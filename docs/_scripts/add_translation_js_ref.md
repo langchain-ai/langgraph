@@ -6,7 +6,6 @@
 // process.env.LANGCHAIN_PROJECT = "Quickstart: LangGraphJS";
 ```
 
-
 ```typescript
 // agent.ts
 
@@ -35,23 +34,18 @@ const agent = createReactAgent({
 // Now it's time to use!
 const agentFinalState = await agent.invoke(
   { messages: [new HumanMessage("what is the current weather in sf")] },
-  { configurable: { thread_id: "42" } },
+  { configurable: { thread_id: "42" } }
 );
 
-console.log(
-  agentFinalState.messages[agentFinalState.messages.length - 1].content,
-);
+console.log(agentFinalState.messages.at(-1)?.text);
 
 const agentNextState = await agent.invoke(
   { messages: [new HumanMessage("what about ny")] },
-  { configurable: { thread_id: "42" } },
+  { configurable: { thread_id: "42" } }
 );
 
-console.log(
-  agentNextState.messages[agentNextState.messages.length - 1].content,
-);
+console.log(agentNextState.messages.at(-1)?.text);
 ```
-
 
 ```typescript
 // Note: tslab only works inside a jupyter notebook. Don't worry about running this code yourself!
@@ -63,7 +57,6 @@ const arrayBuffer = await image.arrayBuffer();
 
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
-
 
 ```typescript
 // agent.ts
@@ -90,7 +83,7 @@ const model = new ChatOpenAI({
 
 // Define the function that determines whether to continue or not
 function shouldContinue({ messages }: typeof MessagesAnnotation.State) {
-  const lastMessage = messages[messages.length - 1] as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage;
 
   // If the LLM makes a tool call, then we route to the "tools" node
   if (lastMessage.tool_calls?.length) {
@@ -123,62 +116,66 @@ const app = workflow.compile();
 const finalState = await app.invoke({
   messages: [new HumanMessage("what is the weather in sf")],
 });
-console.log(finalState.messages[finalState.messages.length - 1].content);
+console.log(finalState.messages.at(-1)?.text);
 
 const nextState = await app.invoke({
   // Including the messages from the previous run gives the LLM context.
   // This way it knows we're asking about the weather in NY
   messages: [...finalState.messages, new HumanMessage("what about ny")],
 });
-console.log(nextState.messages[nextState.messages.length - 1].content);
+console.log(nextState.messages.at(-1)?.text);
 ```
 
-
 ```typescript
-import { StateGraph, Annotation, START, END, interrupt, MemorySaver } from "@langchain/langgraph";
+import {
+  StateGraph,
+  Annotation,
+  START,
+  END,
+  interrupt,
+  MemorySaver,
+} from "@langchain/langgraph";
 
 const StateAnnotation = Annotation.Root({
   input: Annotation<string>,
-  userFeedback: Annotation<string>
+  userFeedback: Annotation<string>,
 });
 
 const step1 = (_state: typeof StateAnnotation.State) => {
   console.log("---Step 1---");
   return {};
-}
+};
 
 const humanFeedback = (_state: typeof StateAnnotation.State) => {
   console.log("--- humanFeedback ---");
   const feedback: string = interrupt("Please provide feedback");
   return {
-    userFeedback: feedback
+    userFeedback: feedback,
   };
-}
+};
 
 const step3 = (_state: typeof StateAnnotation.State) => {
   console.log("---Step 3---");
   return {};
-}
+};
 
 const builder = new StateGraph(StateAnnotation)
-    .addNode("step1", step1)
-    .addNode("humanFeedback", humanFeedback)
-    .addNode("step3", step3)
-    .addEdge(START, "step1")
-    .addEdge("step1", "humanFeedback")
-    .addEdge("humanFeedback", "step3")
-    .addEdge("step3", END);
-
+  .addNode("step1", step1)
+  .addNode("humanFeedback", humanFeedback)
+  .addNode("step3", step3)
+  .addEdge(START, "step1")
+  .addEdge("step1", "humanFeedback")
+  .addEdge("humanFeedback", "step3")
+  .addEdge("step3", END);
 
 // Set up memory
-const memory = new MemorySaver()
+const memory = new MemorySaver();
 
-// Add 
+// Add
 const graph = builder.compile({
   checkpointer: memory,
 });
 ```
-
 
 ```typescript
 import * as tslab from "tslab";
@@ -189,7 +186,6 @@ const arrayBuffer = await image.arrayBuffer();
 
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
-
 
 ```typescript
 // Input
@@ -207,65 +203,75 @@ for await (const event of await graph.stream(initialInput, config)) {
 console.log("--- GRAPH INTERRUPTED ---");
 ```
 
-
 ```typescript
 import { Command } from "@langchain/langgraph";
 
 // Continue the graph execution
 for await (const event of await graph.stream(
-  new Command({ resume: "go to step 3! "}),
-  config,
+  new Command({ resume: "go to step 3! " }),
+  config
 )) {
   console.log(event);
   console.log("\n====\n");
 }
 ```
 
-
 ```typescript
-(await graph.getState(config)).values
+(await graph.getState(config)).values;
 ```
-
 
 ```typescript
 // Set up the tool
 import { ChatAnthropic } from "@langchain/anthropic";
 import { tool } from "@langchain/core/tools";
-import { StateGraph, MessagesAnnotation, START, END, MemorySaver } from "@langchain/langgraph";
+import {
+  StateGraph,
+  MessagesAnnotation,
+  START,
+  END,
+  MemorySaver,
+} from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { AIMessage, ToolMessage } from "@langchain/core/messages";
 import { z } from "zod";
 
-const search = tool((_) => {
-  return "It's sunny in San Francisco, but you better look out if you're a Gemini 😈.";
-}, {
-  name: "search",
-  description: "Call to surf the web.",
-  schema: z.string(),
-})
+const search = tool(
+  (_) => {
+    return "It's sunny in San Francisco, but you better look out if you're a Gemini 😈.";
+  },
+  {
+    name: "search",
+    description: "Call to surf the web.",
+    schema: z.string(),
+  }
+);
 
-const tools = [search]
-const toolNode = new ToolNode<typeof MessagesAnnotation.State>(tools)
+const tools = [search];
+const toolNode = new ToolNode<typeof MessagesAnnotation.State>(tools);
 
 // Set up the model
-const model = new ChatAnthropic({ model: "claude-3-5-sonnet-20240620" })
+const model = new ChatAnthropic({ model: "claude-3-5-sonnet-20240620" });
 
-const askHumanTool = tool((_) => {
-  return "The human said XYZ";
-}, {
-  name: "askHuman",
-  description: "Ask the human for input.",
-  schema: z.string(),
-});
+const askHumanTool = tool(
+  (_) => {
+    return "The human said XYZ";
+  },
+  {
+    name: "askHuman",
+    description: "Ask the human for input.",
+    schema: z.string(),
+  }
+);
 
-
-const modelWithTools = model.bindTools([...tools, askHumanTool])
+const modelWithTools = model.bindTools([...tools, askHumanTool]);
 
 // Define nodes and conditional edges
 
 // Define the function that determines whether to continue or not
-function shouldContinue(state: typeof MessagesAnnotation.State): "action" | "askHuman" | typeof END {
-  const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
+function shouldContinue(
+  state: typeof MessagesAnnotation.State
+): "action" | "askHuman" | typeof END {
+  const lastMessage = state.messages.at(-1) as AIMessage;
   // If there is no function call, then we finish
   if (lastMessage && !lastMessage.tool_calls?.length) {
     return END;
@@ -274,32 +280,34 @@ function shouldContinue(state: typeof MessagesAnnotation.State): "action" | "ask
   // You could also add logic here to let some system know that there's something that requires Human input
   // For example, send a slack message, etc
   if (lastMessage.tool_calls?.[0]?.name === "askHuman") {
-    console.log("--- ASKING HUMAN ---")
+    console.log("--- ASKING HUMAN ---");
     return "askHuman";
   }
   // Otherwise if it isn't, we continue with the action node
   return "action";
 }
 
-
 // Define the function that calls the model
-async function callModel(state: typeof MessagesAnnotation.State): Promise<Partial<typeof MessagesAnnotation.State>> {
+async function callModel(
+  state: typeof MessagesAnnotation.State
+): Promise<Partial<typeof MessagesAnnotation.State>> {
   const messages = state.messages;
   const response = await modelWithTools.invoke(messages);
   // We return an object with a messages property, because this will get added to the existing list
   return { messages: [response] };
 }
 
-
 // We define a fake node to ask the human
-function askHuman(state: typeof MessagesAnnotation.State): Partial<typeof MessagesAnnotation.State> {
-  const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
+function askHuman(
+  state: typeof MessagesAnnotation.State
+): Partial<typeof MessagesAnnotation.State> {
+  const lastMessage = state.messages.at(-1) as AIMessage;
   const toolCallId = lastMessage.tool_calls?.[0].id;
   const location: string = interrupt("Please provide your location:");
   const newToolMessage = new ToolMessage({
     tool_call_id: toolCallId!,
     content: location,
-  })
+  });
   return { messages: [newToolMessage] };
 }
 
@@ -326,7 +334,6 @@ const messagesWorkflow = new StateGraph(MessagesAnnotation)
   // This means that this node is the first one called
   .addEdge(START, "agent");
 
-
 // Setup memory
 const messagesMemory = new MemorySaver();
 
@@ -334,10 +341,9 @@ const messagesMemory = new MemorySaver();
 // This compiles it into a LangChain Runnable,
 // meaning you can use it as you would any other runnable
 const messagesApp = messagesWorkflow.compile({
-    checkpointer: messagesMemory,
+  checkpointer: messagesMemory,
 });
 ```
-
 
 ```typescript
 import * as tslab from "tslab";
@@ -349,31 +355,37 @@ const arrayBuffer2 = await image2.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer2));
 ```
 
-
 ```typescript
 // Input
 const input = {
   role: "user",
-  content: "Use the search tool to ask the user where they are, then look up the weather there",
-}
+  content:
+    "Use the search tool to ask the user where they are, then look up the weather there",
+};
 
 // Thread
-const config2 = { configurable: { thread_id: "3" }, streamMode: "values" as const };
+const config2 = {
+  configurable: { thread_id: "3" },
+  streamMode: "values" as const,
+};
 
-for await (const event of await messagesApp.stream({
-  messages: [input]
-}, config2)) {
-  const recentMsg = event.messages[event.messages.length - 1];
-  console.log(`================================ ${recentMsg.getType()} Message (1) =================================`)
+for await (const event of await messagesApp.stream(
+  {
+    messages: [input],
+  },
+  config2
+)) {
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
   console.log(recentMsg.content);
 }
 ```
 
-
 ```typescript
-console.log("next: ", (await messagesApp.getState(config2)).next)
+console.log("next: ", (await messagesApp.getState(config2)).next);
 ```
-
 
 ```typescript
 import { Command } from "@langchain/langgraph";
@@ -381,83 +393,92 @@ import { Command } from "@langchain/langgraph";
 // Continue the graph execution
 for await (const event of await messagesApp.stream(
   new Command({ resume: "San Francisco" }),
-  config2,
+  config2
 )) {
   console.log(event);
   console.log("\n====\n");
 }
 ```
 
-
 ```typescript
 process.env.ANTHROPIC_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 // Tool for getting travel recommendations
-const getTravelRecommendations = tool(async () => {
-  const destinations = ["aruba", "turks and caicos"];
-  return destinations[Math.floor(Math.random() * destinations.length)];
-}, {
-  name: "getTravelRecommendations",
-  description: "Get recommendation for travel destinations",
-  schema: z.object({}),
-});
+const getTravelRecommendations = tool(
+  async () => {
+    const destinations = ["aruba", "turks and caicos"];
+    return destinations[Math.floor(Math.random() * destinations.length)];
+  },
+  {
+    name: "getTravelRecommendations",
+    description: "Get recommendation for travel destinations",
+    schema: z.object({}),
+  }
+);
 
 // Tool for getting hotel recommendations
-const getHotelRecommendations = tool(async (input: { location: "aruba" | "turks and caicos" }) => {
-  const recommendations = {
-    "aruba": [
-      "The Ritz-Carlton, Aruba (Palm Beach)",
-      "Bucuti & Tara Beach Resort (Eagle Beach)"
-    ],
-    "turks and caicos": ["Grace Bay Club", "COMO Parrot Cay"]
-  };
-  return recommendations[input.location];
-}, {
-  name: "getHotelRecommendations",
-  description: "Get hotel recommendations for a given destination.",
-  schema: z.object({
-    location: z.enum(["aruba", "turks and caicos"])
-  }),
-});
+const getHotelRecommendations = tool(
+  async (input: { location: "aruba" | "turks and caicos" }) => {
+    const recommendations = {
+      aruba: [
+        "The Ritz-Carlton, Aruba (Palm Beach)",
+        "Bucuti & Tara Beach Resort (Eagle Beach)",
+      ],
+      "turks and caicos": ["Grace Bay Club", "COMO Parrot Cay"],
+    };
+    return recommendations[input.location];
+  },
+  {
+    name: "getHotelRecommendations",
+    description: "Get hotel recommendations for a given destination.",
+    schema: z.object({
+      location: z.enum(["aruba", "turks and caicos"]),
+    }),
+  }
+);
 
 // Define a tool to signal intent to hand off to a different agent
 // Note: this is not using Command(goto) syntax for navigating to different agents:
 // `workflow()` below handles the handoffs explicitly
-const transferToHotelAdvisor = tool(async () => {
-  return "Successfully transferred to hotel advisor";
-}, {
-  name: "transferToHotelAdvisor",
-  description: "Ask hotel advisor agent for help.",
-  schema: z.object({}),
-  // Hint to our agent implementation that it should stop
-  // immediately after invoking this tool 
-  returnDirect: true,
-}); 
+const transferToHotelAdvisor = tool(
+  async () => {
+    return "Successfully transferred to hotel advisor";
+  },
+  {
+    name: "transferToHotelAdvisor",
+    description: "Ask hotel advisor agent for help.",
+    schema: z.object({}),
+    // Hint to our agent implementation that it should stop
+    // immediately after invoking this tool
+    returnDirect: true,
+  }
+);
 
-const transferToTravelAdvisor = tool(async () => {
-  return "Successfully transferred to travel advisor";
-}, {
-  name: "transferToTravelAdvisor", 
-  description: "Ask travel advisor agent for help.",
-  schema: z.object({}),
-  // Hint to our agent implementation that it should stop
-  // immediately after invoking this tool
-  returnDirect: true,
-});
+const transferToTravelAdvisor = tool(
+  async () => {
+    return "Successfully transferred to travel advisor";
+  },
+  {
+    name: "transferToTravelAdvisor",
+    description: "Ask travel advisor agent for help.",
+    schema: z.object({}),
+    // Hint to our agent implementation that it should stop
+    // immediately after invoking this tool
+    returnDirect: true,
+  }
+);
 ```
-
 
 ```typescript
 import {
   AIMessage,
   type BaseMessage,
-  type BaseMessageLike
+  type BaseMessageLike,
 } from "@langchain/core/messages";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
@@ -473,10 +494,7 @@ const model = new ChatAnthropic({
   model: "claude-3-5-sonnet-latest",
 });
 
-const travelAdvisorTools = [
-  getTravelRecommendations,
-  transferToHotelAdvisor,
-];
+const travelAdvisorTools = [getTravelRecommendations, transferToHotelAdvisor];
 
 // Define travel advisor ReAct agent
 const travelAdvisor = createReactAgent({
@@ -491,15 +509,15 @@ const travelAdvisor = createReactAgent({
 
 // You can also add additional logic like changing the input to the agent / output from the agent, etc.
 // NOTE: we're invoking the ReAct agent with the full history of messages in the state
-const callTravelAdvisor = task("callTravelAdvisor", async (messages: BaseMessageLike[]) => {
-  const response = await travelAdvisor.invoke({ messages });
-  return response.messages;
-});
+const callTravelAdvisor = task(
+  "callTravelAdvisor",
+  async (messages: BaseMessageLike[]) => {
+    const response = await travelAdvisor.invoke({ messages });
+    return response.messages;
+  }
+);
 
-const hotelAdvisorTools = [
-  getHotelRecommendations,
-  transferToTravelAdvisor,
-];
+const hotelAdvisorTools = [getHotelRecommendations, transferToTravelAdvisor];
 
 // Define hotel advisor ReAct agent
 const hotelAdvisor = createReactAgent({
@@ -508,89 +526,97 @@ const hotelAdvisor = createReactAgent({
   stateModifier: [
     "You are a hotel expert that can provide hotel recommendations for a given destination.",
     "If you need help picking travel destinations, ask 'travel_advisor' for help.",
-    "You MUST include a human-readable response before transferring to another agent."
+    "You MUST include a human-readable response before transferring to another agent.",
   ].join(" "),
 });
 
 // Add task for hotel advisor
-const callHotelAdvisor = task("callHotelAdvisor", async (messages: BaseMessageLike[]) => {
-  const response = await hotelAdvisor.invoke({ messages });
-  return response.messages;
-});
+const callHotelAdvisor = task(
+  "callHotelAdvisor",
+  async (messages: BaseMessageLike[]) => {
+    const response = await hotelAdvisor.invoke({ messages });
+    return response.messages;
+  }
+);
 
 const checkpointer = new MemorySaver();
 
-const multiTurnGraph = entrypoint({
-  name: "multiTurnGraph",
-  checkpointer,
-}, async (messages: BaseMessageLike[]) => {  
-  let callActiveAgent = callTravelAdvisor;
-  let agentMessages: BaseMessage[];
-  let currentMessages = messages;
-  while (true) {
-    agentMessages = await callActiveAgent(currentMessages);
-    
-    // Find the last AI message
-    // If one of the handoff tools is called, the last message returned
-    // by the agent will be a ToolMessages because we set them to have
-    // "returnDirect: true". This means that the last AIMessage will
-    // have tool calls.
-    // Otherwise, the last returned message will be an AIMessage with
-    // no tool calls, which means we are ready for new input.
-    const reversedMessages = [...agentMessages].reverse();
-    const aiMsgIndex = reversedMessages
-      .findIndex((m): m is AIMessage => m.getType() === "ai");
-      
-    const aiMsg: AIMessage = reversedMessages[aiMsgIndex];
-  
-    // We append all messages up to the last AI message to the current messages.
-    // This may include ToolMessages (if the handoff tool was called)
-    const messagesToAdd = reversedMessages.slice(0, aiMsgIndex + 1).reverse();
+const multiTurnGraph = entrypoint(
+  {
+    name: "multiTurnGraph",
+    checkpointer,
+  },
+  async (messages: BaseMessageLike[]) => {
+    let callActiveAgent = callTravelAdvisor;
+    let agentMessages: BaseMessage[];
+    let currentMessages = messages;
+    while (true) {
+      agentMessages = await callActiveAgent(currentMessages);
 
-    // Add the agent's responses
-    currentMessages = addMessages(currentMessages, messagesToAdd);
+      // Find the last AI message
+      // If one of the handoff tools is called, the last message returned
+      // by the agent will be a ToolMessages because we set them to have
+      // "returnDirect: true". This means that the last AIMessage will
+      // have tool calls.
+      // Otherwise, the last returned message will be an AIMessage with
+      // no tool calls, which means we are ready for new input.
+      const reversedMessages = [...agentMessages].reverse();
+      const aiMsgIndex = reversedMessages.findIndex(
+        (m): m is AIMessage => m.getType() === "ai"
+      );
 
-    if (!aiMsg?.tool_calls?.length) {
-      const userInput = await interrupt("Ready for user input.");
-      if (typeof userInput !== "string") {
-        throw new Error("User input must be a string.");
+      const aiMsg: AIMessage = reversedMessages[aiMsgIndex];
+
+      // We append all messages up to the last AI message to the current messages.
+      // This may include ToolMessages (if the handoff tool was called)
+      const messagesToAdd = reversedMessages.slice(0, aiMsgIndex + 1).reverse();
+
+      // Add the agent's responses
+      currentMessages = addMessages(currentMessages, messagesToAdd);
+
+      if (!aiMsg?.tool_calls?.length) {
+        const userInput = await interrupt("Ready for user input.");
+        if (typeof userInput !== "string") {
+          throw new Error("User input must be a string.");
+        }
+        if (userInput.toLowerCase() === "done") {
+          break;
+        }
+        currentMessages = addMessages(currentMessages, [
+          {
+            role: "human",
+            content: userInput,
+          },
+        ]);
+        continue;
       }
-      if (userInput.toLowerCase() === "done") {
-        break;
+
+      const toolCall = aiMsg.tool_calls.at(-1)!;
+      if (toolCall.name === "transferToHotelAdvisor") {
+        callActiveAgent = callHotelAdvisor;
+      } else if (toolCall.name === "transferToTravelAdvisor") {
+        callActiveAgent = callTravelAdvisor;
+      } else {
+        throw new Error(`Expected transfer tool, got '${toolCall.name}'`);
       }
-      currentMessages = addMessages(currentMessages, [{
-        role: "human",
-        content: userInput,
-      }]);
-      continue;
     }
 
-    const toolCall = aiMsg.tool_calls.at(-1)!;
-    if (toolCall.name === "transferToHotelAdvisor") {
-      callActiveAgent = callHotelAdvisor;
-    } else if (toolCall.name === "transferToTravelAdvisor") {
-      callActiveAgent = callTravelAdvisor;
-    } else {
-      throw new Error(`Expected transfer tool, got '${toolCall.name}'`);
-    }
+    return entrypoint.final({
+      value: agentMessages.at(-1),
+      save: currentMessages,
+    });
   }
-
-  return entrypoint.final({
-    value: agentMessages[agentMessages.length - 1],
-    save: currentMessages,
-  });
-});
+);
 ```
 
-
 ```typescript
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 import { Command } from "@langchain/langgraph";
 import { isBaseMessage } from "@langchain/core/messages";
 
 const threadConfig = {
-  configurable: { 
-    thread_id: uuidv4() 
+  configurable: {
+    thread_id: uuidv4(),
   },
   streamMode: "updates" as const,
 };
@@ -601,12 +627,14 @@ const inputs = [
   // Since we're using `interrupt`, we'll need to resume using the Command primitive
   // 2nd round of conversation
   new Command({
-    resume: "could you recommend a nice hotel in one of the areas and tell me which area it is."
+    resume:
+      "could you recommend a nice hotel in one of the areas and tell me which area it is.",
   }),
   // 3rd round of conversation
   new Command({
-    resume: "i like the first one. could you recommend something to do near the hotel?"
-  })
+    resume:
+      "i like the first one. could you recommend something to do near the hotel?",
+  }),
 ];
 
 const runConversation = async () => {
@@ -616,11 +644,8 @@ const runConversation = async () => {
     console.log();
     console.log(`User: ${JSON.stringify(userInput, null, 2)}`);
     console.log();
-    
-    const stream = await multiTurnGraph.stream(
-      userInput as any,
-      threadConfig,
-    );
+
+    const stream = await multiTurnGraph.stream(userInput as any, threadConfig);
 
     for await (const update of stream) {
       if (update.__metadata__?.cached) {
@@ -646,15 +671,9 @@ try {
 }
 ```
 
-
-```typescript
-```
-
-
 ```typescript
 process.env.OPENAI_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 import { task, interrupt } from "@langchain/langgraph";
@@ -663,41 +682,40 @@ const step1 = task("step1", async (inputQuery: string) => {
   return `${inputQuery} bar`;
 });
 
-const humanFeedback = task(
-  "humanFeedback",
-  async (inputQuery: string) => {
-    const feedback = interrupt(`Please provide feedback: ${inputQuery}`);
-    return `${inputQuery} ${feedback}`;
-  });
+const humanFeedback = task("humanFeedback", async (inputQuery: string) => {
+  const feedback = interrupt(`Please provide feedback: ${inputQuery}`);
+  return `${inputQuery} ${feedback}`;
+});
 
 const step3 = task("step3", async (inputQuery: string) => {
   return `${inputQuery} qux`;
 });
 ```
 
-
 ```typescript
 import { MemorySaver, entrypoint } from "@langchain/langgraph";
 
 const checkpointer = new MemorySaver();
 
-const graph = entrypoint({
-  name: "graph",
-  checkpointer,
-}, async (inputQuery: string) => {
-  const result1 = await step1(inputQuery);
-  const result2 = await humanFeedback(result1);
-  const result3 = await step3(result2);
-  return result3;
-});
+const graph = entrypoint(
+  {
+    name: "graph",
+    checkpointer,
+  },
+  async (inputQuery: string) => {
+    const result1 = await step1(inputQuery);
+    const result2 = await humanFeedback(result1);
+    const result3 = await step3(result2);
+    return result3;
+  }
+);
 ```
-
 
 ```typescript
 const config = {
   configurable: {
-    thread_id: "1"
-  }
+    thread_id: "1",
+  },
 };
 
 const stream = await graph.stream("foo", config);
@@ -707,13 +725,15 @@ for await (const event of stream) {
 }
 ```
 
-
 ```typescript
 import { Command } from "@langchain/langgraph";
 
-const resumeStream = await graph.stream(new Command({
-  resume: "baz"
-}), config);
+const resumeStream = await graph.stream(
+  new Command({
+    resume: "baz",
+  }),
+  config
+);
 
 // Continue execution
 for await (const event of resumeStream) {
@@ -724,7 +744,6 @@ for await (const event of resumeStream) {
 }
 ```
 
-
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
 import { tool } from "@langchain/core/tools";
@@ -734,44 +753,51 @@ const model = new ChatOpenAI({
   model: "gpt-4o-mini",
 });
 
-const getWeather = tool(async ({ location }) => {
-  // This is a placeholder for the actual implementation
-  const lowercaseLocation = location.toLowerCase();
-  if (lowercaseLocation.includes("sf") || lowercaseLocation.includes("san francisco")) {
-    return "It's sunny!";
-  } else if (lowercaseLocation.includes("boston")) {
-    return "It's rainy!";
-  } else {
-    return `I am not sure what the weather is in ${location}`;
+const getWeather = tool(
+  async ({ location }) => {
+    // This is a placeholder for the actual implementation
+    const lowercaseLocation = location.toLowerCase();
+    if (
+      lowercaseLocation.includes("sf") ||
+      lowercaseLocation.includes("san francisco")
+    ) {
+      return "It's sunny!";
+    } else if (lowercaseLocation.includes("boston")) {
+      return "It's rainy!";
+    } else {
+      return `I am not sure what the weather is in ${location}`;
+    }
+  },
+  {
+    name: "getWeather",
+    schema: z.object({
+      location: z.string().describe("Location to get the weather for"),
+    }),
+    description: "Call to get the weather from a specific location.",
   }
-}, {
-  name: "getWeather",
-  schema: z.object({
-    location: z.string().describe("Location to get the weather for"),
-  }),
-  description: "Call to get the weather from a specific location.",
-});
+);
 ```
-
 
 ```typescript
 import { interrupt } from "@langchain/langgraph";
 import { z } from "zod";
 
-const humanAssistance = tool(async ({ query }) => {
-  const humanResponse = interrupt({ query });
-  return humanResponse.data;
-}, {
-  name: "humanAssistance",
-  description: "Request assistance from a human.",
-  schema: z.object({
-    query: z.string().describe("Human readable question for the human")
-  })
-});
+const humanAssistance = tool(
+  async ({ query }) => {
+    const humanResponse = interrupt({ query });
+    return humanResponse.data;
+  },
+  {
+    name: "humanAssistance",
+    description: "Request assistance from a human.",
+    schema: z.object({
+      query: z.string().describe("Human readable question for the human"),
+    }),
+  }
+);
 
 const tools = [getWeather, humanAssistance];
 ```
-
 
 ```typescript
 import {
@@ -797,42 +823,47 @@ const callTool = task(
     return new ToolMessage({ content: observation, tool_call_id: toolCall.id });
     // Can also pass toolCall directly into the tool to return a ToolMessage
     // return tool.invoke(toolCall);
-  });
+  }
+);
 ```
-
 
 ```typescript
 import { entrypoint, addMessages, MemorySaver } from "@langchain/langgraph";
 
-const agent = entrypoint({
-  name: "agent",
-  checkpointer: new MemorySaver(),
-}, async (messages: BaseMessageLike[]) => {
-  let currentMessages = messages;
-  let llmResponse = await callModel(currentMessages);
-  while (true) {
-    if (!llmResponse.tool_calls?.length) {
-      break;
+const agent = entrypoint(
+  {
+    name: "agent",
+    checkpointer: new MemorySaver(),
+  },
+  async (messages: BaseMessageLike[]) => {
+    let currentMessages = messages;
+    let llmResponse = await callModel(currentMessages);
+    while (true) {
+      if (!llmResponse.tool_calls?.length) {
+        break;
+      }
+
+      // Execute tools
+      const toolResults = await Promise.all(
+        llmResponse.tool_calls.map((toolCall) => {
+          return callTool(toolCall);
+        })
+      );
+
+      // Append to message list
+      currentMessages = addMessages(currentMessages, [
+        llmResponse,
+        ...toolResults,
+      ]);
+
+      // Call model again
+      llmResponse = await callModel(currentMessages);
     }
 
-    // Execute tools
-    const toolResults = await Promise.all(
-      llmResponse.tool_calls.map((toolCall) => {
-        return callTool(toolCall);
-      })
-    );
-    
-    // Append to message list
-    currentMessages = addMessages(currentMessages, [llmResponse, ...toolResults]);
-
-    // Call model again
-    llmResponse = await callModel(currentMessages);
+    return llmResponse;
   }
-
-  return llmResponse;
-});
+);
 ```
-
 
 ```typescript
 import { BaseMessage, isAIMessage } from "@langchain/core/messages";
@@ -843,7 +874,7 @@ const prettyPrintMessage = (message: BaseMessage) => {
   if (isAIMessage(message) && message.tool_calls?.length) {
     console.log(JSON.stringify(message.tool_calls, null, 2));
   }
-}
+};
 
 const prettyPrintStep = (step: Record<string, any>) => {
   if (step.__metadata__?.cached) {
@@ -860,16 +891,15 @@ const prettyPrintStep = (step: Record<string, any>) => {
       prettyPrintMessage(message);
     }
   }
-}
+};
 ```
-
 
 ```typescript
 const userMessage = {
   role: "user",
   content: [
     "Can you reach out for human assistance: what should I feed my cat?",
-    "Separately, can you check the weather in San Francisco?"
+    "Separately, can you check the weather in San Francisco?",
   ].join(" "),
 };
 console.log(userMessage);
@@ -877,7 +907,7 @@ console.log(userMessage);
 const agentStream = await agent.stream([userMessage], {
   configurable: {
     thread_id: "1",
-  }
+  },
 });
 
 let lastStep;
@@ -888,11 +918,9 @@ for await (const step of agentStream) {
 }
 ```
 
-
 ```typescript
 console.log(JSON.stringify(lastStep));
 ```
-
 
 ```typescript
 import { Command } from "@langchain/langgraph";
@@ -909,11 +937,9 @@ for await (const step of resumeStream2) {
 }
 ```
 
-
 ```typescript
 // process.env.OPENAI_API_KEY = "sk-...";
 ```
-
 
 ```typescript
 import { Annotation } from "@langchain/langgraph";
@@ -926,28 +952,29 @@ const StateAnnotation = Annotation.Root({
 });
 ```
 
-
 ```typescript
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-const searchTool = tool(async ({ query: _query }: { query: string }) => {
-  // This is a placeholder for the actual implementation
-  return "Cold, with a low of 3℃";
-}, {
-  name: "search",
-  description:
-    "Use to surf the web, fetch current information, check the weather, and retrieve other information.",
-  schema: z.object({
-    query: z.string().describe("The query to use in your search."),
-  }),
-});
+const searchTool = tool(
+  async ({ query: _query }: { query: string }) => {
+    // This is a placeholder for the actual implementation
+    return "Cold, with a low of 3℃";
+  },
+  {
+    name: "search",
+    description:
+      "Use to surf the web, fetch current information, check the weather, and retrieve other information.",
+    schema: z.object({
+      query: z.string().describe("The query to use in your search."),
+    }),
+  }
+);
 
 await searchTool.invoke({ query: "What's the weather like?" });
 
 const tools = [searchTool];
 ```
-
 
 ```typescript
 import { ToolNode } from "@langchain/langgraph/prebuilt";
@@ -955,18 +982,15 @@ import { ToolNode } from "@langchain/langgraph/prebuilt";
 const toolNode = new ToolNode(tools);
 ```
 
-
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
 
 const model = new ChatOpenAI({ model: "gpt-4o" });
 ```
 
-
 ```typescript
 const boundModel = model.bindTools(tools);
 ```
-
 
 ```typescript
 import { END, START, StateGraph } from "@langchain/langgraph";
@@ -974,7 +998,7 @@ import { AIMessage } from "@langchain/core/messages";
 
 const routeMessage = (state: typeof StateAnnotation.State) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1] as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage;
   // If no tools are called, we can finish (respond to the user)
   if (!lastMessage?.tool_calls?.length) {
     return END;
@@ -983,9 +1007,7 @@ const routeMessage = (state: typeof StateAnnotation.State) => {
   return "tools";
 };
 
-const callModel = async (
-  state: typeof StateAnnotation.State,
-) => {
+const callModel = async (state: typeof StateAnnotation.State) => {
   const { messages } = state;
   const responseMessage = await boundModel.invoke(messages);
   return { messages: [responseMessage] };
@@ -1001,15 +1023,14 @@ const workflow = new StateGraph(StateAnnotation)
 const graph = workflow.compile();
 ```
 
-
 ```typescript
-let inputs = { messages: [{ role: "user",  content: "what's the weather in sf" }] };
+let inputs = {
+  messages: [{ role: "user", content: "what's the weather in sf" }],
+};
 
-for await (
-  const chunk of await graph.stream(inputs, {
-    streamMode: "updates",
-  })
-) {
+for await (const chunk of await graph.stream(inputs, {
+  streamMode: "updates",
+})) {
   for (const [node, values] of Object.entries(chunk)) {
     console.log(`Receiving update from node: ${node}`);
     console.log(values);
@@ -1018,92 +1039,91 @@ for await (
 }
 ```
 
-
 ```typescript
 process.env.ANTHROPIC_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 // Tool for getting travel recommendations
-const getTravelRecommendations = tool(async () => {
-  const destinations = ["aruba", "turks and caicos"];
-  return destinations[Math.floor(Math.random() * destinations.length)];
-}, {
-  name: "getTravelRecommendations",
-  description: "Get recommendation for travel destinations",
-  schema: z.object({}),
-});
+const getTravelRecommendations = tool(
+  async () => {
+    const destinations = ["aruba", "turks and caicos"];
+    return destinations[Math.floor(Math.random() * destinations.length)];
+  },
+  {
+    name: "getTravelRecommendations",
+    description: "Get recommendation for travel destinations",
+    schema: z.object({}),
+  }
+);
 
 // Tool for getting hotel recommendations
-const getHotelRecommendations = tool(async (input: { location: "aruba" | "turks and caicos" }) => {
-  const recommendations = {
-    "aruba": [
-      "The Ritz-Carlton, Aruba (Palm Beach)",
-      "Bucuti & Tara Beach Resort (Eagle Beach)"
-    ],
-    "turks and caicos": ["Grace Bay Club", "COMO Parrot Cay"]
-  };
-  return recommendations[input.location];
-}, {
-  name: "getHotelRecommendations",
-  description: "Get hotel recommendations for a given destination.",
-  schema: z.object({
-    location: z.enum(["aruba", "turks and caicos"])
-  }),
-});
+const getHotelRecommendations = tool(
+  async (input: { location: "aruba" | "turks and caicos" }) => {
+    const recommendations = {
+      aruba: [
+        "The Ritz-Carlton, Aruba (Palm Beach)",
+        "Bucuti & Tara Beach Resort (Eagle Beach)",
+      ],
+      "turks and caicos": ["Grace Bay Club", "COMO Parrot Cay"],
+    };
+    return recommendations[input.location];
+  },
+  {
+    name: "getHotelRecommendations",
+    description: "Get hotel recommendations for a given destination.",
+    schema: z.object({
+      location: z.enum(["aruba", "turks and caicos"]),
+    }),
+  }
+);
 
 // Define a tool to signal intent to hand off to a different agent
 // Note: this is not using Command(goto) syntax for navigating to different agents:
 // `workflow()` below handles the handoffs explicitly
-const transferToHotelAdvisor = tool(async () => {
-  return "Successfully transferred to hotel advisor";
-}, {
-  name: "transferToHotelAdvisor",
-  description: "Ask hotel advisor agent for help.",
-  schema: z.object({}),
-  // Hint to our agent implementation that it should stop
-  // immediately after invoking this tool 
-  returnDirect: true,
-}); 
+const transferToHotelAdvisor = tool(
+  async () => {
+    return "Successfully transferred to hotel advisor";
+  },
+  {
+    name: "transferToHotelAdvisor",
+    description: "Ask hotel advisor agent for help.",
+    schema: z.object({}),
+    // Hint to our agent implementation that it should stop
+    // immediately after invoking this tool
+    returnDirect: true,
+  }
+);
 
-const transferToTravelAdvisor = tool(async () => {
-  return "Successfully transferred to travel advisor";
-}, {
-  name: "transferToTravelAdvisor", 
-  description: "Ask travel advisor agent for help.",
-  schema: z.object({}),
-  // Hint to our agent implementation that it should stop
-  // immediately after invoking this tool
-  returnDirect: true,
-});
+const transferToTravelAdvisor = tool(
+  async () => {
+    return "Successfully transferred to travel advisor";
+  },
+  {
+    name: "transferToTravelAdvisor",
+    description: "Ask travel advisor agent for help.",
+    schema: z.object({}),
+    // Hint to our agent implementation that it should stop
+    // immediately after invoking this tool
+    returnDirect: true,
+  }
+);
 ```
 
-
 ```typescript
-import {
-  AIMessage,
-  type BaseMessageLike
-} from "@langchain/core/messages";
+import { AIMessage, type BaseMessageLike } from "@langchain/core/messages";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import {
-  addMessages,
-  entrypoint,
-  task,
-} from "@langchain/langgraph";
+import { addMessages, entrypoint, task } from "@langchain/langgraph";
 
 const model = new ChatAnthropic({
   model: "claude-3-5-sonnet-latest",
 });
 
-const travelAdvisorTools = [
-  getTravelRecommendations,
-  transferToHotelAdvisor,
-];
+const travelAdvisorTools = [getTravelRecommendations, transferToHotelAdvisor];
 
 // Define travel advisor ReAct agent
 const travelAdvisor = createReactAgent({
@@ -1118,15 +1138,15 @@ const travelAdvisor = createReactAgent({
 
 // You can also add additional logic like changing the input to the agent / output from the agent, etc.
 // NOTE: we're invoking the ReAct agent with the full history of messages in the state
-const callTravelAdvisor = task("callTravelAdvisor", async (messages: BaseMessageLike[]) => {
-  const response = await travelAdvisor.invoke({ messages });
-  return response.messages;
-});
+const callTravelAdvisor = task(
+  "callTravelAdvisor",
+  async (messages: BaseMessageLike[]) => {
+    const response = await travelAdvisor.invoke({ messages });
+    return response.messages;
+  }
+);
 
-const hotelAdvisorTools = [
-  getHotelRecommendations,
-  transferToTravelAdvisor,
-];
+const hotelAdvisorTools = [getHotelRecommendations, transferToTravelAdvisor];
 
 // Define hotel advisor ReAct agent
 const hotelAdvisor = createReactAgent({
@@ -1135,15 +1155,18 @@ const hotelAdvisor = createReactAgent({
   stateModifier: [
     "You are a hotel expert that can provide hotel recommendations for a given destination.",
     "If you need help picking travel destinations, ask 'travel_advisor' for help.",
-    "You MUST include a human-readable response before transferring to another agent."
+    "You MUST include a human-readable response before transferring to another agent.",
   ].join(" "),
 });
 
 // Add task for hotel advisor
-const callHotelAdvisor = task("callHotelAdvisor", async (messages: BaseMessageLike[]) => {
-  const response = await hotelAdvisor.invoke({ messages });
-  return response.messages;
-});
+const callHotelAdvisor = task(
+  "callHotelAdvisor",
+  async (messages: BaseMessageLike[]) => {
+    const response = await hotelAdvisor.invoke({ messages });
+    return response.messages;
+  }
+);
 
 const networkGraph = entrypoint(
   "networkGraph",
@@ -1155,7 +1178,7 @@ const networkGraph = entrypoint(
     while (true) {
       const agentMessages = await callActiveAgent(currentMessages);
       currentMessages = addMessages(currentMessages, agentMessages);
-      
+
       // Find the last AI message
       // If one of the handoff tools is called, the last message returned
       // by the agent will be a ToolMessage because we set them to have
@@ -1163,9 +1186,10 @@ const networkGraph = entrypoint(
       // have tool calls.
       // Otherwise, the last returned message will be an AIMessage with
       // no tool calls, which means we are ready for new input.
-      const aiMsg = [...agentMessages].reverse()
+      const aiMsg = [...agentMessages]
+        .reverse()
         .find((m): m is AIMessage => m.getType() === "ai");
-        
+
       // If no tool calls, we're done
       if (!aiMsg?.tool_calls?.length) {
         break;
@@ -1183,9 +1207,9 @@ const networkGraph = entrypoint(
     }
 
     return messages;
-  });
+  }
+);
 ```
-
 
 ```typescript
 const prettyPrintMessages = (update: Record<string, any>) => {
@@ -1211,9 +1235,10 @@ const prettyPrintMessages = (update: Record<string, any>) => {
 
     const coercedMessages = addMessages([], updateValue.messages);
     for (const message of coercedMessages) {
-      const textContent = typeof message.content === "string"
-        ? message.content
-        : JSON.stringify(message.content);
+      const textContent =
+        typeof message.content === "string"
+          ? message.content
+          : JSON.stringify(message.content);
       // Print message content based on role
       if (message.getType() === "ai") {
         console.log("=".repeat(33) + " Assistant Message " + "=".repeat(33));
@@ -1234,18 +1259,22 @@ const prettyPrintMessages = (update: Record<string, any>) => {
 };
 ```
 
-
 ```typescript
-const stream = await networkGraph.stream([{
-  role: "user",
-  content: "i wanna go somewhere warm in the caribbean. pick one destination and give me hotel recommendations"
-}], { subgraphs: true })
+const stream = await networkGraph.stream(
+  [
+    {
+      role: "user",
+      content:
+        "i wanna go somewhere warm in the caribbean. pick one destination and give me hotel recommendations",
+    },
+  ],
+  { subgraphs: true }
+);
 
 for await (const chunk of stream) {
   prettyPrintMessages(chunk);
 }
 ```
-
 
 ```typescript
 import { Annotation, Command } from "@langchain/langgraph";
@@ -1259,7 +1288,7 @@ const StateAnnotation = Annotation.Root({
 const nodeA = async (_state: typeof StateAnnotation.State) => {
   console.log("Called A");
   // this is a replacement for a real conditional edge function
-  const goto = Math.random() > .5 ? "nodeB" : "nodeC";
+  const goto = Math.random() > 0.5 ? "nodeB" : "nodeC";
   // note how Command allows you to BOTH update the graph state AND route to the next node
   return new Command({
     // this is the state update
@@ -1277,16 +1306,15 @@ const nodeB = async (state: typeof StateAnnotation.State) => {
   return {
     foo: state.foo + "|b",
   };
-}
+};
 
 const nodeC = async (state: typeof StateAnnotation.State) => {
   console.log("Called C");
   return {
     foo: state.foo + "|c",
   };
-}
+};
 ```
-
 
 ```typescript
 import { StateGraph } from "@langchain/langgraph";
@@ -1302,7 +1330,6 @@ const graph = new StateGraph(StateAnnotation)
   .compile();
 ```
 
-
 ```typescript
 import * as tslab from "tslab";
 
@@ -1313,18 +1340,16 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 await graph.invoke({ foo: "" });
 ```
-
 
 ```typescript
 // Define the nodes
 const nodeASubgraph = async (_state: typeof StateAnnotation.State) => {
   console.log("Called A");
   // this is a replacement for a real conditional edge function
-  const goto = Math.random() > .5 ? "nodeB" : "nodeC";
+  const goto = Math.random() > 0.5 ? "nodeB" : "nodeC";
   // note how Command allows you to BOTH update the graph state AND route to the next node
   return new Command({
     update: {
@@ -1342,144 +1367,141 @@ const subgraph = new StateGraph(StateAnnotation)
   .addEdge("__start__", "nodeA")
   .compile();
 
-const parentGraph= new StateGraph(StateAnnotation)
+const parentGraph = new StateGraph(StateAnnotation)
   .addNode("subgraph", subgraph, { ends: ["nodeB", "nodeC"] })
   .addNode("nodeB", nodeB)
   .addNode("nodeC", nodeC)
   .addEdge("__start__", "subgraph")
   .compile();
-  
+
 await parentGraph.invoke({ foo: "" });
 ```
-
 
 ```typescript
 import { StateGraph, START, Annotation } from "@langchain/langgraph";
 
 const GrandChildAnnotation = Annotation.Root({
-    myGrandchildKey: Annotation<string>,
-})
+  myGrandchildKey: Annotation<string>,
+});
 
 const grandchild1 = (state: typeof GrandChildAnnotation.State) => {
-    // NOTE: child or parent keys will not be accessible here
-    return {
-        myGrandchildKey: state.myGrandchildKey + ", how are you"
-    }
-}
+  // NOTE: child or parent keys will not be accessible here
+  return {
+    myGrandchildKey: state.myGrandchildKey + ", how are you",
+  };
+};
 
 const grandchild = new StateGraph(GrandChildAnnotation)
-    .addNode("grandchild1", grandchild1)
-    .addEdge(START, "grandchild1")
+  .addNode("grandchild1", grandchild1)
+  .addEdge(START, "grandchild1");
 
 const grandchildGraph = grandchild.compile();
 ```
 
-
 ```typescript
-await grandchildGraph.invoke({ myGrandchildKey: "hi Bob" })
+await grandchildGraph.invoke({ myGrandchildKey: "hi Bob" });
 ```
-
 
 ```typescript
 import { StateGraph, START, Annotation } from "@langchain/langgraph";
 
 const ChildAnnotation = Annotation.Root({
-    myChildKey: Annotation<string>,
+  myChildKey: Annotation<string>,
 });
 
 const callGrandchildGraph = async (state: typeof ChildAnnotation.State) => {
-    // NOTE: parent or grandchild keys won't be accessible here
-    // we're transforming the state from the child state channels (`myChildKey`)
-    // to the grandchild state channels (`myGrandchildKey`)
-    const grandchildGraphInput = { myGrandchildKey: state.myChildKey };
-    // we're transforming the state from the grandchild state channels (`myGrandchildKey`)
-    // back to the child state channels (`myChildKey`)
-    const grandchildGraphOutput = await grandchildGraph.invoke(grandchildGraphInput);
-    return {
-        myChildKey: grandchildGraphOutput.myGrandchildKey + " today?"
-    };
+  // NOTE: parent or grandchild keys won't be accessible here
+  // we're transforming the state from the child state channels (`myChildKey`)
+  // to the grandchild state channels (`myGrandchildKey`)
+  const grandchildGraphInput = { myGrandchildKey: state.myChildKey };
+  // we're transforming the state from the grandchild state channels (`myGrandchildKey`)
+  // back to the child state channels (`myChildKey`)
+  const grandchildGraphOutput = await grandchildGraph.invoke(
+    grandchildGraphInput
+  );
+  return {
+    myChildKey: grandchildGraphOutput.myGrandchildKey + " today?",
+  };
 };
 
 const child = new StateGraph(ChildAnnotation)
-    // NOTE: we're passing a function here instead of just compiled graph (`childGraph`)
-    .addNode("child1", callGrandchildGraph)
-    .addEdge(START, "child1");
+  // NOTE: we're passing a function here instead of just compiled graph (`childGraph`)
+  .addNode("child1", callGrandchildGraph)
+  .addEdge(START, "child1");
 
 const childGraph = child.compile();
 ```
 
-
 ```typescript
-await childGraph.invoke({ myChildKey: "hi Bob" })
+await childGraph.invoke({ myChildKey: "hi Bob" });
 ```
-
 
 ```typescript
 import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
 
 const ParentAnnotation = Annotation.Root({
-    myKey: Annotation<string>,
+  myKey: Annotation<string>,
 });
 
 const parent1 = (state: typeof ParentAnnotation.State) => {
-    // NOTE: child or grandchild keys won't be accessible here
-    return { myKey: "hi " + state.myKey };
+  // NOTE: child or grandchild keys won't be accessible here
+  return { myKey: "hi " + state.myKey };
 };
 
 const parent2 = (state: typeof ParentAnnotation.State) => {
-    return { myKey: state.myKey + " bye!" };
+  return { myKey: state.myKey + " bye!" };
 };
 
 const callChildGraph = async (state: typeof ParentAnnotation.State) => {
-    // we're transforming the state from the parent state channels (`myKey`)
-    // to the child state channels (`myChildKey`)
-    const childGraphInput = { myChildKey: state.myKey };
-    // we're transforming the state from the child state channels (`myChildKey`)
-    // back to the parent state channels (`myKey`)
-    const childGraphOutput = await childGraph.invoke(childGraphInput);
-    return { myKey: childGraphOutput.myChildKey };
+  // we're transforming the state from the parent state channels (`myKey`)
+  // to the child state channels (`myChildKey`)
+  const childGraphInput = { myChildKey: state.myKey };
+  // we're transforming the state from the child state channels (`myChildKey`)
+  // back to the parent state channels (`myKey`)
+  const childGraphOutput = await childGraph.invoke(childGraphInput);
+  return { myKey: childGraphOutput.myChildKey };
 };
 
 const parent = new StateGraph(ParentAnnotation)
-    .addNode("parent1", parent1)
-    // NOTE: we're passing a function here instead of just a compiled graph (`childGraph`)
-    .addNode("child", callChildGraph)
-    .addNode("parent2", parent2)
-    .addEdge(START, "parent1")
-    .addEdge("parent1", "child")
-    .addEdge("child", "parent2")
-    .addEdge("parent2", END);
+  .addNode("parent1", parent1)
+  // NOTE: we're passing a function here instead of just a compiled graph (`childGraph`)
+  .addNode("child", callChildGraph)
+  .addNode("parent2", parent2)
+  .addEdge(START, "parent1")
+  .addEdge("parent1", "child")
+  .addEdge("child", "parent2")
+  .addEdge("parent2", END);
 
 const parentGraph = parent.compile();
 ```
 
-
 ```typescript
-await parentGraph.invoke({ myKey: "Bob" })
+await parentGraph.invoke({ myKey: "Bob" });
 ```
-
 
 ```typescript
 import { z } from "zod";
 import { tool } from "@langchain/core/tools";
 
-const getWeather = tool(async (input: { city: "sf" | "nyc" }) => {
-  if (input.city === "nyc") {
-    return "It might be cloudy in nyc";
-  } else if (input.city === "sf") {
-    return "It's always sunny in sf";
-  } else {
-    throw new Error("Unknown city");
+const getWeather = tool(
+  async (input: { city: "sf" | "nyc" }) => {
+    if (input.city === "nyc") {
+      return "It might be cloudy in nyc";
+    } else if (input.city === "sf") {
+      return "It's always sunny in sf";
+    } else {
+      throw new Error("Unknown city");
+    }
+  },
+  {
+    name: "get_weather",
+    description: "Use this to get weather information.",
+    schema: z.object({
+      city: z.enum(["sf", "nyc"]),
+    }),
   }
-}, {
-  name: "get_weather",
-  description: "Use this to get weather information.",
-  schema: z.object({
-    city: z.enum(["sf", "nyc"])
-  }),
-});
+);
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -1491,7 +1513,7 @@ import pg from "pg";
 const { Pool } = pg;
 
 const pool = new Pool({
-  connectionString: "postgresql://user:password@localhost:5434/testdb"
+  connectionString: "postgresql://user:password@localhost:5434/testdb",
 });
 
 const checkpointer = new PostgresSaver(pool);
@@ -1509,19 +1531,22 @@ const graph = createReactAgent({
 });
 const config = { configurable: { thread_id: "1" } };
 
-await graph.invoke({
-  messages: [{
-    role: "user",
-    content: "what's the weather in sf"
-  }],
-}, config);
+await graph.invoke(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "what's the weather in sf",
+      },
+    ],
+  },
+  config
+);
 ```
-
 
 ```typescript
 await checkpointer.get(config);
 ```
-
 
 ```typescript
 const checkpointerFromConnString = PostgresSaver.fromConnString(
@@ -1537,112 +1562,104 @@ const graph2 = createReactAgent({
 });
 const config2 = { configurable: { thread_id: "2" } };
 
-await graph2.invoke({
-  messages: [{
-    role: "user",
-    content: "what's the weather in sf"
-  }],
-}, config2);
+await graph2.invoke(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "what's the weather in sf",
+      },
+    ],
+  },
+  config2
+);
 ```
-
 
 ```typescript
 await checkpointerFromConnString.get(config2);
 ```
 
-
 ```typescript
+const graph = graphBuilder.compile({
+    interruptBefore: ["nodeA"],
+    interruptAfter: ["nodeB", "nodeC"],
+    checkpointer: ..., // Specify a checkpointer
+});
+
+const threadConfig = {
+    configurable: {
+        thread_id: "someThread"
+    }
+};
+
+// Run the graph until the breakpoint
+await graph.invoke(inputs, threadConfig);
+
+// Optionally update the graph state based on user input
+await graph.updateState(update, threadConfig);
+
+// Resume the graph
+await graph.invoke(null, threadConfig);
 ```
 
+```typescript
+await graph.invoke(inputs, {
+  configurable: { thread_id: "someThread" },
+  interruptBefore: ["nodeA"],
+  interruptAfter: ["nodeB", "nodeC"],
+});
 
-    ```typescript
-    const graph = graphBuilder.compile({
-        interruptBefore: ["nodeA"],
-        interruptAfter: ["nodeB", "nodeC"],
-        checkpointer: ..., // Specify a checkpointer
-    });
+const threadConfig = {
+  configurable: {
+    thread_id: "someThread",
+  },
+};
 
-    const threadConfig = {
-        configurable: {
-            thread_id: "someThread"
-        }
-    };
+// Run the graph until the breakpoint
+await graph.invoke(inputs, threadConfig);
 
-    // Run the graph until the breakpoint
-    await graph.invoke(inputs, threadConfig);
+// Optionally update the graph state based on user input
+await graph.updateState(update, threadConfig);
 
-    // Optionally update the graph state based on user input
-    await graph.updateState(update, threadConfig);
+// Resume the graph
+await graph.invoke(null, threadConfig);
+```
 
-    // Resume the graph
-    await graph.invoke(null, threadConfig);
-    ```
-
-
-    ```typescript
-    await graph.invoke(
-        inputs,
-        { 
-            configurable: { thread_id: "someThread" },
-            interruptBefore: ["nodeA"],
-            interruptAfter: ["nodeB", "nodeC"]
-        }
+```typescript
+function myNode(state: typeof GraphAnnotation.State) {
+  if (state.input.length > 5) {
+    throw new NodeInterrupt(
+      `Received input that is longer than 5 characters: ${state.input}`
     );
+  }
+  return state;
+}
+```
 
-    const threadConfig = {
-        configurable: {
-            thread_id: "someThread"
-        }
-    };
+```typescript
+// Attempt to continue the graph execution with no change to state after we hit the dynamic breakpoint
+for await (const event of await graph.stream(null, threadConfig)) {
+  console.log(event);
+}
+```
 
-    // Run the graph until the breakpoint
-    await graph.invoke(inputs, threadConfig);
+```typescript
+// Update the state to pass the dynamic breakpoint
+await graph.updateState({ input: "foo" }, threadConfig);
 
-    // Optionally update the graph state based on user input
-    await graph.updateState(update, threadConfig);
+for await (const event of await graph.stream(null, threadConfig)) {
+  console.log(event);
+}
+```
 
-    // Resume the graph
-    await graph.invoke(null, threadConfig);
-    ```
+```typescript
+// This update will skip the node `myNode` altogether
+await graph.updateState(null, threadConfig, "myNode");
 
-
-    ```typescript
-    function myNode(state: typeof GraphAnnotation.State) {
-        if (state.input.length > 5) {
-            throw new NodeInterrupt(`Received input that is longer than 5 characters: ${state.input}`);
-        }
-        return state;
-    }
-    ```
-
-
-    ```typescript
-    // Attempt to continue the graph execution with no change to state after we hit the dynamic breakpoint 
-    for await (const event of await graph.stream(null, threadConfig)) {
-        console.log(event);
-    }
-    ```
-
-
-    ```typescript
-    // Update the state to pass the dynamic breakpoint
-    await graph.updateState({ input: "foo" }, threadConfig);
-
-    for await (const event of await graph.stream(null, threadConfig)) {
-        console.log(event);
-    }
-    ```
-
-
-    ```typescript
-    // This update will skip the node `myNode` altogether
-    await graph.updateState(null, threadConfig, "myNode");
-
-    for await (const event of await graph.stream(null, threadConfig)) {
-        console.log(event);
-    }
-    ```
-
+for await (const event of await graph.stream(null, threadConfig)) {
+  console.log(event);
+}
+```
 
 ```typescript
 import { StateGraph, Annotation } from "@langchain/langgraph";
@@ -1670,7 +1687,7 @@ const subgraph = new StateGraph(SubgraphStateAnnotation)
   .addEdge("__start__", "subgraphNode1")
   .addEdge("subgraphNode1", "subgraphNode2")
   .compile();
-  
+
 // parent graph
 const StateAnnotation = Annotation.Root({
   foo: Annotation<string>,
@@ -1690,7 +1707,6 @@ const builder = new StateGraph(StateAnnotation)
   .addEdge("node1", "node2");
 ```
 
-
 ```typescript
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
 
@@ -1700,34 +1716,33 @@ const checkpointer = new MemorySaver();
 // LangGraph will automatically propagate the checkpointer to the child subgraphs.
 
 const graph = builder.compile({
-  checkpointer: checkpointer
+  checkpointer: checkpointer,
 });
 ```
-
 
 ```typescript
 const config = { configurable: { thread_id: "1" } };
 ```
 
-
 ```typescript
-const stream = await graph.stream({
-  foo: "foo"
-}, {
-  ...config,
-  subgraphs: true,
-});
+const stream = await graph.stream(
+  {
+    foo: "foo",
+  },
+  {
+    ...config,
+    subgraphs: true,
+  }
+);
 
 for await (const [_source, chunk] of stream) {
   console.log(chunk);
 }
 ```
 
-
 ```typescript
 (await graph.getState(config)).values;
 ```
-
 
 ```typescript
 let stateWithSubgraph;
@@ -1742,18 +1757,15 @@ for await (const state of graphHistories) {
 }
 ```
 
-
 ```typescript
 const subgraphConfig = stateWithSubgraph.tasks[0].state;
 
 console.log(subgraphConfig);
 ```
 
-
 ```typescript
-(await graph.getState(subgraphConfig)).values
+(await graph.getState(subgraphConfig)).values;
 ```
-
 
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
@@ -1766,51 +1778,58 @@ process.env.LANGCHAIN_TRACING_V2 = "true";
 process.env.LANGCHAIN_PROJECT = "ReAct Agent with memory: LangGraphJS";
 ```
 
-
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
-import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { MemorySaver } from "@langchain/langgraph";
 
 const model = new ChatOpenAI({
-    model: "gpt-4o",
-  });
+  model: "gpt-4o",
+});
 
-const getWeather = tool((input) => {
-    if (input.location === 'sf') {
-        return 'It\'s always sunny in sf';
+const getWeather = tool(
+  (input) => {
+    if (input.location === "sf") {
+      return "It's always sunny in sf";
     } else {
-        return 'It might be cloudy in nyc';
+      return "It might be cloudy in nyc";
     }
-}, {
-    name: 'get_weather',
-    description: 'Call to get the current weather.',
+  },
+  {
+    name: "get_weather",
+    description: "Call to get the current weather.",
     schema: z.object({
-        location: z.enum(['sf','nyc']).describe("Location to get the weather for."),
-    })
-})
+      location: z
+        .enum(["sf", "nyc"])
+        .describe("Location to get the weather for."),
+    }),
+  }
+);
 
 // Here we only save in-memory
 const memory = new MemorySaver();
 
-const agent = createReactAgent({ llm: model, tools: [getWeather], checkpointSaver: memory });
+const agent = createReactAgent({
+  llm: model,
+  tools: [getWeather],
+  checkpointSaver: memory,
+});
 ```
 
-
 ```typescript
-let inputs = { messages: [{ role: "user", content: "what is the weather in NYC?" }] };
+let inputs = {
+  messages: [{ role: "user", content: "what is the weather in NYC?" }],
+};
 let config = { configurable: { thread_id: "1" } };
 let stream = await agent.stream(inputs, {
   ...config,
   streamMode: "values",
 });
 
-for await (
-  const { messages } of stream
-) {
-  let msg = messages[messages?.length - 1];
+for await (const { messages } of stream) {
+  let msg = messages?.at(-1);
   if (msg?.content) {
     console.log(msg.content);
   } else if (msg?.tool_calls?.length > 0) {
@@ -1822,7 +1841,6 @@ for await (
 }
 ```
 
-
 ```typescript
 inputs = { messages: [{ role: "user", content: "What's it known for?" }] };
 stream = await agent.stream(inputs, {
@@ -1830,45 +1848,41 @@ stream = await agent.stream(inputs, {
   streamMode: "values",
 });
 
-for await (
-    const { messages } of stream
-  ) {
-    let msg = messages[messages?.length - 1];
-    if (msg?.content) {
-      console.log(msg.content);
-    } else if (msg?.tool_calls?.length > 0) {
-      console.log(msg.tool_calls);
-    } else {
-      console.log(msg);
-    }
-    console.log("-----\n");
+for await (const { messages } of stream) {
+  let msg = messages?.at(-1);
+  if (msg?.content) {
+    console.log(msg.content);
+  } else if (msg?.tool_calls?.length > 0) {
+    console.log(msg.tool_calls);
+  } else {
+    console.log(msg);
   }
+  console.log("-----\n");
+}
 ```
 
-
 ```typescript
-inputs = { messages: [{ role: "user", content: "how close is it to boston?" }] };
+inputs = {
+  messages: [{ role: "user", content: "how close is it to boston?" }],
+};
 config = { configurable: { thread_id: "2" } };
 stream = await agent.stream(inputs, {
   ...config,
   streamMode: "values",
 });
 
-for await (
-    const { messages } of stream
-  ) {
-    let msg = messages[messages?.length - 1];
-    if (msg?.content) {
-      console.log(msg.content);
-    } else if (msg?.tool_calls?.length > 0) {
-      console.log(msg.tool_calls);
-    } else {
-      console.log(msg);
-    }
-    console.log("-----\n");
+for await (const { messages } of stream) {
+  let msg = messages.at(-1);
+  if (msg?.content) {
+    console.log(msg.content);
+  } else if (msg?.tool_calls?.length > 0) {
+    console.log(msg.tool_calls);
+  } else {
+    console.log(msg);
   }
+  console.log("-----\n");
+}
 ```
-
 
 ```typescript
 function humanReviewNode(state: typeof GraphAnnotation.State) {
@@ -1885,23 +1899,28 @@ function humanReviewNode(state: typeof GraphAnnotation.State) {
   if (reviewAction === "continue") {
     return new Command({ goto: "run_tool" });
   }
-  
+
   // Modify the tool call manually and then continue
   if (reviewAction === "update") {
     const updatedMsg = getUpdatedMsg(reviewData);
-    return new Command({ goto: "run_tool", update: { messages: [updatedMsg] } });
+    return new Command({
+      goto: "run_tool",
+      update: { messages: [updatedMsg] },
+    });
   }
-  
+
   // Give natural language feedback, and then pass that back to the agent
   if (reviewAction === "feedback") {
     const feedbackMsg = getFeedbackMsg(reviewData);
-    return new Command({ goto: "call_llm", update: { messages: [feedbackMsg] } });
+    return new Command({
+      goto: "call_llm",
+      update: { messages: [feedbackMsg] },
+    });
   }
-  
+
   throw new Error("Unreachable");
 }
 ```
-
 
 ```typescript
 import {
@@ -1911,128 +1930,139 @@ import {
   END,
   MemorySaver,
   Command,
-  interrupt
+  interrupt,
 } from "@langchain/langgraph";
 import { ChatAnthropic } from "@langchain/anthropic";
-import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
-import { AIMessage, ToolMessage } from '@langchain/core/messages';
-import { ToolCall } from '@langchain/core/messages/tool';
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
+import { AIMessage, ToolMessage } from "@langchain/core/messages";
+import { ToolCall } from "@langchain/core/messages/tool";
 
-const weatherSearch = tool((input: { city: string }) => {
+const weatherSearch = tool(
+  (input: { city: string }) => {
     console.log("----");
     console.log(`Searching for: ${input.city}`);
     console.log("----");
     return "Sunny!";
-}, {
-    name: 'weather_search',
-    description: 'Search for the weather',
+  },
+  {
+    name: "weather_search",
+    description: "Search for the weather",
     schema: z.object({
-        city: z.string()
-    })
-});
+      city: z.string(),
+    }),
+  }
+);
 
-const model = new ChatAnthropic({ 
-    model: "claude-3-5-sonnet-latest"
+const model = new ChatAnthropic({
+  model: "claude-3-5-sonnet-latest",
 }).bindTools([weatherSearch]);
 
 const callLLM = async (state: typeof MessagesAnnotation.State) => {
-    const response = await model.invoke(state.messages);
-    return { messages: [response] };
+  const response = await model.invoke(state.messages);
+  return { messages: [response] };
 };
 
-const humanReviewNode = async (state: typeof MessagesAnnotation.State): Promise<Command> => {
-    const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
-    const toolCall = lastMessage.tool_calls![lastMessage.tool_calls!.length - 1];
+const humanReviewNode = async (
+  state: typeof MessagesAnnotation.State
+): Promise<Command> => {
+  const lastMessage = state.messages.at(-1) as AIMessage;
+  const toolCall = lastMessage.tool_calls!.at(-1);
 
-    const humanReview = interrupt<
-      {
-        question: string;
-        toolCall: ToolCall;
-      },
-      {
-        action: string;
-        data: any;
-      }>({
-        question: "Is this correct?",
-        toolCall: toolCall
-      });
-
-    const reviewAction = humanReview.action;
-    const reviewData = humanReview.data;
-
-    if (reviewAction === "continue") {
-        return new Command({ goto: "run_tool" });
+  const humanReview = interrupt<
+    {
+      question: string;
+      toolCall: ToolCall;
+    },
+    {
+      action: string;
+      data: any;
     }
-    else if (reviewAction === "update") {
-        const updatedMessage = {
-            role: "ai",
-            content: lastMessage.content,
-            tool_calls: [{
-                id: toolCall.id,
-                name: toolCall.name,
-                args: reviewData
-            }],
-            id: lastMessage.id
-        };
-        return new Command({ goto: "run_tool", update: { messages: [updatedMessage] } });
-    }
-    else if (reviewAction === "feedback") {
-        const toolMessage = new ToolMessage({
+  >({
+    question: "Is this correct?",
+    toolCall: toolCall,
+  });
+
+  const reviewAction = humanReview.action;
+  const reviewData = humanReview.data;
+
+  if (reviewAction === "continue") {
+    return new Command({ goto: "run_tool" });
+  } else if (reviewAction === "update") {
+    const updatedMessage = {
+      role: "ai",
+      content: lastMessage.content,
+      tool_calls: [
+        {
+          id: toolCall.id,
           name: toolCall.name,
-          content: reviewData,
-          tool_call_id: toolCall.id
-        })
-        return new Command({ goto: "call_llm", update: { messages: [toolMessage] }});
-    }
-    throw new Error("Invalid review action");
+          args: reviewData,
+        },
+      ],
+      id: lastMessage.id,
+    };
+    return new Command({
+      goto: "run_tool",
+      update: { messages: [updatedMessage] },
+    });
+  } else if (reviewAction === "feedback") {
+    const toolMessage = new ToolMessage({
+      name: toolCall.name,
+      content: reviewData,
+      tool_call_id: toolCall.id,
+    });
+    return new Command({
+      goto: "call_llm",
+      update: { messages: [toolMessage] },
+    });
+  }
+  throw new Error("Invalid review action");
 };
 
 const runTool = async (state: typeof MessagesAnnotation.State) => {
-    const newMessages: ToolMessage[] = [];
-    const tools = { weather_search: weatherSearch };
-    const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
-    const toolCalls = lastMessage.tool_calls!;
+  const newMessages: ToolMessage[] = [];
+  const tools = { weather_search: weatherSearch };
+  const lastMessage = state.messages.at(-1) as AIMessage;
+  const toolCalls = lastMessage.tool_calls!;
 
-    for (const toolCall of toolCalls) {
-        const tool = tools[toolCall.name as keyof typeof tools];
-        const result = await tool.invoke(toolCall.args);
-        newMessages.push(new ToolMessage({
-            name: toolCall.name,
-            content: result,
-            tool_call_id: toolCall.id
-        }));
-    }
-    return { messages: newMessages };
+  for (const toolCall of toolCalls) {
+    const tool = tools[toolCall.name as keyof typeof tools];
+    const result = await tool.invoke(toolCall.args);
+    newMessages.push(
+      new ToolMessage({
+        name: toolCall.name,
+        content: result,
+        tool_call_id: toolCall.id,
+      })
+    );
+  }
+  return { messages: newMessages };
 };
 
-const routeAfterLLM = (state: typeof MessagesAnnotation.State): typeof END | "human_review_node" => {
-    const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
-    if (!lastMessage.tool_calls?.length) {
-        return END;
-    }
-    return "human_review_node";
+const routeAfterLLM = (
+  state: typeof MessagesAnnotation.State
+): typeof END | "human_review_node" => {
+  const lastMessage = state.messages.at(-1) as AIMessage;
+  if (!lastMessage.tool_calls?.length) {
+    return END;
+  }
+  return "human_review_node";
 };
 
 const workflow = new StateGraph(MessagesAnnotation)
-    .addNode("call_llm", callLLM)
-    .addNode("run_tool", runTool)
-    .addNode("human_review_node", humanReviewNode, {
-      ends: ["run_tool", "call_llm"]
-    })
-    .addEdge(START, "call_llm")
-    .addConditionalEdges(
-        "call_llm",
-        routeAfterLLM,
-        ["human_review_node", END]
-    )
-    .addEdge("run_tool", "call_llm");
+  .addNode("call_llm", callLLM)
+  .addNode("run_tool", runTool)
+  .addNode("human_review_node", humanReviewNode, {
+    ends: ["run_tool", "call_llm"],
+  })
+  .addEdge(START, "call_llm")
+  .addConditionalEdges("call_llm", routeAfterLLM, ["human_review_node", END])
+  .addEdge("run_tool", "call_llm");
 
 const memory = new MemorySaver();
 
 const graph = workflow.compile({ checkpointer: memory });
 ```
-
 
 ```typescript
 import * as tslab from "tslab";
@@ -2044,26 +2074,28 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 let inputs = { messages: [{ role: "user", content: "hi!" }] };
-let config = { configurable: { thread_id: "1" }, streamMode: "values" as const };
+let config = {
+  configurable: { thread_id: "1" },
+  streamMode: "values" as const,
+};
 
 let stream = await graph.stream(inputs, config);
 
 for await (const event of stream) {
-    const recentMsg = event.messages[event.messages.length - 1];
-    console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
-    console.log(recentMsg.content);
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
+  console.log(recentMsg.content);
 }
 ```
-
 
 ```typescript
 let state = await graph.getState(config);
 console.log(state.next);
 ```
-
 
 ```typescript
 inputs = { messages: [{ role: "user", content: "what's the weather in SF?" }] };
@@ -2072,18 +2104,18 @@ config = { configurable: { thread_id: "2" }, streamMode: "values" as const };
 stream = await graph.stream(inputs, config);
 
 for await (const event of stream) {
-    const recentMsg = event.messages[event.messages.length - 1];
-    console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
-    console.log(recentMsg.content);
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
+  console.log(recentMsg.content);
 }
 ```
-
 
 ```typescript
 state = await graph.getState(config);
 console.log(state.next);
 ```
-
 
 ```typescript
 import { Command } from "@langchain/langgraph";
@@ -2092,12 +2124,13 @@ for await (const event of await graph.stream(
   new Command({ resume: { action: "continue" } }),
   config
 )) {
-  const recentMsg = event.messages[event.messages.length - 1];
-  console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
   console.log(recentMsg.content);
 }
 ```
-
 
 ```typescript
 inputs = { messages: [{ role: "user", content: "what's the weather in SF?" }] };
@@ -2106,36 +2139,36 @@ config = { configurable: { thread_id: "3" }, streamMode: "values" as const };
 stream = await graph.stream(inputs, config);
 
 for await (const event of stream) {
-    const recentMsg = event.messages[event.messages.length - 1];
-    console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
-    console.log(recentMsg.content);
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
+  console.log(recentMsg.content);
 }
 ```
-
 
 ```typescript
 state = await graph.getState(config);
 console.log(state.next);
 ```
 
-
 ```typescript
 for await (const event of await graph.stream(
   new Command({
     resume: {
       action: "update",
-      data: { city: "San Francisco" }
-    }
+      data: { city: "San Francisco" },
+    },
   }),
   config
 )) {
-  const recentMsg = event.messages[event.messages.length - 1];
-  console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
   console.log(recentMsg.content);
 }
-
 ```
-
 
 ```typescript
 inputs = { messages: [{ role: "user", content: "what's the weather in SF?" }] };
@@ -2144,86 +2177,85 @@ config = { configurable: { thread_id: "4" }, streamMode: "values" as const };
 stream = await graph.stream(inputs, config);
 
 for await (const event of stream) {
-    const recentMsg = event.messages[event.messages.length - 1];
-    console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
-    console.log(recentMsg.content);
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
+  console.log(recentMsg.content);
 }
 ```
-
 
 ```typescript
 state = await graph.getState(config);
 console.log(state.next);
 ```
-
 
 ```typescript
 for await (const event of await graph.stream(
   new Command({
     resume: {
       action: "feedback",
-      data: "User requested changes: use <city, country> format for location"
-    }
+      data: "User requested changes: use <city, country> format for location",
+    },
   }),
   config
 )) {
-  const recentMsg = event.messages[event.messages.length - 1];
-  console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
   console.log(recentMsg.content);
 }
-
 ```
-
 
 ```typescript
 state = await graph.getState(config);
 console.log(state.next);
-
 ```
-
 
 ```typescript
 for await (const event of await graph.stream(
   new Command({
     resume: {
       action: "continue",
-    }
+    },
   }),
   config
 )) {
-    const recentMsg = event.messages[event.messages.length - 1];
-    console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
-    console.log(recentMsg.content);
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
+  console.log(recentMsg.content);
 }
 ```
-
 
 ```typescript
 const threadConfig = { configurable: { thread_id: "1" }, streamMode: "values" };
 
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
-
 
 ```typescript
 const allCheckpoints = [];
 
 for await (const state of graph.getStateHistory(threadConfig)) {
-    allCheckpoints.push(state);
+  allCheckpoints.push(state);
 }
 ```
-
 
 ```typescript
-const threadConfig = { configurable: { thread_id: '1', checkpoint_id: 'xyz' }, streamMode: "values" };
+const threadConfig = {
+  configurable: { thread_id: "1", checkpoint_id: "xyz" },
+  streamMode: "values",
+};
 
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
-
 
 ```typescript
 const threadConfig = { configurable: { thread_id: "1", checkpoint_id: "xyz" } };
@@ -2231,15 +2263,16 @@ const threadConfig = { configurable: { thread_id: "1", checkpoint_id: "xyz" } };
 graph.updateState(threadConfig, { state: "updated state" });
 ```
 
-
 ```typescript
-const threadConfig = { configurable: { thread_id: '1', checkpoint_id: 'xyz-fork' }, streamMode: "values" };
+const threadConfig = {
+  configurable: { thread_id: "1", checkpoint_id: "xyz-fork" },
+  streamMode: "values",
+};
 
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
-
 
 ```typescript
 import {
@@ -2262,7 +2295,9 @@ const step2 = async (state: typeof StateAnnotation.State) => {
   // Let's optionally raise a NodeInterrupt
   // if the length of the input is longer than 5 characters
   if (state.input?.length > 5) {
-    throw new NodeInterrupt(`Received input that is longer than 5 characters: ${state.input}`);
+    throw new NodeInterrupt(
+      `Received input that is longer than 5 characters: ${state.input}`
+    );
   }
   console.log("---Step 2---");
   return state;
@@ -2286,7 +2321,6 @@ const graph = new StateGraph(StateAnnotation)
   .compile({ checkpointer });
 ```
 
-
 ```typescript
 import * as tslab from "tslab";
 
@@ -2296,7 +2330,6 @@ const arrayBuffer = await image.arrayBuffer();
 
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
-
 
 ```typescript
 const initialInput = { input: "hello" };
@@ -2314,13 +2347,11 @@ for await (const event of stream) {
 }
 ```
 
-
 ```typescript
 const state = await graph.getState(config);
 console.log(state.next);
 console.log(state.tasks);
 ```
-
 
 ```typescript
 const longInput = { input: "hello world" };
@@ -2338,13 +2369,11 @@ for await (const event of streamWithInterrupt) {
 }
 ```
 
-
 ```typescript
 const state2 = await graph.getState(config2);
 console.log(state2.next);
 console.log(JSON.stringify(state2.tasks, null, 2));
 ```
-
 
 ```typescript
 // NOTE: to resume the graph from a dynamic interrupt we use the same syntax as
@@ -2356,13 +2385,11 @@ for await (const event of resumedStream) {
 }
 ```
 
-
 ```typescript
 const state3 = await graph.getState(config2);
 console.log(state3.next);
 console.log(JSON.stringify(state2.tasks, null, 2));
 ```
-
 
 ```typescript
 // NOTE: this update will be applied as of the last successful node before the interrupt,
@@ -2380,7 +2407,6 @@ console.log(state4.next);
 console.log(state4.values);
 ```
 
-
 ```typescript
 const config3 = {
   configurable: {
@@ -2397,7 +2423,6 @@ for await (const event of skipStream) {
 }
 ```
 
-
 ```typescript
 // NOTE: this update will skip the node `step2` entirely
 await graph.updateState(config3, undefined, "step2");
@@ -2412,15 +2437,9 @@ console.log(state5.next);
 console.log(state5.values);
 ```
 
-
 ```typescript
 // Import from "@langchain/langgraph/web"
-import {
-  END,
-  START,
-  StateGraph,
-  Annotation,
-} from "@langchain/langgraph/web";
+import { END, START, StateGraph, Annotation } from "@langchain/langgraph/web";
 import { BaseMessage, HumanMessage } from "@langchain/core/messages";
 
 const GraphState = Annotation.Root({
@@ -2442,22 +2461,14 @@ const workflow = new StateGraph(GraphState)
 const app = workflow.compile({});
 
 // Use the Runnable
-const finalState = await app.invoke(
-  { messages: [] },
-);
+const finalState = await app.invoke({ messages: [] });
 
-console.log(finalState.messages[finalState.messages.length - 1].content);
+console.log(finalState.messages.at(-1)?.text);
 ```
-
 
 ```typescript
 // Import from "@langchain/langgraph/web"
-import {
-  END,
-  START,
-  StateGraph,
-  Annotation,
-} from "@langchain/langgraph/web";
+import { END, START, StateGraph, Annotation } from "@langchain/langgraph/web";
 import { BaseMessage } from "@langchain/core/messages";
 import { RunnableLambda } from "@langchain/core/runnables";
 import { type StreamEvent } from "@langchain/core/tracers/log_stream";
@@ -2489,7 +2500,7 @@ const app2 = workflow2.compile({});
 const eventStream2 = app2.streamEvents(
   { messages: [] },
   { version: "v2" },
-  { includeNames: ["nested"] },
+  { includeNames: ["nested"] }
 );
 
 const events2: StreamEvent[] = [];
@@ -2501,15 +2512,9 @@ for await (const event of eventStream2) {
 console.log(`Received ${events2.length} events from the nested function`);
 ```
 
-
 ```typescript
 // Import from "@langchain/langgraph/web"
-import {
-  END,
-  START,
-  StateGraph,
-  Annotation,
-} from "@langchain/langgraph/web";
+import { END, START, StateGraph, Annotation } from "@langchain/langgraph/web";
 import { BaseMessage } from "@langchain/core/messages";
 import { type RunnableConfig, RunnableLambda } from "@langchain/core/runnables";
 import { type StreamEvent } from "@langchain/core/tracers/log_stream";
@@ -2521,12 +2526,15 @@ const GraphState3 = Annotation.Root({
 });
 
 // Note the second argument here.
-const nodeFn3 = async (_state: typeof GraphState3.State, config?: RunnableConfig) => {
+const nodeFn3 = async (
+  _state: typeof GraphState3.State,
+  config?: RunnableConfig
+) => {
   // If you need to nest deeper, remember to pass `_config` when invoking
   const nestedFn = RunnableLambda.from(
     async (input: string, _config?: RunnableConfig) => {
       return new HumanMessage(`Hello from ${input}!`);
-    },
+    }
   ).withConfig({ runName: "nested" });
   const responseMessage = await nestedFn.invoke("a nested function", config);
   return { messages: [responseMessage] };
@@ -2544,7 +2552,7 @@ const app3 = workflow3.compile({});
 const eventStream3 = app3.streamEvents(
   { messages: [] },
   { version: "v2" },
-  { includeNames: ["nested"] },
+  { includeNames: ["nested"] }
 );
 
 const events3: StreamEvent[] = [];
@@ -2556,7 +2564,6 @@ for await (const event of eventStream3) {
 console.log(`Received ${events3.length} events from the nested function`);
 ```
 
-
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
 
@@ -2567,19 +2574,13 @@ process.env.LANGCHAIN_TRACING_V2 = "true";
 process.env.LANGCHAIN_PROJECT = "Configuration: LangGraphJS";
 ```
 
-
 ```typescript
 import { BaseMessage } from "@langchain/core/messages";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { RunnableConfig } from "@langchain/core/runnables";
-import {
-  END,
-  START,
-  StateGraph,
-  Annotation,
-} from "@langchain/langgraph";
+import { END, START, StateGraph, Annotation } from "@langchain/langgraph";
 
 const AgentState = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
@@ -2590,7 +2591,7 @@ const AgentState = Annotation.Root({
       return y ? y : x ? x : "N/A";
     },
     default: () => "N/A",
-  })
+  }),
 });
 
 const promptTemplate = ChatPromptTemplate.fromMessages([
@@ -2600,27 +2601,28 @@ const promptTemplate = ChatPromptTemplate.fromMessages([
 
 const callModel = async (
   state: typeof AgentState.State,
-  config?: RunnableConfig,
+  config?: RunnableConfig
 ) => {
   const { messages, userInfo } = state;
   const modelName = config?.configurable?.model;
-  const model = modelName === "claude"
-    ? new ChatAnthropic({ model: "claude-3-haiku-20240307" })
-    : new ChatOpenAI({ model: "gpt-4o" });
+  const model =
+    modelName === "claude"
+      ? new ChatAnthropic({ model: "claude-3-haiku-20240307" })
+      : new ChatOpenAI({ model: "gpt-4o" });
   const chain = promptTemplate.pipe(model);
   const response = await chain.invoke(
     {
       messages,
       userInfo,
     },
-    config,
+    config
   );
   return { messages: [response] };
 };
 
 const fetchUserInformation = async (
   _: typeof AgentState.State,
-  config?: RunnableConfig,
+  config?: RunnableConfig
 ) => {
   const userDB = {
     user1: {
@@ -2639,8 +2641,7 @@ const fetchUserInformation = async (
     const user = userDB[userId as keyof typeof userDB];
     if (user) {
       return {
-        userInfo:
-          `Name: ${user.name}\nEmail: ${user.email}\nPhone: ${user.phone}`,
+        userInfo: `Name: ${user.name}\nEmail: ${user.email}\nPhone: ${user.phone}`,
       };
     }
   }
@@ -2657,7 +2658,6 @@ const workflow = new StateGraph(AgentState)
 const graph = workflow.compile();
 ```
 
-
 ```typescript
 import { HumanMessage } from "@langchain/core/messages";
 
@@ -2670,13 +2670,11 @@ const config = {
 const inputs = {
   messages: [new HumanMessage("Could you remind me of my email??")],
 };
-for await (
-  const { messages } of await graph.stream(inputs, {
-    ...config,
-    streamMode: "values",
-  })
-) {
-  let msg = messages[messages?.length - 1];
+for await (const { messages } of await graph.stream(inputs, {
+  ...config,
+  streamMode: "values",
+})) {
+  let msg = messages?.at(-1);
   if (msg?.content) {
     console.log(msg.content);
   } else if (msg?.tool_calls?.length > 0) {
@@ -2687,7 +2685,6 @@ for await (
   console.log("-----\n");
 }
 ```
-
 
 ```typescript
 const config2 = {
@@ -2699,13 +2696,11 @@ const config2 = {
 const inputs2 = {
   messages: [new HumanMessage("Could you remind me of my email??")],
 };
-for await (
-  const { messages } of await graph.stream(inputs2, {
-    ...config2,
-    streamMode: "values",
-  })
-) {
-  let msg = messages[messages?.length - 1];
+for await (const { messages } of await graph.stream(inputs2, {
+  ...config2,
+  streamMode: "values",
+})) {
+  let msg = messages?.at(-1);
   if (msg?.content) {
     console.log(msg.content);
   } else if (msg?.tool_calls?.length > 0) {
@@ -2716,7 +2711,6 @@ for await (
   console.log("-----\n");
 }
 ```
-
 
 ```typescript
 import { MessagesAnnotation } from "@langchain/langgraph";
@@ -2735,38 +2729,50 @@ const printNode = async (
   return {};
 };
 
-const graphWithConfigSchema = new StateGraph(MessagesAnnotation, ConfigurableAnnotation)
+const graphWithConfigSchema = new StateGraph(
+  MessagesAnnotation,
+  ConfigurableAnnotation
+)
   .addNode("printNode", printNode)
   .addEdge(START, "printNode")
   .compile();
 
-const result = await graphWithConfigSchema.invoke({
-  messages: [{ role: "user", content: "Echo!"} ]
-}, { configurable: { expectedField: "I am expected", unexpectedField: "I am unexpected but present" } });
+const result = await graphWithConfigSchema.invoke(
+  {
+    messages: [{ role: "user", content: "Echo!" }],
+  },
+  {
+    configurable: {
+      expectedField: "I am expected",
+      unexpectedField: "I am unexpected but present",
+    },
+  }
+);
 ```
-
 
 ```typescript
 import { z } from "zod";
 import { tool } from "@langchain/core/tools";
 
-const getWeather = tool(async ({ location }) => {
-  if (location === "SAN FRANCISCO") {
-    return "It's 60 degrees and foggy";
-  } else if (location.toLowerCase() === "san francisco") {
-    throw new Error("Input queries must be all capitals");
-  } else {
-    throw new Error("Invalid input.");
+const getWeather = tool(
+  async ({ location }) => {
+    if (location === "SAN FRANCISCO") {
+      return "It's 60 degrees and foggy";
+    } else if (location.toLowerCase() === "san francisco") {
+      throw new Error("Input queries must be all capitals");
+    } else {
+      throw new Error("Invalid input.");
+    }
+  },
+  {
+    name: "get_weather",
+    description: "Call to get the current weather",
+    schema: z.object({
+      location: z.string(),
+    }),
   }
-}, {
-  name: "get_weather",
-  description: "Call to get the current weather",
-  schema: z.object({
-    location: z.string(),
-  }),
-});
+);
 ```
-
 
 ```typescript
 import { StateGraph, MessagesAnnotation } from "@langchain/langgraph";
@@ -2783,18 +2789,18 @@ const modelWithTools = new ChatAnthropic({
 
 const shouldContinue = async (state: typeof MessagesAnnotation.State) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1];
+  const lastMessage = messages.at(-1);
   if (isAIMessage(lastMessage) && lastMessage.tool_calls?.length) {
     return "tools";
   }
   return "__end__";
-}
+};
 
 const callModel = async (state: typeof MessagesAnnotation.State) => {
   const { messages } = state;
   const response = await modelWithTools.invoke(messages);
   return { messages: [response] };
-}
+};
 
 const app = new StateGraph(MessagesAnnotation)
   .addNode("agent", callModel)
@@ -2810,7 +2816,6 @@ const app = new StateGraph(MessagesAnnotation)
   .compile();
 ```
 
-
 ```typescript
 import * as tslab from "tslab";
 
@@ -2821,21 +2826,19 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 const response = await app.invoke({
   messages: [
-    { role: "user", content: "what is the weather in san francisco?"},
-  ]
+    { role: "user", content: "what is the weather in san francisco?" },
+  ],
 });
 
 for (const message of response.messages) {
   // Anthropic returns tool calls in content as well as in `AIMessage.tool_calls`
   const content = JSON.stringify(message.content, null, 2);
-  console.log(`${message._getType().toUpperCase()}: ${content}`);
+  console.log(`${message.getType().toUpperCase()}: ${content}`);
 }
 ```
-
 
 ```typescript
 import { StringOutputParser } from "@langchain/core/output_parsers";
@@ -2844,20 +2847,23 @@ const haikuRequestSchema = z.object({
   topic: z.array(z.string()).length(3),
 });
 
-const masterHaikuGenerator = tool(async ({ topic }) => {
-  const model = new ChatAnthropic({
-    model: "claude-3-haiku-20240307",
-    temperature: 0,
-  });
-  const chain = model.pipe(new StringOutputParser());
-  const topics = topic.join(", ");
-  const haiku = await chain.invoke(`Write a haiku about ${topics}`);
-  return haiku;
-}, {
-  name: "master_haiku_generator",
-  description: "Generates a haiku based on the provided topics.",
-  schema: haikuRequestSchema,
-});
+const masterHaikuGenerator = tool(
+  async ({ topic }) => {
+    const model = new ChatAnthropic({
+      model: "claude-3-haiku-20240307",
+      temperature: 0,
+    });
+    const chain = model.pipe(new StringOutputParser());
+    const topics = topic.join(", ");
+    const haiku = await chain.invoke(`Write a haiku about ${topics}`);
+    return haiku;
+  },
+  {
+    name: "master_haiku_generator",
+    description: "Generates a haiku based on the provided topics.",
+    schema: haikuRequestSchema,
+  }
+);
 
 const customStrategyToolNode = new ToolNode([masterHaikuGenerator]);
 
@@ -2865,22 +2871,28 @@ const customStrategyModel = new ChatAnthropic({
   model: "claude-3-haiku-20240307",
   temperature: 0,
 });
-const customStrategyModelWithTools = customStrategyModel.bindTools([masterHaikuGenerator]);
+const customStrategyModelWithTools = customStrategyModel.bindTools([
+  masterHaikuGenerator,
+]);
 
-const customStrategyShouldContinue = async (state: typeof MessagesAnnotation.State) => {
+const customStrategyShouldContinue = async (
+  state: typeof MessagesAnnotation.State
+) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1];
+  const lastMessage = messages.at(-1);
   if (isAIMessage(lastMessage) && lastMessage.tool_calls?.length) {
     return "tools";
   }
   return "__end__";
-}
+};
 
-const customStrategyCallModel = async (state: typeof MessagesAnnotation.State) => {
+const customStrategyCallModel = async (
+  state: typeof MessagesAnnotation.State
+) => {
   const { messages } = state;
   const response = await customStrategyModelWithTools.invoke(messages);
   return { messages: [response] };
-}
+};
 
 const customStrategyApp = new StateGraph(MessagesAnnotation)
   .addNode("tools", customStrategyToolNode)
@@ -2897,7 +2909,9 @@ const customStrategyApp = new StateGraph(MessagesAnnotation)
 
 const response2 = await customStrategyApp.invoke(
   {
-    messages: [{ role: "user", content: "Write me an incredible haiku about water." }],
+    messages: [
+      { role: "user", content: "Write me an incredible haiku about water." },
+    ],
   },
   { recursionLimit: 10 }
 );
@@ -2905,37 +2919,43 @@ const response2 = await customStrategyApp.invoke(
 for (const message of response2.messages) {
   // Anthropic returns tool calls in content as well as in `AIMessage.tool_calls`
   const content = JSON.stringify(message.content, null, 2);
-  console.log(`${message._getType().toUpperCase()}: ${content}`);
+  console.log(`${message.getType().toUpperCase()}: ${content}`);
 }
 ```
 
-
 ```typescript
-import { AIMessage, ToolMessage, RemoveMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  ToolMessage,
+  RemoveMessage,
+} from "@langchain/core/messages";
 
 const haikuRequestSchema2 = z.object({
   topic: z.array(z.string()).length(3),
 });
 
-const masterHaikuGenerator2 = tool(async ({ topic }) => {
-  const model = new ChatAnthropic({
-    model: "claude-3-haiku-20240307",
-    temperature: 0,
-  });
-  const chain = model.pipe(new StringOutputParser());
-  const topics = topic.join(", ");
-  const haiku = await chain.invoke(`Write a haiku about ${topics}`);
-  return haiku;
-}, {
-  name: "master_haiku_generator",
-  description: "Generates a haiku based on the provided topics.",
-  schema: haikuRequestSchema2,
-});
+const masterHaikuGenerator2 = tool(
+  async ({ topic }) => {
+    const model = new ChatAnthropic({
+      model: "claude-3-haiku-20240307",
+      temperature: 0,
+    });
+    const chain = model.pipe(new StringOutputParser());
+    const topics = topic.join(", ");
+    const haiku = await chain.invoke(`Write a haiku about ${topics}`);
+    return haiku;
+  },
+  {
+    name: "master_haiku_generator",
+    description: "Generates a haiku based on the provided topics.",
+    schema: haikuRequestSchema2,
+  }
+);
 
 const callTool2 = async (state: typeof MessagesAnnotation.State) => {
   const { messages } = state;
   const toolsByName = { master_haiku_generator: masterHaikuGenerator };
-  const lastMessage = messages[messages.length - 1] as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage;
   const outputMessages: ToolMessage[] = [];
   for (const toolCall of lastMessage.tool_calls) {
     try {
@@ -2948,7 +2968,7 @@ const callTool2 = async (state: typeof MessagesAnnotation.State) => {
           content: error.message,
           name: toolCall.name,
           tool_call_id: toolCall.id!,
-          additional_kwargs: { error }
+          additional_kwargs: { error },
         })
       );
     }
@@ -2970,31 +2990,36 @@ const betterModelWithTools = betterModel.bindTools([masterHaikuGenerator2]);
 
 const shouldContinue2 = async (state: typeof MessagesAnnotation.State) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1];
+  const lastMessage = messages.at(-1);
   if (isAIMessage(lastMessage) && lastMessage.tool_calls?.length) {
     return "tools";
   }
   return "__end__";
-}
+};
 
 const shouldFallback = async (state: typeof MessagesAnnotation.State) => {
   const { messages } = state;
   const failedToolMessages = messages.find((message) => {
-    return message._getType() === "tool" && message.additional_kwargs.error !== undefined;
+    return (
+      message.getType() === "tool" &&
+      message.additional_kwargs.error !== undefined
+    );
   });
   if (failedToolMessages) {
     return "remove_failed_tool_call_attempt";
   }
   return "agent";
-}
+};
 
 const callModel2 = async (state: typeof MessagesAnnotation.State) => {
   const { messages } = state;
   const response = await modelWithTools2.invoke(messages);
   return { messages: [response] };
-}
+};
 
-const removeFailedToolCallAttempt = async (state: typeof MessagesAnnotation.State) => {
+const removeFailedToolCallAttempt = async (
+  state: typeof MessagesAnnotation.State
+) => {
   const { messages } = state;
   // Remove all messages from the most recent
   // instance of AIMessage onwards.
@@ -3003,14 +3028,16 @@ const removeFailedToolCallAttempt = async (state: typeof MessagesAnnotation.Stat
     .reverse()
     .findIndex(({ msg }) => isAIMessage(msg));
   const messagesToRemove = messages.slice(lastAIMessageIndex);
-  return { messages: messagesToRemove.map(m => new RemoveMessage({ id: m.id })) };
-}
+  return {
+    messages: messagesToRemove.map((m) => new RemoveMessage({ id: m.id })),
+  };
+};
 
 const callFallbackModel = async (state: typeof MessagesAnnotation.State) => {
   const { messages } = state;
   const response = await betterModelWithTools.invoke(messages);
   return { messages: [response] };
-}
+};
 
 const app2 = new StateGraph(MessagesAnnotation)
   .addNode("tools", callTool2)
@@ -3033,7 +3060,6 @@ const app2 = new StateGraph(MessagesAnnotation)
   .compile();
 ```
 
-
 ```typescript
 import * as tslab from "tslab";
 
@@ -3044,18 +3070,20 @@ const arrayBuffer2 = await image2.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer2));
 ```
 
-
 ```typescript
 const stream = await app2.stream(
-  { messages: [{ role: "user", content: "Write me an incredible haiku about water." }] },
-  { recursionLimit: 10 },
-)
+  {
+    messages: [
+      { role: "user", content: "Write me an incredible haiku about water." },
+    ],
+  },
+  { recursionLimit: 10 }
+);
 
 for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
-
 
 ```typescript
 import { StateGraph, Annotation } from "@langchain/langgraph";
@@ -3079,7 +3107,7 @@ const subgraphBuilder = new StateGraph(SubgraphStateAnnotation)
   .addNode("subgraphNode1", subgraphNode1)
   .addNode("subgraphNode2", subgraphNode2)
   .addEdge("__start__", "subgraphNode1")
-  .addEdge("subgraphNode1", "subgraphNode2")
+  .addEdge("subgraphNode1", "subgraphNode2");
 
 const subgraph = subgraphBuilder.compile();
 
@@ -3092,18 +3120,17 @@ const node1 = async (state: typeof ParentStateAnnotation.State) => {
   return {
     foo: "hi! " + state.foo,
   };
-}
+};
 
 const builder = new StateGraph(ParentStateAnnotation)
   .addNode("node1", node1)
   // note that we're adding the compiled subgraph as a node to the parent graph
   .addNode("node2", subgraph)
   .addEdge("__start__", "node1")
-  .addEdge("node1", "node2")
+  .addEdge("node1", "node2");
 
 const graph = builder.compile();
 ```
-
 
 ```typescript
 const stream = await graph.stream({ foo: "foo" });
@@ -3113,15 +3140,16 @@ for await (const chunk of stream) {
 }
 ```
 
-
 ```typescript
-const streamWithSubgraphs = await graph.stream({ foo: "foo" }, { subgraphs: true });
+const streamWithSubgraphs = await graph.stream(
+  { foo: "foo" },
+  { subgraphs: true }
+);
 
 for await (const chunk of streamWithSubgraphs) {
   console.log(chunk);
 }
 ```
-
 
 ```typescript
 import { StateGraph, Annotation } from "@langchain/langgraph";
@@ -3136,7 +3164,7 @@ const subgraphNodeOne = async (state: typeof SubgraphAnnotation.State) => {
 };
 
 const subgraphNodeTwo = async (state: typeof SubgraphAnnotation.State) => {
-  return { bar: state.bar + state.baz }
+  return { bar: state.bar + state.baz };
 };
 
 const subgraphCalledInFunction = new StateGraph(SubgraphAnnotation)
@@ -3155,14 +3183,14 @@ const nodeOne = async (state: typeof ParentAnnotation.State) => {
   return {
     foo: "hi! " + state.foo,
   };
-}
+};
 
 const nodeTwo = async (state: typeof ParentAnnotation.State) => {
   const response = await subgraphCalledInFunction.invoke({
     bar: state.foo,
   });
-  return { foo: response.bar }
-}
+  return { foo: response.bar };
+};
 
 const graphWithFunction = new StateGraph(ParentStateAnnotation)
   .addNode("node1", nodeOne)
@@ -3173,60 +3201,64 @@ const graphWithFunction = new StateGraph(ParentStateAnnotation)
   .compile();
 ```
 
-
 ```typescript
-const graphWithFunctionStream = await graphWithFunction.stream({ foo: "foo" }, { subgraphs: true });
+const graphWithFunctionStream = await graphWithFunction.stream(
+  { foo: "foo" },
+  { subgraphs: true }
+);
 for await (const chunk of graphWithFunctionStream) {
   console.log(chunk);
 }
 ```
 
-
 ```typescript
-process.env.ANTHROPIC_API_KEY = 'your-anthropic-api-key';
+process.env.ANTHROPIC_API_KEY = "your-anthropic-api-key";
 ```
 
-
 ```typescript
-import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
 
-const getWeather = tool((input) => {
-  if (['sf', 'san francisco'].includes(input.location.toLowerCase())) {
-    return 'It\'s 60 degrees and foggy.';
-  } else {
-    return 'It\'s 90 degrees and sunny.';
+const getWeather = tool(
+  (input) => {
+    if (["sf", "san francisco"].includes(input.location.toLowerCase())) {
+      return "It's 60 degrees and foggy.";
+    } else {
+      return "It's 90 degrees and sunny.";
+    }
+  },
+  {
+    name: "get_weather",
+    description: "Call to get the current weather.",
+    schema: z.object({
+      location: z.string().describe("Location to get the weather for."),
+    }),
   }
-}, {
-  name: 'get_weather',
-  description: 'Call to get the current weather.',
-  schema: z.object({
-    location: z.string().describe("Location to get the weather for."),
-  })
-})
+);
 
-const getCoolestCities = tool(() => {
-  return 'nyc, sf';
-}, {
-  name: 'get_coolest_cities',
-  description: 'Get a list of coolest cities',
-  schema: z.object({
-    noOp: z.string().optional().describe("No-op parameter."),
-  })
-})
+const getCoolestCities = tool(
+  () => {
+    return "nyc, sf";
+  },
+  {
+    name: "get_coolest_cities",
+    description: "Get a list of coolest cities",
+    schema: z.object({
+      noOp: z.string().optional().describe("No-op parameter."),
+    }),
+  }
+);
 ```
 
-
 ```typescript
-import { ToolNode } from '@langchain/langgraph/prebuilt';
+import { ToolNode } from "@langchain/langgraph/prebuilt";
 
-const tools = [getWeather, getCoolestCities]
-const toolNode = new ToolNode(tools)
+const tools = [getWeather, getCoolestCities];
+const toolNode = new ToolNode(tools);
 ```
 
-
 ```typescript
-import { AIMessage } from '@langchain/core/messages';
+import { AIMessage } from "@langchain/core/messages";
 
 const messageWithSingleToolCall = new AIMessage({
   content: "",
@@ -3236,13 +3268,12 @@ const messageWithSingleToolCall = new AIMessage({
       args: { location: "sf" },
       id: "tool_call_id",
       type: "tool_call",
-    }
-  ]
-})
+    },
+  ],
+});
 
-await toolNode.invoke({ messages: [messageWithSingleToolCall] })
+await toolNode.invoke({ messages: [messageWithSingleToolCall] });
 ```
-
 
 ```typescript
 const messageWithMultipleToolCalls = new AIMessage({
@@ -3259,61 +3290,64 @@ const messageWithMultipleToolCalls = new AIMessage({
       args: { location: "sf" },
       id: "tool_call_id_2",
       type: "tool_call",
-    }
-  ]
-})
+    },
+  ],
+});
 
-await toolNode.invoke({ messages: [messageWithMultipleToolCalls] })
+await toolNode.invoke({ messages: [messageWithMultipleToolCalls] });
 ```
-
 
 ```typescript
 import { ChatAnthropic } from "@langchain/anthropic";
 
 const modelWithTools = new ChatAnthropic({
   model: "claude-3-haiku-20240307",
-  temperature: 0
+  temperature: 0,
 }).bindTools(tools);
 ```
 
-
 ```typescript
-const responseMessage = await modelWithTools.invoke("what's the weather in sf?");
+const responseMessage = await modelWithTools.invoke(
+  "what's the weather in sf?"
+);
 
 responseMessage.tool_calls;
 ```
 
-
 ```typescript
-await toolNode.invoke({ messages: [await modelWithTools.invoke("what's the weather in sf?")] })
+await toolNode.invoke({
+  messages: [await modelWithTools.invoke("what's the weather in sf?")],
+});
 ```
-
 
 ```typescript
 import {
   StateGraph,
   MessagesAnnotation,
   END,
-  START
+  START,
 } from "@langchain/langgraph";
 
-const toolNodeForGraph = new ToolNode(tools)
+const toolNodeForGraph = new ToolNode(tools);
 
 const shouldContinue = (state: typeof MessagesAnnotation.State) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1];
-  if ("tool_calls" in lastMessage && Array.isArray(lastMessage.tool_calls) && lastMessage.tool_calls?.length) {
-      return "tools";
+  const lastMessage = messages.at(-1);
+  if (
+    "tool_calls" in lastMessage &&
+    Array.isArray(lastMessage.tool_calls) &&
+    lastMessage.tool_calls?.length
+  ) {
+    return "tools";
   }
   return END;
-}
+};
 
 const callModel = async (state: typeof MessagesAnnotation.State) => {
   const { messages } = state;
   const response = await modelWithTools.invoke(messages);
   return { messages: response };
-}
-
+};
 
 const workflow = new StateGraph(MessagesAnnotation)
   // Define the two nodes we will cycle between
@@ -3323,9 +3357,8 @@ const workflow = new StateGraph(MessagesAnnotation)
   .addConditionalEdges("agent", shouldContinue, ["tools", END])
   .addEdge("tools", "agent");
 
-const app = workflow.compile()
+const app = workflow.compile();
 ```
-
 
 ```typescript
 import * as tslab from "tslab";
@@ -3337,7 +3370,6 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 import { HumanMessage } from "@langchain/core/messages";
 
@@ -3347,46 +3379,52 @@ const stream = await app.stream(
     messages: [{ role: "user", content: "what's the weather in sf?" }],
   },
   {
-    streamMode: "values"
+    streamMode: "values",
   }
-)
+);
 for await (const chunk of stream) {
-  const lastMessage = chunk.messages[chunk.messages.length - 1];
-  const type = lastMessage._getType();
+  const lastMessage = chunk.messages.at(-1);
+  const type = lastMessage.getType();
   const content = lastMessage.content;
   const toolCalls = lastMessage.tool_calls;
-  console.dir({
-    type,
-    content,
-    toolCalls
-  }, { depth: null });
+  console.dir(
+    {
+      type,
+      content,
+      toolCalls,
+    },
+    { depth: null }
+  );
 }
 ```
-
 
 ```typescript
 // example with a multiple tool calls in succession
 const streamWithMultiToolCalls = await app.stream(
   {
-      messages: [{ role: "user", content: "what's the weather in the coolest cities?" }],
+    messages: [
+      { role: "user", content: "what's the weather in the coolest cities?" },
+    ],
   },
   {
-    streamMode: "values"
+    streamMode: "values",
   }
-)
+);
 for await (const chunk of streamWithMultiToolCalls) {
-  const lastMessage = chunk.messages[chunk.messages.length - 1];
-  const type = lastMessage._getType();
+  const lastMessage = chunk.messages.at(-1);
+  const type = lastMessage.getType();
   const content = lastMessage.content;
   const toolCalls = lastMessage.tool_calls;
-  console.dir({
-    type,
-    content,
-    toolCalls
-  }, { depth: null });
+  console.dir(
+    {
+      type,
+      content,
+      toolCalls,
+    },
+    { depth: null }
+  );
 }
 ```
-
 
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
@@ -3397,7 +3435,6 @@ for await (const chunk of streamWithMultiToolCalls) {
 // process.env.LANGCHAIN_TRACING = "true";
 // process.env.LANGCHAIN_PROJECT = "Stream Tokens: LangGraphJS";
 ```
-
 
 ```typescript
 import { Annotation } from "@langchain/langgraph";
@@ -3410,35 +3447,35 @@ const StateAnnotation = Annotation.Root({
 });
 ```
 
-
 ```typescript
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-const searchTool = tool((_) => {
-  // This is a placeholder for the actual implementation
-  return "Cold, with a low of 3℃";
-}, {
-  name: "search",
-  description:
-    "Use to surf the web, fetch current information, check the weather, and retrieve other information.",
-  schema: z.object({
-    query: z.string().describe("The query to use in your search."),
-  }),
-});
+const searchTool = tool(
+  (_) => {
+    // This is a placeholder for the actual implementation
+    return "Cold, with a low of 3℃";
+  },
+  {
+    name: "search",
+    description:
+      "Use to surf the web, fetch current information, check the weather, and retrieve other information.",
+    schema: z.object({
+      query: z.string().describe("The query to use in your search."),
+    }),
+  }
+);
 
 await searchTool.invoke({ query: "What's the weather like?" });
 
 const tools = [searchTool];
 ```
 
-
 ```typescript
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 
 const toolNode = new ToolNode(tools);
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -3449,11 +3486,9 @@ const model = new ChatOpenAI({
 });
 ```
 
-
 ```typescript
 const boundModel = model.bindTools(tools);
 ```
-
 
 ```typescript
 import { StateGraph, END } from "@langchain/langgraph";
@@ -3461,7 +3496,7 @@ import { AIMessage } from "@langchain/core/messages";
 
 const routeMessage = (state: typeof StateAnnotation.State) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1] as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage;
   // If no tools are called, we can finish (respond to the user)
   if (!lastMessage?.tool_calls?.length) {
     return END;
@@ -3470,9 +3505,7 @@ const routeMessage = (state: typeof StateAnnotation.State) => {
   return "tools";
 };
 
-const callModel = async (
-  state: typeof StateAnnotation.State,
-) => {
+const callModel = async (state: typeof StateAnnotation.State) => {
   // For versions of @langchain/core < 0.2.3, you must call `.stream()`
   // and aggregate the message from chunks instead of calling `.invoke()`.
   const { messages } = state;
@@ -3490,7 +3523,6 @@ const workflow = new StateGraph(StateAnnotation)
 const agent = workflow.compile();
 ```
 
-
 ```typescript
 import * as tslab from "tslab";
 
@@ -3501,24 +3533,30 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 import { isAIMessageChunk } from "@langchain/core/messages";
 
 const stream = await agent.stream(
-  { messages: [{ role: "user", content: "What's the current weather in Nepal?" }] },
-  { streamMode: "messages" },
+  {
+    messages: [
+      { role: "user", content: "What's the current weather in Nepal?" },
+    ],
+  },
+  { streamMode: "messages" }
 );
 
 for await (const [message, _metadata] of stream) {
   if (isAIMessageChunk(message) && message.tool_call_chunks?.length) {
-    console.log(`${message.getType()} MESSAGE TOOL CALL CHUNK: ${message.tool_call_chunks[0].args}`);
+    console.log(
+      `${message.getType()} MESSAGE TOOL CALL CHUNK: ${
+        message.tool_call_chunks[0].args
+      }`
+    );
   } else {
     console.log(`${message.getType()} MESSAGE CONTENT: ${message.content}`);
   }
 }
 ```
-
 
 ```typescript
 import { RunnableLambda } from "@langchain/core/runnables";
@@ -3532,13 +3570,14 @@ const unstreamed = async (_: typeof StateAnnotation.State) => {
   console.log("LOGGED UNSTREAMED MESSAGE", res.content);
   // Don't update the state, this is just to show a call that won't be streamed
   return {};
-}
+};
 
 const agentWithNoStream = new StateGraph(StateAnnotation)
-  .addNode("unstreamed",
+  .addNode(
+    "unstreamed",
     // Add a "nostream" tag to the entire node
     RunnableLambda.from(unstreamed).withConfig({
-      tags: ["nostream"]
+      tags: ["nostream"],
     })
   )
   .addNode("agent", callModel)
@@ -3551,19 +3590,26 @@ const agentWithNoStream = new StateGraph(StateAnnotation)
   .compile();
 
 const stream = await agentWithNoStream.stream(
-  { messages: [{ role: "user", content: "What's the current weather in Nepal?" }] },
-  { streamMode: "messages" },
+  {
+    messages: [
+      { role: "user", content: "What's the current weather in Nepal?" },
+    ],
+  },
+  { streamMode: "messages" }
 );
 
 for await (const [message, _metadata] of stream) {
   if (isAIMessageChunk(message) && message.tool_call_chunks?.length) {
-    console.log(`${message.getType()} MESSAGE TOOL CALL CHUNK: ${message.tool_call_chunks[0].args}`);
+    console.log(
+      `${message.getType()} MESSAGE TOOL CALL CHUNK: ${
+        message.tool_call_chunks[0].args
+      }`
+    );
   } else {
     console.log(`${message.getType()} MESSAGE CONTENT: ${message.content}`);
   }
 }
 ```
-
 
 ```typescript
 const eventStream = await agent.streamEvents(
@@ -3575,65 +3621,75 @@ const eventStream = await agent.streamEvents(
 
 for await (const { event, data } of eventStream) {
   if (event === "on_chat_model_stream" && isAIMessageChunk(data.chunk)) {
-    if (data.chunk.tool_call_chunks !== undefined && data.chunk.tool_call_chunks.length > 0) {
+    if (
+      data.chunk.tool_call_chunks !== undefined &&
+      data.chunk.tool_call_chunks.length > 0
+    ) {
       console.log(data.chunk.tool_call_chunks);
     }
   }
 }
 ```
 
-
 ```typescript
-import { RetryPolicy } from "@langchain/langgraph"
+import { RetryPolicy } from "@langchain/langgraph";
 
 const retryPolicy: RetryPolicy = {};
 ```
 
-
 ```typescript
-import Database from "better-sqlite3"
-import { ChatAnthropic } from "@langchain/anthropic"
-import { MessagesAnnotation, StateGraph, START, END } from "@langchain/langgraph"
-import { AIMessage } from "@langchain/core/messages"
+import Database from "better-sqlite3";
+import { ChatAnthropic } from "@langchain/anthropic";
+import {
+  MessagesAnnotation,
+  StateGraph,
+  START,
+  END,
+} from "@langchain/langgraph";
+import { AIMessage } from "@langchain/core/messages";
 
 // Create an in-memory database
-const db: typeof Database.prototype = new Database(':memory:');
+const db: typeof Database.prototype = new Database(":memory:");
 
 const model = new ChatAnthropic({ model: "claude-3-5-sonnet-20240620" });
 
 const callModel = async (state: typeof MessagesAnnotation.State) => {
-    const response = await model.invoke(state.messages);
-    return { messages: [response] };
-}
+  const response = await model.invoke(state.messages);
+  return { messages: [response] };
+};
 
 const queryDatabase = async (state: typeof MessagesAnnotation.State) => {
-    const queryResult: string = JSON.stringify(db.prepare("SELECT * FROM Artist LIMIT 10;").all());
+  const queryResult: string = JSON.stringify(
+    db.prepare("SELECT * FROM Artist LIMIT 10;").all()
+  );
 
-    return { messages: [new AIMessage({content: "queryResult"})]};
+  return { messages: [new AIMessage({ content: "queryResult" })] };
 };
 
 const workflow = new StateGraph(MessagesAnnotation)
-    // Define the two nodes we will cycle between
-    .addNode("call_model", callModel, { retryPolicy: {maxAttempts: 5}})
-    .addNode("query_database", queryDatabase, { retryPolicy: { retryOn: (e: any): boolean => {
+  // Define the two nodes we will cycle between
+  .addNode("call_model", callModel, { retryPolicy: { maxAttempts: 5 } })
+  .addNode("query_database", queryDatabase, {
+    retryPolicy: {
+      retryOn: (e: any): boolean => {
         if (e instanceof Database.SqliteError) {
           // Retry on "SQLITE_BUSY" error
-          return e.code === 'SQLITE_BUSY';
+          return e.code === "SQLITE_BUSY";
         }
         return false; // Don't retry on other errors
-      }}})
-    .addEdge(START, "call_model")
-    .addEdge("call_model", "query_database")
-    .addEdge("query_database", END);
+      },
+    },
+  })
+  .addEdge(START, "call_model")
+  .addEdge("call_model", "query_database")
+  .addEdge("query_database", END);
 
 const graph = workflow.compile();
 ```
 
-
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
 ```
-
 
 ```typescript
 // Optional, add tracing in LangSmith
@@ -3642,7 +3698,6 @@ process.env.LANGCHAIN_CALLBACKS_BACKGROUND = "true";
 process.env.LANGCHAIN_TRACING_V2 = "true";
 process.env.LANGCHAIN_PROJECT = "Managing Agent Steps: LangGraphJS";
 ```
-
 
 ```typescript
 import { Annotation } from "@langchain/langgraph";
@@ -3654,7 +3709,6 @@ const AgentState = Annotation.Root({
   }),
 });
 ```
-
 
 ```typescript
 import { DynamicStructuredTool } from "@langchain/core/tools";
@@ -3675,13 +3729,11 @@ const searchTool = new DynamicStructuredTool({
 const tools = [searchTool];
 ```
 
-
 ```typescript
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 
 const toolNode = new ToolNode<typeof AgentState.State>(tools);
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -3692,13 +3744,11 @@ const model = new ChatOpenAI({
 });
 ```
 
-
 ```typescript
 // After we've done this, we should make sure the model knows that it has these tools available to call.
 // We can do this by binding the tools to the model class.
 const boundModel = model.bindTools(tools);
 ```
-
 
 ```typescript
 import { END } from "@langchain/langgraph";
@@ -3708,7 +3758,7 @@ import { RunnableConfig } from "@langchain/core/runnables";
 // Define the function that determines whether to continue or not
 const shouldContinue = (state: typeof AgentState.State) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1] as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage;
   // If there is no function call, then we finish
   if (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0) {
     return END;
@@ -3722,13 +3772,13 @@ const shouldContinue = (state: typeof AgentState.State) => {
 // Here we don't pass all messages to the model but rather only pass the `N` most recent. Note that this is a terribly simplistic way to handle messages meant as an illustration, and there may be other methods you may want to look into depending on your use case. We also have to make sure we don't truncate the chat history to include the tool message first, as this would cause an API error.
 const callModel = async (
   state: typeof AgentState.State,
-  config?: RunnableConfig,
+  config?: RunnableConfig
 ) => {
   let modelMessages = [];
   for (let i = state.messages.length - 1; i >= 0; i--) {
     modelMessages.push(state.messages[i]);
     if (modelMessages.length >= 5) {
-      if (!ToolMessage.isInstance(modelMessages[modelMessages.length - 1])) {
+      if (!ToolMessage.isInstance(modelMessages.at(-1))) {
         break;
       }
     }
@@ -3741,7 +3791,6 @@ const callModel = async (
 };
 ```
 
-
 ```typescript
 import { START, StateGraph } from "@langchain/langgraph";
 
@@ -3750,10 +3799,7 @@ const workflow = new StateGraph(AgentState)
   .addNode("agent", callModel)
   .addNode("tools", toolNode)
   .addEdge(START, "agent")
-  .addConditionalEdges(
-    "agent",
-    shouldContinue,
-  )
+  .addConditionalEdges("agent", shouldContinue)
   .addEdge("tools", "agent");
 
 // Finally, we compile it!
@@ -3762,13 +3808,12 @@ const workflow = new StateGraph(AgentState)
 const app = workflow.compile();
 ```
 
-
 ```typescript
 import { HumanMessage, isAIMessage } from "@langchain/core/messages";
 import { GraphRecursionError } from "@langchain/langgraph";
 
 const prettyPrint = (message: BaseMessage) => {
-  let txt = `[${message._getType()}]: ${message.content}`;
+  let txt = `[${message.getType()}]: ${message.content}`;
   if (
     (isAIMessage(message) && (message as AIMessage)?.tool_calls?.length) ||
     0 > 0
@@ -3784,19 +3829,17 @@ const prettyPrint = (message: BaseMessage) => {
 const inputs = {
   messages: [
     new HumanMessage(
-      "what is the weather in sf? Don't give up! Keep using your tools.",
+      "what is the weather in sf? Don't give up! Keep using your tools."
     ),
   ],
 };
 // Setting the recursionLimit will set a max number of steps. We expect this to endlessly loop :)
 try {
-  for await (
-    const output of await app.stream(inputs, {
-      streamMode: "values",
-      recursionLimit: 10,
-    })
-  ) {
-    const lastMessage = output.messages[output.messages.length - 1];
+  for await (const output of await app.stream(inputs, {
+    streamMode: "values",
+    recursionLimit: 10,
+  })) {
+    const lastMessage = output.messages.at(-1);
     prettyPrint(lastMessage);
     console.log("-----\n");
   }
@@ -3811,7 +3854,6 @@ try {
   }
 }
 ```
-
 
 ```typescript
 const USER_ID_TO_USER_INFO = {
@@ -3828,7 +3870,6 @@ const USER_ID_TO_USER_INFO = {
 };
 ```
 
-
 ```typescript
 import { Annotation, Command, MessagesAnnotation } from "@langchain/langgraph";
 import { tool } from "@langchain/core/tools";
@@ -3843,37 +3884,40 @@ const StateAnnotation = Annotation.Root({
   userInfo: Annotation<Record<string, any>>,
 });
 
-const lookupUserInfo = tool(async (_, config) => {
-  const userId = config.configurable?.user_id;
-  if (userId === undefined) {
-    throw new Error("Please provide a user id in config.configurable");
+const lookupUserInfo = tool(
+  async (_, config) => {
+    const userId = config.configurable?.user_id;
+    if (userId === undefined) {
+      throw new Error("Please provide a user id in config.configurable");
+    }
+    if (USER_ID_TO_USER_INFO[userId] === undefined) {
+      throw new Error(`User "${userId}" not found`);
+    }
+    // Populated when a tool is called with a tool call from a model as input
+    const toolCallId = config.toolCall.id;
+    return new Command({
+      update: {
+        // update the state keys
+        userInfo: USER_ID_TO_USER_INFO[userId],
+        // update the message history
+        messages: [
+          {
+            role: "tool",
+            content: "Successfully looked up user information",
+            tool_call_id: toolCallId,
+          },
+        ],
+      },
+    });
+  },
+  {
+    name: "lookup_user_info",
+    description:
+      "Always use this to look up information about the user to better assist them with their questions.",
+    schema: z.object({}),
   }
-  if (USER_ID_TO_USER_INFO[userId] === undefined) {
-    throw new Error(`User "${userId}" not found`);
-  }
-  // Populated when a tool is called with a tool call from a model as input
-  const toolCallId = config.toolCall.id;
-  return new Command({
-    update: {
-      // update the state keys
-      userInfo: USER_ID_TO_USER_INFO[userId],
-      // update the message history
-      messages: [
-        {
-          role: "tool",
-          content: "Successfully looked up user information",
-          tool_call_id: toolCallId,
-        },
-      ],
-    },
-  })
-}, {
-  name: "lookup_user_info",
-  description: "Always use this to look up information about the user to better assist them with their questions.",
-  schema: z.object({}),
-});
+);
 ```
-
 
 ```typescript
 const stateModifier = (state: typeof StateAnnotation.State) => {
@@ -3882,13 +3926,15 @@ const stateModifier = (state: typeof StateAnnotation.State) => {
     return state.messages;
   }
   const systemMessage = `User name is ${userInfo.name}. User lives in ${userInfo.location}`;
-  return [{
-    role: "system",
-    content: systemMessage,
-  }, ...state.messages];
+  return [
+    {
+      role: "system",
+      content: systemMessage,
+    },
+    ...state.messages,
+  ];
 };
 ```
-
 
 ```typescript
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
@@ -3903,45 +3949,50 @@ const agent = createReactAgent({
   tools: [lookupUserInfo],
   stateSchema: StateAnnotation,
   stateModifier: stateModifier,
-})
+});
 ```
 
-
 ```typescript
-const stream = await agent.stream({
-  messages: [{
-    role: "user",
-    content: "hi, what should i do this weekend?",
-  }],
-  
-}, {
-  // provide user ID in the config
-  configurable: { user_id: "abc123" }
-});
+const stream = await agent.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "hi, what should i do this weekend?",
+      },
+    ],
+  },
+  {
+    // provide user ID in the config
+    configurable: { user_id: "abc123" },
+  }
+);
 
 for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
 
-
 ```typescript
-const taylorStream = await agent.stream({
-  messages: [{
-    role: "user",
-    content: "hi, what should i do this weekend?",
-  }],
-  
-}, {
-  // provide user ID in the config
-  configurable: { user_id: "zyx987" }
-});
+const taylorStream = await agent.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "hi, what should i do this weekend?",
+      },
+    ],
+  },
+  {
+    // provide user ID in the config
+    configurable: { user_id: "zyx987" },
+  }
+);
 
 for await (const chunk of taylorStream) {
   console.log(chunk);
 }
 ```
-
 
 ```typescript
 import {
@@ -3955,28 +4006,37 @@ import { isAIMessage } from "@langchain/core/messages";
 
 import { z } from "zod";
 
-const myTool = tool(async () => {
-  return new Command({
-    update: {
-      messages: [
-        {
-          role: "assistant",
-          content: "hi there!",
-          name: "Greeter",
-        }
-      ],
-    },
-  });
-}, {
-  name: "greeting",
-  description: "Updates the current state with a greeting",
-  schema: z.object({}),
-});
+const myTool = tool(
+  async () => {
+    return new Command({
+      update: {
+        messages: [
+          {
+            role: "assistant",
+            content: "hi there!",
+            name: "Greeter",
+          },
+        ],
+      },
+    });
+  },
+  {
+    name: "greeting",
+    description: "Updates the current state with a greeting",
+    schema: z.object({}),
+  }
+);
 
 const toolExecutor = async (state: typeof MessagesAnnotation.State) => {
   const message = state.messages.at(-1);
-  if (!isAIMessage(message) || message.tool_calls === undefined || message.tool_calls.length === 0) {
-    throw new Error("Most recent message must be an AIMessage with a tool call.")
+  if (
+    !isAIMessage(message) ||
+    message.tool_calls === undefined ||
+    message.tool_calls.length === 0
+  ) {
+    throw new Error(
+      "Most recent message must be an AIMessage with a tool call."
+    );
   }
   const outputs = await Promise.all(
     message.tool_calls.map(async (toolCall) => {
@@ -4003,32 +4063,35 @@ const customGraph = new StateGraph(MessagesAnnotation)
   .addNode("runTools", toolExecutor)
   .addEdge("__start__", "runTools")
   .compile();
-  
+
 await customGraph.invoke({
-  messages: [{
-    role: "user",
-    content: "how are you?",
-  }, {
-    role: "assistant",
-    content: "Let me call the greeting tool and find out!",
-    tool_calls: [{
-      id: "123",
-      args: {},
-      name: "greeting",
-    }],
-  }],
+  messages: [
+    {
+      role: "user",
+      content: "how are you?",
+    },
+    {
+      role: "assistant",
+      content: "Let me call the greeting tool and find out!",
+      tool_calls: [
+        {
+          id: "123",
+          args: {},
+          name: "greeting",
+        },
+      ],
+    },
+  ],
 });
 ```
 
-
 ```typescript
-```
 
+```
 
 ```typescript
 // process.env.OPENAI_API_KEY = "sk-...";
 ```
-
 
 ```typescript
 import { Annotation } from "@langchain/langgraph";
@@ -4041,28 +4104,29 @@ const StateAnnotation = Annotation.Root({
 });
 ```
 
-
 ```typescript
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-const searchTool = tool(async ({ query: _query }: { query: string }) => {
-  // This is a placeholder for the actual implementation
-  return "Cold, with a low of 3℃";
-}, {
-  name: "search",
-  description:
-    "Use to surf the web, fetch current information, check the weather, and retrieve other information.",
-  schema: z.object({
-    query: z.string().describe("The query to use in your search."),
-  }),
-});
+const searchTool = tool(
+  async ({ query: _query }: { query: string }) => {
+    // This is a placeholder for the actual implementation
+    return "Cold, with a low of 3℃";
+  },
+  {
+    name: "search",
+    description:
+      "Use to surf the web, fetch current information, check the weather, and retrieve other information.",
+    schema: z.object({
+      query: z.string().describe("The query to use in your search."),
+    }),
+  }
+);
 
 await searchTool.invoke({ query: "What's the weather like?" });
 
 const tools = [searchTool];
 ```
-
 
 ```typescript
 import { ToolNode } from "@langchain/langgraph/prebuilt";
@@ -4070,18 +4134,15 @@ import { ToolNode } from "@langchain/langgraph/prebuilt";
 const toolNode = new ToolNode(tools);
 ```
 
-
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
 
 const model = new ChatOpenAI({ model: "gpt-4o" });
 ```
 
-
 ```typescript
 const boundModel = model.bindTools(tools);
 ```
-
 
 ```typescript
 import { END, START, StateGraph } from "@langchain/langgraph";
@@ -4089,7 +4150,7 @@ import { AIMessage } from "@langchain/core/messages";
 
 const routeMessage = (state: typeof StateAnnotation.State) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1] as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage;
   // If no tools are called, we can finish (respond to the user)
   if (!lastMessage?.tool_calls?.length) {
     return END;
@@ -4098,9 +4159,7 @@ const routeMessage = (state: typeof StateAnnotation.State) => {
   return "tools";
 };
 
-const callModel = async (
-  state: typeof StateAnnotation.State,
-) => {
+const callModel = async (state: typeof StateAnnotation.State) => {
   // For versions of @langchain/core < 0.2.3, you must call `.stream()`
   // and aggregate the message from chunks instead of calling `.invoke()`.
   const { messages } = state;
@@ -4118,20 +4177,18 @@ const workflow = new StateGraph(StateAnnotation)
 const graph = workflow.compile();
 ```
 
-
 ```typescript
-let inputs = { messages: [{ role: "user", content: "what's the weather in sf" }] };
+let inputs = {
+  messages: [{ role: "user", content: "what's the weather in sf" }],
+};
 
-for await (
-  const chunk of await graph.stream(inputs, {
-    streamMode: "values",
-  })
-) {
+for await (const chunk of await graph.stream(inputs, {
+  streamMode: "values",
+})) {
   console.log(chunk["messages"]);
   console.log("\n====\n");
 }
 ```
-
 
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
@@ -4143,7 +4200,6 @@ process.env.LANGCHAIN_TRACING_V2 = "true";
 process.env.LANGCHAIN_PROJECT = "Direct Return: LangGraphJS";
 ```
 
-
 ```typescript
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -4154,9 +4210,10 @@ const SearchTool = z.object({
   // that isn't used directly by the tool - it's used by our
   // graph instead to determine whether or not to return the
   // result directly to the user
-  return_direct: z.boolean()
+  return_direct: z
+    .boolean()
     .describe(
-      "Whether or not the result of this should be returned directly to the user without you seeing what it is",
+      "Whether or not the result of this should be returned directly to the user without you seeing what it is"
     )
     .default(false),
 });
@@ -4177,13 +4234,11 @@ const searchTool = new DynamicStructuredTool({
 const tools = [searchTool];
 ```
 
-
 ```typescript
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 
 const toolNode = new ToolNode(tools);
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -4197,7 +4252,6 @@ const model = new ChatOpenAI({
 const boundModel = model.bindTools(tools);
 ```
 
-
 ```typescript
 import { Annotation } from "@langchain/langgraph";
 import { BaseMessage } from "@langchain/core/messages";
@@ -4209,7 +4263,6 @@ const AgentState = Annotation.Root({
 });
 ```
 
-
 ```typescript
 import { RunnableConfig } from "@langchain/core/runnables";
 import { END } from "@langchain/langgraph";
@@ -4218,7 +4271,7 @@ import { AIMessage } from "@langchain/core/messages";
 // Define the function that determines whether to continue or not
 const shouldContinue = (state: typeof AgentState.State) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1] as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage;
   // If there is no function call, then we finish
   if (!lastMessage?.tool_calls?.length) {
     return END;
@@ -4234,14 +4287,16 @@ const shouldContinue = (state: typeof AgentState.State) => {
 };
 
 // Define the function that calls the model
-const callModel = async (state: typeof AgentState.State, config?: RunnableConfig) => {
+const callModel = async (
+  state: typeof AgentState.State,
+  config?: RunnableConfig
+) => {
   const messages = state.messages;
   const response = await boundModel.invoke(messages, config);
   // We return an object, because this will get added to the existing list
   return { messages: [response] };
 };
 ```
-
 
 ```typescript
 import { START, StateGraph } from "@langchain/langgraph";
@@ -4260,7 +4315,7 @@ const workflow = new StateGraph(AgentState)
     // First, we define the start node. We use `agent`.
     "agent",
     // Next, we pass in the function that will determine which node is called next.
-    shouldContinue,
+    shouldContinue
   )
   // We now add a normal edge from `tools` to `agent`.
   .addEdge("tools", "agent")
@@ -4270,14 +4325,14 @@ const workflow = new StateGraph(AgentState)
 const app = workflow.compile();
 ```
 
-
 ```typescript
 import { HumanMessage, isAIMessage } from "@langchain/core/messages";
 
 const prettyPrint = (message: BaseMessage) => {
-  let txt = `[${message._getType()}]: ${message.content}`;
+  let txt = `[${message.getType()}]: ${message.content}`;
   if (
-    isAIMessage(message) && (message as AIMessage)?.tool_calls?.length || 0 > 0
+    (isAIMessage(message) && (message as AIMessage)?.tool_calls?.length) ||
+    0 > 0
   ) {
     const tool_calls = (message as AIMessage)?.tool_calls
       ?.map((tc) => `- ${tc.name}(${JSON.stringify(tc.args)})`)
@@ -4289,30 +4344,28 @@ const prettyPrint = (message: BaseMessage) => {
 
 const inputs = { messages: [new HumanMessage("what is the weather in sf")] };
 for await (const output of await app.stream(inputs, { streamMode: "values" })) {
-  const lastMessage = output.messages[output.messages.length - 1];
+  const lastMessage = output.messages.at(-1);
   prettyPrint(lastMessage);
   console.log("-----\n");
 }
 ```
-
 
 ```typescript
 const inputs2 = {
   messages: [
     new HumanMessage(
-      "what is the weather in sf? return this result directly by setting return_direct = True",
+      "what is the weather in sf? return this result directly by setting return_direct = True"
     ),
   ],
 };
-for await (
-  const output of await app.stream(inputs2, { streamMode: "values" })
-) {
-  const lastMessage = output.messages[output.messages.length - 1];
+for await (const output of await app.stream(inputs2, {
+  streamMode: "values",
+})) {
+  const lastMessage = output.messages.at(-1);
   prettyPrint(lastMessage);
   console.log("-----\n");
 }
 ```
-
 
 ```typescript
 import { OpenAIEmbeddings } from "@langchain/openai";
@@ -4326,20 +4379,24 @@ const store = new InMemoryStore({
   index: {
     embeddings,
     dims: 1536,
-  }
+  },
 });
 ```
 
-
 ```typescript
 // Store some memories
-await store.put(["user_123", "memories"], "1", {"text": "I love pizza"})
-await store.put(["user_123", "memories"], "2", {"text": "I prefer Italian food"})
-await store.put(["user_123", "memories"], "3", {"text": "I don't like spicy food"})
-await store.put(["user_123", "memories"], "3", {"text": "I am studying econometrics"})
-await store.put(["user_123", "memories"], "3", {"text": "I am a plumber"})
+await store.put(["user_123", "memories"], "1", { text: "I love pizza" });
+await store.put(["user_123", "memories"], "2", {
+  text: "I prefer Italian food",
+});
+await store.put(["user_123", "memories"], "3", {
+  text: "I don't like spicy food",
+});
+await store.put(["user_123", "memories"], "3", {
+  text: "I am studying econometrics",
+});
+await store.put(["user_123", "memories"], "3", { text: "I am a plumber" });
 ```
-
 
 ```typescript
 // Find memories about food preferences
@@ -4354,62 +4411,62 @@ for (const memory of memories) {
 }
 ```
 
-
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import { MessagesAnnotation, LangGraphRunnableConfig } from "@langchain/langgraph";
+import {
+  MessagesAnnotation,
+  LangGraphRunnableConfig,
+} from "@langchain/langgraph";
 import { tool } from "@langchain/core/tools";
 import { getContextVariable } from "@langchain/core/context";
 
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 
-const addMemories = async (state: typeof MessagesAnnotation.State, config: LangGraphRunnableConfig) => {
+const addMemories = async (
+  state: typeof MessagesAnnotation.State,
+  config: LangGraphRunnableConfig
+) => {
   const store = config.store;
   // Search based on user's last message
-  const items = await store.search(
-    ["user_123", "memories"], 
-    { 
-      // Assume it's not a complex message
-      query: state.messages[state.messages.length - 1].content as string,
-      limit: 2 
-    }
-  );
-  
-  const memories = items.length 
-    ? `## Memories of user\n${items.map(item => item.value.text).join("\n")}`
+  const items = await store.search(["user_123", "memories"], {
+    // Assume it's not a complex message
+    query: state.messages.at(-1)?.text as string,
+    limit: 2,
+  });
+
+  const memories = items.length
+    ? `## Memories of user\n${items.map((item) => item.value.text).join("\n")}`
     : "";
 
   // Add retrieved memories to system message
   return [
     { role: "system", content: `You are a helpful assistant.\n${memories}` },
-    ...state.messages
+    ...state.messages,
   ];
 };
 
-const upsertMemoryTool = tool(async (
-  input,
-  config: LangGraphRunnableConfig
-): Promise<string> => {
-  const store = config.store;
-  if (!store) {
-    throw new Error("No store provided to tool.");
+const upsertMemoryTool = tool(
+  async (input, config: LangGraphRunnableConfig): Promise<string> => {
+    const store = config.store;
+    if (!store) {
+      throw new Error("No store provided to tool.");
+    }
+    const memoryId = getContextVariable("memoryId") || uuidv4();
+    await store.put(["user_123", "memories"], memoryId, {
+      text: input.content,
+    });
+    return `Stored memory ${memoryId}`;
+  },
+  {
+    name: "upsert_memory",
+    schema: z.object({
+      content: z.string(),
+    }),
+    description: "Upsert a memory in the database.",
   }
-  const memoryId = getContextVariable("memoryId") || uuidv4();
-  await store.put(
-    ["user_123", "memories"],
-    memoryId,
-    { text: input.content }
-  );
-  return `Stored memory ${memoryId}`;
-}, {
-  name: "upsert_memory",
-  schema: z.object({
-    content: z.string(),
-  }),
-  description: "Upsert a memory in the database.",
-});
+);
 
 const agent = createReactAgent({
   llm: new ChatOpenAI({ model: "gpt-4o-mini" }),
@@ -4419,22 +4476,25 @@ const agent = createReactAgent({
 });
 ```
 
-
 ```typescript
-const stream = await agent.stream({
-  messages: [{
-    role: "user",
-    content: "I'm hungry",
-  }],
-}, {
-  streamMode: "messages",
-});
+const stream = await agent.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "I'm hungry",
+      },
+    ],
+  },
+  {
+    streamMode: "messages",
+  }
+);
 
 for await (const [message, _metadata] of stream) {
   console.log(message.content);
 }
 ```
-
 
 ```typescript
 import { InMemoryStore } from "@langchain/langgraph";
@@ -4475,7 +4535,6 @@ for (const r of results) {
 }
 ```
 
-
 ```typescript
 import { InMemoryStore } from "@langchain/langgraph";
 
@@ -4485,7 +4544,7 @@ const overrideStore = new InMemoryStore({
     dims: 1536,
     // Default to embed memory field
     fields: ["memory"],
-  }
+  },
 });
 
 // Store one memory with default indexing
@@ -4499,7 +4558,7 @@ await overrideStore.put(["user_123", "memories"], "mem2", {
   memory: "I love spicy food",
   context: "At a Thai restaurant",
   // Override: only embed the context
-  index: ["context"]
+  index: ["context"],
 });
 
 // Search about food - matches mem1 (using default field)
@@ -4527,10 +4586,9 @@ for (const r of results3) {
 }
 ```
 
-
 ```typescript
-```
 
+```
 
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
@@ -4543,14 +4601,13 @@ process.env.LANGCHAIN_TRACING_V2 = "true";
 process.env.LANGCHAIN_PROJECT = "Branching: LangGraphJS";
 ```
 
-
 ```typescript
 import { END, START, StateGraph, Annotation } from "@langchain/langgraph";
 
 const StateAnnotation = Annotation.Root({
   aggregate: Annotation<string[]>({
     reducer: (x, y) => x.concat(y),
-  })
+  }),
 });
 
 // Create the graph
@@ -4584,9 +4641,7 @@ const builder = new StateGraph(StateAnnotation)
   .addEdge("d", END);
 
 const graph = builder.compile();
-
 ```
-
 
 ```typescript
 import * as tslab from "tslab";
@@ -4598,13 +4653,11 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 // Invoke the graph
 const baseResult = await graph.invoke({ aggregate: [] });
 console.log("Base Result: ", baseResult);
 ```
-
 
 ```typescript
 const ConditionalBranchingAnnotation = Annotation.Root({
@@ -4612,9 +4665,9 @@ const ConditionalBranchingAnnotation = Annotation.Root({
     reducer: (x, y) => x.concat(y),
   }),
   which: Annotation<string>({
-    reducer: (x: string, y: string) => (y ?? x),
-  })
-})
+    reducer: (x: string, y: string) => y ?? x,
+  }),
+});
 
 // Create the graph
 const nodeA2 = (state: typeof ConditionalBranchingAnnotation.State) => {
@@ -4639,7 +4692,9 @@ const nodeE2 = (state: typeof ConditionalBranchingAnnotation.State) => {
 };
 
 // Define the route function
-function routeCDorBC(state: typeof ConditionalBranchingAnnotation.State): string[] {
+function routeCDorBC(
+  state: typeof ConditionalBranchingAnnotation.State
+): string[] {
   if (state.which === "cd") {
     return ["c", "d"];
   }
@@ -4662,9 +4717,7 @@ const builder2 = new StateGraph(ConditionalBranchingAnnotation)
   .addEdge("e", END);
 
 const graph2 = builder2.compile();
-
 ```
-
 
 ```typescript
 import * as tslab from "tslab";
@@ -4676,20 +4729,16 @@ const arrayBuffer2 = await image2.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer2));
 ```
 
-
 ```typescript
 // Invoke the graph
 let g2result = await graph2.invoke({ aggregate: [], which: "bc" });
 console.log("Result 1: ", g2result);
 ```
 
-
 ```typescript
 g2result = await graph2.invoke({ aggregate: [], which: "cd" });
 console.log("Result 2: ", g2result);
-
 ```
-
 
 ```typescript
 type ScoredValue = {
@@ -4713,13 +4762,12 @@ const StableSortingAnnotation = Annotation.Root({
     reducer: (x, y) => x.concat(y),
   }),
   which: Annotation<string>({
-    reducer: (x: string, y: string) => (y ?? x),
+    reducer: (x: string, y: string) => y ?? x,
   }),
   fanoutValues: Annotation<ScoredValue[]>({
     reducer: reduceFanouts,
   }),
-})
-
+});
 
 class ParallelReturnNodeValue {
   private _value: string;
@@ -4782,21 +4830,16 @@ const graph3 = builder3.compile();
 // Invoke the graph
 let g3result = await graph3.invoke({ aggregate: [], which: "bc" });
 console.log("Result 1: ", g3result);
-
 ```
-
 
 ```typescript
 let g3result2 = await graph3.invoke({ aggregate: [], which: "cd" });
 console.log("Result 2: ", g3result2);
-
 ```
-
 
 ```typescript
-process.env.ANTHROPIC_API_KEY = 'YOUR_API_KEY'
+process.env.ANTHROPIC_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 import { z } from "zod";
@@ -4806,11 +4849,12 @@ import { StateGraph, END, START, Annotation, Send } from "@langchain/langgraph";
 /* Model and prompts */
 
 // Define model and prompts we will use
-const subjectsPrompt = "Generate a comma separated list of between 2 and 5 examples related to: {topic}."
-const jokePrompt = "Generate a joke about {subject}"
+const subjectsPrompt =
+  "Generate a comma separated list of between 2 and 5 examples related to: {topic}.";
+const jokePrompt = "Generate a joke about {subject}";
 const bestJokePrompt = `Below are a bunch of jokes about {topic}. Select the best one! Return the ID (index) of the best one.
 
-{jokes}`
+{jokes}`;
 
 // Zod schemas for getting structured output from the LLM
 const Subjects = z.object({
@@ -4907,7 +4951,6 @@ const graph = new StateGraph(OverallState)
 const app = graph.compile();
 ```
 
-
 ```typescript
 import * as tslab from "tslab";
 
@@ -4918,7 +4961,6 @@ const arrayBuffer = await image.arrayBuffer();
 tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 // Call the graph: here we call it to generate a list of jokes
 for await (const s of await app.stream({ topic: "animals" })) {
@@ -4926,37 +4968,44 @@ for await (const s of await app.stream({ topic: "animals" })) {
 }
 ```
 
-
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
-import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 
 const model = new ChatOpenAI({
-    model: "gpt-4o",
-  });
+  model: "gpt-4o",
+});
 
-const getWeather = tool((input) => {
-  if (["sf", "san francisco", "san francisco, ca"].includes(input.location.toLowerCase())) {
-    return "It's 60 degrees and foggy.";
-  } else {
-    return "It's 90 degrees and sunny.";
+const getWeather = tool(
+  (input) => {
+    if (
+      ["sf", "san francisco", "san francisco, ca"].includes(
+        input.location.toLowerCase()
+      )
+    ) {
+      return "It's 60 degrees and foggy.";
+    } else {
+      return "It's 90 degrees and sunny.";
+    }
+  },
+  {
+    name: "get_weather",
+    description: "Call to get the current weather.",
+    schema: z.object({
+      location: z.string().describe("Location to get the weather for."),
+    }),
   }
-}, {
-  name: "get_weather",
-  description: "Call to get the current weather.",
-  schema: z.object({
-    location: z.string().describe("Location to get the weather for."),
-  })
-})
+);
 
 const graph = createReactAgent({ llm: model, tools: [getWeather] });
 ```
 
-
 ```typescript
-let inputs = { messages: [{ role: "user", content: "what's the weather in sf?" }] };
+let inputs = {
+  messages: [{ role: "user", content: "what's the weather in sf?" }],
+};
 
 let stream = await graph.stream(inputs, {
   streamMode: ["updates", "debug"],
@@ -4969,30 +5018,28 @@ for await (const chunk of stream) {
 }
 ```
 
-
 ```typescript
 import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
 import { MemorySaver } from "@langchain/langgraph";
 
 const GraphState = Annotation.Root({
-  input: Annotation<string>
+  input: Annotation<string>,
 });
 
 const step1 = (state: typeof GraphState.State) => {
   console.log("---Step 1---");
   return state;
-}
+};
 
 const step2 = (state: typeof GraphState.State) => {
   console.log("---Step 2---");
   return state;
-}
+};
 
 const step3 = (state: typeof GraphState.State) => {
   console.log("---Step 3---");
   return state;
-}
-
+};
 
 const builder = new StateGraph(GraphState)
   .addNode("step1", step1)
@@ -5003,16 +5050,14 @@ const builder = new StateGraph(GraphState)
   .addEdge("step2", "step3")
   .addEdge("step3", END);
 
-
 // Set up memory
-const graphStateMemory = new MemorySaver()
+const graphStateMemory = new MemorySaver();
 
 const graph = builder.compile({
   checkpointer: graphStateMemory,
-  interruptBefore: ["step2"]
+  interruptBefore: ["step2"],
 });
 ```
-
 
 ```typescript
 import * as tslab from "tslab";
@@ -5024,87 +5069,96 @@ const graphStateArrayBuffer = await graphStateImage.arrayBuffer();
 await tslab.display.png(new Uint8Array(graphStateArrayBuffer));
 ```
 
-
 ```typescript
 // Input
 const initialInput = { input: "hello world" };
 
 // Thread
-const graphStateConfig = { configurable: { thread_id: "1" }, streamMode: "values" as const };
+const graphStateConfig = {
+  configurable: { thread_id: "1" },
+  streamMode: "values" as const,
+};
 
 // Run the graph until the first interruption
 for await (const event of await graph.stream(initialInput, graphStateConfig)) {
-    console.log(`--- ${event.input} ---`);
+  console.log(`--- ${event.input} ---`);
 }
 
 // Will log when the graph is interrupted, after step 2.
 console.log("--- GRAPH INTERRUPTED ---");
-
 ```
-
 
 ```typescript
-console.log("Current state!")
+console.log("Current state!");
 const currState = await graph.getState(graphStateConfig);
-console.log(currState.values)
+console.log(currState.values);
 
-await graph.updateState(graphStateConfig, { input: "hello universe!" })
+await graph.updateState(graphStateConfig, { input: "hello universe!" });
 
-console.log("---\n---\nUpdated state!")
+console.log("---\n---\nUpdated state!");
 const updatedState = await graph.getState(graphStateConfig);
-console.log(updatedState.values)
+console.log(updatedState.values);
 ```
-
 
 ```typescript
 // Continue the graph execution
 for await (const event of await graph.stream(null, graphStateConfig)) {
-    console.log(`--- ${event.input} ---`);
+  console.log(`--- ${event.input} ---`);
 }
 ```
-
 
 ```typescript
 // Set up the tool
 import { ChatAnthropic } from "@langchain/anthropic";
 import { tool } from "@langchain/core/tools";
-import { StateGraph, START, END, MessagesAnnotation } from "@langchain/langgraph";
+import {
+  StateGraph,
+  START,
+  END,
+  MessagesAnnotation,
+} from "@langchain/langgraph";
 import { MemorySaver } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { AIMessage } from "@langchain/core/messages";
 import { z } from "zod";
 
-const search = tool((_) => {
-  return "It's sunny in San Francisco, but you better look out if you're a Gemini 😈.";
-}, {
-  name: "search",
-  description: "Call to surf the web.",
-  schema: z.string(),
-})
+const search = tool(
+  (_) => {
+    return "It's sunny in San Francisco, but you better look out if you're a Gemini 😈.";
+  },
+  {
+    name: "search",
+    description: "Call to surf the web.",
+    schema: z.string(),
+  }
+);
 
-const tools = [search]
-const toolNode = new ToolNode(tools)
+const tools = [search];
+const toolNode = new ToolNode(tools);
 
 // Set up the model
-const model = new ChatAnthropic({ model: "claude-3-5-sonnet-20240620" })
-const modelWithTools = model.bindTools(tools)
-
+const model = new ChatAnthropic({ model: "claude-3-5-sonnet-20240620" });
+const modelWithTools = model.bindTools(tools);
 
 // Define nodes and conditional edges
 
 // Define the function that determines whether to continue or not
-function shouldContinue(state: typeof MessagesAnnotation.State): "action" | typeof END {
-  const lastMessage = state.messages[state.messages.length - 1];
+function shouldContinue(
+  state: typeof MessagesAnnotation.State
+): "action" | typeof END {
+  const lastMessage = state.messages.at(-1);
   // If there is no function call, then we finish
   if (lastMessage && !(lastMessage as AIMessage).tool_calls?.length) {
-      return END;
+    return END;
   }
   // Otherwise if there is, we continue
   return "action";
 }
 
 // Define the function that calls the model
-async function callModel(state: typeof MessagesAnnotation.State): Promise<Partial<typeof MessagesAnnotation.State>> {
+async function callModel(
+  state: typeof MessagesAnnotation.State
+): Promise<Partial<typeof MessagesAnnotation.State>> {
   const messages = state.messages;
   const response = await modelWithTools.invoke(messages);
   // We return an object with a messages property, because this will get added to the existing list
@@ -5118,11 +5172,11 @@ const workflow = new StateGraph(MessagesAnnotation)
   .addNode("action", toolNode)
   // We now add a conditional edge
   .addConditionalEdges(
-      // First, we define the start node. We use `agent`.
-      // This means these are the edges taken after the `agent` node is called.
-      "agent",
-      // Next, we pass in the function that will determine which node is called next.
-      shouldContinue
+    // First, we define the start node. We use `agent`.
+    // This means these are the edges taken after the `agent` node is called.
+    "agent",
+    // Next, we pass in the function that will determine which node is called next.
+    shouldContinue
   )
   // We now add a normal edge from `action` to `agent`.
   // This means that after `action` is called, `agent` node is called next.
@@ -5139,10 +5193,9 @@ const memory = new MemorySaver();
 // meaning you can use it as you would any other runnable
 const app = workflow.compile({
   checkpointer: memory,
-  interruptBefore: ["action"]
+  interruptBefore: ["action"],
 });
 ```
-
 
 ```typescript
 import * as tslab from "tslab";
@@ -5154,20 +5207,26 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 // Thread
-const config = { configurable: { thread_id: "3" }, streamMode: "values" as const };
+const config = {
+  configurable: { thread_id: "3" },
+  streamMode: "values" as const,
+};
 
-for await (const event of await app.stream({
-    messages: [{ role: "human", content: "search for the weather in sf now" }]
-}, config)) {
-    const recentMsg = event.messages[event.messages.length - 1];
-    console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
-    console.log(recentMsg.content);
+for await (const event of await app.stream(
+  {
+    messages: [{ role: "human", content: "search for the weather in sf now" }],
+  },
+  config
+)) {
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
+  console.log(recentMsg.content);
 }
 ```
-
 
 ```typescript
 // First, lets get the current state
@@ -5175,10 +5234,10 @@ const currentState = await app.getState(config);
 
 // Let's now get the last message in the state
 // This is the one with the tool calls that we want to update
-let lastMessage = currentState.values.messages[currentState.values.messages.length - 1]
+let lastMessage = currentState.values.messages.at(-1);
 
 // Let's now update the args for that tool call
-lastMessage.tool_calls[0].args = { query: "current weather in SF" }
+lastMessage.tool_calls[0].args = { query: "current weather in SF" };
 
 // Let's now call `updateState` to pass in this message in the `messages` key
 // This will get treated as any other update to the state
@@ -5189,30 +5248,29 @@ lastMessage.tool_calls[0].args = { query: "current weather in SF" }
 await app.updateState(config, { messages: lastMessage });
 ```
 
-
 ```typescript
 const newState = await app.getState(config);
-const updatedStateToolCalls = newState.values.messages[newState.values.messages.length -1 ].tool_calls
-console.log(updatedStateToolCalls)
+const updatedStateToolCalls = newState.values.messages.at(-1)?.tool_calls;
+console.log(updatedStateToolCalls);
 ```
-
 
 ```typescript
 for await (const event of await app.stream(null, config)) {
-    console.log(event)
-    const recentMsg = event.messages[event.messages.length - 1];
-    console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
-    if (recentMsg._getType() === "tool") {
-        console.log({
-            name: recentMsg.name,
-            content: recentMsg.content
-        })
-    } else if (recentMsg._getType() === "ai") {
-        console.log(recentMsg.content)
-    }
+  console.log(event);
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
+  if (recentMsg.getType() === "tool") {
+    console.log({
+      name: recentMsg.name,
+      content: recentMsg.content,
+    });
+  } else if (recentMsg.getType() === "ai") {
+    console.log(recentMsg.content);
+  }
 }
 ```
-
 
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
@@ -5225,48 +5283,55 @@ process.env.LANGCHAIN_TRACING_V2 = "true";
 process.env.LANGCHAIN_PROJECT = "ReAct Agent with system prompt: LangGraphJS";
 ```
 
-
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
-import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 
 const model = new ChatOpenAI({
-    model: "gpt-4o",
-  });
+  model: "gpt-4o",
+});
 
-const getWeather = tool((input) => {
-    if (input.location === 'sf') {
-        return 'It\'s always sunny in sf';
+const getWeather = tool(
+  (input) => {
+    if (input.location === "sf") {
+      return "It's always sunny in sf";
     } else {
-        return 'It might be cloudy in nyc';
+      return "It might be cloudy in nyc";
     }
-}, {
-    name: 'get_weather',
-    description: 'Call to get the current weather.',
+  },
+  {
+    name: "get_weather",
+    description: "Call to get the current weather.",
     schema: z.object({
-        location: z.enum(['sf','nyc']).describe("Location to get the weather for."),
-    })
-})
+      location: z
+        .enum(["sf", "nyc"])
+        .describe("Location to get the weather for."),
+    }),
+  }
+);
 
 // We can add our system prompt here
-const prompt = "Respond in Italian"
+const prompt = "Respond in Italian";
 
-const agent = createReactAgent({ llm: model, tools: [getWeather], stateModifier: prompt });
+const agent = createReactAgent({
+  llm: model,
+  tools: [getWeather],
+  stateModifier: prompt,
+});
 ```
 
-
 ```typescript
-let inputs = { messages: [{ role: "user", content: "what is the weather in NYC?" }] };
+let inputs = {
+  messages: [{ role: "user", content: "what is the weather in NYC?" }],
+};
 let stream = await agent.stream(inputs, {
   streamMode: "values",
 });
 
-for await (
-  const { messages } of stream
-) {
-  let msg = messages[messages?.length - 1];
+for await (const { messages } of stream) {
+  let msg = messages?.at(-1);
   if (msg?.content) {
     console.log(msg.content);
   } else if (msg?.tool_calls?.length > 0) {
@@ -5278,11 +5343,9 @@ for await (
 }
 ```
 
-
 ```typescript
 process.env.OPENAI_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -5293,26 +5356,31 @@ const model = new ChatOpenAI({
   model: "gpt-4o-mini",
 });
 
-const getWeather = tool(async ({ location }) => {
-  const lowercaseLocation = location.toLowerCase();
-  if (lowercaseLocation.includes("sf") || lowercaseLocation.includes("san francisco")) {
-    return "It's sunny!";
-  } else if (lowercaseLocation.includes("boston")) {
-    return "It's rainy!";
-  } else {
-    return `I am not sure what the weather is in ${location}`;
+const getWeather = tool(
+  async ({ location }) => {
+    const lowercaseLocation = location.toLowerCase();
+    if (
+      lowercaseLocation.includes("sf") ||
+      lowercaseLocation.includes("san francisco")
+    ) {
+      return "It's sunny!";
+    } else if (lowercaseLocation.includes("boston")) {
+      return "It's rainy!";
+    } else {
+      return `I am not sure what the weather is in ${location}`;
+    }
+  },
+  {
+    name: "getWeather",
+    schema: z.object({
+      location: z.string().describe("location to get the weather for"),
+    }),
+    description: "Call to get the weather from a specific location.",
   }
-}, {
-  name: "getWeather",
-  schema: z.object({
-    location: z.string().describe("location to get the weather for"),
-  }),
-  description: "Call to get the weather from a specific location."
-});
+);
 
 const tools = [getWeather];
 ```
-
 
 ```typescript
 import {
@@ -5338,42 +5406,41 @@ const callTool = task(
     return new ToolMessage({ content: observation, tool_call_id: toolCall.id });
     // Can also pass toolCall directly into the tool to return a ToolMessage
     // return tool.invoke(toolCall);
-  });
-```
-
-
-```typescript
-import { entrypoint, addMessages } from "@langchain/langgraph";
-
-const agent = entrypoint(
-  "agent",
-  async (messages: BaseMessageLike[]) => {
-    let currentMessages = messages;
-    let llmResponse = await callModel(currentMessages);
-    while (true) {
-      if (!llmResponse.tool_calls?.length) {
-        break;
-      }
-
-      // Execute tools
-      const toolResults = await Promise.all(
-        llmResponse.tool_calls.map((toolCall) => {
-          return callTool(toolCall);
-        })
-      );
-      
-      // Append to message list
-      currentMessages = addMessages(currentMessages, [llmResponse, ...toolResults]);
-
-      // Call model again
-      llmResponse = await callModel(currentMessages);
-    }
-
-    return llmResponse;
   }
 );
 ```
 
+```typescript
+import { entrypoint, addMessages } from "@langchain/langgraph";
+
+const agent = entrypoint("agent", async (messages: BaseMessageLike[]) => {
+  let currentMessages = messages;
+  let llmResponse = await callModel(currentMessages);
+  while (true) {
+    if (!llmResponse.tool_calls?.length) {
+      break;
+    }
+
+    // Execute tools
+    const toolResults = await Promise.all(
+      llmResponse.tool_calls.map((toolCall) => {
+        return callTool(toolCall);
+      })
+    );
+
+    // Append to message list
+    currentMessages = addMessages(currentMessages, [
+      llmResponse,
+      ...toolResults,
+    ]);
+
+    // Call model again
+    llmResponse = await callModel(currentMessages);
+  }
+
+  return llmResponse;
+});
+```
 
 ```typescript
 import { BaseMessage, isAIMessage } from "@langchain/core/messages";
@@ -5384,10 +5451,13 @@ const prettyPrintMessage = (message: BaseMessage) => {
   if (isAIMessage(message) && message.tool_calls?.length) {
     console.log(JSON.stringify(message.tool_calls, null, 2));
   }
-}
+};
 
 // Usage example
-const userMessage = { role: "user", content: "What's the weather in san francisco?" };
+const userMessage = {
+  role: "user",
+  content: "What's the weather in san francisco?",
+};
 console.log(userMessage);
 
 const stream = await agent.stream([userMessage]);
@@ -5403,62 +5473,67 @@ for await (const step of stream) {
 }
 ```
 
-
 ```typescript hl_lines="6 10 37 38 39 40"
-import {
-  MemorySaver,
-  getPreviousState,
-} from "@langchain/langgraph";
+import { MemorySaver, getPreviousState } from "@langchain/langgraph";
 
 const checkpointer = new MemorySaver();
 
-const agentWithMemory = entrypoint({
-  name: "agentWithMemory",
-  checkpointer,
-}, async (messages: BaseMessageLike[]) => {
-  const previous = getPreviousState<BaseMessage>() ?? [];
-  let currentMessages = addMessages(previous, messages);
-  let llmResponse = await callModel(currentMessages);
-  while (true) {
-    if (!llmResponse.tool_calls?.length) {
-      break;
+const agentWithMemory = entrypoint(
+  {
+    name: "agentWithMemory",
+    checkpointer,
+  },
+  async (messages: BaseMessageLike[]) => {
+    const previous = getPreviousState<BaseMessage>() ?? [];
+    let currentMessages = addMessages(previous, messages);
+    let llmResponse = await callModel(currentMessages);
+    while (true) {
+      if (!llmResponse.tool_calls?.length) {
+        break;
+      }
+
+      // Execute tools
+      const toolResults = await Promise.all(
+        llmResponse.tool_calls.map((toolCall) => {
+          return callTool(toolCall);
+        })
+      );
+
+      // Append to message list
+      currentMessages = addMessages(currentMessages, [
+        llmResponse,
+        ...toolResults,
+      ]);
+
+      // Call model again
+      llmResponse = await callModel(currentMessages);
     }
 
-    // Execute tools
-    const toolResults = await Promise.all(
-      llmResponse.tool_calls.map((toolCall) => {
-        return callTool(toolCall);
-      })
-    );
-    
-    // Append to message list
-    currentMessages = addMessages(currentMessages, [llmResponse, ...toolResults]);
+    // Append final response for storage
+    currentMessages = addMessages(currentMessages, llmResponse);
 
-    // Call model again
-    llmResponse = await callModel(currentMessages);
+    return entrypoint.final({
+      value: llmResponse,
+      save: currentMessages,
+    });
   }
-  
-  // Append final response for storage
-  currentMessages = addMessages(currentMessages, llmResponse);
-
-  return entrypoint.final({
-    value: llmResponse,
-    save: currentMessages,
-  });
-});
+);
 ```
-
 
 ```typescript
 const config = { configurable: { thread_id: "1" } };
 ```
 
-
 ```typescript
-const streamWithMemory = await agentWithMemory.stream([{
-  role: "user",
-  content: "What's the weather in san francisco?",
-}], config);
+const streamWithMemory = await agentWithMemory.stream(
+  [
+    {
+      role: "user",
+      content: "What's the weather in san francisco?",
+    },
+  ],
+  config
+);
 
 for await (const step of streamWithMemory) {
   for (const [taskName, update] of Object.entries(step)) {
@@ -5471,12 +5546,16 @@ for await (const step of streamWithMemory) {
 }
 ```
 
-
 ```typescript
-const followupStreamWithMemory = await agentWithMemory.stream([{
-  role: "user",
-  content: "How does it compare to Boston, MA?",
-}], config);
+const followupStreamWithMemory = await agentWithMemory.stream(
+  [
+    {
+      role: "user",
+      content: "How does it compare to Boston, MA?",
+    },
+  ],
+  config
+);
 
 for await (const step of followupStreamWithMemory) {
   for (const [taskName, update] of Object.entries(step)) {
@@ -5488,7 +5567,6 @@ for await (const step of followupStreamWithMemory) {
   }
 }
 ```
-
 
 ```typescript
 import { Annotation, StateGraph } from "@langchain/langgraph";
@@ -5518,14 +5596,9 @@ await graph.invoke({
 });
 ```
 
-
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
-import {
-  Command,
-  MessagesAnnotation,
-  StateGraph
-} from "@langchain/langgraph";
+import { Command, MessagesAnnotation, StateGraph } from "@langchain/langgraph";
 
 import { z } from "zod";
 
@@ -5535,9 +5608,9 @@ const model = new ChatOpenAI({
 });
 
 const makeAgentNode = (params: {
-  name: string,
-  destinations: string[],
-  systemPrompt: string
+  name: string;
+  destinations: string[];
+  systemPrompt: string;
 }) => {
   return async (state: typeof MessagesAnnotation.State) => {
     const possibleDestinations = ["__end__", ...params.destinations] as const;
@@ -5545,21 +5618,29 @@ const makeAgentNode = (params: {
     // - model's text response (`response`)
     // - name of the node to go to next (or '__end__')
     const responseSchema = z.object({
-      response: z.string().describe(
-        "A human readable response to the original question. Does not need to be a final response. Will be streamed back to the user."
-      ),
-      goto: z.enum(possibleDestinations).describe("The next agent to call, or __end__ if the user's query has been resolved. Must be one of the specified values."),
+      response: z
+        .string()
+        .describe(
+          "A human readable response to the original question. Does not need to be a final response. Will be streamed back to the user."
+        ),
+      goto: z
+        .enum(possibleDestinations)
+        .describe(
+          "The next agent to call, or __end__ if the user's query has been resolved. Must be one of the specified values."
+        ),
     });
     const messages = [
       {
         role: "system",
-        content: params.systemPrompt
+        content: params.systemPrompt,
       },
       ...state.messages,
     ];
-    const response = await model.withStructuredOutput(responseSchema, {
-      name: "router",
-    }).invoke(messages);
+    const response = await model
+      .withStructuredOutput(responseSchema, {
+        name: "router",
+      })
+      .invoke(messages);
 
     // handoff to another agent or halt
     const aiMessage = {
@@ -5569,9 +5650,9 @@ const makeAgentNode = (params: {
     };
     return new Command({
       goto: response.goto,
-      update: { messages: aiMessage }
+      update: { messages: aiMessage },
     });
-  }
+  };
 };
 
 const travelAdvisor = makeAgentNode({
@@ -5582,7 +5663,7 @@ const travelAdvisor = makeAgentNode({
     "If you need specific sightseeing recommendations, ask 'sightseeing_advisor' for help. ",
     "If you need hotel recommendations, ask 'hotel_advisor' for help. ",
     "If you have enough information to respond to the user, return '__end__'. ",
-    "Never mention other agents by name."
+    "Never mention other agents by name.",
   ].join(""),
 });
 
@@ -5594,7 +5675,7 @@ const sightseeingAdvisor = makeAgentNode({
     "If you need general travel help, go to 'travel_advisor' for help. ",
     "If you need hotel recommendations, go to 'hotel_advisor' for help. ",
     "If you have enough information to respond to the user, return 'finish'. ",
-    "Never mention other agents by name."
+    "Never mention other agents by name.",
   ].join(""),
 });
 
@@ -5625,7 +5706,6 @@ const graph = new StateGraph(MessagesAnnotation)
   .compile();
 ```
 
-
 ```typescript
 import * as tslab from "tslab";
 
@@ -5636,13 +5716,14 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 const simpleStream = await graph.stream({
-  messages: [{
-    role: "user",
-    content: "i wanna go somewhere warm in the caribbean",
-  }],
+  messages: [
+    {
+      role: "user",
+      content: "i wanna go somewhere warm in the caribbean",
+    },
+  ],
 });
 
 for await (const chunk of simpleStream) {
@@ -5650,20 +5731,21 @@ for await (const chunk of simpleStream) {
 }
 ```
 
-
 ```typescript
 const recommendationStream = await graph.stream({
-  messages: [{
-    role: "user",
-    content: "i wanna go somewhere warm in the caribbean. pick one destination, give me some things to do and hotel recommendations",
-  }],
+  messages: [
+    {
+      role: "user",
+      content:
+        "i wanna go somewhere warm in the caribbean. pick one destination, give me some things to do and hotel recommendations",
+    },
+  ],
 });
 
 for await (const chunk of recommendationStream) {
   console.log(chunk);
 }
 ```
-
 
 ```typescript
 import { Command, StateGraph, Annotation } from "@langchain/langgraph";
@@ -5705,7 +5787,7 @@ const villager = async (state: typeof GameStateAnnotation.State) => {
   return new Command({
     goto: "__end__",
   });
-}
+};
 
 /** Guard NPC that protects gold and consumes food. */
 const guard = async (state: typeof GameStateAnnotation.State) => {
@@ -5738,15 +5820,15 @@ const merchant = async (state: typeof GameStateAnnotation.State) => {
   if (state.wood >= 5) {
     console.log("Merchant trading wood for gold.");
     return new Command({
-      goto: "merchant", 
+      goto: "merchant",
       update: {
         wood: -5,
-        gold: 1
-      }
+        gold: 1,
+      },
     });
   }
   return new Command({
-    goto: "__end__"
+    goto: "__end__",
   });
 };
 
@@ -5756,12 +5838,12 @@ const thief = async (state: typeof GameStateAnnotation.State) => {
     console.log("Thief stealing gold.");
     return new Command({
       goto: "__end__",
-      update: { gold: -state.gold }
+      update: { gold: -state.gold },
     });
   }
   // keep thief on standby (loop back to the 'thief' agent)
   return new Command({
-    goto: "thief"
+    goto: "thief",
   });
 };
 
@@ -5785,7 +5867,6 @@ const gameGraph = new StateGraph(GameStateAnnotation)
   .compile();
 ```
 
-
 ```typescript
 import * as tslab from "tslab";
 
@@ -5796,16 +5877,18 @@ const gameArrayBuffer = await gameImage.arrayBuffer();
 await tslab.display.png(new Uint8Array(gameArrayBuffer));
 ```
 
-
 ```typescript
-const gameStream = await gameGraph.stream({
-  wood: 10,
-  food: 3,
-  gold: 10,
-  guardOnDuty: true,
-}, {
-  streamMode: "values",
-});
+const gameStream = await gameGraph.stream(
+  {
+    wood: 10,
+    food: 3,
+    gold: 10,
+    guardOnDuty: true,
+  },
+  {
+    streamMode: "values",
+  }
+);
 
 for await (const state of gameStream) {
   console.log("Game state", state);
@@ -5813,10 +5896,9 @@ for await (const state of gameStream) {
 }
 ```
 
-
 ```typescript
-```
 
+```
 
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
@@ -5827,7 +5909,6 @@ for await (const state of gameStream) {
 process.env.LANGCHAIN_TRACING_V2 = "true";
 process.env.LANGCHAIN_PROJECT = "Force Calling a Tool First: LangGraphJS";
 ```
-
 
 ```typescript
 import { DynamicStructuredTool } from "@langchain/core/tools";
@@ -5851,13 +5932,11 @@ await searchTool.invoke({ query: "What's the weather like?" });
 const tools = [searchTool];
 ```
 
-
 ```typescript
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 
 const toolNode = new ToolNode(tools);
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -5868,11 +5947,9 @@ const model = new ChatOpenAI({
 });
 ```
 
-
 ```typescript
 const boundModel = model.bindTools(tools);
 ```
-
 
 ```typescript
 import { Annotation } from "@langchain/langgraph";
@@ -5885,7 +5962,6 @@ const AgentState = Annotation.Root({
 });
 ```
 
-
 ```typescript
 import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import { RunnableConfig } from "@langchain/core/runnables";
@@ -5894,7 +5970,7 @@ import { concat } from "@langchain/core/utils/stream";
 // Define logic that will be used to determine which conditional edge to go down
 const shouldContinue = (state: typeof AgentState.State) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1] as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage;
   // If there is no function call, then we finish
   if (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0) {
     return "end";
@@ -5906,7 +5982,7 @@ const shouldContinue = (state: typeof AgentState.State) => {
 // Define the function that calls the model
 const callModel = async (
   state: typeof AgentState.State,
-  config?: RunnableConfig,
+  config?: RunnableConfig
 ) => {
   const { messages } = state;
   let response: AIMessageChunk | undefined;
@@ -5924,11 +6000,10 @@ const callModel = async (
 };
 ```
 
-
 ```typescript
 // This is the new first - the first call of the model we want to explicitly hard-code some action
 const firstModel = async (state: typeof AgentState.State) => {
-  const humanInput = state.messages[state.messages.length - 1].content || "";
+  const humanInput = state.messages.at(-1)?.text || "";
   return {
     messages: [
       new AIMessage({
@@ -5947,7 +6022,6 @@ const firstModel = async (state: typeof AgentState.State) => {
   };
 };
 ```
-
 
 ```typescript
 import { END, START, StateGraph } from "@langchain/langgraph";
@@ -5980,7 +6054,7 @@ const workflow = new StateGraph(AgentState)
       continue: "action",
       // Otherwise we finish.
       end: END,
-    },
+    }
   )
   // We now add a normal edge from `tools` to `agent`.
   // This means that after `tools` is called, `agent` node is called next.
@@ -5993,7 +6067,6 @@ const workflow = new StateGraph(AgentState)
 // meaning you can use it as you would any other runnable
 const app = workflow.compile();
 ```
-
 
 ```typescript
 import { HumanMessage } from "@langchain/core/messages";
@@ -6008,27 +6081,32 @@ for await (const output of await app.stream(inputs)) {
 }
 ```
 
-
 ```typescript
 // process.env.OPENAI_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 import { z } from "zod";
 import { tool } from "@langchain/core/tools";
 import { ChatOpenAI } from "@langchain/openai";
-import { StateGraph, MessagesAnnotation, Annotation } from "@langchain/langgraph";
+import {
+  StateGraph,
+  MessagesAnnotation,
+  Annotation,
+} from "@langchain/langgraph";
 
-const getWeather = tool(async ({ city }) => {
-  return `It's sunny in ${city}`;
-}, {
-  name: "get_weather",
-  description: "Get the weather for a specific city",
-  schema: z.object({
-    city: z.string().describe("A city name")
-  })
-});
+const getWeather = tool(
+  async ({ city }) => {
+    return `It's sunny in ${city}`;
+  },
+  {
+    name: "get_weather",
+    description: "Get the weather for a specific city",
+    schema: z.object({
+      city: z.string().describe("A city name"),
+    }),
+  }
+);
 
 const rawModel = new ChatOpenAI({ model: "gpt-4o-mini" });
 const model = rawModel.withStructuredOutput(getWeather);
@@ -6051,8 +6129,8 @@ const weatherNode = async (state: typeof SubGraphAnnotation.State) => {
       {
         role: "assistant",
         content: result,
-      }
-    ]
+      },
+    ],
   };
 };
 
@@ -6064,7 +6142,6 @@ const subgraph = new StateGraph(SubGraphAnnotation)
   .addEdge("weatherNode", "__end__")
   .compile({ interruptBefore: ["weatherNode"] });
 ```
-
 
 ```typescript
 import { MemorySaver } from "@langchain/langgraph";
@@ -6078,10 +6155,14 @@ const RouterStateAnnotation = Annotation.Root({
 
 const routerModel = rawModel.withStructuredOutput(
   z.object({
-    route: z.enum(["weather", "other"]).describe("A step that should execute next to based on the currnet input")
+    route: z
+      .enum(["weather", "other"])
+      .describe(
+        "A step that should execute next to based on the currnet input"
+      ),
   }),
   {
-    name: "router"
+    name: "router",
   }
 );
 
@@ -6090,17 +6171,19 @@ const routerNode = async (state: typeof RouterStateAnnotation.State) => {
     role: "system",
     content: "Classify the incoming query as either about weather or not.",
   };
-  const messages = [systemMessage, ...state.messages]
+  const messages = [systemMessage, ...state.messages];
   const { route } = await routerModel.invoke(messages);
   return { route };
-}
+};
 
 const normalLLMNode = async (state: typeof RouterStateAnnotation.State) => {
   const responseMessage = await rawModel.invoke(state.messages);
   return { messages: [responseMessage] };
 };
 
-const routeAfterPrediction = async (state: typeof RouterStateAnnotation.State) => {
+const routeAfterPrediction = async (
+  state: typeof RouterStateAnnotation.State
+) => {
   if (state.route === "weather") {
     return "weatherGraph";
   } else {
@@ -6119,7 +6202,6 @@ const graph = new StateGraph(RouterStateAnnotation)
   .compile({ checkpointer: memory });
 ```
 
-
 ```typescript
 const config = { configurable: { thread_id: "1" } };
 
@@ -6132,53 +6214,60 @@ for await (const update of stream) {
 }
 ```
 
-
 ```typescript
 const config2 = { configurable: { thread_id: "2" } };
 
-const streamWithBreakpoint = await graph.stream({
-  messages: [{
-    role: "user",
-    content: "what's the weather in sf"
-  }]
-}, { ...config2, streamMode: "updates" });
+const streamWithBreakpoint = await graph.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "what's the weather in sf",
+      },
+    ],
+  },
+  { ...config2, streamMode: "updates" }
+);
 
 for await (const update of streamWithBreakpoint) {
   console.log(update);
 }
 ```
 
-
 ```typescript
-const streamWithSubgraphs = await graph.stream({
-  messages: [{
-    role: "user",
-    content: "what's the weather in sf"
-  }]
-}, { configurable: { thread_id: "3" }, streamMode: "updates", subgraphs: true });
+const streamWithSubgraphs = await graph.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "what's the weather in sf",
+      },
+    ],
+  },
+  { configurable: { thread_id: "3" }, streamMode: "updates", subgraphs: true }
+);
 
 for await (const update of streamWithSubgraphs) {
   console.log(update);
 }
 ```
 
-
 ```typescript
-const state = await graph.getState({ configurable: { thread_id: "3" } })
-state.next
+const state = await graph.getState({ configurable: { thread_id: "3" } });
+state.next;
 ```
-
 
 ```typescript
 JSON.stringify(state.tasks, null, 2);
 ```
 
-
 ```typescript
-const stateWithSubgraphs = await graph.getState({ configurable: { thread_id: "3" } }, { subgraphs: true })
-JSON.stringify(stateWithSubgraphs.tasks, null, 2)
+const stateWithSubgraphs = await graph.getState(
+  { configurable: { thread_id: "3" } },
+  { subgraphs: true }
+);
+JSON.stringify(stateWithSubgraphs.tasks, null, 2);
 ```
-
 
 ```typescript
 const resumedStream = await graph.stream(null, {
@@ -6192,11 +6281,12 @@ for await (const update of resumedStream) {
 }
 ```
 
-
 ```typescript
 let parentGraphStateBeforeSubgraph;
 
-const histories = await graph.getStateHistory({ configurable: { thread_id: "3" } });
+const histories = await graph.getStateHistory({
+  configurable: { thread_id: "3" },
+});
 
 for await (const historyEntry of histories) {
   if (historyEntry.next[0] === "weatherGraph") {
@@ -6205,11 +6295,12 @@ for await (const historyEntry of histories) {
 }
 ```
 
-
 ```typescript
 let subgraphStateBeforeModelNode;
 
-const subgraphHistories = await graph.getStateHistory(parentGraphStateBeforeSubgraph.tasks[0].state);
+const subgraphHistories = await graph.getStateHistory(
+  parentGraphStateBeforeSubgraph.tasks[0].state
+);
 
 for await (const subgraphHistoryEntry of subgraphHistories) {
   if (subgraphHistoryEntry.next[0] === "modelNode") {
@@ -6220,17 +6311,15 @@ for await (const subgraphHistoryEntry of subgraphHistories) {
 console.log(subgraphStateBeforeModelNode);
 ```
 
-
 ```typescript
 subgraphStateBeforeModelNode.next;
 ```
-
 
 ```typescript
 const resumeSubgraphStream = await graph.stream(null, {
   ...subgraphStateBeforeModelNode.config,
   streamMode: "updates",
-  subgraphs: true
+  subgraphs: true,
 });
 
 for await (const value of resumeSubgraphStream) {
@@ -6238,42 +6327,49 @@ for await (const value of resumeSubgraphStream) {
 }
 ```
 
-
 ```typescript
-const graphStream = await graph.stream({
-  messages: [{
-    role: "user",
-    content: "what's the weather in sf"
-  }],
-}, {
-  configurable: {
-    thread_id: "4",
+const graphStream = await graph.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "what's the weather in sf",
+      },
+    ],
+  },
+  {
+    configurable: {
+      thread_id: "4",
+    },
   }
-});
+);
 
 for await (const update of graphStream) {
   console.log(update);
 }
 ```
 
-
 ```typescript
-const outerGraphState = await graph.getState({
-  configurable: {
-    thread_id: "4",
-  }
-}, { subgraphs: true })
+const outerGraphState = await graph.getState(
+  {
+    configurable: {
+      thread_id: "4",
+    },
+  },
+  { subgraphs: true }
+);
 
 console.log(outerGraphState.tasks[0].state);
 ```
 
-
 ```typescript
 import type { StateSnapshot } from "@langchain/langgraph";
 
-await graph.updateState((outerGraphState.tasks[0].state as StateSnapshot).config, { city: "la" });
+await graph.updateState(
+  (outerGraphState.tasks[0].state as StateSnapshot).config,
+  { city: "la" }
+);
 ```
-
 
 ```typescript
 const resumedStreamWithUpdatedState = await graph.stream(null, {
@@ -6282,25 +6378,29 @@ const resumedStreamWithUpdatedState = await graph.stream(null, {
   },
   streamMode: "updates",
   subgraphs: true,
-})
+});
 
 for await (const update of resumedStreamWithUpdatedState) {
   console.log(JSON.stringify(update, null, 2));
 }
 ```
 
-
 ```typescript
-const streamWithAsNode = await graph.stream({
-  messages: [{
-    role: "user",
-    content: "What's the weather in sf",
-  }]
-}, {
-  configurable: {
-    thread_id: "14",
+const streamWithAsNode = await graph.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "What's the weather in sf",
+      },
+    ],
+  },
+  {
+    configurable: {
+      thread_id: "14",
+    },
   }
-});
+);
 
 for await (const update of streamWithAsNode) {
   console.log(update);
@@ -6309,23 +6409,31 @@ for await (const update of streamWithAsNode) {
 // Graph execution should stop before the weather node
 console.log("interrupted!");
 
-const interruptedState = await graph.getState({
-  configurable: {
-    thread_id: "14",
-  }
-}, { subgraphs: true });
+const interruptedState = await graph.getState(
+  {
+    configurable: {
+      thread_id: "14",
+    },
+  },
+  { subgraphs: true }
+);
 
 console.log(interruptedState);
 
 // We update the state by passing in the message we want returned from the weather node
 // and make sure to pass `"weatherNode"` to signify that we want to act as this node.
-await graph.updateState((interruptedState.tasks[0].state as StateSnapshot).config, {
-  messages: [{
-    "role": "assistant",
-    "content": "rainy"
-  }]
-}, "weatherNode");
-
+await graph.updateState(
+  (interruptedState.tasks[0].state as StateSnapshot).config,
+  {
+    messages: [
+      {
+        role: "assistant",
+        content: "rainy",
+      },
+    ],
+  },
+  "weatherNode"
+);
 
 const resumedStreamWithAsNode = await graph.stream(null, {
   configurable: {
@@ -6339,29 +6447,36 @@ for await (const update of resumedStreamWithAsNode) {
   console.log(update);
 }
 
-console.log(await graph.getState({
-  configurable: {
-    thread_id: "14",
-  }
-}, { subgraphs: true }));
+console.log(
+  await graph.getState(
+    {
+      configurable: {
+        thread_id: "14",
+      },
+    },
+    { subgraphs: true }
+  )
+);
 ```
 
-
 ```typescript
-const entireSubgraphExampleStream = await graph.stream({
-  messages: [
-    {
-      role: "user",
-      content: "what's the weather in sf"
-    }
-  ],
-}, {
-  configurable: {
-    thread_id: "8",
+const entireSubgraphExampleStream = await graph.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "what's the weather in sf",
+      },
+    ],
   },
-  streamMode: "updates",
-  subgraphs: true,
-});
+  {
+    configurable: {
+      thread_id: "8",
+    },
+    streamMode: "updates",
+    subgraphs: true,
+  }
+);
 
 for await (const update of entireSubgraphExampleStream) {
   console.log(update);
@@ -6372,13 +6487,17 @@ console.log("interrupted!");
 
 // We update the state by passing in the message we want returned from the weather graph.
 // Note that we don't need to pass in the subgraph config, since we aren't updating the state inside the subgraph
-await graph.updateState({
-  configurable: {
-    thread_id: "8",
-  }
-}, {
-  messages: [{ role: "assistant", content: "rainy" }]
-}, "weatherGraph");
+await graph.updateState(
+  {
+    configurable: {
+      thread_id: "8",
+    },
+  },
+  {
+    messages: [{ role: "assistant", content: "rainy" }],
+  },
+  "weatherGraph"
+);
 
 const resumedEntireSubgraphExampleStream = await graph.stream(null, {
   configurable: {
@@ -6394,12 +6513,11 @@ for await (const update of resumedEntireSubgraphExampleStream) {
 const currentStateAfterUpdate = await graph.getState({
   configurable: {
     thread_id: "8",
-  }
+  },
 });
 
 console.log(currentStateAfterUpdate.values.messages);
 ```
-
 
 ```typescript
 const parentGraph = new StateGraph(RouterStateAnnotation)
@@ -6413,7 +6531,6 @@ const parentGraph = new StateGraph(RouterStateAnnotation)
   .compile();
 ```
 
-
 ```typescript
 const checkpointer = new MemorySaver();
 
@@ -6422,12 +6539,16 @@ const GrandfatherStateAnnotation = Annotation.Root({
   toContinue: Annotation<boolean>,
 });
 
-const grandparentRouterNode = async (_state: typeof GrandfatherStateAnnotation.State) => {
+const grandparentRouterNode = async (
+  _state: typeof GrandfatherStateAnnotation.State
+) => {
   // Dummy logic that will always continue
   return { toContinue: true };
 };
 
-const grandparentConditionalEdge = async (state: typeof GrandfatherStateAnnotation.State) => {
+const grandparentConditionalEdge = async (
+  state: typeof GrandfatherStateAnnotation.State
+) => {
   if (state.toContinue) {
     return "parentGraph";
   } else {
@@ -6444,32 +6565,35 @@ const grandparentGraph = new StateGraph(GrandfatherStateAnnotation)
   .compile({ checkpointer });
 ```
 
-
 ```typescript
 const grandparentConfig = {
   configurable: { thread_id: "123" },
 };
 
-const grandparentGraphStream = await grandparentGraph.stream({
-  messages: [{
-    role: "user",
-    content: "what's the weather in SF"
-  }],
-}, {
-  ...grandparentConfig,
-  streamMode: "updates",
-  subgraphs: true
-});
+const grandparentGraphStream = await grandparentGraph.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "what's the weather in SF",
+      },
+    ],
+  },
+  {
+    ...grandparentConfig,
+    streamMode: "updates",
+    subgraphs: true,
+  }
+);
 
 for await (const update of grandparentGraphStream) {
   console.log(update);
 }
 ```
 
-
 ```typescript
 const grandparentGraphState = await grandparentGraph.getState(
-  grandparentConfig, 
+  grandparentConfig,
   { subgraphs: true }
 );
 
@@ -6486,14 +6610,19 @@ console.log("Subgraph State:");
 console.log(subgraphState.values);
 ```
 
-
 ```typescript
-await grandparentGraph.updateState(subgraphState.config, {
-  messages: [{
-    role: "assistant",
-    content: "rainy"
-  }]
-}, "weatherNode");
+await grandparentGraph.updateState(
+  subgraphState.config,
+  {
+    messages: [
+      {
+        role: "assistant",
+        content: "rainy",
+      },
+    ],
+  },
+  "weatherNode"
+);
 
 const updatedGrandparentGraphStream = await grandparentGraph.stream(null, {
   ...grandparentConfig,
@@ -6505,22 +6634,24 @@ for await (const update of updatedGrandparentGraphStream) {
   console.log(update);
 }
 
-console.log((await grandparentGraph.getState(grandparentConfig)).values.messages)
+console.log(
+  (await grandparentGraph.getState(grandparentConfig)).values.messages
+);
 ```
 
-
 ```typescript
-const grandparentStateHistories = await grandparentGraph.getStateHistory(grandparentConfig);
+const grandparentStateHistories = await grandparentGraph.getStateHistory(
+  grandparentConfig
+);
 for await (const state of grandparentStateHistories) {
   console.log(state);
   console.log("-----");
 }
 ```
 
-
 ```typescript
-```
 
+```
 
 ```typescript
 import { StateGraph, START, END, MemorySaver, Annotation } from "@langchain/langgraph";
@@ -6555,23 +6686,25 @@ const config = { configurable: { thread_id: "1" } };
 await graph.invoke({ foo: "" }, config);
 ```
 
-
 ```typescript
 // Get the latest state snapshot
 const config = { configurable: { thread_id: "1" } };
 const state = await graph.getState(config);
 
 // Get a state snapshot for a specific checkpoint_id
-const configWithCheckpoint = { configurable: { thread_id: "1", checkpoint_id: "1ef663ba-28fe-6528-8002-5a559208592c" } };
+const configWithCheckpoint = {
+  configurable: {
+    thread_id: "1",
+    checkpoint_id: "1ef663ba-28fe-6528-8002-5a559208592c",
+  },
+};
 const stateWithCheckpoint = await graph.getState(configWithCheckpoint);
 ```
-
 
 ```typescript
 const config = { configurable: { thread_id: "1" } };
 const history = await graph.getStateHistory(config);
 ```
-
 
 ```typescript
 // { configurable: { thread_id: "1" } }  // valid config
@@ -6580,7 +6713,6 @@ const history = await graph.getStateHistory(config);
 const config = { configurable: { thread_id: "1" } };
 await graph.invoke(inputs, config);
 ```
-
 
 ```typescript
 import { Annotation } from "@langchain/langgraph";
@@ -6594,15 +6726,12 @@ const GraphAnnotation = Annotation.Root({
 });
 ```
 
-
 ```typescript
 await graph.updateState(config, { foo: "2", bar: ["b"] });
 ```
 
-
 ```typescript
 import { Annotation, StateGraph } from "@langchain/langgraph";
-
 
 // The overall state of the graph
 const OverallStateAnnotation = Annotation.Root({
@@ -6623,7 +6752,7 @@ const DocumentOutputAnnotation = Annotation.Root({
 // This is what the node that retrieves the documents will return
 const GenerateOutputAnnotation = Annotation.Root({
   ...OverallStateAnnotation.spec,
-  ...DocumentOutputAnnotation.spec
+  ...DocumentOutputAnnotation.spec,
 });
 
 // Node to generate query
@@ -6651,7 +6780,9 @@ const generate = async (state: typeof GenerateOutputAnnotation.State) => {
 
 const graph = new StateGraph(OverallStateAnnotation)
   .addNode("generate_query", generateQuery)
-  .addNode("retrieve_documents", retrieveDocuments, { input: QueryOutputAnnotation })
+  .addNode("retrieve_documents", retrieveDocuments, {
+    input: QueryOutputAnnotation,
+  })
   .addNode("generate", generate, { input: GenerateOutputAnnotation })
   .addEdge("__start__", "generate_query")
   .addEdge("generate_query", "retrieve_documents")
@@ -6663,11 +6794,9 @@ await graph.invoke({
 });
 ```
 
-
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
 ```
-
 
 ```typescript
 // process.env.LANGCHAIN_API_KEY = "ls...";
@@ -6675,7 +6804,6 @@ process.env.LANGCHAIN_CALLBACKS_BACKGROUND = "true";
 process.env.LANGCHAIN_TRACING_V2 = "true";
 process.env.LANGCHAIN_PROJECT = "Respond in Format: LangGraphJS";
 ```
-
 
 ```typescript
 import { Annotation, messagesStateReducer } from "@langchain/langgraph";
@@ -6688,32 +6816,32 @@ const GraphState = Annotation.Root({
 });
 ```
 
-
 ```typescript
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-const searchTool = tool((_) => {
-  // This is a placeholder, but don't tell the LLM that...
-  return "67 degrees. Cloudy with a chance of rain.";
-}, {
-  name: "search",
-  description: "Call to surf the web.",
-  schema: z.object({
-    query: z.string().describe("The query to use in your search."),
-  }),
-});
+const searchTool = tool(
+  (_) => {
+    // This is a placeholder, but don't tell the LLM that...
+    return "67 degrees. Cloudy with a chance of rain.";
+  },
+  {
+    name: "search",
+    description: "Call to surf the web.",
+    schema: z.object({
+      query: z.string().describe("The query to use in your search."),
+    }),
+  }
+);
 
 const tools = [searchTool];
 ```
-
 
 ```typescript
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 
 const toolNode = new ToolNode<typeof GraphState.State>(tools);
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -6723,7 +6851,6 @@ const model = new ChatOpenAI({
   model: "gpt-4o",
 });
 ```
-
 
 ```typescript
 import { tool } from "@langchain/core/tools";
@@ -6736,15 +6863,11 @@ const Response = z.object({
 const finalResponseTool = tool(async () => "mocked value", {
   name: "Response",
   description: "Always respond to the user using this tool.",
-  schema: Response
-})
+  schema: Response,
+});
 
-const boundModel = model.bindTools([
-  ...tools,
-  finalResponseTool
-]);
+const boundModel = model.bindTools([...tools, finalResponseTool]);
 ```
-
 
 ```typescript
 import { AIMessage } from "@langchain/core/messages";
@@ -6753,7 +6876,7 @@ import { RunnableConfig } from "@langchain/core/runnables";
 // Define the function that determines whether to continue or not
 const route = (state: typeof GraphState.State) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1] as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage;
   // If there is no function call, then we finish
   if (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0) {
     return "__end__";
@@ -6769,7 +6892,7 @@ const route = (state: typeof GraphState.State) => {
 // Define the function that calls the model
 const callModel = async (
   state: typeof GraphState.State,
-  config?: RunnableConfig,
+  config?: RunnableConfig
 ) => {
   const { messages } = state;
   const response = await boundModel.invoke(messages, config);
@@ -6777,7 +6900,6 @@ const callModel = async (
   return { messages: [response] };
 };
 ```
-
 
 ```typescript
 import { StateGraph } from "@langchain/langgraph";
@@ -6810,7 +6932,6 @@ const workflow = new StateGraph(GraphState)
 const app = workflow.compile();
 ```
 
-
 ```typescript
 import * as tslab from "tslab";
 
@@ -6821,15 +6942,12 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 import { HumanMessage, isAIMessage } from "@langchain/core/messages";
 
 const prettyPrint = (message: BaseMessage) => {
-  let txt = `[${message._getType()}]: ${message.content}`;
-  if (
-    isAIMessage(message) && message?.tool_calls?.length
-  ) {
+  let txt = `[${message.getType()}]: ${message.content}`;
+  if (isAIMessage(message) && message?.tool_calls?.length) {
     const tool_calls = message?.tool_calls
       ?.map((tc) => `- ${tc.name}(${JSON.stringify(tc.args)})`)
       .join("\n");
@@ -6846,11 +6964,10 @@ const stream = await app.stream(inputs, { streamMode: "values" });
 
 for await (const output of stream) {
   const { messages } = output;
-  prettyPrint(messages[messages.length - 1]);
+  prettyPrint(messages.at(-1));
   console.log("\n---\n");
 }
 ```
-
 
 ```typescript
 import { concat } from "@langchain/core/utils/stream";
@@ -6891,23 +7008,31 @@ for await (const { event, data } of eventStream) {
 console.log(aggregatedChunk.tool_calls);
 ```
 
-
 ```typescript
-process.env.ANTHROPIC_API_KEY = 'YOUR_API_KEY'
+process.env.ANTHROPIC_API_KEY = "YOUR_API_KEY";
 ```
 
-
 ```typescript
-process.env.LANGCHAIN_TRACING_V2 = 'true'
-process.env.LANGCHAIN_API_KEY = 'YOUR_API_KEY'
+process.env.LANGCHAIN_TRACING_V2 = "true";
+process.env.LANGCHAIN_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 import { ChatAnthropic } from "@langchain/anthropic";
-import { SystemMessage, HumanMessage, AIMessage, RemoveMessage } from "@langchain/core/messages";
+import {
+  SystemMessage,
+  HumanMessage,
+  AIMessage,
+  RemoveMessage,
+} from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
-import { MessagesAnnotation, StateGraph, START, END, Annotation } from "@langchain/langgraph";
+import {
+  MessagesAnnotation,
+  StateGraph,
+  START,
+  END,
+  Annotation,
+} from "@langchain/langgraph";
 import { v4 as uuidv4 } from "uuid";
 
 const memory = new MemorySaver();
@@ -6919,21 +7044,23 @@ const GraphAnnotation = Annotation.Root({
   summary: Annotation<string>({
     reducer: (_, action) => action,
     default: () => "",
-  })
-})
+  }),
+});
 
 // We will use this model for both the conversation and the summarization
 const model = new ChatAnthropic({ model: "claude-3-haiku-20240307" });
 
 // Define the logic to call the model
-async function callModel(state: typeof GraphAnnotation.State): Promise<Partial<typeof GraphAnnotation.State>> {
+async function callModel(
+  state: typeof GraphAnnotation.State
+): Promise<Partial<typeof GraphAnnotation.State>> {
   // If a summary exists, we add this in as a system message
   const { summary } = state;
   let { messages } = state;
   if (summary) {
     const systemMessage = new SystemMessage({
       id: uuidv4(),
-      content: `Summary of conversation earlier: ${summary}`
+      content: `Summary of conversation earlier: ${summary}`,
     });
     messages = [systemMessage, ...messages];
   }
@@ -6943,7 +7070,9 @@ async function callModel(state: typeof GraphAnnotation.State): Promise<Partial<t
 }
 
 // We now define the logic for determining whether to end or summarize the conversation
-function shouldContinue(state: typeof GraphAnnotation.State): "summarize_conversation" | typeof END {
+function shouldContinue(
+  state: typeof GraphAnnotation.State
+): "summarize_conversation" | typeof END {
   const messages = state.messages;
   // If there are more than six messages, then we summarize the conversation
   if (messages.length > 6) {
@@ -6953,27 +7082,35 @@ function shouldContinue(state: typeof GraphAnnotation.State): "summarize_convers
   return END;
 }
 
-async function summarizeConversation(state: typeof GraphAnnotation.State): Promise<Partial<typeof GraphAnnotation.State>> {
+async function summarizeConversation(
+  state: typeof GraphAnnotation.State
+): Promise<Partial<typeof GraphAnnotation.State>> {
   // First, we summarize the conversation
   const { summary, messages } = state;
   let summaryMessage: string;
   if (summary) {
     // If a summary already exists, we use a different system prompt
     // to summarize it than if one didn't
-    summaryMessage = `This is summary of the conversation to date: ${summary}\n\n` +
+    summaryMessage =
+      `This is summary of the conversation to date: ${summary}\n\n` +
       "Extend the summary by taking into account the new messages above:";
   } else {
     summaryMessage = "Create a summary of the conversation above:";
   }
 
-  const allMessages = [...messages, new HumanMessage({
-    id: uuidv4(),
-    content: summaryMessage,
-  })];
+  const allMessages = [
+    ...messages,
+    new HumanMessage({
+      id: uuidv4(),
+      content: summaryMessage,
+    }),
+  ];
   const response = await model.invoke(allMessages);
   // We now need to delete messages that we no longer want to show up
   // I will delete all but the last two messages, but you can change this
-  const deleteMessages = messages.slice(0, -2).map((m) => new RemoveMessage({ id: m.id }));
+  const deleteMessages = messages
+    .slice(0, -2)
+    .map((m) => new RemoveMessage({ id: m.id }));
   if (typeof response.content !== "string") {
     throw new Error("Expected a string response from the model");
   }
@@ -7003,7 +7140,6 @@ const workflow = new StateGraph(GraphAnnotation)
 const app = workflow.compile({ checkpointer: memory });
 ```
 
-
 ```typescript
 const printUpdate = (update: Record<string, any>) => {
   Object.keys(update).forEach((key) => {
@@ -7011,118 +7147,138 @@ const printUpdate = (update: Record<string, any>) => {
 
     if ("messages" in value && Array.isArray(value.messages)) {
       value.messages.forEach((msg) => {
-        console.log(`\n================================ ${msg._getType()} Message =================================`)
+        console.log(
+          `\n================================ ${msg.getType()} Message =================================`
+        );
         console.log(msg.content);
-      })
+      });
     }
     if ("summary" in value && value.summary) {
       console.log(value.summary);
     }
-  })
-}
+  });
+};
 ```
-
 
 ```typescript
 import { HumanMessage } from "@langchain/core/messages";
 
-const config = { configurable: { thread_id: "4" }, streamMode: "updates" as const }
+const config = {
+  configurable: { thread_id: "4" },
+  streamMode: "updates" as const,
+};
 
-const inputMessage = new HumanMessage("hi! I'm bob")
-console.log(inputMessage.content)
-for await (const event of await app.stream({ messages: [inputMessage] }, config)) {
-  printUpdate(event)
+const inputMessage = new HumanMessage("hi! I'm bob");
+console.log(inputMessage.content);
+for await (const event of await app.stream(
+  { messages: [inputMessage] },
+  config
+)) {
+  printUpdate(event);
 }
 
-const inputMessage2 = new HumanMessage("What did I sat my name was?")
-console.log(inputMessage2.content)
-for await (const event of await app.stream({ messages: [inputMessage2] }, config)) {
-  printUpdate(event)
+const inputMessage2 = new HumanMessage("What did I sat my name was?");
+console.log(inputMessage2.content);
+for await (const event of await app.stream(
+  { messages: [inputMessage2] },
+  config
+)) {
+  printUpdate(event);
 }
 
-const inputMessage3 = new HumanMessage("i like the celtics!")
-console.log(inputMessage3.content)
-for await (const event of await app.stream({ messages: [inputMessage3] }, config)) {
-  printUpdate(event)
+const inputMessage3 = new HumanMessage("i like the celtics!");
+console.log(inputMessage3.content);
+for await (const event of await app.stream(
+  { messages: [inputMessage3] },
+  config
+)) {
+  printUpdate(event);
 }
 ```
-
 
 ```typescript
-const values = (await app.getState(config)).values
-console.log(values)
+const values = (await app.getState(config)).values;
+console.log(values);
 ```
 
-
 ```typescript
-const inputMessage4 = new HumanMessage("i like how much they win")
-console.log(inputMessage4.content)
-for await (const event of await app.stream({ messages: [inputMessage4] }, config)) {
-  printUpdate(event)
+const inputMessage4 = new HumanMessage("i like how much they win");
+console.log(inputMessage4.content);
+for await (const event of await app.stream(
+  { messages: [inputMessage4] },
+  config
+)) {
+  printUpdate(event);
 }
 ```
 
-
 ```typescript
-const values2 = (await app.getState(config)).values
-console.log(values2)
+const values2 = (await app.getState(config)).values;
+console.log(values2);
 ```
-
 
 ```typescript
 const inputMessage5 = new HumanMessage("what's my name?");
-console.log(inputMessage5.content)
-for await (const event of await app.stream({ messages: [inputMessage5] }, config)) {
-  printUpdate(event)
+console.log(inputMessage5.content);
+for await (const event of await app.stream(
+  { messages: [inputMessage5] },
+  config
+)) {
+  printUpdate(event);
 }
 ```
-
 
 ```typescript
 const inputMessage6 = new HumanMessage("what NFL team do you think I like?");
-console.log(inputMessage6.content)
-for await (const event of await app.stream({ messages: [inputMessage6] }, config)) {
-  printUpdate(event)
+console.log(inputMessage6.content);
+for await (const event of await app.stream(
+  { messages: [inputMessage6] },
+  config
+)) {
+  printUpdate(event);
 }
 ```
-
 
 ```typescript
 const inputMessage7 = new HumanMessage("i like the patriots!");
-console.log(inputMessage7.content)
-for await (const event of await app.stream({ messages: [inputMessage7] }, config)) {
-  printUpdate(event)
+console.log(inputMessage7.content);
+for await (const event of await app.stream(
+  { messages: [inputMessage7] },
+  config
+)) {
+  printUpdate(event);
 }
 ```
-
 
 ```typescript
 import { z } from "zod";
 import { tool } from "@langchain/core/tools";
 import { ChatAnthropic } from "@langchain/anthropic";
 
-const getWeather = tool(async ({ city }) => {
-  if (city === "nyc") {
-    return "It might be cloudy in nyc";
-  } else if (city === "sf") {
-    return "It's always sunny in sf";
-  } else {
-    throw new Error("Unknown city.");
+const getWeather = tool(
+  async ({ city }) => {
+    if (city === "nyc") {
+      return "It might be cloudy in nyc";
+    } else if (city === "sf") {
+      return "It's always sunny in sf";
+    } else {
+      throw new Error("Unknown city.");
+    }
+  },
+  {
+    name: "get_weather",
+    schema: z.object({
+      city: z.enum(["nyc", "sf"]),
+    }),
+    description: "Use this to get weather information",
   }
-}, {
-  name: "get_weather",
-  schema: z.object({
-    city: z.enum(["nyc", "sf"]),
-  }),
-  description: "Use this to get weather information",
-});
+);
 
 const tools = [getWeather];
 
 const model = new ChatAnthropic({
   model: "claude-3-5-sonnet-20240620",
 }).bindTools(tools);
-
 
 // We add a tag that we'll be using later to filter outputs
 const finalModel = new ChatAnthropic({
@@ -7132,15 +7288,18 @@ const finalModel = new ChatAnthropic({
 });
 ```
 
-
 ```typescript
 import { StateGraph, MessagesAnnotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
-import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+} from "@langchain/core/messages";
 
 const shouldContinue = async (state: typeof MessagesAnnotation.State) => {
   const messages = state.messages;
-  const lastMessage: AIMessage = messages[messages.length - 1];
+  const lastMessage: AIMessage = messages.at(-1);
   // If the LLM makes a tool call, then we route to the "tools" node
   if (lastMessage.tool_calls?.length) {
     return "tools";
@@ -7158,16 +7317,16 @@ const callModel = async (state: typeof MessagesAnnotation.State) => {
 
 const callFinalModel = async (state: typeof MessagesAnnotation.State) => {
   const messages = state.messages;
-  const lastAIMessage = messages[messages.length - 1];
+  const lastAIMessage = messages.at(-1);
   const response = await finalModel.invoke([
     new SystemMessage("Rewrite this in the voice of Al Roker"),
-    new HumanMessage({ content: lastAIMessage.content })
+    new HumanMessage({ content: lastAIMessage.content }),
   ]);
   // MessagesAnnotation allows you to overwrite messages from the agent
   // by returning a message with the same id
   response.id = lastAIMessage.id;
   return { messages: [response] };
-}
+};
 
 const toolNode = new ToolNode<typeof MessagesAnnotation.State>(tools);
 
@@ -7187,7 +7346,6 @@ const graph = new StateGraph(MessagesAnnotation)
   .compile();
 ```
 
-
 ```typescript
 import * as tslab from "tslab";
 
@@ -7198,11 +7356,10 @@ const arrayBuffer = await image.arrayBuffer();
 tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 const inputs = { messages: [new HumanMessage("What's the weather in nyc?")] };
 
-const eventStream = await graph.streamEvents(inputs, { version: "v2"});
+const eventStream = await graph.streamEvents(inputs, { version: "v2" });
 
 for await (const { event, tags, data } of eventStream) {
   if (event === "on_chat_model_stream" && tags.includes("final_node")) {
@@ -7214,13 +7371,11 @@ for await (const { event, tags, data } of eventStream) {
     }
   }
 }
-
 ```
-
 
 ```typescript
-```
 
+```
 
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
@@ -7233,34 +7388,39 @@ process.env.LANGCHAIN_TRACING_V2 = "true";
 process.env.LANGCHAIN_PROJECT = "ReAct Agent: LangGraphJS";
 ```
 
-
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
-import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 
 const model = new ChatOpenAI({
   model: "gpt-4o",
 });
 
-const getWeather = tool((input) => {
-  if (['sf', 'san francisco', 'san francisco, ca'].includes(input.location.toLowerCase())) {
-    return 'It\'s 60 degrees and foggy.';
-  } else {
-    return 'It\'s 90 degrees and sunny.';
+const getWeather = tool(
+  (input) => {
+    if (
+      ["sf", "san francisco", "san francisco, ca"].includes(
+        input.location.toLowerCase()
+      )
+    ) {
+      return "It's 60 degrees and foggy.";
+    } else {
+      return "It's 90 degrees and sunny.";
+    }
+  },
+  {
+    name: "get_weather",
+    description: "Call to get the current weather.",
+    schema: z.object({
+      location: z.string().describe("Location to get the weather for."),
+    }),
   }
-}, {
-  name: 'get_weather',
-  description: 'Call to get the current weather.',
-  schema: z.object({
-    location: z.string().describe("Location to get the weather for."),
-  })
-})
+);
 
 const agent = createReactAgent({ llm: model, tools: [getWeather] });
 ```
-
 
 ```typescript
 import * as tslab from "tslab";
@@ -7272,16 +7432,17 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
-let inputs = { messages: [{ role: "user", content: "what is the weather in SF?" }] };
+let inputs = {
+  messages: [{ role: "user", content: "what is the weather in SF?" }],
+};
 
 let stream = await agent.stream(inputs, {
   streamMode: "values",
 });
 
 for await (const { messages } of stream) {
-  let msg = messages[messages?.length - 1];
+  let msg = messages?.at(-1);
   if (msg?.content) {
     console.log(msg.content);
   } else if (msg?.tool_calls?.length > 0) {
@@ -7292,7 +7453,6 @@ for await (const { messages } of stream) {
   console.log("-----\n");
 }
 ```
-
 
 ```typescript
 inputs = { messages: [{ role: "user", content: "who built you?" }] };
@@ -7301,10 +7461,8 @@ stream = await agent.stream(inputs, {
   streamMode: "values",
 });
 
-for await (
-  const { messages } of stream
-) {
-  let msg = messages[messages?.length - 1];
+for await (const { messages } of stream) {
+  let msg = messages?.at(-1);
   if (msg?.content) {
     console.log(msg.content);
   } else if (msg?.tool_calls?.length > 0) {
@@ -7315,7 +7473,6 @@ for await (
   console.log("-----\n");
 }
 ```
-
 
 ```typescript
 import {
@@ -7345,10 +7502,12 @@ const myNode = async (
     config.writer?.(chunk);
   }
   return {
-    messages: [{
-      role: "assistant",
-      content: chunks.join(" "),
-    }],
+    messages: [
+      {
+        role: "assistant",
+        content: chunks.join(" "),
+      },
+    ],
   };
 };
 
@@ -7358,12 +7517,13 @@ const graph = new StateGraph(MessagesAnnotation)
   .compile();
 ```
 
-
 ```typescript
-const inputs = [{
-  role: "user",
-  content: "What are you thinking about?",
-}];
+const inputs = [
+  {
+    role: "user",
+    content: "What are you thinking about?",
+  },
+];
 
 const stream = await graph.stream(
   { messages: inputs },
@@ -7375,7 +7535,6 @@ for await (const chunk of stream) {
 }
 ```
 
-
 ```typescript
 const streamMultiple = await graph.stream(
   { messages: inputs },
@@ -7386,7 +7545,6 @@ for await (const chunk of streamMultiple) {
   console.log(chunk);
 }
 ```
-
 
 ```typescript
 import { dispatchCustomEvent } from "@langchain/core/callbacks/dispatch";
@@ -7407,10 +7565,12 @@ const graphNode = async (_state: typeof MessagesAnnotation.State) => {
     await dispatchCustomEvent("my_custom_event", { chunk });
   }
   return {
-    messages: [{
-      role: "assistant",
-      content: chunks.join(" "),
-    }],
+    messages: [
+      {
+        role: "assistant",
+        content: chunks.join(" "),
+      },
+    ],
   };
 };
 
@@ -7420,18 +7580,19 @@ const graphWithDispatch = new StateGraph(MessagesAnnotation)
   .compile();
 ```
 
-
 ```typescript
 const eventStream = await graphWithDispatch.streamEvents(
   {
-    messages: [{
-      role: "user",
-      content: "What are you thinking about?",
-    }]
+    messages: [
+      {
+        role: "user",
+        content: "What are you thinking about?",
+      },
+    ],
   },
   {
     version: "v2",
-  },
+  }
 );
 
 for await (const { event, name, data } of eventStream) {
@@ -7441,11 +7602,9 @@ for await (const { event, name, data } of eventStream) {
 }
 ```
 
-
 ```typescript
 process.env.ANTHROPIC_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 import { ChatAnthropic } from "@langchain/anthropic";
@@ -7454,7 +7613,6 @@ const model = new ChatAnthropic({
   model: "claude-3-5-sonnet-latest",
 });
 ```
-
 
 ```typescript
 import type { BaseMessage, BaseMessageLike } from "@langchain/core/messages";
@@ -7473,20 +7631,22 @@ const callModel = task("callModel", async (messages: BaseMessageLike[]) => {
 
 const checkpointer = new MemorySaver();
 
-const workflow = entrypoint({
-  name: "workflow",
-  checkpointer,
-}, async (inputs: BaseMessageLike[]) => {
-  const previous = getPreviousState<BaseMessage>() ?? [];
-  const messages = addMessages(previous, inputs);
-  const response = await callModel(messages);
-  return entrypoint.final({
-    value: response,
-    save: addMessages(messages, response),
-  });
-});
+const workflow = entrypoint(
+  {
+    name: "workflow",
+    checkpointer,
+  },
+  async (inputs: BaseMessageLike[]) => {
+    const previous = getPreviousState<BaseMessage>() ?? [];
+    const messages = addMessages(previous, inputs);
+    const response = await callModel(messages);
+    return entrypoint.final({
+      value: response,
+      save: addMessages(messages, response),
+    });
+  }
+);
 ```
-
 
 ```typescript
 const config = {
@@ -7495,10 +7655,7 @@ const config = {
 };
 const inputMessage = { role: "user", content: "hi! I'm bob" };
 
-const stream = await workflow.stream(
-  [inputMessage],
-  config,
-);
+const stream = await workflow.stream([inputMessage], config);
 
 for await (const chunk of stream) {
   console.log("=".repeat(30), `${chunk.getType()} message`, "=".repeat(30));
@@ -7506,11 +7663,10 @@ for await (const chunk of stream) {
 }
 ```
 
-
 ```typescript
 const followupStream = await workflow.stream(
-  [{ role: "user", content: "what's my name?" }], 
-  config,
+  [{ role: "user", content: "what's my name?" }],
+  config
 );
 
 for await (const chunk of followupStream) {
@@ -7518,7 +7674,6 @@ for await (const chunk of followupStream) {
   console.log(chunk.content);
 }
 ```
-
 
 ```typescript
 const newStream = await workflow.stream(
@@ -7528,7 +7683,7 @@ const newStream = await workflow.stream(
       thread_id: "2",
     },
     streamMode: "values",
-  },
+  }
 );
 
 for await (const chunk of newStream) {
@@ -7536,7 +7691,6 @@ for await (const chunk of newStream) {
   console.log(chunk.content);
 }
 ```
-
 
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
@@ -7546,48 +7700,59 @@ for await (const chunk of newStream) {
 // process.env.LANGCHAIN_CALLBACKS_BACKGROUND = "true";
 process.env.LANGCHAIN_CALLBACKS_BACKGROUND = "true";
 process.env.LANGCHAIN_TRACING_V2 = "true";
-process.env.LANGCHAIN_PROJECT = "ReAct Agent with human-in-the-loop: LangGraphJS";
+process.env.LANGCHAIN_PROJECT =
+  "ReAct Agent with human-in-the-loop: LangGraphJS";
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
-import { tool } from '@langchain/core/tools';
-import { z } from 'zod';
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { MemorySaver } from "@langchain/langgraph";
 
 const model = new ChatOpenAI({
-    model: "gpt-4o",
-  });
+  model: "gpt-4o",
+});
 
-const getWeather = tool((input) => {
-    if (['sf', 'san francisco'].includes(input.location.toLowerCase())) {
-        return 'It\'s always sunny in sf';
-    } else if (['nyc', 'new york city'].includes(input.location.toLowerCase())) {
-        return 'It might be cloudy in nyc';
+const getWeather = tool(
+  (input) => {
+    if (["sf", "san francisco"].includes(input.location.toLowerCase())) {
+      return "It's always sunny in sf";
+    } else if (
+      ["nyc", "new york city"].includes(input.location.toLowerCase())
+    ) {
+      return "It might be cloudy in nyc";
+    } else {
+      throw new Error("Unknown Location");
     }
-    else {
-        throw new Error("Unknown Location");
-    }
-}, {
-    name: 'get_weather',
-    description: 'Call to get the current weather in a given location.',
+  },
+  {
+    name: "get_weather",
+    description: "Call to get the current weather in a given location.",
     schema: z.object({
-        location: z.string().describe("Location to get the weather for."),
-    })
-})
+      location: z.string().describe("Location to get the weather for."),
+    }),
+  }
+);
 
 // Here we only save in-memory
 const memory = new MemorySaver();
 
-const agent = createReactAgent({ llm: model, tools: [getWeather], interruptBefore: ["tools"], checkpointSaver: memory });
-
+const agent = createReactAgent({
+  llm: model,
+  tools: [getWeather],
+  interruptBefore: ["tools"],
+  checkpointSaver: memory,
+});
 ```
 
-
 ```typescript
-let inputs = { messages: [{ role: "user", content: "what is the weather in SF california?" }] };
+let inputs = {
+  messages: [
+    { role: "user", content: "what is the weather in SF california?" },
+  ],
+};
 let config = { configurable: { thread_id: "1" } };
 
 let stream = await agent.stream(inputs, {
@@ -7595,10 +7760,8 @@ let stream = await agent.stream(inputs, {
   streamMode: "values",
 });
 
-for await (
-  const { messages } of stream
-) {
-  let msg = messages[messages?.length - 1];
+for await (const { messages } of stream) {
+  let msg = messages?.at(-1);
   if (msg?.content) {
     console.log(msg.content);
   }
@@ -7609,12 +7772,10 @@ for await (
 }
 ```
 
-
 ```typescript
-const state = await agent.getState(config)
-console.log(state.next)
+const state = await agent.getState(config);
+console.log(state.next);
 ```
-
 
 ```typescript
 stream = await agent.stream(null, {
@@ -7622,20 +7783,17 @@ stream = await agent.stream(null, {
   streamMode: "values",
 });
 
-for await (
-    const { messages } of stream
-  ) {
-    let msg = messages[messages?.length - 1];
-    if (msg?.content) {
-      console.log(msg.content);
-    }
-    if (msg?.tool_calls?.length > 0) {
-      console.log(msg.tool_calls);
-    }
-    console.log("-----\n");
+for await (const { messages } of stream) {
+  let msg = messages?.at(-1);
+  if (msg?.content) {
+    console.log(msg.content);
   }
+  if (msg?.tool_calls?.length > 0) {
+    console.log(msg.tool_calls);
+  }
+  console.log("-----\n");
+}
 ```
-
 
 ```typescript
 // First, lets get the current state
@@ -7643,10 +7801,10 @@ const currentState = await agent.getState(config);
 
 // Let's now get the last message in the state
 // This is the one with the tool calls that we want to update
-let lastMessage = currentState.values.messages[currentState.values.messages.length - 1]
+let lastMessage = currentState.values.messages.at(-1);
 
 // Let's now update the args for that tool call
-lastMessage.tool_calls[0].args = { location: "San Francisco" }
+lastMessage.tool_calls[0].args = { location: "San Francisco" };
 
 // Let's now call `updateState` to pass in this message in the `messages` key
 // This will get treated as any other update to the state
@@ -7657,17 +7815,14 @@ lastMessage.tool_calls[0].args = { location: "San Francisco" }
 await agent.updateState(config, { messages: lastMessage });
 ```
 
-
 ```typescript
 stream = await agent.stream(null, {
   ...config,
   streamMode: "values",
 });
 
-for await (
-  const { messages } of stream
-) {
-  let msg = messages[messages?.length - 1];
+for await (const { messages } of stream) {
+  let msg = messages?.at(-1);
   if (msg?.content) {
     console.log(msg.content);
   }
@@ -7677,7 +7832,6 @@ for await (
   console.log("-----\n");
 }
 ```
-
 
 ```typescript
 import { Annotation } from "@langchain/langgraph";
@@ -7690,49 +7844,52 @@ const StateAnnotation = Annotation.Root({
 });
 ```
 
-
 ```typescript
 import { z } from "zod";
 import { tool } from "@langchain/core/tools";
 import { getContextVariable } from "@langchain/core/context";
 import { LangGraphRunnableConfig } from "@langchain/langgraph";
 
-const updateFavoritePets = tool(async (input, config: LangGraphRunnableConfig) => {
-  // Some arguments are populated by the LLM; these are included in the schema below
-  const { pets } = input;
-  // Fetch a context variable named "currentState".
-  // We must set this variable explicitly in each node that calls this tool.
-  const currentState = getContextVariable("currentState");
-  // Other information (such as a UserID) are most easily provided via the config
-  // This is set when when invoking or streaming the graph
-  const userId = config.configurable?.userId;
-  // LangGraph's managed key-value store is also accessible from the config
-  const store = config.store;
-  await store.put([userId, "pets"], "names", pets);
-  // Store the initial input message from the user as a note.
-  // Using the same key will override previous values - you could
-  // use something different if you wanted to store many interactions.
-  await store.put([userId, "pets"], "context", currentState.messages[0].content);
+const updateFavoritePets = tool(
+  async (input, config: LangGraphRunnableConfig) => {
+    // Some arguments are populated by the LLM; these are included in the schema below
+    const { pets } = input;
+    // Fetch a context variable named "currentState".
+    // We must set this variable explicitly in each node that calls this tool.
+    const currentState = getContextVariable("currentState");
+    // Other information (such as a UserID) are most easily provided via the config
+    // This is set when when invoking or streaming the graph
+    const userId = config.configurable?.userId;
+    // LangGraph's managed key-value store is also accessible from the config
+    const store = config.store;
+    await store.put([userId, "pets"], "names", pets);
+    // Store the initial input message from the user as a note.
+    // Using the same key will override previous values - you could
+    // use something different if you wanted to store many interactions.
+    await store.put(
+      [userId, "pets"],
+      "context",
+      currentState.messages[0].content
+    );
 
-  return "update_favorite_pets called.";
-},
-{
-  // The LLM "sees" the following schema:
-  name: "update_favorite_pets",
-  description: "add to the list of favorite pets.",
-  schema: z.object({
-    pets: z.array(z.string()),
-  }),
-});
+    return "update_favorite_pets called.";
+  },
+  {
+    // The LLM "sees" the following schema:
+    name: "update_favorite_pets",
+    description: "add to the list of favorite pets.",
+    schema: z.object({
+      pets: z.array(z.string()),
+    }),
+  }
+);
 ```
-
 
 ```typescript
 import { zodToJsonSchema } from "zod-to-json-schema";
 
 console.log(zodToJsonSchema(updateFavoritePets.schema));
 ```
-
 
 ```typescript
 const getFavoritePets = tool(
@@ -7756,7 +7913,6 @@ const getFavoritePets = tool(
 );
 ```
 
-
 ```typescript
 import {
   END,
@@ -7777,7 +7933,7 @@ const tools = [getFavoritePets, updateFavoritePets];
 
 const routeMessage = (state: typeof StateAnnotation.State) => {
   const { messages } = state;
-  const lastMessage = messages[messages.length - 1] as AIMessage;
+  const lastMessage = messages.at(-1) as AIMessage;
   // If no tools are called, we can finish (respond to the user)
   if (!lastMessage?.tool_calls?.length) {
     return END;
@@ -7792,9 +7948,10 @@ const callModel = async (state: typeof StateAnnotation.State) => {
   const responseMessage = await modelWithTools.invoke([
     {
       role: "system",
-      content: "You are a personal assistant. Store any preferences the user tells you about."
+      content:
+        "You are a personal assistant. Store any preferences the user tells you about.",
     },
-    ...messages
+    ...messages,
   ]);
   return { messages: [responseMessage] };
 };
@@ -7819,7 +7976,6 @@ const store = new InMemoryStore();
 const graph = workflow.compile({ checkpointer: memory, store: store });
 ```
 
-
 ```typescript
 import * as tslab from "tslab";
 
@@ -7830,14 +7986,20 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
-let inputs = { messages: [{ role: "user", content: "My favorite pet is a terrier. I saw a cute one on Twitter." }] };
+let inputs = {
+  messages: [
+    {
+      role: "user",
+      content: "My favorite pet is a terrier. I saw a cute one on Twitter.",
+    },
+  ],
+};
 let config = {
   configurable: {
     thread_id: "1",
-    userId: "a-user"
-  }
+    userId: "a-user",
+  },
 };
 let stream = await graph.stream(inputs, config);
 
@@ -7851,23 +8013,28 @@ for await (const chunk of stream) {
 }
 ```
 
-
 ```typescript
-inputs = { messages: [{ role: "user", content: "What're my favorite pets and what did I say when I told you about them?" }] };
+inputs = {
+  messages: [
+    {
+      role: "user",
+      content:
+        "What're my favorite pets and what did I say when I told you about them?",
+    },
+  ],
+};
 config = {
   configurable: {
     thread_id: "2", // New thread ID, so the conversation history isn't present.
-    userId: "a-user"
-  }
+    userId: "a-user",
+  },
 };
 
 stream = await graph.stream(inputs, {
-  ...config
+  ...config,
 });
 
-for await (
-  const chunk of stream
-) {
+for await (const chunk of stream) {
   for (const [node, values] of Object.entries(chunk)) {
     console.log(`Output from node: ${node}`);
     console.log("---");
@@ -7876,7 +8043,6 @@ for await (
   }
 }
 ```
-
 
 ```typescript
 function generateTools(state: typeof StateAnnotation.State) {
@@ -7889,8 +8055,10 @@ function generateTools(state: typeof StateAnnotation.State) {
       const userId = config.configurable?.userId;
       // LangGraph's managed key-value store is also accessible via the config
       const store = config.store;
-      await store.put([userId, "pets"], "names", pets )
-      await store.put([userId, "pets"], "context", {content: state.messages[0].content})
+      await store.put([userId, "pets"], "names", pets);
+      await store.put([userId, "pets"], "context", {
+        content: state.messages[0].content,
+      });
 
       return "update_favorite_pets called.";
     },
@@ -7904,9 +8072,8 @@ function generateTools(state: typeof StateAnnotation.State) {
     }
   );
   return [updateFavoritePets];
-};
+}
 ```
-
 
 ```typescript
 const toolNodeWithClosure = async (state: typeof StateAnnotation.State) => {
@@ -7918,13 +8085,12 @@ const toolNodeWithClosure = async (state: typeof StateAnnotation.State) => {
 };
 ```
 
-
 ```typescript
 function human(state: typeof MessagesAnnotation.State): Command {
   const userInput: string = interrupt("Ready for user input.");
 
   // Determine the active agent
-  const activeAgent = ...; 
+  const activeAgent = ...;
 
   return new Command({
     update: {
@@ -7954,7 +8120,6 @@ function agent(state: typeof MessagesAnnotation.State): Command {
 }
 ```
 
-
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
 
@@ -7964,7 +8129,6 @@ process.env.LANGCHAIN_CALLBACKS_BACKGROUND = "true";
 process.env.LANGCHAIN_TRACING_V2 = "true";
 process.env.LANGCHAIN_PROJECT = "Time Travel: LangGraphJS";
 ```
-
 
 ```typescript
 import { z } from "zod";
@@ -7976,11 +8140,10 @@ import {
   START,
   Command,
   interrupt,
-  MemorySaver
+  MemorySaver,
 } from "@langchain/langgraph";
 
 const model = new ChatOpenAI({ model: "gpt-4o" });
-
 
 /**
  * Call LLM with structured output to get a natural language response as well as a target agent (node) to go to next.
@@ -7992,135 +8155,163 @@ function callLlm(messages: BaseMessage[], targetAgentNodes: string[]) {
   // - model's text response (`response`)
   // - name of the node to go to next (or 'finish')
   const outputSchema = z.object({
-    response: z.string().describe("A human readable response to the original question. Does not need to be a final response. Will be streamed back to the user."),
-    goto: z.enum(["finish", ...targetAgentNodes]).describe("The next agent to call, or 'finish' if the user's query has been resolved. Must be one of the specified values."),
-  })
-  return model.withStructuredOutput(outputSchema, { name: "Response" }).invoke(messages)
+    response: z
+      .string()
+      .describe(
+        "A human readable response to the original question. Does not need to be a final response. Will be streamed back to the user."
+      ),
+    goto: z
+      .enum(["finish", ...targetAgentNodes])
+      .describe(
+        "The next agent to call, or 'finish' if the user's query has been resolved. Must be one of the specified values."
+      ),
+  });
+  return model
+    .withStructuredOutput(outputSchema, { name: "Response" })
+    .invoke(messages);
 }
 
 async function travelAdvisor(
   state: typeof MessagesAnnotation.State
 ): Promise<Command> {
-  const systemPrompt = 
-      "You are a general travel expert that can recommend travel destinations (e.g. countries, cities, etc). " +
-      "If you need specific sightseeing recommendations, ask 'sightseeingAdvisor' for help. " +
-      "If you need hotel recommendations, ask 'hotelAdvisor' for help. " +
-      "If you have enough information to respond to the user, return 'finish'. " +
-      "Never mention other agents by name.";
+  const systemPrompt =
+    "You are a general travel expert that can recommend travel destinations (e.g. countries, cities, etc). " +
+    "If you need specific sightseeing recommendations, ask 'sightseeingAdvisor' for help. " +
+    "If you need hotel recommendations, ask 'hotelAdvisor' for help. " +
+    "If you have enough information to respond to the user, return 'finish'. " +
+    "Never mention other agents by name.";
 
-  const messages = [{"role": "system", "content": systemPrompt}, ...state.messages] as BaseMessage[];
+  const messages = [
+    { role: "system", content: systemPrompt },
+    ...state.messages,
+  ] as BaseMessage[];
   const targetAgentNodes = ["sightseeingAdvisor", "hotelAdvisor"];
   const response = await callLlm(messages, targetAgentNodes);
-  const aiMsg = {"role": "ai", "content": response.response, "name": "travelAdvisor"};
-  
+  const aiMsg = {
+    role: "ai",
+    content: response.response,
+    name: "travelAdvisor",
+  };
+
   let goto = response.goto;
   if (goto === "finish") {
-      goto = "human";
+    goto = "human";
   }
 
-  return new Command({goto, update: { "messages": [aiMsg] } });
+  return new Command({ goto, update: { messages: [aiMsg] } });
 }
 
 async function sightseeingAdvisor(
   state: typeof MessagesAnnotation.State
 ): Promise<Command> {
-  const systemPrompt = 
-      "You are a travel expert that can provide specific sightseeing recommendations for a given destination. " +
-      "If you need general travel help, go to 'travelAdvisor' for help. " +
-      "If you need hotel recommendations, go to 'hotelAdvisor' for help. " +
-      "If you have enough information to respond to the user, return 'finish'. " +
-      "Never mention other agents by name.";
+  const systemPrompt =
+    "You are a travel expert that can provide specific sightseeing recommendations for a given destination. " +
+    "If you need general travel help, go to 'travelAdvisor' for help. " +
+    "If you need hotel recommendations, go to 'hotelAdvisor' for help. " +
+    "If you have enough information to respond to the user, return 'finish'. " +
+    "Never mention other agents by name.";
 
-  const messages = [{"role": "system", "content": systemPrompt}, ...state.messages] as BaseMessage[];
+  const messages = [
+    { role: "system", content: systemPrompt },
+    ...state.messages,
+  ] as BaseMessage[];
   const targetAgentNodes = ["travelAdvisor", "hotelAdvisor"];
   const response = await callLlm(messages, targetAgentNodes);
-  const aiMsg = {"role": "ai", "content": response.response, "name": "sightseeingAdvisor"};
-  
+  const aiMsg = {
+    role: "ai",
+    content: response.response,
+    name: "sightseeingAdvisor",
+  };
+
   let goto = response.goto;
   if (goto === "finish") {
-      goto = "human";
+    goto = "human";
   }
 
-  return new Command({ goto, update: {"messages": [aiMsg] } });
+  return new Command({ goto, update: { messages: [aiMsg] } });
 }
 
 async function hotelAdvisor(
   state: typeof MessagesAnnotation.State
 ): Promise<Command> {
-  const systemPrompt = 
-      "You are a travel expert that can provide hotel recommendations for a given destination. " +
-      "If you need general travel help, ask 'travelAdvisor' for help. " +
-      "If you need specific sightseeing recommendations, ask 'sightseeingAdvisor' for help. " +
-      "If you have enough information to respond to the user, return 'finish'. " +
-      "Never mention other agents by name.";
+  const systemPrompt =
+    "You are a travel expert that can provide hotel recommendations for a given destination. " +
+    "If you need general travel help, ask 'travelAdvisor' for help. " +
+    "If you need specific sightseeing recommendations, ask 'sightseeingAdvisor' for help. " +
+    "If you have enough information to respond to the user, return 'finish'. " +
+    "Never mention other agents by name.";
 
-  const messages = [{"role": "system", "content": systemPrompt}, ...state.messages] as BaseMessage[];
+  const messages = [
+    { role: "system", content: systemPrompt },
+    ...state.messages,
+  ] as BaseMessage[];
   const targetAgentNodes = ["travelAdvisor", "sightseeingAdvisor"];
   const response = await callLlm(messages, targetAgentNodes);
-  const aiMsg = {"role": "ai", "content": response.response, "name": "hotelAdvisor"};
-  
+  const aiMsg = {
+    role: "ai",
+    content: response.response,
+    name: "hotelAdvisor",
+  };
+
   let goto = response.goto;
   if (goto === "finish") {
-      goto = "human";
+    goto = "human";
   }
 
-  return new Command({ goto, update: {"messages": [aiMsg] } });
+  return new Command({ goto, update: { messages: [aiMsg] } });
 }
 
-function humanNode(
-  state: typeof MessagesAnnotation.State
-): Command {
+function humanNode(state: typeof MessagesAnnotation.State): Command {
   const userInput: string = interrupt("Ready for user input.");
 
   let activeAgent: string | undefined = undefined;
 
   // Look up the active agent
   for (let i = state.messages.length - 1; i >= 0; i--) {
-      if (state.messages[i].name) {
-          activeAgent = state.messages[i].name;
-          break;
-      }
+    if (state.messages[i].name) {
+      activeAgent = state.messages[i].name;
+      break;
+    }
   }
 
   if (!activeAgent) {
-      throw new Error("Could not determine the active agent.");
+    throw new Error("Could not determine the active agent.");
   }
 
   return new Command({
-      goto: activeAgent,
-      update: {
-        "messages": [
-            {
-                "role": "human",
-                "content": userInput,
-            }
-        ]
-      }
+    goto: activeAgent,
+    update: {
+      messages: [
+        {
+          role: "human",
+          content: userInput,
+        },
+      ],
+    },
   });
 }
 
 const builder = new StateGraph(MessagesAnnotation)
   .addNode("travelAdvisor", travelAdvisor, {
-    ends: ["sightseeingAdvisor", "hotelAdvisor"]
+    ends: ["sightseeingAdvisor", "hotelAdvisor"],
   })
   .addNode("sightseeingAdvisor", sightseeingAdvisor, {
-    ends: ["human", "travelAdvisor", "hotelAdvisor"]
+    ends: ["human", "travelAdvisor", "hotelAdvisor"],
   })
   .addNode("hotelAdvisor", hotelAdvisor, {
-    ends: ["human", "travelAdvisor", "sightseeingAdvisor"]
+    ends: ["human", "travelAdvisor", "sightseeingAdvisor"],
   })
   // This adds a node to collect human input, which will route
   // back to the active agent.
   .addNode("human", humanNode, {
-    ends: ["hotelAdvisor", "sightseeingAdvisor", "travelAdvisor", "human"]
+    ends: ["hotelAdvisor", "sightseeingAdvisor", "travelAdvisor", "human"],
   })
   // We'll always start with a general travel advisor.
-  .addEdge(START, "travelAdvisor")
+  .addEdge(START, "travelAdvisor");
 
-const checkpointer = new MemorySaver()
-const graph = builder.compile({ checkpointer })
+const checkpointer = new MemorySaver();
+const graph = builder.compile({ checkpointer });
 ```
-
 
 ```typescript
 import * as tslab from "tslab";
@@ -8132,28 +8323,33 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 import { Command } from "@langchain/langgraph";
 import { v4 as uuidv4 } from "uuid";
 
-const threadConfig = { configurable: { thread_id: uuidv4() }, streamMode: "values" as const };
+const threadConfig = {
+  configurable: { thread_id: uuidv4() },
+  streamMode: "values" as const,
+};
 
 const inputs = [
   // 1st round of conversation
   {
     messages: [
-      { role: "user", content: "i wanna go somewhere warm in the caribbean" }
-    ]
+      { role: "user", content: "i wanna go somewhere warm in the caribbean" },
+    ],
   },
   // Since we're using `interrupt`, we'll need to resume using the Command primitive.
   // 2nd round of conversation
   new Command({
-    resume: "could you recommend a nice hotel in one of the areas and tell me which area it is."
+    resume:
+      "could you recommend a nice hotel in one of the areas and tell me which area it is.",
   }),
   // Third round of conversation
-  new Command({ resume: "could you recommend something to do near the hotel?" }),
-]
+  new Command({
+    resume: "could you recommend something to do near the hotel?",
+  }),
+];
 
 let iter = 0;
 for await (const userInput of inputs) {
@@ -8162,20 +8358,17 @@ for await (const userInput of inputs) {
   console.log(`User: ${JSON.stringify(userInput)}\n`);
 
   for await (const update of await graph.stream(userInput, threadConfig)) {
-    const lastMessage = update.messages ? update.messages[update.messages.length - 1] : undefined;
-    if (lastMessage && lastMessage._getType() === "ai") {
-      console.log(`${lastMessage.name}: ${lastMessage.content}`)
+    const lastMessage = update.messages?.at(-1);
+    if (lastMessage && lastMessage.getType() === "ai") {
+      console.log(`${lastMessage.name}: ${lastMessage.content}`);
     }
   }
 }
-
 ```
-
 
 ```typescript
 process.env.OPENAI_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -8186,27 +8379,32 @@ const model = new ChatOpenAI({
   model: "gpt-4o-mini",
 });
 
-const getWeather = tool(async ({ location }) => {
-  // This is a placeholder for the actual implementation
-  const lowercaseLocation = location.toLowerCase();
-  if (lowercaseLocation.includes("sf") || lowercaseLocation.includes("san francisco")) {
-    return "It's sunny!";
-  } else if (lowercaseLocation.includes("boston")) {
-    return "It's rainy!";
-  } else {
-    return `I am not sure what the weather is in ${location}`;
+const getWeather = tool(
+  async ({ location }) => {
+    // This is a placeholder for the actual implementation
+    const lowercaseLocation = location.toLowerCase();
+    if (
+      lowercaseLocation.includes("sf") ||
+      lowercaseLocation.includes("san francisco")
+    ) {
+      return "It's sunny!";
+    } else if (lowercaseLocation.includes("boston")) {
+      return "It's rainy!";
+    } else {
+      return `I am not sure what the weather is in ${location}`;
+    }
+  },
+  {
+    name: "getWeather",
+    schema: z.object({
+      location: z.string().describe("Location to get the weather for"),
+    }),
+    description: "Call to get the weather from a specific location.",
   }
-}, {
-  name: "getWeather",
-  schema: z.object({
-    location: z.string().describe("Location to get the weather for"),
-  }),
-  description: "Call to get the weather from a specific location.",
-});
+);
 
 const tools = [getWeather];
 ```
-
 
 ```typescript
 import {
@@ -8232,9 +8430,9 @@ const callTool = task(
     return new ToolMessage({ content: observation, tool_call_id: toolCall.id });
     // Can also pass toolCall directly into the tool to return a ToolMessage
     // return tool.invoke(toolCall);
-  });
+  }
+);
 ```
-
 
 ```typescript
 import { interrupt } from "@langchain/langgraph";
@@ -8266,7 +8464,6 @@ function reviewToolCall(toolCall: ToolCall): ToolCall | ToolMessage {
 }
 ```
 
-
 ```typescript
 import {
   MemorySaver,
@@ -8277,55 +8474,59 @@ import {
 
 const checkpointer = new MemorySaver();
 
-const agent = entrypoint({
-  checkpointer,
-  name: "agent",
-}, async (messages: BaseMessageLike[]) => {
-  const previous = getPreviousState<BaseMessageLike[]>() ?? [];
-  let currentMessages = addMessages(previous, messages);
-  let llmResponse = await callModel(currentMessages);
-  while (true) {
-    if (!llmResponse.tool_calls?.length) {
-      break;
-    }
-    // Review tool calls
-    const toolResults: ToolMessage[] = [];
-    const toolCalls: ToolCall[] = [];
-    
-    for (let i = 0; i < llmResponse.tool_calls.length; i++) {
-      const review = await reviewToolCall(llmResponse.tool_calls[i]);
-      if (review instanceof ToolMessage) {
-        toolResults.push(review);
-      } else { // is a validated tool call
-        toolCalls.push(review);
-        if (review !== llmResponse.tool_calls[i]) {
-          llmResponse.tool_calls[i] = review;
+const agent = entrypoint(
+  {
+    checkpointer,
+    name: "agent",
+  },
+  async (messages: BaseMessageLike[]) => {
+    const previous = getPreviousState<BaseMessageLike[]>() ?? [];
+    let currentMessages = addMessages(previous, messages);
+    let llmResponse = await callModel(currentMessages);
+    while (true) {
+      if (!llmResponse.tool_calls?.length) {
+        break;
+      }
+      // Review tool calls
+      const toolResults: ToolMessage[] = [];
+      const toolCalls: ToolCall[] = [];
+
+      for (let i = 0; i < llmResponse.tool_calls.length; i++) {
+        const review = await reviewToolCall(llmResponse.tool_calls[i]);
+        if (review instanceof ToolMessage) {
+          toolResults.push(review);
+        } else {
+          // is a validated tool call
+          toolCalls.push(review);
+          if (review !== llmResponse.tool_calls[i]) {
+            llmResponse.tool_calls[i] = review;
+          }
         }
       }
+      // Execute remaining tool calls
+      const remainingToolResults = await Promise.all(
+        toolCalls.map((toolCall) => callTool(toolCall))
+      );
+
+      // Append to message list
+      currentMessages = addMessages(currentMessages, [
+        llmResponse,
+        ...toolResults,
+        ...remainingToolResults,
+      ]);
+
+      // Call model again
+      llmResponse = await callModel(currentMessages);
     }
-    // Execute remaining tool calls
-    const remainingToolResults = await Promise.all(
-      toolCalls.map((toolCall) => callTool(toolCall))
-    );
-    
-    // Append to message list
-    currentMessages = addMessages(
-      currentMessages,
-      [llmResponse, ...toolResults, ...remainingToolResults]
-    );
-
-    // Call model again
-    llmResponse = await callModel(currentMessages);
+    // Generate final response
+    currentMessages = addMessages(currentMessages, llmResponse);
+    return entrypoint.final({
+      value: llmResponse,
+      save: currentMessages,
+    });
   }
-  // Generate final response
-  currentMessages = addMessages(currentMessages, llmResponse);
-  return entrypoint.final({
-    value: llmResponse,
-    save: currentMessages
-  });
-});
+);
 ```
-
 
 ```typescript
 import { BaseMessage, isAIMessage } from "@langchain/core/messages";
@@ -8336,7 +8537,7 @@ const prettyPrintMessage = (message: BaseMessage) => {
   if (isAIMessage(message) && message.tool_calls?.length) {
     console.log(JSON.stringify(message.tool_calls, null, 2));
   }
-}
+};
 
 const printStep = (step: Record<string, any>) => {
   if (step.__metadata__?.cached) {
@@ -8346,7 +8547,7 @@ const printStep = (step: Record<string, any>) => {
     if (taskName === "agent") {
       continue; // just stream from tasks
     }
-    
+
     console.log(`\n${taskName}:`);
     if (taskName === "__interrupt__" || taskName === "reviewToolCall") {
       console.log(JSON.stringify(result, null, 2));
@@ -8357,17 +8558,16 @@ const printStep = (step: Record<string, any>) => {
 };
 ```
 
-
 ```typescript
 const config = {
   configurable: {
-    thread_id: "1"
-  }
+    thread_id: "1",
+  },
 };
 
 const userMessage = {
   role: "user",
-  content: "What's the weather in san francisco?"
+  content: "What's the weather in san francisco?",
 };
 console.log(userMessage);
 
@@ -8378,7 +8578,6 @@ for await (const step of stream) {
 }
 ```
 
-
 ```typescript hl_lines="3 4 5 6 7"
 import { Command } from "@langchain/langgraph";
 
@@ -8388,24 +8587,23 @@ const humanInput = new Command({
   },
 });
 
-const resumedStream = await agent.stream(humanInput, config)
+const resumedStream = await agent.stream(humanInput, config);
 
 for await (const step of resumedStream) {
   printStep(step);
 }
 ```
 
-
 ```typescript
 const config2 = {
   configurable: {
-    thread_id: "2"
-  }
+    thread_id: "2",
+  },
 };
 
 const userMessage2 = {
   role: "user",
-  content: "What's the weather in san francisco?"
+  content: "What's the weather in san francisco?",
 };
 
 console.log(userMessage2);
@@ -8417,7 +8615,6 @@ for await (const step of stream2) {
 }
 ```
 
-
 ```typescript hl_lines="1 2 3 4 5 6"
 const humanInput2 = new Command({
   resume: {
@@ -8426,24 +8623,23 @@ const humanInput2 = new Command({
   },
 });
 
-const resumedStream2 = await agent.stream(humanInput2, config2)
+const resumedStream2 = await agent.stream(humanInput2, config2);
 
 for await (const step of resumedStream2) {
   printStep(step);
 }
 ```
 
-
 ```typescript
 const config3 = {
   configurable: {
-    thread_id: "3"
-  }
+    thread_id: "3",
+  },
 };
 
 const userMessage3 = {
   role: "user",
-  content: "What's the weather in san francisco?"
+  content: "What's the weather in san francisco?",
 };
 
 console.log(userMessage3);
@@ -8455,7 +8651,6 @@ for await (const step of stream3) {
 }
 ```
 
-
 ```typescript hl_lines="1 2 3 4 5 6"
 const humanInput3 = new Command({
   resume: {
@@ -8464,13 +8659,12 @@ const humanInput3 = new Command({
   },
 });
 
-const resumedStream3 = await agent.stream(humanInput3, config3)
+const resumedStream3 = await agent.stream(humanInput3, config3);
 
 for await (const step of resumedStream3) {
   printStep(step);
 }
 ```
-
 
 ```typescript hl_lines="1 2 3 4 5"
 const continueCommand = new Command({
@@ -8479,17 +8673,16 @@ const continueCommand = new Command({
   },
 });
 
-const continueStream = await agent.stream(continueCommand, config3)
+const continueStream = await agent.stream(continueCommand, config3);
 
 for await (const step of continueStream) {
   printStep(step);
 }
 ```
 
-
 ```typescript
-```
 
+```
 
 ```typescript
 import { BaseMessage } from "@langchain/core/messages";
@@ -8502,10 +8695,9 @@ const GraphAnnotation = Annotation.Root({
     reducer: (currentState, updateValue) => currentState.concat(updateValue),
     // Default function: Initialize the channel with an empty array
     default: () => [],
-  })
+  }),
 });
 ```
-
 
 ```typescript
 const QuestionAnswerAnnotation = Annotation.Root({
@@ -8514,43 +8706,37 @@ const QuestionAnswerAnnotation = Annotation.Root({
 });
 ```
 
-
 ```typescript
 type QuestionAnswerAnnotationType = typeof QuestionAnswerAnnotation.State;
 ```
-
 
 ```typescript
 type QuestionAnswerAnnotationType = {
   question: string;
   answer: string;
-}
+};
 ```
-
 
 ```typescript
 const MergedAnnotation = Annotation.Root({
   ...QuestionAnswerAnnotation.spec,
   ...GraphAnnotation.spec,
-})
+});
 ```
-
 
 ```typescript
 type MergedAnnotation = {
   messages: BaseMessage[];
   question: string;
   answer: string;
-}
+};
 ```
-
 
 ```typescript
 import { StateGraph } from "@langchain/langgraph";
 
 const workflow = new StateGraph(MergedAnnotation);
 ```
-
 
 ```typescript
 import { StateGraph } from "@langchain/langgraph";
@@ -8569,10 +8755,9 @@ const workflowWithChannels = new StateGraph<WorkflowChannelsState>({
     },
     question: null,
     answer: null,
-  }
+  },
 });
 ```
-
 
 ```typescript
 import { ChatAnthropic } from "@langchain/anthropic";
@@ -8591,29 +8776,31 @@ const AgentState = Annotation.Root({
 
 const memory = new MemorySaver();
 
-const searchTool = tool((_): string => {
+const searchTool = tool(
+  (_): string => {
     // This is a placeholder for the actual implementation
     // Don't let the LLM know this though 😊
-    return "It's sunny in San Francisco, but you better look out if you're a Gemini 😈."
-}, {
+    return "It's sunny in San Francisco, but you better look out if you're a Gemini 😈.";
+  },
+  {
     name: "search",
     description: "Call to surf the web.",
     schema: z.object({
-        query: z.string()
-    })
-})
+      query: z.string(),
+    }),
+  }
+);
 
-
-const tools = [searchTool]
-const toolNode = new ToolNode<typeof AgentState.State>(tools)
-const model = new ChatAnthropic({ model: "claude-3-haiku-20240307" })
-const boundModel = model.bindTools(tools)
+const tools = [searchTool];
+const toolNode = new ToolNode<typeof AgentState.State>(tools);
+const model = new ChatAnthropic({ model: "claude-3-haiku-20240307" });
+const boundModel = model.bindTools(tools);
 
 function shouldContinue(state: typeof AgentState.State): "action" | typeof END {
-  const lastMessage = state.messages[state.messages.length - 1];
+  const lastMessage = state.messages.at(-1);
   // If there is no function call, then we finish
   if (lastMessage && !(lastMessage as AIMessage).tool_calls?.length) {
-      return END;
+    return END;
   }
   // Otherwise if there is, we continue
   return "action";
@@ -8628,60 +8815,72 @@ async function callModel(state: typeof AgentState.State) {
 
 // Define a new graph
 const workflow = new StateGraph(AgentState)
-    // Define the two nodes we will cycle between
-    .addNode("agent", callModel)
-    .addNode("action", toolNode)
-    // We now add a conditional edge
-    .addConditionalEdges(
-        // First, we define the start node. We use `agent`.
-        // This means these are the edges taken after the `agent` node is called.
-        "agent",
-        // Next, we pass in the function that will determine which node is called next.
-        shouldContinue
-    )
-    // We now add a normal edge from `action` to `agent`.
-    // This means that after `action` is called, `agent` node is called next.
-    .addEdge("action", "agent")
-    // Set the entrypoint as `agent`
-    // This means that this node is the first one called
-    .addEdge(START, "agent");
+  // Define the two nodes we will cycle between
+  .addNode("agent", callModel)
+  .addNode("action", toolNode)
+  // We now add a conditional edge
+  .addConditionalEdges(
+    // First, we define the start node. We use `agent`.
+    // This means these are the edges taken after the `agent` node is called.
+    "agent",
+    // Next, we pass in the function that will determine which node is called next.
+    shouldContinue
+  )
+  // We now add a normal edge from `action` to `agent`.
+  // This means that after `action` is called, `agent` node is called next.
+  .addEdge("action", "agent")
+  // Set the entrypoint as `agent`
+  // This means that this node is the first one called
+  .addEdge(START, "agent");
 
 // Finally, we compile it!
 // This compiles it into a LangChain Runnable,
 // meaning you can use it as you would any other runnable
 const app = workflow.compile({
-    checkpointer: memory,
+  checkpointer: memory,
 });
 ```
-
 
 ```typescript
 import { HumanMessage } from "@langchain/core/messages";
 
-const config = { configurable: { thread_id: "2"}, streamMode: "values" as const }
+const config = {
+  configurable: { thread_id: "2" },
+  streamMode: "values" as const,
+};
 
 const inputMessage = new HumanMessage("hi! I'm bob");
-for await (const event of await app.stream({
-    messages: [inputMessage]
-}, config)) {
-    const recentMsg = event.messages[event.messages.length - 1];
-    console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
-    console.log(recentMsg.content);
+for await (const event of await app.stream(
+  {
+    messages: [inputMessage],
+  },
+  config
+)) {
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
+  console.log(recentMsg.content);
 }
 
-console.log("\n\n================================= END =================================\n\n")
+console.log(
+  "\n\n================================= END =================================\n\n"
+);
 
 const inputMessage2 = new HumanMessage("what's my name?");
-for await (const event of await app.stream({
-    messages: [inputMessage2]
-}, config)) {
-    const recentMsg = event.messages[event.messages.length - 1];
-    console.log(`================================ ${recentMsg._getType()} Message (2) =================================`)
-    console.log(recentMsg.content);
+for await (const event of await app.stream(
+  {
+    messages: [inputMessage2],
+  },
+  config
+)) {
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (2) =================================`
+  );
+  console.log(recentMsg.content);
 }
-
 ```
-
 
 ```typescript
 import { ChatAnthropic } from "@langchain/anthropic";
@@ -8700,47 +8899,60 @@ const MessageFilteringAgentState = Annotation.Root({
 
 const messageFilteringMemory = new MemorySaver();
 
-const messageFilteringSearchTool = tool((_): string => {
+const messageFilteringSearchTool = tool(
+  (_): string => {
     // This is a placeholder for the actual implementation
     // Don't let the LLM know this though 😊
-    return "It's sunny in San Francisco, but you better look out if you're a Gemini 😈."
-}, {
+    return "It's sunny in San Francisco, but you better look out if you're a Gemini 😈.";
+  },
+  {
     name: "search",
     description: "Call to surf the web.",
     schema: z.object({
-        query: z.string()
-    })
-})
+      query: z.string(),
+    }),
+  }
+);
 
 // We can re-use the same search tool as above as we don't need to change it for this example.
-const messageFilteringTools = [messageFilteringSearchTool]
-const messageFilteringToolNode = new ToolNode<typeof MessageFilteringAgentState.State>(messageFilteringTools)
-const messageFilteringModel = new ChatAnthropic({ model: "claude-3-haiku-20240307" })
-const boundMessageFilteringModel = messageFilteringModel.bindTools(messageFilteringTools)
+const messageFilteringTools = [messageFilteringSearchTool];
+const messageFilteringToolNode = new ToolNode<
+  typeof MessageFilteringAgentState.State
+>(messageFilteringTools);
+const messageFilteringModel = new ChatAnthropic({
+  model: "claude-3-haiku-20240307",
+});
+const boundMessageFilteringModel = messageFilteringModel.bindTools(
+  messageFilteringTools
+);
 
-
-async function shouldContinueMessageFiltering(state: typeof MessageFilteringAgentState.State): Promise<"action" | typeof END> {
-    const lastMessage = state.messages[state.messages.length - 1];
-    // If there is no function call, then we finish
-    if (lastMessage && !(lastMessage as AIMessage).tool_calls?.length) {
-        return END;
-    }
-    // Otherwise if there is, we continue
-    return "action";
+async function shouldContinueMessageFiltering(
+  state: typeof MessageFilteringAgentState.State
+): Promise<"action" | typeof END> {
+  const lastMessage = state.messages.at(-1);
+  // If there is no function call, then we finish
+  if (lastMessage && !(lastMessage as AIMessage).tool_calls?.length) {
+    return END;
+  }
+  // Otherwise if there is, we continue
+  return "action";
 }
 
 const filterMessages = (messages: BaseMessage[]): BaseMessage[] => {
   // This is very simple helper function which only ever uses the last message
   return messages.slice(-1);
-}
+};
 
 // Define the function that calls the model
-async function callModelMessageFiltering(state: typeof MessageFilteringAgentState.State) {
-  const response = await boundMessageFilteringModel.invoke(filterMessages(state.messages));
+async function callModelMessageFiltering(
+  state: typeof MessageFilteringAgentState.State
+) {
+  const response = await boundMessageFilteringModel.invoke(
+    filterMessages(state.messages)
+  );
   // We return an object, because this will get merged with the existing state
   return { messages: [response] };
 }
-
 
 // Define a new graph
 const messageFilteringWorkflow = new StateGraph(MessageFilteringAgentState)
@@ -8766,45 +8978,54 @@ const messageFilteringWorkflow = new StateGraph(MessageFilteringAgentState)
 // This compiles it into a LangChain Runnable,
 // meaning you can use it as you would any other runnable
 const messageFilteringApp = messageFilteringWorkflow.compile({
-    checkpointer: messageFilteringMemory,
+  checkpointer: messageFilteringMemory,
 });
 ```
-
 
 ```typescript
 import { HumanMessage } from "@langchain/core/messages";
 
-const messageFilteringConfig = { configurable: { thread_id: "2"}, streamMode: "values" as const }
+const messageFilteringConfig = {
+  configurable: { thread_id: "2" },
+  streamMode: "values" as const,
+};
 
 const messageFilteringInput = new HumanMessage("hi! I'm bob");
-for await (const event of await messageFilteringApp.stream({
-    messages: [messageFilteringInput]
-}, messageFilteringConfig)) {
-    const recentMsg = event.messages[event.messages.length - 1];
-    console.log(`================================ ${recentMsg._getType()} Message (1) =================================`)
-    console.log(recentMsg.content);
+for await (const event of await messageFilteringApp.stream(
+  {
+    messages: [messageFilteringInput],
+  },
+  messageFilteringConfig
+)) {
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (1) =================================`
+  );
+  console.log(recentMsg.content);
 }
 
-console.log("\n\n================================= END =================================\n\n")
+console.log(
+  "\n\n================================= END =================================\n\n"
+);
 
 const messageFilteringInput2 = new HumanMessage("what's my name?");
 for await (const event of await messageFilteringApp.stream(
   {
-    messages: [messageFilteringInput2]
+    messages: [messageFilteringInput2],
   },
   messageFilteringConfig
 )) {
-    const recentMsg = event.messages[event.messages.length - 1];
-    console.log(`================================ ${recentMsg._getType()} Message (2) =================================`)
-    console.log(recentMsg.content);
+  const recentMsg = event.messages.at(-1);
+  console.log(
+    `================================ ${recentMsg.getType()} Message (2) =================================`
+  );
+  console.log(recentMsg.content);
 }
 ```
 
-
 ```typescript
-process.env.ANTHROPIC_API_KEY = 'YOUR_API_KEY'
+process.env.ANTHROPIC_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 import { z } from "zod";
@@ -8846,7 +9067,6 @@ const getItems = tool(
 );
 ```
 
-
 ```typescript
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 
@@ -8855,7 +9075,6 @@ const agent = createReactAgent({
   tools: [getItems],
 });
 ```
-
 
 ```typescript
 let finalEvent;
@@ -8878,28 +9097,25 @@ for await (const event of agent.streamEvents(
 )) {
   if ("chunk" in event.data) {
     console.dir({
-      type: event.data.chunk._getType(),
+      type: event.data.chunk.getType(),
       content: event.data.chunk.content,
-    })
+    });
   }
   finalEvent = event;
 }
 ```
 
-
 ```typescript
 const finalMessage = finalEvent?.data.output;
 console.dir(
   {
-    type: finalMessage._getType(),
+    type: finalMessage.getType(),
     content: finalMessage.content,
     tool_calls: finalMessage.tool_calls,
   },
   { depth: null }
 );
-
 ```
-
 
 ```typescript
 import OpenAI from "openai";
@@ -8919,11 +9135,10 @@ const toolSchema: OpenAI.ChatCompletionTool = {
         },
       },
       required: ["place"],
-    }
-  }
+    },
+  },
 };
 ```
-
 
 ```typescript
 import { dispatchCustomEvent } from "@langchain/core/callbacks/dispatch";
@@ -8980,14 +9195,16 @@ const callModel = async (state: typeof StateAnnotation.State) => {
   }
   let finalToolCalls;
   if (toolCallName !== undefined && toolCallId !== undefined) {
-    finalToolCalls = [{
-      id: toolCallId,
-      function: {
-        name: toolCallName,
-        arguments: toolCallArgs
+    finalToolCalls = [
+      {
+        id: toolCallId,
+        function: {
+          name: toolCallName,
+          arguments: toolCallArgs,
+        },
+        type: "function" as const,
       },
-      type: "function" as const,
-    }];
+    ];
   }
 
   const responseMessage = {
@@ -8996,25 +9213,29 @@ const callModel = async (state: typeof StateAnnotation.State) => {
     tool_calls: finalToolCalls,
   };
   return { messages: [responseMessage] };
-}
+};
 ```
-
 
 ```typescript
 const getItems = async ({ place }: { place: string }) => {
-  if (place.toLowerCase().includes("bed")) {  // For under the bed
+  if (place.toLowerCase().includes("bed")) {
+    // For under the bed
     return "socks, shoes and dust bunnies";
-  } else if (place.toLowerCase().includes("shelf")) {  // For 'shelf'
+  } else if (place.toLowerCase().includes("shelf")) {
+    // For 'shelf'
     return "books, pencils and pictures";
-  } else {  // if the agent decides to ask about a different place
+  } else {
+    // if the agent decides to ask about a different place
     return "cat snacks";
   }
 };
 
 const callTools = async (state: typeof StateAnnotation.State) => {
   const { messages } = state;
-  const mostRecentMessage = messages[messages.length - 1];
-  const toolCalls = (mostRecentMessage as OpenAI.ChatCompletionAssistantMessageParam).tool_calls;
+  const mostRecentMessage = messages.at(-1);
+  const toolCalls = (
+    mostRecentMessage as OpenAI.ChatCompletionAssistantMessageParam
+  ).tool_calls;
   if (toolCalls === undefined || toolCalls.length === 0) {
     throw new Error("No tool calls passed to node.");
   }
@@ -9029,11 +9250,10 @@ const callTools = async (state: typeof StateAnnotation.State) => {
     role: "tool" as const,
     name: functionName,
     content: response,
-  }
+  };
   return { messages: [toolMessage] };
-}
+};
 ```
-
 
 ```typescript
 import { StateGraph } from "@langchain/langgraph";
@@ -9042,13 +9262,17 @@ import OpenAI from "openai";
 // We can reuse the same `GraphState` from above as it has not changed.
 const shouldContinue = (state: typeof StateAnnotation.State) => {
   const { messages } = state;
-  const lastMessage =
-    messages[messages.length - 1] as OpenAI.ChatCompletionAssistantMessageParam;
-  if (lastMessage?.tool_calls !== undefined && lastMessage?.tool_calls.length > 0) {
+  const lastMessage = messages.at(
+    -1
+  ) as OpenAI.ChatCompletionAssistantMessageParam;
+  if (
+    lastMessage?.tool_calls !== undefined &&
+    lastMessage?.tool_calls.length > 0
+  ) {
     return "tools";
   }
   return "__end__";
-}
+};
 
 const graph = new StateGraph(StateAnnotation)
   .addNode("model", callModel)
@@ -9060,9 +9284,7 @@ const graph = new StateGraph(StateAnnotation)
   })
   .addEdge("tools", "model")
   .compile();
-  
 ```
-
 
 ```typescript
 import * as tslab from "tslab";
@@ -9074,11 +9296,10 @@ const arrayBuffer = await image.arrayBuffer();
 await tslab.display.png(new Uint8Array(arrayBuffer));
 ```
 
-
 ```typescript
 const eventStream = await graph.streamEvents(
   { messages: [{ role: "user", content: "what's in the bedroom?" }] },
-  { version: "v2" },
+  { version: "v2" }
 );
 
 for await (const { event, name, data } of eventStream) {
@@ -9087,7 +9308,6 @@ for await (const { event, name, data } of eventStream) {
   }
 }
 ```
-
 
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
@@ -9099,13 +9319,11 @@ for await (const { event, name, data } of eventStream) {
 // process.env.LANGCHAIN_PROJECT = "Cross-thread persistence: LangGraphJS";
 ```
 
-
 ```typescript
 import { InMemoryStore } from "@langchain/langgraph";
 
 const inMemoryStore = new InMemoryStore();
 ```
-
 
 ```typescript
 import { v4 as uuidv4 } from "uuid";
@@ -9150,7 +9368,7 @@ const callModel = async (
   const systemMsg = `You are a helpful assistant talking to the user. User info: ${info}`;
 
   // Store new memories if the user asks the model to remember
-  const lastMessage = state.messages[state.messages.length - 1];
+  const lastMessage = state.messages.at(-1);
   if (
     typeof lastMessage.content === "string" &&
     lastMessage.content.toLowerCase().includes("remember")
@@ -9175,9 +9393,7 @@ const graph = builder.compile({
   store: inMemoryStore,
 });
 // If you're using LangGraph Cloud or LangGraph Studio, you don't need to pass the store or checkpointer when compiling the graph, since it's done automatically.
-
 ```
-
 
 ```typescript
 let config = { configurable: { thread_id: "1", userId: "1" } };
@@ -9187,11 +9403,9 @@ for await (const chunk of await graph.stream(
   { messages: [inputMessage] },
   { ...config, streamMode: "values" }
 )) {
-  console.log(chunk.messages[chunk.messages.length - 1]);
+  console.log(chunk.messages.at(-1));
 }
-
 ```
-
 
 ```typescript
 config = { configurable: { thread_id: "2", userId: "1" } };
@@ -9201,18 +9415,16 @@ for await (const chunk of await graph.stream(
   { messages: [inputMessage] },
   { ...config, streamMode: "values" }
 )) {
-  console.log(chunk.messages[chunk.messages.length - 1]);
+  console.log(chunk.messages.at(-1));
 }
 ```
-
 
 ```typescript
 const memories = await inMemoryStore.search(["memories", "1"]);
 for (const memory of memories) {
-    console.log(await memory.value);
+  console.log(await memory.value);
 }
 ```
-
 
 ```typescript
 config = { configurable: { thread_id: "3", userId: "2" } };
@@ -9222,28 +9434,26 @@ for await (const chunk of await graph.stream(
   { messages: [inputMessage] },
   { ...config, streamMode: "values" }
 )) {
-  console.log(chunk.messages[chunk.messages.length - 1]);
+  console.log(chunk.messages.at(-1));
 }
 ```
-
 
 ```typescript
 import { z } from "zod";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 
 const responseFormat = z.object({
-    // Respond to the user in this format
-    mySpecialOutput: z.string(),
-})
+  // Respond to the user in this format
+  mySpecialOutput: z.string(),
+});
 
 const graph = createReactAgent({
-    llm: llm,
-    tools: tools,
-    // specify the schema for the structured output using `responseFormat` parameter
-    responseFormat: responseFormat
-})
+  llm: llm,
+  tools: tools,
+  // specify the schema for the structured output using `responseFormat` parameter
+  responseFormat: responseFormat,
+});
 ```
-
 
 ```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
@@ -9253,7 +9463,6 @@ const graph = createReactAgent({
 process.env.LANGSMITH_TRACING = "true";
 process.env.LANGSMITH_PROJECT = "ReAct Agent with system prompt: LangGraphJS";
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -9290,9 +9499,8 @@ const agent = createReactAgent({
   llm: new ChatOpenAI({ model: "gpt-4o", temperature: 0 }),
   tools: tools,
   responseFormat: WeatherResponseSchema,
-}); 
+});
 ```
-
 
 ```typescript
 const response = await agent.invoke({
@@ -9302,14 +9510,12 @@ const response = await agent.invoke({
       content: "What's the weather in NYC?",
     },
   ],
-})
+});
 ```
-
 
 ```typescript
-response.structuredResponse
+response.structuredResponse;
 ```
-
 
 ```typescript
 const agent = createReactAgent({
@@ -9318,8 +9524,8 @@ const agent = createReactAgent({
   responseFormat: {
     prompt: "Always return capitalized weather conditions",
     schema: WeatherResponseSchema,
-  }
-}); 
+  },
+});
 
 const response = await agent.invoke({
   messages: [
@@ -9328,20 +9534,17 @@ const response = await agent.invoke({
       content: "What's the weather in NYC?",
     },
   ],
-})
+});
 ```
-
 
 ```typescript
-response.structuredResponse
+response.structuredResponse;
 ```
-
 
 ```typescript
 process.env.OPENAI_API_KEY = "YOUR_API_KEY";
 process.env.ANTHROPIC_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 import { InMemoryStore } from "@langchain/langgraph";
@@ -9356,7 +9559,6 @@ const inMemoryStore = new InMemoryStore({
   },
 });
 ```
-
 
 ```typescript
 import { v4 } from "uuid";
@@ -9375,56 +9577,60 @@ const model = new ChatAnthropic({
   model: "claude-3-5-sonnet-latest",
 });
 
-const callModel = task("callModel", async (
-  messages: BaseMessage[],
-  memoryStore: BaseStore,
-  userId: string
-) => {
-  const namespace = ["memories", userId];
-  const lastMessage = messages.at(-1);
-  if (typeof lastMessage?.content !== "string") {
-    throw new Error("Received non-string message content.");
+const callModel = task(
+  "callModel",
+  async (messages: BaseMessage[], memoryStore: BaseStore, userId: string) => {
+    const namespace = ["memories", userId];
+    const lastMessage = messages.at(-1);
+    if (typeof lastMessage?.content !== "string") {
+      throw new Error("Received non-string message content.");
+    }
+    const memories = await memoryStore.search(namespace, {
+      query: lastMessage.content,
+    });
+    const info = memories.map((memory) => memory.value.data).join("\n");
+    const systemMessage = `You are a helpful assistant talking to the user. User info: ${info}`;
+
+    // Store new memories if the user asks the model to remember
+    if (lastMessage.content.toLowerCase().includes("remember")) {
+      // Hard-coded for demo
+      const memory = `Username is Bob`;
+      await memoryStore.put(namespace, v4(), { data: memory });
+    }
+    const response = await model.invoke([
+      {
+        role: "system",
+        content: systemMessage,
+      },
+      ...messages,
+    ]);
+    return response;
   }
-  const memories = await memoryStore.search(namespace, {
-    query: lastMessage.content,
-  });
-  const info = memories.map((memory) => memory.value.data).join("\n");
-  const systemMessage = `You are a helpful assistant talking to the user. User info: ${info}`;
-  
-  // Store new memories if the user asks the model to remember
-  if (lastMessage.content.toLowerCase().includes("remember")) {
-    // Hard-coded for demo
-    const memory = `Username is Bob`;
-    await memoryStore.put(namespace, v4(), { data: memory });
-  }
-  const response = await model.invoke([
-    {
-      role: "system",
-      content: systemMessage 
-    },
-    ...messages
-  ]);
-  return response;
-});
+);
 
 // NOTE: we're passing the store object here when creating a workflow via entrypoint()
-const workflow = entrypoint({
-  checkpointer: new MemorySaver(),
-  store: inMemoryStore,
-  name: "workflow",
-}, async (params: {
-  messages: BaseMessageLike[];
-  userId: string;
-}, config) => {
-  const messages = addMessages([], params.messages)
-  const response = await callModel(messages, config.store, params.userId);
-  return entrypoint.final({
-    value: response,
-    save: addMessages(messages, response),
-  });
-});
+const workflow = entrypoint(
+  {
+    checkpointer: new MemorySaver(),
+    store: inMemoryStore,
+    name: "workflow",
+  },
+  async (
+    params: {
+      messages: BaseMessageLike[];
+      userId: string;
+    },
+    config
+  ) => {
+    const messages = addMessages([], params.messages);
+    const response = await callModel(messages, config.store, params.userId);
+    return entrypoint.final({
+      value: response,
+      save: addMessages(messages, response),
+    });
+  }
+);
 ```
-
 
 ```typescript
 const config = {
@@ -9439,13 +9645,15 @@ const inputMessage = {
   content: "Hi! Remember: my name is Bob",
 };
 
-const stream = await workflow.stream({ messages: [inputMessage], userId: "1" }, config);
+const stream = await workflow.stream(
+  { messages: [inputMessage], userId: "1" },
+  config
+);
 
 for await (const chunk of stream) {
   console.log(chunk);
 }
 ```
-
 
 ```typescript
 const config2 = {
@@ -9455,19 +9663,23 @@ const config2 = {
   streamMode: "values" as const,
 };
 
-const followupStream = await workflow.stream({
-  messages: [{
-    role: "user",
-    content: "what is my name?",
-  }],
-  userId: "1"
-}, config2);
+const followupStream = await workflow.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "what is my name?",
+      },
+    ],
+    userId: "1",
+  },
+  config2
+);
 
 for await (const chunk of followupStream) {
   console.log(chunk);
 }
 ```
-
 
 ```typescript
 const memories = await inMemoryStore.search(["memories", "1"]);
@@ -9475,7 +9687,6 @@ for (const memory of memories) {
   console.log(memory.value);
 }
 ```
-
 
 ```typescript
 const config3 = {
@@ -9485,62 +9696,74 @@ const config3 = {
   streamMode: "values" as const,
 };
 
-const otherUserStream = await workflow.stream({
-  messages: [{
-    role: "user",
-    content: "what is my name?",
-  }],
-  userId: "2"
-}, config3);
+const otherUserStream = await workflow.stream(
+  {
+    messages: [
+      {
+        role: "user",
+        content: "what is my name?",
+      },
+    ],
+    userId: "2",
+  },
+  config3
+);
 
 for await (const chunk of otherUserStream) {
   console.log(chunk);
 }
 ```
 
-
 ```typescript
-process.env.OPENAI_API_KEY = 'YOUR_API_KEY';
+process.env.OPENAI_API_KEY = "YOUR_API_KEY";
 ```
-
 
 ```typescript
 process.env.LANGCHAIN_TRACING_V2 = "true";
 process.env.LANGCHAIN_API_KEY = "YOUR_API_KEY";
 ```
 
-
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
 import { tool } from "@langchain/core/tools";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
-import { MessagesAnnotation, StateGraph, START, END } from "@langchain/langgraph";
+import {
+  MessagesAnnotation,
+  StateGraph,
+  START,
+  END,
+} from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { z } from "zod";
 
 const memory = new MemorySaver();
 
-const search = tool((_) => {
-  // This is a placeholder for the actual implementation
-  // Don't let the LLM know this though 😊
-  return [
-    "It's sunny in San Francisco, but you better look out if you're a Gemini 😈.",
-  ];
-}, {
-  name: "search",
-  description: "Call to surf the web.",
-  schema: z.object({
-    query: z.string(),
-  })
-});
+const search = tool(
+  (_) => {
+    // This is a placeholder for the actual implementation
+    // Don't let the LLM know this though 😊
+    return [
+      "It's sunny in San Francisco, but you better look out if you're a Gemini 😈.",
+    ];
+  },
+  {
+    name: "search",
+    description: "Call to surf the web.",
+    schema: z.object({
+      query: z.string(),
+    }),
+  }
+);
 
 const tools = [search];
 const toolNode = new ToolNode<typeof MessagesAnnotation.State>(tools);
 const model = new ChatOpenAI({ model: "gpt-4o" });
 const boundModel = model.bindTools(tools);
 
-function shouldContinue(state: typeof MessagesAnnotation.State): "action" | typeof END {
-  const lastMessage = state.messages[state.messages.length - 1];
+function shouldContinue(
+  state: typeof MessagesAnnotation.State
+): "action" | typeof END {
+  const lastMessage = state.messages.at(-1);
   if (
     "tool_calls" in lastMessage &&
     Array.isArray(lastMessage.tool_calls) &&
@@ -9584,12 +9807,14 @@ const workflow = new StateGraph(MessagesAnnotation)
 const app = workflow.compile({ checkpointer: memory });
 ```
 
-
 ```typescript
 import { HumanMessage } from "@langchain/core/messages";
 import { v4 as uuidv4 } from "uuid";
 
-const config = { configurable: { thread_id: "2" }, streamMode: "values" as const };
+const config = {
+  configurable: { thread_id: "2" },
+  streamMode: "values" as const,
+};
 const inputMessage = new HumanMessage({
   id: uuidv4(),
   content: "hi! I'm bob",
@@ -9597,17 +9822,17 @@ const inputMessage = new HumanMessage({
 
 for await (const event of await app.stream(
   { messages: [inputMessage] },
-  config,
+  config
 )) {
-  const lastMsg = event.messages[event.messages.length - 1];
+  const lastMsg = event.messages.at(-1);
   console.dir(
     {
-      type: lastMsg._getType(),
+      type: lastMsg.getType(),
       content: lastMsg.content,
       tool_calls: lastMsg.tool_calls,
     },
     { depth: null }
-  )
+  );
 }
 
 const inputMessage2 = new HumanMessage({
@@ -9616,57 +9841,53 @@ const inputMessage2 = new HumanMessage({
 });
 for await (const event of await app.stream(
   { messages: [inputMessage2] },
-  config,
+  config
 )) {
-  const lastMsg = event.messages[event.messages.length - 1];
+  const lastMsg = event.messages.at(-1);
   console.dir(
     {
-      type: lastMsg._getType(),
+      type: lastMsg.getType(),
       content: lastMsg.content,
       tool_calls: lastMsg.tool_calls,
     },
     { depth: null }
-  )
+  );
 }
 ```
-
 
 ```typescript
 const messages = (await app.getState(config)).values.messages;
 console.dir(
   messages.map((msg) => ({
     id: msg.id,
-    type: msg._getType(),
+    type: msg.getType(),
     content: msg.content,
-    tool_calls:
-    msg.tool_calls,
+    tool_calls: msg.tool_calls,
   })),
   { depth: null }
 );
 ```
 
-
 ```typescript
 import { RemoveMessage } from "@langchain/core/messages";
 
-await app.updateState(config, { messages: new RemoveMessage({ id: messages[0].id }) })
+await app.updateState(config, {
+  messages: new RemoveMessage({ id: messages[0].id }),
+});
 ```
-
 
 ```typescript
 const updatedMessages = (await app.getState(config)).values.messages;
 console.dir(
   updatedMessages.map((msg) => ({
     id: msg.id,
-    type: msg._getType(),
+    type: msg.getType(),
     content: msg.content,
-    tool_calls:
-    msg.tool_calls,
+    tool_calls: msg.tool_calls,
   })),
   { depth: null }
 );
 ```
-
 
 ```typescript
 import { RemoveMessage } from "@langchain/core/messages";
@@ -9676,14 +9897,20 @@ import { MessagesAnnotation } from "@langchain/langgraph";
 function deleteMessages(state: typeof MessagesAnnotation.State) {
   const messages = state.messages;
   if (messages.length > 3) {
-    return { messages: messages.slice(0, -3).map(m => new RemoveMessage({ id: m.id })) };
+    return {
+      messages: messages
+        .slice(0, -3)
+        .map((m) => new RemoveMessage({ id: m.id })),
+    };
   }
   return {};
 }
 
 // We need to modify the logic to call deleteMessages rather than end right away
-function shouldContinue2(state: typeof MessagesAnnotation.State): "action" | "delete_messages" {
-  const lastMessage = state.messages[state.messages.length - 1];
+function shouldContinue2(
+  state: typeof MessagesAnnotation.State
+): "action" | "delete_messages" {
+  const lastMessage = state.messages.at(-1);
   if (
     "tool_calls" in lastMessage &&
     Array.isArray(lastMessage.tool_calls) &&
@@ -9702,10 +9929,7 @@ const workflow2 = new StateGraph(MessagesAnnotation)
   // This is our new node we're defining
   .addNode("delete_messages", deleteMessages)
   .addEdge(START, "agent")
-  .addConditionalEdges(
-    "agent",
-    shouldContinue2
-  )
+  .addConditionalEdges("agent", shouldContinue2)
   .addEdge("action", "agent")
   // This is the new edge we're adding: after we delete messages, we finish
   .addEdge("delete_messages", END);
@@ -9713,12 +9937,14 @@ const workflow2 = new StateGraph(MessagesAnnotation)
 const app2 = workflow2.compile({ checkpointer: memory });
 ```
 
-
 ```typescript
 import { HumanMessage } from "@langchain/core/messages";
 import { v4 as uuidv4 } from "uuid";
 
-const config2 = { configurable: { thread_id: "3" }, streamMode: "values" as const };
+const config2 = {
+  configurable: { thread_id: "3" },
+  streamMode: "values" as const,
+};
 
 const inputMessage3 = new HumanMessage({
   id: uuidv4(),
@@ -9730,7 +9956,9 @@ for await (const event of await app2.stream(
   { messages: [inputMessage3] },
   config2
 )) {
-  console.log(event.messages.map((message) => [message._getType(), message.content]));
+  console.log(
+    event.messages.map((message) => [message.getType(), message.content])
+  );
 }
 
 const inputMessage4 = new HumanMessage({
@@ -9743,25 +9971,25 @@ for await (const event of await app2.stream(
   { messages: [inputMessage4] },
   config2
 )) {
-  console.log(event.messages.map((message) => [message._getType(), message.content]), "\n");
+  console.log(
+    event.messages.map((message) => [message.getType(), message.content]),
+    "\n"
+  );
 }
 ```
 
-
 ```typescript
-const messages3 = (await app.getState(config2)).values["messages"]
+const messages3 = (await app.getState(config2)).values["messages"];
 console.dir(
   messages3.map((msg) => ({
     id: msg.id,
-    type: msg._getType(),
+    type: msg.getType(),
     content: msg.content,
-    tool_calls:
-    msg.tool_calls,
+    tool_calls: msg.tool_calls,
   })),
   { depth: null }
 );
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -9787,7 +10015,6 @@ for await (const event of app.streamEvents({ messages: inputs })) {
   console.log(`${kind}: ${event.name}`);
 }
 ```
-
 
 ```typescript
 import { Annotation } from "@langchain/langgraph";
@@ -9825,7 +10052,6 @@ function myNode(state: State) {
 }
 ```
 
-
 ```typescript
 import { RemoveMessage, AIMessage } from "@langchain/core/messages";
 import { MessagesAnnotation } from "@langchain/langgraph";
@@ -9846,7 +10072,6 @@ function myNode2(state: State) {
 }
 ```
 
-
 ```typescript
 import { MessagesAnnotation, Annotation } from "@langchain/langgraph";
 
@@ -9855,7 +10080,6 @@ const MyGraphAnnotation = Annotation.Root({
   summary: Annotation<string>,
 });
 ```
-
 
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
@@ -9900,7 +10124,6 @@ async function summarizeConversation(state: State) {
 }
 ```
 
-
 ```typescript
 import { trimMessages } from "@langchain/core/messages";
 import { ChatOpenAI } from "@langchain/openai";
@@ -9929,7 +10152,6 @@ trimMessages(messages, {
 });
 ```
 
-
 ```typescript
 import { InMemoryStore } from "@langchain/langgraph";
 
@@ -9952,7 +10174,6 @@ const items = await store.search(namespace, {
   filter: { "my-key": "my-value" },
 });
 ```
-
 
 ```typescript
 import { BaseStore } from "@langchain/langgraph/store";
@@ -9989,7 +10210,6 @@ const updateInstructions = async (state: State, store: BaseStore) => {
 };
 ```
 
-
 ```typescript
 import { task, entrypoint, interrupt, MemorySaver } from "@langchain/langgraph";
 
@@ -10020,70 +10240,83 @@ const workflow = entrypoint(
 );
 ```
 
+```typescript
+import {
+  task,
+  entrypoint,
+  interrupt,
+  MemorySaver,
+  Command,
+} from "@langchain/langgraph";
 
-    ```typescript
-    import { task, entrypoint, interrupt, MemorySaver, Command } from "@langchain/langgraph";
+const writeEssay = task("write_essay", (topic: string): string => {
+  return `An essay about topic: ${topic}`;
+});
 
-    const writeEssay = task("write_essay", (topic: string): string => {
-      return `An essay about topic: ${topic}`;
+const workflow = entrypoint(
+  { checkpointer: new MemorySaver(), name: "workflow" },
+  async (topic: string) => {
+    const essay = await writeEssay(topic);
+    const isApproved = interrupt({
+      essay, // The essay we want reviewed.
+      action: "Please approve/reject the essay",
     });
 
-    const workflow = entrypoint(
-      { checkpointer: new MemorySaver(), name: "workflow" },
-      async (topic: string) => {
-        const essay = await writeEssay(topic);
-        const isApproved = interrupt({
-          essay, // The essay we want reviewed.
-          action: "Please approve/reject the essay",
-        });
-
-        return {
-          essay,
-          isApproved,
-        };
-      }
-    );
-
-    const threadId = crypto.randomUUID();
-
-    const config = {
-      configurable: {
-        thread_id: threadId,
-      },
+    return {
+      essay,
+      isApproved,
     };
+  }
+);
 
-    for await (const item of await workflow.stream("cat", config)) {
-      console.log(item);
-    }
-    ```
+const threadId = crypto.randomUUID();
 
+const config = {
+  configurable: {
+    thread_id: threadId,
+  },
+};
 
-    ```typescript
-    { write_essay: 'An essay about topic: cat' }
-    { __interrupt__: [{
-      value: { essay: 'An essay about topic: cat', action: 'Please approve/reject the essay' },
+for await (const item of await workflow.stream("cat", config)) {
+  console.log(item);
+}
+```
+
+```typescript
+{
+  write_essay: "An essay about topic: cat";
+}
+{
+  __interrupt__: [
+    {
+      value: {
+        essay: "An essay about topic: cat",
+        action: "Please approve/reject the essay",
+      },
       resumable: true,
-      ns: ['workflow:f7b8508b-21c0-8b4c-5958-4e8de74d2684'],
-      when: 'during'
-    }] }
-    ```
+      ns: ["workflow:f7b8508b-21c0-8b4c-5958-4e8de74d2684"],
+      when: "during",
+    },
+  ];
+}
+```
 
+```typescript
+// Get review from a user (e.g., via a UI)
+// In this case, we're using a bool, but this can be any json-serializable value.
+const humanReview = true;
 
-    ```typescript
-    // Get review from a user (e.g., via a UI)
-    // In this case, we're using a bool, but this can be any json-serializable value.
-    const humanReview = true;
+for await (const item of await workflow.stream(
+  new Command({ resume: humanReview }),
+  config
+)) {
+  console.log(item);
+}
+```
 
-    for await (const item of await workflow.stream(new Command({ resume: humanReview }), config)) {
-      console.log(item);
-    }
-    ```
-
-
-    ```typescript
-    { workflow: { essay: 'An essay about topic: cat', isApproved: true } }
-    ```
-
+```typescript
+{ workflow: { essay: 'An essay about topic: cat', isApproved: true } }
+```
 
 ```typescript
 import { entrypoint, MemorySaver } from "@langchain/langgraph";
@@ -10100,111 +10333,103 @@ const myWorkflow = entrypoint(
 );
 ```
 
+```typescript
+import {
+  entrypoint,
+  getPreviousState,
+  BaseStore,
+  InMemoryStore,
+} from "@langchain/langgraph";
+import { RunnableConfig } from "@langchain/core/runnables";
 
-    ```typescript
-    import {
-      entrypoint,
-      getPreviousState,
-      BaseStore,
-      InMemoryStore,
-    } from "@langchain/langgraph";
-    import { RunnableConfig } from "@langchain/core/runnables";
+const inMemoryStore = new InMemoryStore(...);  // An instance of InMemoryStore for long-term memory
 
-    const inMemoryStore = new InMemoryStore(...);  // An instance of InMemoryStore for long-term memory
+const myWorkflow = entrypoint(
+  {
+    checkpointer,  // Specify the checkpointer
+    store: inMemoryStore,  // Specify the store
+    name: "myWorkflow",
+  },
+  async (someInput: Record<string, any>) => {
+    const previous = getPreviousState<any>(); // For short-term memory
+    // Rest of workflow logic...
+  }
+);
+```
 
-    const myWorkflow = entrypoint(
-      {
-        checkpointer,  // Specify the checkpointer
-        store: inMemoryStore,  // Specify the store
-        name: "myWorkflow",
-      },
-      async (someInput: Record<string, any>) => {
-        const previous = getPreviousState<any>(); // For short-term memory
-        // Rest of workflow logic...
-      }
-    );
-    ```
+```typescript
+const config = {
+  configurable: {
+    thread_id: "some_thread_id",
+  },
+};
+await myWorkflow.invoke(someInput, config); // Wait for the result
+```
 
+```typescript
+const config = {
+  configurable: {
+    thread_id: "some_thread_id",
+  },
+};
 
-    ```typescript
-    const config = {
-      configurable: {
-        thread_id: "some_thread_id",
-      },
-    };
-    await myWorkflow.invoke(someInput, config);  // Wait for the result
-    ```
+for await (const chunk of await myWorkflow.stream(someInput, config)) {
+  console.log(chunk);
+}
+```
 
+```typescript
+import { Command } from "@langchain/langgraph";
 
-    ```typescript
-    const config = {
-      configurable: {
-        thread_id: "some_thread_id",
-      },
-    };
+const config = {
+  configurable: {
+    thread_id: "some_thread_id",
+  },
+};
 
-    for await (const chunk of await myWorkflow.stream(someInput, config)) {
-      console.log(chunk);
-    }
-    ```
+await myWorkflow.invoke(new Command({ resume: someResumeValue }), config);
+```
 
+```typescript
+import { Command } from "@langchain/langgraph";
 
-    ```typescript
-    import { Command } from "@langchain/langgraph";
+const config = {
+  configurable: {
+    thread_id: "some_thread_id",
+  },
+};
 
-    const config = {
-      configurable: {
-        thread_id: "some_thread_id",
-      },
-    };
+const stream = await myWorkflow.stream(
+  new Command({ resume: someResumeValue }),
+  config
+);
 
-    await myWorkflow.invoke(new Command({ resume: someResumeValue }), config);
-    ```
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
 
+```typescript
+const config = {
+  configurable: {
+    thread_id: "some_thread_id",
+  },
+};
 
-    ```typescript
-    import { Command } from "@langchain/langgraph";
+await myWorkflow.invoke(null, config);
+```
 
-    const config = {
-      configurable: {
-        thread_id: "some_thread_id",
-      },
-    };
+```typescript
+const config = {
+  configurable: {
+    thread_id: "some_thread_id",
+  },
+};
 
-    const stream = await myWorkflow.stream(
-      new Command({ resume: someResumeValue }),
-      config,
-    );
-
-    for await (const chunk of stream) {
-      console.log(chunk);
-    }
-    ```
-
-
-    ```typescript
-    const config = {
-      configurable: {
-        thread_id: "some_thread_id",
-      },
-    };
-
-    await myWorkflow.invoke(null, config);
-    ```
-
-
-    ```typescript
-    const config = {
-      configurable: {
-        thread_id: "some_thread_id",
-      },
-    };
-
-    for await (const chunk of await myWorkflow.stream(null, config)) {
-      console.log(chunk);
-    }
-    ```
-
+for await (const chunk of await myWorkflow.stream(null, config)) {
+  console.log(chunk);
+}
+```
 
 ```typescript
 const myWorkflow = entrypoint(
@@ -10224,7 +10449,6 @@ const config = {
 await myWorkflow.invoke(1, config); // 1 (previous was undefined)
 await myWorkflow.invoke(2, config); // 3 (previous was 1 from the previous invocation)
 ```
-
 
 ```typescript
 const myWorkflow = entrypoint(
@@ -10251,7 +10475,6 @@ await myWorkflow.invoke(3, config); // 0 (previous was undefined)
 await myWorkflow.invoke(1, config); // 6 (previous was 3 * 2 from the previous invocation)
 ```
 
-
 ```typescript
 import { task } from "@langchain/langgraph";
 
@@ -10262,7 +10485,6 @@ const slowComputation = task({"slowComputation", async (inputValue: any) => {
 });
 ```
 
-
 ```typescript
 const myWorkflow = entrypoint(
   { checkpointer, name: "myWorkflow" },
@@ -10271,7 +10493,6 @@ const myWorkflow = entrypoint(
   }
 );
 ```
-
 
 ```typescript
 const slowComputation = task(
@@ -10287,87 +10508,82 @@ const slowComputation = task(
 );
 ```
 
+```typescript hl_lines="6"
+const myWorkflow = entrypoint(
+  { checkpointer, name: "myWorkflow" },
+  async (inputs: Record<string, any>) => {
+    // This code will be executed a second time when resuming the workflow.
+    // Which is likely not what you want.
+    await fs.writeFile("output.txt", "Side effect executed");
+    const value = interrupt("question");
+    return value;
+  }
+);
+```
 
-    ```typescript hl_lines="6"
-    const myWorkflow = entrypoint(
-      { checkpointer, name: "myWorkflow" },
-      async (inputs: Record<string, any>) => {
-        // This code will be executed a second time when resuming the workflow.
-        // Which is likely not what you want.
-        await fs.writeFile("output.txt", "Side effect executed");
-        const value = interrupt("question");
-        return value;
-      }
-    );
-    ```
+```typescript hl_lines="3"
+import { task } from "@langchain/langgraph";
 
+const writeToFile = task("writeToFile", async () => {
+  await fs.writeFile("output.txt", "Side effect executed");
+});
 
-    ```typescript hl_lines="3"
-    import { task } from "@langchain/langgraph";
+const myWorkflow = entrypoint(
+  { checkpointer, name: "myWorkflow" },
+  async (inputs: Record<string, any>) => {
+    // The side effect is now encapsulated in a task.
+    await writeToFile();
+    const value = interrupt("question");
+    return value;
+  }
+);
+```
 
-    const writeToFile = task("writeToFile", async () => {
-      await fs.writeFile("output.txt", "Side effect executed");
-    });
+```typescript hl_lines="4"
+const myWorkflow = entrypoint(
+  { checkpointer, name: "myWorkflow" },
+  async (inputs: { t0: number }) => {
+    const t1 = Date.now();
 
-    const myWorkflow = entrypoint(
-      { checkpointer, name: "myWorkflow" },
-      async (inputs: Record<string, any>) => {
-        // The side effect is now encapsulated in a task.
-        await writeToFile();
-        const value = interrupt("question");
-        return value;
-      }
-    );
-    ```
+    const deltaT = t1 - inputs.t0;
 
+    if (deltaT > 1000) {
+      const result = await slowTask(1);
+      const value = interrupt("question");
+      return { result, value };
+    } else {
+      const result = await slowTask(2);
+      const value = interrupt("question");
+      return { result, value };
+    }
+  }
+);
+```
 
-    ```typescript hl_lines="4"
-    const myWorkflow = entrypoint(
-      { checkpointer, name: "myWorkflow" },
-      async (inputs: { t0: number }) => {
-        const t1 = Date.now();
+```typescript hl_lines="3 8"
+import { task } from "@langchain/langgraph";
 
-        const deltaT = t1 - inputs.t0;
+const getTime = task("getTime", () => Date.now());
 
-        if (deltaT > 1000) {
-          const result = await slowTask(1);
-          const value = interrupt("question");
-          return { result, value };
-        } else {
-          const result = await slowTask(2);
-          const value = interrupt("question");
-          return { result, value };
-        }
-      }
-    );
-    ```
+const myWorkflow = entrypoint(
+  { checkpointer, name: "myWorkflow" },
+  async (inputs: { t0: number }) => {
+    const t1 = await getTime();
 
+    const deltaT = t1 - inputs.t0;
 
-    ```typescript hl_lines="3 8"
-    import { task } from "@langchain/langgraph";
-
-    const getTime = task("getTime", () => Date.now());
-
-    const myWorkflow = entrypoint(
-      { checkpointer, name: "myWorkflow" },
-      async (inputs: { t0: number }) => {
-        const t1 = await getTime();
-
-        const deltaT = t1 - inputs.t0;
-
-        if (deltaT > 1000) {
-          const result = await slowTask(1);
-          const value = interrupt("question");
-          return { result, value };
-        } else {
-          const result = await slowTask(2);
-          const value = interrupt("question");
-          return { result, value };
-        }
-      }
-    );
-    ```
-
+    if (deltaT > 1000) {
+      const result = await slowTask(1);
+      const value = interrupt("question");
+      return { result, value };
+    } else {
+      const result = await slowTask(2);
+      const value = interrupt("question");
+      return { result, value };
+    }
+  }
+);
+```
 
 ```typescript
 const myWorkflow = entrypoint(
@@ -10382,7 +10598,6 @@ const myWorkflow = entrypoint(
 await myWorkflow.invoke([{ value: 1, anotherValue: 2 }]);
 ```
 
-
 ```typescript
 const addOne = task("addOne", (number: number) => number + 1);
 
@@ -10393,7 +10608,6 @@ const graph = entrypoint(
   }
 );
 ```
-
 
 ```typescript
 import { entrypoint, StateGraph } from "@langchain/langgraph";
@@ -10417,7 +10631,6 @@ const someWorkflow = entrypoint(
 );
 ```
 
-
 ```typescript
 const someOtherWorkflow = entrypoint(
   { name: "someOtherWorkflow" }, // Will automatically use the checkpointer from the parent entrypoint
@@ -10434,7 +10647,6 @@ const myWorkflow = entrypoint(
   }
 );
 ```
-
 
 ```typescript
 import {
@@ -10477,13 +10689,11 @@ for await (const chunk of stream) {
 }
 ```
 
-
 ```typescript
 ["updates", { addOne: 2 }][("updates", { addTwo: 3 })][("custom", "hello")][
   ("custom", "world")
 ][("updates", { main: 5 })];
 ```
-
 
 ```typescript
 import { entrypoint, task, MemorySaver } from "@langchain/langgraph";
@@ -10549,71 +10759,73 @@ try {
 }
 ```
 
-
 ```typescript
 await main.invoke(null, config);
 ```
-
 
 ```typescript
 "Ran slow task.";
 ```
 
-
 ```typescript
 // Compile our graph with a checkpointer and a breakpoint before "step_for_human_in_the_loop"
-const graph = builder.compile({ checkpointer, interruptBefore: ["step_for_human_in_the_loop"] });
+const graph = builder.compile({
+  checkpointer,
+  interruptBefore: ["step_for_human_in_the_loop"],
+});
 
 // Run the graph up to the breakpoint
-const threadConfig = { configurable: { thread_id: "1" }, streamMode: "values" as const };
+const threadConfig = {
+  configurable: { thread_id: "1" },
+  streamMode: "values" as const,
+};
 for await (const event of await graph.stream(inputs, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
-    
+
 // Perform some action that requires human in the loop
 
-// Continue the graph execution from the current checkpoint 
+// Continue the graph execution from the current checkpoint
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
-
 
 ```typescript
-function myNode(state: typeof GraphAnnotation.State): typeof GraphAnnotation.State {
-    if (state.input.length > 5) {
-        throw new NodeInterrupt(`Received input that is longer than 5 characters: ${state['input']}`);
-    }
-    return state;
+function myNode(
+  state: typeof GraphAnnotation.State
+): typeof GraphAnnotation.State {
+  if (state.input.length > 5) {
+    throw new NodeInterrupt(
+      `Received input that is longer than 5 characters: ${state["input"]}`
+    );
+  }
+  return state;
 }
 ```
-
 
 ```typescript
-// Attempt to continue the graph execution with no change to state after we hit the dynamic breakpoint 
+// Attempt to continue the graph execution with no change to state after we hit the dynamic breakpoint
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
 
-
-```typescript 
+```typescript
 // Update the state to pass the dynamic breakpoint
 await graph.updateState(threadConfig, { input: "foo" });
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
-
 
 ```typescript
 // This update will skip the node `myNode` altogether
 await graph.updateState(threadConfig, null, "myNode");
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
-
 
 ```typescript
 // Compile our graph with a checkpointer and a breakpoint before the step to approve
@@ -10621,17 +10833,16 @@ const graph = builder.compile({ checkpointer, interruptBefore: ["node_2"] });
 
 // Run the graph up to the breakpoint
 for await (const event of await graph.stream(inputs, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
-    
+
 // ... Get human approval ...
 
 // If approved, continue the graph execution from the last saved checkpoint
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
-
 
 ```typescript
 // Compile our graph with a checkpointer and a breakpoint before the step to review
@@ -10639,200 +10850,216 @@ const graph = builder.compile({ checkpointer, interruptBefore: ["node_2"] });
 
 // Run the graph up to the breakpoint
 for await (const event of await graph.stream(inputs, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
-    
+
 // Review the state, decide to edit it, and create a forked checkpoint with the new state
 await graph.updateState(threadConfig, { state: "new state" });
 
 // Continue the graph execution from the forked checkpoint
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
 
-
 ```typescript
 // Compile our graph with a checkpointer and a breakpoint before the step to collect human input
-const graph = builder.compile({ checkpointer, interruptBefore: ["human_input"] });
+const graph = builder.compile({
+  checkpointer,
+  interruptBefore: ["human_input"],
+});
 
 // Run the graph up to the breakpoint
 for await (const event of await graph.stream(inputs, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
-    
+
 // Update the state with the user input as if it was the human_input node
 await graph.updateState(threadConfig, { user_input: userInput }, "human_input");
 
 // Continue the graph execution from the checkpoint created by the human_input node
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
 
-
 ```typescript
-// Compile our graph with a checkpointer and a breakpoint before the step to review the tool call from the LLM 
-const graph = builder.compile({ checkpointer, interruptBefore: ["human_review"] });
+// Compile our graph with a checkpointer and a breakpoint before the step to review the tool call from the LLM
+const graph = builder.compile({
+  checkpointer,
+  interruptBefore: ["human_review"],
+});
 
 // Run the graph up to the breakpoint
 for await (const event of await graph.stream(inputs, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
-    
+
 // Review the tool call and update it, if needed, as the human_review node
-await graph.updateState(threadConfig, { tool_call: "updated tool call" }, "human_review");
+await graph.updateState(
+  threadConfig,
+  { tool_call: "updated tool call" },
+  "human_review"
+);
 
-// Otherwise, approve the tool call and proceed with the graph execution with no edits 
+// Otherwise, approve the tool call and proceed with the graph execution with no edits
 
-// Continue the graph execution from either: 
-// (1) the forked checkpoint created by human_review or 
+// Continue the graph execution from either:
+// (1) the forked checkpoint created by human_review or
 // (2) the checkpoint saved when the tool call was originally made (no edits in human_review)
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
-
 
 ```typescript
 const threadConfig = { configurable: { thread_id: "1" } };
 for await (const event of await graph.stream(null, threadConfig)) {
-    console.log(event);
+  console.log(event);
 }
 ```
-
 
 ```typescript
 const allCheckpoints = [];
 for await (const state of app.getStateHistory(threadConfig)) {
-    allCheckpoints.push(state);
+  allCheckpoints.push(state);
 }
 ```
-
 
 ```typescript
-const config = { configurable: { thread_id: '1', checkpoint_id: 'xxx' }, streamMode: "values" as const };
+const config = {
+  configurable: { thread_id: "1", checkpoint_id: "xxx" },
+  streamMode: "values" as const,
+};
 for await (const event of await graph.stream(null, config)) {
-    console.log(event);
+  console.log(event);
 }
 ```
-
 
 ```typescript
 const config = { configurable: { thread_id: "1", checkpoint_id: "xxx" } };
 await graph.updateState(config, { state: "updated state" });
 ```
 
-
 ```typescript
-const config = { configurable: { thread_id: '1', checkpoint_id: 'xxx-fork' }, streamMode: "values" as const };
+const config = {
+  configurable: { thread_id: "1", checkpoint_id: "xxx-fork" },
+  streamMode: "values" as const,
+};
 for await (const event of await graph.stream(null, config)) {
-    console.log(event);
+  console.log(event);
 }
 ```
-
 
 ```typescript
 import { interrupt } from "@langchain/langgraph";
 
 function humanNode(state: typeof GraphAnnotation.State) {
-    const value = interrupt(
-        // Any JSON serializable value to surface to the human.
-        // For example, a question or a piece of text or a set of keys in the state
-       {
-          text_to_revise: state.some_text
-       }
-    );
-    // Update the state with the human's input or route the graph based on the input
-    return {
-        some_text: value
-    };
+  const value = interrupt(
+    // Any JSON serializable value to surface to the human.
+    // For example, a question or a piece of text or a set of keys in the state
+    {
+      text_to_revise: state.some_text,
+    }
+  );
+  // Update the state with the human's input or route the graph based on the input
+  return {
+    some_text: value,
+  };
 }
 
 const graph = workflow.compile({
-    checkpointer // Required for `interrupt` to work
+  checkpointer, // Required for `interrupt` to work
 });
 
 // Run the graph until the interrupt
 const threadConfig = { configurable: { thread_id: "some_id" } };
 await graph.invoke(someInput, threadConfig);
-    
+
 // Resume the graph with the human's input
 await graph.invoke(new Command({ resume: valueFromHuman }), threadConfig);
 ```
 
-
 ```typescript
-{ some_text: 'Edited text' }
+{
+  some_text: "Edited text";
+}
 ```
 
+```typescript
+import {
+  MemorySaver,
+  Annotation,
+  interrupt,
+  Command,
+  StateGraph,
+} from "@langchain/langgraph";
 
-      ```typescript
-      import { MemorySaver, Annotation, interrupt, Command, StateGraph } from "@langchain/langgraph";
+// Define the graph state
+const StateAnnotation = Annotation.Root({
+  some_text: Annotation<string>(),
+});
 
-      // Define the graph state
-      const StateAnnotation = Annotation.Root({
-        some_text: Annotation<string>()
-      });
+function humanNode(state: typeof StateAnnotation.State) {
+  const value = interrupt(
+    // Any JSON serializable value to surface to the human.
+    // For example, a question or a piece of text or a set of keys in the state
+    {
+      text_to_revise: state.some_text,
+    }
+  );
+  return {
+    // Update the state with the human's input
+    some_text: value,
+  };
+}
 
-      function humanNode(state: typeof StateAnnotation.State) {
-         const value = interrupt(
-            // Any JSON serializable value to surface to the human.
-            // For example, a question or a piece of text or a set of keys in the state
-            {
-               text_to_revise: state.some_text
-            }
-         );
-         return {
-            // Update the state with the human's input
-            some_text: value
-         };
-      }
+// Build the graph
+const workflow = new StateGraph(StateAnnotation)
+  // Add the human-node to the graph
+  .addNode("human_node", humanNode)
+  .addEdge("__start__", "human_node");
 
-      // Build the graph
-      const workflow = new StateGraph(StateAnnotation)
-      // Add the human-node to the graph
-        .addNode("human_node", humanNode)
-        .addEdge("__start__", "human_node")
+// A checkpointer is required for `interrupt` to work.
+const checkpointer = new MemorySaver();
+const graph = workflow.compile({
+  checkpointer,
+});
 
-      // A checkpointer is required for `interrupt` to work.
-      const checkpointer = new MemorySaver();
-      const graph = workflow.compile({
-         checkpointer
-      });
+// Using stream() to directly surface the `__interrupt__` information.
+for await (const chunk of await graph.stream(
+  { some_text: "Original text" },
+  threadConfig
+)) {
+  console.log(chunk);
+}
 
-      // Using stream() to directly surface the `__interrupt__` information.
-      for await (const chunk of await graph.stream(
-         { some_text: "Original text" }, 
-         threadConfig
-      )) {
-         console.log(chunk);
-      }
+// Resume using Command
+for await (const chunk of await graph.stream(
+  new Command({ resume: "Edited text" }),
+  threadConfig
+)) {
+  console.log(chunk);
+}
+```
 
-      // Resume using Command
-      for await (const chunk of await graph.stream(
-         new Command({ resume: "Edited text" }), 
-         threadConfig
-      )) {
-         console.log(chunk);
-      }
-      ```
-
-
-      ```typescript
-      {
-         __interrupt__: [
-            {
-               value: { question: 'Please revise the text', some_text: 'Original text' },
-               resumable: true,
-               ns: ['human_node:10fe492f-3688-c8c6-0d0a-ec61a43fecd6'],
-               when: 'during'
-            }
-         ]
-      }
-      { human_node: { some_text: 'Edited text' } }
-      ```
-
+```typescript
+{
+  __interrupt__: [
+    {
+      value: { question: "Please revise the text", some_text: "Original text" },
+      resumable: true,
+      ns: ["human_node:10fe492f-3688-c8c6-0d0a-ec61a43fecd6"],
+      when: "during",
+    },
+  ];
+}
+{
+  human_node: {
+    some_text: "Edited text";
+  }
+}
+```
 
 ```typescript
 import { interrupt, Command } from "@langchain/langgraph";
@@ -10842,7 +11069,7 @@ function humanApproval(state: typeof GraphAnnotation.State): Command {
     question: "Is this correct?",
     // Surface the output that should be
     // reviewed and approved by the human.
-    llm_output: state.llm_output
+    llm_output: state.llm_output,
   });
 
   if (isApproved) {
@@ -10864,7 +11091,6 @@ const threadConfig = { configurable: { thread_id: "some_id" } };
 await graph.invoke(new Command({ resume: true }), threadConfig);
 ```
 
-
 ```typescript
 import { interrupt } from "@langchain/langgraph";
 
@@ -10873,12 +11099,12 @@ function humanEditing(state: typeof GraphAnnotation.State): Command {
     // Interrupt information to surface to the client.
     // Can be any JSON serializable value.
     task: "Review the output from the LLM and make any necessary edits.",
-    llm_generated_summary: state.llm_generated_summary
+    llm_generated_summary: state.llm_generated_summary,
   });
 
   // Update the state with the edited text
   return {
-    llm_generated_summary: result.edited_text
+    llm_generated_summary: result.edited_text,
   };
 }
 
@@ -10892,11 +11118,10 @@ const graph = graphBuilder.compile({ checkpointer });
 // Resume it with the edited text.
 const threadConfig = { configurable: { thread_id: "some_id" } };
 await graph.invoke(
-  new Command({ resume: { edited_text: "The edited text" } }), 
+  new Command({ resume: { edited_text: "The edited text" } }),
   threadConfig
 );
 ```
-
 
 ```typescript
 import { interrupt, Command } from "@langchain/langgraph";
@@ -10906,7 +11131,7 @@ function humanReviewNode(state: typeof GraphAnnotation.State): Command {
   const humanReview = interrupt({
     question: "Is this correct?",
     // Surface tool calls for review
-    tool_call: toolCall
+    tool_call: toolCall,
   });
 
   const [reviewAction, reviewData] = humanReview;
@@ -10922,7 +11147,7 @@ function humanReviewNode(state: typeof GraphAnnotation.State): Command {
     // to pass the message with a matching ID.
     return new Command({
       goto: "run_tool",
-      update: { messages: [updatedMsg] }
+      update: { messages: [updatedMsg] },
     });
   }
   // Give natural language feedback, and then pass that back to the agent
@@ -10930,75 +11155,69 @@ function humanReviewNode(state: typeof GraphAnnotation.State): Command {
     const feedbackMsg = getFeedbackMsg(reviewData);
     return new Command({
       goto: "call_llm",
-      update: { messages: [feedbackMsg] }
+      update: { messages: [feedbackMsg] },
     });
   }
 }
 ```
 
+```typescript
+import { interrupt } from "@langchain/langgraph";
 
-    ```typescript
-    import { interrupt } from "@langchain/langgraph";
+function humanInput(state: typeof GraphAnnotation.State) {
+  const humanMessage = interrupt("human_input");
 
-    function humanInput(state: typeof GraphAnnotation.State) {
-      const humanMessage = interrupt("human_input");
+  return {
+    messages: [
+      {
+        role: "human",
+        content: humanMessage,
+      },
+    ],
+  };
+}
 
-      return {
-        messages: [
-          {
-            role: "human",
-            content: humanMessage
-          }
-        ]
-      };
+function agent(state: typeof GraphAnnotation.State) {
+  // Agent logic
+  // ...
+}
+
+graphBuilder.addNode("human_input", humanInput);
+graphBuilder.addEdge("human_input", "agent");
+
+const graph = graphBuilder.compile({ checkpointer });
+
+// After running the graph and hitting the interrupt, the graph will pause.
+// Resume it with the human's input.
+await graph.invoke(new Command({ resume: "hello!" }), threadConfig);
+```
+
+```typescript
+import { interrupt, Command, MessagesAnnotation } from "@langchain/langgraph";
+
+function humanNode(state: typeof MessagesAnnotation.State): Command {
+  /**
+   * A node for collecting user input.
+   */
+  const userInput = interrupt("Ready for user input.");
+
+  // Determine the **active agent** from the state, so
+  // we can route to the correct agent after collecting input.
+  // For example, add a field to the state or use the last active agent.
+  // or fill in `name` attribute of AI messages generated by the agents.
+  const activeAgent = ...;
+
+  return new Command({
+    goto: activeAgent,
+    update: {
+      messages: [{
+        role: "human",
+        content: userInput,
+      }]
     }
-
-    function agent(state: typeof GraphAnnotation.State) {
-      // Agent logic
-      // ...
-    }
-
-    graphBuilder.addNode("human_input", humanInput);
-    graphBuilder.addEdge("human_input", "agent");
-
-    const graph = graphBuilder.compile({ checkpointer });
-
-    // After running the graph and hitting the interrupt, the graph will pause.
-    // Resume it with the human's input.
-    await graph.invoke(
-      new Command({ resume: "hello!" }),
-      threadConfig
-    );
-    ```
-
-
-    ```typescript
-    import { interrupt, Command, MessagesAnnotation } from "@langchain/langgraph";
-
-    function humanNode(state: typeof MessagesAnnotation.State): Command {
-      /**
-       * A node for collecting user input.
-       */
-      const userInput = interrupt("Ready for user input.");
-
-      // Determine the **active agent** from the state, so 
-      // we can route to the correct agent after collecting input.
-      // For example, add a field to the state or use the last active agent.
-      // or fill in `name` attribute of AI messages generated by the agents.
-      const activeAgent = ...; 
-
-      return new Command({
-        goto: activeAgent,
-        update: {
-          messages: [{
-            role: "human",
-            content: userInput,
-          }]
-        }
-      });
-    }
-    ```
-
+  });
+}
+```
 
 ```typescript
 import { interrupt } from "@langchain/langgraph";
@@ -11021,34 +11240,31 @@ function humanNode(state: typeof GraphAnnotation.State) {
       break;
     }
   }
-            
+
   console.log(`The human in the loop is ${answer} years old.`);
 
   return {
-    age: answer
+    age: answer,
   };
 }
 ```
 
-
-       ```typescript
-       // Resume graph execution with the user's input.
-       await graph.invoke(new Command({ resume: { age: "25" } }), threadConfig);
-       ```
-
-
-      ```typescript
-      // Update the graph state and resume.
-      // You must provide a `resume` value if using an `interrupt`.
-      await graph.invoke(
-        new Command({ resume: "Let's go!!!", update: { foo: "bar" } }),
-        threadConfig
-      );
-      ```
-
+```typescript
+// Resume graph execution with the user's input.
+await graph.invoke(new Command({ resume: { age: "25" } }), threadConfig);
+```
 
 ```typescript
-// Run the graph up to the interrupt 
+// Update the graph state and resume.
+// You must provide a `resume` value if using an `interrupt`.
+await graph.invoke(
+  new Command({ resume: "Let's go!!!", update: { foo: "bar" } }),
+  threadConfig
+);
+```
+
+```typescript
+// Run the graph up to the interrupt
 const result = await graph.invoke(inputs, threadConfig);
 
 // Get the graph state to get interrupt information.
@@ -11064,28 +11280,30 @@ console.log(state.tasks);
 await graph.invoke(new Command({ resume: { age: "25" } }), threadConfig);
 ```
 
-
 ```typescript
-{ foo: 'bar' } // State values
+{
+  foo: "bar";
+} // State values
 
 [
   {
-    id: '5d8ffc92-8011-0c9b-8b59-9d3545b7e553',
-    name: 'node_foo',
-    path: ['__pregel_pull', 'node_foo'],
+    id: "5d8ffc92-8011-0c9b-8b59-9d3545b7e553",
+    name: "node_foo",
+    path: ["__pregel_pull", "node_foo"],
     error: null,
-    interrupts: [{
-      value: 'value_in_interrupt',
-      resumable: true,
-      ns: ['node_foo:5d8ffc92-8011-0c9b-8b59-9d3545b7e553'],
-      when: 'during'
-    }],
+    interrupts: [
+      {
+        value: "value_in_interrupt",
+        resumable: true,
+        ns: ["node_foo:5d8ffc92-8011-0c9b-8b59-9d3545b7e553"],
+        when: "during",
+      },
+    ],
     state: null,
-    result: null
-  }
-] // Pending tasks. interrupts 
+    result: null,
+  },
+]; // Pending tasks. interrupts
 ```
-
 
 ```typescript
 let counter = 0;
@@ -11105,62 +11323,57 @@ function node(state: State) {
 }
 ```
 
-
 ```typescript
 > Entered the node: 2 # of times
 The value of counter is: 2
 ```
 
+```typescript
+import { interrupt } from "@langchain/langgraph";
 
-    ```typescript
-    import { interrupt } from "@langchain/langgraph";
+function humanNode(state: typeof GraphAnnotation.State) {
+  /**
+   * Human node with validation.
+   */
+  apiCall(); // This code will be re-executed when the node is resumed.
 
-    function humanNode(state: typeof GraphAnnotation.State) {
-      /**
-       * Human node with validation.
-       */
-      apiCall(); // This code will be re-executed when the node is resumed.
+  const answer = interrupt(question);
+}
+```
 
-      const answer = interrupt(question);
-    }
-    ```
+```typescript
+import { interrupt } from "@langchain/langgraph";
 
+function humanNode(state: typeof GraphAnnotation.State) {
+  /**
+   * Human node with validation.
+   */
 
-    ```typescript
-    import { interrupt } from "@langchain/langgraph";
+  const answer = interrupt(question);
 
-    function humanNode(state: typeof GraphAnnotation.State) {
-      /**
-       * Human node with validation.
-       */
-        
-      const answer = interrupt(question);
-        
-      apiCall(answer); // OK as it's after the interrupt
-    }
-    ```
+  apiCall(answer); // OK as it's after the interrupt
+}
+```
 
+```typescript
+import { interrupt } from "@langchain/langgraph";
 
-    ```typescript
-    import { interrupt } from "@langchain/langgraph";
+function humanNode(state: typeof GraphAnnotation.State) {
+  /**
+   * Human node with validation.
+   */
 
-    function humanNode(state: typeof GraphAnnotation.State) {
-      /**
-       * Human node with validation.
-       */
-        
-      const answer = interrupt(question);
-        
-      return {
-        answer
-      };
-    }
+  const answer = interrupt(question);
 
-    function apiCallNode(state: typeof GraphAnnotation.State) {
-      apiCall(); // OK as it's in a separate node
-    }
-    ```
+  return {
+    answer,
+  };
+}
 
+function apiCallNode(state: typeof GraphAnnotation.State) {
+  apiCall(); // OK as it's in a separate node
+}
+```
 
 ```typescript
 async function nodeInParentGraph(state: typeof GraphAnnotation.State) {
@@ -11172,189 +11385,190 @@ async function nodeInParentGraph(state: typeof GraphAnnotation.State) {
 }
 ```
 
+```typescript
+import {
+  StateGraph,
+  START,
+  interrupt,
+  Command,
+  MemorySaver,
+  Annotation,
+} from "@langchain/langgraph";
 
-      ```typescript
-      import {
-        StateGraph,
-        START,
-        interrupt,
-        Command,
-        MemorySaver,
-        Annotation
-      } from "@langchain/langgraph";
+const GraphAnnotation = Annotation.Root({
+  stateCounter: Annotation<number>({
+    reducer: (a, b) => a + b,
+    default: () => 0,
+  }),
+});
 
-      const GraphAnnotation = Annotation.Root({
-        stateCounter: Annotation<number>({
-          reducer: (a, b) => a + b,
-          default: () => 0
-        })
-      })
+let counterNodeInSubgraph = 0;
 
-      let counterNodeInSubgraph = 0;
+function nodeInSubgraph(state: typeof GraphAnnotation.State) {
+  counterNodeInSubgraph += 1; // This code will **NOT** run again!
+  console.log(
+    `Entered 'nodeInSubgraph' a total of ${counterNodeInSubgraph} times`
+  );
+  return {};
+}
 
-      function nodeInSubgraph(state: typeof GraphAnnotation.State) {
-        counterNodeInSubgraph += 1;  // This code will **NOT** run again!
-        console.log(`Entered 'nodeInSubgraph' a total of ${counterNodeInSubgraph} times`);
-        return {};
-      }
+let counterHumanNode = 0;
 
-      let counterHumanNode = 0;
+async function humanNode(state: typeof GraphAnnotation.State) {
+  counterHumanNode += 1; // This code will run again!
+  console.log(
+    `Entered humanNode in sub-graph a total of ${counterHumanNode} times`
+  );
+  const answer = await interrupt("what is your name?");
+  console.log(`Got an answer of ${answer}`);
+  return {};
+}
 
-      async function humanNode(state: typeof GraphAnnotation.State) {
-        counterHumanNode += 1; // This code will run again!
-        console.log(`Entered humanNode in sub-graph a total of ${counterHumanNode} times`);
-        const answer = await interrupt("what is your name?");
-        console.log(`Got an answer of ${answer}`);
-        return {};
-      }
+const checkpointer = new MemorySaver();
 
-      const checkpointer = new MemorySaver();
+const subgraphBuilder = new StateGraph(GraphAnnotation)
+  .addNode("some_node", nodeInSubgraph)
+  .addNode("human_node", humanNode)
+  .addEdge(START, "some_node")
+  .addEdge("some_node", "human_node");
+const subgraph = subgraphBuilder.compile({ checkpointer });
 
-      const subgraphBuilder = new StateGraph(GraphAnnotation)
-        .addNode("some_node", nodeInSubgraph)
-        .addNode("human_node", humanNode)
-        .addEdge(START, "some_node")
-        .addEdge("some_node", "human_node")
-      const subgraph = subgraphBuilder.compile({ checkpointer });
+let counterParentNode = 0;
 
-      let counterParentNode = 0;
+async function parentNode(state: typeof GraphAnnotation.State) {
+  counterParentNode += 1; // This code will run again on resuming!
+  console.log(`Entered 'parentNode' a total of ${counterParentNode} times`);
 
-      async function parentNode(state: typeof GraphAnnotation.State) {
-        counterParentNode += 1; // This code will run again on resuming!
-        console.log(`Entered 'parentNode' a total of ${counterParentNode} times`);
-  
-        // Please note that we're intentionally incrementing the state counter
-        // in the graph state as well to demonstrate that the subgraph update
-        // of the same key will not conflict with the parent graph (until
-        const subgraphState = await subgraph.invoke(state);
-        return subgraphState;
-      }
+  // Please note that we're intentionally incrementing the state counter
+  // in the graph state as well to demonstrate that the subgraph update
+  // of the same key will not conflict with the parent graph (until
+  const subgraphState = await subgraph.invoke(state);
+  return subgraphState;
+}
 
-      const builder = new StateGraph(GraphAnnotation)
-        .addNode("parent_node", parentNode)
-        .addEdge(START, "parent_node")
+const builder = new StateGraph(GraphAnnotation)
+  .addNode("parent_node", parentNode)
+  .addEdge(START, "parent_node");
 
-      // A checkpointer must be enabled for interrupts to work!
-      const graph = builder.compile({ checkpointer });
+// A checkpointer must be enabled for interrupts to work!
+const graph = builder.compile({ checkpointer });
 
-      const config = {
-        configurable: {
-          thread_id: crypto.randomUUID(),
-        }
-      };
+const config = {
+  configurable: {
+    thread_id: crypto.randomUUID(),
+  },
+};
 
-      for await (const chunk of await graph.stream({ stateCounter: 1 }, config)) {
-        console.log(chunk);
-      }
+for await (const chunk of await graph.stream({ stateCounter: 1 }, config)) {
+  console.log(chunk);
+}
 
-      console.log('--- Resuming ---');
+console.log("--- Resuming ---");
 
-      for await (const chunk of await graph.stream(new Command({ resume: "35" }), config)) {
-        console.log(chunk);
-      }
-      ```
+for await (const chunk of await graph.stream(
+  new Command({ resume: "35" }),
+  config
+)) {
+  console.log(chunk);
+}
+```
 
+```typescript
+--- First invocation ---
+In parent node: { foo: 'bar' }
+Entered 'parentNode' a total of 1 times
+Entered 'nodeInSubgraph' a total of 1 times
+Entered humanNode in sub-graph a total of 1 times
+{ __interrupt__: [{ value: 'what is your name?', resumable: true, ns: ['parent_node:0b23d72f-aaba-0329-1a59-ca4f3c8bad3b', 'human_node:25df717c-cb80-57b0-7410-44e20aac8f3c'], when: 'during' }] }
 
-      ```typescript
-      --- First invocation ---
-      In parent node: { foo: 'bar' }
-      Entered 'parentNode' a total of 1 times
-      Entered 'nodeInSubgraph' a total of 1 times
-      Entered humanNode in sub-graph a total of 1 times
-      { __interrupt__: [{ value: 'what is your name?', resumable: true, ns: ['parent_node:0b23d72f-aaba-0329-1a59-ca4f3c8bad3b', 'human_node:25df717c-cb80-57b0-7410-44e20aac8f3c'], when: 'during' }] }
+--- Resuming ---
+In parent node: { foo: 'bar' }
+Entered 'parentNode' a total of 2 times
+Entered humanNode in sub-graph a total of 2 times
+Got an answer of 35
+{ parent_node: null }
+```
 
-      --- Resuming ---
-      In parent node: { foo: 'bar' }
-      Entered 'parentNode' a total of 2 times
-      Entered humanNode in sub-graph a total of 2 times
-      Got an answer of 35
-      { parent_node: null }
-      ```
+```typescript
+import { v4 as uuidv4 } from "uuid";
+import {
+  StateGraph,
+  MemorySaver,
+  START,
+  interrupt,
+  Command,
+  Annotation
+} from "@langchain/langgraph";
 
+const GraphAnnotation = Annotation.Root({
+  name: Annotation<string>(),
+  age: Annotation<string>()
+});
 
-    ```typescript
-    import { v4 as uuidv4 } from "uuid";
-    import {
-      StateGraph,
-      MemorySaver,
-      START,
-      interrupt,
-      Command,
-      Annotation
-    } from "@langchain/langgraph";
+function humanNode(state: typeof GraphAnnotation.State) {
+  let name;
+  if (!state.name) {
+    name = interrupt("what is your name?");
+  } else {
+    name = "N/A";
+  }
 
-    const GraphAnnotation = Annotation.Root({
-      name: Annotation<string>(),
-      age: Annotation<string>()
-    });
+  let age;
+  if (!state.age) {
+    age = interrupt("what is your age?");
+  } else {
+    age = "N/A";
+  }
 
-    function humanNode(state: typeof GraphAnnotation.State) {
-      let name;
-      if (!state.name) {
-        name = interrupt("what is your name?");
-      } else {
-        name = "N/A";
-      }
+  console.log(`Name: ${name}. Age: ${age}`);
 
-      let age;
-      if (!state.age) {
-        age = interrupt("what is your age?");
-      } else {
-        age = "N/A";
-      }
-            
-      console.log(`Name: ${name}. Age: ${age}`);
-        
-      return {
-        age,
-        name,
-      };
-    }
+  return {
+    age,
+    name,
+  };
+}
 
-    const builder = new StateGraph(GraphAnnotation)
-      .addNode("human_node", humanNode);
-      .addEdge(START, "human_node");
+const builder = new StateGraph(GraphAnnotation)
+  .addNode("human_node", humanNode);
+  .addEdge(START, "human_node");
 
-    // A checkpointer must be enabled for interrupts to work!
-    const checkpointer = new MemorySaver();
+// A checkpointer must be enabled for interrupts to work!
+const checkpointer = new MemorySaver();
 
-    const graph = builder.compile({ checkpointer });
+const graph = builder.compile({ checkpointer });
 
-    const config = {
-      configurable: {
-        thread_id: uuidv4(),
-      }
-    };
+const config = {
+  configurable: {
+    thread_id: uuidv4(),
+  }
+};
 
-    for await (const chunk of await graph.stream({ age: undefined, name: undefined }, config)) {
-      console.log(chunk);
-    }
+for await (const chunk of await graph.stream({ age: undefined, name: undefined }, config)) {
+  console.log(chunk);
+}
 
-    for await (const chunk of await graph.stream(
-      Command({ resume: "John", update: { name: "foo" } }), 
-      config
-    )) {
-      console.log(chunk);
-    }
-    ```
+for await (const chunk of await graph.stream(
+  Command({ resume: "John", update: { name: "foo" } }),
+  config
+)) {
+  console.log(chunk);
+}
+```
 
-
-    ```typescript
-    { __interrupt__: [{
-      value: 'what is your name?',
-      resumable: true,
-      ns: ['human_node:3a007ef9-c30d-c357-1ec1-86a1a70d8fba'],
-      when: 'during'
-    }]}
-    Name: N/A. Age: John
-    { human_node: { age: 'John', name: 'N/A' } }
-    ```
-
+```typescript
+{ __interrupt__: [{
+  value: 'what is your name?',
+  resumable: true,
+  ns: ['human_node:3a007ef9-c30d-c357-1ec1-86a1a70d8fba'],
+  when: 'during'
+}]}
+Name: N/A. Age: John
+{ human_node: { age: 'John', name: 'N/A' } }
+```
 
 ```typescript
 const graph = graphBuilder.compile(...);
 ```
-
 
 ```typescript
 import { StateGraph, Annotation } from "@langchain/langgraph";
@@ -11366,7 +11580,6 @@ const State = Annotation.Root({
 
 const graphBuilder = new StateGraph(State);
 ```
-
 
 ```typescript
 import { StateGraph, Annotation } from "@langchain/langgraph";
@@ -11382,7 +11595,6 @@ const State = Annotation.Root({
 const graphBuilder = new StateGraph(State);
 ```
 
-
 ```typescript
 import { MessagesAnnotation, StateGraph } from "@langchain/langgraph";
 
@@ -11390,7 +11602,6 @@ const graph = new StateGraph(MessagesAnnotation)
   .addNode(...)
   ...
 ```
-
 
 ```typescript
 import { BaseMessage } from "@langchain/core/messages";
@@ -11408,7 +11619,6 @@ const graph = new StateGraph(StateAnnotation)
   ...
 ```
 
-
 ```typescript
 import { Annotation, MessagesAnnotation } from "@langchain/langgraph";
 
@@ -11417,7 +11627,6 @@ const StateWithDocuments = Annotation.Root({
   documents: Annotation<string[]>,
 });
 ```
-
 
 ```typescript
 import { RunnableConfig } from "@langchain/core/runnables";
@@ -11447,13 +11656,11 @@ const builder = new StateGraph(GraphAnnotation)
   ...
 ```
 
-
 ```typescript
 import { START } from "@langchain/langgraph";
 
 graph.addEdge(START, "nodeA");
 ```
-
 
 ```typescript
 import { END } from "@langchain/langgraph";
@@ -11461,16 +11668,13 @@ import { END } from "@langchain/langgraph";
 graph.addEdge("nodeA", END);
 ```
 
-
 ```typescript
 graph.addEdge("nodeA", "nodeB");
 ```
 
-
 ```typescript
 graph.addConditionalEdges("nodeA", routingFunction);
 ```
-
 
 ```typescript
 graph.addConditionalEdges("nodeA", routingFunction, {
@@ -11479,13 +11683,11 @@ graph.addConditionalEdges("nodeA", routingFunction, {
 });
 ```
 
-
 ```typescript
 import { START } from "@langchain/langgraph";
 
 graph.addEdge(START, "nodeA");
 ```
-
 
 ```typescript
 import { START } from "@langchain/langgraph";
@@ -11493,14 +11695,12 @@ import { START } from "@langchain/langgraph";
 graph.addConditionalEdges(START, routingFunction);
 ```
 
-
 ```typescript
 graph.addConditionalEdges(START, routingFunction, {
   true: "nodeB",
   false: "nodeC",
 });
 ```
-
 
 ```typescript
 const continueToJokes = (state: { subjects: string[] }) => {
@@ -11512,13 +11712,11 @@ const continueToJokes = (state: { subjects: string[] }) => {
 graph.addConditionalEdges("nodeA", continueToJokes);
 ```
 
-
 ```typescript
 const config = { configurable: { llm: "anthropic" } };
 
 await graph.invoke(inputs, config);
 ```
-
 
 ```typescript
 const nodeA = (state, config) => {
@@ -11532,7 +11730,6 @@ const nodeA = (state, config) => {
 
 ```
 
-
 ```typescript
 const config = { configurable: { thread_id: "foo" } };
 
@@ -11542,7 +11739,6 @@ await graph.invoke(inputs, config);
 // Let's assume it hit a breakpoint somewhere, you can then resume by passing in None
 await graph.invoke(null, config);
 ```
-
 
 ```typescript
 function myNode(
