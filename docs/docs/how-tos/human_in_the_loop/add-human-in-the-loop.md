@@ -11,11 +11,19 @@ hide:
 
 # Enable human intervention
 
-To review, edit, and approve tool calls in an agent or workflow, use LangGraph's [human-in-the-loop](../../concepts/human_in_the_loop.md) features.
+To review, edit, and approve tool calls in an agent or workflow, use interrupts to pause a graph and wait for human input. Interrupts use LangGraph's [persistence](../../concepts/persistence.md) layer, which saves the graph state, to indefinitely pause graph execution until you resume.
+
+!!! info
+
+    For more information about human-in-the-loop workflows, see the [Human-in-the-Loop](../../concepts/human_in_the_loop.md) conceptual guide.
 
 ## Pause using `interrupt`
 
-The [`interrupt` function][langgraph.types.interrupt] in LangGraph enables human-in-the-loop workflows by pausing the graph at a specific node, presenting information to a human, and resuming the graph with their input. It's useful for tasks like approvals, edits, or gathering additional context.
+[Dynamic interrupts](../../concepts/human_in_the_loop.md#key-capabilities) (also known as dynamic breakpoints) are triggered based on the current state of the graph. You can set dynamic interrupts by calling [`interrupt` function][langgraph.types.interrupt] in the appropriate place. The graph will pause, which allows for human intervention, and then resumes the graph with their input. It's useful for tasks like approvals, edits, or gathering additional context.
+
+!!! note
+
+    As of v1.0, `interrupt` is the recommended way to pause a graph. `NodeInterrupt` is deprecated and will be removed in v2.0.
 
 To use `interrupt` in your graph, you need to:
 
@@ -138,14 +146,9 @@ print(graph.invoke(Command(resume="Edited text"), config=config)) # (7)!
 
 !!! warning
 
-      Interrupts are both powerful and ergonomic. However, while they may resemble Python's input() function in terms of developer experience, it's important to note that they do not automatically resume execution from the interruption point. Instead, they rerun the entire node where the interrupt was used. For this reason, interrupts are typically best placed at the start of a node or in a dedicated node.
-
+      Interrupts resemble Python's input() function in terms of developer experience, but they do not automatically resume execution from the interruption point. Instead, they rerun the entire node where the interrupt was used. For this reason, interrupts are typically best placed at the start of a node or in a dedicated node.
 
 ## Resume using the `Command` primitive
-
-!!! warning
-
-    Resuming from an `interrupt` is different from Python's `input()` function, where execution resumes from the exact point where the `input()` function was called.
 
 When the `interrupt` function is used within a graph, execution pauses at that point and awaits user input.
 
@@ -712,6 +715,162 @@ def human_node(state: State):
     print(final_result)  # Should include the valid age
     ```
 
+## Debug with interrupts
+
+To debug and test a graph, use [static interrupts](../../concepts/human_in_the_loop.md#key-capabilities) (also known as static breakpoints) to step through the graph execution one node at a time or to pause the graph execution at specific nodes. Static interrupts are triggered at defined points either before or after a node executes. You can set static interrupts by specifying `interrupt_before` and `interrupt_after` at compile time or run time.
+
+!!! warning
+
+    Static interrupts are **not** recommended for human-in-the-loop workflows. Use [dynamic interrupts](#pause-using-interrupt) instead.
+
+=== "Compile time"
+
+    ```python
+    # highlight-next-line
+    graph = graph_builder.compile( # (1)!
+        # highlight-next-line
+        interrupt_before=["node_a"], # (2)!
+        # highlight-next-line
+        interrupt_after=["node_b", "node_c"], # (3)!
+        checkpointer=checkpointer, # (4)!
+    )
+
+    config = {
+        "configurable": {
+            "thread_id": "some_thread"
+        }
+    }
+
+    # Run the graph until the breakpoint
+    graph.invoke(inputs, config=thread_config) # (5)!
+
+    # Resume the graph
+    graph.invoke(None, config=thread_config) # (6)!
+    ```
+
+    1. The breakpoints are set during `compile` time.
+    2. `interrupt_before` specifies the nodes where execution should pause before the node is executed.
+    3. `interrupt_after` specifies the nodes where execution should pause after the node is executed.
+    4. A checkpointer is required to enable breakpoints.
+    5. The graph is run until the first breakpoint is hit.
+    6. The graph is resumed by passing in `None` for the input. This will run the graph until the next breakpoint is hit.
+
+=== "Run time"
+
+    ```python
+    # highlight-next-line
+    graph.invoke( # (1)!
+        inputs, 
+        # highlight-next-line
+        interrupt_before=["node_a"], # (2)!
+        # highlight-next-line
+        interrupt_after=["node_b", "node_c"] # (3)!
+        config={
+            "configurable": {"thread_id": "some_thread"}
+        }, 
+    )
+
+    config = {
+        "configurable": {
+            "thread_id": "some_thread"
+        }
+    }
+
+    # Run the graph until the breakpoint
+    graph.invoke(inputs, config=config) # (4)!
+
+    # Resume the graph
+    graph.invoke(None, config=config) # (5)!
+    ```
+
+    1. `graph.invoke` is called with the `interrupt_before` and `interrupt_after` parameters. This is a run-time configuration and can be changed for every invocation.
+    2. `interrupt_before` specifies the nodes where execution should pause before the node is executed.
+    3. `interrupt_after` specifies the nodes where execution should pause after the node is executed.
+    4. The graph is run until the first breakpoint is hit.
+    5. The graph is resumed by passing in `None` for the input. This will run the graph until the next breakpoint is hit.
+
+    !!! note
+
+        You cannot set static breakpoints at runtime for **sub-graphs**.
+        If you have a sub-graph, you must set the breakpoints at compilation time.
+
+??? example "Setting static breakpoints"
+
+    ```python
+    from IPython.display import Image, display
+    from typing_extensions import TypedDict
+    
+    from langgraph.checkpoint.memory import InMemorySaver 
+    from langgraph.graph import StateGraph, START, END
+    
+    
+    class State(TypedDict):
+        input: str
+    
+    
+    def step_1(state):
+        print("---Step 1---")
+        pass
+    
+    
+    def step_2(state):
+        print("---Step 2---")
+        pass
+    
+    
+    def step_3(state):
+        print("---Step 3---")
+        pass
+    
+    
+    builder = StateGraph(State)
+    builder.add_node("step_1", step_1)
+    builder.add_node("step_2", step_2)
+    builder.add_node("step_3", step_3)
+    builder.add_edge(START, "step_1")
+    builder.add_edge("step_1", "step_2")
+    builder.add_edge("step_2", "step_3")
+    builder.add_edge("step_3", END)
+    
+    # Set up a checkpointer 
+    checkpointer = InMemorySaver() # (1)!
+    
+    graph = builder.compile(
+        checkpointer=checkpointer, # (2)!
+        interrupt_before=["step_3"] # (3)!
+    )
+    
+    # View
+    display(Image(graph.get_graph().draw_mermaid_png()))
+    
+    
+    # Input
+    initial_input = {"input": "hello world"}
+    
+    # Thread
+    thread = {"configurable": {"thread_id": "1"}}
+    
+    # Run the graph until the first interruption
+    for event in graph.stream(initial_input, thread, stream_mode="values"):
+        print(event)
+        
+    # This will run until the breakpoint
+    # You can get the state of the graph at this point
+    print(graph.get_state(config))
+    
+    # You can continue the graph execution by passing in `None` for the input
+    for event in graph.stream(None, thread, stream_mode="values"):
+        print(event)
+    ```
+
+### Use static interrupts in LangGraph Studio
+
+You can use [LangGraph Studio](../../concepts/langgraph_studio.md) to debug your graph. You can set static breakpoints in the UI and then run the graph. You can also use the UI to inspect the graph state at any point in the execution.
+
+![image](../../concepts/img/human_in_the_loop/static-interrupt.png){: style="max-height:400px"}
+
+LangGraph Studio is free with [locally deployed applications](../../tutorials/langgraph-platform/local-server.md) using `langgraph dev`. 
+
 ## Considerations
 
 When using human-in-the-loop, there are some considerations to keep in mind.
@@ -953,4 +1112,3 @@ To avoid issues, refrain from dynamically changing the node's structure between 
     Name: N/A. Age: John
     {'human_node': {'age': 'John', 'name': 'N/A'}}
     ```
-
