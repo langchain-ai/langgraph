@@ -8094,11 +8094,9 @@ function agent(state: typeof MessagesAnnotation.State): Command {
       goto,
       update: { myStateKey: "myStateValue" }
     });
-  } else {
-    return new Command({
-      goto: "human"
-    });
   }
+
+  return new Command({ goto: "human" });
 }
 ```
 
