@@ -54,6 +54,7 @@ plugins:
       separator: '[\s\u200b\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;'
   - autorefs
   - tags
+  - include-markdown
   - mkdocstrings:
       custom_templates: templates
       handlers:
@@ -141,10 +142,6 @@ nav:
           - Overview: concepts/human_in_the_loop.md
           - Add human intervention: how-tos/human_in_the_loop/add-human-in-the-loop.md
           - Use Server API: cloud/how-tos/add-human-in-the-loop.md
-      - Breakpoints:
-          - Overview: concepts/breakpoints.md
-          - Set breakpoints: how-tos/human_in_the_loop/breakpoints.md
-          - Use Server API: cloud/how-tos/human_in_the_loop_breakpoint.md
       - Time travel:
           - Overview: concepts/time-travel.md
           - Use time travel: how-tos/human_in_the_loop/time-travel.md
@@ -357,12 +354,9 @@ markdown_extensions:
       combine_header_slug: true
   - pymdownx.tasklist:
       custom_checkbox: true
-  - markdown_include.include:
-      base_path: ./
   - github-callouts
 hooks:
   - _scripts/notebook_hooks.py
-  - _scripts/copy_page_hooks.py
 extra:
   social:
     - icon: fontawesome/brands/js

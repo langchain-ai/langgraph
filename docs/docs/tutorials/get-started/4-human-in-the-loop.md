@@ -14,7 +14,7 @@ Starting with the existing code from the [Add memory to the chatbot](./3-add-mem
 
 Let's first select a chat model:
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 <!---
 ```python
@@ -221,7 +221,7 @@ The input has been received and processed as a tool message. Review this call's 
 
 Check out the code snippet below to review the graph from this tutorial:
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 ```python
 from typing import Annotated

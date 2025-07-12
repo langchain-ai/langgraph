@@ -63,7 +63,7 @@ Next, add a "`chatbot`" node. **Nodes** represent units of work and are typicall
 
 Let's first select a chat model:
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 <!---
 ```python
