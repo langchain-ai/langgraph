@@ -48,14 +48,13 @@ console.log(agentNextState.messages.at(-1)?.text);
 ```
 
 ```typescript
-// Note: tslab only works inside a jupyter notebook. Don't worry about running this code yourself!
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const graph = agent.getGraph();
-const image = await graph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const drawableGraph = await graph.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("chatbot-with-tools.png", imageBuffer);
 ```
 
 ```typescript
@@ -178,13 +177,13 @@ const graph = builder.compile({
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const drawableGraph = graph.getGraph();
+const drawableGraph = await graph.getGraphAsync();
 const image = await drawableGraph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -346,13 +345,13 @@ const messagesApp = messagesWorkflow.compile({
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const drawableGraph2 = messagesApp.getGraph();
-const image2 = await drawableGraph2.drawMermaidPng();
-const arrayBuffer2 = await image2.arrayBuffer();
+const drawableGraph = await messagesApp.getGraphAsync();
+const image = await drawableGraph2.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer2));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -1331,13 +1330,13 @@ const graph = new StateGraph(StateAnnotation)
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
 const drawableGraph = await graph.getGraphAsync();
 const image = await drawableGraph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -2065,13 +2064,13 @@ const graph = workflow.compile({ checkpointer: memory });
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const drawableGraph = graph.getGraph();
+const drawableGraph = await graph.getGraphAsync();
 const image = await drawableGraph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -2322,13 +2321,13 @@ const graph = new StateGraph(StateAnnotation)
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const representation = graph.getGraph();
-const image = await representation.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const drawableGraph = await graph.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -2817,13 +2816,13 @@ const app = new StateGraph(MessagesAnnotation)
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const graph = app.getGraph();
-const image = await graph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const drawableGraph = await app.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -3061,13 +3060,13 @@ const app2 = new StateGraph(MessagesAnnotation)
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const graph2 = app2.getGraph();
-const image2 = await graph2.drawMermaidPng();
-const arrayBuffer2 = await image2.arrayBuffer();
+const drawableGraph = await app2.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer2));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -3361,13 +3360,13 @@ const app = workflow.compile();
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const drawableGraph = app.getGraph();
+const drawableGraph = await app.getGraphAsync();
 const image = await drawableGraph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -3524,13 +3523,13 @@ const agent = workflow.compile();
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const runnableGraph = agent.getGraph();
-const image = await runnableGraph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const drawableGraph = await app.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -4086,10 +4085,6 @@ await customGraph.invoke({
 ```
 
 ```typescript
-
-```
-
-```typescript
 // process.env.OPENAI_API_KEY = "sk-...";
 ```
 
@@ -4587,10 +4582,6 @@ for (const r of results3) {
 ```
 
 ```typescript
-
-```
-
-```typescript
 // process.env.OPENAI_API_KEY = "sk_...";
 
 // Optional, add tracing in LangSmith
@@ -4644,13 +4635,13 @@ const graph = builder.compile();
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const representation = graph.getGraph();
-const image = await representation.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const drawableGraph = await graph.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -4720,13 +4711,13 @@ const graph2 = builder2.compile();
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const representation2 = graph2.getGraph();
-const image2 = await representation2.drawMermaidPng();
-const arrayBuffer2 = await image2.arrayBuffer();
+const drawableGraph = await graph2.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer2));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -4952,13 +4943,13 @@ const app = graph.compile();
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const representation = app.getGraph();
-const image = await representation.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const drawableGraph = await app.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -5060,13 +5051,13 @@ const graph = builder.compile({
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const drawableGraphGraphState = graph.getGraph();
-const graphStateImage = await drawableGraphGraphState.drawMermaidPng();
-const graphStateArrayBuffer = await graphStateImage.arrayBuffer();
+const drawableGraph = await app.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(graphStateArrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -5198,13 +5189,13 @@ const app = workflow.compile({
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const drawableGraph = app.getGraph();
+const drawableGraph = await app.getGraphAsync();
 const image = await drawableGraph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -5707,13 +5698,13 @@ const graph = new StateGraph(MessagesAnnotation)
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
 const drawableGraph = await graph.getGraphAsync();
 const image = await drawableGraph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -5868,13 +5859,13 @@ const gameGraph = new StateGraph(GameStateAnnotation)
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const drawableGameGraph = await gameGraph.getGraphAsync();
-const gameImage = await drawableGameGraph.drawMermaidPng();
-const gameArrayBuffer = await gameImage.arrayBuffer();
+const drawableGraph = await gameGraph.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(gameArrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -5894,10 +5885,6 @@ for await (const state of gameStream) {
   console.log("Game state", state);
   console.log("-".repeat(50));
 }
-```
-
-```typescript
-
 ```
 
 ```typescript
@@ -6650,10 +6637,6 @@ for await (const state of grandparentStateHistories) {
 ```
 
 ```typescript
-
-```
-
-```typescript
 import { StateGraph, START, END, MemorySaver, Annotation } from "@langchain/langgraph";
 
 const GraphAnnotation = Annotation.Root({
@@ -6933,13 +6916,13 @@ const app = workflow.compile();
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const graph = app.getGraph();
-const image = await graph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const drawableGraph = await app.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -7347,13 +7330,13 @@ const graph = new StateGraph(MessagesAnnotation)
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const diagram = graph.getGraph();
-const image = await diagram.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const drawableGraph = await graph.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -7371,10 +7354,6 @@ for await (const { event, tags, data } of eventStream) {
     }
   }
 }
-```
-
-```typescript
-
 ```
 
 ```typescript
@@ -7423,13 +7402,13 @@ const agent = createReactAgent({ llm: model, tools: [getWeather] });
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const graph = agent.getGraph();
-const image = await graph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const drawableGraph = await agent.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -7977,13 +7956,13 @@ const graph = workflow.compile({ checkpointer: memory, store: store });
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const graphViz = graph.getGraph();
-const image = await graphViz.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const drawableGraph = await graph.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -8314,13 +8293,13 @@ const graph = builder.compile({ checkpointer });
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const drawableGraph = graph.getGraph();
+const drawableGraph = await graph.getGraphAsync();
 const image = await drawableGraph.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
@@ -8678,10 +8657,6 @@ const continueStream = await agent.stream(continueCommand, config3);
 for await (const step of continueStream) {
   printStep(step);
 }
-```
-
-```typescript
-
 ```
 
 ```typescript
@@ -9287,13 +9262,13 @@ const graph = new StateGraph(StateAnnotation)
 ```
 
 ```typescript
-import * as tslab from "tslab";
+import * as fs from "node:fs/promises";
 
-const representation = graph.getGraph();
-const image = await representation.drawMermaidPng();
-const arrayBuffer = await image.arrayBuffer();
+const drawableGraph = await graph.getGraphAsync();
+const image = await drawableGraph.drawMermaidPng();
+const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await tslab.display.png(new Uint8Array(arrayBuffer));
+await fs.writeFile("graph.png", imageBuffer);
 ```
 
 ```typescript
