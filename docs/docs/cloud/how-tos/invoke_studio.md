@@ -29,7 +29,7 @@ Click the dropdown next to "Submit" and click the toggle to enable/disable strea
 To run your graph with breakpoints, click the "Interrupt" button. Select a node and whether to pause before and/or after that node has executed. Click "Continue" in the thread log to resume execution.
 
 
-For more information on breakpoints see [here](../../concepts/breakpoints.md).
+For more information on breakpoints see [here](../../concepts/human_in_the_loop.md).
 
 ### Submit run
 
