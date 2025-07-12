@@ -1129,3 +1129,60 @@ def test_tool_node_parent_command_with_send():
             graph=Command.PARENT,
         )
     ]
+
+
+def test_tool_node_runtime_tools_from_config():
+    """ToolNode should use tools provided in runtime config when not defined at init."""
+
+    node = ToolNode(config_tools_key="extra_tools")
+
+    # Using tool1 which expects (some_val: int, some_other_val: str)
+    tool_call = {
+        "name": "tool1",
+        "args": {"some_val": 5, "some_other_val": "test"},
+        "id": "call_1",
+        "type": "tool_call",
+    }
+    messages = [AIMessage("", tool_calls=[tool_call])]
+
+    result = node.invoke(
+        {"messages": messages},
+        config={"configurable": {"extra_tools": [tool1]}},
+    )
+
+    tool_messages = result["messages"]
+    assert isinstance(tool_messages[0], ToolMessage)
+    assert tool_messages[0].content == "5 - test"
+
+
+async def test_tool_node_merge_init_and_runtime_tools():
+    """Runtime tools should merge with init-time tools."""
+
+    # Start with tool1 at compile time
+    node = ToolNode(tools=[tool1], config_tools_key="tools")
+
+    # Runtime provides tool2 (async tool)
+    tool_call = {
+        "name": "tool2",
+        "args": {"some_val": 3, "some_other_val": "bar"},
+        "id": "call_2",
+        "type": "tool_call",
+    }
+    messages = [AIMessage("", tool_calls=[tool_call])]
+
+    result = await node.ainvoke(
+        {"messages": messages},
+        config={"configurable": {"tools": [tool2]}},
+    )
+
+    tool_messages = result["messages"]
+    assert tool_messages[0].content == "tool2: 3 - bar"
+
+
+def test_tool_node_constructor_requires_tool_source():
+    """It should be an error to create ToolNode without any tool source."""
+
+    with pytest.raises(ValueError) as exc_info:
+        ToolNode(config_tools_key=None)
+    
+    assert "requires at least one source of tools" in str(exc_info.value)

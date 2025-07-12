@@ -460,6 +460,48 @@ agent.invoke(
     )
     ```
 
+#### Provide/Swap tool lists from graph configuration
+
+`ToolNode` supports sourcing its tools from the run-time `config`. This lets a **single compiled graph** execute with different tool-sets (for example, per user or per tenant) without recompilation.
+
+```python
+from langgraph.prebuilt import ToolNode
+from langchain_core.tools import tool
+
+# Define some tools
+@tool
+def add(a: int, b: int) -> int:
+    """Return a + b"""
+    return a + b
+
+@tool
+def multiply(a: int, b: int) -> int:
+    """Return a * b"""
+    return a * b
+
+# Create ToolNode with no hard-coded tools and instruct it to look
+# for a run-time list under configurable["tools"]
+tools_node = ToolNode(config_tools_key="tools")
+
+# --- Invocation 1: only `add` is available ---
+graph.invoke(
+    {"messages": messages},
+    config={"configurable": {"tools": [add]}},
+)
+
+# --- Invocation 2: swap to calculator suite ---
+graph.invoke(
+    {"messages": messages},
+    config={"configurable": {"tools": [add, multiply]}},
+)
+```
+
+Notes
+
+* `config_tools_key` (default `"tools"`) tells `ToolNode` which key inside `config["configurable"]` contains the tool list.
+* If you also pass a `tools=` list at construction time, the two lists are **merged** (run-time tools override duplicates).
+* Constructing `ToolNode` without any static tools *and* with `config_tools_key=None` raises `ValueError` – at least one tool source is required.
+
 ### Short-term memory
 
 Short-term memory maintains **dynamic** state that changes during a single execution. 
