@@ -264,14 +264,20 @@ class ToolNode(RunnableCallable):
 
     def _normalize_tools(
         self, tools: Sequence[Union[BaseTool, Callable]]
-    ) -> dict[str, BaseTool]:
-        """Convert incoming tools into a name -> BaseTool mapping."""
+    ) -> tuple[dict[str, BaseTool], dict[str, dict[str, Optional[str]]], dict[str, Optional[str]]]:
+        """Convert incoming tools into a name -> BaseTool mapping with metadata."""
         mapping: dict[str, BaseTool] = {}
+        state_args: dict[str, dict[str, Optional[str]]] = {}
+        store_args: dict[str, Optional[str]] = {}
+        
         for tool in tools:
             if not isinstance(tool, BaseTool):
                 tool = create_tool(tool)
             mapping[tool.name] = tool
-        return mapping
+            state_args[tool.name] = _get_state_args(tool)
+            store_args[tool.name] = _get_store_arg(tool)
+        
+        return mapping, state_args, store_args
 
     def _func(
         self,
@@ -291,12 +297,22 @@ class ToolNode(RunnableCallable):
                 config.get("configurable", {}).get(self.config_tools_key, []) or []
             )
 
+        runtime_tools, runtime_state_args, runtime_store_args = self._normalize_tools(runtime_tools_seq)
+        
         merged_tools_by_name = {
             **self.tools_by_name,
-            **self._normalize_tools(runtime_tools_seq),
+            **runtime_tools,
+        }
+        merged_state_args = {
+            **self.tool_to_state_args,
+            **runtime_state_args,
+        }
+        merged_store_args = {
+            **self.tool_to_store_arg,
+            **runtime_store_args,
         }
 
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store, merged_state_args, merged_store_args)
         config_list = get_config_list(config, len(tool_calls))
         input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
@@ -330,12 +346,22 @@ class ToolNode(RunnableCallable):
                 config.get("configurable", {}).get(self.config_tools_key, []) or []
             )
 
+        runtime_tools, runtime_state_args, runtime_store_args = self._normalize_tools(runtime_tools_seq)
+        
         merged_tools_by_name = {
             **self.tools_by_name,
-            **self._normalize_tools(runtime_tools_seq),
+            **runtime_tools,
+        }
+        merged_state_args = {
+            **self.tool_to_state_args,
+            **runtime_state_args,
+        }
+        merged_store_args = {
+            **self.tool_to_store_arg,
+            **runtime_store_args,
         }
 
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store, merged_state_args, merged_store_args)
 
         outputs = await asyncio.gather(
             *(
@@ -511,6 +537,8 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        state_args: dict[str, dict[str, Optional[str]]],
+        store_args: dict[str, Optional[str]],
     ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         if isinstance(input, list):
             if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
@@ -536,7 +564,7 @@ class ToolNode(RunnableCallable):
             raise ValueError("No AIMessage found in input")
 
         tool_calls = [
-            self.inject_tool_args(call, input, store)
+            self.inject_tool_args(call, input, store, state_args, store_args)
             for call in latest_ai_message.tool_calls
         ]
         return tool_calls, input_type
@@ -563,8 +591,9 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
+        state_args_mapping: dict[str, dict[str, Optional[str]]],
     ) -> ToolCall:
-        state_args = self.tool_to_state_args[tool_call["name"]]
+        state_args = state_args_mapping.get(tool_call["name"], {})
         if state_args and isinstance(input, list):
             required_fields = list(state_args.values())
             if (
@@ -601,9 +630,9 @@ class ToolNode(RunnableCallable):
         return tool_call
 
     def _inject_store(
-        self, tool_call: ToolCall, store: Optional[BaseStore]
+        self, tool_call: ToolCall, store: Optional[BaseStore], store_args_mapping: dict[str, Optional[str]]
     ) -> ToolCall:
-        store_arg = self.tool_to_store_arg[tool_call["name"]]
+        store_arg = store_args_mapping.get(tool_call["name"])
         if not store_arg:
             return tool_call
 
@@ -628,6 +657,8 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        state_args: Optional[dict[str, dict[str, Optional[str]]]] = None,
+        store_args: Optional[dict[str, Optional[str]]] = None,
     ) -> ToolCall:
         """Injects the state and store into the tool call.
 
@@ -640,16 +671,23 @@ class ToolNode(RunnableCallable):
             input: The input state
                 to inject.
             store: The store to inject.
+            state_args: Optional mapping of tool state args. If not provided, uses self.tool_to_state_args.
+            store_args: Optional mapping of tool store args. If not provided, uses self.tool_to_store_arg.
 
         Returns:
             ToolCall: The tool call with injected state and store.
         """
-        if tool_call["name"] not in self.tools_by_name:
+        # Use provided metadata or fall back to instance variables
+        state_args = state_args if state_args is not None else self.tool_to_state_args
+        store_args = store_args if store_args is not None else self.tool_to_store_arg
+        
+        # Check if tool exists in either compile-time or runtime tools
+        if tool_call["name"] not in state_args:
             return tool_call
 
         tool_call_copy: ToolCall = copy(tool_call)
-        tool_call_with_state = self._inject_state(tool_call_copy, input)
-        tool_call_with_store = self._inject_store(tool_call_with_state, store)
+        tool_call_with_state = self._inject_state(tool_call_copy, input, state_args)
+        tool_call_with_store = self._inject_store(tool_call_with_state, store, store_args)
         return tool_call_with_store
 
     def _validate_tool_command(
