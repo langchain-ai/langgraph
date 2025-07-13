@@ -1507,7 +1507,7 @@ Because many LangChain objects implement the [Runnable Protocol](https://python.
 
 See example below. To demonstrate async invocations of underlying LLMs, we will include a chat model:
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "../../snippets/chat_model_tabs.md" %}
 
 ```python
 from langchain.chat_models import init_chat_model

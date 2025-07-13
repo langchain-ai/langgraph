@@ -28,4 +28,4 @@ title: LangGraph
 }
 </style>
 
-{!../README.md!}
+{% include-markdown "../../README.md" %}
