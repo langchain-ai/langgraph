@@ -1215,14 +1215,13 @@ def test_tool_node_runtime_tools_with_injected_state():
         "user_name": "Alice"
     }
     
-    # This should work but currently fails because inject_tool_args doesn't
-    # recognize runtime tools
+    # Verify that runtime tools with InjectedState are handled correctly
     result = node.invoke(
         state,
         config={"configurable": {"tools": [get_user_info]}}
     )
     
-    # This assertion would pass if the bug was fixed
+    # Assertion verifies correct behavior
     tool_message = result["messages"][0]
     assert tool_message.content == "User Alice asked: what's the weather?"
 
@@ -1252,7 +1251,7 @@ async def test_tool_node_runtime_tools_with_injected_store():
     
     messages = [AIMessage("", tool_calls=[tool_call])]
     
-    # This should work but currently fails
+    # Verify that runtime tools with InjectedStore are handled correctly
     result = await node.ainvoke(
         {"messages": messages},
         config={"configurable": {"tools": [save_data]}},
