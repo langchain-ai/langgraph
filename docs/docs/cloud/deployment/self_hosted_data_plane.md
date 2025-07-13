@@ -31,7 +31,6 @@ Before deploying, review the [conceptual guide for the Self-Hosted Data Plane](.
 1. Configure your `langgraph-dataplane-values.yaml` file.
 
         config:
-          langgraphPlatformLicenseKey: "" # Your LangGraph Platform license key
           langsmithApiKey: "" # API Key of your Workspace
           langsmithWorkspaceId: "" # Workspace ID
           hostBackendUrl: "https://api.host.langchain.com" # Only override this if on EU
