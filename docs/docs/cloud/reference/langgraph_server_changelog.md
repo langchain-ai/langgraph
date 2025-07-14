@@ -4,6 +4,9 @@
 
 ---
 
+## v0.2.87 (2025-07-14)
+- Enhanced logging for Redis worker signaling to provide more helpful insights into worker activities.
+
 ## v0.2.86 (2025-07-11)
 - Honored tool descriptions in the `/mcp` endpoint to align with expected functionality.
 
