@@ -409,7 +409,7 @@ class RunnableCallable(Runnable):
 
             kw_value: Any = UNSET
             if kw == "config":
-                kwargs[kw] = config
+                kw_value = config
             elif runtime:
                 if kw == "runtime":
                     kw_value = runtime
