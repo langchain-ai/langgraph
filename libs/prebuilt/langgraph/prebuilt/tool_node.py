@@ -26,7 +26,7 @@ Typical Usage:
     @tool
     def my_tool(x: int) -> str:
         return f"Result: {x}"
-    
+
     tool_node = ToolNode([my_tool])
     ```
 """
@@ -83,19 +83,19 @@ TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 def msg_content_output(output: Any) -> Union[str, list[dict]]:
     """Convert tool output to valid message content format.
-    
+
     LangChain ToolMessages accept either string content or a list of content blocks.
     This function ensures tool outputs are properly formatted for message consumption
     by attempting to preserve structured data when possible, falling back to JSON
     serialization or string conversion.
-    
+
     Args:
         output: The raw output from a tool execution. Can be any type.
-        
+
     Returns:
         Either a string representation of the output or a list of content blocks
         if the output is already in the correct format for structured content.
-        
+
     Note:
         This function prioritizes backward compatibility by defaulting to JSON
         serialization rather than supporting all possible message content formats.
@@ -131,11 +131,11 @@ def _handle_tool_error(
     ],
 ) -> str:
     """Generate error message content based on exception handling configuration.
-    
+
     This function centralizes error message generation logic, supporting different
     error handling strategies configured via the ToolNode's handle_tool_errors
     parameter.
-    
+
     Args:
         e: The exception that occurred during tool execution.
         flag: Configuration for how to handle the error. Can be:
@@ -143,13 +143,13 @@ def _handle_tool_error(
             - str: Use this string as the error message
             - Callable: Call this function with the exception to get error message
             - tuple: Not used in this context (handled by caller)
-            
+
     Returns:
         A string containing the error message to include in the ToolMessage.
-        
+
     Raises:
         ValueError: If flag is not one of the supported types.
-        
+
     Note:
         The tuple case is handled by the caller through exception type checking,
         not by this function directly.
@@ -170,24 +170,24 @@ def _handle_tool_error(
 
 def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], ...]:
     """Infer exception types handled by a custom error handler function.
-    
+
     This function analyzes the type annotations of a custom error handler to determine
     which exception types it's designed to handle. This enables type-safe error handling
     where only specific exceptions are caught and processed by the handler.
-    
+
     Args:
         handler: A callable that takes an exception and returns an error message string.
                 The first parameter (after self/cls if present) should be type-annotated
                 with the exception type(s) to handle.
-                
+
     Returns:
         A tuple of exception types that the handler can process. Returns (Exception,)
         if no specific type information is available for backward compatibility.
-        
+
     Raises:
         ValueError: If the handler's annotation contains non-Exception types or
                    if Union types contain non-Exception types.
-                   
+
     Note:
         This function supports both single exception types and Union types for
         handlers that need to handle multiple exception types differently.
@@ -252,7 +252,7 @@ class ToolNode(RunnableCallable):
             and organization. Defaults to None.
         handle_tool_errors: Configuration for error handling during tool execution.
             Defaults to True. Supports multiple strategies:
-            
+
             - True: Catch all errors and return a ToolMessage with the default
               error template containing the exception details.
             - str: Catch all errors and return a ToolMessage with this custom
@@ -262,51 +262,51 @@ class ToolNode(RunnableCallable):
             - Callable[..., str]: Catch exceptions matching the callable's signature
               and return the string result of calling it with the exception.
             - False: Disable error handling entirely, allowing exceptions to propagate.
-              
+
         messages_key: The key in the state dictionary that contains the message list.
             This same key will be used for the output ToolMessages. Defaults to "messages".
-            
+
     Example:
         Basic usage with simple tools:
-        
+
         ```python
         from langgraph.prebuilt import ToolNode
         from langchain_core.tools import tool
-        
+
         @tool
         def calculator(a: int, b: int) -> int:
             \"\"\"Add two numbers.\"\"\"
             return a + b
-            
+
         tool_node = ToolNode([calculator])
         ```
-        
+
         Custom error handling:
-        
+
         ```python
         def handle_math_errors(e: ZeroDivisionError) -> str:
             return "Cannot divide by zero!"
-            
+
         tool_node = ToolNode([calculator], handle_tool_errors=handle_math_errors)
         ```
-        
+
         Direct tool call execution:
-        
+
         ```python
         tool_calls = [{"name": "calculator", "args": {"a": 5, "b": 3}, "id": "1", "type": "tool_call"}]
         result = tool_node.invoke(tool_calls)
         ```
-        
+
     Note:
         The ToolNode expects input in one of three formats:
         1. A dictionary with a messages key containing a list of messages
         2. A list of messages directly
         3. A list of tool call dictionaries
-        
+
         When using message formats, the last message must be an AIMessage with
         tool_calls populated. The node automatically extracts and processes these
         tool calls concurrently.
-        
+
         For advanced use cases involving state injection or store access, tools
         can be annotated with InjectedState or InjectedStore to receive graph
         context automatically.
@@ -326,7 +326,7 @@ class ToolNode(RunnableCallable):
         messages_key: str = "messages",
     ) -> None:
         """Initialize the ToolNode with the provided tools and configuration.
-        
+
         Args:
             tools: Sequence of tools to make available for execution.
             name: Node name for graph identification.
@@ -666,16 +666,16 @@ class ToolNode(RunnableCallable):
         store: Optional[BaseStore],
     ) -> ToolCall:
         """Inject graph state and store into tool call arguments.
-        
+
         This method enables tools to access graph context that should not be controlled
         by the model. Tools can declare dependencies on graph state or persistent storage
         using InjectedState and InjectedStore annotations. This method automatically
         identifies these dependencies and injects the appropriate values.
-        
+
         The injection process preserves the original tool call structure while adding
         the necessary context arguments. This allows tools to be both model-callable
         and context-aware without exposing internal state management to the model.
-        
+
         Args:
             tool_call: The tool call dictionary to augment with injected arguments.
                 Must contain 'name', 'args', 'id', and 'type' fields.
@@ -683,15 +683,15 @@ class ToolNode(RunnableCallable):
                 Can be a message list, state dictionary, or BaseModel instance.
             store: The persistent store instance to inject into tools requiring storage.
                 Will be None if no store is configured for the graph.
-                
+
         Returns:
             A new ToolCall dictionary with the same structure as the input but with
             additional arguments injected based on the tool's annotation requirements.
-            
+
         Raises:
             ValueError: If a tool requires store injection but no store is provided,
                        or if state injection requirements cannot be satisfied.
-                       
+
         Note:
             This method is automatically called during tool execution but can also
             be used manually when working with the Send API or custom routing logic.
@@ -768,15 +768,15 @@ def tools_condition(
     messages_key: str = "messages",
 ) -> Literal["tools", "__end__"]:
     """Conditional routing function for tool-calling workflows.
-    
+
     This utility function implements the standard conditional logic for ReAct-style
     agents: if the last AI message contains tool calls, route to the tool execution
     node; otherwise, end the workflow. This pattern is fundamental to most tool-calling
     agent architectures.
-    
+
     The function handles multiple state formats commonly used in LangGraph applications,
     making it flexible for different graph designs while maintaining consistent behavior.
-    
+
     Args:
         state: The current graph state to examine for tool calls. Supported formats:
             - List of messages (for MessageGraph)
@@ -785,43 +785,43 @@ def tools_condition(
         messages_key: The key or attribute name containing the message list in the state.
             This allows customization for graphs using different state schemas.
             Defaults to "messages".
-            
+
     Returns:
         Either "tools" if tool calls are present in the last AI message, or "__end__"
         to terminate the workflow. These are the standard routing destinations for
         tool-calling conditional edges.
-        
+
     Raises:
         ValueError: If no messages can be found in the provided state format.
-        
+
     Example:
         Basic usage in a ReAct agent:
-        
+
         ```python
         from langgraph.graph import StateGraph
         from langgraph.prebuilt import ToolNode, tools_condition
         from typing_extensions import TypedDict
-        
+
         class State(TypedDict):
             messages: list
-            
+
         graph = StateGraph(State)
         graph.add_node("llm", call_model)
         graph.add_node("tools", ToolNode([my_tool]))
         graph.add_conditional_edges(
-            "llm", 
+            "llm",
             tools_condition,  # Routes to "tools" or "__end__"
             {"tools": "tools", "__end__": "__end__"}
         )
         ```
-        
+
         Custom messages key:
-        
+
         ```python
         def custom_condition(state):
             return tools_condition(state, messages_key="chat_history")
         ```
-        
+
     Note:
         This function is designed to work seamlessly with ToolNode and standard
         LangGraph patterns. It expects the last message to be an AIMessage when
@@ -843,21 +843,21 @@ def tools_condition(
 
 class InjectedState(InjectedToolArg):
     """Annotation for injecting graph state into tool arguments.
-    
+
     This annotation enables tools to access graph state without exposing state
     management details to the language model. Tools annotated with InjectedState
     receive state data automatically during execution while remaining invisible
     to the model's tool-calling interface.
-    
+
     Args:
         field: Optional key to extract from the state dictionary. If None, the entire
             state is injected. If specified, only that field's value is injected.
             This allows tools to request specific state components rather than
             processing the full state structure.
-            
+
     Example:
         Injecting the entire state:
-        
+
         ```python
         from typing import List
         from typing_extensions import Annotated, TypedDict
@@ -902,7 +902,7 @@ class InjectedState(InjectedToolArg):
             ToolMessage(content='bar2', name='foo_tool', tool_call_id='2')
         ]
         ```
-        
+
     Note:
         - InjectedState arguments are automatically excluded from tool schemas
           presented to language models
@@ -919,16 +919,16 @@ class InjectedState(InjectedToolArg):
 
 class InjectedStore(InjectedToolArg):
     """Annotation for injecting persistent store into tool arguments.
-    
+
     This annotation enables tools to access LangGraph's persistent storage system
     without exposing storage details to the language model. Tools annotated with
     InjectedStore receive the store instance automatically during execution while
     remaining invisible to the model's tool-calling interface.
-    
+
     The store provides persistent, cross-session data storage that tools can use
     for maintaining context, user preferences, or any other data that needs to
     persist beyond individual workflow executions.
-    
+
     !!! Warning
         `InjectedStore` annotation requires `langchain-core >= 0.3.8`
 
@@ -938,51 +938,51 @@ class InjectedStore(InjectedToolArg):
         from langchain_core.tools import tool
         from langgraph.store.memory import InMemoryStore
         from langgraph.prebuilt import InjectedStore, ToolNode
-        
+
         @tool
         def save_preference(
-            key: str, 
-            value: str, 
+            key: str,
+            value: str,
             store: Annotated[Any, InjectedStore()]
         ) -> str:
             \"\"\"Save user preference to persistent storage.\"\"\"
             store.put(("preferences",), key, value)
             return f"Saved {key} = {value}"
-            
+
         @tool
         def get_preference(
-            key: str, 
+            key: str,
             store: Annotated[Any, InjectedStore()]
         ) -> str:
             \"\"\"Retrieve user preference from persistent storage.\"\"\"
             result = store.get(("preferences",), key)
             return result.value if result else "Not found"
         ```
-        
+
         Usage with ToolNode and graph compilation:
-        
+
         ```python
         from langgraph.graph import StateGraph
         from langgraph.store.memory import InMemoryStore
-        
+
         store = InMemoryStore()
         tool_node = ToolNode([save_preference, get_preference])
-        
+
         graph = StateGraph(State)
         graph.add_node("tools", tool_node)
         compiled_graph = graph.compile(store=store)  # Store is injected automatically
         ```
-        
+
         Cross-session persistence:
-        
+
         ```python
         # First session
         result1 = graph.invoke({"messages": [HumanMessage("Save my favorite color as blue")]})
-        
+
         # Later session - data persists
         result2 = graph.invoke({"messages": [HumanMessage("What's my favorite color?")]})
         ```
-        
+
     Note:
         - InjectedStore arguments are automatically excluded from tool schemas
           presented to language models
@@ -997,15 +997,15 @@ def _is_injection(
     type_arg: Any, injection_type: Union[Type[InjectedState], Type[InjectedStore]]
 ) -> bool:
     """Check if a type argument represents an injection annotation.
-    
+
     This utility function determines whether a type annotation indicates that
     an argument should be injected with state or store data. It handles both
     direct annotations and nested annotations within Union or Annotated types.
-    
+
     Args:
         type_arg: The type argument to check for injection annotations.
         injection_type: The injection type to look for (InjectedState or InjectedStore).
-        
+
     Returns:
         True if the type argument contains the specified injection annotation.
     """
@@ -1021,18 +1021,18 @@ def _is_injection(
 
 def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
     """Extract state injection mappings from tool annotations.
-    
+
     This function analyzes a tool's input schema to identify arguments that should
     be injected with graph state. It processes InjectedState annotations to build
     a mapping of tool argument names to state field names.
-    
+
     Args:
         tool: The tool to analyze for state injection requirements.
-        
+
     Returns:
         A dictionary mapping tool argument names to state field names. If a field
         name is None, the entire state should be injected for that argument.
-        
+
     Raises:
         ValueError: If a tool argument has multiple InjectedState annotations.
     """
@@ -1063,18 +1063,18 @@ def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
 
 def _get_store_arg(tool: BaseTool) -> Optional[str]:
     """Extract store injection argument from tool annotations.
-    
+
     This function analyzes a tool's input schema to identify the argument that
     should be injected with the graph store. Only one store argument is supported
     per tool.
-    
+
     Args:
         tool: The tool to analyze for store injection requirements.
-        
+
     Returns:
         The name of the argument that should receive the store injection, or None
         if no store injection is required.
-        
+
     Raises:
         ValueError: If a tool argument has multiple InjectedStore annotations.
     """
