@@ -51,12 +51,13 @@ graph.invoke( # (1)!
 
     ```python
     from langchain_core.messages import AnyMessage
-    from langgraph.runtime import Runtime
+    from langgraph.runtime import get_runtime
     from langgraph.prebuilt.chat_agent_executor import AgentState
     from langgraph.prebuilt import create_react_agent
 
     # highlight-next-line
-    def prompt(state: AgentState, runtime: Runtime[ContextSchema]) -> list[AnyMessage]:
+    def prompt(state: AgentState) -> list[AnyMessage]:
+        runtime = get_runtime(ContextSchema)
         system_msg = f"You are a helpful assistant. Address the user as {runtime.context.user_name}."
         return [{"role": "system", "content": system_msg}] + state["messages"]
 
@@ -92,13 +93,14 @@ graph.invoke( # (1)!
 === "In a tool"
 
     ```python
-    from langgraph.runtime import Runtime
+    from langgraph.runtime import get_runtime
 
     @tool
     # highlight-next-line
-    def get_user_email(runtime: Runtime[ContextSchema]) -> str:
+    def get_user_email() -> str:
         """Retrieve user information based on user ID."""
         # simulate fetching user info from a database
+        runtime = get_runtime(ContextSchema)
         email = get_user_email_from_db(runtime.context.user_name)
         return email
     ```
