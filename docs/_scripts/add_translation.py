@@ -6,7 +6,7 @@ import requests
 from langchain_anthropic import ChatAnthropic
 
 # Load reference TypeScript snippets
-URL = "https://gist.githubusercontent.com/eyurtsev/e7486731415463a9bc5b4682358859c8/raw/b5a5fda9c7e3387cfcb781f25082814d43675d50/gistfile1.txt"
+URL = "https://gist.githubusercontent.com/dqbd/b35d49e2ceec80e654fe1c5ab61ec477/raw/2416171f3b23c181012576b3166c7717ae3b8c30/snippets.md"
 response = requests.get(URL)
 response.raise_for_status()
 reference_snippets = response.text
@@ -32,6 +32,8 @@ TRANSLATION_PROMPT = (
     "the translation. "
     "Use the reference TypeScript snippets as guidance whenever possible to "
     "maintain alignment with existing conventions.\n\n"
+    "Use Zod for state definition for StateGraph. Avoid using Annotation since it will be deprecated in the future.\n\n"
+    "Prefer method chaining (fluent interface) to StateGraph builder over calling methods manually, since the types are more accurate.\n\n"
     f"Here are the reference TypeScript snippets:\n\n{reference_snippets}\n\n"
 )
 
