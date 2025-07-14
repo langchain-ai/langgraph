@@ -663,7 +663,7 @@ def create_react_agent(
     workflow.add_node(
         "agent",
         RunnableCallable(call_model, acall_model),
-        input_schema=input_schema,
+        input=input_schema,
     )
     workflow.add_node("tools", tool_node)
 
