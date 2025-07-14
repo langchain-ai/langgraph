@@ -537,5 +537,5 @@ class entrypoint(Generic[ContextT]):
             cache=self.cache,
             cache_policy=self.cache_policy,
             retry_policy=self.retry_policy or (),
-            context_schema=self.context_schema,
+            context_schema=self.context_schema,  # type: ignore[arg-type]
         )

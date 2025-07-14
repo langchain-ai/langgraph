@@ -111,7 +111,7 @@ def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
     )
 
 
-def _get_node_name(node: StateNode) -> str:
+def _get_node_name(node: StateNode[Any, ContextT]) -> str:
     try:
         return getattr(node, "__name__", node.__class__.__name__)
     except AttributeError:
@@ -171,7 +171,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     """
 
     edges: set[tuple[str, str]]
-    nodes: dict[str, StateNodeSpec]
+    nodes: dict[str, StateNodeSpec[Any, ContextT]]
     branches: defaultdict[str, dict[str, BranchSpec]]
     channels: dict[str, BaseChannel]
     managed: dict[str, ManagedValueSpec]
@@ -653,7 +653,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     def add_sequence(
         self,
         nodes: Sequence[
-            StateNode[StateT, ContextT] | tuple[str, StateNode[StateT, ContextT]]
+            StateNode[NodeInputT, ContextT]
+            | tuple[str, StateNode[NodeInputT, ContextT]]
         ],
     ) -> Self:
         """Add a sequence of nodes that will be executed in the provided order.
@@ -931,7 +932,7 @@ class CompiledStateGraph(
             name=self.get_name("Output"),
         )
 
-    def attach_node(self, key: str, node: StateNodeSpec | None) -> None:
+    def attach_node(self, key: str, node: StateNodeSpec[Any, ContextT] | None) -> None:
         if key == START:
             output_keys = [
                 k
