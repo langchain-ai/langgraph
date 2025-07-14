@@ -23,3 +23,7 @@ body:
     attributes:
       label: Issue Content
       description: Add the content of the issue here.
+  - type: markdown
+    attributes:
+      value: |
+        Community members should **NOT** work on Privileged issues unless these issues have been explicitly marked with a "help-wanted" tag.
