@@ -339,7 +339,7 @@ class entrypoint:
                 "thread_id": "some_thread"
             }
         }
-        my_workflow.invoke("hello")
+        my_workflow.invoke("hello",config)
         ```
 
     Example: Using entrypoint.final to save a value
