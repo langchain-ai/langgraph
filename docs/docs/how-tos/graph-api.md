@@ -1149,7 +1149,8 @@ Adding "C" to ['A']
 LangGraph supports map-reduce and other advanced branching patterns using the Send API. Here is an example of how to use it:
 
 ```python
-from langgraph.graph import StateGraph, START, END, Send
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
 from typing_extensions import TypedDict
 
 class OverallState(TypedDict):
@@ -1507,7 +1508,7 @@ Because many LangChain objects implement the [Runnable Protocol](https://python.
 
 See example below. To demonstrate async invocations of underlying LLMs, we will include a chat model:
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "../../snippets/chat_model_tabs.md" %}
 
 ```python
 from langchain.chat_models import init_chat_model

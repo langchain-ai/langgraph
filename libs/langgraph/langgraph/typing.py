@@ -36,3 +36,8 @@ OutputT = TypeVar("OutputT", bound=StateLike, default=StateT)
 
 Defaults to `StateT`.
 """
+
+NodeInputT = TypeVar("NodeInputT", bound=StateLike)
+"""Type variable used to represent the input to a node."""
+
+NodeInputT_contra = TypeVar("NodeInputT_contra", bound=StateLike, contravariant=True)

@@ -122,6 +122,7 @@ from langgraph.types import (
     All,
     CachePolicy,
     Checkpointer,
+    Command,
     Interrupt,
     Send,
     StateSnapshot,
@@ -2402,7 +2403,7 @@ class Pregel(
 
     def stream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
@@ -2636,7 +2637,7 @@ class Pregel(
 
     async def astream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
@@ -2904,7 +2905,7 @@ class Pregel(
 
     def invoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
@@ -2981,7 +2982,7 @@ class Pregel(
 
     async def ainvoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,

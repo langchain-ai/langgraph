@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import Any, Callable, Generic, cast
 
@@ -8,15 +8,13 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
-from langgraph.types import All, StateSnapshot, StateUpdate, StreamMode
-from langgraph.typing import ContextT, InputT, OutputT, StateT
+from langgraph.types import All, Command, StateSnapshot, StateUpdate, StreamMode
+from langgraph.typing import InputT, ContextT, OutputT, StateT
 
 __all__ = ("PregelProtocol", "StreamProtocol")
 
 
-class PregelProtocol(
-    Runnable[InputT, Any], Generic[StateT, ContextT, InputT, OutputT], ABC
-):
+class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, OutputT]):
     @abstractmethod
     def with_config(
         self, config: RunnableConfig | None = None, **kwargs: Any
@@ -101,7 +99,7 @@ class PregelProtocol(
     @abstractmethod
     def stream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
@@ -114,7 +112,7 @@ class PregelProtocol(
     @abstractmethod
     def astream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
@@ -127,7 +125,7 @@ class PregelProtocol(
     @abstractmethod
     def invoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
@@ -138,7 +136,7 @@ class PregelProtocol(
     @abstractmethod
     async def ainvoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
