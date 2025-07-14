@@ -1194,7 +1194,7 @@ from IPython.display import Image, display
 display(Image(graph.get_graph().draw_mermaid_png()))
 ```
 
-![Map-reduce graph with fanout](assets/graph_api_image_2.png)
+![Map-reduce graph with fanout](assets/graph_api_image_6.png)
 
 ```python
 # Call the graph: here we call it to generate a list of jokes
