@@ -1446,7 +1446,7 @@ Recursion Error
     display(Image(graph.get_graph().draw_mermaid_png()))
     ```
 
-    ![Complex loop graph with branches](assets/graph_api_image_4.png)
+    ![Complex loop graph with branches](assets/graph_api_image_8.png)
 
     This graph looks complex, but can be conceptualized as loop of [supersteps](../concepts/low_level.md#graphs):
 
