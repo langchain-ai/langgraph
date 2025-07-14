@@ -1149,7 +1149,8 @@ Adding "C" to ['A']
 LangGraph supports map-reduce and other advanced branching patterns using the Send API. Here is an example of how to use it:
 
 ```python
-from langgraph.graph import StateGraph, START, END, Send
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
 from typing_extensions import TypedDict
 
 class OverallState(TypedDict):
