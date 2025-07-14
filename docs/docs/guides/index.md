@@ -19,8 +19,7 @@ These capabilities are available in both LangGraph OSS and the LangGraph Platfor
 - [Context](../agents/context.md): Pass outside data to a LangGraph graph to provide context for the graph execution.
 - [Models](../agents/models.md): Integrate various LLMs into your LangGraph application.
 - [Tools](../concepts/tools.md): Interface directly with external systems.
-- [Human-in-the-loop](../concepts/human_in_the_loop.md): Enable human intervention at any point in a workflow.
-- [Breakpoints](../concepts/breakpoints.md): Pause the execution of a LangGraph graph at a specific point.
+- [Human-in-the-loop](../concepts/human_in_the_loop.md): Pause a graph and wait for human input at any point in a workflow.
 - [Time travel](../concepts/time-travel.md): Travel back in time to a specific point in the execution of a LangGraph graph.
 - [Subgraphs](../concepts/subgraphs.md): Build modular graphs.
 - [Multi-agent](../concepts/multi_agent.md): Break down a complex workflow into multiple agents.
@@ -31,7 +30,7 @@ These capabilities are available in both LangGraph OSS and the LangGraph Platfor
 
 These capabilities are only available in [LangGraph Platform](../concepts/langgraph_platform.md).
 
-- [Authentication and access control](../concepts/auth.md): Authenticate and authorize users to access a Langraph graph.
+- [Authentication and access control](../concepts/auth.md): Authenticate and authorize users to access a LangGraph graph.
 - [Assistants](../concepts/assistants.md): Build assistants that can be used to interact with a LangGraph graph.
 - [Double-texting](../concepts/double_texting.md): Handle double-texting (consecutive messages before a first response is returned) in a LangGraph graph.
 - [Webhooks](../cloud/concepts/webhooks.md): Send webhooks to a LangGraph graph.

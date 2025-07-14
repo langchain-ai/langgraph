@@ -1,0 +1,16 @@
+/* Minimal CSS for copy page button */
+.copy-page-btn {
+    background: transparent;
+    border: 1px solid var(--md-default-fg-color--lightest);
+    padding: 6px 12px;
+    margin-right: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--md-default-fg-color);
+    transition: all 0.2s ease;
+}
+
+.copy-page-btn:hover {
+    background: var(--md-default-fg-color--lightest);
+}

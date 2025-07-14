@@ -80,7 +80,7 @@ class HumanResponse(TypedDict):
             - "ignore": Skips/ignores the current step
             - "response": Provides text feedback or instructions
             - "edit": Modifies the current state/content
-        arg: The response payload:
+        args: The response payload:
             - None: For ignore/accept actions
             - str: For text responses
             - ActionRequest: For edit actions with updated content

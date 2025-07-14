@@ -782,7 +782,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
-    ) -> CompiledStateGraph[StateT, InputT]:
+    ) -> CompiledStateGraph[StateT, InputT, OutputT]:
         """Compiles the state graph into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
