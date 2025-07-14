@@ -1129,3 +1129,49 @@ def test_tool_node_parent_command_with_send():
             graph=Command.PARENT,
         )
     ]
+
+
+async def test_tool_node_dynamic_tools_basic() -> None:
+    """Test basic dynamic tool functionality."""
+
+    @dec_tool()
+    def answer_to_life() -> int:
+        """A very nice dynamic tool."""
+        return 42
+
+    def tool_provider(state, config, store) -> list:
+        """Provide dynamic tools based on state or config."""
+        return [answer_to_life]
+
+    tool_node = ToolNode(tool_provider)
+    result = await tool_node.ainvoke(
+        [
+            {
+                "name": "answer_to_life",
+                "args": {},
+                "id": "1",
+                "type": "tool_call",
+            }
+        ]
+    )
+
+    assert result == {
+        "messages": [
+            ToolMessage(
+                content="42",
+                tool_call_id="1",
+                name="answer_to_life",
+            )
+        ]
+    }
+
+    # Test invoking a tool that's not defined
+    with pytest.raises(ValueError):
+        await tool_node.ainvoke(
+            {
+                "name": "not_available",
+                "args": {},
+                "id": "1",
+                "type": "tool_call",
+            }
+        )

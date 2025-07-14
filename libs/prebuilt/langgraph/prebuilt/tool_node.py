@@ -35,7 +35,8 @@ import asyncio
 import inspect
 import json
 from copy import copy, deepcopy
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from itertools import repeat
 from typing import (
     Any,
     Callable,
@@ -73,12 +74,50 @@ from typing_extensions import Annotated, get_args, get_origin
 from langgraph.errors import GraphBubbleUp
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
+from langgraph.typing import StateLike
 from langgraph.utils.runnable import RunnableCallable
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
 )
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
+
+
+@dataclass(frozen=True)
+class ToolResolver:
+    """Encapsulates tool metadata for thread-safe tool execution.
+
+    This class holds all the precomputed metadata needed for tool execution,
+    including tool instances, state injection mappings, and store injection settings.
+    """
+
+    tools_by_name: dict[str, BaseTool]
+    tool_to_state_args: dict[str, dict[str, Optional[str]]]
+    tool_to_store_arg: dict[str, Optional[str]]
+
+    @staticmethod
+    def from_tools(tools: Sequence[Union[BaseTool, Callable]]) -> "ToolResolver":
+        """Create a ToolResolver from a sequence of tools.
+
+        Args:
+            tools: Sequence of tools to process. Can be BaseTool instances or
+                  callables that will be converted to tools.
+
+        Returns:
+            A ToolResolver containing all the metadata for the provided tools.
+        """
+        tools_by_name = {}
+        tool_to_state_args = {}
+        tool_to_store_arg = {}
+
+        for tool in tools:
+            if not isinstance(tool, BaseTool):
+                tool = create_tool(tool)
+            tools_by_name[tool.name] = tool
+            tool_to_state_args[tool.name] = _get_state_args(tool)
+            tool_to_store_arg[tool.name] = _get_store_arg(tool)
+
+        return ToolResolver(tools_by_name, tool_to_state_args, tool_to_store_arg)
 
 
 def msg_content_output(output: Any) -> Union[str, list[dict]]:
@@ -244,8 +283,11 @@ class ToolNode(RunnableCallable):
     Tool calls can also be passed directly as a list of `ToolCall` dicts.
 
     Args:
-        tools: A sequence of tools that can be invoked by this node. Tools can be
-            BaseTool instances or plain functions that will be converted to tools.
+        tools: Either a sequence of tools that can be invoked by this node, or a
+            callable that returns tools dynamically based on input, config, and store.
+            Static tools can be BaseTool instances or plain functions that will be
+            converted to tools. Dynamic tool providers receive (input, config, store)
+            and should return a sequence of tools for that specific execution.
         name: The name identifier for this node in the graph. Used for debugging
             and visualization. Defaults to "tools".
         tags: Optional metadata tags to associate with the node for filtering
@@ -316,7 +358,13 @@ class ToolNode(RunnableCallable):
 
     def __init__(
         self,
-        tools: Sequence[Union[BaseTool, Callable]],
+        tools: Union[
+            Sequence[Union[BaseTool, Callable]],
+            Callable[
+                [StateLike, RunnableConfig, Optional[BaseStore]],
+                Sequence[Union[BaseTool, Callable]],
+            ],
+        ],
         *,
         name: str = "tools",
         tags: Optional[list[str]] = None,
@@ -328,24 +376,64 @@ class ToolNode(RunnableCallable):
         """Initialize the ToolNode with the provided tools and configuration.
 
         Args:
-            tools: Sequence of tools to make available for execution.
+            tools: Either a sequence of tools to make available for execution,
+                  or a callable that returns tools dynamically based on input,
+                  config, and store.
             name: Node name for graph identification.
             tags: Optional metadata tags.
             handle_tool_errors: Error handling configuration.
             messages_key: State key containing messages.
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
-        self.tools_by_name: dict[str, BaseTool] = {}
-        self.tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
-        self.tool_to_store_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
-        for tool_ in tools:
-            if not isinstance(tool_, BaseTool):
-                tool_ = create_tool(tool_)
-            self.tools_by_name[tool_.name] = tool_
-            self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
-            self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
+
+        if callable(tools):
+            # Dynamic tool provider
+            self._tool_provider_fn = tools
+            self._static_resolver: Optional[ToolResolver] = None
+            # Likely migrate to property and raise a RunTimeError
+            self.tools_by_name: dict[str, BaseTool] = {}
+            self.tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
+            self.tool_to_store_arg: dict[str, Optional[str]] = {}
+        else:
+            # Static tools
+            self._tool_provider_fn = None
+            self._static_resolver = ToolResolver.from_tools(tools)
+            self.tools_by_name = self._static_resolver.tools_by_name
+            self.tool_to_state_args = self._static_resolver.tool_to_state_args
+            self.tool_to_store_arg = self._static_resolver.tool_to_store_arg
+
+    def _get_resolver(
+        self,
+        input: Union[list[AnyMessage], dict[str, Any], BaseModel],
+        config: Optional[RunnableConfig],
+        store: Optional[BaseStore],
+    ) -> ToolResolver:
+        """Get the appropriate ToolResolver for this execution.
+
+        Args:
+            input: The input to the tool node
+            config: The runnable configuration
+            store: The optional store instance
+
+        Returns:
+            A ToolResolver containing the tools and metadata for this execution.
+
+        Raises:
+            RuntimeError: If no tools are configured.
+        """
+        if self._tool_provider_fn:
+            # Dynamic tools compute fresh for each run
+            # Note: config may be None during _parse_input,
+            # but tool provider should handle this
+            tools = self._tool_provider_fn(input, config, store)
+            return ToolResolver.from_tools(tools)
+        elif self._static_resolver:
+            # Static tools - use cached resolver
+            return self._static_resolver
+        else:
+            raise RuntimeError("ToolNode has no tools configured")
 
     def _func(
         self,
@@ -358,12 +446,16 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store, config)
+        resolver = self._get_resolver(input, config, store)
         config_list = get_config_list(config, len(tool_calls))
         input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
             outputs = [
-                *executor.map(self._run_one, tool_calls, input_types, config_list)
+                *executor.map(
+                    lambda args: self._run_one(*args),
+                    list(zip(tool_calls, input_types, config_list, repeat(resolver))),
+                )
             ]
 
         return self._combine_tool_outputs(outputs, input_type)
@@ -379,9 +471,10 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store, config)
+        resolver = self._get_resolver(input, config, store)
         outputs = await asyncio.gather(
-            *(self._arun_one(call, input_type, config) for call in tool_calls)
+            *(self._arun_one(call, input_type, config, resolver) for call in tool_calls)
         )
 
         return self._combine_tool_outputs(outputs, input_type)
@@ -435,20 +528,23 @@ class ToolNode(RunnableCallable):
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
+        resolver: ToolResolver,
     ) -> ToolMessage:
-        if invalid_tool_message := self._validate_tool_call(call):
+        if invalid_tool_message := self._validate_tool_call(call, resolver):
             return invalid_tool_message
 
         try:
             input = {**call, **{"type": "tool_call"}}
-            response = self.tools_by_name[call["name"]].invoke(input, config)
+            response = resolver.tools_by_name[call["name"]].invoke(input, config)
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
         # (1) a NodeInterrupt is raised inside a tool
         # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
-        # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
-        # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
+        # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph
+        #     called as a tool
+        # ---
+        # (2) and (3) can happen in a "supervisor w/ tools" multi-agent architecture
         except GraphBubbleUp as e:
             raise e
         except Exception as e:
@@ -490,20 +586,23 @@ class ToolNode(RunnableCallable):
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
+        resolver: ToolResolver,
     ) -> ToolMessage:
-        if invalid_tool_message := self._validate_tool_call(call):
+        if invalid_tool_message := self._validate_tool_call(call, resolver):
             return invalid_tool_message
 
         try:
             input = {**call, **{"type": "tool_call"}}
-            response = await self.tools_by_name[call["name"]].ainvoke(input, config)
+            response = await resolver.tools_by_name[call["name"]].ainvoke(input, config)
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
         # (1) a NodeInterrupt is raised inside a tool
         # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
-        # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
-        # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
+        # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph
+        #     called as a tool
+        # ---
+        # (2) and (3) can happen in a "supervisor w/ tools" multi-agent architecture
         except GraphBubbleUp as e:
             raise e
         except Exception as e:
@@ -549,7 +648,10 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        config: RunnableConfig,
     ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
+        """Parse the input to extract tool calls and determine input type."""
+        input_type: Literal["list", "dict", "tool_calls"]
         if isinstance(input, list):
             if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
                 input_type = "tool_calls"
@@ -573,17 +675,22 @@ class ToolNode(RunnableCallable):
         except StopIteration:
             raise ValueError("No AIMessage found in input")
 
+        # For _parse_input, we need to compute the resolver to inject tool args
+        # We pass None for config since we don't have it yet at this stage
+        resolver = self._get_resolver(input, config=config, store=store)
         tool_calls = [
-            self.inject_tool_args(call, input, store)
+            self.inject_tool_args(call, input, store, resolver)
             for call in latest_ai_message.tool_calls
         ]
         return tool_calls, input_type
 
-    def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
-        if (requested_tool := call["name"]) not in self.tools_by_name:
+    def _validate_tool_call(
+        self, call: ToolCall, resolver: ToolResolver
+    ) -> Optional[ToolMessage]:
+        if (requested_tool := call["name"]) not in resolver.tools_by_name:
             content = INVALID_TOOL_NAME_ERROR_TEMPLATE.format(
                 requested_tool=requested_tool,
-                available_tools=", ".join(self.tools_by_name.keys()),
+                available_tools=", ".join(resolver.tools_by_name.keys()),
             )
             return ToolMessage(
                 content, name=requested_tool, tool_call_id=call["id"], status="error"
@@ -599,8 +706,9 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
+        resolver: ToolResolver,
     ) -> ToolCall:
-        state_args = self.tool_to_state_args[tool_call["name"]]
+        state_args = resolver.tool_to_state_args[tool_call["name"]]
         if state_args and isinstance(input, list):
             required_fields = list(state_args.values())
             if (
@@ -637,9 +745,9 @@ class ToolNode(RunnableCallable):
         return tool_call
 
     def _inject_store(
-        self, tool_call: ToolCall, store: Optional[BaseStore]
+        self, tool_call: ToolCall, store: Optional[BaseStore], resolver: ToolResolver
     ) -> ToolCall:
-        store_arg = self.tool_to_store_arg[tool_call["name"]]
+        store_arg = resolver.tool_to_store_arg[tool_call["name"]]
         if not store_arg:
             return tool_call
 
@@ -664,6 +772,8 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        # TODO(EUGENE): Potentially breaking change?
+        resolver: Optional[ToolResolver] = None,
     ) -> ToolCall:
         """Inject graph state and store into tool call arguments.
 
@@ -683,6 +793,8 @@ class ToolNode(RunnableCallable):
                 Can be a message list, state dictionary, or BaseModel instance.
             store: The persistent store instance to inject into tools requiring storage.
                 Will be None if no store is configured for the graph.
+            resolver: The ToolResolver instance containing metadata about available
+                tools, including their state and store injection requirements.
 
         Returns:
             A new ToolCall dictionary with the same structure as the input but with
@@ -698,12 +810,17 @@ class ToolNode(RunnableCallable):
             The injection is performed on a copy of the tool call to avoid mutating
             the original.
         """
-        if tool_call["name"] not in self.tools_by_name:
+
+        resolver_ = resolver or self._static_resolver
+
+        if tool_call["name"] not in resolver_.tools_by_name:
             return tool_call
 
         tool_call_copy: ToolCall = copy(tool_call)
-        tool_call_with_state = self._inject_state(tool_call_copy, input)
-        tool_call_with_store = self._inject_store(tool_call_with_state, store)
+        tool_call_with_state = self._inject_state(tool_call_copy, input, resolver_)
+        tool_call_with_store = self._inject_store(
+            tool_call_with_state, store, resolver_
+        )
         return tool_call_with_store
 
     def _validate_tool_command(
