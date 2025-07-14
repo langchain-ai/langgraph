@@ -142,6 +142,7 @@ class ToolNode(RunnableCallable):
 
     Args:
         tools: A sequence of tools that can be invoked by the ToolNode.
+            Can be None if config_tools_key is provided.
         name: The name of the ToolNode in the graph. Defaults to "tools".
         tags: Optional tags to associate with the node. Defaults to None.
         handle_tool_errors: How to handle tool errors raised by tools inside the node. Defaults to True.
@@ -159,6 +160,10 @@ class ToolNode(RunnableCallable):
         messages_key: The state key in the input that contains the list of messages.
             The same key will be used for the output from the ToolNode.
             Defaults to "messages".
+        config_tools_key: The key in config["configurable"] that holds a list of tools
+            to be used at runtime. Tools from config are merged with those provided at
+            initialization time (with config tools taking precedence in case of name conflicts).
+            Set to None to disable runtime tool configuration. Defaults to "tools".
 
     The `ToolNode` is roughly analogous to:
 
@@ -188,6 +193,28 @@ class ToolNode(RunnableCallable):
         return [Send("tools", [tool_call]) for tool_call in tool_calls]
     ```
 
+    Runtime tools configuration example:
+
+    ```python
+    # Define tools
+    @tool
+    def add(a: int, b: int) -> int:
+        return a + b
+
+    @tool
+    def multiply(a: int, b: int) -> int:
+        return a * b
+
+    # Create ToolNode with runtime configuration enabled
+    tool_node = ToolNode(config_tools_key="tools")
+
+    # Use with different tool sets at runtime
+    graph.invoke(
+        {"messages": messages},
+        config={"configurable": {"tools": [add, multiply]}}
+    )
+    ```
+
     Important:
         - The input state can be one of the following:
             - A dict with a messages key containing a list of messages.
@@ -195,13 +222,15 @@ class ToolNode(RunnableCallable):
             - A list of tool calls.
         - If operating on a message list, the last message must be an `AIMessage` with
             `tool_calls` populated.
+        - At least one source of tools must be provided (either via `tools` parameter
+            or by setting `config_tools_key`).
     """
 
     name: str = "ToolNode"
 
     def __init__(
         self,
-        tools: Sequence[Union[BaseTool, Callable]],
+        tools: Optional[Sequence[Union[BaseTool, Callable]]] = None,
         *,
         name: str = "tools",
         tags: Optional[list[str]] = None,
@@ -209,6 +238,7 @@ class ToolNode(RunnableCallable):
             bool, str, Callable[..., str], tuple[type[Exception], ...]
         ] = True,
         messages_key: str = "messages",
+        config_tools_key: Optional[str] = "tools",
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: dict[str, BaseTool] = {}
@@ -216,12 +246,38 @@ class ToolNode(RunnableCallable):
         self.tool_to_store_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
+        self.config_tools_key = config_tools_key
+
+        if not tools and config_tools_key is None:
+            raise ValueError(
+                "ToolNode requires at least one source of tools. "
+                "Provide `tools` at construction time or specify `config_tools_key`."
+            )
+
+        tools = tools or []
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
                 tool_ = create_tool(tool_)
             self.tools_by_name[tool_.name] = tool_
             self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
             self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
+
+    def _normalize_tools(
+        self, tools: Sequence[Union[BaseTool, Callable]]
+    ) -> tuple[dict[str, BaseTool], dict[str, dict[str, Optional[str]]], dict[str, Optional[str]]]:
+        """Convert incoming tools into a name -> BaseTool mapping with metadata."""
+        mapping: dict[str, BaseTool] = {}
+        state_args: dict[str, dict[str, Optional[str]]] = {}
+        store_args: dict[str, Optional[str]] = {}
+        
+        for tool in tools:
+            if not isinstance(tool, BaseTool):
+                tool = create_tool(tool)
+            mapping[tool.name] = tool
+            state_args[tool.name] = _get_state_args(tool)
+            store_args[tool.name] = _get_store_arg(tool)
+        
+        return mapping, state_args, store_args
 
     def _func(
         self,
@@ -234,12 +290,40 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        # Merge compile-time tools with any runtime-supplied tools
+        runtime_tools_seq: Sequence[Union[BaseTool, Callable]] = []
+        if self.config_tools_key is not None:
+            runtime_tools_seq = (
+                config.get("configurable", {}).get(self.config_tools_key, []) or []
+            )
+
+        runtime_tools, runtime_state_args, runtime_store_args = self._normalize_tools(runtime_tools_seq)
+        
+        merged_tools_by_name = {
+            **self.tools_by_name,
+            **runtime_tools,
+        }
+        merged_state_args = {
+            **self.tool_to_state_args,
+            **runtime_state_args,
+        }
+        merged_store_args = {
+            **self.tool_to_store_arg,
+            **runtime_store_args,
+        }
+
+        tool_calls, input_type = self._parse_input(input, store, merged_state_args, merged_store_args)
         config_list = get_config_list(config, len(tool_calls))
         input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
             outputs = [
-                *executor.map(self._run_one, tool_calls, input_types, config_list)
+                *executor.map(
+                    self._run_one,
+                    tool_calls,
+                    input_types,
+                    config_list,
+                    [merged_tools_by_name] * len(tool_calls),
+                )
             ]
 
         return self._combine_tool_outputs(outputs, input_type)
@@ -255,9 +339,35 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+
+        runtime_tools_seq: Sequence[Union[BaseTool, Callable]] = []
+        if self.config_tools_key is not None:
+            runtime_tools_seq = (
+                config.get("configurable", {}).get(self.config_tools_key, []) or []
+            )
+
+        runtime_tools, runtime_state_args, runtime_store_args = self._normalize_tools(runtime_tools_seq)
+        
+        merged_tools_by_name = {
+            **self.tools_by_name,
+            **runtime_tools,
+        }
+        merged_state_args = {
+            **self.tool_to_state_args,
+            **runtime_state_args,
+        }
+        merged_store_args = {
+            **self.tool_to_store_arg,
+            **runtime_store_args,
+        }
+
+        tool_calls, input_type = self._parse_input(input, store, merged_state_args, merged_store_args)
+
         outputs = await asyncio.gather(
-            *(self._arun_one(call, input_type, config) for call in tool_calls)
+            *(
+                self._arun_one(call, input_type, config, merged_tools_by_name)
+                for call in tool_calls
+            )
         )
 
         return self._combine_tool_outputs(outputs, input_type)
@@ -311,13 +421,14 @@ class ToolNode(RunnableCallable):
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
+        tools_by_name: dict[str, BaseTool],
     ) -> ToolMessage:
-        if invalid_tool_message := self._validate_tool_call(call):
+        if invalid_tool_message := self._validate_tool_call(call, tools_by_name):
             return invalid_tool_message
 
         try:
             input = {**call, **{"type": "tool_call"}}
-            response = self.tools_by_name[call["name"]].invoke(input, config)
+            response = tools_by_name[call["name"]].invoke(input, config)
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
@@ -366,13 +477,14 @@ class ToolNode(RunnableCallable):
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
+        tools_by_name: dict[str, BaseTool],
     ) -> ToolMessage:
-        if invalid_tool_message := self._validate_tool_call(call):
+        if invalid_tool_message := self._validate_tool_call(call, tools_by_name):
             return invalid_tool_message
 
         try:
             input = {**call, **{"type": "tool_call"}}
-            response = await self.tools_by_name[call["name"]].ainvoke(input, config)
+            response = await tools_by_name[call["name"]].ainvoke(input, config)
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
@@ -425,6 +537,8 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        state_args: dict[str, dict[str, Optional[str]]],
+        store_args: dict[str, Optional[str]],
     ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         if isinstance(input, list):
             if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
@@ -450,16 +564,18 @@ class ToolNode(RunnableCallable):
             raise ValueError("No AIMessage found in input")
 
         tool_calls = [
-            self.inject_tool_args(call, input, store)
+            self.inject_tool_args(call, input, store, state_args, store_args)
             for call in latest_ai_message.tool_calls
         ]
         return tool_calls, input_type
 
-    def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
-        if (requested_tool := call["name"]) not in self.tools_by_name:
+    def _validate_tool_call(
+        self, call: ToolCall, tools_by_name: dict[str, BaseTool]
+    ) -> Optional[ToolMessage]:
+        if (requested_tool := call["name"]) not in tools_by_name:
             content = INVALID_TOOL_NAME_ERROR_TEMPLATE.format(
                 requested_tool=requested_tool,
-                available_tools=", ".join(self.tools_by_name.keys()),
+                available_tools=", ".join(tools_by_name.keys()),
             )
             return ToolMessage(
                 content, name=requested_tool, tool_call_id=call["id"], status="error"
@@ -475,8 +591,9 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
+        state_args_mapping: dict[str, dict[str, Optional[str]]],
     ) -> ToolCall:
-        state_args = self.tool_to_state_args[tool_call["name"]]
+        state_args = state_args_mapping.get(tool_call["name"], {})
         if state_args and isinstance(input, list):
             required_fields = list(state_args.values())
             if (
@@ -513,9 +630,9 @@ class ToolNode(RunnableCallable):
         return tool_call
 
     def _inject_store(
-        self, tool_call: ToolCall, store: Optional[BaseStore]
+        self, tool_call: ToolCall, store: Optional[BaseStore], store_args_mapping: dict[str, Optional[str]]
     ) -> ToolCall:
-        store_arg = self.tool_to_store_arg[tool_call["name"]]
+        store_arg = store_args_mapping.get(tool_call["name"])
         if not store_arg:
             return tool_call
 
@@ -540,6 +657,8 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        state_args: Optional[dict[str, dict[str, Optional[str]]]] = None,
+        store_args: Optional[dict[str, Optional[str]]] = None,
     ) -> ToolCall:
         """Injects the state and store into the tool call.
 
@@ -552,16 +671,23 @@ class ToolNode(RunnableCallable):
             input: The input state
                 to inject.
             store: The store to inject.
+            state_args: Optional mapping of tool state args. If not provided, uses self.tool_to_state_args.
+            store_args: Optional mapping of tool store args. If not provided, uses self.tool_to_store_arg.
 
         Returns:
             ToolCall: The tool call with injected state and store.
         """
-        if tool_call["name"] not in self.tools_by_name:
+        # Use provided metadata or fall back to instance variables
+        state_args = state_args if state_args is not None else self.tool_to_state_args
+        store_args = store_args if store_args is not None else self.tool_to_store_arg
+        
+        # Check if tool exists in either compile-time or runtime tools
+        if tool_call["name"] not in state_args:
             return tool_call
 
         tool_call_copy: ToolCall = copy(tool_call)
-        tool_call_with_state = self._inject_state(tool_call_copy, input)
-        tool_call_with_store = self._inject_store(tool_call_with_state, store)
+        tool_call_with_state = self._inject_state(tool_call_copy, input, state_args)
+        tool_call_with_store = self._inject_store(tool_call_with_state, store, store_args)
         return tool_call_with_store
 
     def _validate_tool_command(
@@ -745,7 +871,7 @@ class InjectedState(InjectedToolArg):
             ToolMessage(content='bar2', name='foo_tool', tool_call_id='2')
         ]
         ```
-    """  # noqa: E501
+    """
 
     def __init__(self, field: Optional[str] = None) -> None:
         self.field = field
@@ -801,7 +927,7 @@ class InjectedStore(InjectedToolArg):
             ]
         }
         ```
-    """  # noqa: E501
+    """
 
 
 def _is_injection(

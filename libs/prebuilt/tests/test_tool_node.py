@@ -17,6 +17,7 @@ from pydantic.v1 import ValidationError as ValidationErrorV1
 from langgraph.errors import NodeInterrupt
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import TOOL_CALL_ERROR_TEMPLATE
+from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
 
 pytestmark = pytest.mark.anyio
@@ -1129,3 +1130,241 @@ def test_tool_node_parent_command_with_send():
             graph=Command.PARENT,
         )
     ]
+
+
+def test_tool_node_runtime_tools_from_config():
+    """ToolNode should use tools provided in runtime config when not defined at init."""
+
+    node = ToolNode(config_tools_key="extra_tools")
+
+    # Using tool1 which expects (some_val: int, some_other_val: str)
+    tool_call = {
+        "name": "tool1",
+        "args": {"some_val": 5, "some_other_val": "test"},
+        "id": "call_1",
+        "type": "tool_call",
+    }
+    messages = [AIMessage("", tool_calls=[tool_call])]
+
+    result = node.invoke(
+        {"messages": messages},
+        config={"configurable": {"extra_tools": [tool1]}},
+    )
+
+    tool_messages = result["messages"]
+    assert isinstance(tool_messages[0], ToolMessage)
+    assert tool_messages[0].content == "5 - test"
+
+
+async def test_tool_node_merge_init_and_runtime_tools():
+    """Runtime tools should merge with init-time tools."""
+
+    # Start with tool1 at compile time
+    node = ToolNode(tools=[tool1], config_tools_key="tools")
+
+    # Runtime provides tool2 (async tool)
+    tool_call = {
+        "name": "tool2",
+        "args": {"some_val": 3, "some_other_val": "bar"},
+        "id": "call_2",
+        "type": "tool_call",
+    }
+    messages = [AIMessage("", tool_calls=[tool_call])]
+
+    result = await node.ainvoke(
+        {"messages": messages},
+        config={"configurable": {"tools": [tool2]}},
+    )
+
+    tool_messages = result["messages"]
+    assert tool_messages[0].content == "tool2: 3 - bar"
+
+
+def test_tool_node_constructor_requires_tool_source():
+    """It should be an error to create ToolNode without any tool source."""
+
+    with pytest.raises(ValueError) as exc_info:
+        ToolNode(config_tools_key=None)
+    
+    assert "requires at least one source of tools" in str(exc_info.value)
+
+
+def test_tool_node_runtime_tools_with_injected_state():
+    """Test that runtime tools with InjectedState work correctly."""
+    from langgraph.prebuilt import InjectedState
+    
+    @dec_tool
+    def get_user_info(query: str, state: Annotated[dict, InjectedState]) -> str:
+        """Get info based on user's name from state"""
+        user_name = state.get("user_name", "Unknown")
+        return f"User {user_name} asked: {query}"
+    
+    # Create ToolNode with runtime tools only
+    node = ToolNode(config_tools_key="tools")
+    
+    # Create tool call - note that LLM only generates 'query' arg, not 'state'
+    tool_call = {
+        "name": "get_user_info",
+        "args": {"query": "what's the weather?"},  # No 'state' arg here
+        "id": "call_1",
+        "type": "tool_call",
+    }
+    
+    state = {
+        "messages": [AIMessage("", tool_calls=[tool_call])],
+        "user_name": "Alice"
+    }
+    
+    # Verify that runtime tools with InjectedState are handled correctly
+    result = node.invoke(
+        state,
+        config={"configurable": {"tools": [get_user_info]}}
+    )
+    
+    # Assertion verifies correct behavior
+    tool_message = result["messages"][0]
+    assert tool_message.content == "User Alice asked: what's the weather?"
+
+
+async def test_tool_node_runtime_tools_with_injected_store():
+    """Test that runtime tools with InjectedStore work correctly."""
+    from langgraph.prebuilt import InjectedStore
+    from langgraph.store.memory import InMemoryStore
+    
+    @dec_tool
+    def save_data(key: str, value: str, store: Annotated[BaseStore, InjectedStore()]) -> str:
+        """Save data to store"""
+        store.put(("data",), key, {"value": value})
+        return f"Saved {value} to {key}"
+    
+    # Create store and ToolNode with runtime tools only
+    store = InMemoryStore()
+    node = ToolNode(config_tools_key="tools")
+    
+    # Create tool call - note that LLM only generates 'key' and 'value' args, not 'store'
+    tool_call = {
+        "name": "save_data",
+        "args": {"key": "test_key", "value": "test_value"},  # No 'store' arg
+        "id": "call_1",
+        "type": "tool_call",
+    }
+    
+    messages = [AIMessage("", tool_calls=[tool_call])]
+    
+    # Verify that runtime tools with InjectedStore are handled correctly
+    result = await node.ainvoke(
+        {"messages": messages},
+        config={"configurable": {"tools": [save_data]}},
+        store=store
+    )
+    
+    # Verify the result
+    tool_message = result["messages"][0]
+    assert tool_message.content == "Saved test_value to test_key"
+    
+    # Verify data was actually saved to store
+    stored = store.get(("data",), "test_key")
+    assert stored.value["value"] == "test_value"
+
+
+def test_tool_node_runtime_tools_comprehensive():
+    """Test comprehensive scenarios for runtime tools."""
+    from langgraph.prebuilt import InjectedState, InjectedStore
+    from langgraph.store.memory import InMemoryStore
+    from langchain_core.tools.base import InjectedToolCallId
+    
+    # Tool with multiple injections
+    @dec_tool
+    def complex_tool(
+        x: int,
+        state: Annotated[dict, InjectedState],
+        store: Annotated[BaseStore, InjectedStore()],
+        tool_call_id: Annotated[str, InjectedToolCallId],
+    ) -> str:
+        """Complex tool with multiple injections"""
+        user_name = state.get("user_name", "Unknown")
+        store.put(("calls",), tool_call_id, {"user": user_name, "x": x})
+        return f"User {user_name} called with x={x}, saved to {tool_call_id}"
+    
+    # Tool that will be overridden
+    @dec_tool
+    def simple_tool(x: int) -> str:
+        """Simple tool - compile time version"""
+        return f"Compile-time: x={x}"
+    
+    # Runtime version of the same tool
+    @dec_tool 
+    def simple_tool_runtime(x: int) -> str:
+        """Simple tool - runtime version"""
+        return f"Runtime: x={x}"
+    simple_tool_runtime.name = "simple_tool"  # Same name to test override
+    
+    # Create node with compile-time tool
+    store = InMemoryStore()
+    node = ToolNode(tools=[simple_tool], config_tools_key="tools")
+    
+    # Test 1: Runtime tool with multiple injections
+    tool_call_complex = {
+        "name": "complex_tool",
+        "args": {"x": 42},
+        "id": "complex_call_1",
+        "type": "tool_call",
+    }
+    
+    state = {
+        "messages": [AIMessage("", tool_calls=[tool_call_complex])],
+        "user_name": "Bob"
+    }
+    
+    result = node.invoke(
+        state,
+        config={"configurable": {"tools": [complex_tool]}},
+        store=store
+    )
+    
+    assert result["messages"][0].content == "User Bob called with x=42, saved to complex_call_1"
+    
+    # Verify store was updated
+    stored_call = store.get(("calls",), "complex_call_1")
+    assert stored_call.value == {"user": "Bob", "x": 42}
+    
+    # Test 2: Runtime tool overrides compile-time tool
+    tool_call_simple = {
+        "name": "simple_tool",
+        "args": {"x": 10},
+        "id": "simple_call_1",
+        "type": "tool_call",
+    }
+    
+    # Without runtime override
+    result1 = node.invoke(
+        {"messages": [AIMessage("", tool_calls=[tool_call_simple])]}
+    )
+    assert result1["messages"][0].content == "Compile-time: x=10"
+    
+    # With runtime override
+    result2 = node.invoke(
+        {"messages": [AIMessage("", tool_calls=[tool_call_simple])]},
+        config={"configurable": {"tools": [simple_tool_runtime]}}
+    )
+    assert result2["messages"][0].content == "Runtime: x=10"
+    
+    # Test 3: Mix of compile-time and runtime tools
+    tool_calls_mixed = [
+        {"name": "simple_tool", "args": {"x": 1}, "id": "id1", "type": "tool_call"},
+        {"name": "complex_tool", "args": {"x": 2}, "id": "id2", "type": "tool_call"},
+    ]
+    
+    result3 = node.invoke(
+        {
+            "messages": [AIMessage("", tool_calls=tool_calls_mixed)],
+            "user_name": "Alice"
+        },
+        config={"configurable": {"tools": [complex_tool]}},
+        store=store
+    )
+    
+    # First call uses compile-time tool
+    assert result3["messages"][0].content == "Compile-time: x=1"
+    # Second call uses runtime tool with injections
+    assert result3["messages"][1].content == "User Alice called with x=2, saved to id2"
