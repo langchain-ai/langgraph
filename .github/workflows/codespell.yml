@@ -39,7 +39,6 @@
               skip: '*.ambr,*.lock,*.ipynb,*.yaml,*.zlib,*.css.map,*.js.map'
               builtin: clear, rare, code
               ignore_words_list: ${{ steps.extract_ignore_words.outputs.ignore_words_list }}
-              path: docs
           # We do this to avoid spellchecking cell outputs
           - name: Codespell Notebooks
             run: make codespell
