@@ -349,6 +349,8 @@ class entrypoint:
         long as the same thread id is used.
 
         ```python
+        from typing import Any
+        
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.func import entrypoint
 
