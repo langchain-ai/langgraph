@@ -856,8 +856,6 @@ class InjectedState(InjectedToolArg):
             processing the full state structure.
 
     Example:
-        Injecting the entire state:
-
         ```python
         from typing import List
         from typing_extensions import Annotated, TypedDict
@@ -1032,9 +1030,6 @@ def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
     Returns:
         A dictionary mapping tool argument names to state field names. If a field
         name is None, the entire state should be injected for that argument.
-
-    Raises:
-        ValueError: If a tool argument has multiple InjectedState annotations.
     """
     full_schema = tool.get_input_schema()
     tool_args_to_state_fields: dict = {}
