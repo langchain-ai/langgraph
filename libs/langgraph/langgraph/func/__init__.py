@@ -325,6 +325,8 @@ class entrypoint:
         of the previous invocation on the same thread id.
 
         ```python
+        from typing import Optional
+        
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.func import entrypoint
 
