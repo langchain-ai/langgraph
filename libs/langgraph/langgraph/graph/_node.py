@@ -12,7 +12,6 @@ from langgraph.constants import EMPTY_SEQ
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import CachePolicy, RetryPolicy, StreamWriter
-
 from langgraph.typing import ContextT, NodeInputT, NodeInputT_contra
 
 _DC_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
@@ -64,7 +63,9 @@ class _NodeWithConfigWriterStore(Protocol[NodeInputT_contra]):
 
 
 class _NodeWithRuntime(Protocol[NodeInputT_contra, ContextT]):
-    def __call__(self, state: NodeInputT_contra, *, runtime: Runtime[ContextT]) -> Any: ...
+    def __call__(
+        self, state: NodeInputT_contra, *, runtime: Runtime[ContextT]
+    ) -> Any: ...
 
 
 # TODO: we probably don't want to explicitly support the config / store signatures once
@@ -79,13 +80,14 @@ StateNode: TypeAlias = Union[
     _NodeWithConfigWriter[NodeInputT],
     _NodeWithConfigStore[NodeInputT],
     _NodeWithConfigWriterStore[NodeInputT],
+    _NodeWithRuntime[NodeInputT, ContextT],
     Runnable[NodeInputT, Any],
 ]
 
 
 @dataclass(**_DC_SLOTS)
-class StateNodeSpec(Generic[NodeInputT]):
-    runnable: StateNode[NodeInputT]
+class StateNodeSpec(Generic[NodeInputT, ContextT]):
+    runnable: StateNode[NodeInputT, ContextT]
     metadata: dict[str, Any] | None
     input_schema: type[NodeInputT]
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None

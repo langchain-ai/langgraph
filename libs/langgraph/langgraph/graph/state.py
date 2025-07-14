@@ -85,7 +85,7 @@ from langgraph.types import (
     Send,
 )
 from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
-from langgraph.warnings import LangGraphDeprecatedSinceV05
+from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 
 if sys.version_info < (3, 10):
     NoneType = type(None)
@@ -279,7 +279,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     @overload
     def add_node(
         self,
-        node: StateNode[StateT, ContextT],
+        node: StateNode[NodeInputT, ContextT],
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -297,7 +297,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     @overload
     def add_node(
         self,
-        node: StateNode[StateT, ContextT],
+        node: StateNode[NodeInputT, ContextT],
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -316,7 +316,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     def add_node(
         self,
         node: str,
-        action: StateNode[StateT, ContextT],
+        action: StateNode[NodeInputT, ContextT],
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -332,8 +332,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     @overload
     def add_node(
         self,
-        node: str | StateNode[StateT, ContextT],
-        action: StateNode[StateT, ContextT] | None = None,
+        node: str | StateNode[NodeInputT, ContextT],
+        action: StateNode[NodeInputT, ContextT] | None = None,
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -348,8 +348,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     def add_node(
         self,
-        node: str | StateNode[StateT, ContextT] | StateNode[NodeInputT],
-        action: StateNode[StateT, ContextT] | StateNode[NodeInputT] | None = None,
+        node: str | StateNode[NodeInputT, ContextT],
+        action: StateNode[NodeInputT, ContextT] | None = None,
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -514,8 +514,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             ends = destinations
 
         if input_schema is not None:
-            self.nodes[node] = StateNodeSpec[NodeInputT](
-                coerce_to_runnable(action, name=node, trace=False),
+            self.nodes[node] = StateNodeSpec[NodeInputT, ContextT](
+                coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
                 metadata,
                 input_schema=input_schema,
                 retry_policy=retry_policy,
@@ -525,7 +525,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             )
         elif inferred_input_schema is not None:
             self.nodes[node] = StateNodeSpec(
-                coerce_to_runnable(action, name=node, trace=False),
+                coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
                 metadata,
                 input_schema=inferred_input_schema,
                 retry_policy=retry_policy,
@@ -534,8 +534,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 defer=defer,
             )
         else:
-            self.nodes[node] = StateNodeSpec[StateT](
-                coerce_to_runnable(action, name=node, trace=False),
+            self.nodes[node] = StateNodeSpec[StateT, ContextT](
+                coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
                 metadata,
                 input_schema=self.state_schema,
                 retry_policy=retry_policy,
