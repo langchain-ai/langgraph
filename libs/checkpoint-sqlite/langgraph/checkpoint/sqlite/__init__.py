@@ -29,7 +29,7 @@ _AIO_ERROR_MSG = (
     "from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver\n"
     "Note: AsyncSqliteSaver requires the aiosqlite package to use.\n"
     "Install with:\n`pip install aiosqlite`\n"
-    "See https://langchain-ai.github.io/langgraph/reference/checkpoints/asyncsqlitesaver"
+    "See https://langchain-ai.github.io/langgraph/reference/checkpoints/#langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver"
     "for more information."
 )
 
@@ -519,7 +519,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             Use list() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
-        yield
+
 
     async def aput(
         self,
