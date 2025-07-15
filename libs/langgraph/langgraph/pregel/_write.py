@@ -14,7 +14,8 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 
 from langgraph._internal._runnable import RunnableCallable
-from langgraph.constants import CONF, CONFIG_KEY_SEND, MISSING, TASKS
+from langgraph._internal._typing import MISSING
+from langgraph.constants import CONF, CONFIG_KEY_SEND, TASKS
 from langgraph.errors import InvalidUpdateError
 from langgraph.types import Send
 

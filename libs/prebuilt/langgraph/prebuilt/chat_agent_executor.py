@@ -36,7 +36,7 @@ from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
-from langgraph._internal._typing import UNSET
+from langgraph._internal._typing import MISSING
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
@@ -405,7 +405,9 @@ def create_react_agent(
             print(chunk)
         ```
     """
-    if (config_schema := deprecated_kwargs.pop("config_schema", UNSET)) is not UNSET:
+    if (
+        config_schema := deprecated_kwargs.pop("config_schema", MISSING)
+    ) is not MISSING:
         warn(
             "`config_schema` is no longer supported. Use `context_schema` instead.",
             category=LangGraphDeprecatedSinceV10,

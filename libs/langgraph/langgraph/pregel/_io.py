@@ -4,12 +4,11 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Literal
 
+from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import (
-    EMPTY_SEQ,
     ERROR,
     INTERRUPT,
-    MISSING,
     NULL_TASK_ID,
     RESUME,
     RETURN,

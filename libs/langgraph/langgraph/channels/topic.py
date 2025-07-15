@@ -5,8 +5,8 @@ from typing import Any, Generic, Union
 
 from typing_extensions import Self
 
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
 __all__ = ("Topic",)

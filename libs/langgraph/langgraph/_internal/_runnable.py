@@ -48,7 +48,7 @@ from langgraph._internal._config import (
     get_callback_manager_for_config,
     patch_config,
 )
-from langgraph._internal._typing import UNSET
+from langgraph._internal._typing import MISSING
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_RUNTIME,
@@ -335,7 +335,7 @@ class RunnableCallable(Runnable):
             if kw in kwargs:
                 continue
 
-            kw_value: Any = UNSET
+            kw_value: Any = MISSING
             if kw == "config":
                 kw_value = config
             elif runtime:
@@ -347,7 +347,7 @@ class RunnableCallable(Runnable):
                     except AttributeError:
                         pass
 
-            if kw_value is UNSET:
+            if kw_value is MISSING:
                 if default is inspect.Parameter.empty:
                     raise ValueError(
                         f"Missing required config key '{runtime_key}' for '{self.name}'."
@@ -407,7 +407,7 @@ class RunnableCallable(Runnable):
             if kw in kwargs:
                 continue
 
-            kw_value: Any = UNSET
+            kw_value: Any = MISSING
             if kw == "config":
                 kw_value = config
             elif runtime:
@@ -418,7 +418,7 @@ class RunnableCallable(Runnable):
                         kw_value = getattr(runtime, runtime_key)
                     except AttributeError:
                         pass
-            if kw_value is UNSET:
+            if kw_value is MISSING:
                 if default is inspect.Parameter.empty:
                     raise ValueError(
                         f"Missing required config key '{runtime_key}' for '{self.name}'."

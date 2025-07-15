@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
 from typing import Any, Generic
 
 from typing_extensions import Self
 
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
 __all__ = ("AnyValue",)
@@ -15,6 +17,8 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
     received, they are all equal."""
 
     __slots__ = ("typ", "value")
+
+    value: Value | Any
 
     def __init__(self, typ: Any, key: str = "") -> None:
         super().__init__(typ, key)

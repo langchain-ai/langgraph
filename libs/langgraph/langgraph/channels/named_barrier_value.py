@@ -3,8 +3,8 @@ from typing import Generic
 
 from typing_extensions import Self
 
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 __all__ = ("NamedBarrierValue", "NamedBarrierValueAfterFinish")
