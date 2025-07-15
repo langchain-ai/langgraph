@@ -4,6 +4,8 @@ import argparse
 
 import requests
 from langchain_anthropic import ChatAnthropic
+from textwrap import dedent
+
 
 # Load reference TypeScript snippets
 URL = "https://gist.githubusercontent.com/dqbd/b35d49e2ceec80e654fe1c5ab61ec477/raw/f4768aeedb67628190a4e06d063a938afc8e7672/snippets.md"
@@ -13,6 +15,80 @@ reference_snippets = response.text
 
 # Initialize model
 model = ChatAnthropic(model="claude-sonnet-4-0", max_tokens=64_000)
+
+
+FLUENT_INTERFACE_PROMPT = (
+    "CRITICAL: Always use method chaining (fluent interface) for StateGraph operations in TypeScript. "
+    "Never create separate variables for the graph builder or call methods individually. "
+    "The fluent interface provides better type safety and is the preferred pattern.\n\n"
+    "CORRECT examples with fluent interface:\n"
+    + dedent(
+        """
+        ```typescript
+        const graph = new StateGraph(MyState)
+          .addNode('node1', node1)
+          .addNode('node2', node2)
+          .addEdge(START, 'node1')
+          .addEdge('node1', 'node2')
+          .addEdge('node2', END)
+          .compile()
+        ```
+        
+        ```typescript
+        const graph = new StateGraph(MyState)
+          .addNode('chatbot', chatbot)
+          .addEdge(START, 'chatbot')
+          .addEdge('chatbot', END)
+          .compile()
+        ```
+        
+        ```typescript
+        const graph = new StateGraph(MyState)
+          .addNode('chatbot', chatbot)
+          .addEdge(START, 'chatbot')
+          .addEdge('chatbot', END)
+          .compile()
+        ```
+        """
+    )
+    + "\n"
+    + "INCORRECT examples to avoid:\n"
+    + dedent(
+        """
+        ```typescript
+        // WRONG: Creating separate builder variable
+        const graphBuilder = new StateGraph(MyState)
+        graphBuilder.addNode('node1', node1)
+        graphBuilder.addEdge(START, 'node1')
+        const graph = graphBuilder.compile()
+        ```
+        
+        ```typescript
+        // WRONG: Using Python-style method names
+        const workflow = new StateGraph(MyState)
+        workflow.add_node('node1', node1)
+        workflow.add_edge(START, 'node1')
+        const graph = workflow.compile()
+        ```
+        
+        ```typescript
+        // WRONG: Calling methods individually
+        const graphBuilder = new StateGraph(MyState)
+        graphBuilder.addNode('chatbot', chatbot)
+        graphBuilder.addEdge(START, 'chatbot')
+        graphBuilder.addEdge('chatbot', END)
+        const graph = graphBuilder.compile()
+        ```
+        """
+    )
+    + "\n"
+    + "Key rules:\n"
+    + "- Always chain methods directly on the StateGraph constructor\n"
+    + "- Use camelCase method names (addNode, addEdge, not add_node, add_edge)\n"
+    + "- Always end with .compile()\n"
+    + "- Never store the builder in a separate variable\n"
+)
+
 
 TRANSLATION_PROMPT = (
     "You are a helpful assistant that translates Python-based technical "
@@ -32,8 +108,12 @@ TRANSLATION_PROMPT = (
     "the translation. "
     "Use the reference TypeScript snippets as guidance whenever possible to "
     "maintain alignment with existing conventions.\n\n"
-    "Use Zod for state definition for StateGraph. Avoid using Annotation since it will be deprecated in the future.\n\n"
-    "Prefer method chaining (fluent interface) to StateGraph builder over calling methods manually, since the types are more accurate.\n\n"
+    "IMPORTANT REQUIREMENTS:\n"
+    "- Use Zod for state definition for StateGraph. Avoid using Annotation since it will be deprecated in the future.\n"
+    "- ALWAYS use fluent interface (method chaining) for StateGraph operations - this is CRITICAL\n"
+    "- Never create separate variables for graph builders\n"
+    "- Always chain methods directly on the StateGraph constructor and end with .compile()\n\n"
+    f"{FLUENT_INTERFACE_PROMPT}\n\n"
     f"Here are the reference TypeScript snippets:\n\n{reference_snippets}\n\n"
 )
 
