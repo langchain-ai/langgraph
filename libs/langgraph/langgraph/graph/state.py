@@ -34,7 +34,7 @@ from langgraph._internal._fields import (
 )
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
-from langgraph._internal._typing import UNSET, DeprecatedKwargs
+from langgraph._internal._typing import EMPTY_SEQ, UNSET, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -46,7 +46,6 @@ from langgraph.channels.named_barrier_value import (
 )
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.constants import (
-    EMPTY_SEQ,
     END,
     INTERRUPT,
     MISSING,

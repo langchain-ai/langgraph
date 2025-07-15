@@ -52,3 +52,6 @@ UNSET: Unset = Unset()
 
 class DeprecatedKwargs(TypedDict):
     """TypedDict to use for extra keyword arguments, enabling type checking warnings for deprecated arguments."""
+
+
+EMPTY_SEQ: tuple[str, ...] = tuple()

@@ -32,7 +32,6 @@ def __getattr__(name: str) -> Any:
 
 
 # --- Empty read-only containers ---
-EMPTY_SEQ: tuple[str, ...] = tuple()
 MISSING = object()
 
 # --- Public constants ---

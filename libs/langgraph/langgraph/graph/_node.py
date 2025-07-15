@@ -8,7 +8,7 @@ from typing import Any, Generic, Protocol, Union
 from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import TypeAlias
 
-from langgraph.constants import EMPTY_SEQ
+from langgraph._internal._typing import EMPTY_SEQ
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import CachePolicy, RetryPolicy, StreamWriter

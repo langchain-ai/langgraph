@@ -4,9 +4,9 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Literal
 
+from langgraph._internal._typing import EMPTY_SEQ
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import (
-    EMPTY_SEQ,
     ERROR,
     INTERRUPT,
     MISSING,
