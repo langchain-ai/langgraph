@@ -88,7 +88,6 @@ The `langchain-mcp-adapters` package enables agents to use tools defined across 
     # Create ToolNode
     tool_node = ToolNode(tools)
 
-    # Define should_continue function
     def should_continue(state: MessagesState):
         messages = state["messages"]
         last_message = messages[-1]
