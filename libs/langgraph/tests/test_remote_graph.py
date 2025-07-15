@@ -1,5 +1,6 @@
 import re
 import sys
+import uuid
 from typing import Annotated, Optional, Union
 from unittest.mock import AsyncMock, MagicMock
 
@@ -989,6 +990,8 @@ def test_sanitize_config():
             "invalid": lambda x: x,  # Should be removed
             "tuple": (1, 2, 3),  # Should be converted to list
         },
+        "run_id": uuid.uuid4(), # Should be converted to string
+        "max_concurrency": None, # Should be removed
     }
     sanitized = remote._sanitize_config(complex_config)
     assert sanitized["tags"] == ["tag1", "tag2"]
@@ -997,6 +1000,9 @@ def test_sanitize_config():
         "list": [1, 2, "three"],
         "tuple": [1, 2, 3],
     }
+    assert sanitized["run_id"] is not None
+    assert isinstance(sanitized["run_id"], str)
+    assert "max_concurrency" not in sanitized
     assert "invalid" not in sanitized["metadata"]
 
     # Test 3: Config with configurable fields that should be dropped
