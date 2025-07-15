@@ -116,8 +116,15 @@ def set_warranty_status(
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
     """Set whether device is under warranty"""
+    # Determine next step based on warranty status
+    if value == "out":
+        next_step = "ask_repair_or_continue"
+    else:
+        next_step = "ask_issue_type"
+    
     return Command(update={
         "warranty_status": value,
+        "workflow_step": next_step,
         "messages": [ToolMessage(content=f"Warranty status set to '{value}'",
                                  tool_call_id=tool_call_id)]
     })
@@ -128,8 +135,15 @@ def set_wants_human_help(
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
     """Set whether user wants human help for out-of-warranty device"""
+    # If they want human help, escalate; otherwise continue to issue classification
+    if value:
+        next_step = "escalate"
+    else:
+        next_step = "ask_issue_type"
+    
     return Command(update={
         "wants_human_help": value,
+        "workflow_step": next_step,
         "messages": [
             ToolMessage(content=f"Wants human help: {value}", tool_call_id=tool_call_id)]
     })
@@ -140,8 +154,15 @@ def set_issue_type(
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
     """Classify the issue as hardware or software related"""
+    # Hardware issues escalate immediately; software issues go to troubleshooting
+    if value == "hardware":
+        next_step = "escalate"
+    else:
+        next_step = "check_troubleshooting"
+    
     return Command(update={
         "issue_type": value,
+        "workflow_step": next_step,
         "messages": [
             ToolMessage(content=f"Issue type set to '{value}'", tool_call_id=tool_call_id)]
     })
@@ -152,10 +173,29 @@ def set_tried_basic_steps(
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
     """Record whether user has tried basic troubleshooting"""
+    # If they haven't tried basic steps, suggest them; otherwise offer solution
+    if not value:
+        next_step = "suggest_troubleshooting"
+    else:
+        next_step = "offer_solution"
+    
     return Command(update={
         "tried_basic_steps": value,
+        "workflow_step": next_step,
         "messages": [
             ToolMessage(content=f"Tried basic steps: {value}", tool_call_id=tool_call_id)]
+    })
+
+@tool
+def confirm_troubleshooting_done(
+        tool_call_id: Annotated[str, InjectedToolCallId]
+) -> Command:
+    """Confirm user has completed suggested troubleshooting steps"""
+    return Command(update={
+        "tried_basic_steps": True,
+        "workflow_step": "check_troubleshooting",
+        "messages": [
+            ToolMessage(content="Troubleshooting steps completed", tool_call_id=tool_call_id)]
     })
 
 @tool
@@ -164,8 +204,15 @@ def set_solution_successful(
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
     """Record whether the suggested solution worked"""
+    # If solution worked, success; otherwise escalate
+    if value:
+        next_step = "success"
+    else:
+        next_step = "escalate"
+    
     return Command(update={
         "solution_successful": value,
+        "workflow_step": next_step,
         "messages": [
             ToolMessage(content=f"Solution successful: {value}", tool_call_id=tool_call_id)]
     })
@@ -175,11 +222,12 @@ ALL_TOOLS = [
     set_wants_human_help,
     set_issue_type,
     set_tried_basic_steps,
+    confirm_troubleshooting_done,
     set_solution_successful,
 ]
 ```
 
-These tools allow the LLM to update the workflow state based on user responses. Each tool uses LangGraph's `Command` to update specific state fields while also adding a message to the conversation history.
+These tools now handle both state updates and workflow transitions. Each tool determines the next step in the workflow based on the user's response, eliminating the need for complex routing logic.
 
 ## 4. Set up the chat model
 
@@ -202,7 +250,7 @@ TOOL_MAP = {
     "ask_repair_or_continue": [set_wants_human_help],
     "ask_issue_type": [set_issue_type],
     "check_troubleshooting": [set_tried_basic_steps],
-    "suggest_troubleshooting": [set_tried_basic_steps],
+    "suggest_troubleshooting": [confirm_troubleshooting_done],
     "offer_solution": [set_solution_successful],
 }
 
@@ -238,7 +286,7 @@ def get_prompt_for_step(step: str) -> str:
         "suggest_troubleshooting": """
             Suggest they try restarting their device and updating the software/app.
             Ask them to try these steps and confirm once they're done.
-            Use the set_tried_basic_steps tool once they confirm they've tried.
+            Use the confirm_troubleshooting_done tool once they confirm they've tried.
             """,
 
         "offer_solution": """
@@ -257,8 +305,23 @@ The model node handles LLM interactions with the appropriate tools for each step
 ```python
 
 
-async def call_model(state: State) -> Dict[str, List[AIMessage]]:
+async def call_model(state: State) -> Dict:
     """Call the LLM with appropriate tools for the current step"""
+    # Handle terminal states
+    if state.workflow_step == "success":
+        return {
+            "messages": [AIMessage(
+                content="Great! I'm glad we could resolve your issue. Is there anything else I can help you with today?")],
+            "is_last_step": True
+        }
+    elif state.workflow_step == "escalate":
+        return {
+            "messages": [AIMessage(
+                content="I'm going to connect you with one of our human support specialists who can better assist you with this issue. Please hold on while I transfer you.")],
+            "is_last_step": True
+        }
+    
+    # For regular workflow steps, get the appropriate prompt and tools
     prompt = get_prompt_for_step(state.workflow_step)
     tools = TOOL_MAP.get(state.workflow_step, [])
     model = llm.bind_tools(tools)
@@ -268,177 +331,61 @@ async def call_model(state: State) -> Dict[str, List[AIMessage]]:
     )
 
     return {"messages": [response]}
-```
 
-## 7. Build the routing logic
-
-The routing logic determines which step to execute next based on the current state:
-
-```python
-
-
-def route_workflow(state: State) -> Literal[
-    "check_warranty",
-    "ask_repair_or_continue",
-    "ask_issue_type",
-    "check_troubleshooting",
-    "suggest_troubleshooting",
-    "offer_solution",
-    "success",
-    "escalate"
-]:
-    """Route to the next step based on current state and user responses"""
-    step = state.workflow_step
-
-    # Step 1: Start with warranty check
-    if step == "start":
-        return "check_warranty"
-
-    # Step 1 → Step 2 or repair question
-    if step == "check_warranty":
-        if state.warranty_status == "out":
-            return "ask_repair_or_continue"
-        elif state.warranty_status == "in":
-            return "ask_issue_type"
-
-    # Out of warranty: continue troubleshooting or escalate
-    if step == "ask_repair_or_continue":
-        if state.wants_human_help:
-            return "escalate"
-        else:
-            return "ask_issue_type"
-
-    # Step 2: Hardware → escalate, Software → continue
-    if step == "ask_issue_type":
-        if state.issue_type == "hardware":
-            return "escalate"
-        elif state.issue_type == "software":
-            return "check_troubleshooting"
-
-    # Step 3: Check if they've tried basic steps
-    if step == "check_troubleshooting":
-        if state.tried_basic_steps is False:
-            return "suggest_troubleshooting"
-        elif state.tried_basic_steps is True:
-            return "offer_solution"
-
-    # Step 3 loop: After suggesting troubleshooting, check again
-    if step == "suggest_troubleshooting":
-        return "check_troubleshooting"
-
-    # Step 4: Solution worked → success, didn't work → escalate
-    if step == "offer_solution":
-        if state.solution_successful is True:
-            return "success"
-        elif state.solution_successful is False:
-            return "escalate"
-
-    # Default fallback
-    return "escalate"
-
-def route_model_output(state: State) -> Literal["tools", "route_workflow"]:
-    """Determine if we need to use tools or continue routing"""
+def should_continue(state: State) -> Literal["tools", "call_model", "__end__"]:
+    """Determine whether to call tools or continue with the model"""
+    # If we've reached a terminal state, stop
+    if state.is_last_step:
+        return "__end__"
+    
+    # If the last message has tool calls, execute them
     last_msg = state.messages[-1]
     if isinstance(last_msg, AIMessage) and last_msg.tool_calls:
         return "tools"
-    return "route_workflow"
-
-def update_workflow_step(state: State, next_step: str) -> Dict:
-    """Update the workflow step when transitioning"""
-    return {"workflow_step": next_step}
+    
+    # Otherwise, continue with the model
+    return "call_model"
 ```
 
 !!! tip "Concept"
 
-    The `route_workflow` function is the core of our conditional routing system. It examines the current workflow step and state variables to determine the next step. This creates the branching logic that handles different user paths through the support process.
+    This simplified approach moves all the routing logic into the tools themselves. Each tool determines the next workflow step, eliminating the need for complex conditional routing functions. The `should_continue` function simply decides whether to execute tools or continue with the model.
 
-## 8. Create terminal nodes
-
-Define the final outcome nodes for successful resolution and escalation:
-
-```python
-
-
-def success_node(state: State) -> Dict:
-    """Handle successful resolution"""
-    return {
-        "messages": [AIMessage(
-            content="Great! I'm glad we could resolve your issue. Is there anything else I can help you with today?")],
-        "is_last_step": True
-    }
-
-def escalate_node(state: State) -> Dict:
-    """Handle escalation to human support"""
-    return {
-        "messages": [AIMessage(
-            content="I'm going to connect you with one of our human support specialists who can better assist you with this issue. Please hold on while I transfer you.")],
-        "is_last_step": True
-    }
-```
-
-## 9. Build and compile the graph
+## 8. Build and compile the graph
 
 Now assemble all the components into a complete workflow:
 
 ```python
-
+from langgraph.graph import StateGraph, START, END
 
 builder = StateGraph(State)
 
-# Set entry point
-builder.set_entry_point("route_workflow")
-
-# Add all nodes
+# Add nodes
 builder.add_node("call_model", call_model)
 builder.add_node("tools", ToolNode(ALL_TOOLS))
-builder.add_node("route_workflow", route_workflow)
-builder.add_node("success", success_node)
-builder.add_node("escalate", escalate_node)
 
-# Workflow step nodes that update the step and call the model
-for step in ["check_warranty", "ask_repair_or_continue", "ask_issue_type",
-             "check_troubleshooting", "suggest_troubleshooting", "offer_solution"]:
-    builder.add_node(step, lambda state, s=step: {**update_workflow_step(state, s),
-                                                  **call_model(state)})
+# Set entry point
+builder.add_edge(START, "call_model")
 
-# Main routing logic
-builder.add_conditional_edges(
-    "route_workflow",
-    route_workflow,
-    ["check_warranty", "ask_repair_or_continue", "ask_issue_type",
-     "check_troubleshooting", "suggest_troubleshooting", "offer_solution",
-     "success", "escalate"]
-)
-
-# Model output routing
+# Add conditional edges
 builder.add_conditional_edges(
     "call_model",
-    route_model_output,
-    ["tools", "route_workflow"]
+    should_continue,
+    ["tools", "call_model", END]
 )
 
-# Tool execution flows back to model
+# Tools flow back to model
 builder.add_edge("tools", "call_model")
-
-# Step nodes flow back to routing
-for step in ["check_warranty", "ask_repair_or_continue", "ask_issue_type",
-             "check_troubleshooting", "suggest_troubleshooting", "offer_solution"]:
-    builder.add_conditional_edges(
-        step,
-        route_model_output,
-        ["tools", "route_workflow"]
-    )
 
 # Compile the graph
 graph = builder.compile()
 ```
 
-## 10. Test the workflow
+## 9. Test the workflow
 
 Run the tech support bot to see how it handles different scenarios:
 
 ```python
-
 import asyncio
 
 async def run_example():
@@ -448,7 +395,7 @@ async def run_example():
     initial_state = State(
         messages=[
             HumanMessage(content="Hi, my app is crashing a lot and I can't use it.")],
-        workflow_step="start"
+        workflow_step="check_warranty"
     )
 
     final_state = await graph.ainvoke(initial_state)
