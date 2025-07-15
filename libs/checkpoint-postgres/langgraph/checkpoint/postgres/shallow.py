@@ -957,4 +957,3 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         return asyncio.run_coroutine_threadsafe(
             self.aput_writes(config, writes, task_id, task_path), self.loop
         ).result()
-
