@@ -41,3 +41,9 @@
           # We do this to avoid spellchecking cell outputs
           - name: Codespell Notebooks
             run: make codespell
+          
+          - name: Codespell LangGraph Library
+            run: |
+              # Change to root directory to check the main LangGraph library
+              cd ..
+              codespell --skip="*.ambr,*.lock,*.ipynb,*.yaml,*.zlib,*.css.map,*.js.map,*.pyc,__pycache__/*" --ignore-words-list="${{ steps.extract_ignore_words.outputs.ignore_words_list }}" libs/langgraph/langgraph/
