@@ -78,7 +78,7 @@ body:
     attributes:
       label: System Info
       description: |
-        python -m langchain_core.sys_info
+        Run on your machine: `python -m langchain_core.sys_info`
       placeholder: |
         python -m langchain_core.sys_info
     validations:
