@@ -405,7 +405,9 @@ def create_react_agent(
             print(chunk)
         ```
     """
-    if (config_schema := deprecated_kwargs.pop("config_schema", MISSING)) is not MISSING:
+    if (
+        config_schema := deprecated_kwargs.pop("config_schema", MISSING)
+    ) is not MISSING:
         warn(
             "`config_schema` is no longer supported. Use `context_schema` instead.",
             category=LangGraphDeprecatedSinceV10,
