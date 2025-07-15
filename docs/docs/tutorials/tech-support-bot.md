@@ -93,9 +93,9 @@ class State:
     workflow_step: str = "start"
 
     # State tracking for our 4-step workflow
-    warranty_status: Optional[str] = None  # "in" or "out"
+    warranty_status: Optional[Literal["in", "out"]] = None
     wants_human_help: Optional[bool] = None  # for out-of-warranty users
-    issue_type: Optional[str] = None  # "hardware" or "software"
+    issue_type: Optional[Literal["hardware", "software"]] = None
     tried_basic_steps: Optional[bool] = None
     solution_successful: Optional[bool] = None
 ```
@@ -124,15 +124,14 @@ def set_warranty_status(
 
 @tool
 def set_wants_human_help(
-        value: Literal["true", "false"],
+        value: Literal[True, False],
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
     """Set whether user wants human help for out-of-warranty device"""
-    parsed = value.lower() == "true"
     return Command(update={
-        "wants_human_help": parsed,
+        "wants_human_help": value,
         "messages": [
-            ToolMessage(content=f"Wants human help: {parsed}", tool_call_id=tool_call_id)]
+            ToolMessage(content=f"Wants human help: {value}", tool_call_id=tool_call_id)]
     })
 
 @tool
@@ -149,28 +148,26 @@ def set_issue_type(
 
 @tool
 def set_tried_basic_steps(
-        value: Literal["true", "false"],
+        value: Literal[True, False],
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
     """Record whether user has tried basic troubleshooting"""
-    parsed = value.lower() == "true"
     return Command(update={
-        "tried_basic_steps": parsed,
+        "tried_basic_steps": value,
         "messages": [
-            ToolMessage(content=f"Tried basic steps: {parsed}", tool_call_id=tool_call_id)]
+            ToolMessage(content=f"Tried basic steps: {value}", tool_call_id=tool_call_id)]
     })
 
 @tool
 def set_solution_successful(
-        value: Literal["true", "false"],
+        value: Literal[True, False],
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
     """Record whether the suggested solution worked"""
-    parsed = value.lower() == "true"
     return Command(update={
-        "solution_successful": parsed,
+        "solution_successful": value,
         "messages": [
-            ToolMessage(content=f"Solution successful: {parsed}", tool_call_id=tool_call_id)]
+            ToolMessage(content=f"Solution successful: {value}", tool_call_id=tool_call_id)]
     })
 
 ALL_TOOLS = [
