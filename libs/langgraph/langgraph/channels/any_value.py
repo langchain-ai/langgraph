@@ -3,7 +3,7 @@ from typing import Any, Generic
 
 from typing_extensions import Self
 
-from langgraph._internal._typing import UNSET, UnsetType
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError
 
@@ -16,11 +16,11 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     __slots__ = ("typ", "value")
 
-    value: Value | UnsetType
+    value: Value | Any
 
     def __init__(self, typ: Any, key: str = "") -> None:
         super().__init__(typ, key)
-        self.value = UNSET
+        self.value = MISSING
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, AnyValue)
@@ -41,30 +41,30 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
         empty.value = self.value
         return empty
 
-    def from_checkpoint(self, checkpoint: Value | UnsetType) -> Self:
+    def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.key)
-        if not isinstance(checkpoint, UnsetType):
+        if checkpoint is not MISSING:
             empty.value = checkpoint
         return empty
 
     def update(self, values: Sequence[Value]) -> bool:
         if len(values) == 0:
-            if self.value is UNSET:
+            if self.value is MISSING:
                 return False
             else:
-                self.value = UNSET
+                self.value = MISSING
                 return True
 
         self.value = values[-1]
         return True
 
     def get(self) -> Value:
-        if isinstance(self.value, UnsetType):
+        if self.value is MISSING:
             raise EmptyChannelError()
         return self.value
 
     def is_available(self) -> bool:
-        return self.value is not UNSET
+        return self.value is not MISSING
 
-    def checkpoint(self) -> Value | UnsetType:
+    def checkpoint(self) -> Value:
         return self.value

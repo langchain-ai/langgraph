@@ -3,7 +3,7 @@ from typing import Generic
 
 from typing_extensions import Self
 
-from langgraph._internal._typing import UNSET
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
@@ -49,7 +49,7 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
     def from_checkpoint(self, checkpoint: set[Value]) -> Self:
         empty = self.__class__(self.typ, self.names)
         empty.key = self.key
-        if checkpoint is not UNSET:
+        if checkpoint is not MISSING:
             empty.seen = checkpoint
         return empty
 
@@ -127,7 +127,7 @@ class NamedBarrierValueAfterFinish(
     def from_checkpoint(self, checkpoint: tuple[set[Value], bool]) -> Self:
         empty = self.__class__(self.typ, self.names)
         empty.key = self.key
-        if checkpoint is not UNSET:
+        if checkpoint is not MISSING:
             empty.seen, empty.finished = checkpoint
         return empty
 

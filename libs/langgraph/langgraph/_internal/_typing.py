@@ -42,12 +42,7 @@ It can either be a `TypedDict`, `dataclass`, or Pydantic `BaseModel`.
 Note: we cannot use either `TypedDict` or `dataclass` directly due to limitations in type checking.
 """
 
-
-class UnsetType:
-    """A sentinel value to represent an unset type."""
-
-
-UNSET: UnsetType = UnsetType()
+MISSING = object()
 """Unset sentinel value."""
 
 

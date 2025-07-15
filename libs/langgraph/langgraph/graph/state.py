@@ -34,7 +34,7 @@ from langgraph._internal._fields import (
 )
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
-from langgraph._internal._typing import EMPTY_SEQ, UNSET, DeprecatedKwargs
+from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -191,7 +191,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         output_schema: type[OutputT] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
-        if (config_schema := kwargs.get("config_schema", UNSET)) is not UNSET:
+        if (config_schema := kwargs.get("config_schema", MISSING)) is not MISSING:
             warnings.warn(
                 "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
                 category=LangGraphDeprecatedSinceV10,
@@ -200,7 +200,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             if context_schema is None:
                 context_schema = cast(type[ContextT], config_schema)
 
-        if (input_ := kwargs.get("input", UNSET)) is not UNSET:
+        if (input_ := kwargs.get("input", MISSING)) is not MISSING:
             warnings.warn(
                 "`input` is deprecated and will be removed. Please use `input_schema` instead.",
                 category=LangGraphDeprecatedSinceV05,
@@ -209,7 +209,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             if input_schema is None:
                 input_schema = cast(type[InputT], input_)
 
-        if (output := kwargs.get("output", UNSET)) is not UNSET:
+        if (output := kwargs.get("output", MISSING)) is not MISSING:
             warnings.warn(
                 "`output` is deprecated and will be removed. Please use `output_schema` instead.",
                 category=LangGraphDeprecatedSinceV05,
@@ -410,7 +410,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         Returns:
             Self: The instance of the state graph, allowing for method chaining.
         """
-        if (retry := kwargs.get("retry", UNSET)) is not UNSET:
+        if (retry := kwargs.get("retry", MISSING)) is not MISSING:
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
                 category=LangGraphDeprecatedSinceV05,
@@ -418,7 +418,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             if retry_policy is None:
                 retry_policy = retry  # type: ignore[assignment]
 
-        if (input_ := kwargs.get("input", UNSET)) is not UNSET:
+        if (input_ := kwargs.get("input", MISSING)) is not MISSING:
             warnings.warn(
                 "`input` is deprecated and will be removed. Please use `input_schema` instead.",
                 category=LangGraphDeprecatedSinceV05,
@@ -1191,7 +1191,7 @@ class CompiledStateGraph(
                     continue
                 if k in self.nodes:
                     v = versions.pop(k)
-                    c = values.pop(k, UNSET)
+                    c = values.pop(k, MISSING)
                     for end in source_to_target[k]:
                         # get next version
                         new_k = f"branch:to:{end}"
@@ -1205,13 +1205,13 @@ class CompiledStateGraph(
                                 else:
                                     ss[new_k] = s
                         # update value
-                        if new_k not in values and c is not UNSET:
+                        if new_k not in values and c is not MISSING:
                             values[new_k] = c
                         # update version
                         versions[new_k] = new_v
                     # pop interrupt seen
                     if INTERRUPT in seen:
-                        seen[INTERRUPT].pop(k, UNSET)
+                        seen[INTERRUPT].pop(k, MISSING)
 
 
 def _pick_mapper(

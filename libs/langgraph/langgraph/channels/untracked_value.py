@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
-from typing import Generic
+from typing import Any, Generic
 
 from typing_extensions import Self
 
-from langgraph._internal._typing import UNSET, UnsetType
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
@@ -16,12 +18,12 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
     __slots__ = ("value", "guard")
 
     guard: bool
-    value: Value | UnsetType
+    value: Value | Any
 
     def __init__(self, typ: type[Value], guard: bool = True) -> None:
         super().__init__(typ)
         self.guard = guard
-        self.value = UNSET
+        self.value = MISSING
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, UntrackedValue) and value.guard == self.guard
@@ -43,8 +45,8 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
         empty.value = self.value
         return empty
 
-    def checkpoint(self) -> Value | UnsetType:
-        return UNSET
+    def checkpoint(self) -> Value | Any:
+        return MISSING
 
     def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.guard)
@@ -63,9 +65,9 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
         return True
 
     def get(self) -> Value:
-        if self.value is UNSET:
+        if self.value is MISSING:
             raise EmptyChannelError()
         return self.value
 
     def is_available(self) -> bool:
-        return self.value is not UNSET
+        return self.value is not MISSING

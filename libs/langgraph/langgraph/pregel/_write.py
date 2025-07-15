@@ -14,7 +14,7 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 
 from langgraph._internal._runnable import RunnableCallable
-from langgraph._internal._typing import UNSET
+from langgraph._internal._typing import MISSING
 from langgraph.constants import CONF, CONFIG_KEY_SEND, TASKS
 from langgraph.errors import InvalidUpdateError
 from langgraph.types import Send
@@ -133,7 +133,7 @@ class ChannelWrite(RunnableCallable):
         """Used by PregelNode to distinguish between writers and other runnables."""
         return (
             isinstance(runnable, ChannelWrite)
-            or getattr(runnable, "_is_channel_writer", UNSET) is not UNSET
+            or getattr(runnable, "_is_channel_writer", MISSING) is not MISSING
         )
 
     @staticmethod
@@ -148,8 +148,8 @@ class ChannelWrite(RunnableCallable):
                 if isinstance(entry, ChannelWriteTupleEntry) and entry.static
                 for w in entry.static
             ] or None
-        elif writes := getattr(runnable, "_is_channel_writer", UNSET):
-            if writes is not UNSET:
+        elif writes := getattr(runnable, "_is_channel_writer", MISSING):
+            if writes is not MISSING:
                 writes = cast(
                     Sequence[tuple[Union[ChannelWriteEntry, Send], Optional[str]]],
                     writes,

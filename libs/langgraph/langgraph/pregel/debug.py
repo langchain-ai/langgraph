@@ -9,7 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from typing_extensions import TypedDict
 
 from langgraph._internal._config import patch_checkpoint_map
-from langgraph._internal._typing import UNSET
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import CheckpointMetadata, PendingWrite
 from langgraph.constants import (
@@ -194,7 +194,7 @@ def tasks_w_writes(
                 for tid, chan, val in pending_writes
                 if tid == task.id and chan == RETURN
             ),
-            UNSET,
+            MISSING,
         )
         out.append(
             PregelTask(
@@ -218,7 +218,7 @@ def tasks_w_writes(
                 states.get(task.id) if states else None,
                 (
                     rtn
-                    if rtn is not UNSET
+                    if rtn is not MISSING
                     else next(
                         (
                             val

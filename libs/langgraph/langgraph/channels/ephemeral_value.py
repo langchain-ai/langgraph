@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
 from typing import Any, Generic
 
 from typing_extensions import Self
 
-from langgraph._internal._typing import UNSET, UnsetType
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
@@ -15,13 +17,13 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     __slots__ = ("value", "guard")
 
-    value: Value | UnsetType
+    value: Value | Any
     guard: bool
 
     def __init__(self, typ: Any, guard: bool = True) -> None:
         super().__init__(typ)
         self.guard = guard
-        self.value = UNSET
+        self.value = MISSING
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, EphemeralValue) and value.guard == self.guard
@@ -43,17 +45,17 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
         empty.value = self.value
         return empty
 
-    def from_checkpoint(self, checkpoint: Value | UnsetType) -> Self:
+    def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.guard)
         empty.key = self.key
-        if isinstance(checkpoint, UnsetType):
+        if checkpoint is not MISSING:
             empty.value = checkpoint
         return empty
 
-    def update(self, values: Sequence[Value | UnsetType]) -> bool:
+    def update(self, values: Sequence[Value]) -> bool:
         if len(values) == 0:
-            if self.value is not UNSET:
-                self.value = UNSET
+            if self.value is not MISSING:
+                self.value = MISSING
                 return True
             else:
                 return False
@@ -66,12 +68,12 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
         return True
 
     def get(self) -> Value:
-        if self.value is UNSET:
+        if self.value is MISSING:
             raise EmptyChannelError()
         return self.value
 
     def is_available(self) -> bool:
-        return self.value is not UNSET
+        return self.value is not MISSING
 
     def checkpoint(self) -> Value:
         return self.value
