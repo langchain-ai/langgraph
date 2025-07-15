@@ -1,8 +1,29 @@
-# Building a Tech Support Bot with LangGraph: A Complete Workflow Tutorial
+# Build a tech support bot with custom workflows
 
-This tutorial demonstrates how to build a sophisticated tech support bot using LangGraph that handles warranty checks, issue classification, troubleshooting loops, and escalation to human agents.
+In this tutorial, you'll build a sophisticated tech support bot using LangGraph that demonstrates how to create custom workflows with conditional routing, loops, and human escalation. This bot will guide users through a structured support process, automatically routing them based on their responses and issue type.
 
-## Workflow Diagram
+## What you'll learn
+
+By the end of this tutorial, you'll understand how to:
+
+- Create **conditional routing** that adapts based on user responses
+- Implement **loops** for iterative troubleshooting
+- Handle **human escalation** at multiple decision points
+- Use **state management** to track complex multi-step conversations
+- Build a complete customer service workflow
+
+## Prerequisites
+
+Before you start this tutorial, ensure you have access to a LLM that supports tool-calling features, such as [OpenAI](https://platform.openai.com/api-keys), [Anthropic](https://console.anthropic.com/settings/keys), or [Google Gemini](https://ai.google.dev/gemini-api/docs/api-key).
+
+## The workflow
+
+Our tech support bot follows a 4-step decision tree:
+
+1. **Warranty Check** - Is the device under warranty?
+2. **Issue Classification** - Hardware or software issue?
+3. **Basic Troubleshooting** - Have they tried restarting/updating?
+4. **Solution Testing** - Did the suggested solution work?
 
 ```mermaid
 flowchart TD
@@ -36,35 +57,21 @@ flowchart TD
     class Suggest loopNode
 ```
 
-## Overview
+## 1. Install packages
 
-Our bot implements a 4-step workflow that showcases key LangGraph concepts:
-- **Conditional routing** based on warranty status and issue type
-- **Looping** for troubleshooting attempts
-- **Human escalation** for complex issues
-- **State management** to track conversation progress
+Install the required packages:
 
-## Workflow Steps
+```bash
+pip install -U langgraph langsmith langchain-anthropic
+```
 
-### Step 1: Warranty Check
-- **YES** → Proceed to Step 2 (Issue Classification)
-- **NO** → Ask: "Would you like to troubleshoot or speak to a human about repair options?"
-  - **Human** → 🧑 Escalate
-  - **Troubleshoot** → Step 2
+!!! tip
 
-### Step 2: Issue Classification
-- **Hardware-related** → 🧑 Escalate (hardware requires human expertise)
-- **Software-related or unclear** → Proceed to Step 3
+    Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph. For more information on how to get started, see [LangSmith docs](https://docs.smith.langchain.com).
 
-### Step 3: Basic Troubleshooting Check
-- **NO** (haven't tried restarting/updating) → Suggest trying that → 🔁 Loop back to Step 3
-- **YES** → Proceed to Step 4
+## 2. Define the state
 
-### Step 4: Solution Testing
-- **YES** (solution worked) → ✅ Success message
-- **NO** → 🧑 Escalate to human support
-
-## Implementation
+First, define the state structure that will track the conversation and workflow progress:
 
 ```python
 import os
@@ -79,283 +86,305 @@ from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command
 
-llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
-
-
 @dataclass
 class State:
-  messages: List[BaseMessage]
-  is_last_step: bool = False
-  workflow_step: str = "start"
+    messages: List[BaseMessage]
+    is_last_step: bool = False
+    workflow_step: str = "start"
 
-  # State tracking for our 4-step workflow
-  warranty_status: Optional[str] = None  # "in" or "out"
-  wants_human_help: Optional[bool] = None  # for out-of-warranty users
-  issue_type: Optional[str] = None  # "hardware" or "software"
-  tried_basic_steps: Optional[bool] = None
-  solution_successful: Optional[bool] = None
+    # State tracking for our 4-step workflow
+    warranty_status: Optional[str] = None  # "in" or "out"
+    wants_human_help: Optional[bool] = None  # for out-of-warranty users
+    issue_type: Optional[str] = None  # "hardware" or "software"
+    tried_basic_steps: Optional[bool] = None
+    solution_successful: Optional[bool] = None
+```
+
+!!! tip "Concept"
+
+    The `State` class tracks both the conversation messages and the workflow progress. Each field represents a decision point in our support process, allowing the bot to remember where the user is in the troubleshooting flow.
+
+## 3. Create tools for state management
+
+Create tools that the LLM can use to update the workflow state based on user responses:
+
+```python
 
 @tool
 def set_warranty_status(
         value: Literal["in", "out"],
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
-  """Set whether device is under warranty"""
-  return Command(update={
-    "warranty_status": value,
-    "messages": [ToolMessage(content=f"Warranty status set to '{value}'",
-                             tool_call_id=tool_call_id)]
-  })
-
+    """Set whether device is under warranty"""
+    return Command(update={
+        "warranty_status": value,
+        "messages": [ToolMessage(content=f"Warranty status set to '{value}'",
+                                 tool_call_id=tool_call_id)]
+    })
 
 @tool
 def set_wants_human_help(
         value: Literal["true", "false"],
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
-  """Set whether user wants human help for out-of-warranty device"""
-  parsed = value.lower() == "true"
-  return Command(update={
-    "wants_human_help": parsed,
-    "messages": [
-      ToolMessage(content=f"Wants human help: {parsed}", tool_call_id=tool_call_id)]
-  })
-
+    """Set whether user wants human help for out-of-warranty device"""
+    parsed = value.lower() == "true"
+    return Command(update={
+        "wants_human_help": parsed,
+        "messages": [
+            ToolMessage(content=f"Wants human help: {parsed}", tool_call_id=tool_call_id)]
+    })
 
 @tool
 def set_issue_type(
         value: Literal["hardware", "software"],
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
-  """Classify the issue as hardware or software related"""
-  return Command(update={
-    "issue_type": value,
-    "messages": [
-      ToolMessage(content=f"Issue type set to '{value}'", tool_call_id=tool_call_id)]
-  })
-
+    """Classify the issue as hardware or software related"""
+    return Command(update={
+        "issue_type": value,
+        "messages": [
+            ToolMessage(content=f"Issue type set to '{value}'", tool_call_id=tool_call_id)]
+    })
 
 @tool
 def set_tried_basic_steps(
         value: Literal["true", "false"],
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
-  """Record whether user has tried basic troubleshooting"""
-  parsed = value.lower() == "true"
-  return Command(update={
-    "tried_basic_steps": parsed,
-    "messages": [
-      ToolMessage(content=f"Tried basic steps: {parsed}", tool_call_id=tool_call_id)]
-  })
-
+    """Record whether user has tried basic troubleshooting"""
+    parsed = value.lower() == "true"
+    return Command(update={
+        "tried_basic_steps": parsed,
+        "messages": [
+            ToolMessage(content=f"Tried basic steps: {parsed}", tool_call_id=tool_call_id)]
+    })
 
 @tool
 def set_solution_successful(
         value: Literal["true", "false"],
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
-  """Record whether the suggested solution worked"""
-  parsed = value.lower() == "true"
-  return Command(update={
-    "solution_successful": parsed,
-    "messages": [
-      ToolMessage(content=f"Solution successful: {parsed}", tool_call_id=tool_call_id)]
-  })
-
+    """Record whether the suggested solution worked"""
+    parsed = value.lower() == "true"
+    return Command(update={
+        "solution_successful": parsed,
+        "messages": [
+            ToolMessage(content=f"Solution successful: {parsed}", tool_call_id=tool_call_id)]
+    })
 
 ALL_TOOLS = [
-  set_warranty_status,
-  set_wants_human_help,
-  set_issue_type,
-  set_tried_basic_steps,
-  set_solution_successful,
+    set_warranty_status,
+    set_wants_human_help,
+    set_issue_type,
+    set_tried_basic_steps,
+    set_solution_successful,
 ]
+```
 
-# -------------------------------
-# Tool Mapping by Workflow Step
-# -------------------------------
+These tools allow the LLM to update the workflow state based on user responses. Each tool uses LangGraph's `Command` to update specific state fields while also adding a message to the conversation history.
+
+## 4. Set up the chat model
+
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
+
+<!---
+```python
+llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
+```
+-->
+
+## 5. Create step-specific prompts
+
+Each workflow step needs a specific prompt to guide the LLM's behavior:
+
+```python
 
 TOOL_MAP = {
-  "check_warranty": [set_warranty_status],
-  "ask_repair_or_continue": [set_wants_human_help],
-  "ask_issue_type": [set_issue_type],
-  "check_troubleshooting": [set_tried_basic_steps],
-  "suggest_troubleshooting": [set_tried_basic_steps],
-  "offer_solution": [set_solution_successful],
+    "check_warranty": [set_warranty_status],
+    "ask_repair_or_continue": [set_wants_human_help],
+    "ask_issue_type": [set_issue_type],
+    "check_troubleshooting": [set_tried_basic_steps],
+    "suggest_troubleshooting": [set_tried_basic_steps],
+    "offer_solution": [set_solution_successful],
 }
 
-
-# -------------------------------
-# Step-Specific Prompts
-# -------------------------------
-
 def get_prompt_for_step(step: str) -> str:
-  """Get the appropriate prompt for each workflow step"""
-  prompts = {
-    "check_warranty": """
-        Ask the user whether their device is under warranty. 
-        Use the set_warranty_status tool to record their response as 'in' or 'out'.
-        """,
+    """Get the appropriate prompt for each workflow step"""
+    prompts = {
+        "check_warranty": """
+            Ask the user whether their device is under warranty. 
+            Use the set_warranty_status tool to record their response as 'in' or 'out'.
+            """,
 
-    "ask_repair_or_continue": """
-        The device is out of warranty. Ask if they'd like to:
-        1. Continue troubleshooting themselves, or 
-        2. Speak to a human about repair options
-        Use the set_wants_human_help tool to record their choice.
-        """,
+        "ask_repair_or_continue": """
+            The device is out of warranty. Ask if they'd like to:
+            1. Continue troubleshooting themselves, or 
+            2. Speak to a human about repair options
+            Use the set_wants_human_help tool to record their choice.
+            """,
 
-    "ask_issue_type": """
-        Ask what issue they are experiencing with their device. 
-        Based on their response, classify it as 'hardware' (physical problems, broken parts) 
-        or 'software' (app crashes, performance issues, etc.).
-        Use the set_issue_type tool to record the classification.
-        """,
+        "ask_issue_type": """
+            Ask what issue they are experiencing with their device. 
+            Based on their response, classify it as 'hardware' (physical problems, broken parts) 
+            or 'software' (app crashes, performance issues, etc.).
+            Use the set_issue_type tool to record the classification.
+            """,
 
-    "check_troubleshooting": """
-        Ask if they have already tried basic troubleshooting steps like:
-        - Restarting the device
-        - Updating the software/app
-        Use the set_tried_basic_steps tool to record their response.
-        """,
+        "check_troubleshooting": """
+            Ask if they have already tried basic troubleshooting steps like:
+            - Restarting the device
+            - Updating the software/app
+            Use the set_tried_basic_steps tool to record their response.
+            """,
 
-    "suggest_troubleshooting": """
-        Suggest they try restarting their device and updating the software/app.
-        Ask them to try these steps and confirm once they're done.
-        Use the set_tried_basic_steps tool once they confirm they've tried.
-        """,
+        "suggest_troubleshooting": """
+            Suggest they try restarting their device and updating the software/app.
+            Ask them to try these steps and confirm once they're done.
+            Use the set_tried_basic_steps tool once they confirm they've tried.
+            """,
 
-    "offer_solution": """
-        Suggest they reset the app settings or clear the app cache.
-        Ask them to try this solution and confirm if it resolved the issue.
-        Use the set_solution_successful tool to record whether it worked.
-        """,
-  }
-  return prompts.get(step, "Continue helping the user with their issue.")
+        "offer_solution": """
+            Suggest they reset the app settings or clear the app cache.
+            Ask them to try this solution and confirm if it resolved the issue.
+            Use the set_solution_successful tool to record whether it worked.
+            """,
+    }
+    return prompts.get(step, "Continue helping the user with their issue.")
+```
 
+## 6. Create the model node
 
-# -------------------------------
-# Model Node
-# -------------------------------
+The model node handles LLM interactions with the appropriate tools for each step:
+
+```python
+
 
 async def call_model(state: State) -> Dict[str, List[AIMessage]]:
-  """Call the LLM with appropriate tools for the current step"""
-  prompt = get_prompt_for_step(state.workflow_step)
-  tools = TOOL_MAP.get(state.workflow_step, [])
-  model = llm.bind_tools(tools)
+    """Call the LLM with appropriate tools for the current step"""
+    prompt = get_prompt_for_step(state.workflow_step)
+    tools = TOOL_MAP.get(state.workflow_step, [])
+    model = llm.bind_tools(tools)
 
-  response = await model.ainvoke(
-    [{"role": "system", "content": prompt}, *state.messages]
-  )
+    response = await model.ainvoke(
+        [{"role": "system", "content": prompt}, *state.messages]
+    )
 
-  return {"messages": [response]}
+    return {"messages": [response]}
+```
 
+## 7. Build the routing logic
 
-# -------------------------------
-# Routing Logic - The Heart of Our Workflow
-# -------------------------------
+The routing logic determines which step to execute next based on the current state:
+
+```python
+
 
 def route_workflow(state: State) -> Literal[
-  "check_warranty",
-  "ask_repair_or_continue",
-  "ask_issue_type",
-  "check_troubleshooting",
-  "suggest_troubleshooting",
-  "offer_solution",
-  "success",
-  "escalate"
+    "check_warranty",
+    "ask_repair_or_continue",
+    "ask_issue_type",
+    "check_troubleshooting",
+    "suggest_troubleshooting",
+    "offer_solution",
+    "success",
+    "escalate"
 ]:
-  """Route to the next step based on current state and user responses"""
-  step = state.workflow_step
+    """Route to the next step based on current state and user responses"""
+    step = state.workflow_step
 
-  # Step 1: Start with warranty check
-  if step == "start":
-    return "check_warranty"
+    # Step 1: Start with warranty check
+    if step == "start":
+        return "check_warranty"
 
-  # Step 1 → Step 2 or repair question
-  if step == "check_warranty":
-    if state.warranty_status == "out":
-      return "ask_repair_or_continue"
-    elif state.warranty_status == "in":
-      return "ask_issue_type"
+    # Step 1 → Step 2 or repair question
+    if step == "check_warranty":
+        if state.warranty_status == "out":
+            return "ask_repair_or_continue"
+        elif state.warranty_status == "in":
+            return "ask_issue_type"
 
-  # Out of warranty: continue troubleshooting or escalate
-  if step == "ask_repair_or_continue":
-    if state.wants_human_help:
-      return "escalate"
-    else:
-      return "ask_issue_type"
+    # Out of warranty: continue troubleshooting or escalate
+    if step == "ask_repair_or_continue":
+        if state.wants_human_help:
+            return "escalate"
+        else:
+            return "ask_issue_type"
 
-  # Step 2: Hardware → escalate, Software → continue
-  if step == "ask_issue_type":
-    if state.issue_type == "hardware":
-      return "escalate"
-    elif state.issue_type == "software":
-      return "check_troubleshooting"
+    # Step 2: Hardware → escalate, Software → continue
+    if step == "ask_issue_type":
+        if state.issue_type == "hardware":
+            return "escalate"
+        elif state.issue_type == "software":
+            return "check_troubleshooting"
 
-  # Step 3: Check if they've tried basic steps
-  if step == "check_troubleshooting":
-    if state.tried_basic_steps is False:
-      return "suggest_troubleshooting"
-    elif state.tried_basic_steps is True:
-      return "offer_solution"
+    # Step 3: Check if they've tried basic steps
+    if step == "check_troubleshooting":
+        if state.tried_basic_steps is False:
+            return "suggest_troubleshooting"
+        elif state.tried_basic_steps is True:
+            return "offer_solution"
 
-  # Step 3 loop: After suggesting troubleshooting, check again
-  if step == "suggest_troubleshooting":
-    return "check_troubleshooting"
+    # Step 3 loop: After suggesting troubleshooting, check again
+    if step == "suggest_troubleshooting":
+        return "check_troubleshooting"
 
-  # Step 4: Solution worked → success, didn't work → escalate
-  if step == "offer_solution":
-    if state.solution_successful is True:
-      return "success"
-    elif state.solution_successful is False:
-      return "escalate"
+    # Step 4: Solution worked → success, didn't work → escalate
+    if step == "offer_solution":
+        if state.solution_successful is True:
+            return "success"
+        elif state.solution_successful is False:
+            return "escalate"
 
-  # Default fallback
-  return "escalate"
-
+    # Default fallback
+    return "escalate"
 
 def route_model_output(state: State) -> Literal["tools", "route_workflow"]:
-  """Determine if we need to use tools or continue routing"""
-  last_msg = state.messages[-1]
-  if isinstance(last_msg, AIMessage) and last_msg.tool_calls:
-    return "tools"
-  return "route_workflow"
-
-
-# -------------------------------
-# Workflow Step Updater
-# -------------------------------
+    """Determine if we need to use tools or continue routing"""
+    last_msg = state.messages[-1]
+    if isinstance(last_msg, AIMessage) and last_msg.tool_calls:
+        return "tools"
+    return "route_workflow"
 
 def update_workflow_step(state: State, next_step: str) -> Dict:
-  """Update the workflow step when transitioning"""
-  return {"workflow_step": next_step}
+    """Update the workflow step when transitioning"""
+    return {"workflow_step": next_step}
+```
 
+!!! tip "Concept"
 
-# -------------------------------
-# Terminal Nodes
-# -------------------------------
+    The `route_workflow` function is the core of our conditional routing system. It examines the current workflow step and state variables to determine the next step. This creates the branching logic that handles different user paths through the support process.
+
+## 8. Create terminal nodes
+
+Define the final outcome nodes for successful resolution and escalation:
+
+```python
+
 
 def success_node(state: State) -> Dict:
-  """Handle successful resolution"""
-  return {
-    "messages": [AIMessage(
-      content="Great! I'm glad we could resolve your issue. Is there anything else I can help you with today?")],
-    "is_last_step": True
-  }
-
+    """Handle successful resolution"""
+    return {
+        "messages": [AIMessage(
+            content="Great! I'm glad we could resolve your issue. Is there anything else I can help you with today?")],
+        "is_last_step": True
+    }
 
 def escalate_node(state: State) -> Dict:
-  """Handle escalation to human support"""
-  return {
-    "messages": [AIMessage(
-      content="I'm going to connect you with one of our human support specialists who can better assist you with this issue. Please hold on while I transfer you.")],
-    "is_last_step": True
-  }
+    """Handle escalation to human support"""
+    return {
+        "messages": [AIMessage(
+            content="I'm going to connect you with one of our human support specialists who can better assist you with this issue. Please hold on while I transfer you.")],
+        "is_last_step": True
+    }
+```
 
+## 9. Build and compile the graph
 
-# -------------------------------
-# Build the Graph
-# -------------------------------
+Now assemble all the components into a complete workflow:
+
+```python
+
 
 builder = StateGraph(State)
 
@@ -372,23 +401,23 @@ builder.add_node("escalate", escalate_node)
 # Workflow step nodes that update the step and call the model
 for step in ["check_warranty", "ask_repair_or_continue", "ask_issue_type",
              "check_troubleshooting", "suggest_troubleshooting", "offer_solution"]:
-  builder.add_node(step, lambda state, s=step: {**update_workflow_step(state, s),
-                                                **call_model(state)})
+    builder.add_node(step, lambda state, s=step: {**update_workflow_step(state, s),
+                                                  **call_model(state)})
 
 # Main routing logic
 builder.add_conditional_edges(
-  "route_workflow",
-  route_workflow,
-  ["check_warranty", "ask_repair_or_continue", "ask_issue_type",
-   "check_troubleshooting", "suggest_troubleshooting", "offer_solution",
-   "success", "escalate"]
+    "route_workflow",
+    route_workflow,
+    ["check_warranty", "ask_repair_or_continue", "ask_issue_type",
+     "check_troubleshooting", "suggest_troubleshooting", "offer_solution",
+     "success", "escalate"]
 )
 
 # Model output routing
 builder.add_conditional_edges(
-  "call_model",
-  route_model_output,
-  ["tools", "route_workflow"]
+    "call_model",
+    route_model_output,
+    ["tools", "route_workflow"]
 )
 
 # Tool execution flows back to model
@@ -397,31 +426,32 @@ builder.add_edge("tools", "call_model")
 # Step nodes flow back to routing
 for step in ["check_warranty", "ask_repair_or_continue", "ask_issue_type",
              "check_troubleshooting", "suggest_troubleshooting", "offer_solution"]:
-  builder.add_conditional_edges(
-    step,
-    route_model_output,
-    ["tools", "route_workflow"]
-  )
+    builder.add_conditional_edges(
+        step,
+        route_model_output,
+        ["tools", "route_workflow"]
+    )
 
 # Compile the graph
 graph = builder.compile()
+```
 
-# -------------------------------
-# Example Usage
-# -------------------------------
+## 10. Test the workflow
 
-if __name__ == "__main__":
-  import asyncio
+Run the tech support bot to see how it handles different scenarios:
 
+```python
 
-  async def run_example():
+import asyncio
+
+async def run_example():
     """Run an example conversation"""
     print("\n🔁 Running Tech Support Workflow...\n")
 
     initial_state = State(
-      messages=[
-        HumanMessage(content="Hi, my app is crashing a lot and I can't use it.")],
-      workflow_step="start"
+        messages=[
+            HumanMessage(content="Hi, my app is crashing a lot and I can't use it.")],
+        workflow_step="start"
     )
 
     final_state = await graph.ainvoke(initial_state)
@@ -435,45 +465,53 @@ if __name__ == "__main__":
 
     print("\n💬 Final messages:")
     for msg in final_state.messages[-3:]:  # Show last 3 messages
-      if isinstance(msg, HumanMessage):
-        print(f"User: {msg.content}")
-      elif isinstance(msg, AIMessage):
-        print(f"Bot: {msg.content}")
+        if isinstance(msg, HumanMessage):
+            print(f"User: {msg.content}")
+        elif isinstance(msg, AIMessage):
+            print(f"Bot: {msg.content}")
 
-
-  asyncio.run(run_example())
+if __name__ == "__main__":
+    asyncio.run(run_example())
 ```
 
-## Key Features Demonstrated
+!!! tip
 
-### 1. **Conditional Routing**
-The `route_workflow` function implements complex decision logic:
-- Warranty status determines initial path
-- Issue type (hardware vs software) triggers different responses
-- Solution success determines final outcome
+    You can exit the conversation at any time by typing `quit`, `exit`, or `q`.
 
-### 2. **Looping Behavior**
+## Key concepts demonstrated
+
+This tech support bot showcases several important LangGraph concepts:
+
+### 1. **Conditional routing**
+The `route_workflow` function implements complex decision logic based on user responses:
+- Warranty status determines the initial path
+- Issue type (hardware vs software) triggers different responses  
+- Solution success determines the final outcome
+
+### 2. **Looping behavior**
 Step 3 creates a loop where users who haven't tried basic troubleshooting are guided through it:
 ```
 check_troubleshooting → suggest_troubleshooting → check_troubleshooting
 ```
 
-### 3. **Human Escalation**
+### 3. **Human escalation**
 Multiple escalation points ensure complex issues reach human agents:
 - Out-of-warranty users can choose human help
 - Hardware issues automatically escalate
 - Failed solutions trigger escalation
 
-### 4. **State Management**
+### 4. **State management**
 The workflow tracks user progress through structured state variables, enabling complex multi-turn conversations.
 
-## Testing the Workflow
+## Testing different scenarios
 
-Try different conversation paths:
+Try these conversation paths to see how the bot handles various situations:
 
 1. **In-warranty software issue** → Full troubleshooting flow
 2. **Out-of-warranty hardware issue** → Immediate escalation
 3. **Software issue with successful solution** → Success completion
 4. **Software issue with failed solution** → Escalation
 
-This implementation showcases how LangGraph can handle real-world customer service scenarios with sophisticated routing, looping, and escalation logic.
+## Next steps
+
+This implementation demonstrates how LangGraph can handle real-world customer service scenarios with sophisticated routing, looping, and escalation logic. You can extend this pattern to build more complex workflows for various business processes.
