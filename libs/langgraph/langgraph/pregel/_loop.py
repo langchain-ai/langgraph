@@ -28,7 +28,7 @@ from langchain_core.runnables import RunnableConfig
 from typing_extensions import ParamSpec, Self
 
 from langgraph._internal._config import patch_configurable
-from langgraph._internal._typing import EMPTY_SEQ
+from langgraph._internal._typing import EMPTY_SEQ, UNSET
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
@@ -54,7 +54,6 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
-    MISSING,
     NS_END,
     NS_SEP,
     NULL_TASK_ID,
@@ -581,7 +580,7 @@ class PregelLoop:
                 or (
                     not self.is_nested
                     and self.config.get("metadata", {}).get("run_id")
-                    == self.checkpoint_metadata.get("run_id", MISSING)
+                    == self.checkpoint_metadata.get("run_id", UNSET)
                 ),
             )
         )

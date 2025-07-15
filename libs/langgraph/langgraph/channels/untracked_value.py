@@ -3,8 +3,8 @@ from typing import Generic
 
 from typing_extensions import Self
 
+from langgraph._internal._typing import UNSET
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 __all__ = ("UntrackedValue",)
@@ -18,7 +18,7 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
     def __init__(self, typ: type[Value], guard: bool = True) -> None:
         super().__init__(typ)
         self.guard = guard
-        self.value = MISSING
+        self.value = UNSET
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, UntrackedValue) and value.guard == self.guard
@@ -41,7 +41,7 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
         return empty
 
     def checkpoint(self) -> Value:
-        return MISSING
+        return UNSET
 
     def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.guard)
@@ -60,9 +60,9 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
         return True
 
     def get(self) -> Value:
-        if self.value is MISSING:
+        if self.value is UNSET:
             raise EmptyChannelError()
         return self.value
 
     def is_available(self) -> bool:
-        return self.value is not MISSING
+        return self.value is not UNSET

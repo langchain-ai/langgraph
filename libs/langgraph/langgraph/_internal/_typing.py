@@ -48,6 +48,7 @@ class Unset:
 
 
 UNSET: Unset = Unset()
+"""Unset sentinel value."""
 
 
 class DeprecatedKwargs(TypedDict):
@@ -55,3 +56,4 @@ class DeprecatedKwargs(TypedDict):
 
 
 EMPTY_SEQ: tuple[str, ...] = tuple()
+"""An empty sequence of strings."""

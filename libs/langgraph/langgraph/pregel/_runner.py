@@ -20,13 +20,13 @@ from typing import (
 from langchain_core.callbacks import Callbacks
 
 from langgraph._internal._future import chain_future, run_coroutine_threadsafe
+from langgraph._internal._typing import UNSET
 from langgraph.constants import (
     CONF,
     CONFIG_KEY_CALL,
     CONFIG_KEY_SCRATCHPAD,
     ERROR,
     INTERRUPT,
-    MISSING,
     NO_WRITES,
     RESUME,
     RETURN,
@@ -567,8 +567,8 @@ def _call(
         elif next_task.writes:
             # if it already ran, return the result
             fut = concurrent.futures.Future()
-            ret = next((v for c, v in next_task.writes if c == RETURN), MISSING)
-            if ret is not MISSING:
+            ret = next((v for c, v in next_task.writes if c == RETURN), UNSET)
+            if ret is not UNSET:
                 fut.set_result(ret)
             elif exc := next((v for c, v in next_task.writes if c == ERROR), None):
                 fut.set_exception(
@@ -710,8 +710,8 @@ async def _acall_impl(
             elif next_task.writes:
                 # if it already ran, return the result
                 fut = asyncio.Future(loop=loop)
-                ret = next((v for c, v in next_task.writes if c == RETURN), MISSING)
-                if ret is not MISSING:
+                ret = next((v for c, v in next_task.writes if c == RETURN), UNSET)
+                if ret is not UNSET:
                     fut.set_result(ret)
                 elif exc := next((v for c, v in next_task.writes if c == ERROR), None):
                     fut.set_exception(

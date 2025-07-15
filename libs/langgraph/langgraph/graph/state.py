@@ -48,7 +48,6 @@ from langgraph.checkpoint.base import Checkpoint
 from langgraph.constants import (
     END,
     INTERRUPT,
-    MISSING,
     NS_END,
     NS_SEP,
     START,
@@ -1192,7 +1191,7 @@ class CompiledStateGraph(
                     continue
                 if k in self.nodes:
                     v = versions.pop(k)
-                    c = values.pop(k, MISSING)
+                    c = values.pop(k, UNSET)
                     for end in source_to_target[k]:
                         # get next version
                         new_k = f"branch:to:{end}"
@@ -1206,13 +1205,13 @@ class CompiledStateGraph(
                                 else:
                                     ss[new_k] = s
                         # update value
-                        if new_k not in values and c is not MISSING:
+                        if new_k not in values and c is not UNSET:
                             values[new_k] = c
                         # update version
                         versions[new_k] = new_v
                     # pop interrupt seen
                     if INTERRUPT in seen:
-                        seen[INTERRUPT].pop(k, MISSING)
+                        seen[INTERRUPT].pop(k, UNSET)
 
 
 def _pick_mapper(

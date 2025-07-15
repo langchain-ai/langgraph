@@ -3,8 +3,8 @@ from typing import Any, Generic
 
 from typing_extensions import Self
 
+from langgraph._internal._typing import UNSET
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
 __all__ = ("AnyValue",)
@@ -18,7 +18,7 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def __init__(self, typ: Any, key: str = "") -> None:
         super().__init__(typ, key)
-        self.value = MISSING
+        self.value = UNSET
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, AnyValue)
@@ -41,28 +41,28 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.key)
-        if checkpoint is not MISSING:
+        if checkpoint is not UNSET:
             empty.value = checkpoint
         return empty
 
     def update(self, values: Sequence[Value]) -> bool:
         if len(values) == 0:
-            if self.value is MISSING:
+            if self.value is UNSET:
                 return False
             else:
-                self.value = MISSING
+                self.value = UNSET
                 return True
 
         self.value = values[-1]
         return True
 
     def get(self) -> Value:
-        if self.value is MISSING:
+        if self.value is UNSET:
             raise EmptyChannelError()
         return self.value
 
     def is_available(self) -> bool:
-        return self.value is not MISSING
+        return self.value is not UNSET
 
     def checkpoint(self) -> Value:
         return self.value

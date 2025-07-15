@@ -31,9 +31,6 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module has no attribute '{name}'")
 
 
-# --- Empty read-only containers ---
-MISSING = object()
-
 # --- Public constants ---
 TAG_NOSTREAM = sys.intern("nostream")
 """Tag to disable streaming for a chat model."""

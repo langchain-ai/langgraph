@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime, timezone
 
+from langgraph._internal._typing import UNSET
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.checkpoint.base.id import uuid6
-from langgraph.constants import MISSING
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
 LATEST_VERSION = 4
@@ -40,7 +40,7 @@ def create_checkpoint(
             if k not in checkpoint["channel_versions"]:
                 continue
             v = channels[k].checkpoint()
-            if v is not MISSING:
+            if v is not UNSET:
                 values[k] = v
     return Checkpoint(
         v=LATEST_VERSION,
@@ -66,7 +66,7 @@ def channels_from_checkpoint(
             managed_specs[k] = v
     return (
         {
-            k: v.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
+            k: v.from_checkpoint(checkpoint["channel_values"].get(k, UNSET))
             for k, v in channel_specs.items()
         },
         managed_specs,

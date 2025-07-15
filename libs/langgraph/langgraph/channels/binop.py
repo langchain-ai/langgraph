@@ -4,8 +4,8 @@ from typing import Callable, Generic
 
 from typing_extensions import NotRequired, Required, Self
 
+from langgraph._internal._typing import UNSET
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
 __all__ = ("BinaryOperatorAggregate",)
@@ -49,7 +49,7 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         try:
             self.value = typ()
         except Exception:
-            self.value = MISSING
+            self.value = UNSET
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, BinaryOperatorAggregate) and (
@@ -79,14 +79,14 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.operator)
         empty.key = self.key
-        if checkpoint is not MISSING:
+        if checkpoint is not UNSET:
             empty.value = checkpoint
         return empty
 
     def update(self, values: Sequence[Value]) -> bool:
         if not values:
             return False
-        if self.value is MISSING:
+        if self.value is UNSET:
             self.value = values[0]
             values = values[1:]
         for value in values:
@@ -94,12 +94,12 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         return True
 
     def get(self) -> Value:
-        if self.value is MISSING:
+        if self.value is UNSET:
             raise EmptyChannelError()
         return self.value
 
     def is_available(self) -> bool:
-        return self.value is not MISSING
+        return self.value is not UNSET
 
     def checkpoint(self) -> Value:
         return self.value

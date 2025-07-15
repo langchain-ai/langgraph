@@ -3,8 +3,8 @@ from typing import Any, Generic
 
 from typing_extensions import Self
 
+from langgraph._internal._typing import UNSET
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import (
     EmptyChannelError,
     ErrorCode,
@@ -22,7 +22,7 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def __init__(self, typ: Any, key: str = "") -> None:
         super().__init__(typ, key)
-        self.value = MISSING
+        self.value = UNSET
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, LastValue)
@@ -45,7 +45,7 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.key)
-        if checkpoint is not MISSING:
+        if checkpoint is not UNSET:
             empty.value = checkpoint
         return empty
 
@@ -63,12 +63,12 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
         return True
 
     def get(self) -> Value:
-        if self.value is MISSING:
+        if self.value is UNSET:
             raise EmptyChannelError()
         return self.value
 
     def is_available(self) -> bool:
-        return self.value is not MISSING
+        return self.value is not UNSET
 
     def checkpoint(self) -> Value:
         return self.value
@@ -84,7 +84,7 @@ class LastValueAfterFinish(
 
     def __init__(self, typ: Any, key: str = "") -> None:
         super().__init__(typ, key)
-        self.value = MISSING
+        self.value = UNSET
         self.finished = False
 
     def __eq__(self, value: object) -> bool:
@@ -101,14 +101,14 @@ class LastValueAfterFinish(
         return self.typ
 
     def checkpoint(self) -> tuple[Value, bool]:
-        if self.value is MISSING:
-            return MISSING
+        if self.value is UNSET:
+            return UNSET
         return (self.value, self.finished)
 
     def from_checkpoint(self, checkpoint: tuple[Value, bool]) -> Self:
         empty = self.__class__(self.typ)
         empty.key = self.key
-        if checkpoint is not MISSING:
+        if checkpoint is not UNSET:
             empty.value, empty.finished = checkpoint
         return empty
 
@@ -123,22 +123,22 @@ class LastValueAfterFinish(
     def consume(self) -> bool:
         if self.finished:
             self.finished = False
-            self.value = MISSING
+            self.value = UNSET
             return True
 
         return False
 
     def finish(self) -> bool:
-        if not self.finished and self.value is not MISSING:
+        if not self.finished and self.value is not UNSET:
             self.finished = True
             return True
         else:
             return False
 
     def get(self) -> Value:
-        if self.value is MISSING or not self.finished:
+        if self.value is UNSET or not self.finished:
             raise EmptyChannelError()
         return self.value
 
     def is_available(self) -> bool:
-        return self.value is not MISSING and self.finished
+        return self.value is not UNSET and self.finished

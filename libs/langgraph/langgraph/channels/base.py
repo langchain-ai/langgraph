@@ -4,7 +4,7 @@ from typing import Any, Generic, TypeVar
 
 from typing_extensions import Self
 
-from langgraph.constants import MISSING
+from langgraph._internal._typing import UNSET
 from langgraph.errors import EmptyChannelError
 
 Value = TypeVar("Value")
@@ -48,7 +48,7 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         try:
             return self.get()
         except EmptyChannelError:
-            return MISSING
+            return UNSET
 
     @abstractmethod
     def from_checkpoint(self, checkpoint: C) -> Self:

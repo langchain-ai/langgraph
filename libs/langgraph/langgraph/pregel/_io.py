@@ -4,12 +4,11 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, Literal
 
-from langgraph._internal._typing import EMPTY_SEQ
+from langgraph._internal._typing import EMPTY_SEQ, UNSET
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import (
     ERROR,
     INTERRUPT,
-    MISSING,
     NULL_TASK_ID,
     RESUME,
     RETURN,
@@ -134,8 +133,8 @@ def map_output_updates(
         return
     updated: list[tuple[str, Any]] = []
     for task, writes in output_tasks:
-        rtn = next((value for chan, value in writes if chan == RETURN), MISSING)
-        if rtn is not MISSING:
+        rtn = next((value for chan, value in writes if chan == RETURN), UNSET)
+        if rtn is not UNSET:
             updated.append((task.name, rtn))
         elif isinstance(output_channels, str):
             updated.extend(

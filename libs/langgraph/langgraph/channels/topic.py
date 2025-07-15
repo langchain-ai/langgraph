@@ -5,8 +5,8 @@ from typing import Any, Generic, Union
 
 from typing_extensions import Self
 
+from langgraph._internal._typing import UNSET
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
 
 __all__ = ("Topic",)
@@ -66,7 +66,7 @@ class Topic(
     def from_checkpoint(self, checkpoint: list[Value]) -> Self:
         empty = self.__class__(self.typ, self.accumulate)
         empty.key = self.key
-        if checkpoint is not MISSING:
+        if checkpoint is not UNSET:
             if isinstance(checkpoint, tuple):
                 # backwards compatibility
                 empty.values = checkpoint[1]

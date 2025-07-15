@@ -4,17 +4,17 @@ from typing import Union
 
 import pytest
 
+from langgraph._internal._typing import UNSET
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 pytestmark = pytest.mark.anyio
 
 
 def test_last_value() -> None:
-    channel = LastValue(int).from_checkpoint(MISSING)
+    channel = LastValue(int).from_checkpoint(UNSET)
     assert channel.ValueType is int
     assert channel.UpdateType is int
 
@@ -33,7 +33,7 @@ def test_last_value() -> None:
 
 
 def test_topic() -> None:
-    channel = Topic(str).from_checkpoint(MISSING)
+    channel = Topic(str).from_checkpoint(UNSET)
     assert channel.ValueType == Sequence[str]
     assert channel.UpdateType is Union[str, list[str]]
 
@@ -57,7 +57,7 @@ def test_topic() -> None:
 
 
 def test_topic_accumulate() -> None:
-    channel = Topic(str, accumulate=True).from_checkpoint(MISSING)
+    channel = Topic(str, accumulate=True).from_checkpoint(UNSET)
     assert channel.ValueType == Sequence[str]
     assert channel.UpdateType is Union[str, list[str]]
 
@@ -75,7 +75,7 @@ def test_topic_accumulate() -> None:
 
 
 def test_binop() -> None:
-    channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(MISSING)
+    channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(UNSET)
     assert channel.ValueType is int
     assert channel.UpdateType is int
 
