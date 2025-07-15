@@ -30,7 +30,7 @@ These capabilities are available in both LangGraph OSS and the LangGraph Platfor
 
 These capabilities are only available in [LangGraph Platform](../concepts/langgraph_platform.md).
 
-- [Authentication and access control](../concepts/auth.md): Authenticate and authorize users to access a Langraph graph.
+- [Authentication and access control](../concepts/auth.md): Authenticate and authorize users to access a LangGraph graph.
 - [Assistants](../concepts/assistants.md): Build assistants that can be used to interact with a LangGraph graph.
 - [Double-texting](../concepts/double_texting.md): Handle double-texting (consecutive messages before a first response is returned) in a LangGraph graph.
 - [Webhooks](../cloud/concepts/webhooks.md): Send webhooks to a LangGraph graph.

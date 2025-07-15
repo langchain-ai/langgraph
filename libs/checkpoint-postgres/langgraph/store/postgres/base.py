@@ -756,6 +756,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 If provided, will create a connection pool and use it instead of a single connection.
                 This overrides the `pipeline` argument.
             index: The index configuration for the store.
+            ttl: The TTL configuration for the store.
 
         Returns:
             PostgresStore: A new PostgresStore instance.

@@ -55,14 +55,16 @@ The `langchain-mcp-adapters` package enables agents to use tools defined across 
 
 === "In a workflow"
 
-    ```python
+    ```python title="Workflow using MCP tools with ToolNode"
     from langchain_mcp_adapters.client import MultiServerMCPClient
-    from langgraph.graph import StateGraph, MessagesState, START
-    from langgraph.prebuilt import ToolNode, tools_condition
-
     from langchain.chat_models import init_chat_model
-    model = init_chat_model("openai:gpt-4.1")
+    from langgraph.graph import StateGraph, MessagesState, START
+    from langgraph.prebuilt import ToolNode
 
+    # Initialize the model
+    model = init_chat_model("anthropic:claude-3-5-sonnet-latest")
+
+    # Set up MCP client
     client = MultiServerMCPClient(
         {
             "math": {
@@ -80,22 +82,47 @@ The `langchain-mcp-adapters` package enables agents to use tools defined across 
     )
     tools = await client.get_tools()
 
-    def call_model(state: MessagesState):
-        response = model.bind_tools(tools).invoke(state["messages"])
-        return {"messages": response}
+    # Bind tools to model
+    model_with_tools = model.bind_tools(tools)
 
+    # Create ToolNode
+    tool_node = ToolNode(tools)
+
+    def should_continue(state: MessagesState):
+        messages = state["messages"]
+        last_message = messages[-1]
+        if last_message.tool_calls:
+            return "tools"
+        return END
+
+    # Define call_model function
+    async def call_model(state: MessagesState):
+        messages = state["messages"]
+        response = await model_with_tools.ainvoke(messages)
+        return {"messages": [response]}
+
+    # Build the graph
     builder = StateGraph(MessagesState)
-    builder.add_node(call_model)
-    builder.add_node(ToolNode(tools))
+    builder.add_node("call_model", call_model)
+    builder.add_node("tools", tool_node)
+
     builder.add_edge(START, "call_model")
     builder.add_conditional_edges(
         "call_model",
-        tools_condition,
+        should_continue,
     )
     builder.add_edge("tools", "call_model")
+
+    # Compile the graph
     graph = builder.compile()
-    math_response = await graph.ainvoke({"messages": "what's (3 + 5) x 12?"})
-    weather_response = await graph.ainvoke({"messages": "what is the weather in nyc?"})
+
+    # Test the graph
+    math_response = await graph.ainvoke(
+        {"messages": [{"role": "user", "content": "what's (3 + 5) x 12?"}]}
+    )
+    weather_response = await graph.ainvoke(
+        {"messages": [{"role": "user", "content": "what is the weather in nyc?"}]}
+    )
     ```
 
 

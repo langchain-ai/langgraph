@@ -190,7 +190,7 @@ class PregelRunner:
                             tb = tb.tb_next
                         exc.__traceback__ = tb
                     raise
-            if not futures:  # maybe `t` schuduled another task
+            if not futures:  # maybe `t` scheduled another task
                 return
             else:
                 tasks = ()  # don't reschedule this task
@@ -326,7 +326,7 @@ class PregelRunner:
                             tb = tb.tb_next
                         exc.__traceback__ = tb
                     raise
-            if not futures:  # maybe `t` schuduled another task
+            if not futures:  # maybe `t` scheduled another task
                 return
             else:
                 tasks = ()  # don't reschedule this task
