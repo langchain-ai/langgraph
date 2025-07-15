@@ -4,6 +4,9 @@
 
 ---
 
+## v0.2.89 (2025-07-15)
+- Decoupled checkpoint writing from thread/run state by removing foreign keys and updated logger to prevent timeout-related failures.
+
 ## v0.2.88 (2025-07-14)
 - Removed the foreign key constraint for `thread` in the `run` table to simplify database schema.
 
