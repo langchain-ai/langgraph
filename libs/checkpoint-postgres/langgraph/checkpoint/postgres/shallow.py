@@ -440,7 +440,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                 (
                     thread_id,
                     checkpoint_ns,
-                    Jsonb(copy),
+                    Jsonb(self.serde.dumps_typed(copy)[1]),
                     Jsonb(get_checkpoint_metadata(config, metadata)),
                 ),
             )
@@ -773,7 +773,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                 (
                     thread_id,
                     checkpoint_ns,
-                    Jsonb(copy),
+                    Jsonb(self.serde.dumps_typed(copy)[1]),
                     Jsonb(get_checkpoint_metadata(config, metadata)),
                 ),
             )
@@ -957,3 +957,4 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         return asyncio.run_coroutine_threadsafe(
             self.aput_writes(config, writes, task_id, task_path), self.loop
         ).result()
+
