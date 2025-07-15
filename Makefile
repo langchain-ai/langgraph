@@ -66,3 +66,17 @@ test:
 			$(MAKE) -C $$dir test; \
 		fi; \
 	done
+
+# Help
+.PHONY: help
+help:
+	@echo '===================='
+	@echo 'install                      - install dependencies for all projects'
+	@echo '-- LINTING --'
+	@echo 'lint                         - lint all projects'
+	@echo 'format                       - format all projects'
+	@echo '-- DEPENDENCY MANAGEMENT --'
+	@echo 'lock                         - lock all projects'
+	@echo 'lock-upgrade                 - lock and upgrade all projects'
+	@echo '-- TESTING --'
+	@echo 'test                         - test all projects'
