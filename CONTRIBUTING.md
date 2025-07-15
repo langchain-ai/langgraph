@@ -249,10 +249,10 @@ make serve-docs
 
 #### Linting
 
-The documentation is linted from the **monorepo root**. To lint it, run the following from there:
+To spell check the docs, run the following from the `docs` directory:
 
 ```bash
-make spellcheck
+codespell --skip="*.ambr,*.lock,*.ipynb,*.yaml,*.zlib,*.css.map,*.js.map" --ignore-words-list="infor,thead,stdio,nd,jupyter,lets,lite,uis,deque" .
 ```
 
 ### ️In-code Documentation
