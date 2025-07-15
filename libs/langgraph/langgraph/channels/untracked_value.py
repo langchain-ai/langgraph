@@ -3,7 +3,7 @@ from typing import Generic
 
 from typing_extensions import Self
 
-from langgraph._internal._typing import UNSET
+from langgraph._internal._typing import UNSET, UnsetType
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
@@ -14,6 +14,9 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, never checkpointed."""
 
     __slots__ = ("value", "guard")
+
+    guard: bool
+    value: Value | UnsetType
 
     def __init__(self, typ: type[Value], guard: bool = True) -> None:
         super().__init__(typ)
@@ -40,7 +43,7 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
         empty.value = self.value
         return empty
 
-    def checkpoint(self) -> Value:
+    def checkpoint(self) -> Value | UnsetType:
         return UNSET
 
     def from_checkpoint(self, checkpoint: Value) -> Self:

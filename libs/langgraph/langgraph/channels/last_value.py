@@ -3,7 +3,7 @@ from typing import Any, Generic
 
 from typing_extensions import Self
 
-from langgraph._internal._typing import UNSET
+from langgraph._internal._typing import UNSET, UnsetType
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import (
     EmptyChannelError,
@@ -19,6 +19,8 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, can receive at most one value per step."""
 
     __slots__ = ("value",)
+
+    value: Value | UnsetType
 
     def __init__(self, typ: Any, key: str = "") -> None:
         super().__init__(typ, key)
@@ -43,9 +45,9 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
         empty.value = self.value
         return empty
 
-    def from_checkpoint(self, checkpoint: Value) -> Self:
+    def from_checkpoint(self, checkpoint: Value | UnsetType) -> Self:
         empty = self.__class__(self.typ, self.key)
-        if checkpoint is not UNSET:
+        if not isinstance(checkpoint, UnsetType):
             empty.value = checkpoint
         return empty
 
@@ -75,12 +77,15 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
 
 class LastValueAfterFinish(
-    Generic[Value], BaseChannel[Value, Value, tuple[Value, bool]]
+    Generic[Value], BaseChannel[Value, Value, tuple[Value | UnsetType, bool]]
 ):
     """Stores the last value received, but only made available after finish().
     Once made available, clears the value."""
 
     __slots__ = ("value", "finished")
+
+    value: Value | UnsetType
+    finished: bool
 
     def __init__(self, typ: Any, key: str = "") -> None:
         super().__init__(typ, key)
@@ -100,19 +105,21 @@ class LastValueAfterFinish(
         """The type of the update received by the channel."""
         return self.typ
 
-    def checkpoint(self) -> tuple[Value, bool]:
-        if self.value is UNSET:
+    def checkpoint(self) -> tuple[Value | UnsetType, bool] | UnsetType:
+        if isinstance(self.value, UnsetType):
             return UNSET
         return (self.value, self.finished)
 
-    def from_checkpoint(self, checkpoint: tuple[Value, bool]) -> Self:
+    def from_checkpoint(
+        self, checkpoint: tuple[Value | UnsetType, bool] | UnsetType
+    ) -> Self:
         empty = self.__class__(self.typ)
         empty.key = self.key
-        if checkpoint is not UNSET:
+        if not isinstance(checkpoint, UnsetType):
             empty.value, empty.finished = checkpoint
         return empty
 
-    def update(self, values: Sequence[Value]) -> bool:
+    def update(self, values: Sequence[Value | UnsetType]) -> bool:
         if len(values) == 0:
             return False
 
@@ -136,7 +143,7 @@ class LastValueAfterFinish(
             return False
 
     def get(self) -> Value:
-        if self.value is UNSET or not self.finished:
+        if isinstance(self.value, UnsetType) or not self.finished:
             raise EmptyChannelError()
         return self.value
 

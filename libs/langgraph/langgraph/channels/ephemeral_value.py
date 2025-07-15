@@ -3,7 +3,7 @@ from typing import Any, Generic
 
 from typing_extensions import Self
 
-from langgraph._internal._typing import UNSET
+from langgraph._internal._typing import UNSET, UnsetType
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
@@ -14,6 +14,9 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the value received in the step immediately preceding, clears after."""
 
     __slots__ = ("value", "guard")
+
+    value: Value | UnsetType
+    guard: bool
 
     def __init__(self, typ: Any, guard: bool = True) -> None:
         super().__init__(typ)
@@ -40,14 +43,14 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
         empty.value = self.value
         return empty
 
-    def from_checkpoint(self, checkpoint: Value) -> Self:
+    def from_checkpoint(self, checkpoint: Value | UnsetType) -> Self:
         empty = self.__class__(self.typ, self.guard)
         empty.key = self.key
-        if checkpoint is not UNSET:
+        if isinstance(checkpoint, UnsetType):
             empty.value = checkpoint
         return empty
 
-    def update(self, values: Sequence[Value]) -> bool:
+    def update(self, values: Sequence[Value | UnsetType]) -> bool:
         if len(values) == 0:
             if self.value is not UNSET:
                 self.value = UNSET

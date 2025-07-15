@@ -3,7 +3,7 @@ from typing import Any, Generic
 
 from typing_extensions import Self
 
-from langgraph._internal._typing import UNSET
+from langgraph._internal._typing import UNSET, UnsetType
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError
 
@@ -15,6 +15,8 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
     received, they are all equal."""
 
     __slots__ = ("typ", "value")
+
+    value: Value | UnsetType
 
     def __init__(self, typ: Any, key: str = "") -> None:
         super().__init__(typ, key)
@@ -39,9 +41,9 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
         empty.value = self.value
         return empty
 
-    def from_checkpoint(self, checkpoint: Value) -> Self:
+    def from_checkpoint(self, checkpoint: Value | UnsetType) -> Self:
         empty = self.__class__(self.typ, self.key)
-        if checkpoint is not UNSET:
+        if not isinstance(checkpoint, UnsetType):
             empty.value = checkpoint
         return empty
 
@@ -57,12 +59,12 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
         return True
 
     def get(self) -> Value:
-        if self.value is UNSET:
+        if isinstance(self.value, UnsetType):
             raise EmptyChannelError()
         return self.value
 
     def is_available(self) -> bool:
         return self.value is not UNSET
 
-    def checkpoint(self) -> Value:
+    def checkpoint(self) -> Value | UnsetType:
         return self.value

@@ -4,17 +4,17 @@ from typing import Any, Generic, TypeVar
 
 from typing_extensions import Self
 
-from langgraph._internal._typing import UNSET
+from langgraph._internal._typing import UNSET, UnsetType
 from langgraph.errors import EmptyChannelError
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
-C = TypeVar("C")
+Checkpoint = TypeVar("Checkpoint")
 
 __all__ = ("BaseChannel",)
 
 
-class BaseChannel(Generic[Value, Update, C], ABC):
+class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
     """Base class for all channels."""
 
     __slots__ = ("key", "typ")
@@ -41,7 +41,7 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         Subclasses can override this method with a more efficient implementation."""
         return self.from_checkpoint(self.checkpoint())
 
-    def checkpoint(self) -> C:
+    def checkpoint(self) -> Checkpoint | UnsetType:
         """Return a serializable representation of the channel's current state.
         Raises EmptyChannelError if the channel is empty (never updated yet),
         or doesn't support checkpoints."""
@@ -51,7 +51,7 @@ class BaseChannel(Generic[Value, Update, C], ABC):
             return UNSET
 
     @abstractmethod
-    def from_checkpoint(self, checkpoint: C) -> Self:
+    def from_checkpoint(self, checkpoint: Checkpoint | UnsetType) -> Self:
         """Return a new identical channel, optionally initialized from a checkpoint.
         If the checkpoint contains complex data structures, they should be copied."""
 

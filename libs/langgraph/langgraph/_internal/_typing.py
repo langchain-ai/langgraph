@@ -43,11 +43,11 @@ Note: we cannot use either `TypedDict` or `dataclass` directly due to limitation
 """
 
 
-class Unset:
+class UnsetType:
     """A sentinel value to represent an unset type."""
 
 
-UNSET: Unset = Unset()
+UNSET: UnsetType = UnsetType()
 """Unset sentinel value."""
 
 
