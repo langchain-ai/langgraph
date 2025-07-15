@@ -7,7 +7,6 @@ import operator
 import threading
 import time
 import uuid
-import warnings
 from collections import Counter, deque
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -190,7 +189,7 @@ def test_checkpoint_errors() -> None:
         )
 
 
-def test_config_json_schema() -> None:
+def test_context_json_schema() -> None:
     """Test that config json schema is generated properly."""
     chain = NodeBuilder().subscribe_only("input").write_to("output")
 
@@ -210,37 +209,25 @@ def test_config_json_schema() -> None:
         },
         input_channels=["input", "ephemeral"],
         output_channels="output",
-        config_type=Foo,
+        context_schema=Foo,
     )
 
-    assert app.get_config_jsonschema() == {
-        "$defs": {
-            "Foo": {
-                "properties": {
-                    "x": {
-                        "title": "X",
-                        "type": "integer",
-                    },
-                    "y": {
-                        "default": "foo",
-                        "title": "Y",
-                        "type": "string",
-                    },
-                },
-                "required": [
-                    "x",
-                ],
-                "title": "Foo",
-                "type": "object",
-            },
-        },
+    assert app.get_context_jsonschema() == {
         "properties": {
-            "configurable": {
-                "$ref": "#/$defs/Foo",
-                "default": None,
+            "x": {
+                "title": "X",
+                "type": "integer",
+            },
+            "y": {
+                "default": "foo",
+                "title": "Y",
+                "type": "string",
             },
         },
-        "title": "LangGraphConfig",
+        "required": [
+            "x",
+        ],
+        "title": "Foo",
         "type": "object",
     }
 
@@ -423,13 +410,7 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
         "title": "LangGraphOutput",
         "type": "integer",
     }
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")  # raise warnings as errors
-        assert app.config_schema().model_json_schema() == {
-            "properties": {},
-            "title": "LangGraphConfig",
-            "type": "object",
-        }
+    assert app.get_context_jsonschema() is None
 
     assert app.invoke(2) == 3
     assert app.invoke(2, output_keys=["output"]) == {"output": 3}
@@ -1227,7 +1208,7 @@ def test_imp_task(
 ) -> None:
     mapper_calls = 0
 
-    class Configurable(TypedDict):
+    class Context(TypedDict):
         model: str
 
     @task()
@@ -1237,7 +1218,7 @@ def test_imp_task(
         time.sleep(input / 100)
         return str(input) * 2
 
-    @entrypoint(checkpointer=sync_checkpointer, config_schema=Configurable)
+    @entrypoint(checkpointer=sync_checkpointer, context_schema=Context)
     def graph(input: list[int]) -> list[str]:
         futures = [mapper(i) for i in input]
         mapped = [f.result() for f in futures]
@@ -1254,21 +1235,10 @@ def test_imp_task(
         "items": {"type": "string"},
         "title": "LangGraphOutput",
     }
-    assert graph.get_config_jsonschema() == {
-        "$defs": {
-            "Configurable": {
-                "properties": {
-                    "model": {"title": "Model", "type": "string"},
-                },
-                "required": ["model"],
-                "title": "Configurable",
-                "type": "object",
-            }
-        },
-        "properties": {
-            "configurable": {"$ref": "#/$defs/Configurable", "default": None}
-        },
-        "title": "LangGraphConfig",
+    assert graph.get_context_jsonschema() == {
+        "properties": {"model": {"title": "Model", "type": "string"}},
+        "required": ["model"],
+        "title": "Context",
         "type": "object",
     }
 
@@ -1770,7 +1740,7 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
         "intermediate_steps",
     }
 
-    class Config(TypedDict, total=False):
+    class Context(TypedDict, total=False):
         tools: list[str]
 
     # Assemble the tools
@@ -1827,7 +1797,7 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
             return "continue"
 
     # Define a new graph
-    builder = StateGraph(AgentState, Config)
+    builder = StateGraph(AgentState, Context)
 
     builder.add_node("agent", agent)
     builder.add_node("tools", execute_tools)
@@ -1842,7 +1812,7 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
 
     app = builder.compile()
 
-    assert json.dumps(app.config_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_context_jsonschema()) == snapshot
     assert json.dumps(app.get_input_jsonschema()) == snapshot
     assert json.dumps(app.get_output_jsonschema()) == snapshot
 

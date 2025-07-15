@@ -121,11 +121,11 @@ from langgraph.graph import StateGraph, END, START
 from my_agent.utils.nodes import call_model, should_continue, tool_node # import nodes
 from my_agent.utils.state import AgentState # import state
 
-# Define the config
-class GraphConfig(TypedDict):
+# Define the runtime context
+class GraphContext(TypedDict):
     model_name: Literal["anthropic", "openai"]
 
-workflow = StateGraph(AgentState, config_schema=GraphConfig)
+workflow = StateGraph(AgentState, context_schema=GraphContext)
 workflow.add_node("agent", call_model)
 workflow.add_node("action", tool_node)
 workflow.add_edge(START, "agent")

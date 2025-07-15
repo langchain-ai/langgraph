@@ -4,10 +4,13 @@ import asyncio
 import concurrent
 import concurrent.futures
 import queue
+import warnings
 import weakref
 from collections import defaultdict, deque
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from dataclasses import is_dataclass
 from functools import partial
+from inspect import isclass
 from typing import Any, Callable, Generic, Union, cast, get_type_hints
 from uuid import UUID, uuid5
 
@@ -22,8 +25,8 @@ from langchain_core.runnables.config import (
     get_callback_manager_for_config,
 )
 from langchain_core.runnables.graph import Graph
-from pydantic import BaseModel
-from typing_extensions import Self
+from pydantic import BaseModel, TypeAdapter
+from typing_extensions import Self, Unpack, deprecated, is_typeddict
 
 from langgraph._internal._config import (
     ensure_config,
@@ -44,6 +47,7 @@ from langgraph._internal._runnable import (
     RunnableSeq,
     coerce_to_runnable,
 )
+from langgraph._internal._typing import DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -64,10 +68,9 @@ from langgraph.constants import (
     CONFIG_KEY_NODE_FINISHED,
     CONFIG_KEY_READ,
     CONFIG_KEY_RUNNER_SUBMIT,
+    CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SEND,
-    CONFIG_KEY_STORE,
     CONFIG_KEY_STREAM,
-    CONFIG_KEY_STREAM_WRITER,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
     END,
@@ -113,6 +116,7 @@ from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
+from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
@@ -125,7 +129,8 @@ from langgraph.types import (
     StateUpdate,
     StreamMode,
 )
-from langgraph.typing import InputT, OutputT, StateT
+from langgraph.typing import ContextT, InputT, OutputT, StateT
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -299,7 +304,10 @@ class NodeBuilder:
         )
 
 
-class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, OutputT]):
+class Pregel(
+    PregelProtocol[StateT, ContextT, InputT, OutputT],
+    Generic[StateT, ContextT, InputT, OutputT],
+):
     """Pregel manages the runtime behavior for LangGraph applications.
 
     ## Overview
@@ -592,7 +600,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
     """Cache policy to use for all nodes. Can be overridden by individual nodes.
     Defaults to None."""
 
-    config_type: type[Any] | None = None
+    context_schema: type[ContextT] | None = None
 
     config: RunnableConfig | None = None
 
@@ -620,11 +628,22 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         cache: BaseCache | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
-        config_type: type[Any] | None = None,
+        context_schema: type[ContextT] | None = None,
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         name: str = "LangGraph",
+        **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
+        if config_type := deprecated_kwargs.get("config_type"):
+            warnings.warn(
+                "`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+
+            if context_schema is None:
+                context_schema = cast(type[ContextT], config_type)
+
         self.nodes = {
             k: v.build() if isinstance(v, NodeBuilder) else v for k, v in nodes.items()
         }
@@ -651,7 +670,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
             (retry_policy,) if isinstance(retry_policy, RetryPolicy) else retry_policy
         )
         self.cache_policy = cache_policy
-        self.config_type = config_type
+        self.context_schema = context_schema
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.name = name
@@ -760,10 +779,23 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         self.trigger_to_nodes = _trigger_to_nodes(self.nodes)
         return self
 
+    @deprecated(
+        "`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead."
+    )
     def config_schema(self, *, include: Sequence[str] | None = None) -> type[BaseModel]:
+        warnings.warn(
+            "`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
+            category=LangGraphDeprecatedSinceV10,
+            stacklevel=2,
+        )
+
         include = include or []
         fields = {
-            **({"configurable": (self.config_type, None)} if self.config_type else {}),
+            **(
+                {"configurable": (self.context_schema, None)}
+                if self.context_schema
+                else {}
+            ),
             **{
                 field_name: (field_type, None)
                 for field_name, field_type in get_type_hints(RunnableConfig).items()
@@ -772,11 +804,35 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         }
         return create_model(self.get_name("Config"), field_definitions=fields)
 
+    @deprecated(
+        "`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead."
+    )
     def get_config_jsonschema(
         self, *, include: Sequence[str] | None = None
     ) -> dict[str, Any]:
-        schema = self.config_schema(include=include)
+        warnings.warn(
+            "`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead.",
+            category=LangGraphDeprecatedSinceV10,
+            stacklevel=2,
+        )
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=LangGraphDeprecatedSinceV10)
+            schema = self.config_schema(include=include)
         return schema.model_json_schema()
+
+    def get_context_jsonschema(self) -> dict[str, Any] | None:
+        if (context_schema := self.context_schema) is None:
+            return None
+
+        if isclass(context_schema) and issubclass(context_schema, BaseModel):
+            return context_schema.model_json_schema()
+        elif is_typeddict(context_schema) or is_dataclass(context_schema):
+            return TypeAdapter(context_schema).json_schema()
+        else:
+            raise ValueError(
+                f"Invalid context schema type: {context_schema}. Must be a BaseModel, TypedDict or dataclass."
+            )
 
     @property
     def InputType(self) -> Any:
@@ -2327,8 +2383,8 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 "Checkpointer requires one or more of the following 'configurable' "
                 "keys: thread_id, checkpoint_ns, checkpoint_id"
             )
-        if CONFIG_KEY_STORE in config.get(CONF, {}):
-            store: BaseStore | None = config[CONF][CONFIG_KEY_STORE]
+        if CONFIG_KEY_RUNTIME in config.get(CONF, {}):
+            store: BaseStore | None = config[CONF][CONFIG_KEY_RUNTIME].store
         else:
             store = self.store
         if CONFIG_KEY_CACHE in config.get(CONF, {}):
@@ -2350,6 +2406,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
@@ -2446,28 +2503,39 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(stream.put, subgraphs)
                 )
+
             # set up custom stream mode
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = lambda c: stream.put(
-                    (
-                        tuple(
-                            get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[
-                                :-1
-                            ]
-                        ),
-                        "custom",
-                        c,
+
+                def stream_writer(c: Any) -> None:
+                    stream.put(
+                        (
+                            tuple(
+                                get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(
+                                    NS_SEP
+                                )[:-1]
+                            ),
+                            "custom",
+                            c,
+                        )
                     )
-                )
-            elif (
-                CONFIG_KEY_STREAM not in config[CONF]
-                and CONFIG_KEY_STREAM_WRITER in config[CONF]
-            ):
-                # remove parent graph stream writer if subgraph streaming not requested
-                del config[CONF][CONFIG_KEY_STREAM_WRITER]
+            elif CONFIG_KEY_STREAM in config[CONF]:
+                stream_writer = config[CONF][CONFIG_KEY_RUNTIME].stream_writer
+            else:
+
+                def stream_writer(c: Any) -> None:
+                    pass
+
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
+
+            config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
+                context=context,
+                store=store,
+                stream_writer=stream_writer,
+                previous=None,
+            )
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
@@ -2572,6 +2640,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
@@ -2686,10 +2755,26 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(stream_put, subgraphs)
                 )
+
             # set up custom stream mode
+            def stream_writer(c: Any) -> None:
+                aioloop.call_soon_threadsafe(
+                    stream.put_nowait,
+                    (
+                        tuple(
+                            get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[
+                                :-1
+                            ]
+                        ),
+                        "custom",
+                        c,
+                    ),
+                )
+
             if "custom" in stream_modes:
-                config[CONF][CONFIG_KEY_STREAM_WRITER] = (
-                    lambda c: aioloop.call_soon_threadsafe(
+
+                def stream_writer(c: Any) -> None:
+                    aioloop.call_soon_threadsafe(
                         stream.put_nowait,
                         (
                             tuple(
@@ -2701,16 +2786,23 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
                             c,
                         ),
                     )
-                )
-            elif (
-                CONFIG_KEY_STREAM not in config[CONF]
-                and CONFIG_KEY_STREAM_WRITER in config[CONF]
-            ):
-                # remove parent graph stream writer if subgraph streaming not requested
-                del config[CONF][CONFIG_KEY_STREAM_WRITER]
+            elif CONFIG_KEY_STREAM in config[CONF]:
+                stream_writer = config[CONF][CONFIG_KEY_RUNTIME].stream_writer
+            else:
+
+                def stream_writer(c: Any) -> None:
+                    pass
+
             # set checkpointing mode for subgraphs
             if checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_CHECKPOINT_DURING] = checkpoint_during
+
+            config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
+                context=context,
+                store=store,
+                stream_writer=stream_writer,
+                previous=None,
+            )
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
@@ -2816,6 +2908,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode = "values",
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
@@ -2848,6 +2941,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         for chunk in self.stream(
             input,
             config,
+            context=context,
             stream_mode=["updates", "values"]
             if stream_mode == "values"
             else stream_mode,
@@ -2891,6 +2985,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode = "values",
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
@@ -2924,6 +3019,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         async for chunk in self.astream(
             input,
             config,
+            context=context,
             stream_mode=["updates", "values"]
             if stream_mode == "values"
             else stream_mode,

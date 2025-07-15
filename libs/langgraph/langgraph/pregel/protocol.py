@@ -9,12 +9,12 @@ from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
 from langgraph.types import All, Command, StateSnapshot, StateUpdate, StreamMode
-from langgraph.typing import InputT, OutputT, StateT
+from langgraph.typing import ContextT, InputT, OutputT, StateT
 
 __all__ = ("PregelProtocol", "StreamProtocol")
 
 
-class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT]):
+class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, OutputT]):
     @abstractmethod
     def with_config(
         self, config: RunnableConfig | None = None, **kwargs: Any
@@ -102,6 +102,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT]):
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -114,6 +115,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT]):
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -126,6 +128,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT]):
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
     ) -> dict[str, Any] | Any: ...
@@ -136,6 +139,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT]):
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
+        context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
     ) -> dict[str, Any] | Any: ...

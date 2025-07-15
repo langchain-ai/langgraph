@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import sys
 import typing
 import warnings
 from collections import defaultdict
@@ -83,8 +84,13 @@ from langgraph.types import (
     RetryPolicy,
     Send,
 )
-from langgraph.typing import InputT, NodeInputT, OutputT, StateT
-from langgraph.warnings import LangGraphDeprecatedSinceV05
+from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
+from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
+
+if sys.version_info < (3, 10):
+    NoneType = type(None)
+else:
+    from types import NoneType as NoneType
 
 __all__ = ("StateGraph", "CompiledStateGraph")
 
@@ -105,14 +111,14 @@ def _warn_invalid_state_schema(schema: type[Any] | Any) -> None:
     )
 
 
-def _get_node_name(node: StateNode) -> str:
+def _get_node_name(node: StateNode[Any, ContextT]) -> str:
     try:
         return getattr(node, "__name__", node.__class__.__name__)
     except AttributeError:
         raise TypeError(f"Unsupported node type: {type(node)}")
 
 
-class StateGraph(Generic[StateT, InputT, OutputT]):
+class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
     The signature of each node is State -> Partial<State>.
 
@@ -122,8 +128,10 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
 
     Args:
         state_schema: The schema class that defines the state.
-        config_schema: The schema class that defines the configuration.
-            Use this to expose configurable parameters in your API.
+        context_schema: The schema class that defines the runtime context.
+            Use this to expose immutable context data to your nodes, like user_id, db_conn, etc.
+        input_schema: The schema class that defines the input to the graph.
+        output_schema: The schema class that defines the output from the graph.
 
     Example:
         ```python
@@ -131,6 +139,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         from typing_extensions import Annotated, TypedDict
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.graph import StateGraph
+        from langgraph.rumtime import Runtime
 
         def reducer(a: list, b: int | None) -> list:
             if b is not None:
@@ -140,13 +149,13 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         class State(TypedDict):
             x: Annotated[list, reducer]
 
-        class ConfigSchema(TypedDict):
+        class Context(TypedDict):
             r: float
 
-        graph = StateGraph(State, config_schema=ConfigSchema)
+        graph = StateGraph(state_schema=State, context_schema=Context)
 
-        def node(state: State, config: RunnableConfig) -> dict:
-            r = config["configurable"].get("r", 1.0)
+        def node(state: State, runtime: Runtime[Context]) -> dict:
+            r = runtie.context.get("r", 1.0)
             x = state["x"][-1]
             next_value = x * r * (1 - x)
             return {"x": next_value}
@@ -156,16 +165,13 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         graph.set_finish_point("A")
         compiled = graph.compile()
 
-        print(compiled.config_specs)
-        # [ConfigurableFieldSpec(id='r', annotation=<class 'float'>, name=None, description=None, default=None, is_shared=False, dependencies=None)]
-
-        step1 = compiled.invoke({"x": 0.5}, {"configurable": {"r": 3.0}})
+        step1 = compiled.invoke({"x": 0.5}, context={"r": 3.0})
         # {'x': [0.5, 0.75]}
         ```
     """
 
     edges: set[tuple[str, str]]
-    nodes: dict[str, StateNodeSpec]
+    nodes: dict[str, StateNodeSpec[Any, ContextT]]
     branches: defaultdict[str, dict[str, BranchSpec]]
     channels: dict[str, BaseChannel]
     managed: dict[str, ManagedValueSpec]
@@ -174,18 +180,28 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
 
     compiled: bool
     state_schema: type[StateT]
+    context_schema: type[ContextT] | None
     input_schema: type[InputT]
     output_schema: type[OutputT]
 
     def __init__(
         self,
         state_schema: type[StateT],
-        config_schema: type[Any] | None = None,
+        context_schema: type[ContextT] | None = None,
         *,
         input_schema: type[InputT] | None = None,
         output_schema: type[OutputT] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
+        if (config_schema := kwargs.get("config_schema", UNSET)) is not UNSET:
+            warnings.warn(
+                "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+            if context_schema is None:
+                context_schema = cast(type[ContextT], config_schema)
+
         if (input_ := kwargs.get("input", UNSET)) is not UNSET:
             warnings.warn(
                 "`input` is deprecated and will be removed. Please use `input_schema` instead.",
@@ -193,7 +209,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
                 stacklevel=2,
             )
             if input_schema is None:
-                input_schema = cast(Union[type[InputT], None], input_)
+                input_schema = cast(type[InputT], input_)
 
         if (output := kwargs.get("output", UNSET)) is not UNSET:
             warnings.warn(
@@ -202,7 +218,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
                 stacklevel=2,
             )
             if output_schema is None:
-                output_schema = cast(Union[type[OutputT], None], output)
+                output_schema = cast(type[OutputT], output)
 
         self.nodes = {}
         self.edges = set()
@@ -216,7 +232,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         self.state_schema = state_schema
         self.input_schema = cast(type[InputT], input_schema or state_schema)
         self.output_schema = cast(type[OutputT], output_schema or state_schema)
-        self.config_schema = config_schema
+        self.context_schema = context_schema
 
         self._add_schema(self.state_schema)
         self._add_schema(self.input_schema, allow_managed=False)
@@ -263,7 +279,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
     @overload
     def add_node(
         self,
-        node: StateNode[StateT],
+        node: StateNode[NodeInputT, ContextT],
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -281,7 +297,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
     @overload
     def add_node(
         self,
-        node: StateNode[NodeInputT],
+        node: StateNode[NodeInputT, ContextT],
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -300,7 +316,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
     def add_node(
         self,
         node: str,
-        action: StateNode[StateT],
+        action: StateNode[NodeInputT, ContextT],
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -316,8 +332,8 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
     @overload
     def add_node(
         self,
-        node: str,
-        action: StateNode[NodeInputT],
+        node: str | StateNode[NodeInputT, ContextT],
+        action: StateNode[NodeInputT, ContextT] | None = None,
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -332,8 +348,8 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
 
     def add_node(
         self,
-        node: str | StateNode[StateT] | StateNode[NodeInputT],
-        action: StateNode[StateT] | StateNode[NodeInputT] | None = None,
+        node: str | StateNode[NodeInputT, ContextT],
+        action: StateNode[NodeInputT, ContextT] | None = None,
         *,
         defer: bool = False,
         metadata: dict[str, Any] | None = None,
@@ -498,8 +514,8 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
             ends = destinations
 
         if input_schema is not None:
-            self.nodes[node] = StateNodeSpec[NodeInputT](
-                coerce_to_runnable(action, name=node, trace=False),
+            self.nodes[node] = StateNodeSpec[NodeInputT, ContextT](
+                coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
                 metadata,
                 input_schema=input_schema,
                 retry_policy=retry_policy,
@@ -509,7 +525,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
             )
         elif inferred_input_schema is not None:
             self.nodes[node] = StateNodeSpec(
-                coerce_to_runnable(action, name=node, trace=False),
+                coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
                 metadata,
                 input_schema=inferred_input_schema,
                 retry_policy=retry_policy,
@@ -518,8 +534,8 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
                 defer=defer,
             )
         else:
-            self.nodes[node] = StateNodeSpec[StateT](
-                coerce_to_runnable(action, name=node, trace=False),
+            self.nodes[node] = StateNodeSpec[StateT, ContextT](
+                coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
                 metadata,
                 input_schema=self.state_schema,
                 retry_policy=retry_policy,
@@ -636,7 +652,10 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
 
     def add_sequence(
         self,
-        nodes: Sequence[StateNode[StateT] | tuple[str, StateNode[StateT]]],
+        nodes: Sequence[
+            StateNode[NodeInputT, ContextT]
+            | tuple[str, StateNode[NodeInputT, ContextT]]
+        ],
     ) -> Self:
         """Add a sequence of nodes that will be executed in the provided order.
 
@@ -782,7 +801,7 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
-    ) -> CompiledStateGraph[StateT, InputT, OutputT]:
+    ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the state graph into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
@@ -834,10 +853,10 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
             ]
         )
 
-        compiled = CompiledStateGraph[StateT, InputT, OutputT](
+        compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
             schema_to_mapper={},
-            config_type=self.config_schema,
+            context_schema=self.context_schema,
             nodes={},
             channels={
                 **self.channels,
@@ -876,15 +895,16 @@ class StateGraph(Generic[StateT, InputT, OutputT]):
 
 
 class CompiledStateGraph(
-    Pregel[StateT, InputT, OutputT], Generic[StateT, InputT, OutputT]
+    Pregel[StateT, ContextT, InputT, OutputT],
+    Generic[StateT, ContextT, InputT, OutputT],
 ):
-    builder: StateGraph[StateT, InputT, OutputT]
+    builder: StateGraph[StateT, ContextT, InputT, OutputT]
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
 
     def __init__(
         self,
         *,
-        builder: StateGraph[StateT, InputT, OutputT],
+        builder: StateGraph[StateT, ContextT, InputT, OutputT],
         schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None],
         **kwargs: Any,
     ) -> None:
@@ -912,7 +932,7 @@ class CompiledStateGraph(
             name=self.get_name("Output"),
         )
 
-    def attach_node(self, key: str, node: StateNodeSpec | None) -> None:
+    def attach_node(self, key: str, node: StateNodeSpec[Any, ContextT] | None) -> None:
         if key == START:
             output_keys = [
                 k

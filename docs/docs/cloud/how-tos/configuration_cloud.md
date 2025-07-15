@@ -2,21 +2,20 @@
 
 In this guide we will show how to create, configure, and manage an [assistant](../../concepts/assistants.md).
 
-First, as a brief refresher on the concept of configurations, consider the following simple `call_model` node and configuration schema. Observe that this node tries to read and use the `model_name` as defined by the `config` object's `configurable`.
+First, as a brief refresher on the concept of runtime context, consider the following simple `call_model` node and configuration schema. Observe that this node tries to read and use the `model_provider` as defined by the `Runtime` object's `context` property.
 
 === "Python"
 
     ```python
+    @dataclass
+    class ContextSchema:
+        llm_provider: str = "anthropic"
 
-    class ConfigSchema(TypedDict):
-        model_name: str
+    builder = StateGraph(AgentState, context_schema=ContextSchema)
 
-    builder = StateGraph(AgentState, config_schema=ConfigSchema)
-
-    def call_model(state, config):
+    def call_model(state, runtime: Runtime[ContextSchema]):
         messages = state["messages"]
-        model_name = config.get('configurable', {}).get("model_name", "anthropic")
-        model = _get_model(model_name)
+        model = _get_model(runtime.context.llm_provider)
         response = model.invoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}

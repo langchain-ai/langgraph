@@ -459,33 +459,32 @@ LangGraph can easily handle migrations of graph definitions (nodes, edges, and s
 - State keys that are renamed lose their saved state in existing threads
 - State keys whose types change in incompatible ways could currently cause issues in threads with state from before the change -- if this is a blocker please reach out and we can prioritize a solution.
 
-## Configuration
+## Runtime Context
 
-When creating a graph, you can also mark that certain parts of the graph are configurable. This is commonly done to enable easily switching between models or system prompts. This allows you to create a single "cognitive architecture" (the graph) but have multiple different instance of it.
-
-You can optionally specify a `config_schema` when creating a graph.
+When creating a graph, you can specify a `context_schema` for runtime context passed to nodes. This is useful for passing
+information to nodes that is not part of the graph state. For example, you might want to pass dependencies such as model name or a database connection.
 
 ```python
-class ConfigSchema(TypedDict):
-    llm: str
+@dataclass
+class ContextSchema:
+    llm_provider: str = "openai"
 
-graph = StateGraph(State, config_schema=ConfigSchema)
+graph = StateGraph(State, context_schema=ContextSchema)
 ```
 
-You can then pass this configuration into the graph using the `configurable` config field.
+You can then pass this context into the graph using the `context` parameter of the `invoke` method.
 
 ```python
-config = {"configurable": {"llm": "anthropic"}}
-
-graph.invoke(inputs, config=config)
+graph.invoke(inputs, context={"llm_provider": "anthropic"})
 ```
 
-You can then access and use this configuration inside a node or conditional edge:
+You can then access and use this context inside a node or conditional edge:
 
 ```python
-def node_a(state, config):
-    llm_type = config.get("configurable", {}).get("llm", "openai")
-    llm = get_llm(llm_type)
+from langgraph.runtime import Runtime
+
+def node_a(state: State, runtime: Runtime[ContextSchema]):
+    llm = get_llm(runtime.context.llm_provider)
     ...
 ```
 
@@ -496,7 +495,7 @@ See [this guide](../how-tos/graph-api.md#add-runtime-configuration) for a full b
 The recursion limit sets the maximum number of [super-steps](#graphs) the graph can execute during a single execution. Once the limit is reached, LangGraph will raise `GraphRecursionError`. By default this value is set to 25 steps. The recursion limit can be set on any graph at runtime, and is passed to `.invoke`/`.stream` via the config dictionary. Importantly, `recursion_limit` is a standalone `config` key and should not be passed inside the `configurable` key as all other user-defined configuration. See the example below:
 
 ```python
-graph.invoke(inputs, config={"recursion_limit": 5, "configurable":{"llm": "anthropic"}})
+graph.invoke(inputs, config={"recursion_limit": 5}, context={"llm": "anthropic"})
 ```
 
 Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-limit/) to learn more about how the recursion limit works.

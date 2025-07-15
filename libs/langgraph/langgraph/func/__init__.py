@@ -12,6 +12,7 @@ from typing import (
     Callable,
     Generic,
     TypeVar,
+    cast,
     get_args,
     get_origin,
     overload,
@@ -38,7 +39,8 @@ from langgraph.pregel._read import PregelNode
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
-from langgraph.warnings import LangGraphDeprecatedSinceV05
+from langgraph.typing import ContextT
+from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 
 __all__ = ("task", "entrypoint")
 
@@ -215,7 +217,7 @@ S = TypeVar("S")
 # In this form, the `final` attribute should play nicely with IDE autocompletion,
 # and type checking tools.
 # In addition, we'll be able to surface this information in the API Reference.
-class entrypoint:
+class entrypoint(Generic[ContextT]):
     """Define a LangGraph workflow using the `entrypoint` decorator.
 
     ### Function signature
@@ -231,10 +233,9 @@ class entrypoint:
 
     | Parameter        | Description                                                                                        |
     |------------------|----------------------------------------------------------------------------------------------------|
-    | **`store`**      | An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for long-term memory.           |
-    | **`writer`**     | A [StreamWriter][langgraph.types.StreamWriter] instance for writing custom data to a stream.       |
     | **`config`**     | A configuration object (aka RunnableConfig) that holds run-time configuration values.              |
     | **`previous`**   | The previous return value for the given thread (available only when a checkpointer is provided).   |
+    | **`runtime`**    | A Runtime object that contains information about the current run, including context, store, writer |                                |
 
     The entrypoint decorator can be applied to sync functions or async functions.
 
@@ -254,7 +255,7 @@ class entrypoint:
         store: A generalized key-value store. Some implementations may support
             semantic search capabilities through an optional `index` configuration.
         cache: A cache to use for caching the results of the workflow.
-        config_schema: Specifies the schema for the configuration object that will be
+        context_schema: Specifies the schema for the context object that will be
             passed to the workflow.
         cache_policy: A cache policy to use for caching the results of the workflow.
         retry_policy: A retry policy (or list of policies) to use for the workflow in case of a failure.
@@ -376,26 +377,35 @@ class entrypoint:
         checkpointer: BaseCheckpointSaver | None = None,
         store: BaseStore | None = None,
         cache: BaseCache | None = None,
-        config_schema: type[Any] | None = None,
+        context_schema: type[ContextT] | None = None,
         cache_policy: CachePolicy | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         """Initialize the entrypoint decorator."""
+        if (config_schema := kwargs.get("config_schema", UNSET)) is not UNSET:
+            warnings.warn(
+                "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+            if context_schema is None:
+                context_schema = cast(type[ContextT], config_schema)
+
         if (retry := kwargs.get("retry", UNSET)) is not UNSET:
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
                 category=LangGraphDeprecatedSinceV05,
             )
             if retry_policy is None:
-                retry_policy = retry  # type: ignore[assignment]
+                retry_policy = cast("RetryPolicy | Sequence[RetryPolicy]", retry)
 
         self.checkpointer = checkpointer
         self.store = store
         self.cache = cache
         self.cache_policy = cache_policy
         self.retry_policy = retry_policy
-        self.config_schema = config_schema
+        self.context_schema = context_schema
 
     @dataclass(**_DC_KWARGS)
     class final(Generic[R, S]):
@@ -527,5 +537,5 @@ class entrypoint:
             cache=self.cache,
             cache_policy=self.cache_policy,
             retry_policy=self.retry_policy or (),
-            config_type=self.config_schema,
+            context_schema=self.context_schema,  # type: ignore[arg-type]
         )

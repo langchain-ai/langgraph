@@ -1,9 +1,12 @@
 import pytest
+from pytest_mock import MockerFixture
 from typing_extensions import TypedDict
 
+from langgraph.channels.last_value import LastValue
 from langgraph.errors import NodeInterrupt
 from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
+from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import Interrupt, RetryPolicy
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 
@@ -83,12 +86,60 @@ def test_constants_deprecation() -> None:
         from langgraph.constants import Interrupt  # noqa: F401
 
 
-def test_pregel_deprecation() -> None:
+def test_pregel_types_deprecation() -> None:
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
         match="Importing from langgraph.pregel.types is deprecated. Please use 'from langgraph.types import ...' instead.",
     ):
         from langgraph.pregel.types import StateSnapshot  # noqa: F401
+
+
+@pytest.mark.filterwarnings("ignore:`config_schema` is deprecated")
+@pytest.mark.filterwarnings("ignore:`get_config_jsonschema` is deprecated")
+def test_config_schema_deprecation() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
+    ):
+        builder = StateGraph(PlainState, config_schema=PlainState)
+
+    builder.add_node("test_node", lambda state: state)
+    builder.set_entry_point("test_node")
+    graph = builder.compile()
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
+    ):
+        graph.config_schema()
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead.",
+    ):
+        graph.get_config_jsonschema()
+
+
+def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
+    ):
+        Pregel(
+            nodes={
+                "one": chain,
+            },
+            channels={
+                "input": LastValue(int),
+                "output": LastValue(int),
+            },
+            input_channels="input",
+            output_channels="output",
+            config_type=PlainState,
+        )
 
 
 def test_interrupt_attributes_deprecation() -> None:

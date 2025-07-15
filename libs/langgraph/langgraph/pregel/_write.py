@@ -64,7 +64,6 @@ class ChannelWrite(RunnableCallable):
             name=None,
             tags=tags,
             trace=False,
-            func_accepts_config=True,
         )
         self.writes = cast(
             list[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]], writes

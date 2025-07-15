@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import dataclasses
 import sys
 from collections import deque
 from collections.abc import Hashable, Sequence
+from dataclasses import asdict, dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -122,7 +122,7 @@ class RetryPolicy(NamedTuple):
 KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., Union[str, bytes]])
 
 
-@dataclasses.dataclass(**_DC_KWARGS)
+@dataclass(**_DC_KWARGS)
 class CachePolicy(Generic[KeyFuncT]):
     """Configuration for caching nodes."""
 
@@ -138,7 +138,7 @@ _DEFAULT_INTERRUPT_ID = "placeholder-id"
 
 
 @final
-@dataclasses.dataclass(init=False, **_DC_SLOTS)
+@dataclass(init=False, **_DC_SLOTS)
 class Interrupt:
     """Information about an interrupt that occurred in a node.
 
@@ -218,7 +218,7 @@ class CacheKey(NamedTuple):
     """Time to live for the cache entry in seconds."""
 
 
-@dataclasses.dataclass(**_T_DC_KWARGS)
+@dataclass(**_T_DC_KWARGS)
 class PregelExecutableTask:
     name: str
     input: Any
@@ -329,7 +329,7 @@ class Send:
 N = TypeVar("N", bound=Hashable)
 
 
-@dataclasses.dataclass(**_DC_KWARGS)
+@dataclass(**_DC_KWARGS)
 class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
@@ -362,9 +362,7 @@ class Command(Generic[N], ToolOutputMixin):
     def __repr__(self) -> str:
         # get all non-None values
         contents = ", ".join(
-            f"{key}={value!r}"
-            for key, value in dataclasses.asdict(self).items()
-            if value
+            f"{key}={value!r}" for key, value in asdict(self).items() if value
         )
         return f"Command({contents})"
 

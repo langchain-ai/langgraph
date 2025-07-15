@@ -9,9 +9,10 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from typing_extensions import TypeAlias
 
 from langgraph.constants import EMPTY_SEQ
+from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import CachePolicy, RetryPolicy, StreamWriter
-from langgraph.typing import NodeInputT, NodeInputT_contra
+from langgraph.typing import ContextT, NodeInputT, NodeInputT_contra
 
 _DC_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 
@@ -61,6 +62,12 @@ class _NodeWithConfigWriterStore(Protocol[NodeInputT_contra]):
     ) -> Any: ...
 
 
+class _NodeWithRuntime(Protocol[NodeInputT_contra, ContextT]):
+    def __call__(
+        self, state: NodeInputT_contra, *, runtime: Runtime[ContextT]
+    ) -> Any: ...
+
+
 # TODO: we probably don't want to explicitly support the config / store signatures once
 # we move to adding a context arg. Maybe what we do is we add support for kwargs with param spec
 # this is purely for typing purposes though, so can easily change in the coming weeks.
@@ -73,13 +80,14 @@ StateNode: TypeAlias = Union[
     _NodeWithConfigWriter[NodeInputT],
     _NodeWithConfigStore[NodeInputT],
     _NodeWithConfigWriterStore[NodeInputT],
+    _NodeWithRuntime[NodeInputT, ContextT],
     Runnable[NodeInputT, Any],
 ]
 
 
 @dataclass(**_DC_SLOTS)
-class StateNodeSpec(Generic[NodeInputT]):
-    runnable: StateNode[NodeInputT]
+class StateNodeSpec(Generic[NodeInputT, ContextT]):
+    runnable: StateNode[NodeInputT, ContextT]
     metadata: dict[str, Any] | None
     input_schema: type[NodeInputT]
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None

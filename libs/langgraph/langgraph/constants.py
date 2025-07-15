@@ -79,10 +79,6 @@ CONFIG_KEY_CHECKPOINTER = sys.intern("__pregel_checkpointer")
 # holds a `BaseCheckpointSaver` passed from parent graph to child graphs
 CONFIG_KEY_STREAM = sys.intern("__pregel_stream")
 # holds a `StreamProtocol` passed from parent graph to child graphs
-CONFIG_KEY_STREAM_WRITER = sys.intern("__pregel_stream_writer")
-# holds a `StreamWriter` for stream_mode=custom
-CONFIG_KEY_STORE = sys.intern("__pregel_store")
-# holds a `BaseStore` made available to managed values
 CONFIG_KEY_CACHE = sys.intern("__pregel_cache")
 # holds a `BaseCache` made available to subgraphs
 CONFIG_KEY_RESUMING = sys.intern("__pregel_resuming")
@@ -101,12 +97,12 @@ CONFIG_KEY_NODE_FINISHED = sys.intern("__pregel_node_finished")
 # holds a callback to be called when a node is finished
 CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
 # holds a mutable dict for temporary storage scoped to the current task
-CONFIG_KEY_PREVIOUS = sys.intern("__pregel_previous")
-# holds the previous return value from a stateful Pregel graph.
 CONFIG_KEY_RUNNER_SUBMIT = sys.intern("__pregel_runner_submit")
 # holds a function that receives tasks from runner, executes them and returns results
 CONFIG_KEY_CHECKPOINT_DURING = sys.intern("__pregel_checkpoint_during")
 # holds a boolean indicating whether to checkpoint during the run (or only at the end)
+CONFIG_KEY_RUNTIME = sys.intern("__pregel_runtime")
+# holds a `Runtime` instance with context, store, stream writer, etc.
 
 # --- Other constants ---
 PUSH = sys.intern("__pregel_push")
@@ -137,8 +133,7 @@ RESERVED = {
     CONFIG_KEY_READ,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_STREAM,
-    CONFIG_KEY_STREAM_WRITER,
-    CONFIG_KEY_STORE,
+    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
