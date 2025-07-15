@@ -180,6 +180,7 @@ def task(
         warnings.warn(
             "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
             category=LangGraphDeprecatedSinceV05,
+            stacklevel=2,
         )
         if retry_policy is None:
             retry_policy = retry  # type: ignore[assignment]
@@ -384,6 +385,7 @@ class entrypoint:
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
                 category=LangGraphDeprecatedSinceV05,
+                stacklevel=2,
             )
             if retry_policy is None:
                 retry_policy = retry  # type: ignore[assignment]
