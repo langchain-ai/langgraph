@@ -4,6 +4,15 @@
 
 ---
 
+## v0.2.89 (2025-07-15)
+- Decoupled checkpoint writing from thread/run state by removing foreign keys and updated logger to prevent timeout-related failures.
+
+## v0.2.88 (2025-07-14)
+- Removed the foreign key constraint for `thread` in the `run` table to simplify database schema.
+
+## v0.2.87 (2025-07-14)
+- Added more detailed logs for Redis worker signaling to improve debugging.
+
 ## v0.2.86 (2025-07-11)
 - Honored tool descriptions in the `/mcp` endpoint to align with expected functionality.
 
