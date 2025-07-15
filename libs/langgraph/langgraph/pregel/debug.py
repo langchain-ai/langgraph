@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableConfig
 from typing_extensions import TypedDict
 
 from langgraph._internal._config import patch_checkpoint_map
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import CheckpointMetadata, PendingWrite
 from langgraph.constants import (
@@ -16,7 +17,6 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     ERROR,
     INTERRUPT,
-    MISSING,
     NS_END,
     NS_SEP,
     RETURN,

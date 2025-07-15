@@ -20,7 +20,7 @@ from typing import (
 
 from typing_extensions import Unpack
 
-from langgraph._internal._typing import UNSET, DeprecatedKwargs
+from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
@@ -180,7 +180,7 @@ def task(
         await add_one.ainvoke([1, 2, 3])  # Returns [2, 3, 4]
         ```
     """
-    if (retry := kwargs.get("retry", UNSET)) is not UNSET:
+    if (retry := kwargs.get("retry", MISSING)) is not MISSING:
         warnings.warn(
             "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
             category=LangGraphDeprecatedSinceV05,
@@ -383,7 +383,7 @@ class entrypoint(Generic[ContextT]):
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         """Initialize the entrypoint decorator."""
-        if (config_schema := kwargs.get("config_schema", UNSET)) is not UNSET:
+        if (config_schema := kwargs.get("config_schema", MISSING)) is not MISSING:
             warnings.warn(
                 "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
                 category=LangGraphDeprecatedSinceV10,
@@ -392,7 +392,7 @@ class entrypoint(Generic[ContextT]):
             if context_schema is None:
                 context_schema = cast(type[ContextT], config_schema)
 
-        if (retry := kwargs.get("retry", UNSET)) is not UNSET:
+        if (retry := kwargs.get("retry", MISSING)) is not MISSING:
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
                 category=LangGraphDeprecatedSinceV05,

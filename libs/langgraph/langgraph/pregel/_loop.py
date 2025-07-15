@@ -28,6 +28,7 @@ from langchain_core.runnables import RunnableConfig
 from typing_extensions import ParamSpec, Self
 
 from langgraph._internal._config import patch_configurable
+from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
@@ -50,11 +51,9 @@ from langgraph.constants import (
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
-    EMPTY_SEQ,
     ERROR,
     INPUT,
     INTERRUPT,
-    MISSING,
     NS_END,
     NS_SEP,
     NULL_TASK_ID,

@@ -27,6 +27,7 @@ from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._config import merge_configs, patch_config
 from langgraph._internal._runtime import patch_runtime_non_null
+from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import (
@@ -49,10 +50,8 @@ from langgraph.constants import (
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
-    EMPTY_SEQ,
     ERROR,
     INTERRUPT,
-    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,

@@ -9,9 +9,7 @@ from typing import Annotated, Any, Optional, Union, get_type_hints
 from pydantic import BaseModel
 from typing_extensions import NotRequired, ReadOnly, Required, get_origin
 
-# NOTE: this is redefined here separately from langgraph.constants
-# to avoid a circular import
-MISSING = object()
+from langgraph._internal._typing import MISSING
 
 
 def _is_optional_type(type_: Any) -> bool:
