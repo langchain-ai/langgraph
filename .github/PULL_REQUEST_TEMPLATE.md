@@ -1,4 +1,4 @@
-Thank you for contributing to LangGraph! Follow these steps to mark your pull request as ready for review. **If any of these steps are not completed, your PR
+Thank you for contributing to LangGraph! Follow these steps to mark your pull request as ready for review. **If any of these steps are not completed, your PR will not be considered for review.**
 
 - [ ] **PR title**: Follows the format: {TYPE}({SCOPE}): {DESCRIPTION}
   - Examples:
@@ -21,7 +21,7 @@ Thank you for contributing to LangGraph! Follow these steps to mark your pull re
   1. A test for the integration, preferably unit tests that do not rely on network access,
   2. An example notebook showing its use. It lives in `docs/docs/integrations` directory.
 
-- [ ] **Lint and test**: Run `make format`, `make lint` and `make test` from the root of the package(s) you've modified. We will not consider a PR unless these three are passing in CI. See [contribution guidelines](https://python.langchain.com/docs/contributing/) for more.
+- [ ] **Lint and test**: Run `make format`, `make lint` and `make test` from the root of the package(s) you've modified. We will not consider a PR unless these three are passing in CI. See [contribution guidelines](https://github.com/langchain-ai/langgraph/blob/main/CONTRIBUTING.md) for more.
 
 Additional guidelines:
 
