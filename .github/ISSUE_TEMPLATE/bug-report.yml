@@ -23,7 +23,7 @@ body:
       label: Checked other resources
       description: Before submitting this issue, please confirm that you have completed all the steps below by checking each option. These steps help ensure your issue is well-defined, relevant, and actionable.
       options:
-        - label: This is a bug, not a usage question. For questions, please use the [LangChain Forum](https://forum.langchain.com/).
+        - label: This is a bug, not a usage question. For questions, please use the LangChain Forum (https://forum.langchain.com/).
           required: true
         - label: I added a clear and detailed title that summarizes the issue.
           required: true
