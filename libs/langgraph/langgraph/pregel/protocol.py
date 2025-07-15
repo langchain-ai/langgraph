@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import Any, Generic
 
@@ -14,7 +14,7 @@ from langgraph.typing import InputT, OutputT, StateT
 
 
 # TODO: remove Runnable inheritance here!
-class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], ABC):
+class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT]):
     @abstractmethod
     def with_config(
         self, config: RunnableConfig | None = None, **kwargs: Any
