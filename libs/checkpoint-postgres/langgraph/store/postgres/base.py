@@ -557,7 +557,7 @@ class BasePostgresStore(Generic[C]):
     ) -> list[tuple[str, Sequence]]:
         queries: list[tuple[str, Sequence]] = []
         for _, op in list_ops:
-            query = """
+            query = r"""
                 SELECT DISTINCT ON (truncated_prefix) truncated_prefix, prefix
                 FROM (
                     SELECT
@@ -756,6 +756,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                 If provided, will create a connection pool and use it instead of a single connection.
                 This overrides the `pipeline` argument.
             index: The index configuration for the store.
+            ttl: The TTL configuration for the store.
 
         Returns:
             PostgresStore: A new PostgresStore instance.

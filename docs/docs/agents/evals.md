@@ -15,7 +15,7 @@ To evaluate your agent's performance you can use `LangSmith` [evaluations](https
 def evaluator(*, outputs: dict, reference_outputs: dict):
     # compare agent outputs against reference outputs
     output_messages = outputs["messages"]
-    reference_messages = reference["messages"]
+    reference_messages = reference_outputs["messages"]
     score = compare_messages(output_messages, reference_messages)
     return {"key": "evaluator_score", "score": score}
 ```
