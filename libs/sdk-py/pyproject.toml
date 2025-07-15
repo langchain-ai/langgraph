@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-sdk"
-version = "0.1.72"
+version = "0.1.73"
 description = "SDK for interacting with LangGraph API"
 authors = []
 requires-python = ">=3.9"
