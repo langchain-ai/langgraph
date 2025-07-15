@@ -74,23 +74,28 @@ pip install -U langgraph langsmith langchain-anthropic
 First, define the state structure that will track the conversation and workflow progress:
 
 ```python
-import os
 from dataclasses import dataclass
-from typing import List, Optional, Literal, Annotated, Dict
+from typing import List, Optional, Literal
 
-from langchain.chat_models import init_chat_model
-from langchain_core.messages import AIMessage, ToolMessage, BaseMessage, HumanMessage
-from langchain_core.tools import tool, InjectedToolCallId
+from langchain_core.messages import BaseMessage
 
-from langgraph.graph import StateGraph
-from langgraph.prebuilt import ToolNode
-from langgraph.types import Command
+# Define all possible workflow steps
+WorkflowStep = Literal[
+    "check_warranty",
+    "ask_repair_or_continue", 
+    "ask_issue_type",
+    "check_troubleshooting",
+    "suggest_troubleshooting",
+    "offer_solution",
+    "success",
+    "escalate"
+]
 
 @dataclass
 class State:
     messages: List[BaseMessage]
     is_last_step: bool = False
-    workflow_step: str = "start"
+    workflow_step: WorkflowStep = "check_warranty"
 
     # State tracking for our 4-step workflow
     warranty_status: Optional[Literal["in", "out"]] = None
@@ -109,6 +114,11 @@ class State:
 Create tools that the LLM can use to update the workflow state based on user responses:
 
 ```python
+from typing import Literal, Annotated
+
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import tool, InjectedToolCallId
+from langgraph.types import Command
 
 @tool
 def set_warranty_status(
@@ -117,10 +127,7 @@ def set_warranty_status(
 ) -> Command:
     """Set whether device is under warranty"""
     # Determine next step based on warranty status
-    if value == "out":
-        next_step = "ask_repair_or_continue"
-    else:
-        next_step = "ask_issue_type"
+    next_step: WorkflowStep = "ask_repair_or_continue" if value == "out" else "ask_issue_type"
     
     return Command(update={
         "warranty_status": value,
@@ -136,10 +143,7 @@ def set_wants_human_help(
 ) -> Command:
     """Set whether user wants human help for out-of-warranty device"""
     # If they want human help, escalate; otherwise continue to issue classification
-    if value:
-        next_step = "escalate"
-    else:
-        next_step = "ask_issue_type"
+    next_step: WorkflowStep = "escalate" if value else "ask_issue_type"
     
     return Command(update={
         "wants_human_help": value,
@@ -155,10 +159,7 @@ def set_issue_type(
 ) -> Command:
     """Classify the issue as hardware or software related"""
     # Hardware issues escalate immediately; software issues go to troubleshooting
-    if value == "hardware":
-        next_step = "escalate"
-    else:
-        next_step = "check_troubleshooting"
+    next_step: WorkflowStep = "escalate" if value == "hardware" else "check_troubleshooting"
     
     return Command(update={
         "issue_type": value,
@@ -174,10 +175,7 @@ def set_tried_basic_steps(
 ) -> Command:
     """Record whether user has tried basic troubleshooting"""
     # If they haven't tried basic steps, suggest them; otherwise offer solution
-    if not value:
-        next_step = "suggest_troubleshooting"
-    else:
-        next_step = "offer_solution"
+    next_step: WorkflowStep = "suggest_troubleshooting" if not value else "offer_solution"
     
     return Command(update={
         "tried_basic_steps": value,
@@ -191,9 +189,11 @@ def confirm_troubleshooting_done(
         tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
     """Confirm user has completed suggested troubleshooting steps"""
+    next_step: WorkflowStep = "check_troubleshooting"
+    
     return Command(update={
         "tried_basic_steps": True,
-        "workflow_step": "check_troubleshooting",
+        "workflow_step": next_step,
         "messages": [
             ToolMessage(content="Troubleshooting steps completed", tool_call_id=tool_call_id)]
     })
@@ -205,10 +205,7 @@ def set_solution_successful(
 ) -> Command:
     """Record whether the suggested solution worked"""
     # If solution worked, success; otherwise escalate
-    if value:
-        next_step = "success"
-    else:
-        next_step = "escalate"
+    next_step: WorkflowStep = "success" if value else "escalate"
     
     return Command(update={
         "solution_successful": value,
@@ -231,21 +228,16 @@ These tools now handle both state updates and workflow transitions. Each tool de
 
 ## 4. Set up the chat model
 
-{% include-markdown "../../../snippets/chat_model_tabs.md" %}
-
-<!---
-```python
-llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
-```
--->
+{% include-markdown "../../snippets/chat_model_tabs.md" %}
 
 ## 5. Create step-specific prompts
 
 Each workflow step needs a specific prompt to guide the LLM's behavior:
 
 ```python
+from typing import Dict, List
 
-TOOL_MAP = {
+TOOL_MAP: Dict[WorkflowStep, List] = {
     "check_warranty": [set_warranty_status],
     "ask_repair_or_continue": [set_wants_human_help],
     "ask_issue_type": [set_issue_type],
@@ -254,9 +246,9 @@ TOOL_MAP = {
     "offer_solution": [set_solution_successful],
 }
 
-def get_prompt_for_step(step: str) -> str:
+def get_prompt_for_step(step: WorkflowStep) -> str:
     """Get the appropriate prompt for each workflow step"""
-    prompts = {
+    prompts: Dict[WorkflowStep, str] = {
         "check_warranty": """
             Ask the user whether their device is under warranty. 
             Use the set_warranty_status tool to record their response as 'in' or 'out'.
@@ -303,7 +295,13 @@ def get_prompt_for_step(step: str) -> str:
 The model node handles LLM interactions with the appropriate tools for each step:
 
 ```python
+from typing import Dict, Literal
 
+from langchain.chat_models import init_chat_model
+from langchain_core.messages import AIMessage
+
+# Initialize the chat model
+llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 
 async def call_model(state: State) -> Dict:
     """Call the LLM with appropriate tools for the current step"""
@@ -357,6 +355,7 @@ Now assemble all the components into a complete workflow:
 
 ```python
 from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode
 
 builder = StateGraph(State)
 
@@ -387,6 +386,7 @@ Run the tech support bot to see how it handles different scenarios:
 
 ```python
 import asyncio
+from langchain_core.messages import HumanMessage, AIMessage
 
 async def run_example():
     """Run an example conversation"""
