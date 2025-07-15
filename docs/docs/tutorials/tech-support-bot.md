@@ -1,6 +1,10 @@
-# Build a tech support bot with custom workflows
+# Tech support bot with custom workflows
 
 In this tutorial, you'll build a sophisticated tech support bot using LangGraph that demonstrates how to create custom workflows with conditional routing, loops, and human escalation. This bot will guide users through a structured support process, automatically routing them based on their responses and issue type.
+
+!!! note "About escalation in this tutorial"
+
+    This tutorial demonstrates **workflow-based escalation** where the bot completes its workflow and indicates that human support is needed. This is different from LangGraph's **human-in-the-loop** functionality (using `interrupt`) which pauses execution and waits for human input. For human-in-the-loop examples, see the [human-in-the-loop tutorial](../get-started/4-human-in-the-loop.md).
 
 ## What you'll learn
 
