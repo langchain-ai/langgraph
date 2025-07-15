@@ -79,7 +79,7 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
 
 class LastValueAfterFinish(
-    Generic[Value], BaseChannel[Value, Value, tuple[Value | Any, bool]]
+    Generic[Value], BaseChannel[Value, Value, tuple[Value, bool]]
 ):
     """Stores the last value received, but only made available after finish().
     Once made available, clears the value."""
