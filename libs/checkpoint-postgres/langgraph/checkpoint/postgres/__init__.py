@@ -314,7 +314,7 @@ class PostgresSaver(BasePostgresSaver):
                     checkpoint_ns,
                     checkpoint["id"],
                     checkpoint_id,
-                    Jsonb(copy),
+                    Jsonb(self.serde.dumps_typed(copy)[1]),
                     Jsonb(get_checkpoint_metadata(config, metadata)),
                 ),
             )
@@ -458,3 +458,4 @@ class PostgresSaver(BasePostgresSaver):
 
 
 __all__ = ["PostgresSaver", "BasePostgresSaver", "ShallowPostgresSaver", "Conn"]
+
