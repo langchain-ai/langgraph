@@ -6,7 +6,7 @@ import requests
 from langchain_anthropic import ChatAnthropic
 
 # Load reference TypeScript snippets
-URL = "https://gist.githubusercontent.com/dqbd/b35d49e2ceec80e654fe1c5ab61ec477/raw/2416171f3b23c181012576b3166c7717ae3b8c30/snippets.md"
+URL = "https://gist.githubusercontent.com/dqbd/b35d49e2ceec80e654fe1c5ab61ec477/raw/f4768aeedb67628190a4e06d063a938afc8e7672/snippets.md"
 response = requests.get(URL)
 response.raise_for_status()
 reference_snippets = response.text
