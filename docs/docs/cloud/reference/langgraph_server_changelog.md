@@ -4,6 +4,12 @@
 
 ---
 
+## v0.2.93 (2025-07-16)
+- Removed the GIN index for run metadata to improve performance.
+
+## v0.2.92 (2025-07-16)
+- Enabled copying functionality for blobs and checkpoints, improving data management flexibility.
+
 ## v0.2.91 (2025-07-16)
 - Reduced writes to the `checkpoint_blobs` table by inlining small values (null, numeric, str, etc.). This means we don't need to store extra values for channels that haven't been updated.
 
