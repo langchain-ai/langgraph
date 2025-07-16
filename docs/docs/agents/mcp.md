@@ -58,7 +58,7 @@ The `langchain-mcp-adapters` package enables agents to use tools defined across 
     ```python title="Workflow using MCP tools with ToolNode"
     from langchain_mcp_adapters.client import MultiServerMCPClient
     from langchain.chat_models import init_chat_model
-    from langgraph.graph import StateGraph, MessagesState, START
+    from langgraph.graph import StateGraph, MessagesState, START, END
     from langgraph.prebuilt import ToolNode
 
     # Initialize the model
