@@ -7,7 +7,7 @@ from langchain_core.messages import AnyMessage
 from typing_extensions import TypedDict
 
 from langgraph.config import get_config, get_stream_writer
-from langgraph.constants import CONF, CONFIG_KEY_SEND
+from langgraph.constants import CONF
 
 __all__ = (
     "UIMessage",
@@ -96,6 +96,8 @@ def push_ui_message(
         )
 
     """
+    from langgraph._internal._constants import CONFIG_KEY_SEND
+
     writer = get_stream_writer()
     config = get_config()
 
@@ -148,6 +150,8 @@ def delete_ui_message(id: str, *, state_key: str = "ui") -> RemoveUIMessage:
         delete_ui_message("message-123")
 
     """
+    from langgraph._internal._constants import CONFIG_KEY_SEND
+
     writer = get_stream_writer()
     config = get_config()
 

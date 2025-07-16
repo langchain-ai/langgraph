@@ -13,6 +13,7 @@ from typing import Any, Callable, Generic, TypeVar, cast
 from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
 
+from langgraph._internal._constants import CONF, CONFIG_KEY_CALL, RETURN
 from langgraph._internal._runnable import (
     RunnableCallable,
     RunnableSeq,
@@ -20,7 +21,6 @@ from langgraph._internal._runnable import (
     run_in_executor,
 )
 from langgraph.config import get_config
-from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import CachePolicy, RetryPolicy
 

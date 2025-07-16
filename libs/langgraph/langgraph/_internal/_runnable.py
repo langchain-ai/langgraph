@@ -48,11 +48,11 @@ from langgraph._internal._config import (
     get_callback_manager_for_config,
     patch_config,
 )
-from langgraph._internal._typing import MISSING
-from langgraph.constants import (
+from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_RUNTIME,
 )
+from langgraph._internal._typing import MISSING
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 

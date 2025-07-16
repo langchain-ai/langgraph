@@ -7,9 +7,9 @@ from typing import Any, cast
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph, Node
 
+from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, END, INPUT, START
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import CONF, CONFIG_KEY_SEND, END, INPUT, START
 from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel._algo import (
     PregelTaskWrites,

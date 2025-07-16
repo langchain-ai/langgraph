@@ -27,7 +27,8 @@ from langgraph._internal._runnable import (
     is_async_callable,
     is_async_generator,
 )
-from langgraph.graph import END, StateGraph
+from langgraph.constants import END
+from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 pytestmark = pytest.mark.anyio

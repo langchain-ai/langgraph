@@ -24,7 +24,7 @@ from langchain_core.messages import (
 )
 from typing_extensions import TypedDict
 
-from langgraph.constants import CONF, CONFIG_KEY_SEND
+from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, NS_SEP
 from langgraph.graph.state import StateGraph
 
 __all__ = (
@@ -320,7 +320,6 @@ def push_message(
     )
 
     from langgraph.config import get_config
-    from langgraph.constants import NS_SEP
     from langgraph.pregel._messages import StreamMessagesHandler
 
     config = get_config()

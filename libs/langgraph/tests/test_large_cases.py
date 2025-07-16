@@ -11,11 +11,12 @@ from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import PULL, PUSH
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.constants import END, PULL, PUSH, START
+from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
