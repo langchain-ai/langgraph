@@ -1192,7 +1192,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "1.0.0a1"
+version = "0.5.2"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },
