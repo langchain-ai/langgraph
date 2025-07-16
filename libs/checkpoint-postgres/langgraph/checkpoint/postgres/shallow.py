@@ -276,11 +276,16 @@ class ShallowPostgresSaver(BasePostgresSaver):
         with self._cursor() as cur:
             cur.execute(self.SELECT_SQL + where, args, binary=True)
             for value in cur:
-                checkpoint = self._load_checkpoint(
-                    value["checkpoint"],
-                    value["channel_values"],
-                    value["pending_sends"],
-                )
+                checkpoint: Checkpoint = {
+                    **value["checkpoint"],
+                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "pending_sends": [
+                        self.serde.loads_typed((t.decode(), v))
+                        for t, v in value["pending_sends"]
+                    ]
+                    if value["pending_sends"]
+                    else [],
+                }
                 yield CheckpointTuple(
                     config={
                         "configurable": {
@@ -290,7 +295,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                         }
                     },
                     checkpoint=checkpoint,
-                    metadata=self._load_metadata(value["metadata"]),
+                    metadata=value["metadata"],
                     pending_writes=self._load_writes(value["pending_writes"]),
                 )
 
@@ -340,11 +345,16 @@ class ShallowPostgresSaver(BasePostgresSaver):
             )
 
             for value in cur:
-                checkpoint = self._load_checkpoint(
-                    value["checkpoint"],
-                    value["channel_values"],
-                    value["pending_sends"],
-                )
+                checkpoint: Checkpoint = {
+                    **value["checkpoint"],
+                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "pending_sends": [
+                        self.serde.loads_typed((t.decode(), v))
+                        for t, v in value["pending_sends"]
+                    ]
+                    if value["pending_sends"]
+                    else [],
+                }
                 return CheckpointTuple(
                     config={
                         "configurable": {
@@ -354,7 +364,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                         }
                     },
                     checkpoint=checkpoint,
-                    metadata=self._load_metadata(value["metadata"]),
+                    metadata=value["metadata"],
                     pending_writes=self._load_writes(value["pending_writes"]),
                 )
 
@@ -430,8 +440,8 @@ class ShallowPostgresSaver(BasePostgresSaver):
                 (
                     thread_id,
                     checkpoint_ns,
-                    Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
+                    Jsonb(copy),
+                    Jsonb(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -627,12 +637,16 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         async with self._cursor() as cur:
             await cur.execute(self.SELECT_SQL + where, args, binary=True)
             async for value in cur:
-                checkpoint = await asyncio.to_thread(
-                    self._load_checkpoint,
-                    value["checkpoint"],
-                    value["channel_values"],
-                    value["pending_sends"],
-                )
+                checkpoint: Checkpoint = {
+                    **value["checkpoint"],
+                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "pending_sends": [
+                        self.serde.loads_typed((t.decode(), v))
+                        for t, v in value["pending_sends"]
+                    ]
+                    if value["pending_sends"]
+                    else [],
+                }
                 yield CheckpointTuple(
                     config={
                         "configurable": {
@@ -642,7 +656,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                         }
                     },
                     checkpoint=checkpoint,
-                    metadata=self._load_metadata(value["metadata"]),
+                    metadata=value["metadata"],
                     pending_writes=await asyncio.to_thread(
                         self._load_writes, value["pending_writes"]
                     ),
@@ -673,12 +687,16 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             )
 
             async for value in cur:
-                checkpoint = await asyncio.to_thread(
-                    self._load_checkpoint,
-                    value["checkpoint"],
-                    value["channel_values"],
-                    value["pending_sends"],
-                )
+                checkpoint: Checkpoint = {
+                    **value["checkpoint"],
+                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "pending_sends": [
+                        self.serde.loads_typed((t.decode(), v))
+                        for t, v in value["pending_sends"]
+                    ]
+                    if value["pending_sends"]
+                    else [],
+                }
                 return CheckpointTuple(
                     config={
                         "configurable": {
@@ -688,7 +706,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                         }
                     },
                     checkpoint=checkpoint,
-                    metadata=self._load_metadata(value["metadata"]),
+                    metadata=value["metadata"],
                     pending_writes=await asyncio.to_thread(
                         self._load_writes, value["pending_writes"]
                     ),
@@ -755,8 +773,8 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                 (
                     thread_id,
                     checkpoint_ns,
-                    Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
+                    Jsonb(copy),
+                    Jsonb(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -859,7 +877,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         while True:
             try:
                 yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_),  # noqa: F821
+                    anext(aiter_),  # type: ignore[arg-type]  # noqa: F821
                     self.loop,
                 ).result()
             except StopAsyncIteration:

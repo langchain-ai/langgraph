@@ -78,13 +78,6 @@ class NodeInterrupt(GraphInterrupt):
         super().__init__([Interrupt(value=value)])
 
 
-class GraphDelegate(GraphBubbleUp):
-    """Raised when a graph is delegated (for distributed mode)."""
-
-    def __init__(self, *args: dict[str, Any]) -> None:
-        super().__init__(*args)
-
-
 class ParentCommand(GraphBubbleUp):
     args: tuple[Command]
 
@@ -100,11 +93,5 @@ class EmptyInputError(Exception):
 
 class TaskNotFound(Exception):
     """Raised when the executor is unable to find a task (for distributed mode)."""
-
-    pass
-
-
-class CheckpointNotLatest(Exception):
-    """Raised when the checkpoint is not the latest version (for distributed mode)."""
 
     pass

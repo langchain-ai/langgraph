@@ -40,10 +40,10 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain",
-            "schema",
+            "langgraph",
+            "utils",
             "runnable",
-            "RunnablePassthrough"
+            "RunnableCallable"
           ],
           "name": "__start__"
         }
@@ -89,10 +89,10 @@
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
-  '{"properties": {"input": {"default": null, "title": "Input", "type": "string"}, "output": {"default": null, "title": "Output", "type": "string"}, "steps": {"default": null, "items": {"type": "string"}, "title": "Steps", "type": "array"}}, "title": "LangGraphInput", "type": "object"}'
+  '{"properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}, "steps": {"items": {"type": "string"}, "title": "Steps", "type": "array"}}, "title": "AgentState", "type": "object"}'
 # ---
 # name: test_conditional_entrypoint_graph_state.1
-  '{"properties": {"input": {"default": null, "title": "Input", "type": "string"}, "output": {"default": null, "title": "Output", "type": "string"}, "steps": {"default": null, "items": {"type": "string"}, "title": "Steps", "type": "array"}}, "title": "LangGraphOutput", "type": "object"}'
+  '{"properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}, "steps": {"items": {"type": "string"}, "title": "Steps", "type": "array"}}, "title": "AgentState", "type": "object"}'
 # ---
 # name: test_conditional_entrypoint_graph_state.2
   '''
@@ -103,10 +103,10 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain",
-            "schema",
+            "langgraph",
+            "utils",
             "runnable",
-            "RunnablePassthrough"
+            "RunnableCallable"
           ],
           "name": "__start__"
         }
@@ -178,10 +178,10 @@
   '''
 # ---
 # name: test_conditional_entrypoint_to_multiple_state_graph
-  '{"properties": {"locations": {"items": {"type": "string"}, "title": "Locations", "type": "array"}, "results": {"items": {"type": "string"}, "title": "Results", "type": "array"}}, "required": ["locations", "results"], "title": "LangGraphInput", "type": "object"}'
+  '{"properties": {"locations": {"items": {"type": "string"}, "title": "Locations", "type": "array"}, "results": {"items": {"type": "string"}, "title": "Results", "type": "array"}}, "required": ["locations", "results"], "title": "OverallState", "type": "object"}'
 # ---
 # name: test_conditional_entrypoint_to_multiple_state_graph.1
-  '{"properties": {"locations": {"items": {"type": "string"}, "title": "Locations", "type": "array"}, "results": {"items": {"type": "string"}, "title": "Results", "type": "array"}}, "required": ["locations", "results"], "title": "LangGraphOutput", "type": "object"}'
+  '{"properties": {"locations": {"items": {"type": "string"}, "title": "Locations", "type": "array"}, "results": {"items": {"type": "string"}, "title": "Results", "type": "array"}}, "required": ["locations", "results"], "title": "OverallState", "type": "object"}'
 # ---
 # name: test_conditional_entrypoint_to_multiple_state_graph.2
   '''
@@ -192,10 +192,10 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain",
-            "schema",
+            "langgraph",
+            "utils",
             "runnable",
-            "RunnablePassthrough"
+            "RunnableCallable"
           ],
           "name": "__start__"
         }
@@ -248,10 +248,10 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain",
-            "schema",
+            "langgraph",
+            "utils",
             "runnable",
-            "RunnablePassthrough"
+            "RunnableCallable"
           ],
           "name": "__start__"
         }
@@ -317,6 +317,230 @@
   
   '''
 # ---
+# name: test_get_graph_loop
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "human",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "runnable",
+            "RunnableCallable"
+          ],
+          "name": "human"
+        }
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "runnable",
+            "RunnableCallable"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "human"
+      },
+      {
+        "source": "agent",
+        "target": "human"
+      },
+      {
+        "source": "human",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_get_graph_loop.1
+  '''
+  graph TD;
+  	__start__ --> human;
+  	agent --> human;
+  	human --> agent;
+  	agent -.-> __end__;
+  
+  '''
+# ---
+# name: test_get_graph_root_channel
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "child",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "graph",
+            "state",
+            "CompiledStateGraph"
+          ],
+          "name": "child"
+        }
+      },
+      {
+        "id": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "child"
+      },
+      {
+        "source": "child",
+        "target": "__end__"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_get_graph_root_channel.1
+  '''
+  graph TD;
+  	__start__ --> child;
+  	child --> __end__;
+  
+  '''
+# ---
+# name: test_get_graph_self_loop
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "worker_node",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "runnable",
+            "RunnableCallable"
+          ],
+          "name": "worker_node"
+        }
+      },
+      {
+        "id": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "worker_node"
+      },
+      {
+        "source": "worker_node",
+        "target": "__end__",
+        "conditional": true
+      },
+      {
+        "source": "worker_node",
+        "target": "worker_node",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_get_graph_self_loop.1
+  '''
+  graph TD;
+  	__start__ --> worker_node;
+  	worker_node -.-> __end__;
+  	worker_node -.-> worker_node;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_defer_node[memory-False]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one -.-> qa;
+  	retriever_one --> analyzer_one;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> retriever_one;
+  	rewrite_query --> retriever_two;
+  	qa --> __end__;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_defer_node[memory-True]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one -.-> qa;
+  	retriever_one --> analyzer_one;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> retriever_one;
+  	rewrite_query --> retriever_two;
+  	qa --> __end__;
+  
+  '''
+# ---
 # name: test_in_one_fan_out_state_graph_waiting_edge[memory]
   '''
   graph TD;
@@ -329,76 +553,6 @@
   	qa --> __end__;
   
   '''
-# ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[memory]
-  '''
-  graph TD;
-  	__start__ --> rewrite_query;
-  	analyzer_one --> retriever_one;
-  	retriever_one --> qa;
-  	retriever_two --> qa;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query -.-> retriever_two;
-  	qa --> __end__;
-  
-  '''
-# ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[memory].1
-  dict({
-    'definitions': dict({
-      'InnerObject': dict({
-        'properties': dict({
-          'yo': dict({
-            'title': 'Yo',
-            'type': 'integer',
-          }),
-        }),
-        'required': list([
-          'yo',
-        ]),
-        'title': 'InnerObject',
-        'type': 'object',
-      }),
-    }),
-    'properties': dict({
-      'inner': dict({
-        '$ref': '#/definitions/InnerObject',
-      }),
-      'query': dict({
-        'title': 'Query',
-        'type': 'string',
-      }),
-    }),
-    'required': list([
-      'query',
-      'inner',
-    ]),
-    'title': 'Input',
-    'type': 'object',
-  })
-# ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[memory].2
-  dict({
-    'properties': dict({
-      'answer': dict({
-        'title': 'Answer',
-        'type': 'string',
-      }),
-      'docs': dict({
-        'items': dict({
-          'type': 'string',
-        }),
-        'title': 'Docs',
-        'type': 'array',
-      }),
-    }),
-    'required': list([
-      'answer',
-      'docs',
-    ]),
-    'title': 'Output',
-    'type': 'object',
-  })
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory]
   '''
@@ -612,10 +766,10 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain',
-            'schema',
+            'langgraph',
+            'utils',
             'runnable',
-            'RunnablePassthrough',
+            'RunnableCallable',
           ]),
           'name': '__start__',
         }),
@@ -654,10 +808,10 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain',
-            'schema',
+            'langgraph',
+            'utils',
             'runnable',
-            'RunnablePassthrough',
+            'RunnableCallable',
           ]),
           'name': 'tool_two:__start__',
         }),
@@ -763,10 +917,10 @@
   '{"$defs": {"Config": {"properties": {"tools": {"items": {"type": "string"}, "title": "Tools", "type": "array"}}, "title": "Config", "type": "object"}}, "properties": {"configurable": {"$ref": "#/$defs/Config", "default": null}}, "title": "LangGraphConfig", "type": "object"}'
 # ---
 # name: test_state_graph_w_config_inherited_state_keys.1
-  '{"$defs": {"AgentAction": {"description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"anyOf": [{"type": "string"}, {"type": "object"}], "title": "Tool Input"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentAction", "default": "AgentAction", "enum": ["AgentAction"], "title": "Type", "type": "string"}}, "required": ["tool", "tool_input", "log"], "title": "AgentAction", "type": "object"}, "AgentFinish": {"description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentFinish", "default": "AgentFinish", "enum": ["AgentFinish"], "title": "Type", "type": "string"}}, "required": ["return_values", "log"], "title": "AgentFinish", "type": "object"}}, "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"anyOf": [{"$ref": "#/$defs/AgentAction"}, {"$ref": "#/$defs/AgentFinish"}, {"type": "null"}], "default": null, "title": "Agent Outcome"}, "intermediate_steps": {"default": null, "items": {"maxItems": 2, "minItems": 2, "prefixItems": [{"$ref": "#/$defs/AgentAction"}, {"type": "string"}], "type": "array"}, "title": "Intermediate Steps", "type": "array"}}, "required": ["input"], "title": "LangGraphInput", "type": "object"}'
+  '{"$defs": {"AgentAction": {"description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"anyOf": [{"type": "string"}, {"additionalProperties": true, "type": "object"}], "title": "Tool Input"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentAction", "default": "AgentAction", "title": "Type", "type": "string"}}, "required": ["tool", "tool_input", "log"], "title": "AgentAction", "type": "object"}, "AgentFinish": {"description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "properties": {"return_values": {"additionalProperties": true, "title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentFinish", "default": "AgentFinish", "title": "Type", "type": "string"}}, "required": ["return_values", "log"], "title": "AgentFinish", "type": "object"}}, "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"anyOf": [{"$ref": "#/$defs/AgentAction"}, {"$ref": "#/$defs/AgentFinish"}, {"type": "null"}], "title": "Agent Outcome"}, "intermediate_steps": {"items": {"maxItems": 2, "minItems": 2, "prefixItems": [{"$ref": "#/$defs/AgentAction"}, {"type": "string"}], "type": "array"}, "title": "Intermediate Steps", "type": "array"}}, "required": ["input", "agent_outcome"], "title": "AgentState", "type": "object"}'
 # ---
 # name: test_state_graph_w_config_inherited_state_keys.2
-  '{"$defs": {"AgentAction": {"description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"anyOf": [{"type": "string"}, {"type": "object"}], "title": "Tool Input"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentAction", "default": "AgentAction", "enum": ["AgentAction"], "title": "Type", "type": "string"}}, "required": ["tool", "tool_input", "log"], "title": "AgentAction", "type": "object"}, "AgentFinish": {"description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentFinish", "default": "AgentFinish", "enum": ["AgentFinish"], "title": "Type", "type": "string"}}, "required": ["return_values", "log"], "title": "AgentFinish", "type": "object"}}, "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"anyOf": [{"$ref": "#/$defs/AgentAction"}, {"$ref": "#/$defs/AgentFinish"}, {"type": "null"}], "default": null, "title": "Agent Outcome"}, "intermediate_steps": {"default": null, "items": {"maxItems": 2, "minItems": 2, "prefixItems": [{"$ref": "#/$defs/AgentAction"}, {"type": "string"}], "type": "array"}, "title": "Intermediate Steps", "type": "array"}}, "required": ["input"], "title": "LangGraphOutput", "type": "object"}'
+  '{"$defs": {"AgentAction": {"description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"anyOf": [{"type": "string"}, {"additionalProperties": true, "type": "object"}], "title": "Tool Input"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentAction", "default": "AgentAction", "title": "Type", "type": "string"}}, "required": ["tool", "tool_input", "log"], "title": "AgentAction", "type": "object"}, "AgentFinish": {"description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "properties": {"return_values": {"additionalProperties": true, "title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentFinish", "default": "AgentFinish", "title": "Type", "type": "string"}}, "required": ["return_values", "log"], "title": "AgentFinish", "type": "object"}}, "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"anyOf": [{"$ref": "#/$defs/AgentAction"}, {"$ref": "#/$defs/AgentFinish"}, {"type": "null"}], "title": "Agent Outcome"}, "intermediate_steps": {"items": {"maxItems": 2, "minItems": 2, "prefixItems": [{"$ref": "#/$defs/AgentAction"}, {"type": "string"}], "type": "array"}, "title": "Intermediate Steps", "type": "array"}}, "required": ["input", "agent_outcome"], "title": "AgentState", "type": "object"}'
 # ---
 # name: test_xray_bool
   '''
@@ -865,10 +1019,10 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain',
-            'schema',
+            'langgraph',
+            'utils',
             'runnable',
-            'RunnablePassthrough',
+            'RunnableCallable',
           ]),
           'name': '__start__',
         }),
@@ -932,10 +1086,10 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain',
-            'schema',
+            'langgraph',
+            'utils',
             'runnable',
-            'RunnablePassthrough',
+            'RunnableCallable',
           ]),
           'name': '__start__',
         }),
@@ -1030,10 +1184,10 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain',
-            'schema',
+            'langgraph',
+            'utils',
             'runnable',
-            'RunnablePassthrough',
+            'RunnableCallable',
           ]),
           'name': '__start__',
         }),
@@ -1072,10 +1226,10 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain',
-            'schema',
+            'langgraph',
+            'utils',
             'runnable',
-            'RunnablePassthrough',
+            'RunnableCallable',
           ]),
           'name': 'conduct_interview:__start__',
         }),

@@ -1,13 +1,15 @@
+from __future__ import annotations
+
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Optional
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.constants import MISSING
+from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
-LATEST_VERSION = 3
+LATEST_VERSION = 4
 
 
 def empty_checkpoint() -> Checkpoint:
@@ -18,16 +20,15 @@ def empty_checkpoint() -> Checkpoint:
         channel_values={},
         channel_versions={},
         versions_seen={},
-        pending_sends=[],
     )
 
 
 def create_checkpoint(
     checkpoint: Checkpoint,
-    channels: Optional[Mapping[str, BaseChannel]],
+    channels: Mapping[str, BaseChannel] | None,
     step: int,
     *,
-    id: Optional[str] = None,
+    id: str | None = None,
 ) -> Checkpoint:
     """Create a checkpoint for the given channels."""
     ts = datetime.now(timezone.utc).isoformat()
@@ -48,5 +49,36 @@ def create_checkpoint(
         channel_values=values,
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
-        pending_sends=checkpoint.get("pending_sends", []),
+    )
+
+
+def channels_from_checkpoint(
+    specs: Mapping[str, BaseChannel | ManagedValueSpec],
+    checkpoint: Checkpoint,
+) -> tuple[Mapping[str, BaseChannel], ManagedValueMapping]:
+    """Get channels from a checkpoint."""
+    channel_specs: dict[str, BaseChannel] = {}
+    managed_specs: dict[str, ManagedValueSpec] = {}
+    for k, v in specs.items():
+        if isinstance(v, BaseChannel):
+            channel_specs[k] = v
+        else:
+            managed_specs[k] = v
+    return (
+        {
+            k: v.from_checkpoint(checkpoint["channel_values"].get(k, MISSING))
+            for k, v in channel_specs.items()
+        },
+        managed_specs,
+    )
+
+
+def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
+    return Checkpoint(
+        v=checkpoint["v"],
+        ts=checkpoint["ts"],
+        id=checkpoint["id"],
+        channel_values=checkpoint["channel_values"].copy(),
+        channel_versions=checkpoint["channel_versions"].copy(),
+        versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
     )

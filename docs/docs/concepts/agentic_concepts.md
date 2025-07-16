@@ -31,7 +31,7 @@ Structured outputs with LLMs work by providing a specific format or schema that 
 
 Structured outputs are crucial for routing as they ensure the LLM's decision can be reliably interpreted and acted upon by the system. Learn more about [structured outputs in this how-to guide](https://python.langchain.com/docs/how_to/structured_output/).
 
-## Tool calling agent
+## Tool-calling agent
 
 While a router allows an LLM to make a single decision, more complex agent architectures expand the LLM's control in two key ways:
 
@@ -40,11 +40,13 @@ While a router allows an LLM to make a single decision, more complex agent archi
 
 [ReAct](https://arxiv.org/abs/2210.03629) is a popular general purpose agent architecture that combines these expansions, integrating three core concepts. 
 
-1. `Tool calling`: Allowing the LLM to select and use various tools as needed.
-2. `Memory`: Enabling the agent to retain and use information from previous steps.
-3. `Planning`: Empowering the LLM to create and follow multi-step plans to achieve goals.
+1. [Tool calling](#tool-calling): Allowing the LLM to select and use various tools as needed.
+2. [Memory](#memory): Enabling the agent to retain and use information from previous steps.
+3. [Planning](#planning): Empowering the LLM to create and follow multi-step plans to achieve goals.
 
-This architecture allows for more complex and flexible agent behaviors, going beyond simple routing to enable dynamic problem-solving with multiple steps. You can use it with [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent].
+This architecture allows for more complex and flexible agent behaviors, going beyond simple routing to enable dynamic problem-solving with multiple steps. Unlike the original [paper](https://arxiv.org/abs/2210.03629), today's agents rely on LLMs' [tool calling](#tool-calling) capabilities and operate on a list of [messages](./low_level.md#why-use-messages).
+
+In LangGraph, you can use the prebuilt [agent](../agents/agents.md#2-create-an-agent) to get started with tool-calling agents.
 
 ### Tool calling
 
@@ -56,33 +58,22 @@ Tools are useful whenever you want an agent to interact with external systems. E
 
 ### Memory
 
-Memory is crucial for agents, enabling them to retain and utilize information across multiple steps of problem-solving. It operates on different scales:
+[Memory](../how-tos/memory/add-memory.md) is crucial for agents, enabling them to retain and utilize information across multiple steps of problem-solving. It operates on different scales:
 
-1. Short-term memory: Allows the agent to access information acquired during earlier steps in a sequence.
-2. Long-term memory: Enables the agent to recall information from previous interactions, such as past messages in a conversation.
+1. [Short-term memory](../how-tos/memory/add-memory.md#add-short-term-memory): Allows the agent to access information acquired during earlier steps in a sequence.
+2. [Long-term memory](../how-tos/memory/add-memory.md#add-long-term-memory): Enables the agent to recall information from previous interactions, such as past messages in a conversation.
 
 LangGraph provides full control over memory implementation:
 
 - [`State`](./low_level.md#state): User-defined schema specifying the exact structure of memory to retain.
-- [`Checkpointers`](./persistence.md): Mechanism to store state at every step across different interactions.
+- [`Checkpointer`](./persistence.md#checkpoints): Mechanism to store state at every step across different interactions within a session.
+- [`Store`](./persistence.md#memory-store): Mechanism to store user-specific or application-level data across sessions.
 
-This flexible approach allows you to tailor the memory system to your specific agent architecture needs. For a practical guide on adding memory to your graph, see [this tutorial](../how-tos/persistence.ipynb).
-
-Effective memory management enhances an agent's ability to maintain context, learn from past experiences, and make more informed decisions over time.
+This flexible approach allows you to tailor the memory system to your specific agent architecture needs. Effective memory management enhances an agent's ability to maintain context, learn from past experiences, and make more informed decisions over time. For a practical guide on adding and managing memory, see [Memory](../how-tos/memory/add-memory.md).
 
 ### Planning
 
-In the ReAct architecture, an LLM is called repeatedly in a while-loop. At each step the agent decides which tools to call, and what the inputs to those tools should be. Those tools are then executed, and the outputs are fed back into the LLM as observations. The while-loop terminates when the agent decides it has enough information to solve the user request and it is not worth calling any more tools.
-
-### ReAct implementation 
-
-There are several differences between [this](https://arxiv.org/abs/2210.03629) paper and the pre-built [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] implementation:
-
-- First, we use [tool-calling](#tool-calling) to have LLMs call tools, whereas the paper used prompting + parsing of raw output. This is because tool calling did not exist when the paper was written, but is generally better and more reliable.
-- Second, we use messages to prompt the LLM, whereas the paper used string formatting. This is because at the time of writing, LLMs didn't even expose a message-based interface, whereas now that's the only interface they expose.
-- Third, the paper required all inputs to the tools to be a single string. This was largely due to LLMs not being super capable at the time, and only really being able to generate a single input. Our implementation allows for using tools that require multiple inputs.
-- Fourth, the paper only looks at calling a single tool at the time, largely due to limitations in LLMs performance at the time. Our implementation allows for calling multiple tools at a time.
-- Finally, the paper asked the LLM to explicitly generate a "Thought" step before deciding which tools to call. This is the "Reasoning" part of "ReAct". Our implementation does not do this by default, largely because LLMs have gotten much better and that is not as necessary. Of course, if you wish to prompt it do so, you certainly can.
+In a tool-calling [agent](../agents/overview.md#what-is-an-agent), an LLM is called repeatedly in a while-loop. At each step the agent decides which tools to call, and what the inputs to those tools should be. Those tools are then executed, and the outputs are fed back into the LLM as observations. The while-loop terminates when the agent decides it has enough information to solve the user request and it is not worth calling any more tools.
 
 ## Custom agent architectures
 
@@ -106,17 +97,17 @@ Parallel processing is vital for efficient multi-agent systems and complex tasks
 - Implementation of map-reduce-like operations
 - Efficient handling of independent subtasks
 
-For practical implementation, see our [map-reduce tutorial](../how-tos/map-reduce.ipynb).
+For practical implementation, see our [map-reduce tutorial](../how-tos/graph-api.md#map-reduce-and-the-send-api)
 
 ### Subgraphs
 
-[Subgraphs](./low_level.md#subgraphs) are essential for managing complex agent architectures, particularly in [multi-agent systems](./multi_agent.md). They allow:
+[Subgraphs](./subgraphs.md) are essential for managing complex agent architectures, particularly in [multi-agent systems](./multi_agent.md). They allow:
 
 - Isolated state management for individual agents
 - Hierarchical organization of agent teams
 - Controlled communication between agents and the main system
 
-Subgraphs communicate with the parent graph through overlapping keys in the state schema. This enables flexible, modular agent design. For implementation details, refer to our [subgraph how-to guide](../how-tos/subgraph.ipynb).
+Subgraphs communicate with the parent graph through overlapping keys in the state schema. This enables flexible, modular agent design. For implementation details, refer to our [subgraph how-to guide](../how-tos/subgraph.md).
 
 ### Reflection
 

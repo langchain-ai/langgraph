@@ -2,13 +2,13 @@ import os
 import shutil
 import sys
 from io import BytesIO
-from typing import Dict, Optional
+from typing import Optional
 from urllib import error, request
 from zipfile import ZipFile
 
 import click
 
-TEMPLATES: Dict[str, Dict[str, str]] = {
+TEMPLATES: dict[str, dict[str, str]] = {
     "New LangGraph Project": {
         "description": "A simple, minimal chatbot with memory.",
         "python": "https://github.com/langchain-ai/new-langgraph-project/archive/refs/heads/main.zip",
@@ -123,7 +123,7 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
                 )
     except error.HTTPError as e:
         click.secho(
-            f"❌ Error: Failed to download repository.\n" f"Details: {e}\n",
+            f"❌ Error: Failed to download repository.\nDetails: {e}\n",
             fg="red",
             bold=True,
             err=True,

@@ -3,10 +3,11 @@ https://github.com/oittaa/uuid6-python/blob/main/src/uuid6/__init__.py#L95
 Bundled in to avoid install issues with uuid6 package
 """
 
+from __future__ import annotations
+
 import random
 import time
 import uuid
-from typing import Optional, Tuple
 
 _last_v6_timestamp = None
 
@@ -18,12 +19,12 @@ class UUID(uuid.UUID):
 
     def __init__(
         self,
-        hex: Optional[str] = None,
-        bytes: Optional[bytes] = None,
-        bytes_le: Optional[bytes] = None,
-        fields: Optional[Tuple[int, int, int, int, int, int]] = None,
-        int: Optional[int] = None,
-        version: Optional[int] = None,
+        hex: str | None = None,
+        bytes: bytes | None = None,
+        bytes_le: bytes | None = None,
+        fields: tuple[int, int, int, int, int, int] | None = None,
+        int: int | None = None,
+        version: int | None = None,
         *,
         is_safe: uuid.SafeUUID = uuid.SafeUUID.unknown,
     ) -> None:
@@ -75,7 +76,7 @@ def _subsec_decode(value: int) -> int:
     return -(-value * 10**6 // 2**20)
 
 
-def uuid6(node: Optional[int] = None, clock_seq: Optional[int] = None) -> UUID:
+def uuid6(node: int | None = None, clock_seq: int | None = None) -> UUID:
     r"""UUID version 6 is a field-compatible version of UUIDv1, reordered for
     improved DB locality. It is expected that UUIDv6 will primarily be
     used in contexts where there are existing v1 UUIDs. Systems that do

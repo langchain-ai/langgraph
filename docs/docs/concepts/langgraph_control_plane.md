@@ -5,13 +5,13 @@ search:
 
 # LangGraph Control Plane
 
-The term "control plane" is used broadly to refer to the Control Plane UI where users create and update [LangGraph Servers](./langgraph_server.md) (deployments) and the Control Plane APIs that support the UI experience.
+The term "control plane" is used broadly to refer to the control plane UI where users create and update [LangGraph Servers](./langgraph_server.md) (deployments) and the control plane APIs that support the UI experience.
 
-When a user makes an update through the Control Plane UI, the update is stored in the control plane state. The [LangGraph Data Plane](./langgraph_data_plane.md) "listener" application polls for these updates by calling the Control Plane APIs.
+When a user makes an update through the control plane UI, the update is stored in the control plane state. The [LangGraph Data Plane](./langgraph_data_plane.md) "listener" application polls for these updates by calling the control plane APIs.
 
 ## Control Plane UI
 
-From the Control Plane UI, you can:
+From the control plane UI, you can:
 
 - View a list of outstanding deployments.
 - View details of an individual deployment.
@@ -19,13 +19,14 @@ From the Control Plane UI, you can:
 - Update a deployment.
 - Update environment variables for a deployment.
 - View build and server logs of a deployment.
+- View deployment metrics such as CPU and memory usage.
 - Delete a deployment.
 
 The Control Plane UI is embedded in [LangSmith](https://docs.smith.langchain.com/langgraph_cloud).
 
 ## Control Plane API
 
-This section describes data model of the LangGraph Control Plane API. Control Plane API is used to create, update, and delete deployments. However, they are not publicly accessible.
+This section describes the data model of the control plane API. The API is used to create, update, and delete deployments. See the [control plane API reference](../cloud/reference/api/api_ref_control_plane.md) for more details.
 
 ### Deployment
 
@@ -33,11 +34,7 @@ A deployment is an instance of a LangGraph Server. A single deployment can have 
 
 ### Revision
 
-A revision is an iteration of a deployment. When a new deployment is created, an initial revision is automatically created. To deploy code changes or update environment variables for a deployment, a new revision must be created.
-
-### Environment Variable
-
-Environment variables are set for a deployment. All environment variables are stored as secrets (i.e. saved in a secrets store).
+A revision is an iteration of a deployment. When a new deployment is created, an initial revision is automatically created. To deploy code changes or update secrets for a deployment, a new revision must be created.
 
 ## Control Plane Features
 
@@ -47,18 +44,42 @@ This section describes various features of the control plane.
 
 For simplicity, the control plane offers two deployment types with different resource allocations: `Development` and `Production`.
 
-| **Deployment Type** | **CPU** | **Memory** | **Scaling**         |
-|---------------------|---------|------------|---------------------|
-| Development         | 1 CPU   | 1 GB       | Up to 1 container   |
-| Production          | 2 CPU   | 2 GB       | Up to 10 containers |
+| **Deployment Type** | **CPU/Memory**  | **Scaling**         | **Database**                                                                     |
+|---------------------|-----------------|---------------------|----------------------------------------------------------------------------------|
+| Development         | 1 CPU, 1 GB RAM | Up to 1 replica   | 10 GB disk, no backups                                                           |
+| Production          | 2 CPU, 2 GB RAM | Up to 10 replicas | Autoscaling disk, automatic backups, highly available (multi-zone configuration) |
 
-CPU and memory resources are per container.
+CPU and memory resources are per replica.
 
-!!! info "For [Cloud SaaS](../concepts/langgraph_cloud.md)"
-    For `Production` type deployments, resources can be manually increased on a case-by-case basis depending on use case and capacity constraints. Contact support@langchain.dev to request an increase in resources.
+!!! warning "Immutable Deployment Type"
 
-!!! info "For [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md)"
-    Resources for [Self-Hosted Data Plane](../concepts/langgraph_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_control_plane.md) deployments can be fully customized.
+    Once a deployment is created, the deployment type cannot be changed.
+
+!!! info "Self-Hosted Deployment"
+    Resources for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments can be fully customized. Deployment types are only applicable for [Cloud SaaS](../concepts/langgraph_cloud.md) deployments.
+
+#### Production
+
+`Production` type deployments are suitable for "production" workloads. For example, select `Production` for customer-facing applications in the critical path.
+
+Resources for `Production` type deployments can be manually increased on a case-by-case basis depending on use case and capacity constraints. Contact support@langchain.dev to request an increase in resources.
+
+#### Development
+
+`Development` type deployments are suitable development and testing. For example, select `Development` for internal testing environments. `Development` type deployments are not suitable for "production" workloads.
+
+!!! danger "Preemptible Compute Infrastructure"
+    `Development` type deployments (API server, queue server, and database) are provisioned on preemptible compute infrastructure. This means the compute infrastructure **may be terminated at any time without notice**. This may result in intermittent...
+
+    - Redis connection timeouts/errors
+    - Postgres connection timeouts/errors
+    - Failed or retrying background runs
+    
+    This behavior is expected. Preemptible compute infrastructure **significantly reduces the cost to provision a `Development` type deployment**. By design, LangGraph Server is fault-tolerant. The implementation will automatically attempt to recover from Redis/Postgres connection errors and retry failed background runs.
+
+    `Production` type deployments are provisioned on durable compute infrastructure, not preemptible compute infrastructure.
+
+Database disk size for `Development` type deployments can be manually increased on a case-by-case basis depending on use case and capacity constraints. For most use cases, [TTLs](../how-tos/ttl/configure_ttl.md) should be configured to manage disk usage. Contact support@langchain.dev to request an increase in resources.
 
 ### Database Provisioning
 
@@ -68,10 +89,10 @@ When implementing a LangGraph application, a [checkpointer](../concepts/persiste
 
 There is no direct access to the database. All access to the database occurs through the [LangGraph Server](../concepts/langgraph_server.md).
 
-The database is never deleted until the deployment itself is deleted. See [Automatic Deletion](#automatic-deletion) for additional details.
+The database is never deleted until the deployment itself is deleted.
 
-!!! info "For [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md)"
-    A custom Postgres instance can be configured for [Self-Hosted Data Plane](../concepts/langgraph_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_control_plane.md) deployments.
+!!! info
+    A custom Postgres instance can be configured for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 ### Asynchronous Deployment
 
@@ -83,18 +104,18 @@ Infrastructure for deployments and revisions are provisioned and deployed asynch
 
 The control plane and [LangGraph Data Plane](./langgraph_data_plane.md) "listener" application coordinate to achieve asynchronous deployments.
 
-### Automatic Deletion
+### Monitoring
 
-!!! info "Only for [Cloud SaaS](../concepts/langgraph_cloud.md)"
-    Automatic deletion of deployments is only available for [Cloud SaaS](../concepts/langgraph_cloud.md).
+After a deployment is ready, the control plane monitors the deployment and records various metrics, such as:
 
-The control plane automatically deletes deployments after 28 consecutive days of non-use (it is in an unused state). A deployment is in an unused state if there are no traces emitted to LangSmith from the deployment after 28 consecutive days. On any given day, if a deployment emits a trace to LangSmith, the counter for consecutive days of non-use is reset.
+- CPU and memory usage of the deployment.
+- Number of container restarts.
+- Number of replicas (this will increase with [autoscaling](../concepts/langgraph_data_plane.md#autoscaling)).
+- [Postgres](../concepts/langgraph_data_plane.md#postgres) CPU, memory usage, and disk usage.
+- [LangGraph Server queue](../concepts/langgraph_server.md#persistence-and-task-queue) pending/active run count.
+- [LangGraph Server API](../concepts/langgraph_server.md) success response count, error response count, and latency.
 
-- An email notification is sent after 7 consecutive days of non-use.
-- A deployment is deleted after 28 consecutive days of non-use.
-
-!!! danger "Data Cannot Be Recovered"
-    After a deployment is deleted, the data (e.g. Postgres) from the deployment cannot be recovered.
+These metrics are displayed as charts in the Control Plane UI.
 
 ### LangSmith Integration
 

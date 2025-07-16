@@ -7,21 +7,13 @@ from typing import Annotated, Literal, Optional, Union
 import pytest
 from typing_extensions import TypedDict
 
-from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
-    CheckpointTuple,
-    copy_checkpoint,
-)
+from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointTuple
 from langgraph.graph.state import StateGraph
+from langgraph.pregel.checkpoint import copy_checkpoint
 from langgraph.types import Command, Interrupt, PregelTask, StateSnapshot, interrupt
 from langgraph.utils.config import patch_configurable
 from tests.any_int import AnyInt
 from tests.any_str import AnyDict, AnyObject, AnyStr
-from tests.conftest import (
-    REGULAR_CHECKPOINTERS_ASYNC,
-    REGULAR_CHECKPOINTERS_SYNC,
-    awith_checkpointer,
-)
 
 pytestmark = pytest.mark.anyio
 
@@ -49,10 +41,8 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "step": 4,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -80,10 +70,8 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
                 "step": 3,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -139,13 +127,8 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
                 "step": 2,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -180,10 +163,8 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
                 "step": 1,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -231,10 +212,8 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "loop",
-                "writes": None,
                 "step": 0,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -271,10 +250,8 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
                 "step": -1,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -355,14 +332,11 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "answer": "doc1,doc2,doc3,doc4",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
                 "step": 4,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -418,14 +392,11 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "branch:to:qa": None,
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
                 "step": 3,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -496,17 +467,11 @@ SAVED_CHECKPOINTS = {
                     "branch:to:retriever_one": None,
                     "docs": ["doc3", "doc4"],
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
                 "step": 2,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -553,14 +518,11 @@ SAVED_CHECKPOINTS = {
                     "branch:to:analyzer_one": None,
                     "branch:to:retriever_two": None,
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
                 "step": 1,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -610,14 +572,11 @@ SAVED_CHECKPOINTS = {
                     "query": "what is weather in sf",
                     "branch:to:rewrite_query": None,
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": None,
                 "step": 0,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -661,14 +620,11 @@ SAVED_CHECKPOINTS = {
                 },
                 "versions_seen": {"__input__": {}},
                 "channel_values": {"__start__": {"query": "what is weather in sf"}},
-                "pending_sends": [],
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
                 "step": -1,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config=None,
             pending_writes=[
@@ -749,12 +705,9 @@ SAVED_CHECKPOINTS = {
                     "answer": "doc1,doc2,doc3,doc4",
                     "qa": "qa",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-                "thread_id": "1",
                 "step": 4,
                 "parents": {},
             },
@@ -813,12 +766,9 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "retriever_one": "retriever_one",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
-                "thread_id": "1",
                 "step": 3,
                 "parents": {},
             },
@@ -894,15 +844,9 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc3", "doc4"],
                     "retriever_two": "retriever_two",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
-                "thread_id": "1",
                 "step": 2,
                 "parents": {},
             },
@@ -955,12 +899,9 @@ SAVED_CHECKPOINTS = {
                     "rewrite_query": "rewrite_query",
                     "branch:to:retriever_two": "rewrite_query",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
-                "thread_id": "1",
                 "step": 1,
                 "parents": {},
             },
@@ -1017,12 +958,9 @@ SAVED_CHECKPOINTS = {
                     "query": "what is weather in sf",
                     "start:rewrite_query": "__start__",
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": None,
-                "thread_id": "1",
                 "step": 0,
                 "parents": {},
             },
@@ -1068,12 +1006,9 @@ SAVED_CHECKPOINTS = {
                 },
                 "versions_seen": {"__input__": {}},
                 "channel_values": {"__start__": {"query": "what is weather in sf"}},
-                "pending_sends": [],
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
-                "thread_id": "1",
                 "step": -1,
                 "parents": {},
             },
@@ -1156,12 +1091,9 @@ SAVED_CHECKPOINTS = {
                         "retriever_one": "00000000000000000000000000000005.0.222301724202566"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-                "thread_id": "1",
                 "step": 4,
                 "parents": {},
             },
@@ -1220,12 +1152,9 @@ SAVED_CHECKPOINTS = {
                         "analyzer_one": "00000000000000000000000000000004.0.2684613370070208"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"retriever_one": {"docs": ["doc1", "doc2"]}},
-                "thread_id": "1",
                 "step": 3,
                 "parents": {},
             },
@@ -1301,15 +1230,9 @@ SAVED_CHECKPOINTS = {
                         "branch:rewrite_query:rewrite_query_then:retriever_two": "00000000000000000000000000000003.0.8992241767805405"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {
-                    "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-                    "retriever_two": {"docs": ["doc3", "doc4"]},
-                },
-                "thread_id": "1",
                 "step": 2,
                 "parents": {},
             },
@@ -1362,12 +1285,9 @@ SAVED_CHECKPOINTS = {
                         "start:rewrite_query": "00000000000000000000000000000002.0.32002588286540445"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": {"rewrite_query": {"query": "query: what is weather in sf"}},
-                "thread_id": "1",
                 "step": 1,
                 "parents": {},
             },
@@ -1424,12 +1344,9 @@ SAVED_CHECKPOINTS = {
                         "__start__": "00000000000000000000000000000001.0.6759219622820284"
                     },
                 },
-                "pending_sends": [],
             },
             metadata={
                 "source": "loop",
-                "writes": None,
-                "thread_id": "1",
                 "step": 0,
                 "parents": {},
             },
@@ -1475,12 +1392,9 @@ SAVED_CHECKPOINTS = {
                     "__start__": "00000000000000000000000000000001.0.6759219622820284"
                 },
                 "versions_seen": {"__input__": {}},
-                "pending_sends": [],
             },
             metadata={
                 "source": "input",
-                "writes": {"__start__": {"query": "what is weather in sf"}},
-                "thread_id": "1",
                 "step": -1,
                 "parents": {},
             },
@@ -1587,25 +1501,22 @@ def test_migrate_checkpoints(source: str, target: str) -> None:
                     migrated["versions_seen"][c][v].split(".")[0]
                 )
         # check that the migrated checkpoint matches the target checkpoint
-        assert (
-            migrated == target_checkpoint.checkpoint
-        ), f"Checkpoint mismatch at index {idx}"
+        assert migrated == target_checkpoint.checkpoint, (
+            f"Checkpoint mismatch at index {idx}"
+        )
 
 
 @NEEDS_CONTEXTVARS
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_latest_checkpoint_state_graph(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
-
     builder = make_state_graph()
-    app = builder.compile(checkpointer=checkpointer)
+    app = builder.compile(checkpointer=sync_checkpointer)
     config = {"configurable": {"thread_id": "1"}}
 
-    assert [*app.stream({"query": "what is weather in sf"}, config)] == [
+    assert [
+        *app.stream({"query": "what is weather in sf"}, config, checkpoint_during=True)
+    ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
@@ -1621,7 +1532,7 @@ def test_latest_checkpoint_state_graph(
         },
     ]
 
-    assert [*app.stream(Command(resume=""), config)] == [
+    assert [*app.stream(Command(resume=""), config, checkpoint_during=True)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
 
@@ -1638,61 +1549,60 @@ def test_latest_checkpoint_state_graph(
 
 
 @NEEDS_CONTEXTVARS
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
-async def test_latest_checkpoint_state_graph_async(checkpointer_name: str) -> None:
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        builder = make_state_graph()
-        app = builder.compile(checkpointer=checkpointer)
-        config = {"configurable": {"thread_id": "1"}}
+async def test_latest_checkpoint_state_graph_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    builder = make_state_graph()
+    app = builder.compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
 
-        assert [
-            c async for c in app.astream({"query": "what is weather in sf"}, config)
-        ] == [
-            {"rewrite_query": {"query": "query: what is weather in sf"}},
-            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-            {"retriever_two": {"docs": ["doc3", "doc4"]}},
-            {"retriever_one": {"docs": ["doc1", "doc2"]}},
-            {
-                "__interrupt__": (
-                    Interrupt(
-                        value="",
-                        resumable=True,
-                        ns=[AnyStr("qa:")],
-                    ),
-                )
-            },
-        ]
+    assert [
+        c
+        async for c in app.astream(
+            {"query": "what is weather in sf"}, config, checkpoint_during=True
+        )
+    ] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value="",
+                    resumable=True,
+                    ns=[AnyStr("qa:")],
+                ),
+            )
+        },
+    ]
 
-        assert [c async for c in app.astream(Command(resume=""), config)] == [
-            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        ]
+    assert [
+        c async for c in app.astream(Command(resume=""), config, checkpoint_during=True)
+    ] == [
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
 
-        # check history with current checkpoints matches expected history
-        history = [c async for c in app.aget_state_history(config)]
-        expected_history = get_expected_history()
-        assert len(history) == len(expected_history)
-        assert history[0] == expected_history[0]
-        assert history[1] == expected_history[1]
-        assert history[2] == expected_history[2]
-        assert history[3] == expected_history[3]
-        assert history[4] == expected_history[4]
-        assert history[5] == expected_history[5]
+    # check history with current checkpoints matches expected history
+    history = [c async for c in app.aget_state_history(config)]
+    expected_history = get_expected_history()
+    assert len(history) == len(expected_history)
+    assert history[0] == expected_history[0]
+    assert history[1] == expected_history[1]
+    assert history[2] == expected_history[2]
+    assert history[3] == expected_history[3]
+    assert history[4] == expected_history[4]
+    assert history[5] == expected_history[5]
 
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*", "2-quadratic"])
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_SYNC)
 def test_saved_checkpoint_state_graph(
-    request: pytest.FixtureRequest,
-    checkpointer_name: str,
+    sync_checkpointer: BaseCheckpointSaver,
     checkpoint_version: str,
 ) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
-
     builder = make_state_graph()
-    app = builder.compile(checkpointer=checkpointer)
+    app = builder.compile(checkpointer=sync_checkpointer)
 
     thread1 = "1"
     config = {"configurable": {"thread_id": thread1, "checkpoint_ns": ""}}
@@ -1704,8 +1614,8 @@ def test_saved_checkpoint_state_graph(
         for write in checkpoint.pending_writes:
             grouped_writes[write[0]].append(write[1:])
         for tid, group in grouped_writes.items():
-            checkpointer.put_writes(checkpoint.config, group, tid)
-        checkpointer.put(
+            sync_checkpointer.put_writes(checkpoint.config, group, tid)
+        sync_checkpointer.put(
             patch_configurable(config, {"checkpoint_id": parent_id}),
             checkpoint.checkpoint,
             checkpoint.metadata,
@@ -1753,71 +1663,65 @@ def test_saved_checkpoint_state_graph(
 
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*", "2-quadratic"])
-@pytest.mark.parametrize("checkpointer_name", REGULAR_CHECKPOINTERS_ASYNC)
 async def test_saved_checkpoint_state_graph_async(
-    checkpointer_name: str,
+    async_checkpointer: BaseCheckpointSaver,
     checkpoint_version: str,
 ) -> None:
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        builder = make_state_graph()
-        app = builder.compile(checkpointer=checkpointer)
+    builder = make_state_graph()
+    app = builder.compile(checkpointer=async_checkpointer)
 
-        thread1 = "1"
-        config = {"configurable": {"thread_id": thread1, "checkpoint_ns": ""}}
+    thread1 = "1"
+    config = {"configurable": {"thread_id": thread1, "checkpoint_ns": ""}}
 
-        # save checkpoints
-        parent_id: Optional[str] = None
-        for checkpoint in reversed(SAVED_CHECKPOINTS[checkpoint_version]):
-            grouped_writes = defaultdict(list)
-            for write in checkpoint.pending_writes:
-                grouped_writes[write[0]].append(write[1:])
-            for tid, group in grouped_writes.items():
-                await checkpointer.aput_writes(checkpoint.config, group, tid)
-            await checkpointer.aput(
-                patch_configurable(config, {"checkpoint_id": parent_id}),
-                checkpoint.checkpoint,
-                checkpoint.metadata,
-                checkpoint.checkpoint["channel_versions"],
-            )
-            parent_id = checkpoint.checkpoint["id"]
-
-        # load history
-        history = [c async for c in app.aget_state_history(config)]
-        # check history with saved checkpoints matches expected history
-        exc_task_results: int = 0
-        if checkpoint_version == "2-start:*":
-            exc_task_results = 1
-        elif checkpoint_version == "2-quadratic":
-            exc_task_results = 2
-        expected_history = get_expected_history(exc_task_results=exc_task_results)
-        assert len(history) == len(expected_history)
-        assert history[0] == expected_history[0]
-        assert history[1] == expected_history[1]
-        assert history[2] == expected_history[2]
-        assert history[3] == expected_history[3]
-        assert history[4] == expected_history[4]
-        assert history[5] == expected_history[5]
-
-        # resume from 2nd to latest checkpoint
-        assert [
-            c async for c in app.astream(Command(resume=""), history[1].config)
-        ] == [
-            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        ]
-        # new checkpoint should match the latest checkpoint in history
-        latest_state = await app.aget_state(config)
-        assert (
-            StateSnapshot(
-                values=latest_state.values,
-                next=latest_state.next,
-                config=patch_configurable(
-                    latest_state.config, {"checkpoint_id": AnyStr()}
-                ),
-                metadata=AnyDict(latest_state.metadata),
-                created_at=AnyStr(),
-                parent_config=latest_state.parent_config,
-                tasks=latest_state.tasks,
-                interrupts=latest_state.interrupts,
-            )
-            == history[0]
+    # save checkpoints
+    parent_id: Optional[str] = None
+    for checkpoint in reversed(SAVED_CHECKPOINTS[checkpoint_version]):
+        grouped_writes = defaultdict(list)
+        for write in checkpoint.pending_writes:
+            grouped_writes[write[0]].append(write[1:])
+        for tid, group in grouped_writes.items():
+            await async_checkpointer.aput_writes(checkpoint.config, group, tid)
+        await async_checkpointer.aput(
+            patch_configurable(config, {"checkpoint_id": parent_id}),
+            checkpoint.checkpoint,
+            checkpoint.metadata,
+            checkpoint.checkpoint["channel_versions"],
         )
+        parent_id = checkpoint.checkpoint["id"]
+
+    # load history
+    history = [c async for c in app.aget_state_history(config)]
+    # check history with saved checkpoints matches expected history
+    exc_task_results: int = 0
+    if checkpoint_version == "2-start:*":
+        exc_task_results = 1
+    elif checkpoint_version == "2-quadratic":
+        exc_task_results = 2
+    expected_history = get_expected_history(exc_task_results=exc_task_results)
+    assert len(history) == len(expected_history)
+    assert history[0] == expected_history[0]
+    assert history[1] == expected_history[1]
+    assert history[2] == expected_history[2]
+    assert history[3] == expected_history[3]
+    assert history[4] == expected_history[4]
+    assert history[5] == expected_history[5]
+
+    # resume from 2nd to latest checkpoint
+    assert [c async for c in app.astream(Command(resume=""), history[1].config)] == [
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
+    # new checkpoint should match the latest checkpoint in history
+    latest_state = await app.aget_state(config)
+    assert (
+        StateSnapshot(
+            values=latest_state.values,
+            next=latest_state.next,
+            config=patch_configurable(latest_state.config, {"checkpoint_id": AnyStr()}),
+            metadata=AnyDict(latest_state.metadata),
+            created_at=AnyStr(),
+            parent_config=latest_state.parent_config,
+            tasks=latest_state.tasks,
+            interrupts=latest_state.interrupts,
+        )
+        == history[0]
+    )

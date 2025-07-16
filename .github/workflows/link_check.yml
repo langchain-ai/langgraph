@@ -11,8 +11,8 @@ on:
     - cron: "0 5 * * *"
   workflow_dispatch:
 
-env:
-  POETRY_VERSION: "2.1.2"
+permissions:
+  contents: read
 
 jobs:
   markdown-link-check:

@@ -1,42 +1,45 @@
-[tool.poetry]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
 name = "langgraph-checkpoint"
-version = "2.0.25"
+version = "2.1.0"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
-license = "MIT"
+requires-python = ">=3.9"
 readme = "README.md"
-repository = "https://www.github.com/langchain-ai/langgraph"
-packages = [{ include = "langgraph" }]
+license = "MIT"
+license-files = ['LICENSE']
+dependencies = [
+    "langchain-core>=0.2.38",
+    "ormsgpack>=1.10.0",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.9"
-langchain-core = { version = ">=0.2.38", python = "<4.0" }
-ormsgpack = "^1.8.0"
+[project.urls]
+Repository = "https://www.github.com/langchain-ai/langgraph"
 
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.6.2"
-codespell = "^2.2.0"
-pytest = "^7.2.1"
-pytest-asyncio = "^0.21.1"
-pytest-mock = "^3.11.1"
-pytest-watcher = { version = ">=0.4.1", python = "<4.0" }
-mypy = "^1.10.0"
-dataclasses-json = { version = ">=0.6.7", python = "<4.0" }
+[dependency-groups]
+dev = [
+  "ruff",
+  "codespell",
+  "pytest",
+  "pytest-asyncio",
+  "pytest-mock",
+  "pytest-watcher",
+  "mypy",
+  "dataclasses-json",
+  "numpy",
+  "pandas",
+  "pandas-stubs>=2.2.2.240807",
+]
+
+[tool.hatch.build.targets.wheel]
+include = ["langgraph"]
 
 [tool.pytest.ini_options]
-# --strict-markers will raise errors on unknown marks.
-# https://docs.pytest.org/en/7.1.x/how-to/mark.html#raising-errors-on-unknown-marks
-#
-# https://docs.pytest.org/en/7.1.x/reference/reference.html
-# --strict-config       any warnings encountered while parsing the `pytest`
-#                       section of the configuration file raise errors.
 addopts = "--strict-markers --strict-config --durations=5 -vv"
 asyncio_mode = "auto"
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 lint.select = [
@@ -46,7 +49,7 @@ lint.select = [
   "B",  # flake8-bugbear
   "I",  # isort
 ]
-lint.ignore = ["E501", "B008", "UP007", "UP006"]
+lint.ignore = ["E501", "B008"]
 
 [tool.pytest-watcher]
 now = true

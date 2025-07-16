@@ -11,6 +11,9 @@ on:
   schedule:
     - cron: "0 13 * * *"
 
+permissions:
+  contents: read
+
 defaults:
   run:
     working-directory: docs
@@ -27,30 +30,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python + Poetry
-        uses: "./.github/actions/poetry_setup"
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: 3.11
-          poetry-version: 2.1.2
-          cache-key: test-langgraph-notebooks
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: "test-langgraph-notebooks"
 
       - name: Install dependencies
         run: |
-          poetry install --with test --no-root
-          poetry run pip install jupyter
+          uv sync --group test
+          uv run pip install jupyter
 
       - name: Start services
         run: make start-services
 
       - name: Pre-download tiktoken files
         run: |
-          poetry run python _scripts/download_tiktoken.py
+          uv run python _scripts/download_tiktoken.py
 
       - name: Prepare notebooks
         run: |
           if [ "${{ matrix.lib-version }}" = "development" ]; then
-            poetry run python _scripts/prepare_notebooks_for_ci.py --comment-install-cells
+            uv run python _scripts/prepare_notebooks_for_ci.py --comment-install-cells
           else
-            poetry run python _scripts/prepare_notebooks_for_ci.py
+            uv run python _scripts/prepare_notebooks_for_ci.py
           fi
 
       - name: Run notebooks

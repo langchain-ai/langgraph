@@ -4,7 +4,8 @@ import os
 import pathlib
 import shutil
 import sys
-from typing import Callable, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Callable, Optional
 
 import click
 import click.exceptions
@@ -19,6 +20,7 @@ from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
+from langgraph_cli.util import warn_non_wolfi_distro
 from langgraph_cli.version import __version__
 
 OPT_DOCKER_COMPOSE = click.option(
@@ -176,6 +178,13 @@ def cli():
     " Useful if you want to test against an image already built using `langgraph build`.",
 )
 @click.option(
+    "--base-image",
+    default=None,
+    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
+    "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
+)
+@click.option(
     "--wait",
     is_flag=True,
     help="Wait for services to start before returning. Implies --detach",
@@ -195,10 +204,11 @@ def up(
     debugger_base_url: Optional[str],
     postgres_uri: Optional[str],
     image: Optional[str],
+    base_image: Optional[str],
 ):
     click.secho("Starting LangGraph API server...", fg="green")
     click.secho(
-        """For local dev, requires env var LANGSMITH_API_KEY with access to LangGraph Cloud closed beta.
+        """For local dev, requires env var LANGSMITH_API_KEY with access to LangGraph Platform.
 For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.""",
     )
     with Runner() as runner, Progress(message="Pulling...") as set:
@@ -216,6 +226,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             debugger_base_url=debugger_base_url,
             postgres_uri=postgres_uri,
             image=image,
+            base_image=base_image,
         )
         # add up + options
         args.extend(["up", "--remove-orphans"])
@@ -307,10 +318,8 @@ def _build(
     )
     # add additional_contexts
     if additional_contexts:
-        additional_contexts_str = ",".join(
-            f"{k}={v}" for k, v in additional_contexts.items()
-        )
-        args.extend(["--build-context", additional_contexts_str])
+        for k, v in additional_contexts.items():
+            args.extend(["--build-context", f"{k}={v}"])
     # run docker build
     runner.run(
         subp_exec(
@@ -342,7 +351,9 @@ def _build(
 )
 @click.option(
     "--base-image",
-    hidden=True,
+    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
+    "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(
@@ -363,6 +374,7 @@ def build(
         if shutil.which("docker") is None:
             raise click.UsageError("Docker not installed") from None
         config_json = langgraph_cli.config.validate_config_file(config)
+        warn_non_wolfi_distro(config_json)
         _build(
             runner, set, config, config_json, base_image, pull, tag, docker_build_args
         )
@@ -440,7 +452,9 @@ tests
 )
 @click.option(
     "--base-image",
-    help="Base image to use for the LangGraph API server. Defaults to langchain/langgraph-api or langchain/langgraphjs-api",
+    help="Base image to use for the LangGraph API server. Pin to specific versions using version tags. Defaults to langchain/langgraph-api or langchain/langgraphjs-api."
+    "\n\n    \b\nExamples:\n    --base-image langchain/langgraph-server:0.2.18  # Pin to a specific patch version"
+    "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
 @log_command
 def dockerfile(
@@ -452,6 +466,7 @@ def dockerfile(
     save_path = pathlib.Path(save_path).absolute()
     secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
     config_json = langgraph_cli.config.validate_config_file(config)
+    warn_non_wolfi_distro(config_json)
     secho("✅ Configuration validated!", fg="green")
 
     secho(f"📝 Generating Dockerfile at {save_path}", fg="yellow")
@@ -489,6 +504,7 @@ def dockerfile(
             compose_dict = langgraph_cli.docker.compose_as_dict(
                 capabilities,
                 port=8123,
+                base_image=base_image,
             )
             # Add .env file to the docker-compose.yml for the langgraph-api service
             compose_dict["services"]["langgraph-api"]["env_file"] = [".env"]
@@ -497,6 +513,11 @@ def dockerfile(
                 "context": ".",
                 "dockerfile": save_path.name,
             }
+            # Add the base_image as build arg if provided
+            if base_image:
+                compose_dict["services"]["langgraph-api"]["build"]["args"] = {
+                    "BASE_IMAGE": base_image
+                }
             f.write(langgraph_cli.docker.dict_to_yaml(compose_dict))
             secho("✅ Created: docker-compose.yml", fg="green")
 
@@ -510,7 +531,7 @@ def dockerfile(
                         "\n",
                         "# LANGSMITH_API_KEY=your-api-key",
                         "\n",
-                        "# Or if you have a LangGraph Cloud license key, "
+                        "# Or if you have a LangGraph Platform license key, "
                         "then uncomment the following line: ",
                         "\n",
                         "# LANGGRAPH_CLOUD_LICENSE_KEY=your-license-key",
@@ -722,7 +743,7 @@ def prepare_args_and_stdin(
     image: Optional[str] = None,
     # Like "langchain/langgraphjs-api" or "langchain/langgraph-api
     base_image: Optional[str] = None,
-) -> Tuple[List[str], str]:
+) -> tuple[list[str], str]:
     assert config_path.exists(), f"Config file not found: {config_path}"
     # prepare args
     stdin = langgraph_cli.docker.compose(
@@ -732,6 +753,7 @@ def prepare_args_and_stdin(
         debugger_base_url=debugger_base_url,
         postgres_uri=postgres_uri,
         image=image,  # Pass image to compose YAML generator
+        base_image=base_image,
     )
     args = [
         "--project-directory",
@@ -766,16 +788,18 @@ def prepare(
     debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
     image: Optional[str] = None,
-) -> Tuple[List[str], str]:
+    base_image: Optional[str] = None,
+) -> tuple[list[str], str]:
     """Prepare the arguments and stdin for running the LangGraph API server."""
     config_json = langgraph_cli.config.validate_config_file(config_path)
+    warn_non_wolfi_distro(config_json)
     # pull latest images
     if pull:
         runner.run(
             subp_exec(
                 "docker",
                 "pull",
-                langgraph_cli.config.docker_tag(config_json),
+                langgraph_cli.config.docker_tag(config_json, base_image),
                 verbose=verbose,
             )
         )
@@ -791,5 +815,6 @@ def prepare(
         debugger_base_url=debugger_base_url or f"http://127.0.0.1:{port}",
         postgres_uri=postgres_uri,
         image=image,
+        base_image=base_image,
     )
     return args, stdin

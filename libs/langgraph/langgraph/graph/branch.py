@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Awaitable, Hashable, Sequence
 from inspect import (
     isfunction,
@@ -11,7 +13,6 @@ from typing import (
     Callable,
     Literal,
     NamedTuple,
-    Optional,
     Union,
     cast,
     get_args,
@@ -40,21 +41,18 @@ Writer = Callable[
 
 
 def _get_branch_path_input_schema(
-    path: Union[
-        Callable[..., Union[Hashable, list[Hashable]]],
-        Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
-        Runnable[Any, Union[Hashable, list[Hashable]]],
-    ],
-) -> Optional[type[Any]]:
+    path: Callable[..., Hashable | list[Hashable]]
+    | Callable[..., Awaitable[Hashable | list[Hashable]]]
+    | Runnable[Any, Hashable | list[Hashable]],
+) -> type[Any] | None:
     input = None
     # detect input schema annotation in the branch callable
     try:
-        callable_: Optional[
-            Union[
-                Callable[..., Union[Hashable, list[Hashable]]],
-                Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
-            ]
-        ] = None
+        callable_: (
+            Callable[..., Hashable | list[Hashable]]
+            | Callable[..., Awaitable[Hashable | list[Hashable]]]
+            | None
+        ) = None
         if isinstance(path, (RunnableCallable, RunnableLambda)):
             if isfunction(path.func) or ismethod(path.func):
                 callable_ = path.func
@@ -85,21 +83,19 @@ def _get_branch_path_input_schema(
 
 
 class Branch(NamedTuple):
-    path: Runnable[Any, Union[Hashable, list[Hashable]]]
-    ends: Optional[dict[Hashable, str]]
-    then: Optional[str] = None
-    input_schema: Optional[type[Any]] = None
+    path: Runnable[Any, Hashable | list[Hashable]]
+    ends: dict[Hashable, str] | None
+    input_schema: type[Any] | None = None
 
     @classmethod
     def from_path(
         cls,
-        path: Runnable[Any, Union[Hashable, list[Hashable]]],
-        path_map: Optional[Union[dict[Hashable, str], list[str]]],
-        then: Optional[str] = None,
+        path: Runnable[Any, Hashable | list[Hashable]],
+        path_map: dict[Hashable, str] | list[str] | None,
         infer_schema: bool = False,
-    ) -> "Branch":
+    ) -> Branch:
         # coerce path_map to a dictionary
-        path_map_: Optional[dict[Hashable, str]] = None
+        path_map_: dict[Hashable, str] | None = None
         try:
             if isinstance(path_map, dict):
                 path_map_ = path_map.copy()
@@ -107,7 +103,7 @@ class Branch(NamedTuple):
                 path_map_ = {name: name for name in path_map}
             else:
                 # find func
-                func: Optional[Callable] = None
+                func: Callable | None = None
                 if isinstance(path, (RunnableCallable, RunnableLambda)):
                     func = path.func or path.afunc
                 if func is not None:
@@ -123,12 +119,12 @@ class Branch(NamedTuple):
         # infer input schema
         input_schema = _get_branch_path_input_schema(path) if infer_schema else None
         # create branch
-        return cls(path=path, ends=path_map_, then=then, input_schema=input_schema)
+        return cls(path=path, ends=path_map_, input_schema=input_schema)
 
     def run(
         self,
         writer: Writer,
-        reader: Optional[Callable[[RunnableConfig], Any]] = None,
+        reader: Callable[[RunnableConfig], Any] | None = None,
     ) -> RunnableCallable:
         return ChannelWrite.register_writer(
             RunnableCallable(
@@ -155,7 +151,7 @@ class Branch(NamedTuple):
         input: Any,
         config: RunnableConfig,
         *,
-        reader: Optional[Callable[[RunnableConfig], Any]],
+        reader: Callable[[RunnableConfig], Any] | None,
         writer: Writer,
     ) -> Runnable:
         if reader:
@@ -178,7 +174,7 @@ class Branch(NamedTuple):
         input: Any,
         config: RunnableConfig,
         *,
-        reader: Optional[Callable[[RunnableConfig], Any]],
+        reader: Callable[[RunnableConfig], Any] | None,
         writer: Writer,
     ) -> Runnable:
         if reader:
@@ -202,11 +198,11 @@ class Branch(NamedTuple):
         input: Any,
         result: Any,
         config: RunnableConfig,
-    ) -> Union[Runnable, Any]:
+    ) -> Runnable | Any:
         if not isinstance(result, (list, tuple)):
             result = [result]
         if self.ends:
-            destinations: Sequence[Union[Send, str]] = [
+            destinations: Sequence[Send | str] = [
                 r if isinstance(r, Send) else self.ends[r] for r in result
             ]
         else:

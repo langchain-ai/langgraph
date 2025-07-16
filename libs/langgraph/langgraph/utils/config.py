@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from collections import ChainMap
 from collections.abc import Sequence
 from os import getenv
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from langchain_core.callbacks import (
     AsyncCallbackManager,
@@ -45,7 +47,7 @@ def recast_checkpoint_ns(ns: str) -> str:
 
 
 def patch_configurable(
-    config: Optional[RunnableConfig], patch: dict[str, Any]
+    config: RunnableConfig | None, patch: dict[str, Any]
 ) -> RunnableConfig:
     if config is None:
         return {CONF: patch}
@@ -56,7 +58,7 @@ def patch_configurable(
 
 
 def patch_checkpoint_map(
-    config: Optional[RunnableConfig], metadata: Optional[CheckpointMetadata]
+    config: RunnableConfig | None, metadata: CheckpointMetadata | None
 ) -> RunnableConfig:
     if config is None:
         return config
@@ -75,7 +77,7 @@ def patch_checkpoint_map(
         return config
 
 
-def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
+def merge_configs(*configs: RunnableConfig | None) -> RunnableConfig:
     """Merge multiple configs into one.
 
     Args:
@@ -148,13 +150,13 @@ def merge_configs(*configs: Optional[RunnableConfig]) -> RunnableConfig:
 
 
 def patch_config(
-    config: Optional[RunnableConfig],
+    config: RunnableConfig | None,
     *,
     callbacks: Callbacks = None,
-    recursion_limit: Optional[int] = None,
-    max_concurrency: Optional[int] = None,
-    run_name: Optional[str] = None,
-    configurable: Optional[dict[str, Any]] = None,
+    recursion_limit: int | None = None,
+    max_concurrency: int | None = None,
+    run_name: str | None = None,
+    configurable: dict[str, Any] | None = None,
 ) -> RunnableConfig:
     """Patch a config with new values.
 
@@ -194,7 +196,7 @@ def patch_config(
 
 
 def get_callback_manager_for_config(
-    config: RunnableConfig, tags: Optional[Sequence[str]] = None
+    config: RunnableConfig, tags: Sequence[str] | None = None
 ) -> CallbackManager:
     """Get a callback manager for a config.
 
@@ -232,7 +234,7 @@ def get_callback_manager_for_config(
 
 def get_async_callback_manager_for_config(
     config: RunnableConfig,
-    tags: Optional[Sequence[str]] = None,
+    tags: Sequence[str] | None = None,
 ) -> AsyncCallbackManager:
     """Get an async callback manager for a config.
 
@@ -263,7 +265,7 @@ def get_async_callback_manager_for_config(
         # otherwise create a new manager
         return AsyncCallbackManager.configure(
             inheritable_callbacks=config.get("callbacks"),
-            inheritable_tags=config.get("tags"),
+            inheritable_tags=all_tags,
             inheritable_metadata=config.get("metadata"),
         )
 
@@ -275,15 +277,14 @@ def _is_not_empty(value: Any) -> bool:
         return value is not None
 
 
-def ensure_config(*configs: Optional[RunnableConfig]) -> RunnableConfig:
-    """Ensure that a config is a dict with all keys present.
+def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
+    """Return a config with all keys, merging any provided configs.
 
     Args:
-        config (Optional[RunnableConfig], optional): The config to ensure.
-          Defaults to None.
+        *configs: Configs to merge before ensuring defaults.
 
     Returns:
-        RunnableConfig: The ensured config.
+        RunnableConfig: The merged and ensured config.
     """
     empty = RunnableConfig(
         tags=[],

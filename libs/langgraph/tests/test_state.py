@@ -6,12 +6,11 @@ from typing import Annotated, Any, Optional
 from typing import Annotated as Annotated2
 
 import pytest
-from langchain_core.runnables import RunnableConfig, RunnableLambda
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph.graph.state import StateGraph, _get_node_name, _warn_invalid_state_schema
-from langgraph.managed.shared_value import SharedValue
 
 
 class State(BaseModel):
@@ -93,7 +92,7 @@ def test_state_schema_with_type_hint():
             assert state.pop("foo") == "bar"
             return {"input_state": state}
 
-    graph = StateGraph(InputState, output=OutputState)
+    graph = StateGraph(InputState, output_schema=OutputState)
     actions = [
         complete_hint,
         miss_first_hint,
@@ -153,11 +152,8 @@ def test_state_schema_optional_values(total_: bool):
 
     class State(InputState):  # this would be ignored
         val4: dict
-        some_shared_channel: Annotated[str, SharedValue.on("assistant_id")] = field(
-            default="foo"
-        )
 
-    builder = StateGraph(State, input=InputState, output=OutputState)
+    builder = StateGraph(State, input_schema=InputState, output_schema=OutputState)
     builder.add_node("n", lambda x: x)
     builder.add_edge("__start__", "n")
     graph = builder.compile()
@@ -167,13 +163,12 @@ def test_state_schema_optional_values(total_: bool):
         expected_required = set()
         expected_optional = {"val2", "val1"}
     else:
-        expected_required = {"val1"}
-
-        expected_optional = {"val2"}
+        expected_required = {"val1", "val2"}
+        expected_optional = set()
 
     # The others should always have precedence based on the required annotation
-    expected_required |= {"val0a", "val3", "val5"}
-    expected_optional |= {"val0b", "val4", "val6"}
+    expected_required |= {"val0a", "val0b", "val3", "val5"}
+    expected_optional |= {"val4", "val6"}
 
     assert set(json_schema.get("required", set())) == expected_required
     assert (
@@ -186,11 +181,11 @@ def test_state_schema_optional_values(total_: bool):
         expected_required = set()
         expected_optional = {"out_val2", "out_val1"}
     else:
-        expected_required = {"out_val1"}
-        expected_optional = {"out_val2"}
+        expected_required = {"out_val1", "out_val2"}
+        expected_optional = set()
 
-    expected_required |= {"val0a", "out_val3", "out_val5"}
-    expected_optional |= {"val0b", "out_val4", "out_val6"}
+    expected_required |= {"val0a", "val0b", "out_val3", "out_val5"}
+    expected_optional |= {"out_val4", "out_val6"}
 
     assert set(output_schema.get("required", set())) == expected_required
     assert (
@@ -219,9 +214,6 @@ def test_state_schema_default_values(kw_only_: bool):
         val11: Annotated[list[str], "annotated list"] = field(
             default_factory=lambda: ["a", "b"]
         )
-        some_shared_channel: Annotated[str, SharedValue.on("assistant_id")] = field(
-            default="foo"
-        )
 
     builder = StateGraph(InputState)
     builder.add_node("n", lambda x: x)
@@ -247,67 +239,7 @@ def test_state_schema_default_values(kw_only_: bool):
     )
 
 
-def test_raises_invalid_managed():
-    class BadInputState(TypedDict):
-        some_thing: str
-        some_input_channel: Annotated[str, SharedValue.on("assistant_id")]
-
-    class InputState(TypedDict):
-        some_thing: str
-        some_input_channel: str
-
-    class BadOutputState(TypedDict):
-        some_thing: str
-        some_output_channel: Annotated[str, SharedValue.on("assistant_id")]
-
-    class OutputState(TypedDict):
-        some_thing: str
-        some_output_channel: str
-
-    class State(TypedDict):
-        some_thing: str
-        some_channel: Annotated[str, SharedValue.on("assistant_id")]
-
-    # All OK
-    StateGraph(State, input=InputState, output=OutputState)
-    StateGraph(State)
-    StateGraph(State, input=State, output=State)
-    StateGraph(State, input=InputState)
-    StateGraph(State, input=InputState)
-
-    bad_input_examples = [
-        (State, BadInputState, OutputState),
-        (State, BadInputState, BadOutputState),
-        (State, BadInputState, State),
-        (State, BadInputState, None),
-    ]
-    for _state, _inp, _outp in bad_input_examples:
-        with pytest.raises(
-            ValueError,
-            match="Invalid managed channels detected in BadInputState: some_input_channel. Managed channels are not permitted in Input/Output schema.",
-        ):
-            StateGraph(_state, input=_inp, output=_outp)
-    bad_output_examples = [
-        (State, InputState, BadOutputState),
-        (State, None, BadOutputState),
-    ]
-    for _state, _inp, _outp in bad_output_examples:
-        with pytest.raises(
-            ValueError,
-            match="Invalid managed channels detected in BadOutputState: some_output_channel. Managed channels are not permitted in Input/Output schema.",
-        ):
-            StateGraph(_state, input=_inp, output=_outp)
-
-
 def test__get_node_name() -> None:
-    # default runnable name
-    assert _get_node_name(RunnableLambda(func=lambda x: x)) == "RunnableLambda"
-    # custom runnable name
-    assert (
-        _get_node_name(RunnableLambda(name="my_runnable", func=lambda x: x))
-        == "my_runnable"
-    )
-
     # lambda
     assert _get_node_name(lambda x: x) == "<lambda>"
 

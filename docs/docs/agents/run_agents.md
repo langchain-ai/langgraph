@@ -10,7 +10,7 @@ hide:
 # Running agents
 
 
-Agents support both synchronous and asynchronous execution using either `.invoke()` / `await .invoke()` for full responses, or `.stream()` / `.astream()` for **incremental** [streaming](streaming.md) output. This section explains how to provide input, interpret output, enable streaming, and control execution limits.
+Agents support both synchronous and asynchronous execution using either `.invoke()` / `await .ainvoke()` for full responses, or `.stream()` / `.astream()` for **incremental** [streaming](../how-tos/streaming.md) output. This section explains how to provide input, interpret output, enable streaming, and control execution limits.
 
 
 ## Basic usage
@@ -18,7 +18,7 @@ Agents support both synchronous and asynchronous execution using either `.invoke
 Agents can be executed in two primary modes:
 
 - **Synchronous** using `.invoke()` or `.stream()`
-- **Asynchronous** using `await .invoke()` or `async for` with `.astream()`
+- **Asynchronous** using `await .ainvoke()` or `async for` with `.astream()`
 
 === "Sync invocation"
     ```python
@@ -72,7 +72,7 @@ more about [LangChain messages](https://python.langchain.com/docs/concepts/messa
 Agent output is a dictionary containing:
 
 - `messages`: A list of all messages exchanged during execution (user input, assistant replies, tool invocations).
-- Optionally, `structured_response` if [structured output](./agents.md#structured-output) is configured.
+- Optionally, `structured_response` if [structured output](./agents.md#6-configure-structured-output) is configured.
 - If using a custom `state_schema`, additional keys corresponding to your defined fields may also be present in the output. These can hold updated state values from tool execution or prompt logic.
 
 See the [context guide](./context.md) for more details on working with custom state schemas and accessing context.
@@ -109,7 +109,7 @@ Streaming is available in both sync and async modes:
 
 !!! tip
 
-    For full details, see the [streaming guide](./streaming.md).
+    For full details, see the [streaming guide](../how-tos/streaming.md).
 
 ## Max iterations
 

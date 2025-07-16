@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from collections.abc import AsyncIterator, Iterable, Sequence
 from contextlib import asynccontextmanager
 from types import TracebackType
-from typing import Any, Callable, Optional, Union, cast
+from typing import Any, Callable, cast
 
 import orjson
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
@@ -132,12 +134,10 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         self,
         conn: _ainternal.Conn,
         *,
-        pipe: Optional[AsyncPipeline] = None,
-        deserializer: Optional[
-            Callable[[Union[bytes, orjson.Fragment]], dict[str, Any]]
-        ] = None,
-        index: Optional[PostgresIndexConfig] = None,
-        ttl: Optional[TTLConfig] = None,
+        pipe: AsyncPipeline | None = None,
+        deserializer: Callable[[bytes | orjson.Fragment], dict[str, Any]] | None = None,
+        index: PostgresIndexConfig | None = None,
+        ttl: TTLConfig | None = None,
     ) -> None:
         if isinstance(conn, AsyncConnectionPool) and pipe is not None:
             raise ValueError(
@@ -157,7 +157,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             self.embeddings = None
 
         self.ttl_config = ttl
-        self._ttl_sweeper_task: Optional[asyncio.Task[None]] = None
+        self._ttl_sweeper_task: asyncio.Task[None] | None = None
         self._ttl_stop_event = asyncio.Event()
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
@@ -180,10 +180,10 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         conn_string: str,
         *,
         pipeline: bool = False,
-        pool_config: Optional[PoolConfig] = None,
-        index: Optional[PostgresIndexConfig] = None,
-        ttl: Optional[TTLConfig] = None,
-    ) -> AsyncIterator["AsyncPostgresStore"]:
+        pool_config: PoolConfig | None = None,
+        index: PostgresIndexConfig | None = None,
+        ttl: TTLConfig | None = None,
+    ) -> AsyncIterator[AsyncPostgresStore]:
         """Create a new AsyncPostgresStore instance from a connection string.
 
         Args:
@@ -289,7 +289,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             return deleted_count
 
     async def start_ttl_sweeper(
-        self, sweep_interval_minutes: Optional[int] = None
+        self, sweep_interval_minutes: int | None = None
     ) -> asyncio.Task[None]:
         """Periodically delete expired store items based on TTL.
 
@@ -334,7 +334,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         self._ttl_sweeper_task = task
         return task
 
-    async def stop_ttl_sweeper(self, timeout: Optional[float] = None) -> bool:
+    async def stop_ttl_sweeper(self, timeout: float | None = None) -> bool:
         """Stop the TTL sweeper task if it's running.
 
         Args:
@@ -369,14 +369,14 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
 
         return success
 
-    async def __aenter__(self) -> "AsyncPostgresStore":
+    async def __aenter__(self) -> AsyncPostgresStore:
         return self
 
     async def __aexit__(
         self,
-        exc_type: Optional[type[BaseException]],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional["TracebackType"],
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
     ) -> None:
         # Ensure the TTL sweeper task is stopped when exiting the context
         if hasattr(self, "_ttl_sweeper_task") and self._ttl_sweeper_task is not None:
@@ -558,6 +558,6 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             else:
                 async with (
                     self.lock,
-                    conn.cursor(binary=True) as cur,
+                    conn.cursor(binary=True, row_factory=dict_row) as cur,
                 ):
                     yield cur

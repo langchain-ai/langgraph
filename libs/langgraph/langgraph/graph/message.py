@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import uuid
 import warnings
 from collections.abc import Sequence
@@ -7,7 +9,6 @@ from typing import (
     Any,
     Callable,
     Literal,
-    Optional,
     Union,
     cast,
 )
@@ -23,6 +24,7 @@ from langchain_core.messages import (
 )
 from typing_extensions import TypedDict
 
+from langgraph.constants import CONF, CONFIG_KEY_SEND
 from langgraph.graph.state import StateGraph
 
 Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
@@ -32,8 +34,8 @@ REMOVE_ALL_MESSAGES = "__remove_all__"
 
 def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Messages]:
     def _add_messages(
-        left: Optional[Messages] = None, right: Optional[Messages] = None, **kwargs: Any
-    ) -> Union[Messages, Callable[[Messages, Messages], Messages]]:
+        left: Messages | None = None, right: Messages | None = None, **kwargs: Any
+    ) -> Messages | Callable[[Messages, Messages], Messages]:
         if left is not None and right is not None:
             return func(left, right, **kwargs)
         elif left is not None or right is not None:
@@ -54,7 +56,7 @@ def add_messages(
     left: Messages,
     right: Messages,
     *,
-    format: Optional[Literal["langchain-openai"]] = None,
+    format: Literal["langchain-openai"] | None = None,
 ) -> Messages:
     """Merges two lists of messages, updating existing messages by ID.
 
@@ -294,3 +296,52 @@ def _format_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
         return list(messages)
     else:
         return convert_to_messages(convert_to_openai_messages(messages))
+
+
+def push_message(
+    message: MessageLikeRepresentation | BaseMessageChunk,
+    *,
+    state_key: str | None = "messages",
+) -> AnyMessage:
+    """Write a message manually to the `messages` / `messages-tuple` stream mode.
+
+    Will automatically write to the channel specified in the `state_key` unless `state_key` is `None`.
+    """
+
+    from langchain_core.callbacks.base import (
+        BaseCallbackHandler,
+        BaseCallbackManager,
+    )
+
+    from langgraph.config import get_config
+    from langgraph.constants import NS_SEP
+    from langgraph.pregel.messages import StreamMessagesHandler
+
+    config = get_config()
+    message = next(x for x in convert_to_messages([message]))
+
+    if message.id is None:
+        raise ValueError("Message ID is required")
+
+    if isinstance(config["callbacks"], BaseCallbackManager):
+        manager = config["callbacks"]
+        handlers = manager.handlers
+    elif isinstance(config["callbacks"], list) and all(
+        isinstance(x, BaseCallbackHandler) for x in config["callbacks"]
+    ):
+        handlers = config["callbacks"]
+
+    if stream_handler := next(
+        (x for x in handlers if isinstance(x, StreamMessagesHandler)), None
+    ):
+        metadata = config["metadata"]
+        message_meta = (
+            tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP)),
+            metadata,
+        )
+        stream_handler._emit(message_meta, message, dedupe=False)
+
+    if state_key:
+        config[CONF][CONFIG_KEY_SEND]([(state_key, message)])
+
+    return message

@@ -8,20 +8,31 @@ hide:
   - tags
 ---
 
-# Agent development with LangGraph
+# Agent development using prebuilt components
 
-**LangGraph** provides both low-level primitives and high-level prebuilt components for building agent-based applications. This section focuses on the **prebuilt**, **reusable** components designed to help you construct agentic systems quickly and reliably—without the need to implement orchestration, memory, or human feedback handling from scratch.
+LangGraph provides both low-level primitives and high-level prebuilt components for building agent-based applications. This section focuses on the prebuilt, ready-to-use components designed to help you construct agentic systems quickly and reliably—without the need to implement orchestration, memory, or human feedback handling from scratch.
+
+## What is an agent?
+
+An *agent* consists of three components: a **large language model (LLM)**, a set of **tools** it can use, and a **prompt** that provides instructions.
+
+The LLM operates in a loop. In each iteration, it selects a tool to invoke, provides input, receives the result (an observation), and uses that observation to inform the next action. The loop continues until a stopping condition is met — typically when the agent has gathered enough information to respond to the user.
+
+<figure markdown="1">
+![image](./assets/agent.png){: style="max-height:400px"}
+<figcaption>Agent loop: the LLM selects tools and uses their outputs to fulfill a user request.</figcaption>
+</figure>
 
 ## Key features
 
 LangGraph includes several capabilities essential for building robust, production-ready agentic systems:
 
-- [**Memory integration**](./memory.md): Native support for *short-term* (session-based) and *long-term* (persistent across sessions) memory, enabling stateful behaviors in chatbots and assistants.
-- [**Human-in-the-loop control**](./human-in-the-loop.md): Execution can pause *indefinitely* to await human feedback—unlike websocket-based solutions limited to real-time interaction. This enables asynchronous approval, correction, or intervention at any point in the workflow.
-- [**Streaming support**](./streaming.md): Real-time streaming of agent state, model tokens, tool outputs, or combined streams.
-- [**Deployment tooling**](./deployment.md): Includes infrastructure-free deployment tools. [**LangGraph Platform**](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/) supports testing, debugging, and deployment.
+- [**Memory integration**](../how-tos/memory/add-memory.md): Native support for *short-term* (session-based) and *long-term* (persistent across sessions) memory, enabling stateful behaviors in chatbots and assistants.
+- [**Human-in-the-loop control**](../concepts/human_in_the_loop.md): Execution can pause *indefinitely* to await human feedback—unlike websocket-based solutions limited to real-time interaction. This enables asynchronous approval, correction, or intervention at any point in the workflow.
+- [**Streaming support**](../how-tos/streaming.md): Real-time streaming of agent state, model tokens, tool outputs, or combined streams.
+- [**Deployment tooling**](../tutorials/langgraph-platform/local-server.md): Includes infrastructure-free deployment tools. [**LangGraph Platform**](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/) supports testing, debugging, and deployment.
     - **[Studio](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio/)**: A visual IDE for inspecting and debugging workflows.
-    - Supports multiple [**deployment options**](https://langchain-ai.github.io/langgraph/tutorials/deployment/) for production.
+    - Supports multiple [**deployment options**](https://langchain-ai.github.io/langgraph/concepts/deployment_options.md) for production.
 
 ## High-level building blocks
 
@@ -39,6 +50,142 @@ The high-level components are organized into several packages, each with a speci
 | `langgraph-supervisor`                     | Tools for building [**supervisor**](./multi-agent.md#supervisor) agents     | `pip install -U langgraph-supervisor`   |
 | `langgraph-swarm`                          | Tools for building a [**swarm**](./multi-agent.md#swarm) multi-agent system | `pip install -U langgraph-swarm`        |
 | `langchain-mcp-adapters`                   | Interfaces to [**MCP servers**](./mcp.md) for tool and resource integration | `pip install -U langchain-mcp-adapters` |
-| `langmem`                                  | Agent memory management: [**short-term and long-term**](./memory.md)        | `pip install -U langmem`                |
+| `langmem`                                  | Agent memory management: [**short-term and long-term**](../how-tos/memory/add-memory.md)        | `pip install -U langmem`                |
 | `agentevals`                               | Utilities to [**evaluate agent performance**](./evals.md)                   | `pip install -U agentevals`             |
 
+## Visualize an agent graph
+
+Use the following tool to visualize the graph generated by
+[`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]
+and to view an outline of the corresponding code.
+It allows you to explore the infrastructure of the agent as defined by the presence of:
+
+* [`tools`](../how-tos/tool-calling.md): A list of tools (functions, APIs, or other callable objects) that the agent can use to perform tasks.
+* [`pre_model_hook`](../how-tos/create-react-agent-manage-message-history.ipynb): A function that is called before the model is invoked. It can be used to condense messages or perform other preprocessing tasks.
+* `post_model_hook`: A function that is called after the model is invoked. It can be used to implement guardrails, human-in-the-loop flows, or other postprocessing tasks.
+* [`response_format`](../agents/agents.md#6-configure-structured-output): A data structure used to constrain the type of the final output, e.g., a `pydantic` `BaseModel`.
+
+<div class="agent-layout">
+  <div class="agent-graph-features-container">
+    <div class="agent-graph-features">
+      <h3 class="agent-section-title">Features</h3>
+      <label><input type="checkbox" id="tools" checked> <code>tools</code></label>
+      <label><input type="checkbox" id="pre_model_hook"> <code>pre_model_hook</code></label>
+      <label><input type="checkbox" id="post_model_hook"> <code>post_model_hook</code></label>
+      <label><input type="checkbox" id="response_format"> <code>response_format</code></label>
+    </div>
+  </div>
+
+  <div class="agent-graph-container">
+    <h3 class="agent-section-title">Graph</h3>
+    <img id="agent-graph-img" src="../assets/react_agent_graphs/0001.svg" alt="graph image" style="max-width: 100%;"/>
+  </div>
+</div>
+
+
+The following code snippet shows how to create the above agent (and underlying graph) with
+[`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]:
+
+<div class="language-python">
+  <pre><code id="agent-code" class="language-python"></code></pre>
+</div>
+
+
+<script>
+function getCheckedValue(id) {
+  return document.getElementById(id).checked ? "1" : "0";
+}
+
+function getKey() {
+  return [
+    getCheckedValue("response_format"),
+    getCheckedValue("post_model_hook"),
+    getCheckedValue("pre_model_hook"),
+    getCheckedValue("tools")
+  ].join("");
+}
+
+function generateCodeSnippet({ tools, pre, post, response }) {
+  const lines = [
+    "from langgraph.prebuilt import create_react_agent",
+    "from langchain_openai import ChatOpenAI"
+  ];
+
+  if (response) lines.push("from pydantic import BaseModel");
+
+  lines.push("", 'model = ChatOpenAI("o4-mini")', "");
+
+  if (tools) {
+    lines.push(
+      "def tool() -> None:",
+      '    """Testing tool."""',
+      "    ...",
+      ""
+    );
+  }
+
+  if (pre) {
+    lines.push(
+      "def pre_model_hook() -> None:",
+      '    """Pre-model hook."""',
+      "    ...",
+      ""
+    );
+  }
+
+  if (post) {
+    lines.push(
+      "def post_model_hook() -> None:",
+      '    """Post-model hook."""',
+      "    ...",
+      ""
+    );
+  }
+
+  if (response) {
+    lines.push(
+      "class ResponseFormat(BaseModel):",
+      '    """Response format for the agent."""',
+      "    result: str",
+      ""
+    );
+  }
+
+  lines.push("agent = create_react_agent(");
+  lines.push("    model,");
+
+  if (tools) lines.push("    tools=[tool],");
+  if (pre) lines.push("    pre_model_hook=pre_model_hook,");
+  if (post) lines.push("    post_model_hook=post_model_hook,");
+  if (response) lines.push("    response_format=ResponseFormat,");
+
+  lines.push(")", "", "agent.get_graph().draw_mermaid_png()");
+
+  return lines.join("\n");
+}
+
+async function render() {
+  const key = getKey();
+  document.getElementById("agent-graph-img").src = `../assets/react_agent_graphs/${key}.svg`;
+
+  const state = {
+    tools: document.getElementById("tools").checked,
+    pre: document.getElementById("pre_model_hook").checked,
+    post: document.getElementById("post_model_hook").checked,
+    response: document.getElementById("response_format").checked
+  };
+
+  document.getElementById("agent-code").textContent = generateCodeSnippet(state);
+}
+
+function initializeWidget() {
+  render(); // no need for `await` here
+  document.querySelectorAll(".agent-graph-features input").forEach((input) => {
+    input.addEventListener("change", render);
+  });
+}
+
+// Init for both full reload and SPA nav (used by MkDocs Material)
+window.addEventListener("DOMContentLoaded", initializeWidget);
+document$.subscribe(initializeWidget);
+</script>

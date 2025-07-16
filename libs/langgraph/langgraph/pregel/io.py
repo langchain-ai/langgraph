@@ -1,8 +1,8 @@
+from __future__ import annotations
+
 from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, Literal, Optional, TypeVar, Union
-
-from langchain_core.runnables.utils import AddableDict
+from typing import Any, Literal
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import (
@@ -39,10 +39,10 @@ def read_channel(
 
 def read_channels(
     channels: Mapping[str, BaseChannel],
-    select: Union[Sequence[str], str],
+    select: Sequence[str] | str,
     *,
     skip_empty: bool = True,
-) -> Union[dict[str, Any], Any]:
+) -> dict[str, Any] | Any:
     if isinstance(select, str):
         return read_channel(channels, select)
     else:
@@ -81,8 +81,8 @@ def map_command(cmd: Command) -> Iterator[tuple[str, str, Any]]:
 
 
 def map_input(
-    input_channels: Union[str, Sequence[str]],
-    chunk: Optional[Union[dict[str, Any], Any]],
+    input_channels: str | Sequence[str],
+    chunk: dict[str, Any] | Any | None,
 ) -> Iterator[tuple[str, Any]]:
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
     if chunk is None:
@@ -99,19 +99,11 @@ def map_input(
                 logger.warning(f"Input channel {k} not found in {input_channels}")
 
 
-class AddableValuesDict(AddableDict):
-    def __add__(self, other: dict[str, Any]) -> "AddableValuesDict":
-        return self | other
-
-    def __radd__(self, other: dict[str, Any]) -> "AddableValuesDict":
-        return other | self
-
-
 def map_output_values(
-    output_channels: Union[str, Sequence[str]],
-    pending_writes: Union[Literal[True], Sequence[tuple[str, Any]]],
+    output_channels: str | Sequence[str],
+    pending_writes: Literal[True] | Sequence[tuple[str, Any]],
     channels: Mapping[str, BaseChannel],
-) -> Iterator[Union[dict[str, Any], Any]]:
+) -> Iterator[dict[str, Any] | Any]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
         if pending_writes is True or any(
@@ -122,22 +114,14 @@ def map_output_values(
         if pending_writes is True or {
             c for c, _ in pending_writes if c in output_channels
         }:
-            yield AddableValuesDict(read_channels(channels, output_channels))
-
-
-class AddableUpdatesDict(AddableDict):
-    def __add__(self, other: dict[str, Any]) -> "AddableUpdatesDict":
-        return [self, other]
-
-    def __radd__(self, other: dict[str, Any]) -> "AddableUpdatesDict":
-        raise TypeError("AddableUpdatesDict does not support right-side addition")
+            yield read_channels(channels, output_channels)
 
 
 def map_output_updates(
-    output_channels: Union[str, Sequence[str]],
+    output_channels: str | Sequence[str],
     tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
     cached: bool = False,
-) -> Iterator[dict[str, Union[Any, dict[str, Any]]]]:
+) -> Iterator[dict[str, Any | dict[str, Any]]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     output_tasks = [
         (t, ww)
@@ -179,22 +163,14 @@ def map_output_updates(
                         },
                     )
                 )
-    grouped: dict[str, list[Any]] = {t.name: [] for t, _ in output_tasks}
+    grouped: dict[str, Any] = {t.name: [] for t, _ in output_tasks}
     for node, value in updated:
         grouped[node].append(value)
     for node, value in grouped.items():
         if len(value) == 0:
-            grouped[node] = None  # type: ignore[assignment]
+            grouped[node] = None
         if len(value) == 1:
             grouped[node] = value[0]
     if cached:
-        grouped["__metadata__"] = {"cached": cached}  # type: ignore[assignment]
-    yield AddableUpdatesDict(grouped)
-
-
-T = TypeVar("T")
-
-
-def single(iter: Iterator[T]) -> Optional[T]:
-    for item in iter:
-        return item
+        grouped["__metadata__"] = {"cached": cached}
+    yield grouped

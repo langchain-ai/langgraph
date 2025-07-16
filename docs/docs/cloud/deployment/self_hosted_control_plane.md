@@ -1,12 +1,15 @@
-# How to Deploy Self-Hosted Control Plane (Beta)
+# How to Deploy Self-Hosted Control Plane
 
 Before deploying, review the [conceptual guide for the Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployment option.
+
+!!! info "Important"
+    The Self-Hosted Control Plane deployment option requires an [Enterprise](../../concepts/plans.md) plan.
 
 ## Prerequisites
 
 1. You are using Kubernetes.
 1. You have self-hosted LangSmith deployed.
-1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](./test_locally.md).
+1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to [test your application locally](../../tutorials/langgraph-platform/local-server.md).
 1. Use the [LangGraph CLI](../../concepts/langgraph_cli.md) to build a Docker image (i.e. `langgraph build`) and push it to a registry your Kubernetes cluster has access to.
 1. `KEDA` is installed on your cluster.
 
@@ -27,18 +30,17 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
     1. `LangGraphPlatform CRD`: A CRD for LangGraph Platform deployments. This contains the spec for managing an instance of a LangGraph platform deployment.
     1. `operator`: This operator handles changes to your LangGraph Platform CRDs.
     1. `host-backend`: This is the [control plane](../../concepts/langgraph_control_plane.md).
-1. Two additional images will be used by the chart.
+1. Two additional images will be used by the chart. Use the images that are specified in the latest release.
 
         hostBackendImage:
           repository: "docker.io/langchain/hosted-langserve-backend"
           pullPolicy: IfNotPresent
-          tag: "0.9.80"
         operatorImage:
           repository: "docker.io/langchain/langgraph-operator"
           pullPolicy: IfNotPresent
-          tag: "aa9dff4"
 
-1. In your `values.yaml` file, enable the `langgraphPlatform` option. Note that you must also have a valid ingress setup:
+1. In your config file for langsmith (usually `langsmith_config.yaml`, enable the `langgraphPlatform` option. Note that you must also have a valid ingress setup:
+
         config:
           langgraphPlatform:
             enabled: true
@@ -46,4 +48,4 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
 1. In your `values.yaml` file, configure the `hostBackendImage` and `operatorImage` options (if you need to mirror images)
 
 1. You can also configure base templates for your agents by overriding the base templates [here](https://github.com/langchain-ai/helm/blob/main/charts/langsmith/values.yaml#L898).
-1. You create a deployment from the [Control Plane UI](../../concepts/langgraph_control_plane.md#control-plane-ui).
+1. You create a deployment from the [control plane UI](../../concepts/langgraph_control_plane.md#control-plane-ui).

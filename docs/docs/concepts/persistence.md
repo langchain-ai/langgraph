@@ -5,7 +5,7 @@ search:
 
 # Persistence
 
-LangGraph has a built-in persistence layer, implemented through checkpointers. When you compile graph with a checkpointer, the checkpointer saves a `checkpoint` of the graph state at every super-step. Those checkpoints are saved to a `thread`, which can be accessed after graph execution. Because `threads` allow access to graph's state after execution, several powerful capabilities including human-in-the-loop, memory, time travel, and fault-tolerance are all possible. See [this how-to guide](../how-tos/persistence.ipynb) for an end-to-end example on how to add and use checkpointers with your graph. Below, we'll discuss each of these concepts in more detail. 
+LangGraph has a built-in persistence layer, implemented through checkpointers. When you compile a graph with a checkpointer, the checkpointer saves a `checkpoint` of the graph state at every super-step. Those checkpoints are saved to a `thread`, which can be accessed after graph execution. Because `threads` allow access to graph's state after execution, several powerful capabilities including human-in-the-loop, memory, time travel, and fault-tolerance are all possible. Below, we'll discuss each of these concepts in more detail. 
 
 ![Checkpoints](img/persistence/checkpoints.jpg)
 
@@ -15,21 +15,27 @@ LangGraph has a built-in persistence layer, implemented through checkpointers. W
 
 ## Threads
 
-A thread is a unique ID or [thread identifier](#threads) assigned to each checkpoint saved by a checkpointer. When invoking graph with a checkpointer, you **must** specify a `thread_id` as part of the `configurable` portion of the config:
+A thread is a unique ID or thread identifier assigned to each checkpoint saved by a checkpointer. It contains the accumulated state of a sequence of [runs](./assistants.md#execution). When a run is executed, the [state](../concepts/low_level.md#state) of the underlying graph of the assistant will be persisted to the thread.
+
+When invoking graph with a checkpointer, you **must** specify a `thread_id` as part of the `configurable` portion of the config:
 
 ```python
 {"configurable": {"thread_id": "1"}}
 ```
 
+A thread's current and historical state can be retrieved. To persist state, a thread must be created prior to executing a run. The LangGraph Platform API provides several endpoints for creating and managing threads and thread state. See the [API reference](../cloud/reference/api/api_ref.html#tag/threads) for more details.
+
 ## Checkpoints
 
-Checkpoint is a snapshot of the graph state saved at each super-step and is represented by `StateSnapshot` object with the following key properties:
+The state of a thread at a particular point in time is called a checkpoint. Checkpoint is a snapshot of the graph state saved at each super-step and is represented by `StateSnapshot` object with the following key properties:
 
 - `config`: Config associated with this checkpoint. 
 - `metadata`: Metadata associated with this checkpoint.
 - `values`: Values of the state channels at this point in time.
 - `next` A tuple of the node names to execute next in the graph.
-- `tasks`: A tuple of `PregelTask` objects that contain information about next tasks to be executed. If the step was previously attempted, it will include error information. If a graph was interrupted [dynamically](../how-tos/human_in_the_loop/dynamic_breakpoints.ipynb) from within a node, tasks will contain additional data associated with interrupts.
+- `tasks`: A tuple of `PregelTask` objects that contain information about next tasks to be executed. If the step was previously attempted, it will include error information. If a graph was interrupted [dynamically](../how-tos/human_in_the_loop/add-human-in-the-loop.md#pause-using-interrupt) from within a node, tasks will contain additional data associated with interrupts.
+
+Checkpoints are persisted and can be used to restore the state of a thread at a later time.
 
 Let's see what checkpoints are saved when a simple graph is invoked as follows:
 
@@ -72,7 +78,7 @@ After we run the graph, we expect to see exactly 4 checkpoints:
 * checkpoint with the outputs of `node_a` `{'foo': 'a', 'bar': ['a']}` and `node_b` as the next node to be executed
 * checkpoint with the outputs of `node_b` `{'foo': 'b', 'bar': ['a', 'b']}` and no next nodes to be executed
 
-Note that we `bar` channel values contain outputs from both nodes as we have a reducer for `bar` channel.
+Note that the `bar` channel values contain outputs from both nodes as we have a reducer for `bar` channel.
 
 ### Get state
 
@@ -168,7 +174,7 @@ config = {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445
 graph.invoke(None, config=config)
 ```
 
-Importantly, LangGraph knows whether a particular step has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step, but only for the steps _before_ the provided `checkpoint_id`. All of the steps _after_ `checkpoint_id` will be executed (i.e., a new fork), even if they have been executed previously. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.ipynb).
+Importantly, LangGraph knows whether a particular step has been executed previously. If it has, LangGraph simply *re-plays* that particular step in the graph and does not re-execute the step, but only for the steps _before_ the provided `checkpoint_id`. All of the steps _after_ `checkpoint_id` will be executed (i.e., a new fork), even if they have been executed previously. See this [how to guide on time-travel to learn more about replaying](../how-tos/human_in_the_loop/time-travel.md).
 
 ![Replay](img/persistence/re_play.png)
 
@@ -218,7 +224,7 @@ The `foo` key (channel) is completely changed (because there is no reducer speci
 
 #### `as_node`
 
-The final thing you can optionally specify when calling `update_state` is `as_node`. If you provided it, the update will be applied as if it came from node `as_node`. If `as_node` is not provided, it will be set to the last node that updated the state, if not ambiguous. The reason this matters is that the next steps to execute depend on the last node to have given an update, so this can be used to control which node executes next. See this [how to guide on time-travel to learn more about forking state](../how-tos/human_in_the_loop/time-travel.ipynb).
+The final thing you can optionally specify when calling `update_state` is `as_node`. If you provided it, the update will be applied as if it came from node `as_node`. If `as_node` is not provided, it will be set to the last node that updated the state, if not ambiguous. The reason this matters is that the next steps to execute depend on the last node to have given an update, so this can be used to control which node executes next. See this [how to guide on time-travel to learn more about forking state](../how-tos/human_in_the_loop/time-travel.md).
 
 ![Update](img/persistence/checkpoints_full_story.jpg)
 
@@ -232,7 +238,7 @@ But, what if we want to retain some information *across threads*? Consider the c
 
 With checkpointers alone, we cannot share information across threads. This motivates the need for the [`Store`](../reference/store.md#langgraph.store.base.BaseStore) interface. As an illustration, we can define an `InMemoryStore` to store information about a user across threads. We simply compile our graph with a checkpointer, as before, and with our new `in_memory_store` variable.
 
-!!!  info "LangGraph API handles stores automatically"
+!!! info "LangGraph API handles stores automatically"
 
     When using the LangGraph API, you don't need to implement or configure stores manually. The API handles all storage infrastructure for you behind the scenes.
 
@@ -383,7 +389,7 @@ def update_memory(state: MessagesState, config: RunnableConfig, *, store: BaseSt
 
 ```
 
-As we showed above, we can also access the store in any node and use the `store.search` method to get memories. Recall the the memories are returned as a list of objects that can be converted to a dictionary.
+As we showed above, we can also access the store in any node and use the `store.search` method to get memories. Recall the memories are returned as a list of objects that can be converted to a dictionary.
 
 ```python
 memories[-1].dict()
@@ -428,7 +434,7 @@ for update in graph.stream(
     print(update)
 ```
 
-When we use the LangGraph Platform, either locally (e.g., in LangGraph Studio) or with LangGraph Cloud, the base store is available to use by default and does not need to be specified during graph compilation. To enable semantic search, however, you **do** need to configure the indexing settings in your `langgraph.json` file. For example:
+When we use the LangGraph Platform, either locally (e.g., in LangGraph Studio) or with LangGraph Platform, the base store is available to use by default and does not need to be specified during graph compilation. To enable semantic search, however, you **do** need to configure the indexing settings in your `langgraph.json` file. For example:
 
 ```json
 {
@@ -451,7 +457,7 @@ Under the hood, checkpointing is powered by checkpointer objects that conform to
 
 * `langgraph-checkpoint`: The base interface for checkpointer savers ([BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver]) and serialization/deserialization interface ([SerializerProtocol][langgraph.checkpoint.serde.base.SerializerProtocol]). Includes in-memory checkpointer implementation ([InMemorySaver][langgraph.checkpoint.memory.InMemorySaver]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
 * `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database ([SqliteSaver][langgraph.checkpoint.sqlite.SqliteSaver] / [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
-* `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database ([PostgresSaver][langgraph.checkpoint.postgres.PostgresSaver] / [AsyncPostgresSaver][langgraph.checkpoint.postgres.aio.AsyncPostgresSaver]), used in LangGraph Cloud. Ideal for using in production. Needs to be installed separately.
+* `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database ([PostgresSaver][langgraph.checkpoint.postgres.PostgresSaver] / [AsyncPostgresSaver][langgraph.checkpoint.postgres.aio.AsyncPostgresSaver]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
 
 
 ### Checkpointer interface
@@ -470,18 +476,60 @@ If the checkpointer is used with asynchronous graph execution (i.e. executing th
 
 ### Serializer
 
-When checkpointers save the graph state, they need to serialize the channel values in the state. This is done using serializer objects. 
+When checkpointers save the graph state, they need to serialize the channel values in the state. This is done using serializer objects.
 `langgraph_checkpoint` defines [protocol][langgraph.checkpoint.serde.base.SerializerProtocol] for implementing serializers provides a default implementation ([JsonPlusSerializer][langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer]) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
+
+#### Serialization with `pickle`
+
+The default serializer, [`JsonPlusSerializer`][langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer], uses ormsgpack and JSON under the hood, which is not suitable for all types of objects.
+
+If you want to fallback to pickle for objects not currently supported by our msgpack encoder (such as Pandas dataframes),
+you can use the `pickle_fallback` argument of the `JsonPlusSerializer`:
+
+```python
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+# ... Define the graph ...
+graph.compile(
+    checkpointer=MemorySaver(serde=JsonPlusSerializer(pickle_fallback=True))
+)
+```
+
+#### Encryption
+
+Checkpointers can optionally encrypt all persisted state. To enable this, pass an instance of [`EncryptedSerializer`][langgraph.checkpoint.serde.encrypted.EncryptedSerializer] to the `serde` argument of any `BaseCheckpointSaver` implementation. The easiest way to create an encrypted serializer is via [`from_pycryptodome_aes`][langgraph.checkpoint.serde.encrypted.EncryptedSerializer.from_pycryptodome_aes], which reads the AES key from the `LANGGRAPH_AES_KEY` environment variable (or accepts a `key` argument):
+
+```python
+import sqlite3
+
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
+from langgraph.checkpoint.sqlite import SqliteSaver
+
+serde = EncryptedSerializer.from_pycryptodome_aes()  # reads LANGGRAPH_AES_KEY
+checkpointer = SqliteSaver(sqlite3.connect("checkpoint.db"), serde=serde)
+```
+
+```python
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
+from langgraph.checkpoint.postgres import PostgresSaver
+
+serde = EncryptedSerializer.from_pycryptodome_aes()
+checkpointer = PostgresSaver.from_conn_string("postgresql://...", serde=serde)
+checkpointer.setup()
+```
+
+When running on LangGraph Platform, encryption is automatically enabled whenever `LANGGRAPH_AES_KEY` is present, so you only need to provide the environment variable. Other encryption schemes can be used by implementing [`CipherProtocol`][langgraph.checkpoint.serde.base.CipherProtocol] and supplying it to `EncryptedSerializer`.
 
 ## Capabilities
 
 ### Human-in-the-loop
 
-First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop) workflows by allowing humans to inspect, interrupt, and approve graph steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state. See [these how-to guides](../how-tos/human_in_the_loop/breakpoints.ipynb) for concrete examples.
+First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop) workflows by allowing humans to inspect, interrupt, and approve graph steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state. See [the how-to guides](../how-tos/human_in_the_loop/add-human-in-the-loop.md) for examples.
 
 ### Memory
 
-Second, checkpointers allow for ["memory"](agentic_concepts.md#memory) between interactions.  In the case of repeated human interactions (like conversations) any follow up messages can be sent to that thread, which will retain its memory of previous ones. See [this how-to guide](../how-tos/memory/manage-conversation-history.ipynb) for an end-to-end example on how to add and manage conversation memory using checkpointers.
+Second, checkpointers allow for ["memory"](../concepts/memory.md) between interactions.  In the case of repeated human interactions (like conversations) any follow up messages can be sent to that thread, which will retain its memory of previous ones. See [Add memory](../how-tos/memory/add-memory.md) for information on how to add and manage conversation memory using checkpointers.
 
 ### Time Travel
 

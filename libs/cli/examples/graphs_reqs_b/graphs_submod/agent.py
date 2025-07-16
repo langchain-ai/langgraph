@@ -1,5 +1,6 @@
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated, Sequence, TypedDict
+from typing import Annotated, TypedDict
 
 from langchain_anthropic import ChatAnthropic
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -16,7 +17,7 @@ model_oai = ChatOpenAI(temperature=0)
 model_anth = model_anth.bind_tools(tools)
 model_oai = model_oai.bind_tools(tools)
 
-prompt = open("prompt.txt").read()
+prompt = open(Path(__file__).parent.parent / "prompt.txt").read()
 subprompt = open(Path(__file__).parent / "subprompt.txt").read()
 
 

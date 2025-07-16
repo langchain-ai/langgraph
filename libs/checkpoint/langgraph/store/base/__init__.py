@@ -9,14 +9,15 @@ Core types:
     - Op: Get/Put/Search/List operations
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from datetime import datetime
 from typing import (
     Any,
-    Iterable,
     Literal,
     NamedTuple,
-    Optional,
     TypedDict,
     Union,
     cast,
@@ -127,7 +128,7 @@ class SearchItem(Item):
         value: dict[str, Any],
         created_at: datetime,
         updated_at: datetime,
-        score: Optional[float] = None,
+        score: float | None = None,
     ) -> None:
         """Initialize a result item.
 
@@ -242,7 +243,7 @@ class SearchOp(NamedTuple):
         ```
     """
 
-    filter: Optional[dict[str, Any]] = None
+    filter: dict[str, Any] | None = None
     """Key-value pairs for filtering results based on exact matches or comparison operators.
 
     The filter supports both exact matches and operator-based comparisons.
@@ -284,7 +285,7 @@ class SearchOp(NamedTuple):
     offset: int = 0
     """Number of matching items to skip for pagination."""
 
-    query: Optional[str] = None
+    query: str | None = None
     """Natural language search query for semantic search capabilities.
 
     ???+ example "Examples"
@@ -379,7 +380,7 @@ class ListNamespacesOp(NamedTuple):
 
     """
 
-    match_conditions: Optional[tuple[MatchCondition, ...]] = None
+    match_conditions: tuple[MatchCondition, ...] | None = None
     """Optional conditions for filtering namespaces.
 
     ???+ example "Examples"
@@ -397,7 +398,7 @@ class ListNamespacesOp(NamedTuple):
         ```
     """
 
-    max_depth: Optional[int] = None
+    max_depth: int | None = None
     """Maximum depth of namespace hierarchy to return.
 
     Note:
@@ -452,7 +453,7 @@ class PutOp(NamedTuple):
         the full path would effectively be "documents/user123/report1"
     """
 
-    value: Optional[dict[str, Any]]
+    value: dict[str, Any] | None
     """The data to store, or None to mark the item for deletion.
 
     The value must be a dictionary with string keys and JSON-serializable values.
@@ -466,7 +467,7 @@ class PutOp(NamedTuple):
         }
     """
 
-    index: Optional[Union[Literal[False], list[str]]] = None  # type: ignore[assignment]
+    index: Literal[False] | list[str] | None = None  # type: ignore[assignment]
     """Controls how the item's fields are indexed for search operations.
 
     Indexing configuration determines how the item can be found through search:
@@ -501,7 +502,7 @@ class PutOp(NamedTuple):
         ]
         ```
     """
-    ttl: Optional[float] = None
+    ttl: float | None = None
     """Controls the TTL (time-to-live) for the item in minutes.
 
     If provided, and if the store you are using supports this feature, the item
@@ -530,14 +531,14 @@ class TTLConfig(TypedDict, total=False):
     This can be overridden per-operation by explicitly setting refresh_ttl.
     Defaults to True if not configured.
     """
-    default_ttl: Optional[float]
+    default_ttl: float | None
     """Default TTL (time-to-live) in minutes for new items.
     
     If provided, new items will expire after this many minutes after their last access.
     The expiration timer refreshes on both read and write operations.
     Defaults to None (no expiration).
     """
-    sweep_interval_minutes: Optional[int]
+    sweep_interval_minutes: int | None
     """Interval in minutes between TTL sweep operations.
     
     If provided, the store will periodically delete expired items based on TTL.
@@ -565,7 +566,7 @@ class IndexConfig(TypedDict, total=False):
         - cohere:embed-multilingual-light-v3.0: 384
     """
 
-    embed: Union[Embeddings, EmbeddingsFunc, AEmbeddingsFunc, str]
+    embed: Embeddings | EmbeddingsFunc | AEmbeddingsFunc | str
     """Optional function to generate embeddings from text.
     
     Can be specified in three ways:
@@ -633,7 +634,7 @@ class IndexConfig(TypedDict, total=False):
         ```
     """
 
-    fields: Optional[list[str]]
+    fields: list[str] | None
     """Fields to extract text from for embedding generation.
     
     Controls which parts of stored items are embedded for semantic search. Follows JSON path syntax:
@@ -690,7 +691,7 @@ class BaseStore(ABC):
     """
 
     supports_ttl: bool = False
-    ttl_config: Optional[TTLConfig] = None
+    ttl_config: TTLConfig | None = None
 
     __slots__ = ("__weakref__",)
 
@@ -723,8 +724,8 @@ class BaseStore(ABC):
         namespace: tuple[str, ...],
         key: str,
         *,
-        refresh_ttl: Optional[bool] = None,
-    ) -> Optional[Item]:
+        refresh_ttl: bool | None = None,
+    ) -> Item | None:
         """Retrieve a single item.
 
         Args:
@@ -746,11 +747,11 @@ class BaseStore(ABC):
         namespace_prefix: tuple[str, ...],
         /,
         *,
-        query: Optional[str] = None,
-        filter: Optional[dict[str, Any]] = None,
+        query: str | None = None,
+        filter: dict[str, Any] | None = None,
         limit: int = 10,
         offset: int = 0,
-        refresh_ttl: Optional[bool] = None,
+        refresh_ttl: bool | None = None,
     ) -> list[SearchItem]:
         """Search for items within a namespace prefix.
 
@@ -817,9 +818,9 @@ class BaseStore(ABC):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
-        index: Optional[Union[Literal[False], list[str]]] = None,
+        index: Literal[False] | list[str] | None = None,
         *,
-        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
+        ttl: float | None | NotProvided = NOT_PROVIDED,
     ) -> None:
         """Store or update an item in the store.
 
@@ -901,9 +902,9 @@ class BaseStore(ABC):
     def list_namespaces(
         self,
         *,
-        prefix: Optional[NamespacePath] = None,
-        suffix: Optional[NamespacePath] = None,
-        max_depth: Optional[int] = None,
+        prefix: NamespacePath | None = None,
+        suffix: NamespacePath | None = None,
+        max_depth: int | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[str, ...]]:
@@ -956,8 +957,8 @@ class BaseStore(ABC):
         namespace: tuple[str, ...],
         key: str,
         *,
-        refresh_ttl: Optional[bool] = None,
-    ) -> Optional[Item]:
+        refresh_ttl: bool | None = None,
+    ) -> Item | None:
         """Asynchronously retrieve a single item.
 
         Args:
@@ -984,11 +985,11 @@ class BaseStore(ABC):
         namespace_prefix: tuple[str, ...],
         /,
         *,
-        query: Optional[str] = None,
-        filter: Optional[dict[str, Any]] = None,
+        query: str | None = None,
+        filter: dict[str, Any] | None = None,
         limit: int = 10,
         offset: int = 0,
-        refresh_ttl: Optional[bool] = None,
+        refresh_ttl: bool | None = None,
     ) -> list[SearchItem]:
         """Asynchronously search for items within a namespace prefix.
 
@@ -1058,9 +1059,9 @@ class BaseStore(ABC):
         namespace: tuple[str, ...],
         key: str,
         value: dict[str, Any],
-        index: Optional[Union[Literal[False], list[str]]] = None,
+        index: Literal[False] | list[str] | None = None,
         *,
-        ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
+        ttl: float | None | NotProvided = NOT_PROVIDED,
     ) -> None:
         """Asynchronously store or update an item in the store.
 
@@ -1150,9 +1151,9 @@ class BaseStore(ABC):
     async def alist_namespaces(
         self,
         *,
-        prefix: Optional[NamespacePath] = None,
-        suffix: Optional[NamespacePath] = None,
-        max_depth: Optional[int] = None,
+        prefix: NamespacePath | None = None,
+        suffix: NamespacePath | None = None,
+        max_depth: int | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[str, ...]]:
@@ -1226,7 +1227,7 @@ def _validate_namespace(namespace: tuple[str, ...]) -> None:
 
 
 def _ensure_refresh(
-    ttl_config: Optional[TTLConfig], refresh_ttl: Optional[bool] = None
+    ttl_config: TTLConfig | None, refresh_ttl: bool | None = None
 ) -> bool:
     if refresh_ttl is not None:
         return refresh_ttl
@@ -1236,9 +1237,9 @@ def _ensure_refresh(
 
 
 def _ensure_ttl(
-    ttl_config: Optional[TTLConfig],
-    ttl: Union[Optional[float], "NotProvided"] = NOT_PROVIDED,
-) -> Optional[float]:
+    ttl_config: TTLConfig | None,
+    ttl: float | None | NotProvided = NOT_PROVIDED,
+) -> float | None:
     if ttl is NOT_PROVIDED:
         if ttl_config:
             return ttl_config.get("default_ttl")

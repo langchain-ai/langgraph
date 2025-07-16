@@ -119,6 +119,49 @@
               ],
               "description": "Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed\nand how cross-origin requests are handled.\n"
             },
+            "image_distro": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "debian",
+                    "wolfi"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Linux distribution for the base image.\n\nMust be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.\n"
+            },
+            "keep_pkg_tools": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Control whether to retain Python packaging tools in the final image.\n\nYou can also set to true to include all packaging tools.\n"
+            },
+            "pip_installer": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
+            },
             "store": {
               "anyOf": [
                 {
@@ -256,6 +299,49 @@
                 }
               ],
               "description": "Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed\nand how cross-origin requests are handled.\n"
+            },
+            "image_distro": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "debian",
+                    "wolfi"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Linux distribution for the base image.\n\nMust be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.\n"
+            },
+            "keep_pkg_tools": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Control whether to retain Python packaging tools in the final image.\n\nYou can also set to true to include all packaging tools.\n"
+            },
+            "pip_installer": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Python package installer to use ('auto', 'pip', 'uv').\n\n"
             },
             "store": {
               "anyOf": [
@@ -447,9 +533,13 @@
           "type": "boolean",
           "description": "Optional. If True, /assistants routes are removed from the server.\n\nDefault is False (meaning /assistants is enabled).\n"
         },
+        "disable_mcp": {
+          "type": "boolean",
+          "description": "Optional. If True, /mcp routes are removed, disabling the MCP server.\n\nDefault is False.\n"
+        },
         "disable_meta": {
           "type": "boolean",
-          "description": "Optional. If True, all meta endpoints (/ok, /info, /metrics, /docs) are disabled.\n\nDefault is False.\n"
+          "description": "Optional. Remove meta endpoints.\n\n\nDefault is False.\n"
         },
         "disable_runs": {
           "type": "boolean",
