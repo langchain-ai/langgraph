@@ -405,6 +405,8 @@ nav:
       - SDK (JS/TS): "cloud/reference/sdk/js_ts_sdk_ref.md"
       - RemoteGraph: reference/remote_graph.md
       - Environment variables: "cloud/reference/env_var.md"
+  - Community:
+    - community.md
 
 markdown_extensions:
   - abbr
