@@ -8,7 +8,8 @@
 - Reduced writes to the `checkpoint_blobs` table by inlining small values (null, numeric, str, etc.). This means we don't need to store extra values for channels that haven't been updated.
 
 ## v0.2.90 (2025-07-16)
-- Improve checkpoint writes via node-local background queing.
+- Improve checkpoint writes via node-local background queueing.
+
 
 ## v0.2.89 (2025-07-15)
 - Decoupled checkpoint writing from thread/run state by removing foreign keys and updated logger to prevent timeout-related failures.
