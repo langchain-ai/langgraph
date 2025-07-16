@@ -142,7 +142,7 @@ Your server should extract and validate this token before processing requests.
 
 ## Disable webhooks
 
-As of `langgraph-api`>= xx, developers can disable webhooks in the `langgraph.json` file:
+As of [langgraph-api>=0.2.78](https://github.com/langchain-ai/langgraph-api/releases/tag/api%3D%3D0.2.78), developers can disable webhooks in the `langgraph.json` file:
 
 ```json
 {
