@@ -595,6 +595,6 @@ class PersistentDict(defaultdict):
                 except EOFError:
                     return
                 except Exception:
-                    logging.error(f"Failed to load file: {fileobj.name}")
+                    logger.error(f"Failed to load file: {fileobj.name}")
                     raise
             raise ValueError("File not in a supported format")

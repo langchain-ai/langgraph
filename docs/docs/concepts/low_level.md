@@ -298,7 +298,7 @@ print(graph.invoke({"x": 5}, stream_mode='updates'))  # (2)!
 [{'expensive_node': {'result': 10}, '__metadata__': {'cached': True}}]
 ```
 
-1. First run takes the full second to run (due to mocked expensive computation).
+1. First run takes two seconds to run (due to mocked expensive computation).
 2. Second run utilizes cache and returns quickly.
 
 ## Edges

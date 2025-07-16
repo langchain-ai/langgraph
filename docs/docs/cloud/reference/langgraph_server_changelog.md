@@ -4,6 +4,28 @@
 
 ---
 
+## v0.2.93 (2025-07-16)
+- Removed the GIN index for run metadata to improve performance.
+
+## v0.2.92 (2025-07-16)
+- Enabled copying functionality for blobs and checkpoints, improving data management flexibility.
+
+## v0.2.91 (2025-07-16)
+- Reduced writes to the `checkpoint_blobs` table by inlining small values (null, numeric, str, etc.). This means we don't need to store extra values for channels that haven't been updated.
+
+## v0.2.90 (2025-07-16)
+- Improve checkpoint writes via node-local background queueing.
+
+
+## v0.2.89 (2025-07-15)
+- Decoupled checkpoint writing from thread/run state by removing foreign keys and updated logger to prevent timeout-related failures.
+
+## v0.2.88 (2025-07-14)
+- Removed the foreign key constraint for `thread` in the `run` table to simplify database schema.
+
+## v0.2.87 (2025-07-14)
+- Added more detailed logs for Redis worker signaling to improve debugging.
+
 ## v0.2.86 (2025-07-11)
 - Honored tool descriptions in the `/mcp` endpoint to align with expected functionality.
 
