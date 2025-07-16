@@ -26,10 +26,10 @@ from langchain_core.runnables import (
     RunnableLambda,
 )
 
-from langgraph._internal._constants import END, START
 from langgraph._internal._runnable import (
     RunnableCallable,
 )
+from langgraph.constants import END, START
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel._write import PASSTHROUGH, ChannelWrite, ChannelWriteEntry
 from langgraph.types import Send

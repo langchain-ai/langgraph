@@ -10,12 +10,11 @@ from langgraph._internal._constants import (
     NULL_TASK_ID,
     RESUME,
     RETURN,
-    START,
-    TAG_HIDDEN,
     TASKS,
 )
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel, EmptyChannelError
+from langgraph.constants import START, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel._log import logger
 from langgraph.types import Command, PregelExecutableTask, Send

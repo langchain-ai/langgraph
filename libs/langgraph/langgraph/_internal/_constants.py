@@ -3,20 +3,6 @@
 import sys
 from typing import Literal, cast
 
-# --- Public constants, re-exported from langgraph.constants ---
-TAG_NOSTREAM = sys.intern("nostream")
-"""Tag to disable streaming for a chat model."""
-TAG_HIDDEN = sys.intern("langsmith:hidden")
-"""Tag to hide a node/edge from certain tracing/streaming environments."""
-END = sys.intern("__end__")
-"""The last (maybe virtual) node in graph-style Pregel."""
-START = sys.intern("__start__")
-"""The first (maybe virtual) node in graph-style Pregel."""
-SELF = sys.intern("__self__")
-"""The implicit branch that handles each node's Control values."""
-PREVIOUS = sys.intern("__previous__")
-
-
 # --- Reserved write keys ---
 INPUT = sys.intern("__input__")
 # for values passed as input to the graph
@@ -32,6 +18,9 @@ TASKS = sys.intern("__pregel_tasks")
 # for Send objects returned by nodes/edges, corresponds to PUSH below
 RETURN = sys.intern("__return__")
 # for writes of a task where we simply record the return value
+PREVIOUS = sys.intern("__previous__")
+# the implicit branch that handles each node's Control values
+
 
 # --- Reserved cache namespaces ---
 CACHE_NS_WRITES = sys.intern("__pregel_ns_writes")
@@ -89,8 +78,11 @@ CONF = cast(Literal["configurable"], sys.intern("configurable"))
 NULL_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000000")
 # the task_id to use for writes that are not associated with a task
 
+# redefined to avoid circular import with langgraph.constants
+_TAG_HIDDEN = sys.intern("langsmith:hidden")
+
 RESERVED = {
-    TAG_HIDDEN,
+    _TAG_HIDDEN,
     # reserved write keys
     INPUT,
     INTERRUPT,

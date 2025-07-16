@@ -51,7 +51,6 @@ from langgraph._internal._constants import (
     RESERVED,
     RESUME,
     RETURN,
-    TAG_HIDDEN,
     TASKS,
 )
 from langgraph._internal._runtime import patch_runtime_non_null
@@ -65,6 +64,7 @@ from langgraph.checkpoint.base import (
     PendingWrite,
     V,
 )
+from langgraph.constants import TAG_HIDDEN
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels

@@ -28,12 +28,9 @@ from pydantic import BaseModel, TypeAdapter
 from typing_extensions import Self, Unpack, is_typeddict
 
 from langgraph._internal._constants import (
-    END,
     INTERRUPT,
     NS_END,
     NS_SEP,
-    START,
-    TAG_HIDDEN,
     TASKS,
 )
 from langgraph._internal._fields import (
@@ -54,6 +51,7 @@ from langgraph.channels.named_barrier_value import (
     NamedBarrierValueAfterFinish,
 )
 from langgraph.checkpoint.base import Checkpoint
+from langgraph.constants import END, START, TAG_HIDDEN
 from langgraph.errors import (
     ErrorCode,
     InvalidUpdateError,

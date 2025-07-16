@@ -28,10 +28,10 @@ from langgraph._internal._constants import (
     NO_WRITES,
     RESUME,
     RETURN,
-    TAG_HIDDEN,
 )
 from langgraph._internal._future import chain_future, run_coroutine_threadsafe
 from langgraph._internal._typing import MISSING
+from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.pregel._algo import Call
 from langgraph.pregel._executor import Submit

@@ -1,14 +1,9 @@
+import sys
 from typing import Any
 from warnings import warn
 
 from langgraph._internal._constants import (
     CONF,
-    END,
-    PREVIOUS,
-    SELF,
-    START,
-    TAG_HIDDEN,
-    TAG_NOSTREAM,
     TASKS,
 )
 from langgraph.warnings import LangGraphDeprecatedSinceV10
@@ -18,12 +13,20 @@ __all__ = (
     "TAG_HIDDEN",
     "START",
     "END",
-    "SELF",
-    "PREVIOUS",
     # retained for backwards compatibility, should be removed in v2 (or earlier)
     "CONF",
     "TASKS",
 )
+
+# --- Public constants ---
+TAG_NOSTREAM = sys.intern("nostream")
+"""Tag to disable streaming for a chat model."""
+TAG_HIDDEN = sys.intern("langsmith:hidden")
+"""Tag to hide a node/edge from certain tracing/streaming environments."""
+END = sys.intern("__end__")
+"""The last (maybe virtual) node in graph-style Pregel."""
+START = sys.intern("__start__")
+"""The first (maybe virtual) node in graph-style Pregel."""
 
 
 def __getattr__(name: str) -> Any:

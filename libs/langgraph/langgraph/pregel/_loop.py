@@ -47,7 +47,6 @@ from langgraph._internal._constants import (
     NULL_TASK_ID,
     PUSH,
     RESUME,
-    TAG_HIDDEN,
 )
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.cache.base import BaseCache
@@ -61,6 +60,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     PendingWrite,
 )
+from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
     GraphInterrupt,

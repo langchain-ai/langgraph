@@ -17,11 +17,11 @@ from langgraph._internal._constants import (
     NS_END,
     NS_SEP,
     RETURN,
-    TAG_HIDDEN,
 )
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import CheckpointMetadata, PendingWrite
+from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel._io import read_channels
 from langgraph.types import PregelExecutableTask, PregelTask, StateSnapshot
 

@@ -52,7 +52,6 @@ from langgraph._internal._constants import (
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_THREAD_ID,
-    END,
     ERROR,
     INPUT,
     INTERRUPT,
@@ -83,6 +82,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.config import get_config
+from langgraph.constants import END
 from langgraph.errors import (
     ErrorCode,
     GraphRecursionError,
