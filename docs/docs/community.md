@@ -1,3 +1,9 @@
+---
+hide:
+  - navigation
+  - toc
+---
+
 # Community
 
 Our community is filled with smart and helpful individuals who share our commitment to advancing the field of generative AI. We’re dedicated to maintaining the spirit of this community and creating a welcoming environment for learning.
