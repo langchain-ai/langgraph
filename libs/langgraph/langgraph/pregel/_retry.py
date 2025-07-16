@@ -10,7 +10,7 @@ from dataclasses import replace
 from typing import Any, Callable
 
 from langgraph._internal._config import patch_configurable
-from langgraph.constants import (
+from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,

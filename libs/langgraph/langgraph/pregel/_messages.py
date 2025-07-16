@@ -13,7 +13,8 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 
-from langgraph.constants import NS_SEP, TAG_HIDDEN, TAG_NOSTREAM
+from langgraph._internal._constants import NS_SEP
+from langgraph.constants import TAG_HIDDEN, TAG_NOSTREAM
 from langgraph.pregel.protocol import StreamChunk
 from langgraph.types import Command
 

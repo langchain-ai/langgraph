@@ -1,4 +1,4 @@
-from langgraph.constants import PULL, PUSH
+from langgraph._internal._constants import PULL, PUSH
 from langgraph.pregel._algo import prepare_next_tasks, task_path_str
 from langgraph.pregel._checkpoint import channels_from_checkpoint, empty_checkpoint
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Generic, cast
 
+from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.config import get_config
-from langgraph.constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, StreamWriter
 from langgraph.typing import ContextT

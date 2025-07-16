@@ -28,6 +28,7 @@ from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph.cache.base import BaseCache
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
@@ -41,10 +42,9 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_stream_writer
-from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (

@@ -30,8 +30,7 @@ from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
 from langgraph._internal._config import merge_configs
-from langgraph.checkpoint.base import CheckpointMetadata
-from langgraph.constants import (
+from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
@@ -41,6 +40,7 @@ from langgraph.constants import (
     INTERRUPT,
     NS_SEP,
 )
+from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
 from langgraph.types import (

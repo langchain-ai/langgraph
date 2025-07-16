@@ -20,12 +20,13 @@ from typing import (
 
 from typing_extensions import Unpack
 
+from langgraph._internal._constants import CACHE_NS_WRITES, PREVIOUS
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import CACHE_NS_WRITES, END, PREVIOUS, START
+from langgraph.constants import END, START
 from langgraph.pregel import Pregel
 from langgraph.pregel._call import (
     P,
