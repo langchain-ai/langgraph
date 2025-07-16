@@ -4,6 +4,7 @@ from warnings import warn
 
 from langgraph._internal._constants import (
     CONF,
+    CONFIG_KEY_CHECKPOINTER,
     TASKS,
 )
 from langgraph.warnings import LangGraphDeprecatedSinceV10
@@ -13,9 +14,10 @@ __all__ = (
     "TAG_HIDDEN",
     "START",
     "END",
-    # retained for backwards compatibility, should be removed in v2 (or earlier)
+    # retained for backwards compatibility (mostly langgraph-api), should be removed in v2 (or earlier)
     "CONF",
     "TASKS",
+    "CONFIG_KEY_CHECKPOINTER",
 )
 
 # --- Public constants ---
