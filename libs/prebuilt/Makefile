@@ -19,13 +19,13 @@ test-fast:
 	LANGGRAPH_TEST_FAST=1 uv run pytest $(TEST)
 
 test:
-	LANGGRAPH_TEST_FAST=0 make start-postgres && uv run pytest $(TEST); \
+	make start-postgres && LANGGRAPH_TEST_FAST=0 uv run pytest $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
 
 test_watch:
-	LANGGRAPH_TEST_FAST=0 make start-postgres && uv run ptw $(TEST); \
+	make start-postgres && LANGGRAPH_TEST_FAST=0 uv run ptw $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
