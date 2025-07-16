@@ -5,7 +5,7 @@
 ---
 
 ## v0.2.90 (2025-07-16)
-- Optimized checkpoint handling by writing checkpoints in a background thread and performing rough conflict checks.
+- Improve checkpoint writes via node-local background queing.
 
 ## v0.2.89 (2025-07-15)
 - Decoupled checkpoint writing from thread/run state by removing foreign keys and updated logger to prevent timeout-related failures.
