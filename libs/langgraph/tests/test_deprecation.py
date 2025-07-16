@@ -142,6 +142,7 @@ def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
         )
 
 
+@pytest.mark.filterwarnings("ignore:`interrupt_id` is deprecated. Use `id` instead.")
 def test_interrupt_attributes_deprecation() -> None:
     interrupt = Interrupt(value="question", id="abc")
 
@@ -152,9 +153,18 @@ def test_interrupt_attributes_deprecation() -> None:
         interrupt.interrupt_id
 
 
+@pytest.mark.filterwarnings("ignore:NodeInterrupt is deprecated.")
 def test_node_interrupt_deprecation() -> None:
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
         match="NodeInterrupt is deprecated. Please use `langgraph.types.interrupt` instead.",
     ):
         NodeInterrupt(value="test")
+
+
+def test_deprecated_import() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="Importing PREVIOUS from langgraph.constants is deprecated. This constant is now private and should not be used directly.",
+    ):
+        from langgraph.constants import PREVIOUS  # noqa: F401

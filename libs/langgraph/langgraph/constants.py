@@ -53,7 +53,9 @@ def __getattr__(name: str) -> Any:
         warn(
             f"Importing {name} from langgraph.constants is deprecated. "
             f"This constant is now private and should not be used directly. "
-            "Please let the LangGraph team know if you need this value."
+            "Please let the LangGraph team know if you need this value.",
+            LangGraphDeprecatedSinceV10,
+            stacklevel=2,
         )
         return attr
     except AttributeError:
