@@ -1,4 +1,4 @@
-.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile
+.PHONY: all format lint test test-fast test_watch integration_tests spell_check spell_fix benchmark profile
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -14,6 +14,9 @@ stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v
 
 TEST ?= .
+
+test-fast:
+	LANGGRAPH_TEST_FAST=1 uv run pytest $(TEST)
 
 test:
 	make start-postgres && uv run pytest $(TEST); \
@@ -74,5 +77,6 @@ help:
 	@echo '-- TESTS --'
 	@echo 'coverage                     - run unit tests and generate coverage report'
 	@echo 'test                         - run unit tests'
+	@echo 'test-fast                    - run unit tests with in-memory checkpointer only'
 	@echo 'test TEST_FILE=<test_file>   - run all tests in file'
 	@echo 'test_watch                   - run unit tests in watch mode'
