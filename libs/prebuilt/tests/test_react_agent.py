@@ -511,7 +511,7 @@ class CustomStatePydantic(AgentStatePydantic):
 @pytest.mark.parametrize("state_schema", [CustomState, CustomStatePydantic])
 def test_react_agent_update_state(
     sync_checkpointer: BaseCheckpointSaver,
-    version: str,
+    version: Literal["v1", "v2"],
     state_schema: StateSchemaType,
 ) -> None:
     @dec_tool
