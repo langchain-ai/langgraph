@@ -44,7 +44,6 @@ from typing import (
     Sequence,
     Tuple,
     Type,
-    TypedDict,
     Union,
     cast,
     get_type_hints,
@@ -72,6 +71,7 @@ from pydantic import BaseModel
 from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.errors import GraphBubbleUp
+from langgraph.prebuilt._internal import ToolCallWithContext
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
 from langgraph.utils.runnable import RunnableCallable
@@ -80,29 +80,6 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
 )
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
-
-
-class _ToolCallWithContext(TypedDict):
-    """ToolCall with additional context for graph state.
-
-    This is an internal data-structure meant to help the ToolNode accept
-    tools calls with additional context (e.g. state) when dispatched using the
-    `Send` API.
-
-    The Send API is used in create_react_agent to be able to distribute the tool
-    calls in parallel and support human-in-the-loop workflows where graph execution
-    may be paused for an indefinite time.
-    """
-
-    tool_call: ToolCall
-    type: Literal["__tool_call_with_context"]
-    """Type to parameterize the payload.
-    
-    Using "__" as a prefix to be defensive against potential name collisions with
-    regular user state.
-    """
-    state: Any
-    """The state is provided as additional context."""
 
 
 def msg_content_output(output: Any) -> Union[str, list[dict]]:
@@ -587,12 +564,12 @@ class ToolNode(RunnableCallable):
                 input_type = "list"
                 messages = input
         elif (
-            isinstance(input, dict) and input.get("type") == "__tool_call_with_context"
+            isinstance(input, dict) and input.get("__type") == "tool_call_with_context"
         ):
             # mypy will not be able to type narrow correctly since the signature
             # for input contains dict[str, Any]. We'd need to type dict[str, Any]
             # before we can apply correct typing.
-            input = cast(_ToolCallWithContext, input)  # type: ignore[assignment]
+            input = cast(ToolCallWithContext, input)  # type: ignore[assignment]
             input_type = "tool_calls"
             return [input["tool_call"]], input_type
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
@@ -653,7 +630,7 @@ class ToolNode(RunnableCallable):
                     err_msg += f" State should contain fields {required_fields_str}."
                 raise ValueError(err_msg)
 
-        if isinstance(input, dict) and input.get("type") == "__tool_call_with_context":
+        if isinstance(input, dict) and input.get("__type") == "tool_call_with_context":
             state = input["state"]
         else:
             state = input

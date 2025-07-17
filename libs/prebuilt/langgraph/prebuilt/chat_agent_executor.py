@@ -39,7 +39,8 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import IsLastStep, RemainingSteps
-from langgraph.prebuilt.tool_node import ToolNode, _ToolCallWithContext
+from langgraph.prebuilt._internal import ToolCallWithContext
+from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
 from langgraph.utils.runnable import RunnableCallable, RunnableLike
@@ -653,8 +654,8 @@ def create_react_agent(
                 return [
                     Send(
                         "tools",
-                        _ToolCallWithContext(
-                            type="__tool_call_with_context",
+                        ToolCallWithContext(
+                            __type="tool_call_with_context",
                             tool_call=tool_call,
                             state=state,
                         ),
@@ -742,8 +743,8 @@ def create_react_agent(
                 return [
                     Send(
                         "tools",
-                        _ToolCallWithContext(
-                            type="__tool_call_with_context",
+                        ToolCallWithContext(
+                            __type="tool_call_with_context",
                             tool_call=tool_call,
                             state=state,
                         ),
