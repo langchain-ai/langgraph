@@ -53,7 +53,6 @@ from langgraph._internal._constants import (
     RETURN,
     TASKS,
 )
-from langgraph._internal._runtime import patch_runtime_non_null
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -71,7 +70,7 @@ from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
 from langgraph.pregel._scratchpad import PregelScratchpad
-from langgraph.runtime import DEFAULT_RUNTIME
+from langgraph.runtime import DEFAULT_RUNTIME, Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
@@ -583,10 +582,10 @@ def prepare_single_task(
                 step,
                 stop,
             )
-            runtime = patch_runtime_non_null(
-                configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME),
-                store=store,
+            runtime = cast(
+                Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             )
+            runtime = runtime.override(store=store)
             return PregelExecutableTask(
                 name,
                 call.input,
@@ -713,10 +712,11 @@ def prepare_single_task(
                 step,
                 stop,
             )
-            runtime = patch_runtime_non_null(
-                configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME),
-                store=store,
-                previous=checkpoint["channel_values"].get(PREVIOUS, None),
+            runtime = cast(
+                Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            )
+            runtime = runtime.override(
+                store=store, previous=checkpoint["channel_values"].get(PREVIOUS, None)
             )
             return PregelExecutableTask(
                 packet.node,
@@ -852,8 +852,10 @@ def prepare_single_task(
                         )
                     else:
                         cache_key = None
-                    runtime = patch_runtime_non_null(
-                        configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME),
+                    runtime = cast(
+                        Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+                    )
+                    runtime = runtime.override(
                         previous=checkpoint["channel_values"].get(PREVIOUS, None),
                         store=store,
                     )
