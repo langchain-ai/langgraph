@@ -16,7 +16,13 @@ While often used interchangeably, these terms represent distinct security concep
 - [**Authentication**](#authentication) ("AuthN") verifies _who_ you are. This runs as middleware for every request.
 - [**Authorization**](#authorization) ("AuthZ") determines _what you can do_. This validates the user's privileges and roles on a per-resource basis.
 
+:::python
 In LangGraph Platform, authentication is handled by your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler, and authorization is handled by your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers.
+:::
+
+:::js
+In LangGraph Platform, authentication is handled by your [`@auth.authenticate`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.authenticate) handler, and authorization is handled by your [`@auth.on`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.on) handlers.
+:::
 
 ## Default Security Models
 
@@ -84,15 +90,24 @@ sequenceDiagram
     LG-->>Client: 8. Return resources
 ```
 
+:::python
 Your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler in LangGraph handles steps 4-6, while your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers implement step 7.
+:::
+
+:::js
+Your [`@auth.authenticate`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.authenticate) handler in LangGraph handles steps 4-6, while your [`@auth.on`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.on) handlers implement step 7.
+:::
 
 ## Authentication
 
-Authentication in LangGraph runs as middleware on every request. Your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler receives request information and should:
+Authentication in LangGraph runs as middleware on every request. Your authentication handler receives request information and should:
 
 1. Validate the credentials
-2. Return [user info](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.MinimalUserDict) containing the user's identity and user information if valid
-3. Raise an [HTTP exception](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.exceptions.HTTPException) or AssertionError if invalid
+2. Return user info containing the user's identity and user information if valid
+3. Raise an HTTP exception or throw an error if invalid
+
+:::python
+Your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler should return [user info](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.MinimalUserDict) and raise an [HTTP exception](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.exceptions.HTTPException) or AssertionError if invalid.
 
 ```python
 from langgraph_sdk import Auth
@@ -126,11 +141,58 @@ The returned user information is available:
 
 - To your authorization handlers via [`ctx.user`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.AuthContext)
 - In your application via `config["configuration"]["langgraph_auth_user"]`
+:::
+
+:::js
+Your [`@auth.authenticate`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.authenticate) handler should return [user info](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.MinimalUserDict) and throw an [HTTP exception](../cloud/reference/sdk/typescript_sdk_ref.md#auth.exceptions.HTTPException) or throw an error if invalid.
+
+```typescript
+import { Auth } from "@langchain/langgraph-sdk";
+
+const auth = new Auth();
+
+auth.authenticate(async (headers: Record<string, string>) => {
+    // Validate credentials (e.g., API key, JWT token)
+    const apiKey = headers["x-api-key"];
+    if (!apiKey || !isValidKey(apiKey)) {
+        throw new Auth.exceptions.HTTPException(
+            401,
+            "Invalid API key"
+        );
+    }
+
+    // Return user info - only identity and isAuthenticated are required
+    // Add any additional fields you need for authorization
+    return {
+        identity: "user-123",        // Required: unique user identifier
+        isAuthenticated: true,      // Optional: assumed true by default
+        permissions: ["read", "write"], // Optional: for permission-based auth
+        // You can add more custom fields if you want to implement other auth patterns
+        role: "admin",
+        orgId: "org-456"
+    };
+});
+```
+
+The returned user information is available:
+
+- To your authorization handlers via [`ctx.user`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.AuthContext)
+- In your application via `config.configurable.langgraph_auth_user`
+:::
 
 ??? tip "Supported Parameters"
 
-    The [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.authenticate) handler can accept any of the following parameters by name:
+    The authentication handler can accept any of the following parameters by name:
 
+    * request: The raw request object
+    * body: The parsed request body
+    * path: The request path
+    * method: The HTTP method
+    * query_params/queryParams: URL query parameters
+    * headers: Request headers
+    * authorization: The Authorization header value
+    
+    :::python
     * request (Request): The raw ASGI request object
     * body (dict): The parsed request body
     * path (str): The request path, e.g., "/threads/abcd-1234-abcd-1234/runs/abcd-1234-abcd-1234/stream"
@@ -139,19 +201,34 @@ The returned user information is available:
     * query_params (dict[str, str]): URL query parameters, e.g., {"stream": "true"}
     * headers (dict[bytes, bytes]): Request headers
     * authorization (str | None): The Authorization header value (e.g., "Bearer <token>")
+    :::
+
+    :::js
+    * request (Request): The raw request object
+    * body (object): The parsed request body
+    * path (string): The request path, e.g., "/threads/abcd-1234-abcd-1234/runs/abcd-1234-abcd-1234/stream"
+    * method (string): The HTTP method, e.g., "GET"
+    * pathParams (Record<string, string>): URL path parameters, e.g., {"threadId": "abcd-1234-abcd-1234", "runId": "abcd-1234-abcd-1234"}
+    * queryParams (Record<string, string>): URL query parameters, e.g., {"stream": "true"}
+    * headers (Record<string, string>): Request headers
+    * authorization (string | null): The Authorization header value (e.g., "Bearer <token>")
+    :::
     
     In many of our tutorials, we will just show the "authorization" parameter to be concise, but you can opt to accept more information as needed
     to implement your custom authentication scheme.
 
 ## Authorization
 
-After authentication, LangGraph calls your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers to control access to specific resources (e.g., threads, assistants, crons). These handlers can:
+After authentication, LangGraph calls your authorization handlers to control access to specific resources (e.g., threads, assistants, crons). These handlers can:
 
-1. Add metadata to be saved during resource creation by mutating the `value["metadata"]` dictionary directly. See the [supported actions table](#supported-actions) for the list of types the value can take for each action.
-2. Filter resources by metadata during search/list or read operations by returning a [filter dictionary](#filter-operations).
-3. Raise an HTTP exception if access is denied.
+1. Add metadata to be saved during resource creation by mutating the metadata. See the [supported actions table](#supported-actions) for the list of types the value can take for each action.
+2. Filter resources by metadata during search/list or read operations by returning a [filter](#filter-operations).
+3. Raise an HTTP exception or throw an error if access is denied.
 
-If you want to just implement simple user-scoped access control, you can use a single [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handler for all resources and actions. If you want to have different control depending on the resource and action, you can use [resource-specific handlers](#resource-specific-handlers). See the [Supported Resources](#supported-resources) section for a full list of the resources that support access control.
+If you want to just implement simple user-scoped access control, you can use a single authorization handler for all resources and actions. If you want to have different control depending on the resource and action, you can use [resource-specific handlers](#resource-specific-handlers). See the [Supported Resources](#supported-resources) section for a full list of the resources that support access control.
+
+:::python
+Your [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) handlers control access by mutating the `value["metadata"]` dictionary directly and returning a [filter dictionary](#filter-operations).
 
 ```python
 @auth.on
@@ -192,10 +269,58 @@ async def add_owner(
     # to ensure users can only access their own resources
     return filters
 ```
+:::
+
+:::js
+Your [`@auth.on`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.on) handlers control access by mutating the `value.metadata` object directly and returning a [filter object](#filter-operations).
+
+```typescript
+auth.on(async (
+    ctx: Auth.types.AuthContext,
+    value: any  // The payload being sent to this access method
+): Promise<any> => {  // Returns a filter object that restricts access to resources
+    /**
+     * Authorize all access to threads, runs, crons, and assistants.
+     *
+     * This handler does two things:
+     *     - Adds a value to resource metadata (to persist with the resource so it can be filtered later)
+     *     - Returns a filter (to restrict access to existing resources)
+     *
+     * Args:
+     *     ctx: Authentication context containing user info, permissions, the path, and
+     *     value: The request payload sent to the endpoint. For creation
+     *           operations, this contains the resource parameters. For read
+     *           operations, this contains the resource being accessed.
+     *
+     * Returns:
+     *     A filter object that LangGraph uses to restrict access to resources.
+     *     See [Filter Operations](#filter-operations) for supported operators.
+     */
+    // Create filter to restrict access to just this user's resources
+    const filters = { owner: ctx.user.identity };
+
+    // Get or create the metadata object in the payload
+    // This is where we store persistent info about the resource
+    if (!value.metadata) {
+        value.metadata = {};
+    }
+
+    // Add owner to metadata - if this is a create or update operation,
+    // this information will be saved with the resource
+    // So we can filter by it later in read operations
+    Object.assign(value.metadata, filters);
+
+    // Return filters to restrict access
+    // These filters are applied to ALL operations (create, read, update, search, etc.)
+    // to ensure users can only access their own resources
+    return filters;
+});
+```
+:::
 
 ### Resource-Specific Handlers {#resource-specific-handlers}
 
-You can register handlers for specific resources and actions by chaining the resource and action names together with the [`@auth.on`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth.on) decorator.
+You can register handlers for specific resources and actions by chaining the resource and action names together with the authorization decorator.
 When a request is made, the most specific handler that matches that resource and action is called. Below is an example of how to register handlers for specific resources and actions. For the following setup:
 
 1. Authenticated users are able to create threads, read threads, and create runs on threads
@@ -206,6 +331,7 @@ When a request is made, the most specific handler that matches that resource and
 
     For a full list of supported resources and actions, see the [Supported Resources](#supported-resources) section below.
 
+:::python
 ```python
 # Generic / global handler catches calls that aren't handled by more specific handlers
 @auth.on
@@ -289,12 +415,121 @@ async def on_assistant_create(
             detail="User lacks the required permissions."
         )
 ```
+:::
+
+:::js
+```typescript
+// Generic / global handler catches calls that aren't handled by more specific handlers
+auth.on(async (ctx: Auth.types.AuthContext, value: any) => {
+    console.log(`Request to ${ctx.path} by ${ctx.user.identity}`);
+    throw new Auth.exceptions.HTTPException(
+        403,
+        "Forbidden"
+    );
+});
+
+// Matches the "thread" resource and all actions - create, read, update, delete, search
+// Since this is **more specific** than the generic @auth.on handler, it will take precedence
+// over the generic handler for all actions on the "threads" resource
+auth.on.threads(async (
+    ctx: Auth.types.AuthContext,
+    value: Auth.types.threads.create.value
+) => {
+    if (!ctx.permissions.includes("write")) {
+        throw new Auth.exceptions.HTTPException(
+            403,
+            "User lacks the required permissions."
+        );
+    }
+    // Setting metadata on the thread being created
+    // will ensure that the resource contains an "owner" field
+    // Then any time a user tries to access this thread or runs within the thread,
+    // we can filter by owner
+    if (!value.metadata) {
+        value.metadata = {};
+    }
+    value.metadata.owner = ctx.user.identity;
+    return { owner: ctx.user.identity };
+});
+
+// Thread creation. This will match only on thread create actions
+// Since this is **more specific** than both the generic @auth.on handler and the @auth.on.threads handler,
+// it will take precedence for any "create" actions on the "threads" resources
+auth.on.threads.create(async (
+    ctx: Auth.types.AuthContext,
+    value: Auth.types.threads.create.value
+) => {
+    // Setting metadata on the thread being created
+    // will ensure that the resource contains an "owner" field
+    // Then any time a user tries to access this thread or runs within the thread,
+    // we can filter by owner
+    if (!value.metadata) {
+        value.metadata = {};
+    }
+    value.metadata.owner = ctx.user.identity;
+    return { owner: ctx.user.identity };
+});
+
+// Reading a thread. Since this is also more specific than the generic @auth.on handler, and the @auth.on.threads handler,
+// it will take precedence for any "read" actions on the "threads" resource
+auth.on.threads.read(async (
+    ctx: Auth.types.AuthContext,
+    value: Auth.types.threads.read.value
+) => {
+    // Since we are reading (and not creating) a thread,
+    // we don't need to set metadata. We just need to
+    // return a filter to ensure users can only see their own threads
+    return { owner: ctx.user.identity };
+});
+
+// Run creation, streaming, updates, etc.
+// This takes precedence over the generic @auth.on handler and the @auth.on.threads handler
+auth.on.threads.createRun(async (
+    ctx: Auth.types.AuthContext,
+    value: Auth.types.threads.createRun.value
+) => {
+    if (!value.metadata) {
+        value.metadata = {};
+    }
+    value.metadata.owner = ctx.user.identity;
+    // Inherit thread's access control
+    return { owner: ctx.user.identity };
+});
+
+// Assistant creation
+auth.on.assistants.create(async (
+    ctx: Auth.types.AuthContext,
+    value: Auth.types.assistants.create.value
+) => {
+    if (!ctx.permissions.includes("assistants:create")) {
+        throw new Auth.exceptions.HTTPException(
+            403,
+            "User lacks the required permissions."
+        );
+    }
+});
+```
+:::
 
 Notice that we are mixing global and resource-specific handlers in the above example. Since each request is handled by the most specific handler, a request to create a `thread` would match the `on_thread_create` handler but NOT the `reject_unhandled_requests` handler. A request to `update` a thread, however would be handled by the global handler, since we don't have a more specific handler for that resource and action.
 
 ### Filter Operations {#filter-operations}
 
-Authorization handlers can return `None`, a boolean, or a filter dictionary.
+Authorization handlers can return different types of values:
+
+- `None`/`null` and `True`/`true` mean "authorize access to all underling resources"
+- `False`/`false` means "deny access to all underling resources (raises a 403 exception)"
+- A metadata filter restricts access to resources
+
+A filter is a collection with keys that match the resource metadata. It supports three operators:
+
+- The default value is a shorthand for exact match, or "$eq", below
+- `$eq`: Exact match
+- `$contains`: List membership - The value here must be an element of the list. The metadata in the stored resource must be a list/container type.
+
+A filter with multiple keys is treated using a logical `AND` filter.
+
+:::python
 - `None` and `True` mean "authorize access to all underling resources"
 - `False` means "deny access to all underling resources (raises a 403 exception)"
 - A metadata filter dictionary will restrict access to resources
@@ -307,6 +542,22 @@ A filter dictionary is a dictionary with keys that match the resource metadata. 
 
 A dictionary with multiple keys is treated using a logical `AND` filter. For example, `{"owner": org_id, "allowed_users": {"$contains": user_id}}` will only match resources with metadata whose "owner" is `org_id` and whose "allowed_users" list contains `user_id`.
 See the reference [here](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.FilterType) for more information.
+:::
+
+:::js
+- `null` and `true` mean "authorize access to all underling resources"
+- `false` means "deny access to all underling resources (raises a 403 exception)"
+- A metadata filter object will restrict access to resources
+
+A filter object is an object with keys that match the resource metadata. It supports three operators:
+
+- The default value is a shorthand for exact match, or "$eq", below. For example, `{owner: userId}` will include only resources with metadata containing `{owner: userId}`
+- `$eq`: Exact match (e.g., `{owner: {$eq: userId}}`) - this is equivalent to the shorthand above, `{owner: userId}`
+- `$contains`: List membership (e.g., `{allowedUsers: {$contains: userId}}`) The value here must be an element of the list. The metadata in the stored resource must be a list/container type.
+
+An object with multiple keys is treated using a logical `AND` filter. For example, `{owner: orgId, allowedUsers: {$contains: userId}}` will only match resources with metadata whose "owner" is `orgId` and whose "allowedUsers" list contains `userId`.
+See the reference [here](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.FilterType) for more information.
+:::
 
 ## Common Access Patterns
 
@@ -316,6 +567,7 @@ Here are some typical authorization patterns:
 
 This common pattern lets you scope all threads, assistants, crons, and runs to a single user. It's useful for common single-user use cases like regular chatbot-style apps.
 
+:::python
 ```python
 @auth.on
 async def owner_only(ctx: Auth.types.AuthContext, value: dict):
@@ -323,11 +575,25 @@ async def owner_only(ctx: Auth.types.AuthContext, value: dict):
     metadata["owner"] = ctx.user.identity
     return {"owner": ctx.user.identity}
 ```
+:::
+
+:::js
+```typescript
+auth.on(async (ctx: Auth.types.AuthContext, value: any) => {
+    if (!value.metadata) {
+        value.metadata = {};
+    }
+    value.metadata.owner = ctx.user.identity;
+    return { owner: ctx.user.identity };
+});
+```
+:::
 
 ### Permission-based Access
 
 This pattern lets you control access based on **permissions**. It's useful if you want certain roles to have broader or more restricted access to resources.
 
+:::python
 ```python
 # In your auth handler:
 @auth.authenticate
@@ -363,20 +629,83 @@ async def rbac_create(ctx: Auth.types.AuthContext, value: dict):
         )
     return _default(ctx, value)
 ```
+:::
+
+:::js
+```typescript
+// In your auth handler:
+auth.authenticate(async (headers: Record<string, string>) => {
+    // ...
+    return {
+        identity: "user-123",
+        isAuthenticated: true,
+        permissions: ["threads:write", "threads:read"]  // Define permissions in auth
+    };
+});
+
+function _default(ctx: Auth.types.AuthContext, value: any) {
+    if (!value.metadata) {
+        value.metadata = {};
+    }
+    value.metadata.owner = ctx.user.identity;
+    return { owner: ctx.user.identity };
+}
+
+auth.on.threads.create(async (ctx: Auth.types.AuthContext, value: any) => {
+    if (!ctx.permissions.includes("threads:write")) {
+        throw new Auth.exceptions.HTTPException(
+            403,
+            "Unauthorized"
+        );
+    }
+    return _default(ctx, value);
+});
+
+auth.on.threads.read(async (ctx: Auth.types.AuthContext, value: any) => {
+    if (!ctx.permissions.includes("threads:read") && !ctx.permissions.includes("threads:write")) {
+        throw new Auth.exceptions.HTTPException(
+            403,
+            "Unauthorized"
+        );
+    }
+    return _default(ctx, value);
+});
+```
+:::
 
 ## Supported Resources
 
 LangGraph provides three levels of authorization handlers, from most general to most specific:
 
+1. **Global Handler**: Matches all resources and actions
+2. **Resource Handler**: Matches all actions for a specific resource
+3. **Action Handler**: Matches a specific action on a specific resource
+
+The most specific matching handler will be used. For example, a thread-specific create handler takes precedence over a general threads handler for thread creation.
+If a more specific handler is registered, the more general handler will not be called for that resource and action.
+
+:::python
 1. **Global Handler** (`@auth.on`): Matches all resources and actions
 2. **Resource Handler** (e.g., `@auth.on.threads`, `@auth.on.assistants`, `@auth.on.crons`): Matches all actions for a specific resource
 3. **Action Handler** (e.g., `@auth.on.threads.create`, `@auth.on.threads.read`): Matches a specific action on a specific resource
 
 The most specific matching handler will be used. For example, `@auth.on.threads.create` takes precedence over `@auth.on.threads` for thread creation.
 If a more specific handler is registered, the more general handler will not be called for that resource and action.
+:::
+
+:::js
+1. **Global Handler** (`auth.on`): Matches all resources and actions
+2. **Resource Handler** (e.g., `auth.on.threads`, `auth.on.assistants`, `auth.on.crons`): Matches all actions for a specific resource
+3. **Action Handler** (e.g., `auth.on.threads.create`, `auth.on.threads.read`): Matches a specific action on a specific resource
+
+The most specific matching handler will be used. For example, `auth.on.threads.create` takes precedence over `auth.on.threads` for thread creation.
+If a more specific handler is registered, the more general handler will not be called for that resource and action.
+:::
 
 ???+ tip "Type Safety"
-    Each handler has type hints available for its `value` parameter at `Auth.types.on.<resource>.<action>.value`. For example:
+    Each handler has type hints available for its `value` parameter. For example:
+    
+    :::python
     ```python
     @auth.on.threads.create
     async def on_thread_create(
@@ -399,11 +728,39 @@ If a more specific handler is registered, the more general handler will not be c
     ):
         ...
     ```
+    :::
+
+    :::js
+    ```typescript
+    auth.on.threads.create(async (
+        ctx: Auth.types.AuthContext,
+        value: Auth.types.on.threads.create.value  // Specific type for thread creation
+    ) => {
+        // ...
+    });
+    
+    auth.on.threads(async (
+        ctx: Auth.types.AuthContext,
+        value: Auth.types.on.threads.value  // Union type of all thread actions
+    ) => {
+        // ...
+    });
+    
+    auth.on(async (
+        ctx: Auth.types.AuthContext,
+        value: any  // Union type of all possible actions
+    ) => {
+        // ...
+    });
+    ```
+    :::
+
     More specific handlers provide better type hints since they handle fewer action types.
 
 #### Supported actions and types {#supported-actions}
 Here are all the supported action handlers:
 
+:::python
 | Resource | Handler | Description | Value Type |
 |----------|---------|-------------|------------|
 | **Threads** | `@auth.on.threads.create` | Thread creation | [`ThreadsCreate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.ThreadsCreate) |
@@ -422,12 +779,40 @@ Here are all the supported action handlers:
 | | `@auth.on.crons.update` | Cron job updates | [`CronsUpdate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.CronsUpdate) |
 | | `@auth.on.crons.delete` | Cron job deletion | [`CronsDelete`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.CronsDelete) |
 | | `@auth.on.crons.search` | Listing cron jobs | [`CronsSearch`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.types.CronsSearch) |
+:::
+
+:::js
+| Resource | Handler | Description | Value Type |
+|----------|---------|-------------|------------|
+| **Threads** | `auth.on.threads.create` | Thread creation | [`ThreadsCreate`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.ThreadsCreate) |
+| | `auth.on.threads.read` | Thread retrieval | [`ThreadsRead`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.ThreadsRead) |
+| | `auth.on.threads.update` | Thread updates | [`ThreadsUpdate`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.ThreadsUpdate) |
+| | `auth.on.threads.delete` | Thread deletion | [`ThreadsDelete`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.ThreadsDelete) |
+| | `auth.on.threads.search` | Listing threads | [`ThreadsSearch`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.ThreadsSearch) |
+| | `auth.on.threads.createRun` | Creating or updating a run | [`RunsCreate`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.RunsCreate) |
+| **Assistants** | `auth.on.assistants.create` | Assistant creation | [`AssistantsCreate`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.AssistantsCreate) |
+| | `auth.on.assistants.read` | Assistant retrieval | [`AssistantsRead`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.AssistantsRead) |
+| | `auth.on.assistants.update` | Assistant updates | [`AssistantsUpdate`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.AssistantsUpdate) |
+| | `auth.on.assistants.delete` | Assistant deletion | [`AssistantsDelete`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.AssistantsDelete) |
+| | `auth.on.assistants.search` | Listing assistants | [`AssistantsSearch`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.AssistantsSearch) |
+| **Crons** | `auth.on.crons.create` | Cron job creation | [`CronsCreate`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.CronsCreate) |
+| | `auth.on.crons.read` | Cron job retrieval | [`CronsRead`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.CronsRead) |
+| | `auth.on.crons.update` | Cron job updates | [`CronsUpdate`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.CronsUpdate) |
+| | `auth.on.crons.delete` | Cron job deletion | [`CronsDelete`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.CronsDelete) |
+| | `auth.on.crons.search` | Listing cron jobs | [`CronsSearch`](../cloud/reference/sdk/typescript_sdk_ref.md#auth.types.CronsSearch) |
+:::
 
 ???+ note "About Runs"
 
     Runs are scoped to their parent thread for access control. This means permissions are typically inherited from the thread, reflecting the conversational nature of the data model. All run operations (reading, listing) except creation are controlled by the thread's handlers.
-    There is a specific `create_run` handler for creating new runs because it had more arguments that you can view in the handler.
 
+    :::python
+    There is a specific `create_run` handler for creating new runs because it had more arguments that you can view in the handler.
+    :::
+
+    :::js
+    There is a specific `createRun` handler for creating new runs because it had more arguments that you can view in the handler.
+    :::
 
 ## Next Steps
 
