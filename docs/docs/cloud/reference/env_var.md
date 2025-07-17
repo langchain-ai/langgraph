@@ -28,6 +28,9 @@ Specify `DD_API_KEY` (your [Datadog API Key](https://docs.datadoghq.com/account_
 
 If `DD_API_KEY` is specified, the application process is wrapped in the [`ddtrace-run` command](https://ddtrace.readthedocs.io/en/stable/installation_quickstart.html). Other `DD_*` environment variables (e.g. `DD_SITE`, `DD_ENV`, `DD_SERVICE`, `DD_TRACE_ENABLED`) are typically needed to properly configure the tracing instrumentation. See [`DD_*` environment variables](https://ddtrace.readthedocs.io/en/stable/configuration.html) for more details.
 
+!!! note 
+    Enabling `DD_API_KEY` (and thus `ddtrace-run`) can override or interfere with other auto-instrumentation solutions (such as OpenTelemetry) that you may have instrumented into your application code.
+
 ## `LANGCHAIN_TRACING_SAMPLING_RATE`
 
 Sampling rate for traces sent to LangSmith. Valid values: Any float between `0` and `1`.

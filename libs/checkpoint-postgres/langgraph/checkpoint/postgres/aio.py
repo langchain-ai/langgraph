@@ -245,6 +245,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         )
 
         copy = checkpoint.copy()
+        copy["channel_values"] = copy["channel_values"].copy()
         next_config = {
             "configurable": {
                 "thread_id": thread_id,
@@ -253,17 +254,29 @@ class AsyncPostgresSaver(BasePostgresSaver):
             }
         }
 
+        # inline primitive values in checkpoint table
+        # others are stored in blobs table
+        blob_values = {}
+        for k, v in checkpoint["channel_values"].items():
+            if v is None or isinstance(v, (str, int, float, bool)):
+                pass
+            else:
+                blob_values[k] = copy["channel_values"].pop(k)
+
         async with self._cursor(pipeline=True) as cur:
-            await cur.executemany(
-                self.UPSERT_CHECKPOINT_BLOBS_SQL,
-                await asyncio.to_thread(
-                    self._dump_blobs,
-                    thread_id,
-                    checkpoint_ns,
-                    copy.pop("channel_values"),  # type: ignore[misc]
-                    new_versions,
-                ),
-            )
+            if blob_versions := {
+                k: v for k, v in new_versions.items() if k in blob_values
+            }:
+                await cur.executemany(
+                    self.UPSERT_CHECKPOINT_BLOBS_SQL,
+                    await asyncio.to_thread(
+                        self._dump_blobs,
+                        thread_id,
+                        checkpoint_ns,
+                        blob_values,
+                        blob_versions,
+                    ),
+                )
             await cur.execute(
                 self.UPSERT_CHECKPOINTS_SQL,
                 (
@@ -397,7 +410,10 @@ class AsyncPostgresSaver(BasePostgresSaver):
             },
             {
                 **value["checkpoint"],
-                "channel_values": self._load_blobs(value["channel_values"]),
+                "channel_values": {
+                    **value["checkpoint"].get("channel_values"),
+                    **self._load_blobs(value["channel_values"]),
+                },
             },
             value["metadata"],
             (
