@@ -183,6 +183,9 @@ class GraphSchema(TypedDict):
     config_schema: dict | None
     """The schema for the graph config.
     Missing if unable to generate JSON schema from graph."""
+    context_schema: dict | None
+    """The schema for the graph context.
+    Missing if unable to generate JSON schema from graph."""
 
 
 Subgraphs = dict[str, GraphSchema]
