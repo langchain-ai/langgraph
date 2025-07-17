@@ -589,7 +589,10 @@ class ToolNode(RunnableCallable):
         elif (
             isinstance(input, dict) and input.get("type") == "__tool_call_with_context"
         ):
-            input = cast(_ToolCallWithContext, input)
+            # mypy will not be able to type narrow correctly since the signature
+            # for input contains dict[str, Any]. We'd need to type dict[str, Any]
+            # before we can apply correct typing.
+            input = cast(_ToolCallWithContext, input)  # type: ignore[assignment]
             input_type = "tool_calls"
             return [input["tool_call"]], input_type
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
