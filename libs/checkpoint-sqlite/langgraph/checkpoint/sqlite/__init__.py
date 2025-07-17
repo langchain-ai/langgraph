@@ -519,6 +519,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             Use list() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
+        yield
 
 
     async def aput(
