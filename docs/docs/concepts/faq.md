@@ -13,7 +13,7 @@ No. LangGraph is an orchestration framework for complex agentic systems and is m
 
 ## How is LangGraph different from other agent frameworks?
 
-Other agentic frameworks can work for simple, generic tasks but fall short for complex tasks bespoke to a company’s needs. LangGraph provides a more expressive framework to handle companies’ unique tasks without restricting users to a single black-box cognitive architecture.
+Other agentic frameworks can work for simple, generic tasks but fall short for complex tasks. LangGraph provides a more expressive framework to handle your unique tasks without restricting you to a single black-box cognitive architecture.
 
 ## Does LangGraph impact the performance of my app?
 
@@ -28,14 +28,14 @@ Yes. LangGraph is an MIT-licensed open-source library and is free to use.
 LangGraph is a stateful, orchestration framework that brings added control to agent workflows. LangGraph Platform is a service for deploying and scaling LangGraph applications, with an opinionated API for building agent UXs, plus an integrated developer studio.
 
 | Features            | LangGraph (open source)                                   | LangGraph Platform                                                                                     |
-|---------------------|-----------------------------------------------------------|--------------------------------------------------------------------------------------------------------|
+| ------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Description         | Stateful orchestration framework for agentic applications | Scalable infrastructure for deploying LangGraph applications                                           |
 | SDKs                | Python and JavaScript                                     | Python and JavaScript                                                                                  |
 | HTTP APIs           | None                                                      | Yes - useful for retrieving & updating state or long-term memory, or creating a configurable assistant |
 | Streaming           | Basic                                                     | Dedicated mode for token-by-token messages                                                             |
 | Checkpointer        | Community contributed                                     | Supported out-of-the-box                                                                               |
 | Persistence Layer   | Self-managed                                              | Managed Postgres with efficient storage                                                                |
-| Deployment          | Self-managed                                              | • Cloud SaaS <br> • Free self-hosted <br> • Enterprise (paid self-hosted)                      |
+| Deployment          | Self-managed                                              | • Cloud SaaS <br> • Free self-hosted <br> • Enterprise (paid self-hosted)                              |
 | Scalability         | Self-managed                                              | Auto-scaling of task queues and servers                                                                |
 | Fault-tolerance     | Self-managed                                              | Automated retries                                                                                      |
 | Concurrency Control | Simple threading                                          | Supports double-texting                                                                                |
@@ -47,7 +47,7 @@ LangGraph is a stateful, orchestration framework that brings added control to ag
 
 No. LangGraph Platform is proprietary software.
 
-There is a free, self-hosted version of LangGraph Platform with access to basic features. The Cloud SaaS deployment option is free while in beta, but will eventually be a paid service. We will always give ample notice before charging for a service and reward our early adopters with preferential pricing. The Self-Hosted deployment options are paid services. [Contact our sales team](https://www.langchain.com/contact-sales) to learn more.
+There is a free, self-hosted version of LangGraph Platform with access to basic features. The Self-Hosted deployment options are paid services. [Contact our sales team](https://www.langchain.com/contact-sales) to learn more.
 
 For more information, see our [LangGraph Platform pricing page](https://www.langchain.com/pricing-langgraph-platform).
 
