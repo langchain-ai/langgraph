@@ -52,7 +52,7 @@ lint lint_diff lint_package lint_tests:
 
 format format_diff:
 	uv run ruff format $(PYTHON_FILES)
-	uv run ruff check --select I --fix $(PYTHON_FILES)
+	uv run ruff check --fix $(PYTHON_FILES)
 
 spell_check:
 	uv run codespell --toml pyproject.toml
