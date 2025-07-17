@@ -974,13 +974,47 @@ class CompiledStateGraph(
                 )
                 raise InvalidUpdateError(msg)
 
+        # Create a validated version of _control_branch that has access to available nodes
+        def _control_branch_with_validation(value: Any) -> Sequence[tuple[str, Any]]:
+            if isinstance(value, Send):
+                return ((TASKS, value),)
+            commands: list[Command] = []
+            if isinstance(value, Command):
+                commands.append(value)
+            elif isinstance(value, (list, tuple)):
+                for cmd in value:
+                    if isinstance(cmd, Command):
+                        commands.append(cmd)
+            rtn: list[tuple[str, Any]] = []
+            for command in commands:
+                if command.graph == Command.PARENT:
+                    raise ParentCommand(command)
+                if isinstance(command.goto, Send):
+                    rtn.append((TASKS, command.goto))
+                elif isinstance(command.goto, str):
+                    # Validate that the goto target exists in the graph
+                    if command.goto != END and command.goto not in self.builder.nodes:
+                        raise InvalidUpdateError(f"Node '{command.goto}' does not exist in the graph")
+                    rtn.append((CHANNEL_BRANCH_TO.format(command.goto), None))
+                else:
+                    # Handle sequence of goto targets
+                    for go in command.goto:
+                        if isinstance(go, Send):
+                            rtn.append((TASKS, go))
+                        else:
+                            # Validate that the goto target exists in the graph
+                            if go != END and go not in self.builder.nodes:
+                                raise InvalidUpdateError(f"Node '{go}' does not exist in the graph")
+                            rtn.append((CHANNEL_BRANCH_TO.format(go), None))
+            return rtn
+
         # state updaters
         write_entries: tuple[ChannelWriteEntry | ChannelWriteTupleEntry, ...] = (
             ChannelWriteTupleEntry(
                 mapper=_get_root if output_keys == ["__root__"] else _get_updates
             ),
             ChannelWriteTupleEntry(
-                mapper=_control_branch,
+                mapper=_control_branch_with_validation,
                 static=_control_static(node.ends)
                 if node is not None and node.ends is not None
                 else None,
@@ -1422,3 +1456,4 @@ def _get_json_schema(
 
 
 CHANNEL_BRANCH_TO = "branch:to:{}"
+
