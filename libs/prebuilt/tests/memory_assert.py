@@ -2,13 +2,12 @@ import os
 import tempfile
 from collections import defaultdict
 from functools import partial
-from typing import Any, Optional
+from typing import Optional
 
 from langgraph.checkpoint.base import (
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
-    CheckpointTuple,
     SerializerProtocol,
 )
 from langgraph.checkpoint.memory import InMemorySaver, PersistentDict
