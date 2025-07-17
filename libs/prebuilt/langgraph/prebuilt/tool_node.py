@@ -466,10 +466,7 @@ class ToolNode(RunnableCallable):
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
         try:
-            if call["type"] == "tool_call":
-                call_args = call
-            else:
-                call_args = {**call, **{"type": "tool_call"}}
+            call_args = {**call, **{"type": "tool_call"}}
             response = self.tools_by_name[call["name"]].invoke(call_args, config)
 
         # GraphInterrupt is a special exception that will always be raised.
