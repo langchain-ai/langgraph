@@ -4,6 +4,10 @@
 
 ---
 
+## v0.2.94 (2025-07-16)
+- Improved performance by omitting pending sends for langgraph versions 0.5 and above.
+- Improved server startup logs to provide clearer warnings when the DD_API_KEY environment variable is set.
+
 ## v0.2.93 (2025-07-16)
 - Removed the GIN index for run metadata to improve performance.
 
