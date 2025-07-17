@@ -58,9 +58,13 @@ Below are examples of directory structures for applications:
     ├── langgraph.json  # configuration file for LangGraph
     └── pyproject.toml # dependencies for your project
     ```
+
+:::
+
 :::
 
 :::js
+
 ```plaintext
 my-app/
 ├── src # all project code lies within here
@@ -73,6 +77,7 @@ my-app/
 ├── .env # environment variables
 └── langgraph.json # configuration file for LangGraph
 ```
+
 :::
 
 !!! note
@@ -92,42 +97,41 @@ See the [LangGraph configuration file reference](../cloud/reference/cli.md#confi
 ### Examples
 
 :::python
-* The dependencies involve a custom local package and the `langchain_openai` package.
-* A single graph will be loaded from the file `./your_package/your_file.py` with the variable `variable`.
-* The environment variables are loaded from the `.env` file.
+
+- The dependencies involve a custom local package and the `langchain_openai` package.
+- A single graph will be loaded from the file `./your_package/your_file.py` with the variable `variable`.
+- The environment variables are loaded from the `.env` file.
 
 ```json
 {
-    "dependencies": [
-        "langchain_openai",
-        "./your_package"
-    ],
-    "graphs": {
-        "my_agent": "./your_package/your_file.py:agent"
-    },
-    "env": "./.env"
+  "dependencies": ["langchain_openai", "./your_package"],
+  "graphs": {
+    "my_agent": "./your_package/your_file.py:agent"
+  },
+  "env": "./.env"
 }
 ```
+
 :::
 
 :::js
-* The dependencies will be loaded from a dependency file in the local directory (e.g., `package.json`).
-* A single graph will be loaded from the file `./your_package/your_file.js` with the function `agent`.
-* The environment variable `OPENAI_API_KEY` is set inline.
+
+- The dependencies will be loaded from a dependency file in the local directory (e.g., `package.json`).
+- A single graph will be loaded from the file `./your_package/your_file.js` with the function `agent`.
+- The environment variable `OPENAI_API_KEY` is set inline.
 
 ```json
 {
-    "dependencies": [
-        "."
-    ],
-    "graphs": {
-        "my_agent": "./your_package/your_file.js:agent"
-    },
-    "env": {
-        "OPENAI_API_KEY": "secret-key"
-    }
+  "dependencies": ["."],
+  "graphs": {
+    "my_agent": "./your_package/your_file.js:agent"
+  },
+  "env": {
+    "OPENAI_API_KEY": "secret-key"
+  }
 }
 ```
+
 :::
 
 ## Dependencies
@@ -143,12 +147,14 @@ A LangGraph application may depend on other TypeScript/JavaScript libraries.
 You will generally need to specify the following information for dependencies to be set up correctly:
 
 :::python
+
 1. A file in the directory that specifies the dependencies (e.g. `requirements.txt`, `pyproject.toml`, or `package.json`).
-:::
+   :::
 
 :::js
+
 1. A file in the directory that specifies the dependencies (e.g. `package.json`).
-:::
+   :::
 
 2. A `dependencies` key in the [LangGraph configuration file](#configuration-file-concepts) that specifies the dependencies required to run the LangGraph application.
 3. Any additional binaries or system libraries can be specified using `dockerfile_lines` key in the [LangGraph configuration file](#configuration-file-concepts).
