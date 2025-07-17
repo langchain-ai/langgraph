@@ -157,8 +157,10 @@ nav:
           - Overview: concepts/mcp.md
           - Use MCP: agents/mcp.md
           - Server API: concepts/server-mcp.md
-      - Evaluation:
-          - Basic implementation: agents/evals.md
+      - Tracing:
+          - Overview: concepts/tracing.md
+          - Enable tracing: how-tos/enable-tracing.md
+          - Evaluate performance: agents/evals.md
     - Platform-only capabilities:
       - LangGraph Platform:
           - Overview: concepts/langgraph_platform.md
