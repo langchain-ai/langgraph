@@ -994,7 +994,9 @@ class CompiledStateGraph(
                 elif isinstance(command.goto, str):
                     # Validate that the goto target exists in the graph
                     if command.goto != END and command.goto not in self.builder.nodes:
-                        raise InvalidUpdateError(f"Node '{command.goto}' does not exist in the graph")
+                        raise InvalidUpdateError(
+                            f"Node '{command.goto}' does not exist in the graph"
+                        )
                     rtn.append((CHANNEL_BRANCH_TO.format(command.goto), None))
                 else:
                     # Handle sequence of goto targets
@@ -1004,7 +1006,9 @@ class CompiledStateGraph(
                         else:
                             # Validate that the goto target exists in the graph
                             if go != END and go not in self.builder.nodes:
-                                raise InvalidUpdateError(f"Node '{go}' does not exist in the graph")
+                                raise InvalidUpdateError(
+                                    f"Node '{go}' does not exist in the graph"
+                                )
                             rtn.append((CHANNEL_BRANCH_TO.format(go), None))
             return rtn
 
@@ -1456,4 +1460,3 @@ def _get_json_schema(
 
 
 CHANNEL_BRANCH_TO = "branch:to:{}"
-
