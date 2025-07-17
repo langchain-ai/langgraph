@@ -8,6 +8,8 @@ from langgraph.checkpoint.base import (
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
+    CheckpointTuple,
+    SerializerProtocol,
 )
 from langgraph.checkpoint.memory import InMemorySaver, PersistentDict
 from langgraph.pregel.checkpoint import copy_checkpoint
@@ -19,7 +21,7 @@ class MemorySaverAssertImmutable(InMemorySaver):
     def __init__(
         self,
         *,
-        serde: Optional[Any] = None,
+        serde: Optional[SerializerProtocol] = None,
         put_sleep: Optional[float] = None,
     ) -> None:
         _, filename = tempfile.mkstemp()
@@ -56,4 +58,3 @@ class MemorySaverAssertImmutable(InMemorySaver):
         )
         # call super to write checkpoint
         return super().put(config, checkpoint, metadata, new_versions)
-

@@ -26,4 +26,3 @@ def _AnyIdToolMessage(**kwargs: Any) -> ToolMessage:
     message = ToolMessage(**kwargs)
     message.id = AnyStr()
     return message
-
