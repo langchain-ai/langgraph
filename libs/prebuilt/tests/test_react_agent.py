@@ -4,7 +4,6 @@ import json
 from functools import partial
 from typing import (
     Annotated,
-    Any,
     List,
     Literal,
     Optional,
@@ -559,7 +558,7 @@ def test_react_agent_update_state(
         version=version,
     )
     config = {"configurable": {"thread_id": "1"}}
-    # run until interrpupted
+    # Run until interrupted
     agent.invoke({"messages": [("user", "what's my name")]}, config)
     # supply the value for the interrupt
     response = agent.invoke(Command(resume="Archibald"), config)

@@ -515,7 +515,7 @@ class ToolNode(RunnableCallable):
     async def _arun_one(
         self,
         call: ToolCall,
-        input_type: Literal["list", "dict", "tool_calls", "tool_call_with_context"],
+        input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
     ) -> ToolMessage:
         """Run a single tool call asynchronously."""
@@ -576,10 +576,8 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
-    ) -> Tuple[
-        list[ToolCall], Literal["list", "dict", "tool_calls", "tool_call_with_context"]
-    ]:
-        input_type: Literal["list", "dict", "tool_calls", "tool_call_with_context"]
+    ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
+        input_type: Literal["list", "dict", "tool_calls"]
         if isinstance(input, list):
             if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
                 input_type = "tool_calls"
@@ -592,7 +590,7 @@ class ToolNode(RunnableCallable):
             isinstance(input, dict) and input.get("type") == "__tool_call_with_context"
         ):
             input = cast(_ToolCallWithContext, input)
-            input_type = "tool_call_with_context"
+            input_type = "tool_calls"
             return [input["tool_call"]], input_type
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
             input_type = "dict"
