@@ -19,8 +19,7 @@ class TestAsyncSqliteSaver:
         self.config_1: RunnableConfig = {
             "configurable": {
                 "thread_id": "thread-1",
-                # for backwards compatibility testing
-                "thread_ts": "1",
+                "checkpoint_id": "1",
                 "checkpoint_ns": "",
             }
         }

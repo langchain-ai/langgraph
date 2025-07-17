@@ -11,12 +11,12 @@ from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import PULL, PUSH
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.constants import END, PULL, PUSH, START
-from langgraph.errors import NodeInterrupt
+from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
@@ -4173,9 +4173,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
     ) == {
         "my_key": "value",
         "market": "DE",
-        "__interrupt__": [
-            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
-        ],
+        "__interrupt__": [Interrupt(value="Just because...", id=AnyStr())],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -4205,8 +4203,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
             "__interrupt__": (
                 Interrupt(
                     value="Just because...",
-                    resumable=True,
-                    ns=[AnyStr("tool_two:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -4224,9 +4221,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
     ) == {
         "my_key": "value ⛰️",
         "market": "DE",
-        "__interrupt__": [
-            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
-        ],
+        "__interrupt__": [Interrupt(value="Just because...", id=AnyStr())],
     }
 
     assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
@@ -4248,8 +4243,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
                 interrupts=(
                     Interrupt(
                         value="Just because...",
-                        resumable=True,
-                        ns=[AnyStr("tool_two:")],
+                        id=AnyStr(),
                     ),
                 ),
             ),
@@ -4271,8 +4265,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
         interrupts=(
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:")],
+                id=AnyStr(),
             ),
         ),
     )
@@ -4336,9 +4329,7 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
     ) == {
         "my_key": "value one",
         "market": "DE",
-        "__interrupt__": [
-            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
-        ],
+        "__interrupt__": [Interrupt(value="Just because...", id=AnyStr())],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -4371,8 +4362,7 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
             "__interrupt__": (
                 Interrupt(
                     value="Just because...",
-                    resumable=True,
-                    ns=[AnyStr("tool_two:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -4391,9 +4381,7 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
     ) == {
         "my_key": "value ⛰️ one",
         "market": "DE",
-        "__interrupt__": [
-            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
-        ],
+        "__interrupt__": [Interrupt(value="Just because...", id=AnyStr())],
     }
     assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
         {
@@ -4420,8 +4408,7 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
                 interrupts=(
                     Interrupt(
                         value="Just because...",
-                        resumable=True,
-                        ns=[AnyStr("tool_two:")],
+                        id=AnyStr(),
                     ),
                 ),
             ),
@@ -4443,8 +4430,7 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
         interrupts=(
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:")],
+                id=AnyStr(),
             ),
         ),
     )
@@ -4513,8 +4499,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
         "__interrupt__": [
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -4546,8 +4531,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
             "__interrupt__": (
                 Interrupt(
                     value="Just because...",
-                    resumable=True,
-                    ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -4568,8 +4552,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
         "__interrupt__": [
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -4598,8 +4581,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
                 interrupts=(
                     Interrupt(
                         value="Just because...",
-                        resumable=True,
-                        ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                        id=AnyStr(),
                     ),
                 ),
                 state={
@@ -4627,8 +4609,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
         interrupts=(
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                id=AnyStr(),
             ),
         ),
     )
@@ -4672,7 +4653,7 @@ def test_send_dedupe_on_resume(
         def __call__(self, state):
             self.ticks += 1
             if self.ticks == 1:
-                raise NodeInterrupt("Bahh")
+                interrupt("Bahh")
             return ["|".join(("flaky", str(state)))]
 
     class Node:
@@ -4722,8 +4703,7 @@ def test_send_dedupe_on_resume(
         "__interrupt__": [
             Interrupt(
                 value="Bahh",
-                resumable=False,
-                ns=None,
+                id=AnyStr(),
             ),
         ],
     }
@@ -4884,7 +4864,7 @@ def test_send_dedupe_on_resume(
                     name="flaky",
                     path=("__pregel_push", 1, False),
                     error=None,
-                    interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
+                    interrupts=(Interrupt(value="Bahh", id=AnyStr()),),
                     state=None,
                     result=["flaky|4"] if checkpoint_during else None,
                 ),
@@ -4898,7 +4878,7 @@ def test_send_dedupe_on_resume(
                     result=["3"],
                 ),
             ),
-            interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
+            interrupts=(Interrupt(value="Bahh", id=AnyStr()),),
         ),
         StateSnapshot(
             values=["0", "1"],

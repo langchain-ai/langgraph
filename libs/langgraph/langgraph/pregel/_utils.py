@@ -6,12 +6,12 @@ import re
 import textwrap
 from typing import Any, Callable
 
-from langchain_core.runnables import RunnableLambda, RunnableSequence
+from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
 from typing_extensions import override
 
+from langgraph._internal._runnable import RunnableCallable, RunnableSeq
 from langgraph.checkpoint.base import ChannelVersions
 from langgraph.pregel.protocol import PregelProtocol
-from langgraph.utils.runnable import Runnable, RunnableCallable, RunnableSeq
 
 
 def get_new_channel_versions(

@@ -36,7 +36,7 @@ Each checkpointer should conform to `langgraph.checkpoint.base.BaseCheckpointSav
 
 - `.put` - Store a checkpoint with its configuration and metadata.
 - `.put_writes` - Store intermediate writes linked to a checkpoint (i.e. pending writes).
-- `.get_tuple` - Fetch a checkpoint tuple using for a given configuration (`thread_id` and `thread_ts`).
+- `.get_tuple` - Fetch a checkpoint tuple using for a given configuration (`thread_id` and `checkpoint_id`).
 - `.list` - List checkpoints that match a given configuration and filter criteria.
 
 If the checkpointer will be used with asynchronous graph execution (i.e. executing the graph via `.ainvoke`, `.astream`, `.abatch`), checkpointer must implement asynchronous versions of the above methods (`.aput`, `.aput_writes`, `.aget_tuple`, `.alist`).

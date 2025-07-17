@@ -70,10 +70,10 @@ from langchain_core.tools.base import (
 from pydantic import BaseModel
 from typing_extensions import Annotated, get_args, get_origin
 
+from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
-from langgraph.utils.runnable import RunnableCallable
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
@@ -444,9 +444,10 @@ class ToolNode(RunnableCallable):
             response = self.tools_by_name[call["name"]].invoke(input, config)
 
         # GraphInterrupt is a special exception that will always be raised.
-        # It can be triggered in the following scenarios:
-        # (1) a NodeInterrupt is raised inside a tool
-        # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
+        # It can be triggered in the following scenarios,
+        # Where GraphInterrupt(GraphBubbleUp) is raised from an `interrupt` invocation most commonly:
+        # (1) a GraphInterrupt is raised inside a tool
+        # (2) a GraphInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         except GraphBubbleUp as e:

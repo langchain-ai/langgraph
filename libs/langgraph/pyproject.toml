@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "0.5.3"
+version = "0.6.0a1"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.9"
@@ -60,6 +60,7 @@ langgraph-checkpoint = { path = "../checkpoint", editable = true }
 langgraph-checkpoint-sqlite = { path = "../checkpoint-sqlite", editable = true }
 langgraph-checkpoint-postgres = { path = "../checkpoint-postgres", editable = true }
 langgraph-sdk = { path = "../sdk-py", editable = true }
+langgraph-cli = { path = "../cli", editable = true }
 
 [tool.ruff]
 lint.select = [ "E", "F", "I", "TID251", "UP" ]

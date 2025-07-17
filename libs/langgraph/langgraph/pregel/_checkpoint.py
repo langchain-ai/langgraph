@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import datetime, timezone
 
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.checkpoint.base.id import uuid6
-from langgraph.constants import MISSING
 from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 
 LATEST_VERSION = 4

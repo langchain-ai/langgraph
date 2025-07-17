@@ -42,13 +42,13 @@ It can either be a `TypedDict`, `dataclass`, or Pydantic `BaseModel`.
 Note: we cannot use either `TypedDict` or `dataclass` directly due to limitations in type checking.
 """
 
-
-class Unset:
-    """A sentinel value to represent an unset type."""
-
-
-UNSET: Unset = Unset()
+MISSING = object()
+"""Unset sentinel value."""
 
 
 class DeprecatedKwargs(TypedDict):
     """TypedDict to use for extra keyword arguments, enabling type checking warnings for deprecated arguments."""
+
+
+EMPTY_SEQ: tuple[str, ...] = tuple()
+"""An empty sequence of strings."""

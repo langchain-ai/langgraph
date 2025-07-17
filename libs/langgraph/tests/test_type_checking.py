@@ -2,11 +2,13 @@ from dataclasses import dataclass
 from operator import add
 from typing import Annotated, Any
 
+import pytest
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from langgraph.graph import StateGraph
+from langgraph.types import Command
 
 
 def test_typed_dict_state() -> None:
@@ -103,3 +105,57 @@ def test_input_state_specified() -> None:
 
     new_graph.invoke({"something": 1})
     new_graph.invoke({"something": 2, "info": ["hello", "world"]})  # type: ignore[arg-type]
+
+
+@pytest.mark.skip("Purely for type checking")
+def test_invoke_with_all_valid_types() -> None:
+    class State(TypedDict):
+        a: int
+
+    def a(state: State) -> Any: ...
+
+    graph = StateGraph(State).add_node("a", a).set_entry_point("a").compile()
+    graph.invoke({"a": 1})
+    graph.invoke(None)
+    graph.invoke(Command())
+
+
+def test_add_node_with_explicit_input_schema() -> None:
+    class A(TypedDict):
+        a1: int
+        a2: str
+
+    class B(TypedDict):
+        b1: int
+        b2: str
+
+    class ANarrow(TypedDict):
+        a1: int
+
+    class BNarrow(TypedDict):
+        b1: int
+
+    class State(A, B): ...
+
+    def a(state: A) -> Any: ...
+
+    def b(state: B) -> Any: ...
+
+    workflow = StateGraph(State)
+    # input schema matches typed schemas
+    workflow.add_node("a", a, input_schema=A)
+    workflow.add_node("b", b, input_schema=B)
+
+    # input schema does not match typed schemas
+    workflow.add_node("a_wrong", a, input_schema=B)  # type: ignore[arg-type]
+    workflow.add_node("b_wrong", b, input_schema=A)  # type: ignore[arg-type]
+
+    # input schema is more broad than the typed schemas, which is allowed
+    # by the principles of contravariance
+    workflow.add_node("a_inclusive", a, input_schema=State)
+    workflow.add_node("b_inclusive", b, input_schema=State)
+
+    # input schema is more narrow than the typed schemas, which is not allowed
+    # because it violates the principles of contravariance
+    workflow.add_node("a_narrow", a, input_schema=ANarrow)  # type: ignore[arg-type]
+    workflow.add_node("b_narrow", b, input_schema=BNarrow)  # type: ignore[arg-type]

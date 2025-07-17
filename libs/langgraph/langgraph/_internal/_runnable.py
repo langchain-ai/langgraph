@@ -42,20 +42,19 @@ from langchain_core.runnables.utils import Input, Output
 from langchain_core.tracers.langchain import LangChainTracer
 from typing_extensions import TypeGuard
 
-from langgraph.constants import (
-    CONF,
-    CONFIG_KEY_PREVIOUS,
-    CONFIG_KEY_STORE,
-    CONFIG_KEY_STREAM_WRITER,
-)
-from langgraph.store.base import BaseStore
-from langgraph.types import StreamWriter
-from langgraph.utils.config import (
+from langgraph._internal._config import (
     ensure_config,
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
     patch_config,
 )
+from langgraph._internal._constants import (
+    CONF,
+    CONFIG_KEY_RUNTIME,
+)
+from langgraph._internal._typing import MISSING
+from langgraph.store.base import BaseStore
+from langgraph.types import StreamWriter
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -128,45 +127,52 @@ ANY_TYPE = object()
 
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
 
-# List of keyword arguments that can be injected at runtime from the config object.
+# List of keyword arguments that can be injected into nodes / tasks / tools at runtime.
 # A named argument may appear multiple times if it appears with distinct types.
 KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
     (
-        sys.intern("writer"),
+        "config",
+        (RunnableConfig, "RunnableConfig", inspect.Parameter.empty),
+        # for now, use config directly, eventually, will pop off of Runtime
+        "N/A",
+        inspect.Parameter.empty,
+    ),
+    (
+        "writer",
         (StreamWriter, "StreamWriter", inspect.Parameter.empty),
-        CONFIG_KEY_STREAM_WRITER,
+        "stream_writer",
         lambda _: None,
     ),
     (
-        # Covers store that is not optional (will raise an error if a store
-        # cannot be injected).
-        sys.intern("store"),
+        "store",
         (
             BaseStore,
             "BaseStore",
             inspect.Parameter.empty,
         ),
-        CONFIG_KEY_STORE,
+        "store",
         inspect.Parameter.empty,
     ),
     (
-        # Covers store that is optional. Will set to None if not found in config.
-        sys.intern("store"),
+        "store",
         (
             Optional[BaseStore],
-            # Best effort to catch some forward references.
-            # This will not work for cases like `"Union[None, BaseStore]"`,
-            # we'll need to re-write logic to use get_type_hints()
-            # to resolve forward references.
             "Optional[BaseStore]",
         ),
-        CONFIG_KEY_STORE,
+        "store",
         None,
     ),
     (
-        sys.intern("previous"),
+        "previous",
         (ANY_TYPE,),
-        CONFIG_KEY_PREVIOUS,
+        "previous",
+        inspect.Parameter.empty,
+    ),
+    (
+        "runtime",
+        (ANY_TYPE,),
+        # we never hit this block, we just inject runtime directly
+        "N/A",
         inspect.Parameter.empty,
     ),
 )
@@ -174,7 +180,7 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
 config keys, default values and type annotations.
 
 Used to configure keyword arguments that can be injected at runtime
-from the config object as kwargs to `invoke`, `ainvoke`, `stream` and `astream`.
+from the `Runtime` object as kwargs to `invoke`, `ainvoke`, `stream` and `astream`.
 
 For a keyword to be injected from the config object, the function signature
 must contain a kwarg with the same name and a matching type annotation.
@@ -182,8 +188,10 @@ must contain a kwarg with the same name and a matching type annotation.
 Each tuple contains:
 - the name of the kwarg in the function signature
 - the type annotation(s) for the kwarg
-- the config key to look for the value in
-- the default value for the kwarg
+- the `Runtime` attribute for fetching the value (N/A if not applicable)
+
+This is fully internal and should be further refactored to use `get_type_hints`
+to resolve forward references and optional types formatted like BaseStore | None.
 """
 
 VALID_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
@@ -250,7 +258,6 @@ class RunnableCallable(Runnable):
         trace: bool = True,
         recurse: bool = True,
         explode_args: bool = False,
-        func_accepts_config: bool | None = None,
         **kwargs: Any,
     ) -> None:
         self.name = name
@@ -277,31 +284,23 @@ class RunnableCallable(Runnable):
         if func is None and afunc is None:
             raise ValueError("At least one of func or afunc must be provided.")
 
-        if func_accepts_config is not None:
-            self.func_accepts_config = func_accepts_config
-            self.func_accepts: dict[str, tuple[str, Any]] = {}
-        else:
-            params = inspect.signature(cast(Callable, func or afunc)).parameters
+        self.func_accepts: dict[str, tuple[str, Any]] = {}
+        params = inspect.signature(cast(Callable, func or afunc)).parameters
 
-            self.func_accepts_config = "config" in params
-            # Mapping from kwarg name to (config key, default value) to be used.
-            # The default value is used if the config key is not found in the config.
-            self.func_accepts = {}
+        for kw, typ, runtime_key, default in KWARGS_CONFIG_KEYS:
+            p = params.get(kw)
 
-            for kw, typ, config_key, default in KWARGS_CONFIG_KEYS:
-                p = params.get(kw)
+            if p is None or p.kind not in VALID_KINDS:
+                # If parameter is not found or is not a valid kind, skip
+                continue
 
-                if p is None or p.kind not in VALID_KINDS:
-                    # If parameter is not found or is not a valid kind, skip
-                    continue
+            if typ != (ANY_TYPE,) and p.annotation not in typ:
+                # A specific type is required, but the function annotation does
+                # not match the expected type.
+                continue
 
-                if typ != (ANY_TYPE,) and p.annotation not in typ:
-                    # A specific type is required, but the function annotation does
-                    # not match the expected type.
-                    continue
-
-                # If the kwarg is accepted by the function, store the default value
-                self.func_accepts[kw] = (config_key, default)
+            # If the kwarg is accepted by the function, store the key / runtime attribute to inject
+            self.func_accepts[kw] = (runtime_key, default)
 
     def __repr__(self) -> str:
         repr_args = {
@@ -328,25 +327,33 @@ class RunnableCallable(Runnable):
         else:
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
-        if self.func_accepts_config:
-            kwargs["config"] = config
-        _conf = config[CONF]
 
-        for kw, (config_key, default_value) in self.func_accepts.items():
+        runtime = config[CONF].get(CONFIG_KEY_RUNTIME)
+
+        for kw, (runtime_key, default) in self.func_accepts.items():
             # If the kwarg is already set, use the set value
             if kw in kwargs:
                 continue
 
-            if (
-                # If the kwarg is requested, but isn't in the config AND has no
-                # default value, raise an error
-                config_key not in _conf and default_value is inspect.Parameter.empty
-            ):
-                raise ValueError(
-                    f"Missing required config key '{config_key}' for '{self.name}'."
-                )
+            kw_value: Any = MISSING
+            if kw == "config":
+                kw_value = config
+            elif runtime:
+                if kw == "runtime":
+                    kw_value = runtime
+                else:
+                    try:
+                        kw_value = getattr(runtime, runtime_key)
+                    except AttributeError:
+                        pass
 
-            kwargs[kw] = _conf.get(config_key, default_value)
+            if kw_value is MISSING:
+                if default is inspect.Parameter.empty:
+                    raise ValueError(
+                        f"Missing required config key '{runtime_key}' for '{self.name}'."
+                    )
+                kw_value = default
+            kwargs[kw] = kw_value
 
         if self.trace:
             callback_manager = get_callback_manager_for_config(config, self.tags)
@@ -392,23 +399,33 @@ class RunnableCallable(Runnable):
         else:
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
-        if self.func_accepts_config:
-            kwargs["config"] = config
-        _conf = config[CONF]
-        for kw, (config_key, default_value) in self.func_accepts.items():
+
+        runtime = config[CONF].get(CONFIG_KEY_RUNTIME)
+
+        for kw, (runtime_key, default) in self.func_accepts.items():
             # If the kwarg has already been set, use the set value
             if kw in kwargs:
                 continue
 
-            if (
-                # If the kwarg is requested, but isn't in the config AND has no
-                # default value, raise an error
-                config_key not in _conf and default_value is inspect.Parameter.empty
-            ):
-                raise ValueError(
-                    f"Missing required config key '{config_key}' for '{self.name}'."
-                )
-            kwargs[kw] = _conf.get(config_key, default_value)
+            kw_value: Any = MISSING
+            if kw == "config":
+                kw_value = config
+            elif runtime:
+                if kw == "runtime":
+                    kw_value = runtime
+                else:
+                    try:
+                        kw_value = getattr(runtime, runtime_key)
+                    except AttributeError:
+                        pass
+            if kw_value is MISSING:
+                if default is inspect.Parameter.empty:
+                    raise ValueError(
+                        f"Missing required config key '{runtime_key}' for '{self.name}'."
+                    )
+                kw_value = default
+            kwargs[kw] = kw_value
+
         if self.trace:
             callback_manager = get_async_callback_manager_for_config(config, self.tags)
             run_manager = await callback_manager.on_chain_start(

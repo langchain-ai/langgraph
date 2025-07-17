@@ -4,9 +4,10 @@ from typing import Any, Optional
 
 import pytest
 
+from langgraph._internal._runnable import RunnableCallable
+from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
-from langgraph.utils.runnable import RunnableCallable
 
 pytestmark = pytest.mark.anyio
 
@@ -90,7 +91,22 @@ def test_runnable_callable_injectable_arguments() -> None:
         assert store is None
         return "success"
 
-    assert RunnableCallable(func_optional_store).invoke({"x": "1"}) == "success"
+    assert (
+        RunnableCallable(func_optional_store).invoke(
+            {"x": "1"},
+            config={
+                "configurable": {
+                    "__pregel_runtime": Runtime(
+                        store=None,
+                        context=None,
+                        stream_writer=lambda _: None,
+                        previous=None,
+                    )
+                }
+            },
+        )
+        == "success"
+    )
 
     # Test BaseStore annotation
     def func_required_store(inputs: Any, store: BaseStore) -> str:
@@ -108,7 +124,17 @@ def test_runnable_callable_injectable_arguments() -> None:
     # Specify a value for store in the config
     assert (
         RunnableCallable(func_required_store).invoke(
-            {}, config={"configurable": {"__pregel_store": None}}
+            {},
+            config={
+                "configurable": {
+                    "__pregel_runtime": Runtime(
+                        store=None,
+                        context=None,
+                        stream_writer=lambda _: None,
+                        previous=None,
+                    )
+                }
+            },
         )
         == "success"
     )
@@ -118,7 +144,16 @@ def test_runnable_callable_injectable_arguments() -> None:
         RunnableCallable(func_optional_store).invoke(
             {"x": "1"},
             store=None,
-            config={"configurable": {"__pregel_store": "foobar"}},
+            config={
+                "configurable": {
+                    "__pregel_runtime": Runtime(
+                        store="foobar",  # type: ignore[assignment]
+                        context=None,
+                        stream_writer=lambda _: None,
+                        previous=None,
+                    )
+                }
+            },
         )
         == "success"
     )
@@ -134,7 +169,17 @@ def test_runnable_callable_injectable_arguments() -> None:
 
     assert (
         RunnableCallable(func_required_store_v2).invoke(
-            {}, config={"configurable": {"__pregel_store": "foobar"}}
+            {},
+            config={
+                "configurable": {
+                    "__pregel_runtime": Runtime(
+                        store="foobar",  # type: ignore[assignment]
+                        context=None,
+                        stream_writer=lambda _: None,
+                        previous=None,
+                    )
+                }
+            },
         )
         == "success"
     )
@@ -143,7 +188,16 @@ def test_runnable_callable_injectable_arguments() -> None:
         # And manual override takes precedence.
         {},
         store="foobar",
-        config={"configurable": {"__pregel_store": "barbar"}},
+        config={
+            "configurable": {
+                "__pregel_runtime": Runtime(
+                    store="foobar",  # type: ignore[assignment]
+                    context=None,
+                    stream_writer=lambda _: None,
+                    previous=None,
+                )
+            }
+        },
     )
 
 
@@ -192,7 +246,9 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
         assert (
             await RunnableCallable(
                 func=func_required_store, afunc=afunc_required_store
-            ).ainvoke({})
+            ).ainvoke(
+                {},
+            )
             == "success"
         )
 
@@ -200,7 +256,20 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
     assert (
         await RunnableCallable(
             func=func_required_store, afunc=afunc_required_store
-        ).ainvoke({}, store=None)
+        ).ainvoke(
+            {},
+            store=None,
+            config={
+                "configurable": {
+                    "__pregel_runtime": Runtime(
+                        store=None,
+                        context=None,
+                        stream_writer=lambda _: None,
+                        previous=None,
+                    )
+                }
+            },
+        )
         == "success"
     )
 
@@ -208,7 +277,19 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
     assert (
         await RunnableCallable(
             func=func_required_store, afunc=afunc_required_store
-        ).ainvoke({}, config={"configurable": {"__pregel_store": None}})
+        ).ainvoke(
+            {},
+            config={
+                "configurable": {
+                    "__pregel_runtime": Runtime(
+                        store=None,
+                        context=None,
+                        stream_writer=lambda _: None,
+                        previous=None,
+                    )
+                }
+            },
+        )
         == "success"
     )
 
@@ -219,7 +300,16 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
         ).ainvoke(
             {"x": "1"},
             store=None,
-            config={"configurable": {"__pregel_store": "foobar"}},
+            config={
+                "configurable": {
+                    "__pregel_runtime": Runtime(
+                        store="foobar",
+                        context=None,
+                        stream_writer=lambda _: None,
+                        previous=None,
+                    )
+                }
+            },
         )
         == "success"
     )
@@ -244,7 +334,19 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
     assert (
         await RunnableCallable(
             func=func_required_store_v2, afunc=afunc_required_store_v2
-        ).ainvoke({}, config={"configurable": {"__pregel_store": "foobar"}})
+        ).ainvoke(
+            {},
+            config={
+                "configurable": {
+                    "__pregel_runtime": Runtime(
+                        store="foobar",
+                        context=None,
+                        stream_writer=lambda _: None,
+                        previous=None,
+                    )
+                }
+            },
+        )
         == "success"
     )
 
@@ -255,7 +357,16 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
             # And manual override takes precedence.
             {},
             store="foobar",
-            config={"configurable": {"__pregel_store": "barbar"}},
+            config={
+                "configurable": {
+                    "__pregel_runtime": Runtime(
+                        store="foobar",
+                        context=None,
+                        stream_writer=lambda _: None,
+                        previous=None,
+                    )
+                }
+            },
         )
         == "success"
     )

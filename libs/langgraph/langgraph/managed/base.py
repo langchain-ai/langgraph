@@ -8,10 +8,12 @@ from typing import (
 
 from typing_extensions import TypeGuard
 
-from langgraph.types import PregelScratchpad
+from langgraph.pregel._scratchpad import PregelScratchpad
 
 V = TypeVar("V")
 U = TypeVar("U")
+
+__all__ = ("ManagedValueSpec", "ManagedValueMapping")
 
 
 class ManagedValue(ABC, Generic[V]):

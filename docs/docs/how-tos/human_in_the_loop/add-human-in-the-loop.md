@@ -54,13 +54,7 @@ graph = graph_builder.compile(checkpointer=checkpointer) # (4)!
 config = {"configurable": {"thread_id": "some_id"}}
 result = graph.invoke({"some_text": "original text"}, config=config) # (5)!
 print(result['__interrupt__']) # (6)!
-# > [
-# >    Interrupt(
-# >       value={'text_to_revise': 'original text'}, 
-# >       resumable=True,
-# >       ns=['human_node:6ce9e64f-edef-fe5d-f7dc-511fa9526960']
-# >    )
-# > ] 
+# > [Interrupt(value={'text_to_revise': 'original text'}, id='a0d9dd40440ac7be2720dc5c20858627')]
 
 # highlight-next-line
 print(graph.invoke(Command(resume="Edited text"), config=config)) # (7)!
@@ -80,25 +74,27 @@ print(graph.invoke(Command(resume="Edited text"), config=config)) # (7)!
     ```python
     from typing import TypedDict
     import uuid
-
     from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.constants import START
     from langgraph.graph import StateGraph
+
     # highlight-next-line
     from langgraph.types import interrupt, Command
+
 
     class State(TypedDict):
         some_text: str
 
+
     def human_node(state: State):
         # highlight-next-line
-        value = interrupt( # (1)!
+        value = interrupt(  # (1)!
             {
-                "text_to_revise": state["some_text"] # (2)!
+                "text_to_revise": state["some_text"]  # (2)!
             }
         )
         return {
-            "some_text": value # (3)!
+            "some_text": value  # (3)!
         }
 
 
@@ -106,25 +102,15 @@ print(graph.invoke(Command(resume="Edited text"), config=config)) # (7)!
     graph_builder = StateGraph(State)
     graph_builder.add_node("human_node", human_node)
     graph_builder.add_edge(START, "human_node")
-
-    checkpointer = InMemorySaver() # (4)!
-
+    checkpointer = InMemorySaver()  # (4)!
     graph = graph_builder.compile(checkpointer=checkpointer)
-
     # Pass a thread ID to the graph to run it.
     config = {"configurable": {"thread_id": uuid.uuid4()}}
-
     # Run the graph until the interrupt is hit.
-    result = graph.invoke({"some_text": "original text"}, config=config) # (5)!
+    result = graph.invoke({"some_text": "original text"}, config=config)  # (5)!
 
-    print(result['__interrupt__']) # (6)!
-    # > [
-    # >    Interrupt(
-    # >       value={'text_to_revise': 'original text'}, 
-    # >       resumable=True,
-    # >       ns=['human_node:6ce9e64f-edef-fe5d-f7dc-511fa9526960']
-    # >    )
-    # > ] 
+    print(result["__interrupt__"])  # (6)!
+    # > [Interrupt(value={'text_to_revise': 'original text'}, id='6d7c4048049254c83195429a3659661d')]
 
     # highlight-next-line
     print(graph.invoke(Command(resume="Edited text"), config=config)) # (7)!
@@ -167,7 +153,7 @@ For example, once your graph has been interrupted (multiple times, theoretically
 
 ```python
 resume_map = {
-    i.interrupt_id: f"human input for prompt {i.value}"
+    i.id: f"human input for prompt {i.value}"
     for i in parent.get_state(thread_config).interrupts
 }
 
@@ -388,14 +374,15 @@ graph.invoke(
     # Output interrupt payload
     print(result["__interrupt__"])
     # Example output:
-    # Interrupt(
-    #   value={
-    #     'task': 'Please review and edit the generated summary if necessary.',
-    #     'generated_summary': 'The cat sat on the mat and looked at the stars.'
-    #   },
-    #   resumable=True,
-    #   ...
-    # )
+    # > [
+    # >     Interrupt(
+    # >         value={
+    # >             'task': 'Please review and edit the generated summary if necessary.',
+    # >             'generated_summary': 'The cat sat on the mat and looked at the stars.'
+    # >         }, 
+    # >         id='...'
+    # >     )
+    # > ]
 
     # Resume the graph with human-edited input
     edited_summary = "The cat lay on the rug, gazing peacefully at the night sky."
@@ -1032,7 +1019,7 @@ def node_in_parent_graph(state: State):
     Entered `parent_node` a total of 1 times
     Entered `node_in_subgraph` a total of 1 times
     Entered human_node in sub-graph a total of 1 times
-    {'__interrupt__': (Interrupt(value='what is your name?', resumable=True, ns=['parent_node:4c3a0248-21f0-1287-eacf-3002bc304db4', 'human_node:2fe86d52-6f70-2a3f-6b2f-b1eededd6348'], when='during'),)}
+    {'__interrupt__': (Interrupt(value='what is your name?', id='...'),)}
     --- Resuming ---
     Entered `parent_node` a total of 2 times
     Entered human_node in sub-graph a total of 2 times
@@ -1108,7 +1095,7 @@ To avoid issues, refrain from dynamically changing the node's structure between 
     ```
 
     ```pycon
-    {'__interrupt__': (Interrupt(value='what is your name?', resumable=True, ns=['human_node:3a007ef9-c30d-c357-1ec1-86a1a70d8fba'], when='during'),)}
+    {'__interrupt__': (Interrupt(value='what is your name?', id='...'),)}
     Name: N/A. Age: John
     {'human_node': {'age': 'John', 'name': 'N/A'}}
     ```

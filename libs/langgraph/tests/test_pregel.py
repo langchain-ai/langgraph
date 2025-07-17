@@ -7,7 +7,6 @@ import operator
 import threading
 import time
 import uuid
-import warnings
 from collections import Counter, deque
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -29,6 +28,7 @@ from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph.cache.base import BaseCache
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
@@ -42,28 +42,26 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_stream_writer
-from langgraph.constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL, START
-from langgraph.errors import InvalidUpdateError, ParentCommand
+from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessageGraph, MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
-    GraphRecursionError,
     NodeBuilder,
     Pregel,
-    StateSnapshot,
 )
-from langgraph.pregel.loop import SyncPregelLoop
-from langgraph.pregel.retry import RetryPolicy
-from langgraph.pregel.runner import PregelRunner
+from langgraph.pregel._loop import SyncPregelLoop
+from langgraph.pregel._runner import PregelRunner
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     CachePolicy,
     Command,
     Interrupt,
     PregelTask,
+    RetryPolicy,
     Send,
+    StateSnapshot,
     StateUpdate,
     StreamWriter,
     interrupt,
@@ -191,7 +189,7 @@ def test_checkpoint_errors() -> None:
         )
 
 
-def test_config_json_schema() -> None:
+def test_context_json_schema() -> None:
     """Test that config json schema is generated properly."""
     chain = NodeBuilder().subscribe_only("input").write_to("output")
 
@@ -211,37 +209,25 @@ def test_config_json_schema() -> None:
         },
         input_channels=["input", "ephemeral"],
         output_channels="output",
-        config_type=Foo,
+        context_schema=Foo,
     )
 
-    assert app.get_config_jsonschema() == {
-        "$defs": {
-            "Foo": {
-                "properties": {
-                    "x": {
-                        "title": "X",
-                        "type": "integer",
-                    },
-                    "y": {
-                        "default": "foo",
-                        "title": "Y",
-                        "type": "string",
-                    },
-                },
-                "required": [
-                    "x",
-                ],
-                "title": "Foo",
-                "type": "object",
-            },
-        },
+    assert app.get_context_jsonschema() == {
         "properties": {
-            "configurable": {
-                "$ref": "#/$defs/Foo",
-                "default": None,
+            "x": {
+                "title": "X",
+                "type": "integer",
+            },
+            "y": {
+                "default": "foo",
+                "title": "Y",
+                "type": "string",
             },
         },
-        "title": "LangGraphConfig",
+        "required": [
+            "x",
+        ],
+        "title": "Foo",
         "type": "object",
     }
 
@@ -424,13 +410,7 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
         "title": "LangGraphOutput",
         "type": "integer",
     }
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")  # raise warnings as errors
-        assert app.config_schema().model_json_schema() == {
-            "properties": {},
-            "title": "LangGraphConfig",
-            "type": "object",
-        }
+    assert app.get_context_jsonschema() is None
 
     assert app.invoke(2) == 3
     assert app.invoke(2, output_keys=["output"]) == {"output": 3}
@@ -1228,7 +1208,7 @@ def test_imp_task(
 ) -> None:
     mapper_calls = 0
 
-    class Configurable(TypedDict):
+    class Context(TypedDict):
         model: str
 
     @task()
@@ -1238,7 +1218,7 @@ def test_imp_task(
         time.sleep(input / 100)
         return str(input) * 2
 
-    @entrypoint(checkpointer=sync_checkpointer, config_schema=Configurable)
+    @entrypoint(checkpointer=sync_checkpointer, context_schema=Context)
     def graph(input: list[int]) -> list[str]:
         futures = [mapper(i) for i in input]
         mapped = [f.result() for f in futures]
@@ -1255,21 +1235,10 @@ def test_imp_task(
         "items": {"type": "string"},
         "title": "LangGraphOutput",
     }
-    assert graph.get_config_jsonschema() == {
-        "$defs": {
-            "Configurable": {
-                "properties": {
-                    "model": {"title": "Model", "type": "string"},
-                },
-                "required": ["model"],
-                "title": "Configurable",
-                "type": "object",
-            }
-        },
-        "properties": {
-            "configurable": {"$ref": "#/$defs/Configurable", "default": None}
-        },
-        "title": "LangGraphConfig",
+    assert graph.get_context_jsonschema() == {
+        "properties": {"model": {"title": "Model", "type": "string"}},
+        "required": ["model"],
+        "title": "Context",
         "type": "object",
     }
 
@@ -1281,9 +1250,7 @@ def test_imp_task(
             "__interrupt__": (
                 Interrupt(
                     value="question",
-                    resumable=True,
-                    ns=[AnyStr("graph:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -1350,9 +1317,7 @@ def test_imp_nested(
             "__interrupt__": (
                 Interrupt(
                     value="question",
-                    resumable=True,
-                    ns=[AnyStr("graph:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -1775,7 +1740,7 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
         "intermediate_steps",
     }
 
-    class Config(TypedDict, total=False):
+    class Context(TypedDict, total=False):
         tools: list[str]
 
     # Assemble the tools
@@ -1832,7 +1797,7 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
             return "continue"
 
     # Define a new graph
-    builder = StateGraph(AgentState, Config)
+    builder = StateGraph(AgentState, Context)
 
     builder.add_node("agent", agent)
     builder.add_node("tools", execute_tools)
@@ -1847,7 +1812,7 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
 
     app = builder.compile()
 
-    assert json.dumps(app.config_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_context_jsonschema()) == snapshot
     assert json.dumps(app.get_input_jsonschema()) == snapshot
     assert json.dumps(app.get_output_jsonschema()) == snapshot
 
@@ -3372,8 +3337,7 @@ def test_subgraph_checkpoint_true_interrupt(
         "__interrupt__": [
             Interrupt(
                 value="Provide baz value",
-                resumable=True,
-                ns=[AnyStr("node_2"), AnyStr("subgraph_node_1:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -4901,9 +4865,7 @@ def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value={"value": 1},
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -4919,9 +4881,7 @@ def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value={"value": 2},
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -4969,9 +4929,7 @@ def test_interrupt_loop(sync_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value="How old are you?",
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -4988,9 +4946,7 @@ def test_interrupt_loop(sync_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value="invalid response",
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -5007,9 +4963,7 @@ def test_interrupt_loop(sync_checkpointer: BaseCheckpointSaver):
             "__interrupt__": (
                 Interrupt(
                     value="invalid response",
-                    resumable=True,
-                    ns=[AnyStr("node:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -5045,8 +4999,7 @@ def test_interrupt_functional(
         "__interrupt__": [
             Interrupt(
                 value="Provide value for bar:",
-                resumable=True,
-                ns=[AnyStr("graph:")],
+                id=AnyStr(),
             )
         ]
     }
@@ -5079,8 +5032,7 @@ def test_interrupt_task_functional(
         "__interrupt__": [
             Interrupt(
                 value="Provide value for bar:",
-                resumable=True,
-                ns=[AnyStr("graph:"), AnyStr("bar:")],
+                id=AnyStr(),
             ),
         ]
     }
@@ -5103,8 +5055,7 @@ def test_interrupt_task_functional(
         "__interrupt__": [
             Interrupt(
                 value="Provide value for bar:",
-                resumable=True,
-                ns=[AnyStr("graph:"), AnyStr("bar:")],
+                id=AnyStr(),
             ),
         ]
     }
@@ -5629,12 +5580,8 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 "id": AnyStr(),
                 "interrupts": [
                     {
-                        "ns": [
-                            AnyStr(),
-                        ],
-                        "resumable": True,
+                        "id": AnyStr(),
                         "value": "test",
-                        "when": "during",
                     },
                 ],
                 "name": "graph",
@@ -5677,12 +5624,8 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                         "id": AnyStr(),
                         "interrupts": (
                             {
-                                "ns": [
-                                    AnyStr(),
-                                ],
-                                "resumable": True,
+                                "id": AnyStr(),
                                 "value": "test",
-                                "when": "during",
                             },
                         ),
                         "name": "graph",
@@ -5902,9 +5845,7 @@ def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> No
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 1",
-                    resumable=True,
-                    ns=[AnyStr("node_1:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -5918,9 +5859,7 @@ def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> No
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 2",
-                    resumable=True,
-                    ns=[AnyStr("node_2:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -5951,9 +5890,7 @@ def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> No
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 1",
-                    resumable=True,
-                    ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_1:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         },
@@ -5965,9 +5902,7 @@ def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> No
             "__interrupt__": (
                 Interrupt(
                     value="interrupt node 2",
-                    resumable=True,
-                    ns=[AnyStr("invoke_sub_agent:"), AnyStr("node_2:")],
-                    when="during",
+                    id=AnyStr(),
                 ),
             )
         }
@@ -6046,7 +5981,7 @@ def test_multi_resume(sync_checkpointer: BaseCheckpointSaver) -> None:
     assert interrupt_values == set(prompts)
 
     resume_map: dict[str, str] = {
-        i.interrupt_id: f"human input for prompt {i.value}"
+        i.id: f"human input for prompt {i.value}"
         for i in parent_graph.get_state(thread_config).interrupts
     }
 
@@ -7124,8 +7059,7 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
         "__interrupt__": [
             Interrupt(
                 value="Provide value",
-                resumable=True,
-                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -7135,8 +7069,7 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
         "__interrupt__": [
             Interrupt(
                 value="Provide value",
-                resumable=True,
-                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -7166,8 +7099,7 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
         "__interrupt__": [
             Interrupt(
                 value="Provide value",
-                resumable=True,
-                ns=[AnyStr("call_subgraph"), AnyStr("subnode_2:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -7313,7 +7245,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
                 # assume that it breaks here, because it is an interrupt
 
         # get human input and resume
-        if any(i.resumable for i in current_interrupts):
+        if len(current_interrupts) > 0:
             current_input = Command(resume=f"Resume #{invokes}")
 
         # not more human input required, must be completed
@@ -7330,11 +7262,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
             "__interrupt__": (
                 Interrupt(
                     value="a",
-                    resumable=True,
-                    ns=[
-                        AnyStr("child_graph:"),
-                        AnyStr("get_human_input:"),
-                    ],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -7342,11 +7270,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
             "__interrupt__": (
                 Interrupt(
                     value="b",
-                    resumable=True,
-                    ns=[
-                        AnyStr("child_graph:"),
-                        AnyStr("get_human_input:"),
-                    ],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -7357,11 +7281,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
                 "__interrupt__": (
                     Interrupt(
                         value="a",
-                        resumable=True,
-                        ns=[
-                            AnyStr("child_graph:"),
-                            AnyStr("get_human_input:"),
-                        ],
+                        id=AnyStr(),
                     ),
                 )
             },
@@ -7372,11 +7292,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
                 "__interrupt__": (
                     Interrupt(
                         value="b",
-                        resumable=True,
-                        ns=[
-                            AnyStr("child_graph:"),
-                            AnyStr("get_human_input:"),
-                        ],
+                        id=AnyStr(),
                     ),
                 )
             },
@@ -7490,7 +7406,7 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
                 # assume that it breaks here, because it is an interrupt
 
         # get human input and resume
-        if any(i.resumable for i in current_interrupts):
+        if len(current_interrupts) > 0:
             current_input = Command(resume=f"Resume #{invokes}")
 
         # not more human input required, must be completed
