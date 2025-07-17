@@ -553,7 +553,7 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.1.7" },
     { name = "langgraph-api", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.2.67,<0.3.0" },
-    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.3.4,<0.4.0" },
+    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.3.4,<0.7.0" },
     { name = "langgraph-sdk", marker = "python_full_version >= '3.11'", specifier = ">=0.1.0" },
     { name = "python-dotenv", marker = "extra == 'inmem'", specifier = ">=0.8.0" },
 ]
