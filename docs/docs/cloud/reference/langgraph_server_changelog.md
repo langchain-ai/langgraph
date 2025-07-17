@@ -4,6 +4,10 @@
 
 ---
 
+## v0.2.95 (2025-07-17)
+- Avoided setting the future if it is already done to prevent redundant operations.
+- Resolved compatibility errors in CI by switching from `typing.TypedDict` to `typing_extensions.TypedDict` for Python versions below 3.12.
+
 ## v0.2.94 (2025-07-16)
 - Improved performance by omitting pending sends for langgraph versions 0.5 and above.
 - Improved server startup logs to provide clearer warnings when the DD_API_KEY environment variable is set.
