@@ -521,7 +521,6 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         raise NotImplementedError(_AIO_ERROR_MSG)
         yield
 
-
     async def aput(
         self,
         config: RunnableConfig,
