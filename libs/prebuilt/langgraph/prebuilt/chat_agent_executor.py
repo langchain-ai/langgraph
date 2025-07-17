@@ -39,7 +39,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import IsLastStep, RemainingSteps
-from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.prebuilt.tool_node import ToolNode, _ToolCallWithContext
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
 from langgraph.utils.runnable import RunnableCallable, RunnableLike
@@ -650,11 +650,17 @@ def create_react_agent(
             elif version == "v2":
                 if post_model_hook is not None:
                     return "post_model_hook"
-                tool_calls = [
-                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
-                    for call in last_message.tool_calls
+                return [
+                    Send(
+                        "tools",
+                        _ToolCallWithContext(
+                            type="__tool_call_with_context",
+                            tool_call=tool_call,
+                            state=state,
+                        ),
+                    )
+                    for tool_call in last_message.tool_calls
                 ]
-                return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
     workflow = StateGraph(state_schema or AgentState, config_schema=config_schema)
@@ -733,11 +739,17 @@ def create_react_agent(
             ]
 
             if pending_tool_calls:
-                pending_tool_calls = [
-                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
-                    for call in pending_tool_calls
+                return [
+                    Send(
+                        "tools",
+                        _ToolCallWithContext(
+                            type="__tool_call_with_context",
+                            tool_call=tool_call,
+                            state=state,
+                        ),
+                    )
+                    for tool_call in pending_tool_calls
                 ]
-                return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
             elif isinstance(messages[-1], ToolMessage):
                 return entrypoint
             elif response_format is not None:

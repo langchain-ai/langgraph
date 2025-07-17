@@ -44,6 +44,7 @@ from typing import (
     Sequence,
     Tuple,
     Type,
+    TypedDict,
     Union,
     cast,
     get_type_hints,
@@ -79,6 +80,29 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
 )
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
+
+
+class _ToolCallWithContext(TypedDict):
+    """ToolCall with additional context for graph state.
+
+    This is an internal data-structure meant to help the ToolNode accept
+    tools calls with additional context (e.g. state) when dispatched using the
+    `Send` API.
+
+    The Send API is used in create_react_agent to be able to distribute the tool
+    calls in parallel and support human-in-the-loop workflows where graph execution
+    may be paused for an indefinite time.
+    """
+
+    tool_call: ToolCall
+    type: Literal["__tool_call_with_context"]
+    """Type to parameterize the payload.
+    
+    Using "__" as a prefix to be defensive against potential name collisions with
+    regular user state.
+    """
+    state: Any
+    """The state is provided as additional context."""
 
 
 def msg_content_output(output: Any) -> Union[str, list[dict]]:
@@ -358,7 +382,8 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input)
+        tool_calls = [self.inject_tool_args(call, input, store) for call in tool_calls]
         config_list = get_config_list(config, len(tool_calls))
         input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
@@ -379,7 +404,8 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input)
+        tool_calls = [self.inject_tool_args(call, input, store) for call in tool_calls]
         outputs = await asyncio.gather(
             *(self._arun_one(call, input_type, config) for call in tool_calls)
         )
@@ -436,18 +462,22 @@ class ToolNode(RunnableCallable):
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
     ) -> ToolMessage:
+        """Run a single tool call synchronously."""
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
-
         try:
-            input = {**call, **{"type": "tool_call"}}
-            response = self.tools_by_name[call["name"]].invoke(input, config)
+            if call["type"] == "tool_call":
+                call_args = call
+            else:
+                call_args = {**call, **{"type": "tool_call"}}
+            response = self.tools_by_name[call["name"]].invoke(call_args, config)
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios:
         # (1) a NodeInterrupt is raised inside a tool
         # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
-        # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
+        # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph
+        #     called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         except GraphBubbleUp as e:
             raise e
@@ -488,9 +518,10 @@ class ToolNode(RunnableCallable):
     async def _arun_one(
         self,
         call: ToolCall,
-        input_type: Literal["list", "dict", "tool_calls"],
+        input_type: Literal["list", "dict", "tool_calls", "tool_call_with_context"],
         config: RunnableConfig,
     ) -> ToolMessage:
+        """Run a single tool call asynchronously."""
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
@@ -548,16 +579,24 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
-        store: Optional[BaseStore],
-    ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
+    ) -> Tuple[
+        list[ToolCall], Literal["list", "dict", "tool_calls", "tool_call_with_context"]
+    ]:
+        input_type: Literal["list", "dict", "tool_calls", "tool_call_with_context"]
         if isinstance(input, list):
             if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
                 input_type = "tool_calls"
-                tool_calls = input
+                tool_calls = cast(list[ToolCall], input)
                 return tool_calls, input_type
             else:
                 input_type = "list"
                 messages = input
+        elif (
+            isinstance(input, dict) and input.get("type") == "__tool_call_with_context"
+        ):
+            input = cast(_ToolCallWithContext, input)
+            input_type = "tool_call_with_context"
+            return [input["tool_call"]], input_type
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
             input_type = "dict"
         elif messages := getattr(input, self.messages_key, []):
@@ -573,10 +612,7 @@ class ToolNode(RunnableCallable):
         except StopIteration:
             raise ValueError("No AIMessage found in input")
 
-        tool_calls = [
-            self.inject_tool_args(call, input, store)
-            for call in latest_ai_message.tool_calls
-        ]
+        tool_calls = [call for call in latest_ai_message.tool_calls]
         return tool_calls, input_type
 
     def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
@@ -618,15 +654,20 @@ class ToolNode(RunnableCallable):
                     required_fields_str = ", ".join(f for f in required_fields if f)
                     err_msg += f" State should contain fields {required_fields_str}."
                 raise ValueError(err_msg)
-        if isinstance(input, dict):
+
+        if isinstance(input, dict) and input.get("type") == "__tool_call_with_context":
+            state = input["state"]
+        else:
+            state = input
+
+        if isinstance(state, dict):
             tool_state_args = {
-                tool_arg: input[state_field] if state_field else input
+                tool_arg: state[state_field] if state_field else state
                 for tool_arg, state_field in state_args.items()
             }
-
         else:
             tool_state_args = {
-                tool_arg: getattr(input, state_field) if state_field else input
+                tool_arg: getattr(state, state_field) if state_field else state
                 for tool_arg, state_field in state_args.items()
             }
 

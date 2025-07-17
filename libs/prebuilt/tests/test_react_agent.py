@@ -4,7 +4,9 @@ import json
 from functools import partial
 from typing import (
     Annotated,
+    Any,
     List,
+    Literal,
     Optional,
     Type,
     TypeVar,
@@ -781,8 +783,9 @@ class AgentStateExtraKeyPydantic(AgentStatePydantic):
     "state_schema", [AgentStateExtraKey, AgentStateExtraKeyPydantic]
 )
 def test_create_react_agent_inject_vars(
-    version: str, state_schema: StateSchemaType
+    version: Literal["v1", "v2"], state_schema: StateSchemaType
 ) -> None:
+    """Test that the agent can inject state and store into tool functions."""
     store = InMemoryStore()
     namespace = ("test",)
     store.put(namespace, "test_key", {"bar": 3})
@@ -817,15 +820,14 @@ def test_create_react_agent_inject_vars(
     model = FakeToolCallingModel(tool_calls=[[tool_call], []])
     agent = create_react_agent(
         model,
-        [tool1],
+        ToolNode([tool1], handle_tool_errors=False),
         state_schema=state_schema,
         store=store,
         version=version,
     )
-    input_message = HumanMessage("hi")
-    result = agent.invoke({"messages": [input_message], "foo": 2})
+    result = agent.invoke({"messages": [{"role": "user", "content": "hi"}], "foo": 2})
     assert result["messages"] == [
-        input_message,
+        _AnyIdHumanMessage(content="hi"),
         AIMessage(content="hi", tool_calls=[tool_call], id="0"),
         _AnyIdToolMessage(content="6", name="tool1", tool_call_id="some 0"),
         AIMessage("hi-hi-6", id="1"),
@@ -1580,13 +1582,14 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         "type": "tool_call",
     }
 
-    def post_model_hook(state: dict) -> None:
-        return
+    def post_model_hook(state: dict) -> dict:
+        """Post model hook is injecting a new foo key."""
+        return {"foo": 2}
 
     model = FakeToolCallingModel(tool_calls=[[tool_call], []])
     agent = create_react_agent(
         model,
-        [tool1],
+        ToolNode([tool1], handle_tool_errors=False),
         state_schema=state_schema,
         store=store,
         post_model_hook=post_model_hook,
