@@ -1566,9 +1566,9 @@ class State(TypedDict):
 
 def node_a(state: State) -> Command[Literal["node_b", "node_c"]]:
     print("Called A")
-    value = random.choice(["a", "b"])
+    value = random.choice(["b", "c"])
     # this is a replacement for a conditional edge function
-    if value == "a":
+    if value == "b":
         goto = "node_b"
     else:
         goto = "node_c"
