@@ -23,6 +23,8 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
 
         kubectl get storageclass
 
+1. Egress to `https://beacon.langchain.com` from your network. This is required for license verification and usage reporting if not running in air-gapped mode. See the [Egress documentation](../../cloud/deployment/egress.md) for more details.
+
 ## Setup
 
 1. As part of configuring your Self-Hosted LangSmith instance, you enable the `langgraphPlatform` option. This will provision a few key resources.
