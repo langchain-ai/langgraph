@@ -328,14 +328,15 @@ Output of graph invocation: {'a': 'set by node_3'}
 
 A [StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs.md#langgraph.graph.StateGraph) accepts a `state_schema` argument on initialization that specifies the "shape" of the state that the nodes in the graph can access and update.
 
-In our examples, we typically use a python-native `TypedDict` for `state_schema`, but `state_schema` can be any [type](https://docs.python.org/3/library/stdtypes.html#type-objects).
+In our examples, we typically use a python-native `TypedDict` or [`dataclass`](https://docs.python.org/3/library/dataclasses.html) for `state_schema`, but `state_schema` can be any [type](https://docs.python.org/3/library/stdtypes.html#type-objects).
 
-Here, we'll see how a [Pydantic BaseModel](https://docs.pydantic.dev/latest/api/base_model/). can be used for `state_schema` to add run time validation on **inputs**.
+Here, we'll see how a [Pydantic BaseModel](https://docs.pydantic.dev/latest/api/base_model/) can be used for `state_schema` to add run-time validation on **inputs**.
 
 !!! note "Known Limitations"
     - Currently, the output of the graph will **NOT** be an instance of a pydantic model.
     - Run-time validation only occurs on inputs into nodes, not on the outputs.
     - The validation error trace from pydantic does not show which node the error arises in.
+    - Pydantic's recursive validation can be slow. For performance-sensitive applications, you may want to consider using a `dataclass` instead.
 
 ```python
 from langgraph.graph import StateGraph, START, END
@@ -1149,7 +1150,8 @@ Adding "C" to ['A']
 LangGraph supports map-reduce and other advanced branching patterns using the Send API. Here is an example of how to use it:
 
 ```python
-from langgraph.graph import StateGraph, START, END, Send
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import Send
 from typing_extensions import TypedDict
 
 class OverallState(TypedDict):
@@ -1193,7 +1195,7 @@ from IPython.display import Image, display
 display(Image(graph.get_graph().draw_mermaid_png()))
 ```
 
-![Map-reduce graph with fanout](assets/graph_api_image_2.png)
+![Map-reduce graph with fanout](assets/graph_api_image_6.png)
 
 ```python
 # Call the graph: here we call it to generate a list of jokes
@@ -1445,7 +1447,7 @@ Recursion Error
     display(Image(graph.get_graph().draw_mermaid_png()))
     ```
 
-    ![Complex loop graph with branches](assets/graph_api_image_4.png)
+    ![Complex loop graph with branches](assets/graph_api_image_8.png)
 
     This graph looks complex, but can be conceptualized as loop of [supersteps](../concepts/low_level.md#graphs):
 
