@@ -149,45 +149,51 @@ graph.invoke({"user_input":"My"})
 
 :::js
 ```typescript
-import { z } from "zod";
+import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
 
-const InputState = z.object({
-  userInput: z.string(),
+// Note: In JavaScript, all state channels must be defined upfront
+const GraphStateAnnotation = Annotation.Root({
+  // Input state
+  userInput: Annotation<string>({
+    reducer: (x, y) => y ?? x,
+    default: () => "",
+  }),
+  // Overall state
+  foo: Annotation<string>({
+    reducer: (x, y) => y ?? x,
+    default: () => "",
+  }),
+  // Private state - must be defined here, unlike Python
+  bar: Annotation<string>({
+    reducer: (x, y) => y ?? x,
+    default: () => "",
+  }),
+  // Output state
+  graphOutput: Annotation<string>({
+    reducer: (x, y) => y ?? x,
+    default: () => "",
+  }),
 });
 
-const OutputState = z.object({
-  graphOutput: z.string(),
-});
+type GraphState = typeof GraphStateAnnotation.State;
 
-const OverallState = z.object({
-  foo: z.string(),
-  userInput: z.string(),
-  graphOutput: z.string(),
-});
-
-const PrivateState = z.object({
-  bar: z.string(),
-});
-
-const node1 = (state: z.infer<typeof InputState>): Partial<z.infer<typeof OverallState>> => {
+const node1 = (state: GraphState): Partial<GraphState> => {
   // Write to OverallState
   return { foo: state.userInput + " name" };
 };
 
-const node2 = (state: z.infer<typeof OverallState>): Partial<z.infer<typeof PrivateState>> => {
+const node2 = (state: GraphState): Partial<GraphState> => {
   // Read from OverallState, write to PrivateState
   return { bar: state.foo + " is" };
 };
 
-const node3 = (state: z.infer<typeof PrivateState>): Partial<z.infer<typeof OutputState>> => {
+const node3 = (state: GraphState): Partial<GraphState> => {
   // Read from PrivateState, write to OutputState
   return { graphOutput: state.bar + " Lance" };
 };
 
 const graph = new StateGraph({
-  state: OverallState,
-  input: InputState,
-  output: OutputState,
+  stateSchema: GraphStateAnnotation,
 })
   .addNode("node1", node1)
   .addNode("node2", node2)
@@ -199,7 +205,7 @@ const graph = new StateGraph({
   .compile();
 
 await graph.invoke({ userInput: "My" });
-// { graphOutput: 'My name is Lance' }
+// { userInput: 'My', foo: 'My name', bar: 'My name is', graphOutput: 'My name is Lance' }
 ```
 :::
 
@@ -212,9 +218,11 @@ There are two subtle and important points to note here:
 :::
 
 :::js
-1. We pass `state: z.infer<typeof InputState>` as the input schema to `node1`. But, we write out to `foo`, a channel in `OverallState`. How can we write out to a state channel that is not included in the input schema? This is because a node _can write to any state channel in the graph state._ The graph state is the union of the state channels defined at initialization, which includes `OverallState` and the filters `InputState` and `OutputState`.
+1. In JavaScript, **all state channels must be defined upfront** in the `GraphStateAnnotation`. Unlike Python, JavaScript nodes cannot dynamically write to new state channels that weren't registered during graph initialization. This is why we define all channels (`userInput`, `foo`, `bar`, `graphOutput`) in the `Annotation.Root` declaration.
 
-2. We initialize the graph with `new StateGraph({ state: OverallState, input: InputState, output: OutputState })`. So, how can we write to `PrivateState` in `node2`? How does the graph gain access to this schema if it was not passed in the `StateGraph` initialization? We can do this because _nodes can also declare additional state channels_ as long as the state schema definition exists. In this case, the `PrivateState` schema is defined, so we can add `bar` as a new state channel in the graph and write to it.
+2. We initialize the graph with `new StateGraph({ stateSchema: GraphStateAnnotation })`. All nodes receive and can write to the complete state, but they should only write to the channels they're responsible for. The type system (`GraphState`) ensures type safety across all node operations.
+
+Note: This is a key difference from the Python implementation, where nodes can write to state channels that weren't initially passed to `StateGraph`. In JavaScript, the state schema is fixed at compile time for type safety.
 :::
 
 ### Reducers
