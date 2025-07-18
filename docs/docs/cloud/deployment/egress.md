@@ -57,7 +57,7 @@ In an effort to maximize transparency, we provide sample payloads here:
 
 ```json
 "Headers": {
-        X-Api-Key: <YOUR_API_KEY>
+  X-Api-Key: <YOUR_API_KEY>
 }
 ```
 
