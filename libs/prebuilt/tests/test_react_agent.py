@@ -5,6 +5,7 @@ from functools import partial
 from typing import (
     Annotated,
     List,
+    Literal,
     Optional,
     Type,
     TypeVar,
@@ -40,7 +41,7 @@ from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
     AgentStatePydantic,
     StateSchemaType,
-    _get_model,
+    _get_underlying_model,
     _should_bind_tools,
     _validate_chat_history,
 )
@@ -470,7 +471,7 @@ def test__infer_handled_types() -> None:
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_react_agent_with_structured_response(version: str) -> None:
+def test_react_agent_with_structured_response(version: Literal["v1", "v2"]) -> None:
     class WeatherResponse(BaseModel):
         temperature: float = Field(description="The temperature in fahrenheit")
 
@@ -1346,7 +1347,7 @@ def test_should_bind_tools(tool_style: str) -> None:
 
 def test_get_model() -> None:
     model = FakeToolCallingModel(tool_calls=[])
-    assert _get_model(model) == model
+    assert _get_underlying_model(model) == model
 
     @dec_tool
     def some_tool(some_val: int) -> str:
@@ -1354,18 +1355,18 @@ def test_get_model() -> None:
         return "meow"
 
     model_with_tools = model.bind_tools([some_tool])
-    assert _get_model(model_with_tools) == model
+    assert _get_underlying_model(model_with_tools) == model
 
     seq = model | RunnableLambda(lambda message: message)
-    assert _get_model(seq) == model
+    assert _get_underlying_model(seq) == model
 
     seq_with_tools = model.bind_tools([some_tool]) | RunnableLambda(
         lambda message: message
     )
-    assert _get_model(seq_with_tools) == model
+    assert _get_underlying_model(seq_with_tools) == model
 
     with pytest.raises(TypeError):
-        _get_model(RunnableLambda(lambda message: message))
+        _get_underlying_model(RunnableLambda(lambda message: message))
 
 
 def test_pre_model_hook() -> None:
