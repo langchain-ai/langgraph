@@ -363,3 +363,31 @@ def test_push_messages_in_graph():
             messages.append(message)
 
     assert values["messages"] == messages
+
+
+def test_stream_usage_metadata_preserved():
+    class MessagesState(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    usage_metadata = {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+    ai_msg = AIMessage(content="Test", id="1", usage_metadata=usage_metadata)
+    human_msg = HumanMessage(content="Hello", id="2")
+
+    def chat(_: MessagesState) -> MessagesState:
+        return {"messages": [human_msg, ai_msg]}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node(chat)
+    builder.add_edge(START, "chat")
+    graph = builder.compile()
+
+    found = False
+    for event, chunk in graph.stream({"messages": []}, stream_mode=["values", "messages"]):
+        if event == "messages":
+            message, _ = chunk
+            if getattr(message, "id", None) == "1":
+                additional_kwargs = getattr(message, "additional_kwargs", {})
+                assert "usage_metadata" in additional_kwargs, f"usage_metadata missing in additional_kwargs: {additional_kwargs}"
+                assert additional_kwargs["usage_metadata"] == usage_metadata
+                found = True
+    assert found, "Did not find AIMessage with usage_metadata in stream"
