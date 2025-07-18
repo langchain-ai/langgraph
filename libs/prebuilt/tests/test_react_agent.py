@@ -1581,7 +1581,7 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
     }
 
     def post_model_hook(state: dict) -> None:
-        return
+        pass
 
     model = FakeToolCallingModel(tool_calls=[[tool_call], []])
     agent = create_react_agent(
@@ -1600,3 +1600,36 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
+
+def test_pydantic_prompt_and_state() -> None:
+    from langchain_core.prompts import ChatPromptTemplate
+
+    from langgraph.managed import RemainingSteps
+
+    class State(BaseModel):
+        messages: Annotated[list[AnyMessage], add_messages]
+        role: str
+        remaining_steps: RemainingSteps = 25
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "You are a helpful assistant that knows the user's role is {role}",
+            ),
+            ("placeholder", "{messages}"),
+        ]
+    )
+
+    agent = create_react_agent(
+        FakeToolCallingModel(),
+        tools=[],
+        state_schema=State,
+        prompt=prompt,
+    )
+    response = agent.invoke({"messages": [("user", "Hello!")], "role": "user"})
+    assert (
+        response["messages"][-1].content
+        == "You are a helpful assistant that knows the user's role is user-Hello!"
+    )
