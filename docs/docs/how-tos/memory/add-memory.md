@@ -994,6 +994,7 @@ agent.invoke(
 from typing_extensions import TypedDict
 
 from langgraph.config import get_store
+from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt import create_react_agent
 from langgraph.store.memory import InMemoryStore
 

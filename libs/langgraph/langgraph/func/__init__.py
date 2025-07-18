@@ -326,6 +326,8 @@ class entrypoint:
         of the previous invocation on the same thread id.
 
         ```python
+        from typing import Optional
+        
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.func import entrypoint
 
@@ -338,7 +340,7 @@ class entrypoint:
                 "thread_id": "some_thread"
             }
         }
-        my_workflow.invoke("hello")
+        my_workflow.invoke("hello", config)
         ```
 
     Example: Using entrypoint.final to save a value
@@ -348,6 +350,8 @@ class entrypoint:
         long as the same thread id is used.
 
         ```python
+        from typing import Any
+        
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.func import entrypoint
 
