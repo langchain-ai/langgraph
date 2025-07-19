@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint"
-version = "2.1.0"
+version = "2.1.1"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
 requires-python = ">=3.9"

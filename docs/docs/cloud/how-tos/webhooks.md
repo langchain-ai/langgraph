@@ -140,6 +140,22 @@ https://my-server.app/my-webhook-endpoint?token=YOUR_SECRET_TOKEN
 
 Your server should extract and validate this token before processing requests.
 
+## Disable webhooks
+
+As of `langgraph-api>=0.2.78`, developers can disable webhooks in the `langgraph.json` file:
+
+```json
+{
+  "http": {
+    "disable_webhooks": true
+  }
+}
+```
+
+This feature is primarily intended for self-hosted deployments, where platform administrators or developers may prefer to disable webhooks to simplify their security posture—especially if they are not configuring firewall rules or other network controls. Disabling webhooks helps prevent untrusted payloads from being sent to internal endpoints.
+
+For full configuration details, refer to the [configuration file reference](https://langchain-ai.github.io/langgraph/cloud/reference/cli/?h=disable_webhooks#configuration-file).
+
 ## Test webhooks
 
 You can test your webhook using online services like:

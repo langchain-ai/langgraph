@@ -10,7 +10,7 @@ search:
 There are two free options for deploying LangGraph applications via the LangGraph Server:
 
 1. [Local](../tutorials/langgraph-platform/local-server.md): Deploy for local testing and development. 
-1. [Standalone Container (Lite)](../concepts/langgraph_standalone_container.md): A limited version of Standalone Container for deployments unlikely to see more that 1 million node executions per year and that do not need crons and other enterprise features. Standalone Container (Lite) deployment option is free with a LangSmith API key.
+1. [Standalone Container (Lite)](../concepts/langgraph_standalone_container.md): A limited version of Standalone Container for deployments unlikely to see more than 1 million node executions per year and that do not need crons and other enterprise features. Standalone Container (Lite) deployment option is free with a LangSmith API key.
 
 ## Production deployment
 

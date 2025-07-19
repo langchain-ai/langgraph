@@ -343,10 +343,14 @@ async def _run(
 
                     # set the results of each operation
                     for fut, result in zip(futs, results):
-                        fut.set_result(result)
+                        # guard against future being done (e.g. cancelled)
+                        if not fut.done():
+                            fut.set_result(result)
                 except Exception as e:
                     for fut in futs:
-                        fut.set_exception(e)
+                        # guard against future being done (e.g. cancelled)
+                        if not fut.done():
+                            fut.set_exception(e)
             finally:
                 # remove strong ref to store
                 del s
