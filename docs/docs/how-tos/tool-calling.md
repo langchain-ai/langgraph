@@ -344,6 +344,8 @@ tool_node.invoke({"messages": [...]})
 
 ## Tool customization
 
+For more control over tool behavior, use the `@tool` decorator.
+
 ### Parameter descriptions
 
 Auto-generate descriptions from docstrings:

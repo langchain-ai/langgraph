@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "0.5.0"
+version = "0.5.3"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.9"
@@ -13,9 +13,9 @@ license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
     "langchain-core>=0.1",
-    "langgraph-checkpoint>=2.1.0",
-    "langgraph-sdk>=0.1.42",
-    "langgraph-prebuilt>=0.5.0",
+    "langgraph-checkpoint>=2.1.0,<3.0.0",
+    "langgraph-sdk>=0.1.42,<0.2.0",
+    "langgraph-prebuilt>=0.5.0,<0.6.0",
     "xxhash>=3.5.0",
     "pydantic>=2.7.4",
 ]
@@ -106,3 +106,7 @@ packages = ["langgraph"]
 
 [tool.pytest.ini_options]
 addopts = "--full-trace --strict-markers --strict-config --durations=5 --snapshot-warn-unused"
+
+[tool.codespell]
+# Ignore words specific to the LangGraph library code
+ignore-words-list = "infor,thead,stdio,nd,jupyter,lets,lite,uis,deque,langgraph,langchain,pydantic,typing,async,await,coroutine,iterable,iterables,serializable,deserializable,checkpointer,checkpointing,stateful,statefulness,prebuilt,prebuilt,supervisor,supervisory,swarm,swarming,multiactor,multiactors,subgraph,subgraphs,workflow,workflows,streaming,streamable,streamed,streamer,streamers,streaming,streamable,streamed,streamer,streamers"

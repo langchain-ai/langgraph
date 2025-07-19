@@ -63,7 +63,7 @@ Next, add a "`chatbot`" node. **Nodes** represent units of work and are typicall
 
 Let's first select a chat model:
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 <!---
 ```python
@@ -112,7 +112,7 @@ This tells the graph to terminate after running the chatbot node.
 ## 6. Compile the graph
 
 Before running the graph, we'll need to compile it. We can do so by calling `compile()`
-on the graph builder. This creates a `CompiledGraph` we can invoke on our state.
+on the graph builder. This creates a `CompiledStateGraph` we can invoke on our state.
 
 ```python
 graph = graph_builder.compile()

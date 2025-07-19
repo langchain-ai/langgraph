@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import Any, Generic
 
@@ -9,11 +9,12 @@ from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
 from langgraph.pregel.types import All, StateSnapshot, StateUpdate, StreamMode
+from langgraph.types import Command
 from langgraph.typing import InputT, OutputT, StateT
 
 
 # TODO: remove Runnable inheritance here!
-class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], ABC):
+class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT]):
     @abstractmethod
     def with_config(
         self, config: RunnableConfig | None = None, **kwargs: Any
@@ -98,7 +99,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], AB
     @abstractmethod
     def stream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -110,7 +111,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], AB
     @abstractmethod
     def astream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | list[StreamMode] | None = None,
@@ -122,7 +123,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], AB
     @abstractmethod
     def invoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         interrupt_before: All | Sequence[str] | None = None,
@@ -132,7 +133,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, InputT, OutputT], AB
     @abstractmethod
     async def ainvoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         interrupt_before: All | Sequence[str] | None = None,

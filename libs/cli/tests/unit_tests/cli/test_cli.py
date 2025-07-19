@@ -281,9 +281,9 @@ def test_version_option() -> None:
     assert result.exit_code == 0, "Expected exit code 0 for --version option"
 
     # Check that the output contains the correct version information
-    assert (
-        "LangGraph CLI, version" in result.output
-    ), "Expected version information in output"
+    assert "LangGraph CLI, version" in result.output, (
+        "Expected version information in output"
+    )
 
 
 def test_dockerfile_command_basic() -> None:

@@ -163,13 +163,12 @@ def test_state_schema_optional_values(total_: bool):
         expected_required = set()
         expected_optional = {"val2", "val1"}
     else:
-        expected_required = {"val1"}
-
-        expected_optional = {"val2"}
+        expected_required = {"val1", "val2"}
+        expected_optional = set()
 
     # The others should always have precedence based on the required annotation
-    expected_required |= {"val0a", "val3", "val5"}
-    expected_optional |= {"val0b", "val4", "val6"}
+    expected_required |= {"val0a", "val0b", "val3", "val5"}
+    expected_optional |= {"val4", "val6"}
 
     assert set(json_schema.get("required", set())) == expected_required
     assert (
@@ -182,11 +181,11 @@ def test_state_schema_optional_values(total_: bool):
         expected_required = set()
         expected_optional = {"out_val2", "out_val1"}
     else:
-        expected_required = {"out_val1"}
-        expected_optional = {"out_val2"}
+        expected_required = {"out_val1", "out_val2"}
+        expected_optional = set()
 
-    expected_required |= {"val0a", "out_val3", "out_val5"}
-    expected_optional |= {"val0b", "out_val4", "out_val6"}
+    expected_required |= {"val0a", "val0b", "out_val3", "out_val5"}
+    expected_optional |= {"out_val4", "out_val6"}
 
     assert set(output_schema.get("required", set())) == expected_required
     assert (

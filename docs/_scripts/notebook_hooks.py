@@ -3,6 +3,7 @@
 Lifecycle events: https://www.mkdocs.org/dev-guide/plugins/#events
 """
 
+import json
 import logging
 import os
 import posixpath
@@ -15,8 +16,8 @@ from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
 
 from _scripts.generate_api_reference_links import update_markdown_with_imports
-from _scripts.notebook_convert import convert_notebook
 from _scripts.link_map import JS_LINK_MAP
+from _scripts.notebook_convert import convert_notebook
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -34,20 +35,20 @@ REDIRECT_MAP = {
     "how-tos/streaming-from-final-node.ipynb": "how-tos/streaming-specific-nodes.ipynb",
     "how-tos/streaming-events-from-within-tools-without-langchain.ipynb": "how-tos/streaming-events-from-within-tools.ipynb#example-without-langchain",
     # graph-api
-    "how-tos/state-reducers.ipynb": "how-tos/graph-api#define-and-update-state",
-    "how-tos/sequence.ipynb": "how-tos/graph-api#create-a-sequence-of-steps",
-    "how-tos/branching.ipynb": "how-tos/graph-api#create-branches",
-    "how-tos/recursion-limit.ipynb": "how-tos/graph-api#create-and-control-loops",
-    "how-tos/visualization.ipynb": "how-tos/graph-api#visualize-your-graph",
-    "how-tos/input_output_schema.ipynb": "how-tos/graph-api#define-input-and-output-schemas",
-    "how-tos/pass_private_state.ipynb": "how-tos/graph-api#pass-private-state-between-nodes",
-    "how-tos/state-model.ipynb": "how-tos/graph-api#use-pydantic-models-for-graph-state",
-    "how-tos/map-reduce.ipynb": "how-tos/graph-api/#map-reduce-and-the-send-api",
-    "how-tos/command.ipynb": "how-tos/graph-api/#combine-control-flow-and-state-updates-with-command",
-    "how-tos/configuration.ipynb": "how-tos/graph-api/#add-runtime-configuration",
-    "how-tos/node-retries.ipynb": "how-tos/graph-api/#add-retry-policies",
-    "how-tos/return-when-recursion-limit-hits.ipynb": "how-tos/graph-api/#impose-a-recursion-limit",
-    "how-tos/async.ipynb": "how-tos/graph-api/#async",
+    "how-tos/state-reducers.ipynb": "how-tos/graph-api.md#define-and-update-state",
+    "how-tos/sequence.ipynb": "how-tos/graph-api.md#create-a-sequence-of-steps",
+    "how-tos/branching.ipynb": "how-tos/graph-api.md#create-branches",
+    "how-tos/recursion-limit.ipynb": "how-tos/graph-api.md#create-and-control-loops",
+    "how-tos/visualization.ipynb": "how-tos/graph-api.md#visualize-your-graph",
+    "how-tos/input_output_schema.ipynb": "how-tos/graph-api.md#define-input-and-output-schemas",
+    "how-tos/pass_private_state.ipynb": "how-tos/graph-api.md#pass-private-state-between-nodes",
+    "how-tos/state-model.ipynb": "how-tos/graph-api.md#use-pydantic-models-for-graph-state",
+    "how-tos/map-reduce.ipynb": "how-tos/graph-api.md#map-reduce-and-the-send-api",
+    "how-tos/command.ipynb": "how-tos/graph-api.md#combine-control-flow-and-state-updates-with-command",
+    "how-tos/configuration.ipynb": "how-tos/graph-api.md#add-runtime-configuration",
+    "how-tos/node-retries.ipynb": "how-tos/graph-api.md#add-retry-policies",
+    "how-tos/return-when-recursion-limit-hits.ipynb": "how-tos/graph-api.md#impose-a-recursion-limit",
+    "how-tos/async.ipynb": "how-tos/graph-api.md#async",
     # memory how-tos
     "how-tos/memory/manage-conversation-history.ipynb": "how-tos/memory/add-memory.md",
     "how-tos/memory/delete-messages.ipynb": "how-tos/memory/add-memory.md#delete-messages",
@@ -55,8 +56,8 @@ REDIRECT_MAP = {
     "how-tos/memory.ipynb": "how-tos/memory/add-memory.md",
     "agents/memory.ipynb": "how-tos/memory/add-memory.md",
     # subgraph how-tos
-    "how-tos/subgraph-transform-state.ipynb": "how-tos/subgraph.ipynb#different-state-schemas",
-    "how-tos/subgraphs-manage-state.ipynb": "how-tos/subgraph.ipynb#add-persistence",
+    "how-tos/subgraph-transform-state.ipynb": "how-tos/subgraph.md#different-state-schemas",
+    "how-tos/subgraphs-manage-state.ipynb": "how-tos/subgraph.md#add-persistence",
     # persistence how-tos
     "how-tos/persistence_postgres.ipynb": "how-tos/memory/add-memory.md#use-in-production",
     "how-tos/persistence_mongodb.ipynb": "how-tos/memory/add-memory.md#use-in-production",
@@ -72,10 +73,11 @@ REDIRECT_MAP = {
     "how-tos/pass-config-to-tools.ipynb": "how-tos/tool-calling.ipynb#access-config",
     "how-tos/pass-run-time-values-to-tools.ipynb": "how-tos/tool-calling.ipynb#read-state",
     "how-tos/update-state-from-tools.ipynb": "how-tos/tool-calling.ipynb#update-state",
+    "agents/tools.md": "how-tos/tool-calling.md",
     # multi-agent how-tos
-    "how-tos/agent-handoffs.ipynb": "how-tos/multi_agent.ipynb#handoffs",
-    "how-tos/multi-agent-network.ipynb": "how-tos/multi_agent.ipynb#use-in-a-multi-agent-system",
-    "how-tos/multi-agent-multi-turn-convo.ipynb": "how-tos/multi_agent.ipynb#multi-turn-conversation",
+    "how-tos/agent-handoffs.ipynb": "how-tos/multi_agent.md#handoffs",
+    "how-tos/multi-agent-network.ipynb": "how-tos/multi_agent.md#use-in-a-multi-agent-system",
+    "how-tos/multi-agent-multi-turn-convo.ipynb": "how-tos/multi_agent.md#multi-turn-conversation",
     # cloud redirects
     "cloud/index.md": "index.md",
     "cloud/how-tos/index.md": "concepts/langgraph_platform",
@@ -99,10 +101,6 @@ REDIRECT_MAP = {
     "how-tos/create-react-agent-memory.ipynb": "agents/memory.md",
     "how-tos/create-react-agent-system-prompt.ipynb": "agents/context.md#prompts",
     "how-tos/create-react-agent-structured-output.ipynb": "agents/agents.md#structured-output",
-    # Time-travel
-    "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.md",
-    # breakpoints
-    "how-tos/human_in_the_loop/dynamic_breakpoints.ipynb": "how-tos/human_in_the_loop/breakpoints.md",
     # misc
     "prebuilt.md": "agents/prebuilt.md",
     "reference/prebuilt.md": "reference/agents.md",
@@ -124,6 +122,11 @@ REDIRECT_MAP = {
     "how-tos/review-tool-calls-functional.ipynb": "how-tos/use-functional-api.md",
     "how-tos/create-react-agent-hitl.ipynb": "how-tos/human_in_the_loop/add-human-in-the-loop.md",
     "agents/human-in-the-loop.md": "how-tos/human_in_the_loop/add-human-in-the-loop.md",
+    "how-tos/human_in_the_loop/dynamic_breakpoints.ipynb": "how-tos/human_in_the_loop/breakpoints.md",
+    "concepts/breakpoints.md": "concepts/human_in_the_loop.md",
+    "how-tos/human_in_the_loop/breakpoints.md": "how-tos/human_in_the_loop/add-human-in-the-loop.md",
+    "cloud/how-tos/human_in_the_loop_breakpoint.md": "cloud/how-tos/add-human-in-the-loop.md",
+    "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.md",
 }
 
 
@@ -355,12 +358,16 @@ def _on_page_markdown_with_config(
 
 
 def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
-    return _on_page_markdown_with_config(
-        markdown,
-        page,
-        add_api_references=True,
-        **kwargs,
+    finalized_markdown = (
+        _on_page_markdown_with_config(
+            markdown,
+            page,
+            add_api_references=True,
+            **kwargs,
+        )
     )
+    page.meta["original_markdown"] = finalized_markdown
+    return finalized_markdown
 
 
 # redirects
@@ -430,20 +437,51 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     else:
         return html  # fallback if no <body> found
 
+def _inject_markdown_into_html(html: str, page: Page) -> str:
+    """Inject the original markdown content into the HTML page as JSON."""
+    original_markdown = page.meta.get("original_markdown", "")
+    if not original_markdown:
+        return html
+    markdown_data = {
+        "markdown": original_markdown,
+        "title": page.title or "Page Content",
+        "url": page.url or "",
+    }
 
-def on_post_page(output: str, page: Page, config: MkDocsConfig) -> str:
+    # Properly escape the JSON for HTML
+    json_content = json.dumps(markdown_data, ensure_ascii=False)
+
+    json_content = (
+        json_content.replace("</", "\\u003c/")
+        .replace("<script", "\\u003cscript")
+        .replace("</script", "\\u003c/script")
+    )
+
+    script_content = (
+        f'<script id="page-markdown-content" '
+        f'type="application/json">{json_content}</script>'
+    )
+
+    # Insert before </head> if it exists, otherwise before </body>
+    if "</head>" not in html:
+        raise ValueError(
+            "HTML does not contain </head> tag. Cannot inject markdown content."
+        )
+    return html.replace("</head>", f"{script_content}</head>")
+
+def on_post_page(html: str, page: Page, config: MkDocsConfig) -> str:
     """Inject Google Tag Manager noscript tag immediately after <body>.
 
     Args:
-        output: The HTML output of the page.
+        html: The HTML output of the page.
         page: The page instance.
         config: The MkDocs configuration object.
 
     Returns:
         modified HTML output with GTM code injected.
     """
-    return _inject_gtm(output)
-
+    html = _inject_markdown_into_html(html, page)
+    return _inject_gtm(html)
 
 # Create HTML files for redirects after site dir has been built
 def on_post_build(config):

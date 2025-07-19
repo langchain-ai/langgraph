@@ -9,7 +9,8 @@ import click
 import pytest
 
 from langgraph_cli.config import (
-    PIP_CLEANUP_LINES,
+    _BUILD_TOOLS,
+    _get_pip_cleanup_lines,
     config_to_compose,
     config_to_docker,
     docker_tag,
@@ -18,9 +19,10 @@ from langgraph_cli.config import (
 )
 from langgraph_cli.util import clean_empty_lines
 
-FORMATTED_CLEANUP_LINES = PIP_CLEANUP_LINES.format(
+FORMATTED_CLEANUP_LINES = _get_pip_cleanup_lines(
     install_cmd="uv pip install --system",
-    uv_removal="RUN uv pip uninstall --system pip setuptools wheel && rm /usr/bin/uv /usr/bin/uvx",
+    to_uninstall=("pip", "setuptools", "wheel"),
+    pip_installer="uv",
 )
 
 PATH_TO_CONFIG = pathlib.Path(__file__).parent / "test_config.json"
@@ -51,6 +53,7 @@ def test_validate_config():
         "http": None,
         "ui": None,
         "ui_config": None,
+        "keep_pkg_tools": None,
         **expected_config,
     }
     assert actual_config == expected_config
@@ -77,6 +80,7 @@ def test_validate_config():
         "http": None,
         "ui": None,
         "ui_config": None,
+        "keep_pkg_tools": None,
     }
     actual_config = validate_config(expected_config)
     assert actual_config == expected_config
@@ -923,6 +927,53 @@ def test_config_to_docker_pip_installer():
         PATH_TO_CONFIG, config_default, "langchain/langgraph-api:0.2.47"
     )
     assert "uv pip install --system" in docker_default
+
+
+def test_config_retain_build_tools():
+    graphs = {"agent": "./graphs/agent.py:graph"}
+    base_config = {
+        "python_version": "3.11",
+        "dependencies": ["."],
+        "graphs": graphs,
+    }
+    config_true = validate_config(
+        {**copy.deepcopy(base_config), "keep_pkg_tools": True}
+    )
+    docker_true, _ = config_to_docker(
+        PATH_TO_CONFIG, config_true, "langchain/langgraph-api:0.2.47"
+    )
+    assert not any(
+        "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_true
+        for pckg in _BUILD_TOOLS
+    )
+    assert "RUN pip uninstall -y pip setuptools wheel" not in docker_true
+    config_false = validate_config(
+        {**copy.deepcopy(base_config), "keep_pkg_tools": False}
+    )
+    docker_false, _ = config_to_docker(
+        PATH_TO_CONFIG, config_false, "langchain/langgraph-api:0.2.47"
+    )
+    assert all(
+        "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_false
+        for pckg in _BUILD_TOOLS
+    )
+    assert "RUN pip uninstall -y pip setuptools wheel" in docker_false
+    config_list = validate_config(
+        {**copy.deepcopy(base_config), "keep_pkg_tools": ["pip", "setuptools"]}
+    )
+    docker_list, _ = config_to_docker(
+        PATH_TO_CONFIG, config_list, "langchain/langgraph-api:0.2.47"
+    )
+    assert all(
+        "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_list
+        for pckg in ("wheel",)
+    )
+    assert not any(
+        "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_list
+        for pckg in ("pip", "setuptools")
+    )
+    assert "RUN pip uninstall -y wheel" in docker_list
+    assert "RUN pip uninstall -y pip setuptools" not in docker_list
 
 
 # config_to_compose

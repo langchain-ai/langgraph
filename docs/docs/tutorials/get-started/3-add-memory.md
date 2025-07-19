@@ -154,7 +154,7 @@ The snapshot above contains the current state values, corresponding config, and 
   
 Check out the code snippet below to review the graph from this tutorial:
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 <!---
 ```python

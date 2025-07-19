@@ -99,6 +99,7 @@ from langgraph.types import (
     All,
     CachePolicy,
     Checkpointer,
+    Command,
     Interrupt,
     Send,
     StateSnapshot,
@@ -771,10 +772,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         self, *, include: Sequence[str] | None = None
     ) -> dict[str, Any]:
         schema = self.config_schema(include=include)
-        if hasattr(schema, "model_json_schema"):
-            return schema.model_json_schema()
-        else:
-            return schema.schema()
+        return schema.model_json_schema()
 
     @property
     def InputType(self) -> Any:
@@ -801,10 +799,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         self, config: RunnableConfig | None = None
     ) -> dict[str, Any]:
         schema = self.get_input_schema(config)
-        if hasattr(schema, "model_json_schema"):
-            return schema.model_json_schema()
-        else:
-            return schema.schema()
+        return schema.model_json_schema()
 
     @property
     def OutputType(self) -> Any:
@@ -833,10 +828,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
         self, config: RunnableConfig | None = None
     ) -> dict[str, Any]:
         schema = self.get_output_schema(config)
-        if hasattr(schema, "model_json_schema"):
-            return schema.model_json_schema()
-        else:
-            return schema.schema()
+        return schema.model_json_schema()
 
     @property
     def stream_channels_list(self) -> Sequence[str]:
@@ -2351,7 +2343,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     def stream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
@@ -2573,7 +2565,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     async def astream(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
@@ -2817,7 +2809,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     def invoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",
@@ -2892,7 +2884,7 @@ class Pregel(PregelProtocol[StateT, InputT, OutputT], Generic[StateT, InputT, Ou
 
     async def ainvoke(
         self,
-        input: InputT,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         stream_mode: StreamMode = "values",
