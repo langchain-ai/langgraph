@@ -1483,13 +1483,13 @@ def docker_tag(
     else:
         language, version = "py", config["python_version"]
 
-    lang_distro_tag = f"{version}{distro_tag}"
+    version_distro_tag = f"{version}{distro_tag}"
 
     # Prepend API version if provided
     if api_version:
-        full_tag = f"{api_version}-{language}{lang_distro_tag}"
+        full_tag = f"{api_version}-{language}{version_distro_tag}"
     else:
-        full_tag = lang_distro_tag
+        full_tag = version_distro_tag
 
     return f"{base_image}:{full_tag}"
 
