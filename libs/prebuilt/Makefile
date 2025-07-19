@@ -1,4 +1,4 @@
-.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile
+.PHONY: all format lint test test-fast test_watch integration_tests spell_check spell_fix benchmark profile
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -15,14 +15,17 @@ stop-postgres:
 
 TEST ?= .
 
+test-fast:
+	LANGGRAPH_TEST_FAST=1 uv run pytest $(TEST)
+
 test:
-	make start-postgres && uv run pytest $(TEST); \
+	make start-postgres && LANGGRAPH_TEST_FAST=0 uv run pytest $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
 
 test_watch:
-	make start-postgres && uv run ptw $(TEST); \
+	make start-postgres && LANGGRAPH_TEST_FAST=0 uv run ptw $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
@@ -49,7 +52,7 @@ lint lint_diff lint_package lint_tests:
 
 format format_diff:
 	uv run ruff format $(PYTHON_FILES)
-	uv run ruff check --select I --fix $(PYTHON_FILES)
+	uv run ruff check --fix $(PYTHON_FILES)
 
 spell_check:
 	uv run codespell --toml pyproject.toml
@@ -74,5 +77,6 @@ help:
 	@echo '-- TESTS --'
 	@echo 'coverage                     - run unit tests and generate coverage report'
 	@echo 'test                         - run unit tests'
+	@echo 'test-fast                    - run unit tests with in-memory checkpointer only'
 	@echo 'test TEST_FILE=<test_file>   - run all tests in file'
 	@echo 'test_watch                   - run unit tests in watch mode'

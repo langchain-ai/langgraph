@@ -409,8 +409,8 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
     | Option                       | Default                   | Description                                                                                                             |
     | ---------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
     | `--wait`                     |                           | Wait for services to start before returning. Implies --detach                                                           |
-| `--base-image TEXT`          | `langchain/langgraph-api`  | Base image to use for the LangGraph API server. Pin to specific versions using version tags.                            |
-| `--image TEXT`               |                           | Docker image to use for the langgraph-api service. If specified, skips building and uses this image directly.           |
+    | `--base-image TEXT`          | `langchain/langgraph-api`  | Base image to use for the LangGraph API server. Pin to specific versions using version tags.                            |
+    | `--image TEXT`               |                           | Docker image to use for the langgraph-api service. If specified, skips building and uses this image directly.           |
     | `--postgres-uri TEXT`        | Local database            | Postgres URI to use for the database.                                                                                   |
     | `--watch`                    |                           | Restart on file changes                                                                                                 |
     | `--debugger-base-url TEXT`   | `http://127.0.0.1:[PORT]` | URL used by the debugger to access LangGraph API.                                                                       |
@@ -438,8 +438,8 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
     | Option                                                                 | Default                   | Description                                                                                                             |
     | ---------------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
     | <span style="white-space: nowrap;">`--wait`</span>                     |                           | Wait for services to start before returning. Implies --detach                                                           |
-| <span style="white-space: nowrap;">`--base-image TEXT`</span>          | <span style="white-space: nowrap;">`langchain/langgraph-api`</span> | Base image to use for the LangGraph API server. Pin to specific versions using version tags. |
-| <span style="white-space: nowrap;">`--image TEXT`</span>               |                           | Docker image to use for the langgraph-api service. If specified, skips building and uses this image directly. |
+    | <span style="white-space: nowrap;">`--base-image TEXT`</span>          | <span style="white-space: nowrap;">`langchain/langgraph-api`</span> | Base image to use for the LangGraph API server. Pin to specific versions using version tags. |
+    | <span style="white-space: nowrap;">`--image TEXT`</span>               |                           | Docker image to use for the langgraph-api service. If specified, skips building and uses this image directly. |
     | <span style="white-space: nowrap;">`--postgres-uri TEXT`</span>        | Local database            | Postgres URI to use for the database.                                                                                   |
     | <span style="white-space: nowrap;">`--watch`</span>                    |                           | Restart on file changes                                                                                                 |
     | <span style="white-space: nowrap;">`-c, --config FILE`</span>          | `langgraph.json`          | Path to configuration file declaring dependencies, graphs and environment variables.                                    |
