@@ -103,14 +103,15 @@ nav:
           -  5. Customize state: tutorials/get-started/5-customize-state.md
           -  6. Time travel: tutorials/get-started/6-time-travel.md
       - Run a local server: tutorials/langgraph-platform/local-server.md
-    - Agent development:
+    - General concepts:
       - Workflows & agents: tutorials/workflows.md
-      - Prebuilt components: agents/overview.md
-      - Run an agent: agents/run_agents.md
       - Agent architectures: concepts/agentic_concepts.md
 
   - Guides:
     - guides/index.md
+    - Agent development:
+      - Overview: agents/overview.md
+      - Run an agent: agents/run_agents.md
     - LangGraph APIs:
       - Graph API:
           - Overview: concepts/low_level.md
