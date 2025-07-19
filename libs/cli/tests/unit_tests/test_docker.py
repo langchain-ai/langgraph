@@ -152,14 +152,12 @@ def test_compose_with_api_version():
     """Test compose function with api_version parameter."""
     port = 8123
     api_version = "0.2.74"
-    
+
     actual_compose_str = compose(
-        DEFAULT_DOCKER_CAPABILITIES, 
-        port=port, 
-        api_version=api_version
+        DEFAULT_DOCKER_CAPABILITIES, port=port, api_version=api_version
     )
-    
-    # The compose function should generate a compose file that doesn't directly 
+
+    # The compose function should generate a compose file that doesn't directly
     # reference the api_version, since it's handled in the docker tag creation
     # when building the image. The compose function mainly sets up services.
     expected_compose_str = f"""volumes:
@@ -212,14 +210,14 @@ def test_compose_with_api_version_and_base_image():
     port = 8123
     api_version = "1.0.0"
     base_image = "my-registry/custom-api"
-    
+
     actual_compose_str = compose(
-        DEFAULT_DOCKER_CAPABILITIES, 
-        port=port, 
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
         api_version=api_version,
-        base_image=base_image
+        base_image=base_image,
     )
-    
+
     # Similar to the previous test - the compose function doesn't directly embed
     # the api_version or base_image into the compose file since those are handled
     # during the docker build process
@@ -273,14 +271,14 @@ def test_compose_with_api_version_and_custom_postgres():
     port = 8123
     api_version = "0.2.74"
     custom_postgres_uri = "postgresql://user:pass@external-db:5432/mydb"
-    
+
     actual_compose_str = compose(
-        DEFAULT_DOCKER_CAPABILITIES, 
-        port=port, 
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
         api_version=api_version,
-        postgres_uri=custom_postgres_uri
+        postgres_uri=custom_postgres_uri,
     )
-    
+
     expected_compose_str = f"""services:
     langgraph-redis:
         image: redis:6
@@ -306,14 +304,14 @@ def test_compose_with_api_version_and_debugger():
     port = 8123
     debugger_port = 8001
     api_version = "0.2.74"
-    
+
     actual_compose_str = compose(
-        DEFAULT_DOCKER_CAPABILITIES, 
-        port=port, 
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
         api_version=api_version,
-        debugger_port=debugger_port
+        debugger_port=debugger_port,
     )
-    
+
     expected_compose_str = f"""volumes:
     langgraph-data:
         driver: local

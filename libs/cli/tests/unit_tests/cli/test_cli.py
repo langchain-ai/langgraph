@@ -592,10 +592,12 @@ def test_dockerfile_command_with_api_version() -> None:
         result = runner.invoke(
             cli,
             [
-                "dockerfile", 
-                str(save_path), 
-                "--config", str(temp_dir / "config.json"),
-                "--api-version", "0.2.74"
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--api-version",
+                "0.2.74",
             ],
         )
 
@@ -628,11 +630,14 @@ def test_dockerfile_command_with_api_version_and_base_image() -> None:
         result = runner.invoke(
             cli,
             [
-                "dockerfile", 
-                str(save_path), 
-                "--config", str(temp_dir / "config.json"),
-                "--api-version", "1.0.0",
-                "--base-image", "my-registry/custom-api"
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--api-version",
+                "1.0.0",
+                "--base-image",
+                "my-registry/custom-api",
             ],
         )
 
@@ -663,10 +668,12 @@ def test_dockerfile_command_with_api_version_nodejs() -> None:
         result = runner.invoke(
             cli,
             [
-                "dockerfile", 
-                str(save_path), 
-                "--config", str(temp_dir / "config.json"),
-                "--api-version", "0.2.74"
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--api-version",
+                "0.2.74",
             ],
         )
 
@@ -705,8 +712,9 @@ def test_build_command_with_api_version() -> None:
                     "test-image",
                     "--config",
                     str(temp_dir / "config.json"),
-                    "--api-version", "0.2.74",
-                    "--no-pull"  # Avoid pulling non-existent images
+                    "--api-version",
+                    "0.2.74",
+                    "--no-pull",  # Avoid pulling non-existent images
                 ],
                 catch_exceptions=True,
             )
@@ -740,9 +748,11 @@ def test_build_command_with_api_version_and_base_image() -> None:
                     "test-image",
                     "--config",
                     str(temp_dir / "config.json"),
-                    "--api-version", "1.0.0",
-                    "--base-image", "my-registry/custom-api",
-                    "--no-pull"  # Avoid pulling non-existent images
+                    "--api-version",
+                    "1.0.0",
+                    "--base-image",
+                    "my-registry/custom-api",
+                    "--no-pull",  # Avoid pulling non-existent images
                 ],
                 catch_exceptions=True,
             )
@@ -779,7 +789,7 @@ def test_prepare_args_and_stdin_with_api_version() -> None:
 
     # Check that the args are correct
     assert actual_args == expected_args
-    
+
     # Check that the stdin contains the correct FROM line with api_version
     assert f"FROM langchain/langgraph-api:0.2.74-py3.11" in actual_stdin
 

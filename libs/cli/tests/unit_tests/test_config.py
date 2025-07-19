@@ -1290,7 +1290,7 @@ def test_docker_tag_different_node_versions_with_distro():
 
 def test_docker_tag_with_api_version():
     """Test docker_tag function with api_version parameter."""
-    
+
     # Test 1: Python config with api_version and default distro
     config = validate_config(
         {
@@ -1402,13 +1402,15 @@ def test_docker_tag_with_api_version():
             "graphs": {"agent": "./agent.py:graph"},
         }
     )
-    tag = docker_tag(config, base_image="langchain/langgraph-server:0.2", api_version="0.2.74")
+    tag = docker_tag(
+        config, base_image="langchain/langgraph-server:0.2", api_version="0.2.74"
+    )
     assert tag == "langchain/langgraph-server:0.2-py3.11"
 
 
 def test_config_to_docker_with_api_version():
     """Test config_to_docker function with api_version parameter."""
-    
+
     # Test Python config with api_version
     graphs = {"agent": "./agent.py:graph"}
     actual_docker_stdin, additional_contexts = config_to_docker(
@@ -1417,9 +1419,9 @@ def test_config_to_docker_with_api_version():
         "langchain/langgraph-api",
         api_version="0.2.74",
     )
-    
+
     # Check that the FROM line uses the api_version
-    lines = actual_docker_stdin.split('\n')
+    lines = actual_docker_stdin.split("\n")
     from_line = lines[0]
     assert from_line == "FROM langchain/langgraph-api:0.2.74-py3.11"
 
@@ -1431,16 +1433,16 @@ def test_config_to_docker_with_api_version():
         "langchain/langgraphjs-api",
         api_version="0.2.74",
     )
-    
+
     # Check that the FROM line uses the api_version
-    lines = actual_docker_stdin.split('\n')
+    lines = actual_docker_stdin.split("\n")
     from_line = lines[0]
     assert from_line == "FROM langchain/langgraphjs-api:0.2.74-node20"
 
 
 def test_config_to_compose_with_api_version():
     """Test config_to_compose function with api_version parameter."""
-    
+
     # Test Python config with api_version
     config = validate_config(
         {
@@ -1448,14 +1450,14 @@ def test_config_to_compose_with_api_version():
             "graphs": {"agent": "./agent.py:graph"},
         }
     )
-    
+
     actual_compose_str = config_to_compose(
         PATH_TO_CONFIG,
         config,
         "langchain/langgraph-api",
         api_version="0.2.74",
     )
-    
+
     # Check that the compose file includes the correct FROM line with api_version
     assert "FROM langchain/langgraph-api:0.2.74-py3.11" in actual_compose_str
 
@@ -1466,13 +1468,13 @@ def test_config_to_compose_with_api_version():
             "graphs": {"agent": "./agent.js:graph"},
         }
     )
-    
+
     actual_compose_str = config_to_compose(
         PATH_TO_CONFIG,
         config,
         "langchain/langgraphjs-api",
         api_version="0.2.74",
     )
-    
+
     # Check that the compose file includes the correct FROM line with api_version
     assert "FROM langchain/langgraphjs-api:0.2.74-node20" in actual_compose_str

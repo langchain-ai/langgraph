@@ -388,7 +388,15 @@ def build(
         config_json = langgraph_cli.config.validate_config_file(config)
         warn_non_wolfi_distro(config_json)
         _build(
-            runner, set, config, config_json, base_image, api_version, pull, tag, docker_build_args
+            runner,
+            set,
+            config,
+            config_json,
+            base_image,
+            api_version,
+            pull,
+            tag,
+            docker_build_args,
         )
 
 
