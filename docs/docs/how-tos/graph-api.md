@@ -1157,7 +1157,7 @@ from typing_extensions import TypedDict
 class OverallState(TypedDict):
     topic: str
     subjects: list[str]
-    jokes: list[str]
+    jokes: Annotated[list[str], operator.add]
     best_selected_joke: str
 
 def generate_topics(state: OverallState):
@@ -1185,7 +1185,6 @@ builder.add_edge(START, "generate_topics")
 builder.add_conditional_edges("generate_topics", continue_to_jokes, ["generate_joke"])
 builder.add_edge("generate_joke", "best_joke")
 builder.add_edge("best_joke", END)
-builder.add_edge("generate_topics", END)
 graph = builder.compile()
 ```
 
