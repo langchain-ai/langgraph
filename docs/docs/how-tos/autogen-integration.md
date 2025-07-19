@@ -290,7 +290,7 @@ my-autogen-agent/
 
     ```
     langgraph>=0.1.0
-    pyautogen>=0.2.0
+    ag2>=0.2.0
     langchain-core>=0.1.0
     langchain-openai>=0.0.5
     ```
