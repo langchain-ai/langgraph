@@ -1152,12 +1152,13 @@ LangGraph supports map-reduce and other advanced branching patterns using the Se
 ```python
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, Annotated
+import operator
 
 class OverallState(TypedDict):
     topic: str
     subjects: list[str]
-    jokes: list[str]
+    jokes: Annotated[list[str], operator.add]
     best_selected_joke: str
 
 def generate_topics(state: OverallState):
