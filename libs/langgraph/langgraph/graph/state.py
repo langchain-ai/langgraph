@@ -1239,12 +1239,14 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
         if isinstance(command.goto, Send):
             rtn.append((TASKS, command.goto))
         elif isinstance(command.goto, str):
-            rtn.append((CHANNEL_BRANCH_TO.format(command.goto), None))
+            # Handle END specially - don't create a branch channel for it
+            channel_name = command.goto if command.goto == END else CHANNEL_BRANCH_TO.format(command.goto)
+            rtn.append((channel_name, None))
         else:
             rtn.extend(
                 (TASKS, go)
                 if isinstance(go, Send)
-                else (CHANNEL_BRANCH_TO.format(go), None)
+                else (go if go == END else CHANNEL_BRANCH_TO.format(go), None)
                 for go in command.goto
             )
     return rtn
