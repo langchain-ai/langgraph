@@ -1133,6 +1133,7 @@ def python_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: str,
+    api_version: Optional[str] = None,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     pip_installer = config.get("pip_installer", "auto")
@@ -1282,7 +1283,7 @@ ADD {relpath} /deps/{name}
                 "# -- End of JS dependencies install --",
             ]
         )
-    image_str = docker_tag(config, base_image)
+    image_str = docker_tag(config, base_image, api_version)
     docker_file_contents = [
         f"FROM {image_str}",
         "",
@@ -1320,10 +1321,11 @@ def node_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: str,
+    api_version: Optional[str] = None,
 ) -> tuple[str, dict[str, str]]:
     faux_path = f"/deps/{config_path.parent.name}"
     install_cmd = _get_node_pm_install_cmd(config_path, config)
-    image_str = docker_tag(config, base_image)
+    image_str = docker_tag(config, base_image, api_version)
 
     env_vars: list[str] = []
 
@@ -1379,6 +1381,7 @@ def default_base_image(config: Config) -> str:
 def docker_tag(
     config: Config,
     base_image: Optional[str] = None,
+    api_version: Optional[str] = None,
 ) -> str:
     base_image = base_image or default_base_image(config)
 
@@ -1391,28 +1394,43 @@ def docker_tag(
     if "/langgraph-server" in base_image:
         return f"{base_image}-py{config['python_version']}"
 
+    # Build the standard tag format
+    language, version = None, None
     if config.get("node_version") and not config.get("python_version"):
-        return f"{base_image}:{config['node_version']}{distro_tag}"
-    return f"{base_image}:{config['python_version']}{distro_tag}"
+        language, version = "node", config["node_version"]
+    else:
+        language, version = "py", config["python_version"]
+
+    lang_distro_tag = f"{version}{distro_tag}"
+
+    # Prepend API version if provided
+    if api_version:
+        full_tag = f"{api_version}-{language}{lang_distro_tag}"
+    else:
+        full_tag = lang_distro_tag
+
+    return f"{base_image}:{full_tag}"
 
 
 def config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: Optional[str] = None,
+    api_version: Optional[str] = None,
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or default_base_image(config)
 
     if config.get("node_version") and not config.get("python_version"):
-        return node_config_to_docker(config_path, config, base_image)
+        return node_config_to_docker(config_path, config, base_image, api_version)
 
-    return python_config_to_docker(config_path, config, base_image)
+    return python_config_to_docker(config_path, config, base_image, api_version)
 
 
 def config_to_compose(
     config_path: pathlib.Path,
     config: Config,
     base_image: Optional[str] = None,
+    api_version: Optional[str] = None,
     image: Optional[str] = None,
     watch: bool = False,
 ) -> str:
@@ -1449,7 +1467,7 @@ def config_to_compose(
 
     else:
         dockerfile, additional_contexts = config_to_docker(
-            config_path, config, base_image
+            config_path, config, base_image, api_version
         )
 
         additional_contexts_str = "\n".join(
