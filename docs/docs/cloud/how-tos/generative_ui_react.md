@@ -30,6 +30,23 @@ export default {
 
 Next, define your UI components in your `langgraph.json` configuration:
 
+=== "Python agent"
+
+```json
+{
+  "node_version": "20",
+  "graphs": {
+    "agent": "./src/agent.py:graph"
+  },
+  "ui": {
+    "agent": "./src/agent/ui.tsx"
+  }
+}
+```
+
+
+=== "JS agent"
+
 ```json
 {
   "node_version": "20",
