@@ -57,6 +57,17 @@ graph = graph_builder.compile(...)
 You compile your graph by just calling the `.compile()` method:
 
 ```typescript
+import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
+
+// Define your state using Annotation.Root
+const State = Annotation.Root({
+  // Define your state channels here
+  messages: Annotation({
+    reducer: (x, y) => [...x, ...y],
+    default: () => [],
+  }),
+});
+
 const graph = new StateGraph(State)
   .addNode("node1", node1)
   .addNode("node2", node2)
@@ -249,15 +260,21 @@ In this example, no reducer functions are specified for any key. Let's assume th
 
 :::js
 ```typescript
-import { z } from "zod";
+import { Annotation } from "@langchain/langgraph";
 
-const State = z.object({
-  foo: z.number(),
-  bar: z.array(z.string()),
+const State = Annotation.Root({
+  foo: Annotation<number>({
+    reducer: (x, y) => y ?? x,
+    default: () => 0,
+  }),
+  bar: Annotation<string[]>({
+    reducer: (x, y) => y ?? x,
+    default: () => [],
+  }),
 });
 ```
 
-In this example, no reducer functions are specified for any key. Let's assume the input to the graph is `{ foo: 1, bar: ["hi"] }`. Let's then assume the first `Node` returns `{ foo: 2 }`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{ foo: 2, bar: ["hi"] }`. If the second node returns `{ bar: ["bye"] }` then the `State` would then be `{ foo: 2, bar: ["bye"] }`
+In this example, we're using the default reducer pattern `(x, y) => y ?? x` which replaces the old value with the new value if provided. Let's assume the input to the graph is `{ foo: 1, bar: ["hi"] }`. Let's then assume the first `Node` returns `{ foo: 2 }`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{ foo: 2, bar: ["hi"] }`. If the second node returns `{ bar: ["bye"] }` then the `State` would then be `{ foo: 2, bar: ["bye"] }`
 :::
 
 **Example B:**
@@ -278,16 +295,21 @@ In this example, we've used the `Annotated` type to specify a reducer function (
 
 :::js
 ```typescript
-import { z } from "zod";
-import "@langchain/langgraph/zod";
+import { Annotation } from "@langchain/langgraph";
 
-const State = z.object({
-  foo: z.number(),
-  bar: z.array(z.string()).langgraph.reducer((x, y) => x.concat(y)),
+const State = Annotation.Root({
+  foo: Annotation<number>({
+    reducer: (x, y) => y ?? x,
+    default: () => 0,
+  }),
+  bar: Annotation<string[]>({
+    reducer: (x, y) => x.concat(y),
+    default: () => [],
+  }),
 });
 ```
 
-In this example, we've used the `.langgraph.reducer()` method to specify a reducer function for the second key (`bar`). Note that the first key remains unchanged. Let's assume the input to the graph is `{ foo: 1, bar: ["hi"] }`. Let's then assume the first `Node` returns `{ foo: 2 }`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{ foo: 2, bar: ["hi"] }`. If the second node returns `{ bar: ["bye"] }` then the `State` would then be `{ foo: 2, bar: ["hi", "bye"] }`. Notice here that the `bar` key is updated by concatenating the two arrays together.
+In this example, we've specified a custom reducer function for the second key (`bar`) that concatenates arrays. Note that the first key uses the default replacement reducer. Let's assume the input to the graph is `{ foo: 1, bar: ["hi"] }`. Let's then assume the first `Node` returns `{ foo: 2 }`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{ foo: 2, bar: ["hi"] }`. If the second node returns `{ bar: ["bye"] }` then the `State` would then be `{ foo: 2, bar: ["hi", "bye"] }`. Notice here that the `bar` key is updated by concatenating the two arrays together.
 :::
 
 ### Working with Messages in Graph State
@@ -357,12 +379,13 @@ Since the state updates are always deserialized into LangChain `Messages` when u
 
 ```typescript
 import { BaseMessage } from "@langchain/core/messages";
-import { messagesStateReducer } from "@langchain/langgraph";
-import { z } from "zod";
-import "@langchain/langgraph/zod";
+import { messagesStateReducer, Annotation } from "@langchain/langgraph";
 
-const GraphState = z.object({
-  messages: z.array(z.any()).langgraph.reducer(messagesStateReducer),
+const GraphState = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: messagesStateReducer,
+    default: () => [],
+  }),
 });
 ```
 :::
@@ -381,15 +404,20 @@ class State(MessagesState):
 :::
 
 :::js
-Since having a list of messages in your state is so common, there exists a prebuilt state called `MessagesZodState` which makes it easy to use messages. `MessagesZodState` is defined with a single `messages` key which is a list of `BaseMessage` objects and uses the `messagesStateReducer` reducer. Typically, there is more state to track than just messages, so we see people merge this state with other schemas, like:
+Since having a list of messages in your state is so common, you can easily create a state with messages using the `messagesStateReducer`. This reducer handles a list of `BaseMessage` objects and manages message IDs correctly. Typically, there is more state to track than just messages, so we see people combine messages with other state fields, like:
 
 ```typescript
-import { MessagesZodState } from "@langchain/langgraph";
-import { z } from "zod";
+import { messagesStateReducer, Annotation } from "@langchain/langgraph";
 
-const State = z.object({
-  messages: MessagesZodState.shape.messages,
-  documents: z.array(z.string()),
+const State = Annotation.Root({
+  messages: Annotation({
+    reducer: messagesStateReducer,
+    default: () => [],
+  }),
+  documents: Annotation<string[]>({
+    reducer: (x, y) => y ?? x,
+    default: () => [],
+  }),
 });
 ```
 :::
@@ -445,22 +473,20 @@ In LangGraph, nodes are typically TypeScript functions (sync or async) where the
 Similar to `NetworkX`, you add these nodes to a graph using the `addNode` method:
 
 ```typescript
-import { z } from "zod";
-import { RunnableConfig } from "@langchain/core/runnables";
-import { StateGraph } from "@langchain/langgraph";
+import { StateGraph, Annotation } from "@langchain/langgraph";
 
-const State = z.object({
-  input: z.string(),
-  results: z.string(),
+const State = Annotation.Root({
+  input: Annotation<string>(),
+  results: Annotation<string>(),
 });
 
-const myNode = (state: z.infer<typeof State>, config: RunnableConfig) => {
+const myNode = (state, config) => {
   console.log("In node: ", config?.configurable?.user_id);
   return { results: `Hello, ${state.input}!` };
 };
 
 // The second argument is optional
-const myOtherNode = (state: z.infer<typeof State>) => {
+const myOtherNode = (state) => {
   return state;
 };
 
@@ -535,7 +561,7 @@ For example:
 ```py
 import time
 from typing_extensions import TypedDict
-from langgraph.graph import StateGraph
+from langgraph.graph import StateGraph, END
 from langgraph.cache.memory import InMemoryCache
 from langgraph.types import CachePolicy
 
@@ -556,7 +582,7 @@ def expensive_node(state: State) -> dict[str, int]:
 
 builder.add_node("expensive_node", expensive_node, cache_policy=CachePolicy(ttl=3))
 builder.set_entry_point("expensive_node")
-builder.set_finish_point("expensive_node")
+builder.add_edge("expensive_node", END)
 
 graph = builder.compile(cache=InMemoryCache())
 
@@ -572,16 +598,15 @@ print(graph.invoke({"x": 5}, stream_mode='updates'))  # (2)!
 
 :::js
 ```typescript
-import { z } from "zod";
-import { StateGraph } from "@langchain/langgraph";
-import { InMemoryCache } from "@langchain/langgraph";
+import { StateGraph, Annotation, START } from "@langchain/langgraph";
+import { InMemoryCache } from "@langchain/langgraph-checkpoint";
 
-const State = z.object({
-  x: z.number(),
-  result: z.number(),
+const State = Annotation.Root({
+  x: Annotation<number>(),
+  result: Annotation<number>(),
 });
 
-const expensiveNode = (state: z.infer<typeof State>) => {
+const expensiveNode = (state) => {
   // expensive computation
   return { result: state.x * 2 };
 };
@@ -590,7 +615,7 @@ const graph = new StateGraph(State)
   .addNode("expensiveNode", expensiveNode, { 
     cachePolicy: { ttl: 3 } 
   })
-  .addEdge("__start__", "expensiveNode")
+  .addEdge(START, "expensiveNode")
   .compile({ cache: new InMemoryCache() });
 
 console.log(await graph.invoke({ x: 5 }, { streamMode: "updates" })); // (1)!
@@ -614,6 +639,9 @@ Edges define how the logic is routed and how the graph decides to stop. This is 
 
 A node can have MULTIPLE outgoing edges. If a node has multiple out-going edges, **all** of those destination nodes will be executed in parallel as a part of the next superstep.
 
+!!! warning "Parallel Edges and State Updates"
+    When multiple nodes execute in parallel and update the same state fields, you must use reducers to handle the concurrent updates. Without reducers, you'll get an error about receiving multiple values per step. See the [Reducers](#reducers) section for details.
+
 ### Normal Edges
 
 :::python
@@ -628,6 +656,24 @@ graph.add_edge("node_a", "node_b")
 If you **always** want to go from node A to node B, you can use the `addEdge` method directly.
 
 ```typescript
+import { StateGraph, Annotation } from "@langchain/langgraph";
+
+// Define your state structure
+const State = Annotation.Root({
+  // your state fields here
+});
+
+// Define your node functions
+const nodeA = (state) => {
+  // node A logic
+  return state;
+};
+
+const nodeB = (state) => {
+  // node B logic
+  return state;
+};
+
 const graph = new StateGraph(State)
   .addNode("nodeA", nodeA)
   .addNode("nodeB", nodeB)
@@ -660,6 +706,20 @@ graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: 
 If you want to **optionally** route to 1 or more edges (or optionally terminate), you can use the `addConditionalEdges` method. This method accepts the name of a node and a "routing function" to call after that node is executed:
 
 ```typescript
+import { StateGraph, Annotation } from "@langchain/langgraph";
+
+// Define your state structure
+const State = Annotation.Root({
+  // your state fields here
+});
+
+// Define routing function
+const routingFunction = (state) => {
+  // Your routing logic here
+  // Return the name of the next node or array of node names
+  return "nodeB"; // or ["nodeB", "nodeC"] for parallel execution
+};
+
 const graph = new StateGraph(State)
   .addNode("nodeA", nodeA)
   .addNode("nodeB", nodeB)
@@ -675,6 +735,12 @@ By default, the return value `routingFunction` is used as the name of the node (
 You can optionally provide a dictionary that maps the `routingFunction`'s output to the name of the next node.
 
 ```typescript
+// Routing function that returns a boolean or other value
+const routingFunction = (state) => {
+  // Return a value that will be mapped
+  return state.someCondition; // returns true or false
+};
+
 const graph = new StateGraph(State)
   .addNode("nodeA", nodeA)
   .addNode("nodeB", nodeB)
@@ -706,7 +772,12 @@ graph.add_edge(START, "node_a")
 The entry point is the first node(s) that are run when the graph starts. You can use the `addEdge` method from the virtual `START` node to the first node to execute to specify where to enter the graph.
 
 ```typescript
-import { START } from "@langchain/langgraph";
+import { StateGraph, START, Annotation } from "@langchain/langgraph";
+
+// Define your state structure
+const State = Annotation.Root({
+  // your state fields here
+});
 
 const graph = new StateGraph(State)
   .addNode("nodeA", nodeA)
@@ -737,7 +808,18 @@ graph.add_conditional_edges(START, routing_function, {True: "node_b", False: "no
 A conditional entry point lets you start at different nodes depending on custom logic. You can use `addConditionalEdges` from the virtual `START` node to accomplish this.
 
 ```typescript
-import { START } from "@langchain/langgraph";
+import { StateGraph, START, Annotation } from "@langchain/langgraph";
+
+// Define your state structure
+const State = Annotation.Root({
+  // your state fields here
+});
+
+// Define entry routing function
+const routingFunction = (state) => {
+  // Logic to determine starting node
+  return "nodeB"; // or "nodeC" based on state
+};
 
 const graph = new StateGraph(State)
   .addNode("nodeB", nodeB)
@@ -749,7 +831,7 @@ const graph = new StateGraph(State)
 You can optionally provide a dictionary that maps the `routingFunction`'s output to the name of the next node.
 
 ```typescript
-import { START } from "@langchain/langgraph";
+import { StateGraph, START, Annotation } from "@langchain/langgraph";
 
 const graph = new StateGraph(State)
   .addNode("nodeB", nodeB)
@@ -770,6 +852,15 @@ By default, `Nodes` and `Edges` are defined ahead of time and operate on the sam
 To support this design pattern, LangGraph supports returning [`Send`][langgraph.types.Send] objects from conditional edges. `Send` takes two arguments: first is the name of the node, and second is the state to pass to that node.
 
 ```python
+from typing import TypedDict, List, Annotated
+from operator import add
+from langgraph.types import Send
+
+# The overall state has a reducer for jokes since multiple nodes write to it
+class OverallState(TypedDict):
+    subjects: List[str]
+    jokes: Annotated[List[str], add]  # Reducer for parallel writes
+
 def continue_to_jokes(state: OverallState):
     return [Send("generate_joke", {"subject": s}) for s in state['subjects']]
 
@@ -781,13 +872,22 @@ graph.add_conditional_edges("node_a", continue_to_jokes)
 To support this design pattern, LangGraph supports returning `Send` objects from conditional edges. `Send` takes two arguments: first is the name of the node, and second is the state to pass to that node.
 
 ```typescript
-import { Send } from "@langchain/langgraph";
+import { Send, Annotation } from "@langchain/langgraph";
+
+// The overall state has a reducer for jokes since multiple nodes write to it
+const OverallState = Annotation.Root({
+  subjects: Annotation(),
+  jokes: Annotation({
+    default: () => [],
+    reducer: (prev, curr) => [...prev, ...curr]  // Reducer for parallel writes
+  })
+});
 
 const continueToJokes = (state: OverallState) => {
   return state.subjects.map((subject) => new Send("generateJoke", { subject }));
 };
 
-const graph = new StateGraph(State)
+const graph = new StateGraph(OverallState)
   .addNode("nodeA", nodeA)
   .addNode("generateJoke", generateJoke)
   .addConditionalEdges("nodeA", continueToJokes)
