@@ -1513,7 +1513,7 @@ def test_latest_checkpoint_state_graph(
     config = {"configurable": {"thread_id": "1"}}
 
     assert [
-        *app.stream({"query": "what is weather in sf"}, config, checkpoint_during=True)
+        *app.stream({"query": "what is weather in sf"}, config, durability="async")
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
@@ -1529,7 +1529,7 @@ def test_latest_checkpoint_state_graph(
         },
     ]
 
-    assert [*app.stream(Command(resume=""), config, checkpoint_during=True)] == [
+    assert [*app.stream(Command(resume=""), config, durability="async")] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
 
@@ -1556,7 +1556,7 @@ async def test_latest_checkpoint_state_graph_async(
     assert [
         c
         async for c in app.astream(
-            {"query": "what is weather in sf"}, config, checkpoint_during=True
+            {"query": "what is weather in sf"}, config, durability="async"
         )
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
@@ -1574,7 +1574,7 @@ async def test_latest_checkpoint_state_graph_async(
     ]
 
     assert [
-        c async for c in app.astream(Command(resume=""), config, checkpoint_during=True)
+        c async for c in app.astream(Command(resume=""), config, durability="async")
     ] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
