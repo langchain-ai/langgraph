@@ -4,6 +4,33 @@
 
 ---
 
+## v0.2.96 (2025-07-17)
+- Added a fallback mechanism for configurable header patterns to handle exclude/include settings more effectively.
+
+## v0.2.95 (2025-07-17)
+- Avoided setting the future if it is already done to prevent redundant operations.
+- Resolved compatibility errors in CI by switching from `typing.TypedDict` to `typing_extensions.TypedDict` for Python versions below 3.12.
+
+## v0.2.94 (2025-07-16)
+- Improved performance by omitting pending sends for langgraph versions 0.5 and above.
+- Improved server startup logs to provide clearer warnings when the DD_API_KEY environment variable is set.
+
+## v0.2.93 (2025-07-16)
+- Removed the GIN index for run metadata to improve performance.
+
+## v0.2.92 (2025-07-16)
+- Enabled copying functionality for blobs and checkpoints, improving data management flexibility.
+
+## v0.2.91 (2025-07-16)
+- Reduced writes to the `checkpoint_blobs` table by inlining small values (null, numeric, str, etc.). This means we don't need to store extra values for channels that haven't been updated.
+
+## v0.2.90 (2025-07-16)
+- Improve checkpoint writes via node-local background queueing.
+
+
+## v0.2.89 (2025-07-15)
+- Decoupled checkpoint writing from thread/run state by removing foreign keys and updated logger to prevent timeout-related failures.
+
 ## v0.2.88 (2025-07-14)
 - Removed the foreign key constraint for `thread` in the `run` table to simplify database schema.
 

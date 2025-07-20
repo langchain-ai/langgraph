@@ -112,4 +112,6 @@ extend-include = ["*.ipynb"]
 [tool.codespell]
 # https://mypy.readthedocs.io/en/stable/config_file.html
 # comma-separated list
-ignore-words-list = "infor"
+ignore-words-list = "infor,thead,stdio,nd,jupyter,lets,lite,uis,deque"
+# Exclude generated files and directories
+skip = "*.ambr,*.lock,*.ipynb,*.yaml,*.zlib,*.css.map,*.js.map"
