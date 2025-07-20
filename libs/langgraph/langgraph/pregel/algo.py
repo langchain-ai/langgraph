@@ -49,6 +49,7 @@ from langgraph.constants import (
     CONFIG_KEY_STORE,
     CONFIG_KEY_TASK_ID,
     EMPTY_SEQ,
+    END,
     ERROR,
     INTERRUPT,
     MISSING,
@@ -288,9 +289,11 @@ def apply_writes(
             elif chan in channels:
                 pending_writes_by_channel[chan].append(val)
             else:
-                logger.warning(
-                    f"Task {task.name} with path {task.path} wrote to unknown channel {chan}, ignoring it."
-                )
+                # Skip warning for END channels as they are handled specially by graph termination logic
+                if not (chan == f"branch:to:{END}"):
+                    logger.warning(
+                        f"Task {task.name} with path {task.path} wrote to unknown channel {chan}, ignoring it."
+                    )
 
     # Apply writes to channels
     updated_channels: set[str] = set()
@@ -1097,3 +1100,4 @@ class LazyAtomicCounter:
                 if self._counter is None:
                     self._counter = itertools.count(0).__next__
         return self._counter()
+
