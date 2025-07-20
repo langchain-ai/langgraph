@@ -35,7 +35,7 @@ class DataclassLike(Protocol):
     __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
 
 
-StateLike: TypeAlias = Union[TypedDictLikeV1, TypedDictLikeV2, DataclassLike, BaseModel]
+StateLike: TypeAlias = Union[dict, BaseModel]
 """Type alias for state-like types.
 
 It can either be a `TypedDict`, `dataclass`, or Pydantic `BaseModel`.
