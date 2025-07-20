@@ -135,7 +135,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         from typing_extensions import Annotated, TypedDict
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.graph import StateGraph
-        from langgraph.rumtime import Runtime
+        from langgraph.runtime import Runtime
 
         def reducer(a: list, b: int | None) -> list:
             if b is not None:
