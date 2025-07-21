@@ -57,8 +57,8 @@ CONFIG_KEY_SCRATCHPAD = sys.intern("__pregel_scratchpad")
 # holds a mutable dict for temporary storage scoped to the current task
 CONFIG_KEY_RUNNER_SUBMIT = sys.intern("__pregel_runner_submit")
 # holds a function that receives tasks from runner, executes them and returns results
-CONFIG_KEY_CHECKPOINT_DURING = sys.intern("__pregel_checkpoint_during")
-# holds a boolean indicating whether to checkpoint during the run (or only at the end)
+CONFIG_KEY_DURABILITY = sys.intern("__pregel_durability")
+# holds the durability mode, one of "sync", "async", or "exit"
 CONFIG_KEY_RUNTIME = sys.intern("__pregel_runtime")
 # holds a `Runtime` instance with context, store, stream writer, etc.
 CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")

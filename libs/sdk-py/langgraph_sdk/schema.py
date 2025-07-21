@@ -283,6 +283,8 @@ class ThreadState(TypedDict):
     """The ID of the parent checkpoint. If missing, this is the root checkpoint."""
     tasks: Sequence[ThreadTask]
     """Tasks to execute in this step. If already attempted, may contain an error."""
+    interrupts: list[Interrupt]
+    """Interrupts which were thrown in this thread."""
 
 
 class ThreadUpdateStateResponse(TypedDict):

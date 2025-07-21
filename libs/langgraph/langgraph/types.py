@@ -55,9 +55,15 @@ __all__ = (
     "StateSnapshot",
     "Send",
     "Command",
+    "Durability",
     "interrupt",
 )
 
+Durability = Literal["sync", "async", "exit"]
+"""Durability mode for the graph execution.
+- `"sync"`: Changes are persisted synchronously before the next step starts.
+- `"async"`: Changes are persisted asynchronously while the next step executes.
+- `"exit"`: Changes are persisted only when the graph exits."""
 
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
