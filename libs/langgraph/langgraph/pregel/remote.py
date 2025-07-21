@@ -673,7 +673,7 @@ class RemoteGraph(PregelProtocol):
             else:
                 mode, ns = chunk.event, ()
             # raise ParentCommand exception for command events
-            if mode == "command":
+            if mode == "command" and chunk.data.get("graph") == Command.PARENT:
                 raise ParentCommand(Command(**chunk.data))
             # prepend caller ns (as it is not passed to remote graph)
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
@@ -775,7 +775,7 @@ class RemoteGraph(PregelProtocol):
             else:
                 mode, ns = chunk.event, ()
             # raise ParentCommand exception for command events
-            if mode == "command":
+            if mode == "command" and chunk.data.get("graph") == Command.PARENT:
                 raise ParentCommand(Command(**chunk.data))
             # prepend caller ns (as it is not passed to remote graph)
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
