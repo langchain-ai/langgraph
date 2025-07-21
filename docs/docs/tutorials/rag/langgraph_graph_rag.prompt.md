@@ -13,8 +13,8 @@ The primary objective is to **adapt an existing agentic RAG workflow**, specific
 *   **Relevant Components:** The UI from the `llm-movieagent` repository is not relevant for our project, but the data import logic (in `ingest.py`) and agentic RAG code (in the `neo4j-semantic-layer` package) are highly relevant and should be adapted for our implementation.
 
 ### Graph Database Integration
-*   **Database Choice:** The integration must be performed with the **Neo4j graph database** [2, 5].
-*   **Accessibility for Testing:** For development and testing purposes, utilize the **free cloud version of Neo4j named "AuraDB,"** which does not require credit card details for access [11, 12, 00:37:46, 00:39:34].
+*   **Database Choice:** The integration must be performed with the **Neo4j graph database** [2, 5]. Integration must use user and password
+*   **Accessibility for Testing:** For development and testing purposes, utilize the **free cloud version of Neo4j named "AuraDB,"** which does not require credit card details for access. This service provide user/password credentials that we will use in our solution for connecting to neo4j.
 *   **Workflow Adaptation:** Crucially, within the chosen self-RAG (/Users/spolischook/www/langgraph/docs/docs/tutorials/rag/langgraph_self_rag.ipynb) workflow, the **vector database component must be replaced** with direct calls to the Neo4j graph database for retrieval [12, 00:20:59, 00:23:50].
 
 ### LangGraph Workflow and Agentic Principles
