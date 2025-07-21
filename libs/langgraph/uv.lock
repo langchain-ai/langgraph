@@ -1394,7 +1394,7 @@ dev = [
 
 [[package]]
 name = "langgraph-cli"
-version = "0.3.4"
+version = "0.3.5"
 source = { editable = "../cli" }
 dependencies = [
     { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
