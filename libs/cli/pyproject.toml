@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-cli"
-version = "0.3.6"
+dynamic = ["version"]
 description = "CLI for interacting with LangGraph API"
 authors = []
 requires-python = ">=3.9"
@@ -60,3 +60,11 @@ lint.select = [
   "I",  # isort
 ]
 lint.ignore = ["E501", "B008"]
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+bump = true
