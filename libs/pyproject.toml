@@ -9,13 +9,13 @@ dependencies = [
   'langgraph-checkpoint-postgres',
   'langgraph-checkpoint-sqlite',
   'langgraph-prebuilt',
-  # 'langgraph-sdk-py',
+  'langgraph-sdk',
   'langgraph-cli'
 ]
 
 [dependency-groups]
 dev = [
-  "ruff >= 0.8.1"
+  "ruff"
 ]
 
 [tool.uv.sources]
@@ -24,13 +24,13 @@ langgraph-checkpoint = { workspace = true }
 langgraph-checkpoint-postgres = { workspace = true }
 langgraph-checkpoint-sqlite = { workspace = true }
 langgraph-prebuilt = { workspace = true }
-# langgraph-sdk = { workspace = true }
+langgraph-sdk = { workspace = true }
 langgraph-cli = { workspace = true }
 
 [tool.uv.workspace]
 members = [
   './langgraph',
-  # './sdk-py',
+  './sdk-py',
   './cli',
   './checkpoint',
   './checkpoint-sqlite',
@@ -38,6 +38,5 @@ members = [
   './prebuilt'
 ]
 exclude = [
-  './sdk-js',
-  './sdk-py'
+  './sdk-js'
 ]
