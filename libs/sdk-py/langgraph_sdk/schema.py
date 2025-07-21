@@ -251,7 +251,7 @@ class Thread(TypedDict):
     values: Json
     """The current state of the thread."""
     interrupts: dict[str, list[Interrupt]]
-    """Interrupts which were thrown in this thread"""
+    """Mapping of task ids to interrupts that were raised in that task."""
 
 
 class ThreadTask(TypedDict):
@@ -284,6 +284,8 @@ class ThreadState(TypedDict):
     """The ID of the parent checkpoint. If missing, this is the root checkpoint."""
     tasks: Sequence[ThreadTask]
     """Tasks to execute in this step. If already attempted, may contain an error."""
+    interrupts: list[Interrupt]
+    """Interrupts which were thrown in this thread."""
 
 
 class ThreadUpdateStateResponse(TypedDict):
