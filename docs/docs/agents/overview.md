@@ -159,7 +159,7 @@ function generateCodeSnippet({ tools, pre, post, response }) {
   if (post) lines.push("    post_model_hook=post_model_hook,");
   if (response) lines.push("    response_format=ResponseFormat,");
 
-  lines.push(")", "", "# Only works in Jupyter or GUI environments", "agent.get_graph().draw_mermaid_png()");
+  lines.push(")", "", "# Visualize the graph", "# For Jupyter or GUI environments:", "agent.get_graph().draw_mermaid_png()", "", "# To save PNG to file:", "png_data = agent.get_graph().draw_mermaid_png()", "with open(\"graph.png\", \"wb\") as f:", "    f.write(png_data)", "", "# For terminal/ASCII output:", "agent.get_graph().draw_ascii()");
 
   return lines.join("\n");
 }
