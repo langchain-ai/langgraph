@@ -57,24 +57,7 @@ graph = graph_builder.compile(...)
 You compile your graph by just calling the `.compile()` method:
 
 ```typescript
-import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
-
-// Define your state using Annotation.Root
-const State = Annotation.Root({
-  // Define your state channels here
-  messages: Annotation({
-    reducer: (x, y) => [...x, ...y],
-    default: () => [],
-  }),
-});
-
-const graph = new StateGraph(State)
-  .addNode("node1", node1)
-  .addNode("node2", node2)
-  .addEdge(START, "node1")
-  .addEdge("node1", "node2")
-  .addEdge("node2", END)
-  .compile();
+const graph = graph_builder.compile(...);
 ```
 :::
 
@@ -87,7 +70,7 @@ The first thing you do when you define a graph is define the `State` of the grap
 :::
 
 :::js
-The first thing you do when you define a graph is define the `State` of the graph. The `State` consists of the [schema of the graph](#schema) as well as [`reducer` functions](#reducers) which specify how to apply updates to the state. The schema of the `State` will be the input schema to all `Nodes` and `Edges` in the graph, and can be either a Zod schema or a TypeScript interface. All `Nodes` will emit updates to the `State` which are then applied using the specified `reducer` function.
+The first thing you do when you define a graph is define the `State` of the graph. The `State` consists of the [schema of the graph](#schema) as well as [`reducer` functions](#reducers) which specify how to apply updates to the state. The schema of the `State` will be the input schema to all `Nodes` and `Edges` in the graph, and must use Annotation.Root to define state channels with their reducers. All `Nodes` will emit updates to the `State` which are then applied using the specified `reducer` function.
 :::
 
 ### Schema
@@ -97,7 +80,7 @@ The main documented way to specify the schema of a graph is by using `TypedDict`
 :::
 
 :::js
-The main documented way to specify the schema of a graph is by using Zod schemas. However, we also support [using TypeScript interfaces](../how-tos/graph-api.ipynb#use-typescript-interfaces-for-graph-state) as your graph state to add **default values** and additional data validation.
+The main documented way to specify the schema of a graph is by using Annotation.Root with reducer functions. You can define your state channels with explicit reducers and default values. While Zod schemas can be used for validation in other contexts, the graph state itself must use Annotation.Root.
 :::
 
 By default, the graph will have the same input and output schemas. If you want to change this, you can also specify explicit input and output schemas directly. This is useful when you have a lot of keys, and some are explicitly for input and others for output. See the [guide here](../how-tos/graph-api.ipynb#define-input-and-output-schemas) for how to use.
@@ -160,51 +143,63 @@ graph.invoke({"user_input":"My"})
 
 :::js
 ```typescript
-import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
+import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
 
-// Note: In JavaScript, all state channels must be defined upfront
-const GraphStateAnnotation = Annotation.Root({
-  // Input state
+// In JavaScript, ALL state channels must be pre-declared in Annotation.Root
+// This is a key architectural difference from Python
+const State = Annotation.Root({
+  // All channels including "private" ones must be declared here
   userInput: Annotation<string>({
     reducer: (x, y) => y ?? x,
     default: () => "",
   }),
-  // Overall state
   foo: Annotation<string>({
     reducer: (x, y) => y ?? x,
     default: () => "",
   }),
-  // Private state - must be defined here, unlike Python
   bar: Annotation<string>({
     reducer: (x, y) => y ?? x,
     default: () => "",
   }),
-  // Output state
   graphOutput: Annotation<string>({
     reducer: (x, y) => y ?? x,
     default: () => "",
   }),
 });
 
-type GraphState = typeof GraphStateAnnotation.State;
+// Define input/output schemas for filtering (these reference the main State)
+const InputState = Annotation.Root({
+  userInput: Annotation<string>({
+    reducer: (x, y) => y ?? x,
+    default: () => "",
+  }),
+});
 
-const node1 = (state: GraphState): Partial<GraphState> => {
-  // Write to OverallState
+const OutputState = Annotation.Root({
+  graphOutput: Annotation<string>({
+    reducer: (x, y) => y ?? x,
+    default: () => "",
+  }),
+});
+
+const node1 = (state: typeof State.State) => {
+  // Write to foo channel
   return { foo: state.userInput + " name" };
 };
 
-const node2 = (state: GraphState): Partial<GraphState> => {
-  // Read from OverallState, write to PrivateState
+const node2 = (state: typeof State.State) => {
+  // Read from foo, write to bar
   return { bar: state.foo + " is" };
 };
 
-const node3 = (state: GraphState): Partial<GraphState> => {
-  // Read from PrivateState, write to OutputState
+const node3 = (state: typeof State.State) => {
+  // Read from bar, write to graphOutput
   return { graphOutput: state.bar + " Lance" };
 };
 
-const graph = new StateGraph({
-  stateSchema: GraphStateAnnotation,
+const graph = new StateGraph(State, {
+  input: InputState,
+  output: OutputState,
 })
   .addNode("node1", node1)
   .addNode("node2", node2)
@@ -216,6 +211,7 @@ const graph = new StateGraph({
   .compile();
 
 await graph.invoke({ userInput: "My" });
+// Note: JavaScript returns ALL state fields, not just output schema fields
 // { userInput: 'My', foo: 'My name', bar: 'My name is', graphOutput: 'My name is Lance' }
 ```
 :::
@@ -229,11 +225,9 @@ There are two subtle and important points to note here:
 :::
 
 :::js
-1. In JavaScript, **all state channels must be defined upfront** in the `GraphStateAnnotation`. Unlike Python, JavaScript nodes cannot dynamically write to new state channels that weren't registered during graph initialization. This is why we define all channels (`userInput`, `foo`, `bar`, `graphOutput`) in the `Annotation.Root` declaration.
+1. The nodes receive the full state object (containing all channels) regardless of the input/output schema filters. The input/output schemas in JavaScript only affect what fields are accepted as input and what fields are returned in the output, but internally all nodes work with the complete state.
 
-2. We initialize the graph with `new StateGraph({ stateSchema: GraphStateAnnotation })`. All nodes receive and can write to the complete state, but they should only write to the channels they're responsible for. The type system (`GraphState`) ensures type safety across all node operations.
-
-Note: This is a key difference from the Python implementation, where nodes can write to state channels that weren't initially passed to `StateGraph`. In JavaScript, the state schema is fixed at compile time for type safety.
+2. **Important architectural difference**: Unlike Python, JavaScript requires ALL state channels to be pre-declared in the main State definition using Annotation.Root. You cannot dynamically add new state channels. The concept of "PrivateState" in JavaScript is implemented by including all channels (including "private" ones like `bar`) in the main State definition. The input/output schemas then act as filters to control what's exposed at the graph boundaries.
 :::
 
 ### Reducers
@@ -264,17 +258,17 @@ import { Annotation } from "@langchain/langgraph";
 
 const State = Annotation.Root({
   foo: Annotation<number>({
-    reducer: (x, y) => y ?? x,
+    reducer: (x, y) => y ?? x,  // Default reducer: replace if new value provided
     default: () => 0,
   }),
   bar: Annotation<string[]>({
-    reducer: (x, y) => y ?? x,
+    reducer: (x, y) => y ?? x,  // Default reducer: replace if new value provided
     default: () => [],
   }),
 });
 ```
 
-In this example, we're using the default reducer pattern `(x, y) => y ?? x` which replaces the old value with the new value if provided. Let's assume the input to the graph is `{ foo: 1, bar: ["hi"] }`. Let's then assume the first `Node` returns `{ foo: 2 }`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{ foo: 2, bar: ["hi"] }`. If the second node returns `{ bar: ["bye"] }` then the `State` would then be `{ foo: 2, bar: ["bye"] }`
+In this example, we use the default reducer pattern `(x, y) => y ?? x` which replaces the old value with the new value if provided. Let's assume the input to the graph is `{ foo: 1, bar: ["hi"] }`. Let's then assume the first `Node` returns `{ foo: 2 }`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{ foo: 2, bar: ["hi"] }`. If the second node returns `{ bar: ["bye"] }` then the `State` would then be `{ foo: 2, bar: ["bye"] }`
 :::
 
 **Example B:**
@@ -299,17 +293,17 @@ import { Annotation } from "@langchain/langgraph";
 
 const State = Annotation.Root({
   foo: Annotation<number>({
-    reducer: (x, y) => y ?? x,
+    reducer: (x, y) => y ?? x,  // Default reducer
     default: () => 0,
   }),
   bar: Annotation<string[]>({
-    reducer: (x, y) => x.concat(y),
+    reducer: (x, y) => x.concat(y),  // Custom reducer: concatenate arrays
     default: () => [],
   }),
 });
 ```
 
-In this example, we've specified a custom reducer function for the second key (`bar`) that concatenates arrays. Note that the first key uses the default replacement reducer. Let's assume the input to the graph is `{ foo: 1, bar: ["hi"] }`. Let's then assume the first `Node` returns `{ foo: 2 }`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{ foo: 2, bar: ["hi"] }`. If the second node returns `{ bar: ["bye"] }` then the `State` would then be `{ foo: 2, bar: ["hi", "bye"] }`. Notice here that the `bar` key is updated by concatenating the two arrays together.
+In this example, we've specified a custom reducer function for the second key (`bar`) that concatenates arrays instead of replacing them. The first key uses the default reducer. Let's assume the input to the graph is `{ foo: 1, bar: ["hi"] }`. Let's then assume the first `Node` returns `{ foo: 2 }`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{ foo: 2, bar: ["hi"] }`. If the second node returns `{ bar: ["bye"] }` then the `State` would then be `{ foo: 2, bar: ["hi", "bye"] }`. Notice here that the `bar` key is updated by concatenating the two arrays together.
 :::
 
 ### Working with Messages in Graph State
@@ -378,11 +372,10 @@ In addition to keeping track of message IDs, the `messagesStateReducer` function
 Since the state updates are always deserialized into LangChain `Messages` when using `messagesStateReducer`, you should use dot notation to access message attributes, like `state.messages[state.messages.length - 1].content`. Below is an example of a graph that uses `messagesStateReducer` as its reducer function.
 
 ```typescript
-import { BaseMessage } from "@langchain/core/messages";
-import { messagesStateReducer, Annotation } from "@langchain/langgraph";
+import { Annotation, messagesStateReducer } from "@langchain/langgraph";
 
 const GraphState = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
+  messages: Annotation({
     reducer: messagesStateReducer,
     default: () => [],
   }),
@@ -404,10 +397,10 @@ class State(MessagesState):
 :::
 
 :::js
-Since having a list of messages in your state is so common, you can easily create a state with messages using the `messagesStateReducer`. This reducer handles a list of `BaseMessage` objects and manages message IDs correctly. Typically, there is more state to track than just messages, so we see people combine messages with other state fields, like:
+Since having a list of messages in your state is so common, using the `messagesStateReducer` pattern makes it easy to handle messages. When defining state with messages, you use Annotation.Root with a `messages` field that uses the `messagesStateReducer`. Typically, there is more state to track than just messages, so we see people combine this pattern with other fields, like:
 
 ```typescript
-import { messagesStateReducer, Annotation } from "@langchain/langgraph";
+import { Annotation, messagesStateReducer } from "@langchain/langgraph";
 
 const State = Annotation.Root({
   messages: Annotation({
@@ -473,20 +466,28 @@ In LangGraph, nodes are typically TypeScript functions (sync or async) where the
 Similar to `NetworkX`, you add these nodes to a graph using the `addNode` method:
 
 ```typescript
-import { StateGraph, Annotation } from "@langchain/langgraph";
+import { Annotation } from "@langchain/langgraph";
+import { RunnableConfig } from "@langchain/core/runnables";
+import { StateGraph } from "@langchain/langgraph";
 
 const State = Annotation.Root({
-  input: Annotation<string>(),
-  results: Annotation<string>(),
+  input: Annotation<string>({
+    reducer: (x, y) => y ?? x,
+    default: () => "",
+  }),
+  results: Annotation<string>({
+    reducer: (x, y) => y ?? x,
+    default: () => "",
+  }),
 });
 
-const myNode = (state, config) => {
+const myNode = (state: typeof State.State, config: RunnableConfig) => {
   console.log("In node: ", config?.configurable?.user_id);
   return { results: `Hello, ${state.input}!` };
 };
 
 // The second argument is optional
-const myOtherNode = (state) => {
+const myOtherNode = (state: typeof State.State) => {
   return state;
 };
 
@@ -558,10 +559,10 @@ LangGraph supports caching of tasks/nodes based on the input to the node. To use
 For example:
 
 :::python
-```py
+```python
 import time
 from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END, START
 from langgraph.cache.memory import InMemoryCache
 from langgraph.types import CachePolicy
 
@@ -581,7 +582,7 @@ def expensive_node(state: State) -> dict[str, int]:
 
 
 builder.add_node("expensive_node", expensive_node, cache_policy=CachePolicy(ttl=3))
-builder.set_entry_point("expensive_node")
+builder.add_edge(START, "expensive_node")
 builder.add_edge("expensive_node", END)
 
 graph = builder.compile(cache=InMemoryCache())
@@ -598,15 +599,22 @@ print(graph.invoke({"x": 5}, stream_mode='updates'))  # (2)!
 
 :::js
 ```typescript
-import { StateGraph, Annotation, START } from "@langchain/langgraph";
+import { Annotation } from "@langchain/langgraph";
+import { StateGraph, START, END } from "@langchain/langgraph";
 import { InMemoryCache } from "@langchain/langgraph-checkpoint";
 
 const State = Annotation.Root({
-  x: Annotation<number>(),
-  result: Annotation<number>(),
+  x: Annotation<number>({
+    reducer: (x, y) => y ?? x,
+    default: () => 0,
+  }),
+  result: Annotation<number>({
+    reducer: (x, y) => y ?? x,
+    default: () => 0,
+  }),
 });
 
-const expensiveNode = (state) => {
+const expensiveNode = (state: typeof State.State) => {
   // expensive computation
   return { result: state.x * 2 };
 };
@@ -616,6 +624,7 @@ const graph = new StateGraph(State)
     cachePolicy: { ttl: 3 } 
   })
   .addEdge(START, "expensiveNode")
+  .addEdge("expensiveNode", END)
   .compile({ cache: new InMemoryCache() });
 
 console.log(await graph.invoke({ x: 5 }, { streamMode: "updates" })); // (1)!
@@ -639,9 +648,6 @@ Edges define how the logic is routed and how the graph decides to stop. This is 
 
 A node can have MULTIPLE outgoing edges. If a node has multiple out-going edges, **all** of those destination nodes will be executed in parallel as a part of the next superstep.
 
-!!! warning "Parallel Edges and State Updates"
-    When multiple nodes execute in parallel and update the same state fields, you must use reducers to handle the concurrent updates. Without reducers, you'll get an error about receiving multiple values per step. See the [Reducers](#reducers) section for details.
-
 ### Normal Edges
 
 :::python
@@ -658,20 +664,20 @@ If you **always** want to go from node A to node B, you can use the `addEdge` me
 ```typescript
 import { StateGraph, Annotation } from "@langchain/langgraph";
 
-// Define your state structure
+// Define the state
 const State = Annotation.Root({
-  // your state fields here
+  // Define your state fields here
 });
 
-// Define your node functions
+// Define the nodes
 const nodeA = (state) => {
-  // node A logic
-  return state;
+  // Node A logic
+  return { /* state updates */ };
 };
 
 const nodeB = (state) => {
-  // node B logic
-  return state;
+  // Node B logic
+  return { /* state updates */ };
 };
 
 const graph = new StateGraph(State)
@@ -708,17 +714,21 @@ If you want to **optionally** route to 1 or more edges (or optionally terminate)
 ```typescript
 import { StateGraph, Annotation } from "@langchain/langgraph";
 
-// Define your state structure
+// Define the state
 const State = Annotation.Root({
-  // your state fields here
+  // Define your state fields here
 });
 
-// Define routing function
+// Define the routing function
 const routingFunction = (state) => {
-  // Your routing logic here
-  // Return the name of the next node or array of node names
-  return "nodeB"; // or ["nodeB", "nodeC"] for parallel execution
+  // Routing logic based on state
+  return "nodeB"; // or "nodeC", or ["nodeB", "nodeC"] for parallel
 };
+
+// Define the nodes
+const nodeA = (state) => { /* logic */ };
+const nodeB = (state) => { /* logic */ };
+const nodeC = (state) => { /* logic */ };
 
 const graph = new StateGraph(State)
   .addNode("nodeA", nodeA)
@@ -735,12 +745,6 @@ By default, the return value `routingFunction` is used as the name of the node (
 You can optionally provide a dictionary that maps the `routingFunction`'s output to the name of the next node.
 
 ```typescript
-// Routing function that returns a boolean or other value
-const routingFunction = (state) => {
-  // Return a value that will be mapped
-  return state.someCondition; // returns true or false
-};
-
 const graph = new StateGraph(State)
   .addNode("nodeA", nodeA)
   .addNode("nodeB", nodeB)
@@ -772,12 +776,7 @@ graph.add_edge(START, "node_a")
 The entry point is the first node(s) that are run when the graph starts. You can use the `addEdge` method from the virtual `START` node to the first node to execute to specify where to enter the graph.
 
 ```typescript
-import { StateGraph, START, Annotation } from "@langchain/langgraph";
-
-// Define your state structure
-const State = Annotation.Root({
-  // your state fields here
-});
+import { START } from "@langchain/langgraph";
 
 const graph = new StateGraph(State)
   .addNode("nodeA", nodeA)
@@ -808,18 +807,7 @@ graph.add_conditional_edges(START, routing_function, {True: "node_b", False: "no
 A conditional entry point lets you start at different nodes depending on custom logic. You can use `addConditionalEdges` from the virtual `START` node to accomplish this.
 
 ```typescript
-import { StateGraph, START, Annotation } from "@langchain/langgraph";
-
-// Define your state structure
-const State = Annotation.Root({
-  // your state fields here
-});
-
-// Define entry routing function
-const routingFunction = (state) => {
-  // Logic to determine starting node
-  return "nodeB"; // or "nodeC" based on state
-};
+import { START } from "@langchain/langgraph";
 
 const graph = new StateGraph(State)
   .addNode("nodeB", nodeB)
@@ -831,7 +819,7 @@ const graph = new StateGraph(State)
 You can optionally provide a dictionary that maps the `routingFunction`'s output to the name of the next node.
 
 ```typescript
-import { StateGraph, START, Annotation } from "@langchain/langgraph";
+import { START } from "@langchain/langgraph";
 
 const graph = new StateGraph(State)
   .addNode("nodeB", nodeB)
@@ -848,19 +836,13 @@ const graph = new StateGraph(State)
 
 By default, `Nodes` and `Edges` are defined ahead of time and operate on the same shared state. However, there can be cases where the exact edges are not known ahead of time and/or you may want different versions of `State` to exist at the same time. A common example of this is with [map-reduce](https://langchain-ai.github.io/langgraph/how-tos/map-reduce/) design patterns. In this design pattern, a first node may generate a list of objects, and you may want to apply some other node to all those objects. The number of objects may be unknown ahead of time (meaning the number of edges may not be known) and the input `State` to the downstream `Node` should be different (one for each generated object).
 
+!!! warning "Parallel Updates Require Reducers"
+    When using `Send` to create parallel execution branches, if multiple nodes update the same state field, you **must** define a reducer for that field. Without a reducer, parallel updates will cause an error. See the [Reducers](#reducers) section for more details.
+
 :::python
 To support this design pattern, LangGraph supports returning [`Send`][langgraph.types.Send] objects from conditional edges. `Send` takes two arguments: first is the name of the node, and second is the state to pass to that node.
 
 ```python
-from typing import TypedDict, List, Annotated
-from operator import add
-from langgraph.types import Send
-
-# The overall state has a reducer for jokes since multiple nodes write to it
-class OverallState(TypedDict):
-    subjects: List[str]
-    jokes: Annotated[List[str], add]  # Reducer for parallel writes
-
 def continue_to_jokes(state: OverallState):
     return [Send("generate_joke", {"subject": s}) for s in state['subjects']]
 
@@ -872,15 +854,18 @@ graph.add_conditional_edges("node_a", continue_to_jokes)
 To support this design pattern, LangGraph supports returning `Send` objects from conditional edges. `Send` takes two arguments: first is the name of the node, and second is the state to pass to that node.
 
 ```typescript
-import { Send, Annotation } from "@langchain/langgraph";
+import { Send, StateGraph, Annotation } from "@langchain/langgraph";
 
-// The overall state has a reducer for jokes since multiple nodes write to it
+// Define states with reducer for parallel updates
 const OverallState = Annotation.Root({
-  subjects: Annotation(),
-  jokes: Annotation({
+  subjects: Annotation<string[]>({
+    reducer: (x, y) => y ?? x,
     default: () => [],
-    reducer: (prev, curr) => [...prev, ...curr]  // Reducer for parallel writes
-  })
+  }),
+  jokes: Annotation<string[]>({
+    reducer: (x, y) => [...x, ...y],  // Concatenate for parallel updates
+    default: () => [],
+  }),
 });
 
 const continueToJokes = (state: OverallState) => {
@@ -1028,6 +1013,24 @@ A common use case is updating graph state from inside a tool. For example, in a 
 
 Refer to [this guide](../how-tos/graph-api.ipynb#use-inside-tools) for detail.
 
+!!! note
+
+    Setting `graph` to `Command.PARENT` will navigate to the closest parent graph.
+
+!!! important "State updates with `Command.PARENT`"
+
+    When you send updates from a subgraph node to a parent graph node for a key that's shared by both parent and subgraph [state schemas](#schema), you **must** define a [reducer](#reducers) for the key you're updating in the parent graph state. See this [example](../how-tos/graph-api.ipynb#navigate-to-a-node-in-a-parent-graph).
+
+This is particularly useful when implementing [multi-agent handoffs](./multi_agent.md#handoffs).
+
+Check out [this guide](../how-tos/graph-api.ipynb#navigate-to-a-node-in-a-parent-graph) for detail.
+
+### Using inside tools
+
+A common use case is updating graph state from inside a tool. For example, in a customer support application you might want to look up customer information based on their account number or ID in the beginning of the conversation.
+
+Refer to [this guide](../how-tos/graph-api.ipynb#use-inside-tools) for detail.
+
 ### Human-in-the-loop
 
 :::python
@@ -1087,7 +1090,7 @@ You can optionally specify a `configSchema` when creating a graph.
 import { z } from "zod";
 
 const ConfigSchema = z.object({
-  llm: z.string(),
+  llm: z.string().optional(),
 });
 
 const graph = new StateGraph(State, ConfigSchema)
