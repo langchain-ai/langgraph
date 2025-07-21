@@ -1463,7 +1463,7 @@ wheels = [
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.73"
+version = "0.1.74"
 source = { editable = "../sdk-py" }
 dependencies = [
     { name = "httpx" },
