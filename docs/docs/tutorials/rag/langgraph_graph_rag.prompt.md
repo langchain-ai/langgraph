@@ -1,4 +1,4 @@
-# LangGraph GraphRAG Implementation
+# LangGraphx2RAG Implementation
 
 **Generate a Python Jupyter notebook for an agentic GraphRAG implementation using LangGraph**
 
