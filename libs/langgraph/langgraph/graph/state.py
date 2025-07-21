@@ -1239,12 +1239,7 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
         if isinstance(command.goto, Send):
             rtn.append((TASKS, command.goto))
         elif isinstance(command.goto, str):
-            if command.goto == END:
-                # END is a special case, it's not actually a node in a practical sense
-                # but rather a special terminal node that we don't need to write to
-                pass
-            else:
-                rtn.append((CHANNEL_BRANCH_TO.format(command.goto), None))
+            rtn.append((CHANNEL_BRANCH_TO.format(command.goto), None))
         else:
             rtn.extend(
                 (TASKS, go)
