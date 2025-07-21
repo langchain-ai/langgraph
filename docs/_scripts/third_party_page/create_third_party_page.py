@@ -91,7 +91,9 @@ def generate_markdown(resolved_packages: List[ResolvedPackage], language: str) -
         )
         stars = f"![GitHub stars]({stars_badge})"
         downloads = package["weekly_downloads"] or "-"
-        row = f"| {name} | {repo_url} | {package['description']} | {downloads} | {stars}"
+        row = (
+            f"| {name} | {repo_url} | {package['description']} | {downloads} | {stars}"
+        )
         rows.append(row)
     markdown_content = MARKDOWN.format(
         library_list="\n".join(rows), langgraph_url=langgraph_url
