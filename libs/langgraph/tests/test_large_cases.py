@@ -6958,4 +6958,4 @@ def test_subgraph_to_end_does_not_warn() -> None:
     graph = builder.compile()
 
     response = graph.invoke({"x": "hello"})
-    print(response)
+    assert response == {"x": "hello!"}
