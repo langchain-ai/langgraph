@@ -6955,3 +6955,30 @@ def test_weather_subgraph(
             },
         ),
     ]
+
+
+def test_subgraph_to_end_does_not_warn() -> None:
+    """Regression test for https://github.com/langchain-ai/langgraph/issues/5572."""
+
+    class State(TypedDict):
+        x: str
+
+    def update_x(state: State):
+        return Command(goto=END, update={"x": state["x"] + "!"})
+
+    # Subgraph
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node("update_x", update_x)
+    subgraph_builder.add_edge(START, "update_x")
+    subgraph_builder.add_edge("update_x", END)
+    subgraph = subgraph_builder.compile()
+
+    # Parent graph
+    builder = StateGraph(State)
+    builder.add_node("subgraph_node", subgraph)
+    builder.add_edge(START, "subgraph_node")
+    builder.add_edge("subgraph_node", END)
+    graph = builder.compile()
+
+    response = graph.invoke({"x": "hello"})
+    print(response)

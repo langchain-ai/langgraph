@@ -1236,17 +1236,18 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
     for command in commands:
         if command.graph == Command.PARENT:
             raise ParentCommand(command)
-        if isinstance(command.goto, Send):
-            rtn.append((TASKS, command.goto))
-        elif isinstance(command.goto, str):
-            rtn.append((CHANNEL_BRANCH_TO.format(command.goto), None))
-        else:
-            rtn.extend(
-                (TASKS, go)
-                if isinstance(go, Send)
-                else (CHANNEL_BRANCH_TO.format(go), None)
-                for go in command.goto
-            )
+
+        goto_targets = (
+            [command.goto] if isinstance(command.goto, (Send, str)) else command.goto
+        )
+
+        for go in goto_targets:
+            if isinstance(go, Send):
+                rtn.append((TASKS, go))
+            elif isinstance(go, str) and go != END:
+                # END is a special case, it's not actually a node in a practical sense
+                # but rather a special terminal node that we don't need to branch to
+                rtn.append((CHANNEL_BRANCH_TO.format(go), None))
     return rtn
 
 
