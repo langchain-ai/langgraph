@@ -8,7 +8,7 @@ import nbformat
 import re
 
 logger = logging.getLogger(__name__)
-NOTEBOOK_DIRS = ("docs/how-tos","docs/tutorials")
+NOTEBOOK_DIRS = ("docs/how-tos", "docs/tutorials")
 DOCS_PATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CASSETTES_PATH = os.path.join(DOCS_PATH, "cassettes")
 
@@ -19,9 +19,7 @@ BLOCKLIST_COMMANDS = (
     "draw_mermaid_png",
 )
 
-NOTEBOOKS_NO_CASSETTES = (
-    "docs/how-tos/visualization.ipynb",
-)
+NOTEBOOKS_NO_CASSETTES = ("docs/how-tos/visualization.ipynb",)
 
 NOTEBOOKS_NO_EXECUTION = [
     # this uses a user provided project name for langsmith
@@ -43,7 +41,7 @@ NOTEBOOKS_NO_EXECUTION = [
     "docs/tutorials/storm/storm.ipynb",  # issues only when running with VCR
     "docs/tutorials/lats/lats.ipynb",  # issues only when running with VCR
     "docs/tutorials/rag/langgraph_crag.ipynb",  # flakiness from tavily
-    "docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # flakiness only when running in GHA 
+    "docs/tutorials/rag/langgraph_adaptive_rag.ipynb",  # flakiness only when running in GHA
     "docs/tutorials/rag/langgraph_self_rag.ipynb",  # flakiness only when running in GHA
     "docs/tutorials/rag/langgraph_agentic_rag.ipynb",  # flakiness only when running in GHA
     "docs/how-tos/map-reduce.ipynb",  # flakiness from structured output, only when running with VCR
@@ -80,19 +78,23 @@ def is_comment(code: str) -> bool:
 
 
 def has_blocklisted_command(code: str, metadata: dict) -> bool:
-    if 'hide_from_vcr' in metadata:
+    if "hide_from_vcr" in metadata:
         return True
-    
+
     code = code.strip()
     for blocklisted_pattern in BLOCKLIST_COMMANDS:
         if blocklisted_pattern in code:
             return True
     return False
 
-MERMAID_PATTERN = re.compile(r'display\(Image\((\w+)\.get_graph\(\)\.draw_mermaid_png\(\)\)\)')
+
+MERMAID_PATTERN = re.compile(
+    r"display\(Image\((\w+)\.get_graph\(\)\.draw_mermaid_png\(\)\)\)"
+)
+
 
 def remove_mermaid(code: str) -> str:
-    return MERMAID_PATTERN.sub('print()', code)
+    return MERMAID_PATTERN.sub("print()", code)
 
 
 def add_vcr_to_notebook(
@@ -133,8 +135,9 @@ def add_vcr_to_notebook(
 
         cell_id = cell.get("id", idx)
         cassette_name = f"{cassette_prefix}_{cell_id}.msgpack.zlib"
-        cell.source = f"with custom_vcr.use_cassette('{cassette_name}', filter_headers=['x-api-key', 'authorization'], record_mode='once', serializer='advanced_compressed'):\n" + "\n".join(
-            f"    {line}" for line in lines
+        cell.source = (
+            f"with custom_vcr.use_cassette('{cassette_name}', filter_headers=['x-api-key', 'authorization'], record_mode='once', serializer='advanced_compressed'):\n"
+            + "\n".join(f"    {line}" for line in lines)
         )
 
         if any("hub.pull" in line or "from langsmith import" in line for line in lines):
@@ -143,46 +146,50 @@ def add_vcr_to_notebook(
     # Add import statement
     vcr_import_lines = []
     if uses_langsmith:
-        vcr_import_lines.extend([
-            # patch urllib3 to handle vcr errors, see more here:
-            # https://github.com/langchain-ai/langsmith-sdk/blob/main/python/langsmith/_internal/_patch.py
-            "import sys",
-            f"sys.path.insert(0, '{os.path.join(DOCS_PATH, '_scripts')}')",
-            "import _patch as patch_urllib3",
-            "patch_urllib3.patch_urllib3()",
-        ])
+        vcr_import_lines.extend(
+            [
+                # patch urllib3 to handle vcr errors, see more here:
+                # https://github.com/langchain-ai/langsmith-sdk/blob/main/python/langsmith/_internal/_patch.py
+                "import sys",
+                f"sys.path.insert(0, '{os.path.join(DOCS_PATH, '_scripts')}')",
+                "import _patch as patch_urllib3",
+                "patch_urllib3.patch_urllib3()",
+            ]
+        )
 
-    vcr_import_lines.extend([
-        "import nest_asyncio",
-        "nest_asyncio.apply()",
-        "import vcr",
-        "import msgpack",
-        "import base64",
-        "import zlib",
-        "import os",
-        "os.environ.pop(\"LANGCHAIN_TRACING_V2\", None)",
-        "custom_vcr = vcr.VCR()",
-        "",
-        "def compress_data(data, compression_level=9):",
-        "    packed = msgpack.packb(data, use_bin_type=True)",
-        "    compressed = zlib.compress(packed, level=compression_level)",
-        "    return base64.b64encode(compressed).decode('utf-8')",
-        "",
-        "def decompress_data(compressed_string):",
-        "    decoded = base64.b64decode(compressed_string)",
-        "    decompressed = zlib.decompress(decoded)",
-        "    return msgpack.unpackb(decompressed, raw=False)",
-        "",
-        "class AdvancedCompressedSerializer:",
-        "    def serialize(self, cassette_dict):",
-        "        return compress_data(cassette_dict)",
-        "",
-        "    def deserialize(self, cassette_string):",
-        "        return decompress_data(cassette_string)",
-        "",
-        "custom_vcr.register_serializer('advanced_compressed', AdvancedCompressedSerializer())",
-        "custom_vcr.serializer = 'advanced_compressed'",
-    ])
+    vcr_import_lines.extend(
+        [
+            "import nest_asyncio",
+            "nest_asyncio.apply()",
+            "import vcr",
+            "import msgpack",
+            "import base64",
+            "import zlib",
+            "import os",
+            'os.environ.pop("LANGCHAIN_TRACING_V2", None)',
+            "custom_vcr = vcr.VCR()",
+            "",
+            "def compress_data(data, compression_level=9):",
+            "    packed = msgpack.packb(data, use_bin_type=True)",
+            "    compressed = zlib.compress(packed, level=compression_level)",
+            "    return base64.b64encode(compressed).decode('utf-8')",
+            "",
+            "def decompress_data(compressed_string):",
+            "    decoded = base64.b64decode(compressed_string)",
+            "    decompressed = zlib.decompress(decoded)",
+            "    return msgpack.unpackb(decompressed, raw=False)",
+            "",
+            "class AdvancedCompressedSerializer:",
+            "    def serialize(self, cassette_dict):",
+            "        return compress_data(cassette_dict)",
+            "",
+            "    def deserialize(self, cassette_string):",
+            "        return decompress_data(cassette_string)",
+            "",
+            "custom_vcr.register_serializer('advanced_compressed', AdvancedCompressedSerializer())",
+            "custom_vcr.serializer = 'advanced_compressed'",
+        ]
+    )
 
     import_cell = nbformat.v4.new_code_cell(source="\n".join(vcr_import_lines))
     import_cell.pop("id", None)
@@ -190,7 +197,9 @@ def add_vcr_to_notebook(
     return notebook
 
 
-def remove_mermaid_from_notebook(notebook: nbformat.NotebookNode) -> nbformat.NotebookNode:
+def remove_mermaid_from_notebook(
+    notebook: nbformat.NotebookNode,
+) -> nbformat.NotebookNode:
     for cell in notebook.cells:
         if cell.cell_type != "code":
             continue
@@ -236,13 +245,15 @@ def process_notebooks(should_comment_install_cells: bool) -> None:
 
                         # Add a special tag to the first code cell
                         if notebook.cells and notebook.cells[1].cell_type == "code":
-                            notebook.cells[1].metadata["tags"] = notebook.cells[1].metadata.get("tags", []) + ["no_execution"]
+                            notebook.cells[1].metadata["tags"] = notebook.cells[
+                                1
+                            ].metadata.get("tags", []) + ["no_execution"]
 
                     nbformat.write(notebook, notebook_path)
                     logger.info(f"Processed: {notebook_path}")
                 except Exception as e:
                     logger.error(f"Error processing {notebook_path}: {e}")
-    
+
     with open("notebooks_no_execution.json", "w") as f:
         json.dump(NOTEBOOKS_NO_EXECUTION, f)
 
