@@ -295,7 +295,7 @@ def _highlight_code_blocks(markdown: str) -> str:
             opening_fence += f" {attributes}"
 
         if highlighted_lines:
-            opening_fence += f" hl_lines=\"{' '.join(highlighted_lines)}\""
+            opening_fence += f' hl_lines="{" ".join(highlighted_lines)}"'
 
         return (
             # The indent and opening fence
@@ -358,13 +358,11 @@ def _on_page_markdown_with_config(
 
 
 def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
-    finalized_markdown = (
-        _on_page_markdown_with_config(
-            markdown,
-            page,
-            add_api_references=True,
-            **kwargs,
-        )
+    finalized_markdown = _on_page_markdown_with_config(
+        markdown,
+        page,
+        add_api_references=True,
+        **kwargs,
     )
     page.meta["original_markdown"] = finalized_markdown
     return finalized_markdown
@@ -437,6 +435,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     else:
         return html  # fallback if no <body> found
 
+
 def _inject_markdown_into_html(html: str, page: Page) -> str:
     """Inject the original markdown content into the HTML page as JSON."""
     original_markdown = page.meta.get("original_markdown", "")
@@ -469,6 +468,7 @@ def _inject_markdown_into_html(html: str, page: Page) -> str:
         )
     return html.replace("</head>", f"{script_content}</head>")
 
+
 def on_post_page(html: str, page: Page, config: MkDocsConfig) -> str:
     """Inject Google Tag Manager noscript tag immediately after <body>.
 
@@ -482,6 +482,7 @@ def on_post_page(html: str, page: Page, config: MkDocsConfig) -> str:
     """
     html = _inject_markdown_into_html(html, page)
     return _inject_gtm(html)
+
 
 # Create HTML files for redirects after site dir has been built
 def on_post_build(config):

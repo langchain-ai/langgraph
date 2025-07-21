@@ -27,7 +27,7 @@ class ResolvedPackage(Package):
 
 HERE = pathlib.Path(__file__).parent
 PACKAGES_FILE = HERE / "packages.yml"
-PACKAGES = yaml.safe_load(PACKAGES_FILE.read_text())['packages']
+PACKAGES = yaml.safe_load(PACKAGES_FILE.read_text())["packages"]
 
 
 def _get_weekly_downloads(packages: list[Package], fake: bool) -> list[ResolvedPackage]:
@@ -98,7 +98,6 @@ def _get_weekly_downloads(packages: list[Package], fake: bool) -> list[ResolvedP
         )
 
     return resolved_packages
-
 
 
 def main(output_file: str, fake: bool) -> None:

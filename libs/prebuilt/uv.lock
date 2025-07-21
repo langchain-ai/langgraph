@@ -316,7 +316,6 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.5.3"
 source = { editable = "../langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -367,7 +366,6 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.1.1"
 source = { editable = "../checkpoint" }
 dependencies = [
     { name = "langchain-core" },
@@ -397,7 +395,6 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.23"
 source = { editable = "../checkpoint-postgres" }
 dependencies = [
     { name = "langgraph-checkpoint" },
@@ -430,7 +427,6 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.10"
 source = { editable = "../checkpoint-sqlite" }
 dependencies = [
     { name = "aiosqlite" },
@@ -507,7 +503,6 @@ dev = [
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.73"
 source = { editable = "../sdk-py" }
 dependencies = [
     { name = "httpx" },
