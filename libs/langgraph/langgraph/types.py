@@ -425,7 +425,7 @@ def interrupt(value: Any) -> Any:
         from typing import Optional
         from typing_extensions import TypedDict
 
-        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.checkpoint.memory import InMemorySaver
         from langgraph.constants import START
         from langgraph.graph import StateGraph
         from langgraph.types import interrupt, Command
@@ -454,7 +454,7 @@ def interrupt(value: Any) -> Any:
         builder.add_edge(START, \"node\")
 
         # A checkpointer must be enabled for interrupts to work!
-        checkpointer = MemorySaver()
+        checkpointer = InMemorySaver()
         graph = builder.compile(checkpointer=checkpointer)
 
         config = {
