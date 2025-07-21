@@ -159,7 +159,7 @@ function generateCodeSnippet({ tools, pre, post, response }) {
   if (post) lines.push("    post_model_hook=post_model_hook,");
   if (response) lines.push("    response_format=ResponseFormat,");
 
-  lines.push(")", "", "agent.get_graph().draw_mermaid_png()");
+  lines.push(")", "", "# Only works in Jupyter or GUI environments", "agent.get_graph().draw_mermaid_png()");
 
   return lines.join("\n");
 }
