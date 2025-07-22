@@ -632,6 +632,7 @@ class AssistantsUpdate(typing.TypedDict, total=False):
     """typing.Optional configuration to update."""
 
     context: dict[str, typing.Any]
+    """The static context of the assistant."""
 
     metadata: MetadataInput
     """typing.Optional metadata to update."""
