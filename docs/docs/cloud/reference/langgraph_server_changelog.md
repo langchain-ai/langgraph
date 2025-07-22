@@ -4,6 +4,12 @@
 
 ---
 
+## v0.2.99 (2025-07-22)
+- Improved license validation by adding an in-memory cache and handling Redis connection errors more effectively.
+- Automatically remove agents from memory that are removed from `langgraph.json` to prevent persistence issues.
+- Ensured the UI namespace for generated UI is a valid JavaScript property name to prevent errors.
+- Raised a 422 error for improved request validation feedback.
+
 ## v0.2.98 (2025-07-19)
 - Added langgraph node context for improved log filtering and trace visibility.
 
