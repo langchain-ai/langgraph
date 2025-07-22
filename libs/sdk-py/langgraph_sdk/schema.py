@@ -9,6 +9,7 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
+    TypeAlias,
     TypedDict,
 )
 
@@ -129,6 +130,8 @@ SortOrder = Literal["asc", "desc"]
 The order to sort by.
 """
 
+Context: TypeAlias = dict[str, Any]
+
 
 class Config(TypedDict, total=False):
     """Configuration options for a call."""
@@ -200,6 +203,8 @@ class AssistantBase(TypedDict):
     """The ID of the graph."""
     config: Config
     """The assistant config."""
+    context: Context
+    """The static context of the assistant."""
     created_at: datetime
     """The time the assistant was created."""
     metadata: Json
@@ -355,6 +360,8 @@ class RunCreate(TypedDict):
     """Additional metadata to associate with the run."""
     config: Config | None
     """Configuration options for the run."""
+    context: Context | None
+    """The static context of the run."""
     checkpoint_id: str | None
     """The identifier of a checkpoint to resume from."""
     interrupt_before: list[str] | None

@@ -574,7 +574,7 @@ class AssistantsCreate(typing.TypedDict, total=False):
     config: dict[str, typing.Any]
     """typing.Optional configuration for the assistant."""
 
-    context: typing.Any
+    context: dict[str, typing.Any]
 
     metadata: MetadataInput
     """typing.Optional metadata to attach to the assistant."""
@@ -631,7 +631,7 @@ class AssistantsUpdate(typing.TypedDict, total=False):
     config: dict[str, typing.Any]
     """typing.Optional configuration to update."""
 
-    context: typing.Any
+    context: dict[str, typing.Any]
 
     metadata: MetadataInput
     """typing.Optional metadata to update."""
