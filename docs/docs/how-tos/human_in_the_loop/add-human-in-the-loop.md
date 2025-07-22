@@ -212,7 +212,7 @@ graph.invoke(Command(resume=True), config=thread_config)
     from langgraph.constants import START, END
     from langgraph.graph import StateGraph
     from langgraph.types import interrupt, Command
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
 
     # Define the shared graph state
     class State(TypedDict):
@@ -257,7 +257,7 @@ graph.invoke(Command(resume=True), config=thread_config)
     builder.add_edge("approved_path", END)
     builder.add_edge("rejected_path", END)
 
-    checkpointer = MemorySaver()
+    checkpointer = InMemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
 
     # Run until interrupt
@@ -325,7 +325,7 @@ graph.invoke(
     from langgraph.constants import START, END
     from langgraph.graph import StateGraph
     from langgraph.types import interrupt, Command
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
 
     # Define the graph state
     class State(TypedDict):
@@ -364,7 +364,7 @@ graph.invoke(
     builder.add_edge("downstream_use", END)
 
     # Set up in-memory checkpointing for interrupt support
-    checkpointer = MemorySaver()
+    checkpointer = InMemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
 
     # Invoke the graph until it hits the interrupt
@@ -642,7 +642,7 @@ def human_node(state: State):
     from langgraph.constants import START, END
     from langgraph.graph import StateGraph
     from langgraph.types import interrupt, Command
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
 
     # Define graph state
     class State(TypedDict):
@@ -681,7 +681,7 @@ def human_node(state: State):
     builder.add_edge("report_age", END)
 
     # Create the graph with a memory checkpointer
-    checkpointer = MemorySaver()
+    checkpointer = InMemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
 
     # Run the graph until the first interrupt
@@ -938,7 +938,7 @@ def node_in_parent_graph(state: State):
     from langgraph.graph import StateGraph
     from langgraph.constants import START
     from langgraph.types import interrupt, Command
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
 
 
     class State(TypedDict):
@@ -964,7 +964,7 @@ def node_in_parent_graph(state: State):
         print(f"Got an answer of {answer}")
 
 
-    checkpointer = MemorySaver()
+    checkpointer = InMemorySaver()
 
     subgraph_builder = StateGraph(State)
     subgraph_builder.add_node("some_node", node_in_subgraph)
@@ -995,7 +995,7 @@ def node_in_parent_graph(state: State):
     builder.add_edge(START, "parent_node")
 
     # A checkpointer must be enabled for interrupts to work!
-    checkpointer = MemorySaver()
+    checkpointer = InMemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
 
     config = {
@@ -1044,7 +1044,7 @@ To avoid issues, refrain from dynamically changing the node's structure between 
     from langgraph.graph import StateGraph
     from langgraph.constants import START 
     from langgraph.types import interrupt, Command
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
 
 
     class State(TypedDict):
@@ -1078,7 +1078,7 @@ To avoid issues, refrain from dynamically changing the node's structure between 
     builder.add_edge(START, "human_node")
 
     # A checkpointer must be enabled for interrupts to work!
-    checkpointer = MemorySaver()
+    checkpointer = InMemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
 
     config = {

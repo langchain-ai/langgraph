@@ -255,7 +255,7 @@ class Thread(TypedDict):
     values: Json
     """The current state of the thread."""
     interrupts: dict[str, list[Interrupt]]
-    """Interrupts which were thrown in this thread"""
+    """Mapping of task ids to interrupts that were raised in that task."""
 
 
 class ThreadTask(TypedDict):

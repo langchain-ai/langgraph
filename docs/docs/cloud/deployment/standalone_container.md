@@ -24,6 +24,7 @@ Before deploying, review the [conceptual guide for the Standalone Container](../
     1. `LANGSMITH_API_KEY`: (if using [Lite](../../concepts/langgraph_server.md#server-versions)) LangSmith API key. This will be used to authenticate ONCE at server start up.
     1. `LANGGRAPH_CLOUD_LICENSE_KEY`: (if using [Enterprise](../../concepts/langgraph_data_plane.md#licensing)) LangGraph Platform license key. This will be used to authenticate ONCE at server start up.
     1. `LANGSMITH_ENDPOINT`: To send traces to a [self-hosted LangSmith](https://docs.smith.langchain.com/self_hosting) instance, set `LANGSMITH_ENDPOINT` to the hostname of the self-hosted LangSmith instance.
+1. Egress to `https://beacon.langchain.com` from your network. This is required for license verification and usage reporting if not running in air-gapped mode. See the [Egress documentation](../../cloud/deployment/egress.md) for more details.
 
 ## Kubernetes (Helm)
 

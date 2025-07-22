@@ -328,14 +328,15 @@ Output of graph invocation: {'a': 'set by node_3'}
 
 A [StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs.md#langgraph.graph.StateGraph) accepts a `state_schema` argument on initialization that specifies the "shape" of the state that the nodes in the graph can access and update.
 
-In our examples, we typically use a python-native `TypedDict` for `state_schema`, but `state_schema` can be any [type](https://docs.python.org/3/library/stdtypes.html#type-objects).
+In our examples, we typically use a python-native `TypedDict` or [`dataclass`](https://docs.python.org/3/library/dataclasses.html) for `state_schema`, but `state_schema` can be any [type](https://docs.python.org/3/library/stdtypes.html#type-objects).
 
-Here, we'll see how a [Pydantic BaseModel](https://docs.pydantic.dev/latest/api/base_model/). can be used for `state_schema` to add run time validation on **inputs**.
+Here, we'll see how a [Pydantic BaseModel](https://docs.pydantic.dev/latest/api/base_model/) can be used for `state_schema` to add run-time validation on **inputs**.
 
 !!! note "Known Limitations"
     - Currently, the output of the graph will **NOT** be an instance of a pydantic model.
     - Run-time validation only occurs on inputs into nodes, not on the outputs.
     - The validation error trace from pydantic does not show which node the error arises in.
+    - Pydantic's recursive validation can be slow. For performance-sensitive applications, you may want to consider using a `dataclass` instead.
 
 ```python
 from langgraph.graph import StateGraph, START, END
@@ -1151,12 +1152,13 @@ LangGraph supports map-reduce and other advanced branching patterns using the Se
 ```python
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, Annotated
+import operator
 
 class OverallState(TypedDict):
     topic: str
     subjects: list[str]
-    jokes: list[str]
+    jokes: Annotated[list[str], operator.add]
     best_selected_joke: str
 
 def generate_topics(state: OverallState):
@@ -1565,9 +1567,9 @@ class State(TypedDict):
 
 def node_a(state: State) -> Command[Literal["node_b", "node_c"]]:
     print("Called A")
-    value = random.choice(["a", "b"])
+    value = random.choice(["b", "c"])
     # this is a replacement for a conditional edge function
-    if value == "a":
+    if value == "b":
         goto = "node_b"
     else:
         goto = "node_c"
