@@ -326,7 +326,7 @@ class entrypoint:
 
         ```python
         from typing import Optional
-        
+
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.func import entrypoint
 
@@ -350,7 +350,7 @@ class entrypoint:
 
         ```python
         from typing import Any
-        
+
         from langgraph.checkpoint.memory import MemorySaver
         from langgraph.func import entrypoint
 
