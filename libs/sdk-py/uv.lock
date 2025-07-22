@@ -119,7 +119,7 @@ wheels = [
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.2.0"
+version = "0.2.0a1"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
