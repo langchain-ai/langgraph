@@ -133,7 +133,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         ```python
         from langchain_core.runnables import RunnableConfig
         from typing_extensions import Annotated, TypedDict
-        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.checkpoint.memory import InMemorySaver
         from langgraph.graph import StateGraph
         from langgraph.runtime import Runtime
 
