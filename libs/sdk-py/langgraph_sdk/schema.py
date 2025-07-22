@@ -9,9 +9,10 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
-    TypeAlias,
     TypedDict,
 )
+
+from typing_extensions import TypeAlias
 
 Json = Optional[dict[str, Any]]
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
