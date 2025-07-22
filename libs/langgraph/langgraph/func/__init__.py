@@ -264,14 +264,14 @@ class entrypoint:
 
         from langgraph.func import entrypoint, task
         from langgraph.types import interrupt, Command
-        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.checkpoint.memory import InMemorySaver
 
         @task
         def compose_essay(topic: str) -> str:
             time.sleep(1.0)  # Simulate slow operation
             return f"An essay about {topic}"
 
-        @entrypoint(checkpointer=MemorySaver())
+        @entrypoint(checkpointer=InMemorySaver())
         def review_workflow(topic: str) -> dict:
             \"\"\"Manages the workflow for generating and reviewing an essay.
 
@@ -326,10 +326,10 @@ class entrypoint:
         of the previous invocation on the same thread id.
 
         ```python
-        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.checkpoint.memory import InMemorySaver
         from langgraph.func import entrypoint
 
-        @entrypoint(checkpointer=MemorySaver())
+        @entrypoint(checkpointer=InMemorySaver())
         def my_workflow(input_data: str, previous: Optional[str] = None) -> str:
             return "world"
 
@@ -348,10 +348,10 @@ class entrypoint:
         long as the same thread id is used.
 
         ```python
-        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.checkpoint.memory import InMemorySaver
         from langgraph.func import entrypoint
 
-        @entrypoint(checkpointer=MemorySaver())
+        @entrypoint(checkpointer=InMemorySaver())
         def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
             previous = previous or 0
             # This will return the previous value to the caller, saving
@@ -406,10 +406,10 @@ class entrypoint:
 
         Example: Decoupling the return value and the save value
             ```python
-            from langgraph.checkpoint.memory import MemorySaver
+            from langgraph.checkpoint.memory import InMemorySaver
             from langgraph.func import entrypoint
 
-            @entrypoint(checkpointer=MemorySaver())
+            @entrypoint(checkpointer=InMemorySaver())
             def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
                 previous = previous or 0
                 # This will return the previous value to the caller, saving

@@ -40,7 +40,7 @@ from langgraph.constants import (
     INTERRUPT,
     NS_SEP,
 )
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphInterrupt, ParentCommand
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
 from langgraph.types import Command, Interrupt, StreamProtocol
@@ -672,6 +672,9 @@ class RemoteGraph(PregelProtocol):
                 ns = tuple(ns_.split(NS_SEP))
             else:
                 mode, ns = chunk.event, ()
+            # raise ParentCommand exception for command events
+            if mode == "command" and chunk.data.get("graph") == Command.PARENT:
+                raise ParentCommand(Command(**chunk.data))
             # prepend caller ns (as it is not passed to remote graph)
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
                 caller_ns = tuple(caller_ns.split(NS_SEP))
@@ -771,6 +774,9 @@ class RemoteGraph(PregelProtocol):
                 ns = tuple(ns_.split(NS_SEP))
             else:
                 mode, ns = chunk.event, ()
+            # raise ParentCommand exception for command events
+            if mode == "command" and chunk.data.get("graph") == Command.PARENT:
+                raise ParentCommand(Command(**chunk.data))
             # prepend caller ns (as it is not passed to remote graph)
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
                 caller_ns = tuple(caller_ns.split(NS_SEP))

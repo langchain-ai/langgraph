@@ -877,7 +877,7 @@ async def test_ainvoke():
 async def test_langgraph_cloud_integration():
     from langgraph_sdk.client import get_client, get_sync_client
 
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.graph import END, START, MessagesState, StateGraph
 
     # create RemotePregel instance
@@ -894,7 +894,7 @@ async def test_langgraph_cloud_integration():
     workflow.add_node("agent", remote_pregel)
     workflow.add_edge(START, "agent")
     workflow.add_edge("agent", END)
-    app = workflow.compile(checkpointer=MemorySaver())
+    app = workflow.compile(checkpointer=InMemorySaver())
 
     # test invocation
     input = {

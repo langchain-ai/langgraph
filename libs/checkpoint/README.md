@@ -44,12 +44,12 @@ If the checkpointer will be used with asynchronous graph execution (i.e. executi
 ## Usage
 
 ```python
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
 read_config = {"configurable": {"thread_id": "1"}}
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 checkpoint = {
     "v": 4,
     "ts": "2024-07-31T20:14:19.804150+00:00",
