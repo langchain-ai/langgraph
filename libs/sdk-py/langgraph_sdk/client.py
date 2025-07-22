@@ -1873,9 +1873,10 @@ class RunsClient:
                                         'assistant_id': 'my_assistant_id'
                                     },
                             },
-                        'context': {
-                            'model_name': 'openai'
-                        }
+                        'context':
+                            {
+                                'model_name': 'openai'
+                            }
                         'webhook': "https://my.fake.webhook.com",
                         'temporary': False,
                         'stream_mode': ['values'],
