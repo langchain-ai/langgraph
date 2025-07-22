@@ -12,6 +12,8 @@ from typing import (
     TypedDict,
 )
 
+from typing_extensions import TypeAlias
+
 Json = Optional[dict[str, Any]]
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
 
@@ -129,6 +131,8 @@ SortOrder = Literal["asc", "desc"]
 The order to sort by.
 """
 
+Context: TypeAlias = dict[str, Any]
+
 
 class Config(TypedDict, total=False):
     """Configuration options for a call."""
@@ -183,6 +187,9 @@ class GraphSchema(TypedDict):
     config_schema: dict | None
     """The schema for the graph config.
     Missing if unable to generate JSON schema from graph."""
+    context_schema: dict | None
+    """The schema for the graph context.
+    Missing if unable to generate JSON schema from graph."""
 
 
 Subgraphs = dict[str, GraphSchema]
@@ -197,6 +204,8 @@ class AssistantBase(TypedDict):
     """The ID of the graph."""
     config: Config
     """The assistant config."""
+    context: Context
+    """The static context of the assistant."""
     created_at: datetime
     """The time the assistant was created."""
     metadata: Json
@@ -222,17 +231,13 @@ class Assistant(AssistantBase):
     """The last time the assistant was updated."""
 
 
-class Interrupt(TypedDict, total=False):
+class Interrupt(TypedDict):
     """Represents an interruption in the execution flow."""
 
     value: Any
     """The value associated with the interrupt."""
-    when: Literal["during"]
-    """When the interrupt occurred."""
-    resumable: bool
-    """Whether the interrupt can be resumed."""
-    ns: list[str] | None
-    """Optional namespace for the interrupt."""
+    id: str
+    """The ID of the interrupt. Can be used to resume the interrupt."""
 
 
 class Thread(TypedDict):
@@ -356,6 +361,8 @@ class RunCreate(TypedDict):
     """Additional metadata to associate with the run."""
     config: Config | None
     """Configuration options for the run."""
+    context: Context | None
+    """The static context of the run."""
     checkpoint_id: str | None
     """The identifier of a checkpoint to resume from."""
     interrupt_before: list[str] | None

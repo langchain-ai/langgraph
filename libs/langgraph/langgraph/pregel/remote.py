@@ -29,8 +29,8 @@ from langgraph_sdk.schema import Command as CommandSDK
 from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
-from langgraph.checkpoint.base import CheckpointMetadata
-from langgraph.constants import (
+from langgraph._internal._config import merge_configs
+from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
@@ -40,13 +40,21 @@ from langgraph.constants import (
     INTERRUPT,
     NS_SEP,
 )
+from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.errors import GraphInterrupt, ParentCommand
-from langgraph.pregel.protocol import PregelProtocol
-from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
-from langgraph.types import Command, Interrupt, StreamProtocol
-from langgraph.utils.config import merge_configs
+from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
+from langgraph.types import (
+    All,
+    Command,
+    Interrupt,
+    PregelTask,
+    StateSnapshot,
+    StreamMode,
+)
 
-CONF_DROPLIST = frozenset(
+__all__ = ("RemoteGraph", "RemoteException")
+
+_CONF_DROPLIST = frozenset(
     (
         CONFIG_KEY_CHECKPOINT_MAP,
         CONFIG_KEY_CHECKPOINT_ID,
@@ -56,7 +64,7 @@ CONF_DROPLIST = frozenset(
 )
 
 
-def sanitize_config_value(v: Any) -> Any:
+def _sanitize_config_value(v: Any) -> Any:
     """Recursively sanitize a config value to ensure it contains only primitives."""
     if isinstance(v, (str, int, float, bool)):
         return v
@@ -64,14 +72,14 @@ def sanitize_config_value(v: Any) -> Any:
         sanitized_dict = {}
         for k, val in v.items():
             if isinstance(k, str):
-                sanitized_value = sanitize_config_value(val)
+                sanitized_value = _sanitize_config_value(val)
                 if sanitized_value is not None:
                     sanitized_dict[k] = sanitized_value
         return sanitized_dict
     elif isinstance(v, (list, tuple)):
         sanitized_list = []
         for item in v:
-            sanitized_item = sanitize_config_value(item)
+            sanitized_item = _sanitize_config_value(item)
             if sanitized_item is not None:
                 sanitized_list.append(sanitized_item)
         return sanitized_list
@@ -252,9 +260,9 @@ class RemoteGraph(PregelProtocol):
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
         tasks: list[PregelTask] = []
         for task in state["tasks"]:
-            interrupts = []
-            for interrupt in task["interrupts"]:
-                interrupts.append(Interrupt(**interrupt))
+            interrupts = tuple(
+                Interrupt(**interrupt) for interrupt in task["interrupts"]
+            )
 
             tasks.append(
                 PregelTask(
@@ -262,7 +270,7 @@ class RemoteGraph(PregelProtocol):
                     name=task["name"],
                     path=tuple(),
                     error=Exception(task["error"]) if task["error"] else None,
-                    interrupts=tuple(interrupts),
+                    interrupts=interrupts,
                     state=(
                         self._create_state_snapshot(task["state"])
                         if task["state"]
@@ -347,7 +355,7 @@ class RemoteGraph(PregelProtocol):
             for k, v in config["metadata"].items():
                 if (
                     isinstance(k, str)
-                    and (sanitized_value := sanitize_config_value(v)) is not None
+                    and (sanitized_value := _sanitize_config_value(v)) is not None
                 ):
                     sanitized["metadata"][k] = sanitized_value
 
@@ -356,8 +364,8 @@ class RemoteGraph(PregelProtocol):
             for k, v in config["configurable"].items():
                 if (
                     isinstance(k, str)
-                    and k not in CONF_DROPLIST
-                    and (sanitized_value := sanitize_config_value(v)) is not None
+                    and k not in _CONF_DROPLIST
+                    and (sanitized_value := _sanitize_config_value(v)) is not None
                 ):
                     sanitized["configurable"][k] = sanitized_value
 
