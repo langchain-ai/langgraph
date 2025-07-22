@@ -16,8 +16,6 @@ LangGraph provides **three** primary ways to supply context:
 | [**Short-term memory (State)**](#short-term-memory-mutable-context)          | dynamic data that can change during execution | ✅        | per run or conversation |
 | [**Long-term memory (Store)**](#long-term-memory-cross-conversation-context) | data that can be shared between conversations | ✅        | across conversations    |
 
-## Provide runtime context
-
 ### Runtime Context
 
 !!! note "`config['configurable']` -> `runtime.context`"
