@@ -192,35 +192,48 @@ class State(MessagesState):
 
 ## Nodes
 
-In LangGraph, nodes are typically python functions (sync or async) where the **first** positional argument is the [state](#state), and (optionally), the **second** positional argument is a "config", containing optional [configurable parameters](#configuration) (such as a `thread_id`).
+In LangGraph, nodes are Python functions (either synchronous or asynchronous) that accept the following arguments:
+
+1. `state`: The [state](#state) of the graph
+2. `config`: A `RunnableConfig` object that contains configuration information like `thread_id` and tracing information like `tags`
+3. `runtime`: A `Runtime` object that contains [runtime `context`](#runtime-context) and other information like `store` and `stream_writer`
+    
 
 Similar to `NetworkX`, you add these nodes to a graph using the [add_node][langgraph.graph.StateGraph.add_node] method:
 
 ```python
+from dataclasses import dataclass
 from typing_extensions import TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
+from langgraph.runtime import Runtime
 
 class State(TypedDict):
     input: str
     results: str
 
+@dataclass
+class Context:
+    user_id: str
+
 builder = StateGraph(State)
 
+def plain_node(state: State):
+    return state
 
-def my_node(state: State, config: RunnableConfig):
-    print("In node: ", config["configurable"]["user_id"])
+def node_with_runtime(state: State, runtime: Runtime[Context]):
+    print("In node: ", runtime.context.user_id)
+    return {"results": f"Hello, {state['input']}!"}
+
+def node_with_config(state: State, config: RunnableConfig):
+    print("In node with thread_id: ", config["configurable"]["thread_id"])
     return {"results": f"Hello, {state['input']}!"}
 
 
-# The second argument is optional
-def my_other_node(state: State):
-    return state
-
-
-builder.add_node("my_node", my_node)
-builder.add_node("other_node", my_other_node)
+builder.add_node("plain_node", plain_node)
+builder.add_node("node_with_runtime", node_with_runtime)
+builder.add_node("node_with_config", node_with_config)
 ...
 ```
 

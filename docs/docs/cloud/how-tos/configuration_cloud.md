@@ -2,7 +2,7 @@
 
 In this guide we will show how to create, configure, and manage an [assistant](../../concepts/assistants.md).
 
-First, as a brief refresher on the concept of runtime context, consider the following simple `call_model` node and configuration schema. Observe that this node tries to read and use the `model_provider` as defined by the `Runtime` object's `context` property.
+First, as a brief refresher on the concept of runtime context, consider the following simple `call_model` node and context schema. Observe that this node tries to read and use the `model_provider` as defined by the `Runtime` object's `context` property.
 
 === "Python"
 
@@ -43,7 +43,7 @@ First, as a brief refresher on the concept of runtime context, consider the foll
     }
     ```
 
-For more information on configurations, [see here](../../concepts/low_level.md#configuration).
+For more information on runtime context, [see here](../../concepts/low_level.md#runtime-context).
 
 ## Create an assistant
 
