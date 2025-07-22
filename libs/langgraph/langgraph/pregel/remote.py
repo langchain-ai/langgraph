@@ -8,6 +8,7 @@ from typing import (
     cast,
 )
 
+import langsmith as ls
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
@@ -118,6 +119,7 @@ class RemoteGraph(PregelProtocol):
         sync_client: SyncLangGraphClient | None = None,
         config: RunnableConfig | None = None,
         name: str | None = None,
+        distributed_tracing: bool = False,
     ):
         """Specify `url`, `api_key`, and/or `headers` to create default sync and async clients.
 
@@ -136,6 +138,7 @@ class RemoteGraph(PregelProtocol):
             name: Human-readable name to attach to the RemoteGraph instance.
                 This is useful for adding `RemoteGraph` as a subgraph via `graph.add_node(remote_graph)`.
                 If not provided, defaults to the assistant ID.
+            distributed_tracing: Whether to enable sending LangSmith distributed tracing headers.
         """
         self.assistant_id = assistant_id
         if name is None:
@@ -143,6 +146,7 @@ class RemoteGraph(PregelProtocol):
         else:
             self.name = name
         self.config = config
+        self.distributed_tracing = distributed_tracing
 
         if client is None and url is not None:
             client = get_client(url=url, api_key=api_key, headers=headers)
@@ -672,6 +676,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
+            headers=self._merge_tracing_headers(kwargs.pop("headers", None) or {}),
             **kwargs,
         ):
             # split mode and ns
@@ -774,6 +779,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
+            headers=self._merge_tracing_headers(kwargs.pop("headers", None) or {}),
             **kwargs,
         ):
             # split mode and ns
@@ -909,3 +915,13 @@ class RemoteGraph(PregelProtocol):
             return chunk
         except UnboundLocalError:
             return None
+
+    def _merge_tracing_headers(self, headers: dict[str, str]) -> dict[str, str]:
+        if rt := ls.get_current_run_tree():
+            tracing_headers = rt.to_headers()
+            baggage = tracing_headers.pop("baggage")
+            if "baggage" in headers:
+                baggage = headers["baggage"] + "," + baggage
+            tracing_headers["baggage"] = baggage
+            headers.update(tracing_headers)
+        return headers
