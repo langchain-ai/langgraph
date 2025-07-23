@@ -767,7 +767,7 @@ def prepare_args_and_stdin(
     image: Optional[str] = None,
     # Like "langchain/langgraphjs-api" or "langchain/langgraph-api
     base_image: Optional[str] = None,
-):
+) -> tuple[list[str], str]:
     assert config_path.exists(), f"Config file not found: {config_path}"
     # prepare args
     stdin = langgraph_cli.docker.compose(
