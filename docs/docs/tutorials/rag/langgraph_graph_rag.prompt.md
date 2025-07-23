@@ -26,6 +26,9 @@ The primary goal is adapt an existing self-RAG workflow from a LangGraph Jupyter
 ### Expected Output
 Provide the complete documented Python code (.py, not .ipynb). Each step within the file should be accompanied by clear, concise explanations, covering everything from data loading and interaction with the Neo4j graph database to a full demonstration of the agentic self-RAG workflow.
 
+### Deprecation Warning
+1. The class `Neo4jGraph` was deprecated in LangChain 0.3.8 and will be removed in 1.0. An updated version of the class exists in the :class:`~langchain-neo4j package and should be used instead. To use it run `pip install -U :class:`~langchain-neo4j` and import as `from :class:`~langchain_neo4j import Neo4jGraph``.
+
 ### References
 1. [Tomaz Bratanic's GraphRAG implementation](https://github.com/tomasonjo/llm-movieagent)
 2. [LangGraph](https://langchain-ai.github.io/langgraph/)
