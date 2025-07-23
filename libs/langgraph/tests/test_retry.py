@@ -4,7 +4,7 @@ import pytest
 from typing_extensions import TypedDict
 
 from langgraph.graph import START, StateGraph
-from langgraph.pregel.retry import _should_retry_on
+from langgraph.pregel._retry import _should_retry_on
 from langgraph.types import RetryPolicy
 
 

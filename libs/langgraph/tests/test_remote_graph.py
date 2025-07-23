@@ -15,8 +15,8 @@ from langgraph.errors import GraphInterrupt
 from langgraph.graph import StateGraph, add_messages
 from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
-from langgraph.pregel.types import StateSnapshot
-from langgraph.types import Interrupt
+from langgraph.types import Interrupt, StateSnapshot
+from tests.any_str import AnyStr
 from tests.conftest import NO_DOCKER
 from tests.example_app.example_graph import app
 
@@ -460,9 +460,7 @@ def test_stream():
                 "__interrupt__": [
                     {
                         "value": {"question": "Does this look good?"},
-                        "resumable": True,
-                        "ns": ["some_ns"],
-                        "when": "during",
+                        "id": AnyStr(),
                     }
                 ]
             },
@@ -490,9 +488,7 @@ def test_stream():
     assert exc.value.args[0] == [
         Interrupt(
             value={"question": "Does this look good?"},
-            resumable=True,
-            ns=["some_ns"],
-            when="during",
+            id=AnyStr(),
         )
     ]
 
@@ -633,9 +629,7 @@ async def test_astream():
                 "__interrupt__": [
                     {
                         "value": {"question": "Does this look good?"},
-                        "resumable": True,
-                        "ns": ["some_ns"],
-                        "when": "during",
+                        "id": AnyStr(),
                     }
                 ]
             },
@@ -664,9 +658,7 @@ async def test_astream():
     assert exc.value.args[0] == [
         Interrupt(
             value={"question": "Does this look good?"},
-            resumable=True,
-            ns=["some_ns"],
-            when="during",
+            id=AnyStr(),
         )
     ]
 
@@ -877,7 +869,7 @@ async def test_ainvoke():
 async def test_langgraph_cloud_integration():
     from langgraph_sdk.client import get_client, get_sync_client
 
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.graph import END, START, MessagesState, StateGraph
 
     # create RemotePregel instance
@@ -894,7 +886,7 @@ async def test_langgraph_cloud_integration():
     workflow.add_node("agent", remote_pregel)
     workflow.add_edge(START, "agent")
     workflow.add_edge("agent", END)
-    app = workflow.compile(checkpointer=MemorySaver())
+    app = workflow.compile(checkpointer=InMemorySaver())
 
     # test invocation
     input = {
