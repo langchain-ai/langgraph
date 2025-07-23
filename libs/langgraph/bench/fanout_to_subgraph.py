@@ -3,8 +3,9 @@ from typing import Annotated
 
 from typing_extensions import TypedDict
 
-from langgraph.constants import END, START, Send
+from langgraph.constants import END, START
 from langgraph.graph.state import StateGraph
+from langgraph.types import Send
 
 
 def fanout_to_subgraph() -> StateGraph:
@@ -114,9 +115,9 @@ if __name__ == "__main__":
 
     import uvloop
 
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
 
-    graph = fanout_to_subgraph().compile(checkpointer=MemorySaver())
+    graph = fanout_to_subgraph().compile(checkpointer=InMemorySaver())
     input = {
         "subjects": [
             random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(1000)

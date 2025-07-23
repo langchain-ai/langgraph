@@ -487,12 +487,12 @@ If you want to fallback to pickle for objects not currently supported by our msg
 you can use the `pickle_fallback` argument of the `JsonPlusSerializer`:
 
 ```python
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 # ... Define the graph ...
 graph.compile(
-    checkpointer=MemorySaver(serde=JsonPlusSerializer(pickle_fallback=True))
+    checkpointer=InMemorySaver(serde=JsonPlusSerializer(pickle_fallback=True))
 )
 ```
 

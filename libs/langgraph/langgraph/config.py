@@ -5,7 +5,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import var_child_runnable_config
 
-from langgraph.constants import CONF, CONFIG_KEY_STORE, CONFIG_KEY_STREAM_WRITER
+from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 
@@ -114,8 +114,7 @@ def get_store() -> BaseStore:
         3
         ```
     """
-    config = get_config()
-    return config[CONF][CONFIG_KEY_STORE]
+    return get_config()[CONF][CONFIG_KEY_RUNTIME].store
 
 
 def get_stream_writer() -> StreamWriter:
@@ -181,5 +180,5 @@ def get_stream_writer() -> StreamWriter:
         {'custom_data': 'Hello!'}
         ```
     """
-    config = get_config()
-    return config[CONF].get(CONFIG_KEY_STREAM_WRITER, _no_op_stream_writer)
+    runtime = get_config()[CONF][CONFIG_KEY_RUNTIME]
+    return runtime.stream_writer

@@ -12,9 +12,9 @@ Before you begin, ensure you have the following:
 
 === "Python server"
 
-    ```shell
-    # Python >= 3.11 is required.
+    Python >= 3.11 is required.
 
+    ```shell
     pip install --upgrade "langgraph-cli[inmem]"
     ```
 

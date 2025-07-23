@@ -30,6 +30,7 @@ from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.config import get_stream_writer
 from langgraph.graph import START, MessagesState, StateGraph, add_messages
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt import (
@@ -54,7 +55,6 @@ from langgraph.prebuilt.tool_node import (
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Interrupt, interrupt
-from langgraph.utils.config import get_stream_writer
 from tests.any_str import AnyStr
 from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
 from tests.model import FakeToolCallingModel
@@ -1299,9 +1299,7 @@ def test_tool_node_node_interrupt(
     assert task.interrupts == (
         Interrupt(
             value="provide value for foo",
-            when="during",
-            resumable=True,
-            ns=[AnyStr("tools:")],
+            id=AnyStr(),
         ),
     )
 

@@ -27,6 +27,28 @@ from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import ParamSpec, Self
 
+from langgraph._internal._config import patch_configurable
+from langgraph._internal._constants import (
+    CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
+    CONFIG_KEY_CHECKPOINT_MAP,
+    CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_RESUME_MAP,
+    CONFIG_KEY_RESUMING,
+    CONFIG_KEY_SCRATCHPAD,
+    CONFIG_KEY_STREAM,
+    CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_THREAD_ID,
+    ERROR,
+    INPUT,
+    INTERRUPT,
+    NS_END,
+    NS_SEP,
+    NULL_TASK_ID,
+    PUSH,
+    RESUME,
+)
+from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
@@ -38,29 +60,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     PendingWrite,
 )
-from langgraph.constants import (
-    CONF,
-    CONFIG_KEY_CHECKPOINT_ID,
-    CONFIG_KEY_CHECKPOINT_MAP,
-    CONFIG_KEY_CHECKPOINT_NS,
-    CONFIG_KEY_RESUME_MAP,
-    CONFIG_KEY_RESUMING,
-    CONFIG_KEY_SCRATCHPAD,
-    CONFIG_KEY_STREAM,
-    CONFIG_KEY_TASK_ID,
-    CONFIG_KEY_THREAD_ID,
-    EMPTY_SEQ,
-    ERROR,
-    INPUT,
-    INTERRUPT,
-    MISSING,
-    NS_END,
-    NS_SEP,
-    NULL_TASK_ID,
-    PUSH,
-    RESUME,
-    TAG_HIDDEN,
-)
+from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
     GraphInterrupt,
@@ -69,7 +69,7 @@ from langgraph.managed.base import (
     ManagedValueMapping,
     ManagedValueSpec,
 )
-from langgraph.pregel.algo import (
+from langgraph.pregel._algo import (
     Call,
     GetNextVersion,
     PregelTaskWrites,
@@ -81,44 +81,43 @@ from langgraph.pregel.algo import (
     should_interrupt,
     task_path_str,
 )
-from langgraph.pregel.checkpoint import (
+from langgraph.pregel._checkpoint import (
     channels_from_checkpoint,
     copy_checkpoint,
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.pregel.debug import (
-    map_debug_checkpoint,
-    map_debug_task_results,
-    map_debug_tasks,
-)
-from langgraph.pregel.executor import (
+from langgraph.pregel._executor import (
     AsyncBackgroundExecutor,
     BackgroundExecutor,
     Submit,
 )
-from langgraph.pregel.io import (
+from langgraph.pregel._io import (
     map_command,
     map_input,
     map_output_updates,
     map_output_values,
     read_channels,
 )
-from langgraph.pregel.read import PregelNode
-from langgraph.pregel.utils import get_new_channel_versions, is_xxh3_128_hexdigest
+from langgraph.pregel._read import PregelNode
+from langgraph.pregel._scratchpad import PregelScratchpad
+from langgraph.pregel._utils import get_new_channel_versions, is_xxh3_128_hexdigest
+from langgraph.pregel.debug import (
+    map_debug_checkpoint,
+    map_debug_task_results,
+    map_debug_tasks,
+)
+from langgraph.pregel.protocol import StreamChunk, StreamProtocol
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     CachePolicy,
     Command,
+    Durability,
     PregelExecutableTask,
-    PregelScratchpad,
     RetryPolicy,
-    StreamChunk,
     StreamMode,
-    StreamProtocol,
 )
-from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
 P = ParamSpec("P")
@@ -156,7 +155,7 @@ class PregelLoop:
     manager: None | AsyncParentRunManager | ParentRunManager
     interrupt_after: All | Sequence[str]
     interrupt_before: All | Sequence[str]
-    checkpoint_during: bool
+    durability: Durability
     retry_policy: Sequence[RetryPolicy]
     cache_policy: CachePolicy | None
 
@@ -218,13 +217,13 @@ class PregelLoop:
         output_keys: str | Sequence[str],
         stream_keys: str | Sequence[str],
         trigger_to_nodes: Mapping[str, Sequence[str]],
+        durability: Durability,
         interrupt_after: All | Sequence[str] = EMPTY_SEQ,
         interrupt_before: All | Sequence[str] = EMPTY_SEQ,
         manager: None | AsyncParentRunManager | ParentRunManager = None,
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
-        checkpoint_during: bool = True,
     ) -> None:
         self.stream = stream
         self.config = config
@@ -248,7 +247,7 @@ class PregelLoop:
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
-        self.checkpoint_during = checkpoint_during
+        self.durability = durability
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -325,7 +324,7 @@ class PregelLoop:
             writes_to_save = writes
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
-        if self.checkpoint_during and self.checkpointer_put_writes is not None:
+        if self.durability != "exit" and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
                 {
@@ -686,7 +685,7 @@ class PregelLoop:
             self.checkpoint_metadata = metadata
         # do checkpoint?
         do_checkpoint = self._checkpointer_put_after_previous is not None and (
-            exiting or self.checkpoint_during
+            exiting or self.durability != "exit"
         )
         # create new checkpoint
         self.checkpoint = create_checkpoint(
@@ -748,7 +747,7 @@ class PregelLoop:
         traceback: TracebackType | None,
     ) -> bool | None:
         # persist current checkpoint and writes
-        if not self.checkpoint_during and (
+        if self.durability == "exit" and (
             # if it's a top graph
             not self.is_nested
             # or a nested graph with error or interrupt
@@ -893,6 +892,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, BaseChannel | ManagedValueSpec],
         trigger_to_nodes: Mapping[str, Sequence[str]],
+        durability: Durability,
         manager: None | AsyncParentRunManager | ParentRunManager = None,
         interrupt_after: All | Sequence[str] = EMPTY_SEQ,
         interrupt_before: All | Sequence[str] = EMPTY_SEQ,
@@ -902,7 +902,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
-        checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
             input,
@@ -923,7 +922,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             trigger_to_nodes=trigger_to_nodes,
             retry_policy=retry_policy,
             cache_policy=cache_policy,
-            checkpoint_during=checkpoint_during,
+            durability=durability,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1064,6 +1063,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, BaseChannel | ManagedValueSpec],
         trigger_to_nodes: Mapping[str, Sequence[str]],
+        durability: Durability,
         interrupt_after: All | Sequence[str] = EMPTY_SEQ,
         interrupt_before: All | Sequence[str] = EMPTY_SEQ,
         manager: None | AsyncParentRunManager | ParentRunManager = None,
@@ -1073,7 +1073,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
-        checkpoint_during: bool = True,
     ) -> None:
         super().__init__(
             input,
@@ -1094,7 +1093,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             trigger_to_nodes=trigger_to_nodes,
             retry_policy=retry_policy,
             cache_policy=cache_policy,
-            checkpoint_during=checkpoint_during,
+            durability=durability,
         )
         self.stack = AsyncExitStack()
         if checkpointer:

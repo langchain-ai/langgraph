@@ -75,7 +75,7 @@ We will now create a LangGraph chatbot graph that calls AutoGen agent.
 ```python
 from langchain_core.messages import convert_to_openai_messages
 from langgraph.graph import StateGraph, MessagesState, START
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 def call_autogen_agent(state: MessagesState):
     # Convert LangGraph messages to OpenAI format for AutoGen
@@ -101,7 +101,7 @@ def call_autogen_agent(state: MessagesState):
     return {"messages": {"role": "assistant", "content": final_content}}
 
 # Create the graph with memory for persistence
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 
 # Build the graph
 builder = StateGraph(MessagesState)
@@ -228,7 +228,7 @@ my-autogen-agent/
     import autogen
     from langchain_core.messages import convert_to_openai_messages
     from langgraph.graph import StateGraph, MessagesState, START
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
 
     # AutoGen configuration
     config_list = [{"model": "gpt-4o", "api_key": os.environ["OPENAI_API_KEY"]}]
@@ -276,7 +276,7 @@ my-autogen-agent/
 
     # Create and compile the graph
     def create_graph():
-        checkpointer = MemorySaver()
+        checkpointer = InMemorySaver()
         builder = StateGraph(MessagesState)
         builder.add_node("autogen", call_autogen_agent)
         builder.add_edge(START, "autogen")
@@ -290,7 +290,7 @@ my-autogen-agent/
 
     ```
     langgraph>=0.1.0
-    pyautogen>=0.2.0
+    ag2>=0.2.0
     langchain-core>=0.1.0
     langchain-openai>=0.0.5
     ```

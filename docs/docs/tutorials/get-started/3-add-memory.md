@@ -10,14 +10,14 @@ We will see later that **checkpointing** is _much_ more powerful than simple cha
 
     This tutorial builds on [Add tools](./2-add-tools.md).
 
-## 1. Create a `MemorySaver` checkpointer
+## 1. Create a `InMemorySaver` checkpointer
 
-Create a `MemorySaver` checkpointer:
+Create a `InMemorySaver` checkpointer:
 
 ``` python
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
-memory = MemorySaver()
+memory = InMemorySaver()
 ```
 
 This is in-memory checkpointer, which is convenient for the tutorial. However, in a production application, you would likely change this to use `SqliteSaver` or `PostgresSaver` and connect a database.
@@ -172,7 +172,7 @@ from langchain_tavily import TavilySearch
 from langchain_core.messages import BaseMessage
 from typing_extensions import TypedDict
 
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -200,7 +200,7 @@ graph_builder.add_conditional_edges(
 )
 graph_builder.add_edge("tools", "chatbot")
 graph_builder.set_entry_point("chatbot")
-memory = MemorySaver()
+memory = InMemorySaver()
 graph = graph_builder.compile(checkpointer=memory)
 ```
 

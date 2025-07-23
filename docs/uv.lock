@@ -15,16 +15,16 @@ name = "ag2"
 version = "0.9.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio" },
-    { name = "asyncer" },
-    { name = "diskcache" },
-    { name = "docker" },
-    { name = "httpx" },
-    { name = "packaging" },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-    { name = "termcolor" },
-    { name = "tiktoken" },
+    { name = "anyio", marker = "python_full_version < '3.13'" },
+    { name = "asyncer", marker = "python_full_version < '3.13'" },
+    { name = "diskcache", marker = "python_full_version < '3.13'" },
+    { name = "docker", marker = "python_full_version < '3.13'" },
+    { name = "httpx", marker = "python_full_version < '3.13'" },
+    { name = "packaging", marker = "python_full_version < '3.13'" },
+    { name = "pydantic", marker = "python_full_version < '3.13'" },
+    { name = "python-dotenv", marker = "python_full_version < '3.13'" },
+    { name = "termcolor", marker = "python_full_version < '3.13'" },
+    { name = "tiktoken", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ee/15/edfbbf217e19ea647225b3ab72a6e3755d2677665f1a7f8e5108da3feabd/ag2-0.9.6.tar.gz", hash = "sha256:d6f7812b1a49654d14113fa3c13ccb593115dee1193744ca428d7178d2b32090", size = 3356270, upload-time = "2025-07-08T14:56:21.63Z" }
 wheels = [
@@ -267,7 +267,7 @@ name = "asyncer"
 version = "0.0.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "anyio" },
+    { name = "anyio", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ff/67/7ea59c3e69eaeee42e7fc91a5be67ca5849c8979acac2b920249760c6af2/asyncer-0.0.8.tar.gz", hash = "sha256:a589d980f57e20efb07ed91d0dbe67f1d2fd343e7142c66d3a099f05c620739c", size = 18217, upload-time = "2024-08-24T23:15:36.449Z" }
 wheels = [
@@ -288,7 +288,7 @@ name = "autogen"
 version = "0.9.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ag2" },
+    { name = "ag2", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/67/b9/dc958031b7e08ee50e3d40f5991f4c0bc21538df8d53aa3e9a9f2e2f7818/autogen-0.9.6.tar.gz", hash = "sha256:dc2efbeef61002608983afb120e62f8a109815eb741bcbc9ef398dcff7424a30", size = 43422, upload-time = "2025-07-08T14:56:17.6Z" }
 wheels = [
@@ -914,9 +914,9 @@ name = "docker"
 version = "7.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pywin32", marker = "sys_platform == 'win32'" },
-    { name = "requests" },
-    { name = "urllib3" },
+    { name = "pywin32", marker = "python_full_version < '3.13' and sys_platform == 'win32'" },
+    { name = "requests", marker = "python_full_version < '3.13'" },
+    { name = "urllib3", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/91/9b/4a2ea29aeba62471211598dac5d96825bb49348fa07e906ea930394a83ce/docker-7.1.0.tar.gz", hash = "sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c", size = 117834, upload-time = "2024-05-23T11:13:57.216Z" }
 wheels = [
@@ -2337,7 +2337,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.5.2"
+version = "0.6.0a1"
 source = { editable = "../libs/langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -2365,7 +2365,7 @@ dev = [
     { name = "langgraph-checkpoint", editable = "../libs/checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../libs/checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../libs/checkpoint-sqlite" },
-    { name = "langgraph-cli", extras = ["inmem"] },
+    { name = "langgraph-cli", extras = ["inmem"], editable = "../libs/cli" },
     { name = "langgraph-prebuilt", editable = "../libs/prebuilt" },
     { name = "langgraph-sdk", editable = "../libs/sdk-py" },
     { name = "mypy" },
@@ -2388,7 +2388,7 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.1.0"
+version = "2.1.1"
 source = { editable = "../libs/checkpoint" }
 dependencies = [
     { name = "langchain-core" },
@@ -2433,7 +2433,7 @@ wheels = [
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.21"
+version = "2.0.23"
 source = { editable = "../libs/checkpoint-postgres" }
 dependencies = [
     { name = "langgraph-checkpoint" },
@@ -2674,7 +2674,7 @@ dev = [
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.1.72"
+version = "0.2.0a1"
 source = { editable = "../libs/sdk-py" }
 dependencies = [
     { name = "httpx" },

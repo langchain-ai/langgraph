@@ -16,10 +16,11 @@ from langchain_core.runnables import RunnableConfig, RunnablePick
 from pytest_mock import MockerFixture
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import PULL, PUSH
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import END, PULL, PUSH, START
+from langgraph.constants import END, START
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.graph.state import StateGraph
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
@@ -62,7 +63,7 @@ async def test_invoke_two_processes_in_out_interrupt(
     thread2 = {"configurable": {"thread_id": "2"}}
 
     # start execution, stop at inbox
-    assert await app.ainvoke(2, thread1, checkpoint_during=True) is None
+    assert await app.ainvoke(2, thread1, durability="async") is None
 
     # inbox == 3
     checkpoint = await async_checkpointer.aget(thread1)
@@ -70,10 +71,10 @@ async def test_invoke_two_processes_in_out_interrupt(
     assert checkpoint["channel_values"]["inbox"] == 3
 
     # resume execution, finish
-    assert await app.ainvoke(None, thread1, checkpoint_during=True) == 4
+    assert await app.ainvoke(None, thread1, durability="async") == 4
 
     # start execution again, stop at inbox
-    assert await app.ainvoke(20, thread1, checkpoint_during=True) is None
+    assert await app.ainvoke(20, thread1, durability="async") is None
 
     # inbox == 21
     checkpoint = await async_checkpointer.aget(thread1)
@@ -81,11 +82,11 @@ async def test_invoke_two_processes_in_out_interrupt(
     assert checkpoint["channel_values"]["inbox"] == 21
 
     # send a new value in, interrupting the previous execution
-    assert await app.ainvoke(3, thread1, checkpoint_during=True) is None
-    assert await app.ainvoke(None, thread1, checkpoint_during=True) == 5
+    assert await app.ainvoke(3, thread1, durability="async") is None
+    assert await app.ainvoke(None, thread1, durability="async") == 5
 
     # start execution again, stopping at inbox
-    assert await app.ainvoke(20, thread2, checkpoint_during=True) is None
+    assert await app.ainvoke(20, thread2, durability="async") is None
 
     # inbox == 21
     snapshot = await app.aget_state(thread2)
@@ -300,7 +301,7 @@ async def test_fork_always_re_runs_nodes(
     assert [
         c
         async for c in graph.astream(
-            1, thread1, stream_mode=["values", "updates"], checkpoint_during=True
+            1, thread1, stream_mode=["values", "updates"], durability="async"
         )
     ] == [
         ("values", 1),
@@ -683,7 +684,7 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
     assert [
         c
         async for c in app_w_interrupt.astream(
-            {"input": "what is weather in sf"}, config, checkpoint_during=False
+            {"input": "what is weather in sf"}, config, durability="exit"
         )
     ] == [
         {
@@ -858,7 +859,7 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
     assert [
         c
         async for c in app_w_interrupt.astream(
-            {"input": "what is weather in sf"}, config, checkpoint_during=False
+            {"input": "what is weather in sf"}, config, durability="exit"
         )
     ] == [
         {
@@ -1576,7 +1577,7 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
         async for c in app_w_interrupt.astream(
             {"messages": HumanMessage(content="what is weather in sf")},
             config,
-            checkpoint_during=False,
+            durability="exit",
         )
     ] == [
         {
@@ -1827,7 +1828,7 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
         async for c in app_w_interrupt.astream(
             {"messages": HumanMessage(content="what is weather in sf")},
             config,
-            checkpoint_during=False,
+            durability="exit",
         )
     ] == [
         {
@@ -2256,7 +2257,7 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
         async for c in app_w_interrupt.astream(
             HumanMessage(content="what is weather in sf"),
             config,
-            checkpoint_during=False,
+            durability="exit",
         )
     ] == [
         {
@@ -2739,7 +2740,7 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
     app = graph.compile(checkpointer=async_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
-    await app.ainvoke({"my_key": "my value"}, config, checkpoint_during=False)
+    await app.ainvoke({"my_key": "my value"}, config, durability="exit")
     # test state w/ nested subgraph state (right after interrupt)
     # first get_state without subgraph state
     expected = StateSnapshot(
@@ -2870,7 +2871,7 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
     assert child_history == expected_child_history
 
     # resume
-    await app.ainvoke(None, config, checkpoint_during=False)
+    await app.ainvoke(None, config, durability="exit")
     # test state w/ nested subgraph state (after resuming from interrupt)
     assert await app.aget_state(config) == StateSnapshot(
         values={"my_key": "hi my value here and there and back again"},
@@ -3029,7 +3030,7 @@ async def test_doubly_nested_graph_state(
     assert [
         c
         async for c in app.astream(
-            {"my_key": "my value"}, config, subgraphs=True, checkpoint_during=False
+            {"my_key": "my value"}, config, subgraphs=True, durability="exit"
         )
     ] == [
         ((), {"parent_1": {"my_key": "hi my value"}}),
@@ -3249,10 +3250,7 @@ async def test_doubly_nested_graph_state(
     )
     # resume
     assert [
-        c
-        async for c in app.astream(
-            None, config, subgraphs=True, checkpoint_during=False
-        )
+        c async for c in app.astream(None, config, subgraphs=True, durability="exit")
     ] == [
         (
             (AnyStr("child:"), AnyStr("child_1:")),
@@ -3661,7 +3659,7 @@ async def test_weather_subgraph(
             config=config,
             stream_mode="updates",
             subgraphs=True,
-            checkpoint_during=False,
+            durability="exit",
         )
     ] == [
         ((), {"router_node": {"route": "weather"}}),
@@ -3750,7 +3748,7 @@ async def test_weather_subgraph(
             config=config,
             stream_mode="updates",
             subgraphs=True,
-            checkpoint_during=False,
+            durability="exit",
         )
     ] == [
         ((), {"router_node": {"route": "weather"}}),

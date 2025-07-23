@@ -4,7 +4,16 @@ from typing import Union
 
 from typing_extensions import TypeVar
 
-from langgraph._typing import StateLike
+from langgraph._internal._typing import StateLike
+
+__all__ = (
+    "StateT",
+    "StateT_co",
+    "StateT_contra",
+    "InputT",
+    "OutputT",
+    "ContextT",
+)
 
 StateT = TypeVar("StateT", bound=StateLike)
 """Type variable used to represent the state in a graph."""
@@ -13,18 +22,29 @@ StateT_co = TypeVar("StateT_co", bound=StateLike, covariant=True)
 
 StateT_contra = TypeVar("StateT_contra", bound=StateLike, contravariant=True)
 
+ContextT = TypeVar("ContextT", bound=Union[StateLike, None], default=None)
+"""Type variable used to represent graph run scoped context.
+
+Defaults to `None`.
+"""
+
+ContextT_contra = TypeVar(
+    "ContextT_contra", bound=Union[StateLike, None], contravariant=True, default=None
+)
+
 InputT = TypeVar("InputT", bound=StateLike, default=StateT)
 """Type variable used to represent the input to a state graph.
 
 Defaults to `StateT`.
 """
 
-ResolvedInputT = TypeVar("ResolvedInputT", bound=StateLike)
-"""Type variable used to represent the resolved input to a state graph.
+OutputT = TypeVar("OutputT", bound=StateLike, default=StateT)
+"""Type variable used to represent the output of a state graph.
 
-No default.
+Defaults to `StateT`.
 """
 
+NodeInputT = TypeVar("NodeInputT", bound=StateLike)
+"""Type variable used to represent the input to a node."""
 
-OutputT = TypeVar("OutputT", bound=Union[StateLike, None], default=StateT)
-"""Type variable used to represent the output of a state graph."""
+NodeInputT_contra = TypeVar("NodeInputT_contra", bound=StateLike, contravariant=True)

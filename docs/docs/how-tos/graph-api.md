@@ -514,12 +514,12 @@ To add runtime configuration:
 See below for a simple example:
 
 ```python
-from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph, START
+from langgraph.runtime import Runtime
 from typing_extensions import TypedDict
 
 # 1. Specify config schema
-class ConfigSchema(TypedDict):
+class ContextSchema(TypedDict):
     my_runtime_value: str
 
 # 2. Define a graph that accesses the config in a node
@@ -527,18 +527,18 @@ class State(TypedDict):
     my_state_value: str
 
 # highlight-next-line
-def node(state: State, config: RunnableConfig):
+def node(state: State, runtime: Runtime[ContextSchema]):
     # highlight-next-line
-    if config["configurable"]["my_runtime_value"] == "a":
+    if runtime.context["my_runtime_value"] == "a":
         return {"my_state_value": 1}
         # highlight-next-line
-    elif config["configurable"]["my_runtime_value"] == "b":
+    elif runtime.context["my_runtime_value"] == "b":
         return {"my_state_value": 2}
     else:
         raise ValueError("Unknown values.")
 
 # highlight-next-line
-builder = StateGraph(State, config_schema=ConfigSchema)
+builder = StateGraph(State, context_schema=ContextSchema)
 builder.add_node(node)
 builder.add_edge(START, "node")
 builder.add_edge("node", END)
@@ -547,9 +547,9 @@ graph = builder.compile()
 
 # 3. Pass in configuration at runtime:
 # highlight-next-line
-print(graph.invoke({}, {"configurable": {"my_runtime_value": "a"}}))
+print(graph.invoke({}, context={"my_runtime_value": "a"}))
 # highlight-next-line
-print(graph.invoke({}, {"configurable": {"my_runtime_value": "b"}}))
+print(graph.invoke({}, context={"my_runtime_value": "b"}))
 ```
 ```
 {'my_state_value': 1}
@@ -560,27 +560,28 @@ print(graph.invoke({}, {"configurable": {"my_runtime_value": "b"}}))
     Below we demonstrate a practical example in which we configure what LLM to use at runtime. We will use both OpenAI and Anthropic models.
 
     ```python
+    from dataclasses import dataclass
+
     from langchain.chat_models import init_chat_model
-    from langchain_core.runnables import RunnableConfig
-    from langgraph.graph import MessagesState
-    from langgraph.graph import END, StateGraph, START
+    from langgraph.graph import MessagesState, END, StateGraph, START
+    from langgraph.runtime import Runtime
     from typing_extensions import TypedDict
 
-    class ConfigSchema(TypedDict):
-        model: str
+    @dataclass
+    class ContextSchema:
+        model_provider: str = "anthropic"
 
     MODELS = {
         "anthropic": init_chat_model("anthropic:claude-3-5-haiku-latest"),
         "openai": init_chat_model("openai:gpt-4.1-mini"),
     }
 
-    def call_model(state: MessagesState, config: RunnableConfig):
-        model = config["configurable"].get("model", "anthropic")
-        model = MODELS[model]
+    def call_model(state: MessagesState, runtime: Runtime[ContextSchema]):
+        model = MODELS[runtime.context.model_provider]
         response = model.invoke(state["messages"])
         return {"messages": [response]}
 
-    builder = StateGraph(MessagesState, config_schema=ConfigSchema)
+    builder = StateGraph(MessagesState, context_schema=ContextSchema)
     builder.add_node("model", call_model)
     builder.add_edge(START, "model")
     builder.add_edge("model", END)
@@ -592,8 +593,7 @@ print(graph.invoke({}, {"configurable": {"my_runtime_value": "b"}}))
     # With no configuration, uses default (Anthropic)
     response_1 = graph.invoke({"messages": [input_message]})["messages"][-1]
     # Or, can set OpenAI
-    config = {"configurable": {"model": "openai"}}
-    response_2 = graph.invoke({"messages": [input_message]}, config=config)["messages"][-1]
+    response_2 = graph.invoke({"messages": [input_message]}, context={"model_provider": "openai"})["messages"][-1]
 
     print(response_1.response_metadata["model_name"])
     print(response_2.response_metadata["model_name"])
@@ -607,32 +607,33 @@ print(graph.invoke({}, {"configurable": {"my_runtime_value": "b"}}))
     Below we demonstrate a practical example in which we configure two parameters: the LLM and system message to use at runtime.
 
     ```python
+    from dataclasses import dataclass
     from typing import Optional
     from langchain.chat_models import init_chat_model
     from langchain_core.messages import SystemMessage
-    from langchain_core.runnables import RunnableConfig
     from langgraph.graph import END, MessagesState, StateGraph, START
+    from langgraph.runtime import Runtime
     from typing_extensions import TypedDict
 
-    class ConfigSchema(TypedDict):
-        model: Optional[str]
-        system_message: Optional[str]
+    @dataclass
+    class ContextSchema:
+        model_provider: str = "anthropic"
+        system_message: str | None = None
 
     MODELS = {
         "anthropic": init_chat_model("anthropic:claude-3-5-haiku-latest"),
         "openai": init_chat_model("openai:gpt-4.1-mini"),
     }
 
-    def call_model(state: MessagesState, config: RunnableConfig):
-        model = config["configurable"].get("model", "anthropic")
-        model = MODELS[model]
+    def call_model(state: MessagesState, runtime: Runtime[ContextSchema]):
+        model = MODELS[runtime.context.model_provider]
         messages = state["messages"]
-        if system_message := config["configurable"].get("system_message"):
+        if (system_message := runtime.context.system_message):
             messages = [SystemMessage(system_message)] + messages
         response = model.invoke(messages)
         return {"messages": [response]}
 
-    builder = StateGraph(MessagesState, config_schema=ConfigSchema)
+    builder = StateGraph(MessagesState, context_schema=ContextSchema)
     builder.add_node("model", call_model)
     builder.add_edge(START, "model")
     builder.add_edge("model", END)
@@ -641,8 +642,7 @@ print(graph.invoke({}, {"configurable": {"my_runtime_value": "b"}}))
 
     # Usage
     input_message = {"role": "user", "content": "hi"}
-    config = {"configurable": {"model": "openai", "system_message": "Respond in Italian."}}
-    response = graph.invoke({"messages": [input_message]}, config)
+    response = graph.invoke({"messages": [input_message]}, context={"model_provider": "openai", "system_message": "Respond in Italian."})
     for message in response["messages"]:
         message.pretty_print()
     ```
@@ -1152,12 +1152,13 @@ LangGraph supports map-reduce and other advanced branching patterns using the Se
 ```python
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, Annotated
+import operator
 
 class OverallState(TypedDict):
     topic: str
     subjects: list[str]
-    jokes: list[str]
+    jokes: Annotated[list[str], operator.add]
     best_selected_joke: str
 
 def generate_topics(state: OverallState):
@@ -1566,9 +1567,9 @@ class State(TypedDict):
 
 def node_a(state: State) -> Command[Literal["node_b", "node_c"]]:
     print("Called A")
-    value = random.choice(["a", "b"])
+    value = random.choice(["b", "c"])
     # this is a replacement for a conditional edge function
-    if value == "a":
+    if value == "b":
         goto = "node_b"
     else:
         goto = "node_c"

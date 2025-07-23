@@ -25,33 +25,22 @@ from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunMan
 from langchain_core.runnables.config import RunnableConfig
 from xxhash import xxh3_128_hexdigest
 
-from langgraph.channels.base import BaseChannel
-from langgraph.channels.topic import Topic
-from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
-    ChannelVersions,
-    Checkpoint,
-    PendingWrite,
-    V,
-)
-from langgraph.constants import (
+from langgraph._internal._config import merge_configs, patch_config
+from langgraph._internal._constants import (
     CACHE_NS_WRITES,
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
-    CONFIG_KEY_PREVIOUS,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUME_MAP,
+    CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SCRATCHPAD,
     CONFIG_KEY_SEND,
-    CONFIG_KEY_STORE,
     CONFIG_KEY_TASK_ID,
-    EMPTY_SEQ,
     ERROR,
     INTERRUPT,
-    MISSING,
     NO_WRITES,
     NS_END,
     NS_SEP,
@@ -62,26 +51,36 @@ from langgraph.constants import (
     RESERVED,
     RESUME,
     RETURN,
-    TAG_HIDDEN,
     TASKS,
-    Send,
 )
+from langgraph._internal._typing import EMPTY_SEQ, MISSING
+from langgraph.channels.base import BaseChannel
+from langgraph.channels.topic import Topic
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    ChannelVersions,
+    Checkpoint,
+    PendingWrite,
+    V,
+)
+from langgraph.constants import TAG_HIDDEN
 from langgraph.managed.base import ManagedValueMapping
-from langgraph.pregel.call import get_runnable_for_task, identifier
-from langgraph.pregel.io import read_channels
-from langgraph.pregel.log import logger
-from langgraph.pregel.read import INPUT_CACHE_KEY_TYPE, PregelNode
+from langgraph.pregel._call import get_runnable_for_task, identifier
+from langgraph.pregel._io import read_channels
+from langgraph.pregel._log import logger
+from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
+from langgraph.pregel._scratchpad import PregelScratchpad
+from langgraph.runtime import DEFAULT_RUNTIME, Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     CacheKey,
     CachePolicy,
     PregelExecutableTask,
-    PregelScratchpad,
     PregelTask,
     RetryPolicy,
+    Send,
 )
-from langgraph.utils.config import merge_configs, patch_config
 
 GetNextVersion = Callable[[Optional[V], None], V]
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
@@ -583,6 +582,10 @@ def prepare_single_task(
                 step,
                 stop,
             )
+            runtime = cast(
+                Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            )
+            runtime = runtime.override(store=store)
             return PregelExecutableTask(
                 name,
                 call.input,
@@ -604,7 +607,6 @@ def prepare_single_task(
                             managed,
                             PregelTaskWrites(task_path, name, writes, triggers),
                         ),
-                        CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
                         CONFIG_KEY_CHECKPOINTER: (
                             checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
                         ),
@@ -615,6 +617,7 @@ def prepare_single_task(
                         CONFIG_KEY_CHECKPOINT_ID: None,
                         CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                         CONFIG_KEY_SCRATCHPAD: scratchpad,
+                        CONFIG_KEY_RUNTIME: runtime,
                     },
                 ),
                 triggers,
@@ -709,6 +712,12 @@ def prepare_single_task(
                 step,
                 stop,
             )
+            runtime = cast(
+                Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            )
+            runtime = runtime.override(
+                store=store, previous=checkpoint["channel_values"].get(PREVIOUS, None)
+            )
             return PregelExecutableTask(
                 packet.node,
                 packet.arg,
@@ -731,7 +740,6 @@ def prepare_single_task(
                             managed,
                             PregelTaskWrites(task_path, packet.node, writes, triggers),
                         ),
-                        CONFIG_KEY_STORE: (store or configurable.get(CONFIG_KEY_STORE)),
                         CONFIG_KEY_CHECKPOINTER: (
                             checkpointer or configurable.get(CONFIG_KEY_CHECKPOINTER)
                         ),
@@ -742,9 +750,7 @@ def prepare_single_task(
                         CONFIG_KEY_CHECKPOINT_ID: None,
                         CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                         CONFIG_KEY_SCRATCHPAD: scratchpad,
-                        CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
-                            PREVIOUS, None
-                        ),
+                        CONFIG_KEY_RUNTIME: runtime,
                     },
                 ),
                 triggers,
@@ -846,6 +852,13 @@ def prepare_single_task(
                         )
                     else:
                         cache_key = None
+                    runtime = cast(
+                        Runtime, configurable.get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+                    )
+                    runtime = runtime.override(
+                        previous=checkpoint["channel_values"].get(PREVIOUS, None),
+                        store=store,
+                    )
                     return PregelExecutableTask(
                         name,
                         val,
@@ -877,9 +890,6 @@ def prepare_single_task(
                                         triggers,
                                     ),
                                 ),
-                                CONFIG_KEY_STORE: (
-                                    store or configurable.get(CONFIG_KEY_STORE)
-                                ),
                                 CONFIG_KEY_CHECKPOINTER: (
                                     checkpointer
                                     or configurable.get(CONFIG_KEY_CHECKPOINTER)
@@ -891,9 +901,7 @@ def prepare_single_task(
                                 CONFIG_KEY_CHECKPOINT_ID: None,
                                 CONFIG_KEY_CHECKPOINT_NS: task_checkpoint_ns,
                                 CONFIG_KEY_SCRATCHPAD: scratchpad,
-                                CONFIG_KEY_PREVIOUS: checkpoint["channel_values"].get(
-                                    PREVIOUS, None
-                                ),
+                                CONFIG_KEY_RUNTIME: runtime,
                             },
                         ),
                         triggers,

@@ -4,6 +4,15 @@
 
 ---
 
+## v0.2.98 (2025-07-19)
+- Added langgraph node context for improved log filtering and trace visibility.
+
+## v0.2.97 (2025-07-19)
+- Fixed scheduling issue with ckpt ingestion worker that occurred on isolated background loops.
+- Ensured queue worker starts only after all migrations have completed.
+- Added more detailed error messages for thread state issues and improved response handling when state updates fail.
+- Exposed interrupt ID while retrieving thread state for enhanced API response details.
+
 ## v0.2.96 (2025-07-17)
 - Added a fallback mechanism for configurable header patterns to handle exclude/include settings more effectively.
 

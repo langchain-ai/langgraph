@@ -7,20 +7,21 @@ from typing import Any, cast
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph, Node
 
+from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, INPUT
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import CONF, CONFIG_KEY_SEND, END, INPUT, START
+from langgraph.constants import END, START
 from langgraph.managed.base import ManagedValueSpec
-from langgraph.pregel.algo import (
+from langgraph.pregel._algo import (
     PregelTaskWrites,
     apply_writes,
     increment,
     prepare_next_tasks,
 )
-from langgraph.pregel.checkpoint import channels_from_checkpoint, empty_checkpoint
-from langgraph.pregel.io import map_input
-from langgraph.pregel.read import PregelNode
-from langgraph.pregel.write import ChannelWrite
+from langgraph.pregel._checkpoint import channels_from_checkpoint, empty_checkpoint
+from langgraph.pregel._io import map_input
+from langgraph.pregel._read import PregelNode
+from langgraph.pregel._write import ChannelWrite
 from langgraph.types import All, Checkpointer
 
 
