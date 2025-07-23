@@ -45,7 +45,7 @@ except ImportError:
 
 import pandas as pd
 import requests
-from langchain_community.graphs import Neo4jGraph
+from langchain_neo4j import Neo4jGraph
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser
@@ -114,8 +114,7 @@ print("\nImporting movie data from tomasonjo/blog-datasets...")
 movies_query = """
 LOAD CSV WITH HEADERS 
 FROM 'https://raw.githubusercontent.com/tomasonjo/blog-datasets/main/movies/movies.csv' AS row
-CALL {
-  WITH row
+CALL (row) {
   MERGE (m:Movie {id: toInteger(row.movieId)})
   SET m.released = toInteger(row.released),
       m.title = row.title,
@@ -146,8 +145,7 @@ print("Movies data imported!")
 ratings_query = """
 LOAD CSV WITH HEADERS
 FROM 'https://raw.githubusercontent.com/tomasonjo/blog-datasets/main/movies/ratings.csv' AS row
-CALL {
-  WITH row
+CALL (row) {
   MERGE (u:User {id: toInteger(row.userId)})
   MERGE (m:Movie {id: toInteger(row.movieId)})
   MERGE (u)-[r:RATED]->(m)
