@@ -116,7 +116,7 @@ LOAD CSV WITH HEADERS
 FROM 'https://raw.githubusercontent.com/tomasonjo/blog-datasets/main/movies/movies.csv' AS row
 CALL (row) {
   MERGE (m:Movie {id: toInteger(row.movieId)})
-  SET m.released = toInteger(row.released),
+  SET m.year = toInteger(split(row.released, '-')[0]),
       m.title = row.title,
       m.imdbRating = toFloat(row.imdbRating)
   
@@ -267,7 +267,7 @@ def graph_retriever(question: str, limit: int = 5):
              collect(DISTINCT a.name) AS actors,
              AVG(r.rating) AS avgRating,
              COUNT(r) AS numRatings, score
-        RETURN 'Movie' as type, m.title AS title, m.released AS released, 
+        RETURN 'Movie' as type, m.title AS title, m.year AS year, 
                m.imdbRating AS imdbRating, genres, directors, actors, 
                avgRating, numRatings, score
         """,
@@ -297,7 +297,7 @@ def graph_retriever(question: str, limit: int = 5):
     
     for result in movie_results + person_results:
         if result['type'] == 'Movie':
-            content = f"Movie: {result['title']} ({result['released']})\n"
+            content = f"Movie: {result['title']} ({result['year']})\n"
             content += f"IMDB Rating: {result['imdbRating']}\n"
             if result['avgRating']:
                 content += f"User Rating: {result['avgRating']:.2f} ({result['numRatings']} ratings)\n"
@@ -731,7 +731,7 @@ WHERE r.rating >= 4.0
 WITH m, avg(r.rating) AS avgRating, count(r) AS numRatings
 WHERE numRatings >= 10
 MATCH (m)-[:IN_GENRE]->(g:Genre)
-RETURN m.title AS movie, m.released AS year, avgRating, numRatings, collect(g.name) AS genres
+RETURN m.title AS movie, m.year AS year, avgRating, numRatings, collect(g.name) AS genres
 ORDER BY avgRating DESC, numRatings DESC
 LIMIT 5
 """
