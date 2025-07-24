@@ -127,6 +127,76 @@ REDIRECT_MAP = {
     "how-tos/human_in_the_loop/breakpoints.md": "how-tos/human_in_the_loop/add-human-in-the-loop.md",
     "cloud/how-tos/human_in_the_loop_breakpoint.md": "cloud/how-tos/add-human-in-the-loop.md",
     "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.md",
+    # LGP migration-related redirects - once LG is also migrated, we can add a redirect for the whole site
+    "concepts/langgraph_platform.md": "https://docs.langchain.com/",
+    "concepts/langgraph_platform.md": "https://docs.langchain.com/",
+    "concepts/langgraph_components.md": "https://docs.langchain.com/",
+    "concepts/langgraph_server.md": "https://docs.langchain.com/",
+    "concepts/langgraph_data_plane.md": "https://docs.langchain.com/",
+    "concepts/langgraph_control_plane.md": "https://docs.langchain.com/",
+    "concepts/langgraph_cli.md": "https://docs.langchain.com/",
+    "concepts/langgraph_studio.md": "https://docs.langchain.com/",
+    "cloud/how-tos/studio/quick_start.md": "https://docs.langchain.com/",
+    "cloud/how-tos/invoke_studio.md": "https://docs.langchain.com/",
+    "cloud/how-tos/studio/manage_assistants.md": "https://docs.langchain.com/",
+    "cloud/how-tos/threads_studio.md": "https://docs.langchain.com/",
+    "concepts/langgraph_control_plane.md": "https://docs.langchain.com/",
+    "concepts/langgraph_cli.md": "https://docs.langchain.com/",
+    "concepts/langgraph_studio.md": "https://docs.langchain.com/",
+    "cloud/how-tos/studio/quick_start.md": "https://docs.langchain.com/",
+    "cloud/how-tos/studio/quick_start.md": "https://docs.langchain.com/",
+    "cloud/how-tos/invoke_studio.md": "https://docs.langchain.com/",
+    "cloud/how-tos/studio/manage_assistants.md": "https://docs.langchain.com/",
+    "cloud/how-tos/threads_studio.md": "https://docs.langchain.com/",
+    "cloud/how-tos/iterate_graph_studio.md": "https://docs.langchain.com/",
+    "cloud/how-tos/studio/run_evals.md": "https://docs.langchain.com/",
+    "cloud/how-tos/clone_traces_studio.md": "https://docs.langchain.com/",
+    "cloud/how-tos/datasets_studio.md": "https://docs.langchain.com/",
+    "concepts/sdk.md": "https://docs.langchain.com/",
+    "concepts/plans.md": "https://docs.langchain.com/",
+    "concepts/application_structure.md": "https://docs.langchain.com/",
+    "concepts/scalability_and_resilience.md": "https://docs.langchain.com/",
+    "concepts/auth.md": "https://docs.langchain.com/",
+    "how-tos/auth/custom_auth.md": "https://docs.langchain.com/",
+    "how-tos/auth/openapi_security.md": "https://docs.langchain.com/",
+    "concepts/assistants.md": "https://docs.langchain.com/",
+    "cloud/how-tos/configuration_cloud.md": "https://docs.langchain.com/",
+    "cloud/how-tos/use_threads.md": "https://docs.langchain.com/",
+    "cloud/how-tos/background_run.md": "https://docs.langchain.com/",
+    "cloud/how-tos/same-thread.md": "https://docs.langchain.com/",
+    "cloud/how-tos/cron_jobs.md": "https://docs.langchain.com/",
+    "cloud/how-tos/stateless_runs.md": "https://docs.langchain.com/",
+    "cloud/how-tos/configurable_headers.md": "https://docs.langchain.com/",
+    "concepts/double_texting.md": "https://docs.langchain.com/",
+    "cloud/how-tos/interrupt_concurrent.md": "https://docs.langchain.com/",
+    "cloud/how-tos/rollback_concurrent.md": "https://docs.langchain.com/",
+    "cloud/how-tos/reject_concurrent.md": "https://docs.langchain.com/",
+    "cloud/how-tos/enqueue_concurrent.md": "https://docs.langchain.com/",
+    "cloud/concepts/webhooks.md": "https://docs.langchain.com/",
+    "cloud/how-tos/webhooks.md": "https://docs.langchain.com/",
+    "cloud/concepts/cron_jobs.md": "https://docs.langchain.com/",
+    "cloud/how-tos/cron_jobs.md": "https://docs.langchain.com/",
+    "how-tos/http/custom_lifespan.md": "https://docs.langchain.com/",
+    "how-tos/http/custom_middleware.md": "https://docs.langchain.com/",
+    "how-tos/http/custom_routes.md": "https://docs.langchain.com/",
+    "cloud/concepts/data_storage_and_privacy.md": "https://docs.langchain.com/",
+    "cloud/deployment/semantic_search.md": "https://docs.langchain.com/",
+    "how-tos/ttl/configure_ttl.md": "https://docs.langchain.com/",
+    "concepts/deployment_options.md": "https://docs.langchain.com/",
+    "cloud/quick_start.md": "https://docs.langchain.com/",
+    "cloud/deployment/setup.md": "https://docs.langchain.com/",
+    "cloud/deployment/setup_pyproject.md": "https://docs.langchain.com/",
+    "cloud/deployment/setup_javascript.md": "https://docs.langchain.com/",
+    "cloud/deployment/custom_docker.md": "https://docs.langchain.com/",
+    "cloud/deployment/graph_rebuild.md": "https://docs.langchain.com/",
+    "concepts/langgraph_cloud.md": "https://docs.langchain.com/",
+    "concepts/langgraph_self_hosted_data_plane.md": "https://docs.langchain.com/",
+    "concepts/langgraph_self_hosted_control_plane.md": "https://docs.langchain.com/",
+    "concepts/langgraph_standalone_container.md": "https://docs.langchain.com/",
+    "cloud/deployment/cloud.md": "https://docs.langchain.com/",
+    "cloud/deployment/self_hosted_data_plane.md": "https://docs.langchain.com/",
+    "cloud/deployment/self_hosted_control_plane.md": "https://docs.langchain.com/",
+    "cloud/deployment/standalone_container.md": "https://docs.langchain.com/",
 }
 
 
@@ -493,10 +563,18 @@ def on_post_build(config):
         old_html_path = File(page_old, "", "", use_directory_urls).dest_path.replace(
             os.sep, "/"
         )
-        new_html_path = File(page_new_before_hash, "", "", True).url
-        new_html_path = (
-            posixpath.relpath(new_html_path, start=posixpath.dirname(old_html_path))
-            + hash
-            + suffix
-        )
+        
+        # Check if this is an external URL (starts with http)
+        if page_new_before_hash.startswith(('http://', 'https://')):
+            # For external URLs, use the URL directly
+            new_html_path = page_new_before_hash + hash + suffix
+        else:
+            # For internal URLs, use the existing logic
+            new_html_path = File(page_new_before_hash, "", "", True).url
+            new_html_path = (
+                posixpath.relpath(new_html_path, start=posixpath.dirname(old_html_path))
+                + hash
+                + suffix
+            )
+        
         _write_html(config["site_dir"], old_html_path, new_html_path)
