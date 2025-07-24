@@ -12,6 +12,8 @@ from langgraph.types import _DC_KWARGS, StreamWriter
 from langgraph.typing import ContextT
 
 
+__all__ = ("Runtime", "get_runtime")
+
 def _no_op_stream_writer(_: Any) -> None: ...
 
 
@@ -78,7 +80,14 @@ DEFAULT_RUNTIME = Runtime(
 
 
 def get_runtime(context_schema: type[ContextT] | None = None) -> Runtime[ContextT]:
-    """Get the runtime for the current graph run."""
+    """Get the runtime for the current graph run.
+    
+    Args:
+        context_schema: Optional schema used for type hinting the return type of the runtime.
+
+    Returns:
+        The runtime for the current graph run.
+    """
 
     # TODO: in an ideal world, we would have a context manager for
     # the runtime that's independent of the config. this will follow
