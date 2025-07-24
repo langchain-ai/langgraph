@@ -485,12 +485,12 @@ def create_react_agent(
     # our graph needs to check if these were called
     should_return_direct = {t.name for t in tool_classes if t.return_direct}
 
-    def _resolve_model(state: StateSchema, config: RunnableConfig) -> BaseChatModel:
+    def _resolve_model(state: StateSchema, config: RunnableConfig) -> LanguageModelLike:
         """Resolve the model to use, handling both static and dynamic models."""
         if is_dynamic_model:
-            return model(state, config)
+            return _get_prompt_runnable(prompt) | model(state, config)
         else:
-            return model
+            return static_model
 
     def _are_more_steps_needed(state: StateSchema, response: BaseMessage) -> bool:
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
@@ -541,9 +541,8 @@ def create_react_agent(
 
         if is_dynamic_model:
             # Resolve dynamic model at runtime and apply prompt
-            resolved_model = _resolve_model(state, config)
-            runtime_model_runnable = _get_prompt_runnable(prompt) | resolved_model
-            response = cast(AIMessage, runtime_model_runnable.invoke(state, config))
+            dynamic_model = _resolve_model(state, config)
+            response = cast(AIMessage, dynamic_model.invoke(state, config))
         else:
             response = cast(AIMessage, static_model.invoke(state, config))
 
@@ -567,11 +566,8 @@ def create_react_agent(
 
         if is_dynamic_model:
             # Resolve dynamic model at runtime and apply prompt
-            resolved_model = _resolve_model(state, config)
-            runtime_model_runnable = _get_prompt_runnable(prompt) | resolved_model
-            response = cast(
-                AIMessage, await runtime_model_runnable.ainvoke(state, config)
-            )
+            dynamic_model = _resolve_model(state, config)
+            response = cast(AIMessage, await dynamic_model.ainvoke(state, config))
         else:
             response = cast(AIMessage, await static_model.ainvoke(state, config))
 
