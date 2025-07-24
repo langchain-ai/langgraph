@@ -15,7 +15,12 @@ You are an expert Python developer and AI engineer tasked with adapting a self-R
 The primary goal is adapt an existing [self-RAG workflow](langgraph_self_rag.ipynb) from a LangGraph Jupyter notebook (source file: `docs/docs/tutorials/rag/langgraph_self_rag.ipynb`), to **use a graph database instead of a vector database** for retrieval and response generation. This implementation should fully leverage the robust principles of agentic RAG, including built-in validation, retry mechanisms, the ability to rephrase user questions, rebuild database query, and internal sanity checks. Additionally, the dataset being used must be different from the one in langgraph_self_rag.ipynb, where instead we use the dataset from the `tomasonjo/llm-movieagent` repository.
 
 ### Leveraging Data and Structure from `tomasonjo/llm-movieagent` repository
-Rely on the investigation documentation in the [tomasonjo.llm-movieagent.md](tomasonjo.llm-movieagent.md) file.
+- Rely on the investigation documentation in the [tomasonjo.llm-movieagent.md](tomasonjo.llm-movieagent.md) file.
+- The dataset is downloaded in the [file](./llm-movieagent/api/ingest.py) `api/ingest.py`.
+- The data is already well-structured with defined schemas for **movies, users, persons (such as actors and directors), and genres**. This existing structure should serve as the foundation for the graph database.
+- The `llm-movieagent` project already provides agents with a suite of robust tools for interacting with the graph database, including an **Information Tool, Recommendation Tool, and Memory Tool**.
+- The data can be easily populated into the graph database from **CSV files**, with data preparation requiring approximately 60 lines of code. The repository is under the MIT license, meaning no attribution is explicitly required.
+- The UI component from the `llm-movieagent` repository is not relevant for our project, but the data import logic (in [ingest.py](./llm-movieagent/api/ingest.py)) and agentic RAG code (in the `neo4j-semantic-layer` package) are highly relevant and should be adapted for our implementation.
 
 ### Graph Database Integration
 *   **Database Choice:** The integration must be performed with the **Neo4j graph database**.
