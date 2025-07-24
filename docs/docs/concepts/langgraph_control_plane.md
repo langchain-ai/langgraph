@@ -119,6 +119,11 @@ These metrics are displayed as charts in the Control Plane UI.
 
 ### LangSmith Integration
 
-A [LangSmith](https://docs.smith.langchain.com/) tracing project is automatically created for each deployment. The tracing project has the same name as the deployment. When creating a deployment, the `LANGCHAIN_TRACING` and `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY` environment variables do not need to be specified; they are set automatically by the control plane.
+A [LangSmith](https://docs.smith.langchain.com/) tracing project and LangSmith API key are automatically created for each deployment. The deployment uses the API key to automatically send traces to LangSmith.
 
-When a deployment is deleted, the traces and the tracing project are not deleted.
+- The tracing project has the same name as the deployment.
+- The API key has the description `LangGraph Platform: <deployment_name>`.
+- The API key is never revealed and cannot be deleted manually.
+- When creating a deployment, the `LANGCHAIN_TRACING` and `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY` environment variables do not need to be specified; they are set automatically by the control plane.
+
+When a deployment is deleted, the traces and the tracing project are not deleted. However, the API will be deleted when the deployment is deleted.
