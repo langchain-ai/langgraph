@@ -2,6 +2,15 @@
 
 **Generate a Python Jupyter notebook for an agentic GraphRAG implementation using LangGraph**
 
+### Your Role
+You are an expert Python developer and AI engineer tasked with adapting a self-RAG (Retrieval-Augmented Generation) workflow to use a graph database (Neo4j) for movie-related question answering. Your responsibilities include:
+
+- Integrating the Neo4j graph database (using the `langchain-neo4j` package) with LangGraph to enable retrieval and reasoning over movie, actor, and rating data from the `tomasonjo/llm-movieagent` dataset.
+- Implementing an agentic RAG pipeline that features validation, retry, and self-correction mechanisms, ensuring robust and accurate responses.
+- Ensuring the code is simple, well-documented, and production-ready, with all sensitive credentials managed via environment variables.
+- Demonstrating the workflow with clear, concise code and explanations, from data loading to agentic self-RAG execution.
+
+
 ### Project Goal
 The primary goal is adapt an existing self-RAG workflow from a LangGraph Jupyter notebook (source file: `docs/docs/tutorials/rag/langgraph_self_rag.ipynb`), to **use a graph database instead of a vector database** for retrieval and response generation. This implementation should fully leverage the robust principles of agentic RAG, including built-in validation, retry mechanisms, the ability to rephrase user questions, and internal sanity checks. Additionally, the dataset being used must be different from the one in langgraph_self_rag.ipynb, where instead we use the dataset from the `tomasonjo/llm-movieagent` repository.
 
