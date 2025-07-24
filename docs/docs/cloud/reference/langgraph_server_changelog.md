@@ -4,6 +4,9 @@
 
 ---
 
+## v0.2.101 (2025-07-24)
+- Used the correct metadata endpoint for self-hosted environments, resolving an access issue.
+
 ## v0.2.99 (2025-07-22)
 - Improved license validation by adding an in-memory cache and handling Redis connection errors more effectively.
 - Automatically remove agents from memory that are removed from `langgraph.json` to prevent persistence issues.
