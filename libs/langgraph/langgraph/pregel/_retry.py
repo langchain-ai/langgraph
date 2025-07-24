@@ -9,7 +9,8 @@ from collections.abc import Awaitable, Sequence
 from dataclasses import replace
 from typing import Any, Callable
 
-from langgraph.constants import (
+from langgraph._internal._config import patch_configurable
+from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
@@ -17,7 +18,6 @@ from langgraph.constants import (
 )
 from langgraph.errors import GraphBubbleUp, ParentCommand
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
-from langgraph.utils.config import patch_configurable
 
 logger = logging.getLogger(__name__)
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)

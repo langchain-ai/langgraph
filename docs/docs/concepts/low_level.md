@@ -192,35 +192,48 @@ class State(MessagesState):
 
 ## Nodes
 
-In LangGraph, nodes are typically python functions (sync or async) where the **first** positional argument is the [state](#state), and (optionally), the **second** positional argument is a "config", containing optional [configurable parameters](#configuration) (such as a `thread_id`).
+In LangGraph, nodes are Python functions (either synchronous or asynchronous) that accept the following arguments:
+
+1. `state`: The [state](#state) of the graph
+2. `config`: A `RunnableConfig` object that contains configuration information like `thread_id` and tracing information like `tags`
+3. `runtime`: A `Runtime` object that contains [runtime `context`](#runtime-context) and other information like `store` and `stream_writer`
+    
 
 Similar to `NetworkX`, you add these nodes to a graph using the [add_node][langgraph.graph.StateGraph.add_node] method:
 
 ```python
+from dataclasses import dataclass
 from typing_extensions import TypedDict
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph
+from langgraph.runtime import Runtime
 
 class State(TypedDict):
     input: str
     results: str
 
+@dataclass
+class Context:
+    user_id: str
+
 builder = StateGraph(State)
 
+def plain_node(state: State):
+    return state
 
-def my_node(state: State, config: RunnableConfig):
-    print("In node: ", config["configurable"]["user_id"])
+def node_with_runtime(state: State, runtime: Runtime[Context]):
+    print("In node: ", runtime.context.user_id)
+    return {"results": f"Hello, {state['input']}!"}
+
+def node_with_config(state: State, config: RunnableConfig):
+    print("In node with thread_id: ", config["configurable"]["thread_id"])
     return {"results": f"Hello, {state['input']}!"}
 
 
-# The second argument is optional
-def my_other_node(state: State):
-    return state
-
-
-builder.add_node("my_node", my_node)
-builder.add_node("other_node", my_other_node)
+builder.add_node("plain_node", plain_node)
+builder.add_node("node_with_runtime", node_with_runtime)
+builder.add_node("node_with_config", node_with_config)
 ...
 ```
 
@@ -459,33 +472,32 @@ LangGraph can easily handle migrations of graph definitions (nodes, edges, and s
 - State keys that are renamed lose their saved state in existing threads
 - State keys whose types change in incompatible ways could currently cause issues in threads with state from before the change -- if this is a blocker please reach out and we can prioritize a solution.
 
-## Configuration
+## Runtime Context
 
-When creating a graph, you can also mark that certain parts of the graph are configurable. This is commonly done to enable easily switching between models or system prompts. This allows you to create a single "cognitive architecture" (the graph) but have multiple different instance of it.
-
-You can optionally specify a `config_schema` when creating a graph.
+When creating a graph, you can specify a `context_schema` for runtime context passed to nodes. This is useful for passing
+information to nodes that is not part of the graph state. For example, you might want to pass dependencies such as model name or a database connection.
 
 ```python
-class ConfigSchema(TypedDict):
-    llm: str
+@dataclass
+class ContextSchema:
+    llm_provider: str = "openai"
 
-graph = StateGraph(State, config_schema=ConfigSchema)
+graph = StateGraph(State, context_schema=ContextSchema)
 ```
 
-You can then pass this configuration into the graph using the `configurable` config field.
+You can then pass this context into the graph using the `context` parameter of the `invoke` method.
 
 ```python
-config = {"configurable": {"llm": "anthropic"}}
-
-graph.invoke(inputs, config=config)
+graph.invoke(inputs, context={"llm_provider": "anthropic"})
 ```
 
-You can then access and use this configuration inside a node or conditional edge:
+You can then access and use this context inside a node or conditional edge:
 
 ```python
-def node_a(state, config):
-    llm_type = config.get("configurable", {}).get("llm", "openai")
-    llm = get_llm(llm_type)
+from langgraph.runtime import Runtime
+
+def node_a(state: State, runtime: Runtime[ContextSchema]):
+    llm = get_llm(runtime.context.llm_provider)
     ...
 ```
 
@@ -496,7 +508,7 @@ See [this guide](../how-tos/graph-api.md#add-runtime-configuration) for a full b
 The recursion limit sets the maximum number of [super-steps](#graphs) the graph can execute during a single execution. Once the limit is reached, LangGraph will raise `GraphRecursionError`. By default this value is set to 25 steps. The recursion limit can be set on any graph at runtime, and is passed to `.invoke`/`.stream` via the config dictionary. Importantly, `recursion_limit` is a standalone `config` key and should not be passed inside the `configurable` key as all other user-defined configuration. See the example below:
 
 ```python
-graph.invoke(inputs, config={"recursion_limit": 5, "configurable":{"llm": "anthropic"}})
+graph.invoke(inputs, config={"recursion_limit": 5}, context={"llm": "anthropic"})
 ```
 
 Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-limit/) to learn more about how the recursion limit works.

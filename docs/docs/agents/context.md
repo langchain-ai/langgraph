@@ -12,56 +12,64 @@ LangGraph provides **three** primary ways to supply context:
 
 | Type                                                                         | Description                                   | Mutable? | Lifetime                |
 |------------------------------------------------------------------------------|-----------------------------------------------|----------|-------------------------|
-| [**Config**](#config-static-context)                                         | data passed at the start of a run             | ❌        | per run                 |
+| [**Runtime Context**](#runtime-context)                                      | data passed at the start of a run             | ❌        | per run                 |
 | [**Short-term memory (State)**](#short-term-memory-mutable-context)          | dynamic data that can change during execution | ✅        | per run or conversation |
 | [**Long-term memory (Store)**](#long-term-memory-cross-conversation-context) | data that can be shared between conversations | ✅        | across conversations    |
 
-## Provide runtime context
+### Runtime Context
 
-### Config (static context)
+!!! note "`config['configurable']` -> `runtime.context`"
 
-Config is for immutable data like user metadata or API keys. Use
-when you have values that don't change mid-run.
+    In LangGraph < v1.0, static runtime context was passed via the `config['configurable']` key, paired with a `config_schema` argument
+    to `StateGraph` or `Pregel`. This is now deprecated and will be removed in v2.0.
 
-Specify configuration using a key called **"configurable"** which is reserved
-for this purpose:
+    As of LangGraph v1.0, the Runtime object is recommended to access static context and runtime-specific information like the store and stream writer.
+
+Runtime context is for immutable data like user metadata or API keys. Use this when you have values that don't change mid-run.
+
+Specify static context via the `context` argument to `invoke` / `stream`, which is reserved for this purpose:
 
 ```python
+@dataclass
+class ContextSchema:
+    user_name: str
+
 graph.invoke( # (1)!
     {"messages": [{"role": "user", "content": "hi!"}]}, # (2)!
     # highlight-next-line
-    config={"configurable": {"user_id": "user_123"}} # (3)!
+    context={"user_name": "John Smith"} # (3)!
 )
 ```
 
 1. This is the invocation of the agent or graph. The `invoke` method runs the underlying graph with the provided input.
 2. This example uses messages as an input, which is common, but your application may use different input structures.
-3. This is where you pass the configuration data. The `config` parameter allows you to provide additional context that the agent can use during its execution.
+3. This is where you pass the runtime data. The `context` parameter allows you to provide additional dependencies that the agent can use during its execution.
 
 === "Agent prompt"
 
     ```python
     from langchain_core.messages import AnyMessage
-    from langchain_core.runnables import RunnableConfig
+    from langgraph.runtime import get_runtime
     from langgraph.prebuilt.chat_agent_executor import AgentState
     from langgraph.prebuilt import create_react_agent
 
     # highlight-next-line
-    def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:
-        user_name = config["configurable"].get("user_name")
-        system_msg = f"You are a helpful assistant. Address the user as {user_name}."
+    def prompt(state: AgentState) -> list[AnyMessage]:
+        runtime = get_runtime(ContextSchema)
+        system_msg = f"You are a helpful assistant. Address the user as {runtime.context.user_name}."
         return [{"role": "system", "content": system_msg}] + state["messages"]
 
     agent = create_react_agent(
         model="anthropic:claude-3-7-sonnet-latest",
         tools=[get_weather],
-        prompt=prompt
+        prompt=prompt,
+        context_schema=ContextSchema
     )
 
     agent.invoke(
         {"messages": [{"role": "user", "content": "what is the weather in sf"}]},
         # highlight-next-line
-        config={"configurable": {"user_name": "John Smith"}}
+        context={"user_name": "John Smith"}
     )
     ```
 
@@ -70,11 +78,11 @@ graph.invoke( # (1)!
 === "Workflow node"
 
     ```python
-    from langchain_core.runnables import RunnableConfig
+    from langgraph.runtime import Runtime
 
     # highlight-next-line
-    def node(state: State, config: RunnableConfig):
-        user_name = config["configurable"].get("user_name")
+    def node(state: State, config: Runtime[ContextSchema]):
+        user_name = runtime.context.user_name
         ...
     ```
 
@@ -83,14 +91,16 @@ graph.invoke( # (1)!
 === "In a tool"
 
     ```python
-    from langchain_core.runnables import RunnableConfig
+    from langgraph.runtime import get_runtime
 
     @tool
     # highlight-next-line
-    def get_user_info(config: RunnableConfig) -> str:
+    def get_user_email() -> str:
         """Retrieve user information based on user ID."""
-        user_id = config["configurable"].get("user_id")
-        return "User is John Smith" if user_id == "user_123" else "Unknown user"
+        # simulate fetching user info from a database
+        runtime = get_runtime(ContextSchema)
+        email = get_user_email_from_db(runtime.context.user_name)
+        return email
     ```
 
     See the [tool calling guide](../how-tos/tool-calling.md#configuration) for details.

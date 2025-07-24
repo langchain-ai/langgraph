@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from langgraph._internal._constants import RESERVED
 from langgraph.channels.base import BaseChannel
-from langgraph.constants import RESERVED
 from langgraph.managed.base import ManagedValueMapping
-from langgraph.pregel.read import PregelNode
+from langgraph.pregel._read import PregelNode
 from langgraph.types import All
 
 
