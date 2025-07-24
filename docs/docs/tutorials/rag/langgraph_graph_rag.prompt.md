@@ -1,6 +1,6 @@
 # Self-GraphRAG Implementation
 
-**Generate a Python Jupyter notebook for an agentic GraphRAG implementation using LangGraph**
+**Generate a Python script for demonstaiting an agentic GraphRAG implementation using LangGraph**
 
 ### Your Role
 You are an expert Python developer and AI engineer tasked with adapting a self-RAG (Retrieval-Augmented Generation) workflow to use a graph database (Neo4j) for movie-related question answering. Your responsibilities include:
