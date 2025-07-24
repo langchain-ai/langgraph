@@ -21,6 +21,7 @@ The primary goal is adapt an existing [self-RAG workflow](langgraph_self_rag.ipy
 - The `llm-movieagent` project already provides agents with a suite of robust tools for interacting with the graph database, including an **Information Tool, Recommendation Tool, and Memory Tool**.
 - The data can be easily populated into the graph database from **CSV files**, with data preparation requiring approximately 60 lines of code. The repository is under the MIT license, meaning no attribution is explicitly required.
 - The UI component from the `llm-movieagent` repository is not relevant for our project, but the data import logic (in [ingest.py](./llm-movieagent/api/ingest.py)) and agentic RAG code (in the `neo4j-semantic-layer` package) are highly relevant and should be adapted for our implementation.
+- Don't download the code from the `llm-movieagent` repository, just use the downloaded version in the [llm-movieagent](./llm-movieagent) folder.
 
 ### Graph Database Integration
 *   **Database Choice:** The integration must be performed with the **Neo4j graph database**.
