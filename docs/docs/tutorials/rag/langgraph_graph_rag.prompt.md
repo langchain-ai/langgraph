@@ -64,6 +64,12 @@ Structure your Python script in the following logical sections:
 -  **Execution:**
     *   Whole logic should be in one file `docs/docs/tutorials/rag/self_graphrag_v2.py`.
 
+### Out of Scope
+*   Do not build a UI or any web server components (e.g., Flask, FastAPI).
+*   Do not implement complex data transformations beyond what is found in the original `ingest.py`.
+*   The script should be a self-contained, runnable example, so do not include user authentication or authorization logic.
+*   Don't use hardcoded queries, the agent must build queries from the prompt
+
 ### Deprecation Warnings
 1. The class `Neo4jGraph` was deprecated in LangChain 0.3.8 and will be removed in 1.0. An updated version of the class exists in the :class:`~langchain-neo4j package and should be used instead. To use it run `pip install -U :class:`~langchain-neo4j` and import as `from :class:`~langchain_neo4j import Neo4jGraph``.
 
