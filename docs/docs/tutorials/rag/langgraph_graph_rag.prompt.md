@@ -38,7 +38,33 @@ Provide the complete documented Python code (.py, not .ipynb). Each step within 
 ### Definition of Done
 1. The code should be able to run without errors and warnings
 
-### Deprecation Warning
+### Implementation Steps
+Structure your Python script in the following logical sections:
+
+-  **Imports:** Import all necessary libraries.
+-  **Configuration:** Set up environment variables for API keys (e.g., OpenAI, Neo4j).
+-  **Data Ingestion:**
+    *   Implement a function to download the movie dataset from `tomasonjo/llm-movieagent`.
+    *   Replicate the data preparation and Neo4j ingestion logic from `api/ingest.py` in the source repository.
+-  **Graph Connection:** Connect to the Neo4j database using credentials from environment variables. Ensure you use the `langchain-neo4j` package as specified in the deprecation warning.
+-  **Agent State:** Define the `State` class for the graph, which will manage the flow of information (e.g., question, context, generation).
+-  **Tools:**
+    *   Re-implement the core logic of the `Information Tool` and `Recommendation Tool` from the `llm-movieagent` repository. These tools should query the Neo4j graph to fetch data.
+-  **Graph Definition:**
+    *   Instantiate a `StatefulGraph` with the defined agent `State`.
+    *   Create nodes for the agent's workflow (e.g., `retrieve`, `grade_documents`, `generate`, `rewrite_question`).
+    *   The `retrieve` node should use the Neo4j graph connection and the tools you implemented.
+-  **Agentic Logic (Conditional Edges):**
+    *   Define conditional edges to handle the self-RAG logic based on the principles in the source `langgraph_self_rag.ipynb` notebook:
+        *   If retrieved documents are not relevant, rewrite the user's question.
+        *   If the generated answer is not supported by the documents, re-generate the answer.
+- **Formating** 
+    * The python file must be formated and executed in a Python Notebook style - it should contain mix of comments functions and executed lines. 
+    * Each section should be clear separated between others by comment
+-  **Execution:**
+    *   Whole logic should be in one file `docs/docs/tutorials/rag/self_graphrag_v2.py`.
+
+### Deprecation Warnings
 1. The class `Neo4jGraph` was deprecated in LangChain 0.3.8 and will be removed in 1.0. An updated version of the class exists in the :class:`~langchain-neo4j package and should be used instead. To use it run `pip install -U :class:`~langchain-neo4j` and import as `from :class:`~langchain_neo4j import Neo4jGraph``.
 
 ### References
