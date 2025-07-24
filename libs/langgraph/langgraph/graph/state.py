@@ -128,6 +128,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             Use this to expose immutable context data to your nodes, like user_id, db_conn, etc.
         input_schema: The schema class that defines the input to the graph.
         output_schema: The schema class that defines the output from the graph.
+        config_schema: Specifies the schema for the `configurable` key in the `RunnableConfig` object.
+            !!! warning "Deprecated"
+                This parameter is deprecated and support will be removed in v2.0.0.
+                Please use `context_schema` instead.
 
     Example:
         ```python

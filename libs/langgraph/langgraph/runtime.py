@@ -26,7 +26,9 @@ class _RuntimeOverrides(TypedDict, Generic[ContextT], total=False):
 class Runtime(Generic[ContextT]):
     """Convenience class that bundles run-scoped context and graph configuration.
 
-    !!! version-added "Added in version 1.0.0."
+    !!! version-added "Added in version v0.6.0"
+
+    TODO: write a compelling example with the new API.
     """
 
     context: ContextT = field(default=None)  # type: ignore[assignment]
