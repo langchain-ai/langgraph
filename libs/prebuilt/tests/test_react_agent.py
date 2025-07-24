@@ -28,6 +28,9 @@ from langchain_core.tools import InjectedToolCallId, ToolException
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel, Field
 from pydantic.v1 import BaseModel as BaseModelV1
+from tests.any_str import AnyStr
+from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
+from tests.model import FakeToolCallingModel
 from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -56,9 +59,6 @@ from langgraph.prebuilt.tool_node import (
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Interrupt, interrupt
-from tests.any_str import AnyStr
-from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
-from tests.model import FakeToolCallingModel
 
 pytestmark = pytest.mark.anyio
 
@@ -1616,7 +1616,7 @@ def test_dynamic_model_state_dependent_tools(version: Literal["v1", "v2"]) -> No
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_dynamic_model_error_handling(version: str) -> None:
+def test_dynamic_model_error_handling(version: Literal["v1", "v2"]) -> None:
     """Test error handling in dynamic model."""
 
     def failing_dynamic_model(state, config):
