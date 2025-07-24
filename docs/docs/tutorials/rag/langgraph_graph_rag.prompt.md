@@ -12,7 +12,7 @@ You are an expert Python developer and AI engineer tasked with adapting a self-R
 
 
 ### Project Goal
-The primary goal is adapt an existing self-RAG workflow from a LangGraph Jupyter notebook (source file: `docs/docs/tutorials/rag/langgraph_self_rag.ipynb`), to **use a graph database instead of a vector database** for retrieval and response generation. This implementation should fully leverage the robust principles of agentic RAG, including built-in validation, retry mechanisms, the ability to rephrase user questions, and internal sanity checks. Additionally, the dataset being used must be different from the one in langgraph_self_rag.ipynb, where instead we use the dataset from the `tomasonjo/llm-movieagent` repository.
+The primary goal is adapt an existing [self-RAG workflow](langgraph_self_rag.ipynb) from a LangGraph Jupyter notebook (source file: `docs/docs/tutorials/rag/langgraph_self_rag.ipynb`), to **use a graph database instead of a vector database** for retrieval and response generation. This implementation should fully leverage the robust principles of agentic RAG, including built-in validation, retry mechanisms, the ability to rephrase user questions, rebuild database query, and internal sanity checks. Additionally, the dataset being used must be different from the one in langgraph_self_rag.ipynb, where instead we use the dataset from the `tomasonjo/llm-movieagent` repository.
 
 ### Leveraging Data and Structure from `tomasonjo/llm-movieagent` repository
 *   **Data Source:** Use the **movie dataset from the `tomasonjo/llm-movieagent` GitHub repository** https://github.com/tomasonjo/llm-movieagent. This repository implements a "semantic layer on top of a graph database", using Neo4j to store information about actors, movies, and their ratings. The dataset is based on the MovieLens dataset. The dataset is downloaded in the file `api/ingest.py`.
@@ -37,6 +37,9 @@ Provide the complete documented Python code (.py, not .ipynb). Each step within 
 
 ### Definition of Done
 1. The code should be able to run without errors and warnings
+2. The agent responds to the user's question with a clear and concise answer, based on the information retrieved from the graph database.
+3. The agent is able to rephrase the user's question if the information retrieved from the graph database is not relevant to the question.
+4. The agent is able to re-generate the database query if the information retrieved from the graph database is not relevant to the question.
 
 ### Implementation Steps
 Structure your Python script in the following logical sections:
