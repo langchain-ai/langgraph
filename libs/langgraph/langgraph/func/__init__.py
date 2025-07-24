@@ -261,6 +261,10 @@ class entrypoint(Generic[ContextT]):
             passed to the workflow.
         cache_policy: A cache policy to use for caching the results of the workflow.
         retry_policy: A retry policy (or list of policies) to use for the workflow in case of a failure.
+        config_schema: Specifies the schema for the `configurable` key in the `RunnableConfig` object.
+            !!! warning "Deprecated"
+                This parameter is deprecated and support will be removed in v2.0.0.
+                Please use `context_schema` instead.
 
     Example: Using entrypoint and tasks
         ```python

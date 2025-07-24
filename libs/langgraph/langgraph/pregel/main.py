@@ -602,6 +602,7 @@ class Pregel(
     Defaults to None."""
 
     context_schema: type[ContextT] | None = None
+    """Specifies the schema for the context object that will be passed to the workflow."""
 
     config: RunnableConfig | None = None
 
