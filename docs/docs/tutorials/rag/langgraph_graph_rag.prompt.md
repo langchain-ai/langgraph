@@ -14,10 +14,10 @@ The primary goal is adapt an existing self-RAG workflow from a LangGraph Jupyter
 
 ### Graph Database Integration
 *   **Database Choice:** The integration must be performed with the **Neo4j graph database**.
-*   **Accessibility for Testing:** For development and testing purposes, utilize the local self-hosted version of Neo4j run via `docker compose`
+*   **Accessibility for Testing:** For development and testing purposes, utilize Neo4j Aura - hosted version of Neo4j
 
 ### LangGraph Workflow and Agentic Principles
-*   The notebook should demonstrate the **agentic self-RAG workflow**'s capabilities, including its validation and retry mechanisms. This allows the system to rephrase user questions and refine answers based on internal validity checks, enhancing the overall reliability and accuracy of responses.
+*   The python code should demonstrate the **agentic self-RAG workflow**'s capabilities, including its validation and retry mechanisms. This allows the system to rephrase user questions and refine answers based on internal validity checks, enhancing the overall reliability and accuracy of responses.
 
 ### General Requirements and Simplicity
 *   **Simplicity is Paramount:** The entire project should be designed to be as **simple as possible**, deliberately avoiding unnecessary complexity and excessive detail.
