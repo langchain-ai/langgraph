@@ -4,6 +4,10 @@
 
 ---
 
+## v0.2.102 (2025-07-24)
+- Captured interrupt events in the wait method to preserve legacy behavior and stream updates by default.
+- Added support for SDK structlog in the JavaScript environment, enhancing logging capabilities.
+
 ## v0.2.101 (2025-07-24)
 - Used the correct metadata endpoint for self-hosted environments, resolving an access issue.
 
