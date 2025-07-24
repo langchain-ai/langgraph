@@ -22,6 +22,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolCall,
     ToolMessage,
+    MessageLikeRepresentation,
 )
 from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langchain_core.tools import InjectedToolCallId, ToolException
@@ -1424,15 +1425,15 @@ def test_dynamic_model_with_tools(version: Literal["v1", "v2"]) -> None:
 
     # Test basic tool usage
     result = agent.invoke({"messages": [HumanMessage("basic request")]})
-    assert len(result["messages"]) == 4
-    tool_message = result["messages"][-2]
+    assert len(result["messages"]) == 3
+    tool_message = result["messages"][-1]
     assert tool_message.content == "basic: 1"
     assert tool_message.name == "basic_tool"
 
     # Test advanced tool usage
     result = agent.invoke({"messages": [HumanMessage("advanced request")]})
-    assert len(result["messages"]) == 4
-    tool_message = result["messages"][-2]
+    assert len(result["messages"]) == 3
+    tool_message = result["messages"][-1]
     assert tool_message.content == "advanced: 1"
     assert tool_message.name == "advanced_tool"
 
@@ -1504,9 +1505,9 @@ def test_dynamic_model_with_prompt(version: Literal["v1", "v2"]) -> None:
     assert result["messages"][-1].content == "system_msg-human_msg"
 
     # Test with callable prompt
-    def dynamic_prompt(state: AgentState) -> str:
+    def dynamic_prompt(state: AgentState) -> list[MessageLikeRepresentation]:
         """Generate a dynamic system message based on state."""
-        return "system_msg"
+        return [{"role": "system", "content": "system_msg"}] + list(state["messages"])
 
     agent = create_react_agent(
         dynamic_model, [], prompt=dynamic_prompt, version=version
@@ -1562,16 +1563,15 @@ def test_dynamic_model_with_checkpointer(sync_checkpointer):
         return FakeToolCallingModel(tool_calls=[])
 
     agent = create_react_agent(dynamic_model, [], checkpointer=sync_checkpointer)
-
     config = {"configurable": {"thread_id": "test_dynamic"}}
 
     # First call
     result1 = agent.invoke({"messages": [HumanMessage("hello")]}, config)
-    assert len(result1["messages"]) == 2
+    assert len(result1["messages"]) == 2  # Human + AI message
 
     # Second call - should load from checkpoint
     result2 = agent.invoke({"messages": [HumanMessage("world")]}, config)
-    assert len(result2["messages"]) == 4  # Previous messages + new ones
+    assert len(result2["messages"]) == 4
 
     # Dynamic model should be called each time
     assert call_count >= 2
@@ -1604,15 +1604,17 @@ def test_dynamic_model_state_dependent_tools(version: Literal["v1", "v2"]) -> No
 
     agent = create_react_agent(dynamic_model, [tool_a, tool_b], version=version)
 
-    # Test default tool
-    result = agent.invoke({"messages": [HumanMessage("hello")]})
-    tool_message = result["messages"][-2]
-    assert tool_message.content == "A: 1"
-
-    # Test switching tool
+    # Ask to use tool B
     result = agent.invoke({"messages": [HumanMessage("use_b please")]})
-    tool_message = result["messages"][-2]
-    assert tool_message.content == "B: 2"
+    last_message = result["messages"][-1]
+    assert isinstance(last_message, ToolMessage)
+    assert last_message.content == "B: 2"
+
+    # Ask to use tool A
+    result = agent.invoke({"messages": [HumanMessage("hello")]})
+    last_message = result["messages"][-1]
+    assert isinstance(last_message, ToolMessage)
+    assert last_message.content == "A: 1"
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
