@@ -284,22 +284,28 @@ def create_react_agent(
             - **Static model**: A chat model instance (e.g., `ChatOpenAI()`) or
               string identifier (e.g., `"openai:gpt-4"`)
             - **Dynamic model**: A callable with signature
-              `(state, config) -> BaseChatModel` that returns different models
+              `(state, runtime) -> BaseChatModel` that returns different models
               based on runtime context
 
-            Dynamic functions receive graph state and configuration, enabling
+            Dynamic functions receive graph state and runtime, enabling
             context-dependent model selection. Must return a `BaseChatModel`
             instance. For tool calling, bind tools using `.bind_tools()`.
             Bound tools must be a subset of the `tools` parameter.
 
             Dynamic model example:
             ```python
+            from dataclasses import dataclass
+
+            @dataclass
+            class ModelContext:
+                model_name: str = "gpt-3.5-turbo"
+
             # Instantiate models globally
             gpt4_model = ChatOpenAI(model="gpt-4")
             gpt35_model = ChatOpenAI(model="gpt-3.5-turbo")
 
-            def select_model(state: AgentState, config: RunnableConfig) -> ChatOpenAI:
-                model_name = config.get("configurable", {}).get("model", "gpt-3.5-turbo")
+            def select_model(state: AgentState, runtime: Runtime[ModelContext]) -> ChatOpenAI:
+                model_name = runtime.context.model_name
                 model = gpt4_model if model_name == "gpt-4" else gpt35_model
                 return model.bind_tools(tools)
             ```
@@ -446,10 +452,15 @@ def create_react_agent(
 
         Dynamic model selection example:
         ```python
-        from langchain_core.runnables import RunnableConfig
+        from dataclasses import dataclass
         from langchain_openai import ChatOpenAI
         from langgraph.prebuilt import create_react_agent
         from langgraph.prebuilt.chat_agent_executor import AgentState
+        from langgraph.runtime import Runtime
+
+        @dataclass
+        class ModelContext:
+            model_name: str = "gpt-3.5-turbo"
 
         def check_weather(location: str) -> str:
             '''Return the weather forecast for the specified location.'''
@@ -459,9 +470,9 @@ def create_react_agent(
         gpt4_model = ChatOpenAI(model="gpt-4")
         gpt35_model = ChatOpenAI(model="gpt-3.5-turbo")
 
-        def select_model(state: AgentState, config: RunnableConfig) -> ChatOpenAI:
-            # Select model based on configuration
-            model_name = config.get("configurable", {}).get("model", "gpt-3.5-turbo")
+        def select_model(state: AgentState, runtime: Runtime[ModelContext]) -> ChatOpenAI:
+            # Select model based on context
+            model_name = runtime.context.model_name
 
             if model_name == "gpt-4":
                 model = gpt4_model
@@ -475,12 +486,13 @@ def create_react_agent(
             select_model,
             tools=[check_weather],
             prompt="You are a helpful assistant",
+            context_schema=ModelContext,
         )
 
-        # Use different models via configuration
-        config = {"configurable": {"model": "gpt-4"}}
+        # Use different models via context
+        context = ModelContext(model_name="gpt-4")
         inputs = {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
-        for chunk in graph.stream(inputs, config=config, stream_mode="updates"):
+        for chunk in graph.stream(inputs, context=context, stream_mode="updates"):
             print(chunk)
         ```
     """

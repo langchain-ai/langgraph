@@ -24,7 +24,7 @@ from langchain_core.messages import (
     ToolCall,
     ToolMessage,
 )
-from langchain_core.runnables import RunnableConfig, RunnableLambda
+from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import InjectedToolCallId, ToolException
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel, Field
@@ -54,6 +54,7 @@ from langgraph.prebuilt.tool_node import (
     _get_state_args,
     _infer_handled_types,
 )
+from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Interrupt, interrupt
@@ -1094,7 +1095,7 @@ def test_inspect_react() -> None:
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_react_with_subgraph_tools(
-    sync_checkpointer: BaseCheckpointSaver, version: str
+    sync_checkpointer: BaseCheckpointSaver, version: Literal["v1", "v2"]
 ) -> None:
     class State(TypedDict):
         a: int
@@ -1373,7 +1374,7 @@ def test_get_model() -> None:
 def test_dynamic_model_basic(version: str) -> None:
     """Test basic dynamic model functionality."""
 
-    def dynamic_model(state, config: RunnableConfig):
+    def dynamic_model(state, runtime: Runtime):
         # Return different models based on state
         if "urgent" in state["messages"][-1].content:
             return FakeToolCallingModel(tool_calls=[])
@@ -1405,7 +1406,7 @@ def test_dynamic_model_with_tools(version: Literal["v1", "v2"]) -> None:
         """Advanced tool."""
         return f"advanced: {x}"
 
-    def dynamic_model(state: dict, config: RunnableConfig) -> BaseChatModel:
+    def dynamic_model(state: dict, runtime: Runtime) -> BaseChatModel:
         # Return model with different behaviors based on message content
         if "advanced" in state["messages"][-1].content:
             return FakeToolCallingModel(
@@ -1438,31 +1439,38 @@ def test_dynamic_model_with_tools(version: Literal["v1", "v2"]) -> None:
     assert tool_message.name == "advanced_tool"
 
 
+@dataclasses.dataclass
+class Context:
+    user_id: str
+
+
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_dynamic_model_with_config(version: str) -> None:
     """Test dynamic model using config parameters."""
 
-    def dynamic_model(state, config: RunnableConfig):
-        # Use config to determine model behavior
-        user_type = config.get("configurable", {}).get("user_type", "basic")
-        if user_type == "premium":
+    def dynamic_model(state, runtime: Runtime[Context]):
+        # Use context to determine model behavior
+        user_id = runtime.context.user_id
+        if user_id == "user_premium":
             return FakeToolCallingModel(tool_calls=[])
         else:
             return FakeToolCallingModel(tool_calls=[])
 
-    agent = create_react_agent(dynamic_model, [], version=version)
+    agent = create_react_agent(
+        dynamic_model, [], context_schema=Context, version=version
+    )
 
     # Test with basic user
     result = agent.invoke(
         {"messages": [HumanMessage("hello")]},
-        config={"configurable": {"user_type": "basic"}},
+        context=Context(user_id="user_basic"),
     )
     assert len(result["messages"]) == 2
 
     # Test with premium user
     result = agent.invoke(
         {"messages": [HumanMessage("hello")]},
-        config={"configurable": {"user_type": "premium"}},
+        context=Context(user_id="user_premium"),
     )
     assert len(result["messages"]) == 2
 
@@ -1474,7 +1482,7 @@ def test_dynamic_model_with_state_schema(version: Literal["v1", "v2"]) -> None:
     class CustomDynamicState(AgentState):
         model_preference: str = "default"
 
-    def dynamic_model(state: dict, config: RunnableConfig) -> BaseChatModel:
+    def dynamic_model(state: dict, runtime: Runtime) -> BaseChatModel:
         # Use custom state field to determine model
         if state.get("model_preference") == "advanced":
             return FakeToolCallingModel(tool_calls=[])
@@ -1496,7 +1504,7 @@ def test_dynamic_model_with_state_schema(version: Literal["v1", "v2"]) -> None:
 def test_dynamic_model_with_prompt(version: Literal["v1", "v2"]) -> None:
     """Test dynamic model with different prompt types."""
 
-    def dynamic_model(state: AgentState, config: RunnableConfig) -> BaseChatModel:
+    def dynamic_model(state: AgentState, runtime: Runtime) -> BaseChatModel:
         return FakeToolCallingModel(tool_calls=[])
 
     # Test with string prompt
@@ -1519,7 +1527,7 @@ def test_dynamic_model_with_prompt(version: Literal["v1", "v2"]) -> None:
 async def test_dynamic_model_async() -> None:
     """Test dynamic model with async operations."""
 
-    def dynamic_model(state: AgentState, config: RunnableConfig) -> BaseChatModel:
+    def dynamic_model(state: AgentState, runtime: Runtime) -> BaseChatModel:
         return FakeToolCallingModel(tool_calls=[])
 
     agent = create_react_agent(dynamic_model, [])
@@ -1537,7 +1545,7 @@ def test_dynamic_model_with_structured_response(version: str) -> None:
         message: str
         confidence: float
 
-    def dynamic_model(state, config: RunnableConfig):
+    def dynamic_model(state, runtime: Runtime):
         expected_response = TestResponse(message="dynamic response", confidence=0.9)
         return FakeToolCallingModel(
             tool_calls=[], structured_response=expected_response
@@ -1557,7 +1565,7 @@ def test_dynamic_model_with_checkpointer(sync_checkpointer):
     """Test dynamic model with checkpointer."""
     call_count = 0
 
-    def dynamic_model(state: AgentState, config: RunnableConfig) -> BaseChatModel:
+    def dynamic_model(state: AgentState, runtime: Runtime) -> BaseChatModel:
         nonlocal call_count
         call_count += 1
         return FakeToolCallingModel(
@@ -1598,7 +1606,7 @@ def test_dynamic_model_state_dependent_tools(version: Literal["v1", "v2"]) -> No
         """Tool B."""
         return f"B: {x}"
 
-    def dynamic_model(state, config: RunnableConfig):
+    def dynamic_model(state, runtime: Runtime):
         # Switch tools based on message history
         if any("use_b" in msg.content for msg in state["messages"]):
             return FakeToolCallingModel(
@@ -1628,7 +1636,7 @@ def test_dynamic_model_state_dependent_tools(version: Literal["v1", "v2"]) -> No
 def test_dynamic_model_error_handling(version: Literal["v1", "v2"]) -> None:
     """Test error handling in dynamic model."""
 
-    def failing_dynamic_model(state, config: RunnableConfig):
+    def failing_dynamic_model(state, runtime: Runtime):
         if "fail" in state["messages"][-1].content:
             raise ValueError("Dynamic model failed")
         return FakeToolCallingModel(tool_calls=[])
@@ -1651,7 +1659,7 @@ def test_dynamic_model_vs_static_model_behavior():
     static_agent = create_react_agent(static_model, [])
 
     # Dynamic model returning the same model
-    def dynamic_model(state, config: RunnableConfig):
+    def dynamic_model(state, runtime: Runtime):
         return FakeToolCallingModel(tool_calls=[])
 
     dynamic_agent = create_react_agent(dynamic_model, [])
@@ -1674,7 +1682,7 @@ def test_dynamic_model_receives_correct_state():
     class CustomAgentState(AgentState):
         custom_field: str
 
-    def dynamic_model(state, config: RunnableConfig):
+    def dynamic_model(state, runtime: Runtime):
         # Capture the state that's passed to the dynamic model function
         received_states.append(state)
         return FakeToolCallingModel(tool_calls=[])
@@ -1705,7 +1713,7 @@ async def test_dynamic_model_receives_correct_state_async():
     class CustomAgentStateAsync(AgentState):
         custom_field: str
 
-    def dynamic_model(state, config: RunnableConfig):
+    def dynamic_model(state, runtime: Runtime):
         # Capture the state that's passed to the dynamic model function
         received_states.append(state)
         return FakeToolCallingModel(tool_calls=[])
