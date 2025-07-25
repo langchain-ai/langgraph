@@ -585,8 +585,8 @@ def create_react_agent(
     ) -> LanguageModelLike:
         """Async resolve the model to use, handling both static and dynamic models."""
         if is_async_dynamic_model:
-            resolved_model = await model(state, runtime)  # type: ignore[misc]
-            return _get_prompt_runnable(prompt) | resolved_model  # type: ignore[operator]
+            resolved_model = await model(state, runtime)  # type: ignore[misc,operator]
+            return _get_prompt_runnable(prompt) | resolved_model
         elif is_dynamic_model:
             return _get_prompt_runnable(prompt) | model(state, runtime)  # type: ignore[operator]
         else:
