@@ -523,6 +523,23 @@ def create_react_agent(
 
     is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
 
+    # To ensure future compatibility with langgraph 1.0 where we'll want to
+    # provide RunContext as the 2nd argument, we'll require that the dynamic
+    # model uses explicit type annotations for the config.
+    # As of LangGraph 1.0, we can allow type annotation to be optional, which
+    # will default to RunContext.
+    if is_dynamic_model:
+        type_hints = get_type_hints(model)
+        if "config" not in type_hints or type_hints["config"] is not RunnableConfig:
+            raise ValueError(
+                "Dynamic model provider must have explicit type annotation for "
+                "'config' parameter. Use `RunnableConfig`. For example:\n"
+                "def select_model(state: AgentState, config: RunnableConfig)"
+                " -> BaseChatModel:\n"
+                "    '''Select model based on state and config.'''\n"
+                "    return model.bind_tools(tools)"
+            )
+
     tool_calling_enabled = len(tool_classes) > 0
 
     if not is_dynamic_model:

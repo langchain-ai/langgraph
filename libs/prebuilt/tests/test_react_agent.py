@@ -1373,7 +1373,7 @@ def test_get_model() -> None:
 def test_dynamic_model_basic(version: str) -> None:
     """Test basic dynamic model functionality."""
 
-    def dynamic_model(state, config):
+    def dynamic_model(state, config: RunnableConfig):
         # Return different models based on state
         if "urgent" in state["messages"][-1].content:
             return FakeToolCallingModel(tool_calls=[])
@@ -1442,7 +1442,7 @@ def test_dynamic_model_with_tools(version: Literal["v1", "v2"]) -> None:
 def test_dynamic_model_with_config(version: str) -> None:
     """Test dynamic model using config parameters."""
 
-    def dynamic_model(state, config):
+    def dynamic_model(state, config: RunnableConfig):
         # Use config to determine model behavior
         user_type = config.get("configurable", {}).get("user_type", "basic")
         if user_type == "premium":
@@ -1537,7 +1537,7 @@ def test_dynamic_model_with_structured_response(version: str) -> None:
         message: str
         confidence: float
 
-    def dynamic_model(state, config):
+    def dynamic_model(state, config: RunnableConfig):
         expected_response = TestResponse(message="dynamic response", confidence=0.9)
         return FakeToolCallingModel(
             tool_calls=[], structured_response=expected_response
@@ -1598,7 +1598,7 @@ def test_dynamic_model_state_dependent_tools(version: Literal["v1", "v2"]) -> No
         """Tool B."""
         return f"B: {x}"
 
-    def dynamic_model(state, config):
+    def dynamic_model(state, config: RunnableConfig):
         # Switch tools based on message history
         if any("use_b" in msg.content for msg in state["messages"]):
             return FakeToolCallingModel(
@@ -1628,7 +1628,7 @@ def test_dynamic_model_state_dependent_tools(version: Literal["v1", "v2"]) -> No
 def test_dynamic_model_error_handling(version: Literal["v1", "v2"]) -> None:
     """Test error handling in dynamic model."""
 
-    def failing_dynamic_model(state, config):
+    def failing_dynamic_model(state, config: RunnableConfig):
         if "fail" in state["messages"][-1].content:
             raise ValueError("Dynamic model failed")
         return FakeToolCallingModel(tool_calls=[])
@@ -1651,7 +1651,7 @@ def test_dynamic_model_vs_static_model_behavior():
     static_agent = create_react_agent(static_model, [])
 
     # Dynamic model returning the same model
-    def dynamic_model(state, config):
+    def dynamic_model(state, config: RunnableConfig):
         return FakeToolCallingModel(tool_calls=[])
 
     dynamic_agent = create_react_agent(dynamic_model, [])
@@ -1674,7 +1674,7 @@ def test_dynamic_model_receives_correct_state():
     class CustomAgentState(AgentState):
         custom_field: str
 
-    def dynamic_model(state, config):
+    def dynamic_model(state, config: RunnableConfig):
         # Capture the state that's passed to the dynamic model function
         received_states.append(state)
         return FakeToolCallingModel(tool_calls=[])
@@ -1705,7 +1705,7 @@ async def test_dynamic_model_receives_correct_state_async():
     class CustomAgentStateAsync(AgentState):
         custom_field: str
 
-    def dynamic_model(state, config):
+    def dynamic_model(state, config: RunnableConfig):
         # Capture the state that's passed to the dynamic model function
         received_states.append(state)
         return FakeToolCallingModel(tool_calls=[])
