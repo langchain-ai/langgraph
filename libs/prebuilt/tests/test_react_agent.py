@@ -2,6 +2,7 @@ import dataclasses
 import inspect
 import json
 from functools import partial
+from operator import add
 from typing import (
     Annotated,
     List,
@@ -1821,7 +1822,9 @@ def test_post_model_hook_with_structured_output() -> None:
 
     expected_structured_response = WeatherResponse(temperature=75)
     model = FakeToolCallingModel(
-        tool_calls=tool_calls, structured_response=expected_structured_response
+        tool_calls=tool_calls,
+        structured_response=expected_structured_response,
+        max_generations_with_tools=1,
     )
 
     class State(AgentState):
@@ -1848,6 +1851,22 @@ def test_post_model_hook_with_structured_output() -> None:
     assert response["flag"] is True
     assert response["structured_response"] == expected_structured_response
 
+    # Test with stream - reset state
+
+    model = FakeToolCallingModel(
+        tool_calls=tool_calls,
+        structured_response=expected_structured_response,
+        max_generations_with_tools=1,
+    )
+
+    agent = create_react_agent(
+        model,
+        [get_weather],
+        response_format=WeatherResponse,
+        post_model_hook=post_model_hook,
+        state_schema=State,
+    )
+
     events = list(
         agent.stream({"messages": [HumanMessage("What's the weather?")], "flag": False})
     )
@@ -1860,7 +1879,7 @@ def test_post_model_hook_with_structured_output() -> None:
                         content="What's the weather?",
                         additional_kwargs={},
                         response_metadata={},
-                        id="2",
+                        id="0",
                         tool_calls=[
                             {
                                 "name": "get_weather",
@@ -1892,15 +1911,8 @@ def test_post_model_hook_with_structured_output() -> None:
                         content="What's the weather?-What's the weather?-The weather is sunny and 75°F.",
                         additional_kwargs={},
                         response_metadata={},
-                        id="3",
-                        tool_calls=[
-                            {
-                                "name": "get_weather",
-                                "args": {},
-                                "id": "1",
-                                "type": "tool_call",
-                            }
-                        ],
+                        id="1",
+                        tool_calls=[],
                     )
                 ]
             }
@@ -1973,3 +1985,39 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
+
+def test_post_model_hook_identical_tool_call_ids() -> None:
+    def get_weather():
+        """Get the weather"""
+        return "The weather is sunny and 75°F."
+
+    # two identical calls
+    tool_calls = [[{"args": {}, "id": "1", "name": "get_weather"}]] * 2
+
+    model = FakeToolCallingModel(
+        tool_calls=tool_calls,
+        # Only two tool calls, then, done.
+        max_generations_with_tools=2,
+    )
+
+    class State(AgentState):
+        called_count: Annotated[int, add]
+
+    def post_model_hook(state: State) -> Union[dict[str, bool], Command]:
+        # Track post model hook calls
+        return {"called_count": 1}
+
+    agent = create_react_agent(
+        model,
+        [get_weather],
+        post_model_hook=post_model_hook,
+        state_schema=State,
+    )
+
+    assert "post_model_hook" in agent.nodes
+
+    response = agent.invoke(
+        {"messages": [HumanMessage("What's the weather?")], "called_count": 0}
+    )
+    assert response["called_count"] == 3
