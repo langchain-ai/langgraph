@@ -51,8 +51,6 @@ Our graph can now handle two key tasks:
 1. Each `node` can receive the current `State` as input and output an update to the state.
 2. Updates to `messages` will be appended to the existing list rather than overwriting it, thanks to the prebuilt [`add_messages`](https://langchain-ai.github.io/langgraph/reference/graphs/?h=add+messages#add_messages) function used with the `Annotated` syntax.
 
-------
-
 !!! tip "Concept"
 
     When defining a graph, the first step is to define its `State`. The `State` includes the graph's schema and [reducer functions](https://langchain-ai.github.io/langgraph/concepts/low_level/#reducers) that handle state updates. In our example, `State` is a `TypedDict` with one key: `messages`. The [`add_messages`](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.message.add_messages) reducer function is used to append new messages to the list instead of overwriting it. Keys without a reducer annotation will overwrite previous values. To learn more about state, reducers, and related concepts, see [LangGraph reference docs](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.message.add_messages).
@@ -77,7 +75,6 @@ llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 We can now incorporate the chat model into a simple node:
 
 ```python
-
 def chatbot(state: State):
     return {"messages": [llm.invoke(state["messages"])]}
 
@@ -107,6 +104,7 @@ Add an `exit` point to indicate **where the graph should finish execution**. Thi
 ```python
 graph_builder.add_edge("chatbot", END)
 ```
+
 This tells the graph to terminate after running the chatbot node.
 
 ## 6. Compile the graph
