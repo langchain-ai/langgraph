@@ -274,7 +274,37 @@ def create_react_agent(
     For more details on using `create_react_agent`, visit [Agents](https://langchain-ai.github.io/langgraph/agents/overview/) documentation.
 
     Args:
-        model: The `LangChain` chat model that supports tool calling.
+        model: The language model for the agent. Supports static and dynamic
+            model selection.
+            
+            - **Static model**: A chat model instance (e.g., `ChatOpenAI()`) or
+              string identifier (e.g., `"openai:gpt-4"`)
+            - **Dynamic model**: A callable with signature 
+              `(state, config) -> BaseChatModel` that returns different models
+              based on runtime context
+            
+            Dynamic functions receive graph state and configuration, enabling
+            context-dependent model selection. Must return a `BaseChatModel`
+            instance. For tool calling, bind tools using `.bind_tools()`. 
+            Bound tools must be a subset of the `tools` parameter.
+
+            Dynamic model example:
+            ```python
+            # Instantiate models globally
+            gpt4_model = ChatOpenAI(model="gpt-4")
+            gpt35_model = ChatOpenAI(model="gpt-3.5-turbo")
+            
+            def select_model(state: AgentState, config: RunnableConfig) -> ChatOpenAI:
+                model_name = config.get("configurable", {}).get("model", "gpt-3.5-turbo")
+                model = gpt4_model if model_name == "gpt-4" else gpt35_model
+                return model.bind_tools(tools)
+            ```
+            
+            !!! note "Dynamic Model Requirements"
+                Ensure returned models have appropriate tools bound via 
+                `.bind_tools()` and support required functionality. Bound tools
+                must be a subset of those specified in the `tools` parameter.
+        
         tools: A list of tools or a ToolNode instance.
             If an empty list is provided, the agent will consist of a single LLM node without tool calling.
         prompt: An optional prompt for the LLM. Can take a few different forms:
@@ -392,6 +422,7 @@ def create_react_agent(
     ```
 
     Example:
+        Basic usage with static model:
         ```python
         from langgraph.prebuilt import create_react_agent
 
@@ -406,6 +437,46 @@ def create_react_agent(
         )
         inputs = {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
         for chunk in graph.stream(inputs, stream_mode="updates"):
+            print(chunk)
+        ```
+        
+        Dynamic model selection example:
+        ```python
+        from langchain_core.runnables import RunnableConfig
+        from langchain_openai import ChatOpenAI
+        from langgraph.prebuilt import create_react_agent
+        from langgraph.prebuilt.chat_agent_executor import AgentState
+
+        def check_weather(location: str) -> str:
+            '''Return the weather forecast for the specified location.'''
+            return f"It's always sunny in {location}"
+
+        # Instantiate models in global scope to avoid recreating clients
+        gpt4_model = ChatOpenAI(model="gpt-4")
+        gpt35_model = ChatOpenAI(model="gpt-3.5-turbo")
+
+        def select_model(state: AgentState, config: RunnableConfig) -> ChatOpenAI:
+            # Select model based on configuration
+            model_name = config.get("configurable", {}).get("model", "gpt-3.5-turbo")
+            
+            if model_name == "gpt-4":
+                model = gpt4_model
+            else:
+                model = gpt35_model
+            
+            # Bind tools to the selected model
+            return model.bind_tools([check_weather])
+
+        graph = create_react_agent(
+            select_model,
+            tools=[check_weather],
+            prompt="You are a helpful assistant",
+        )
+        
+        # Use different models via configuration
+        config = {"configurable": {"model": "gpt-4"}}
+        inputs = {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+        for chunk in graph.stream(inputs, config=config, stream_mode="updates"):
             print(chunk)
         ```
     """
@@ -537,14 +608,14 @@ def create_react_agent(
 
     # Define the function that calls the model
     def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        state = _get_model_input_state(state)
+        model_input = _get_model_input_state(state)
 
         if is_dynamic_model:
             # Resolve dynamic model at runtime and apply prompt
             dynamic_model = _resolve_model(state, config)
-            response = cast(AIMessage, dynamic_model.invoke(state, config))
+            response = cast(AIMessage, dynamic_model.invoke(model_input, config))
         else:
-            response = cast(AIMessage, static_model.invoke(state, config))
+            response = cast(AIMessage, static_model.invoke(model_input, config))
 
         # add agent name to the AIMessage
         response.name = name
@@ -562,14 +633,14 @@ def create_react_agent(
         return {"messages": [response]}
 
     async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        state = _get_model_input_state(state)
+        model_input = _get_model_input_state(state)
 
         if is_dynamic_model:
             # Resolve dynamic model at runtime and apply prompt
             dynamic_model = _resolve_model(state, config)
-            response = cast(AIMessage, await dynamic_model.ainvoke(state, config))
+            response = cast(AIMessage, await dynamic_model.ainvoke(model_input, config))
         else:
-            response = cast(AIMessage, await static_model.ainvoke(state, config))
+            response = cast(AIMessage, await static_model.ainvoke(model_input, config))
 
         # add agent name to the AIMessage
         response.name = name
