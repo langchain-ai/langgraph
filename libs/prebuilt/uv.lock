@@ -430,7 +430,7 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.10"
+version = "2.0.11"
 source = { editable = "../checkpoint-sqlite" }
 dependencies = [
     { name = "aiosqlite" },
