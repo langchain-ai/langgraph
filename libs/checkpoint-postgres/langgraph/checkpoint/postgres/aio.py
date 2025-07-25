@@ -409,7 +409,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             {
                 **value["checkpoint"],
                 "channel_values": {
-                    **value["checkpoint"].get("channel_values"),
+                    **value["checkpoint"].get("channel_values",{}),
                     **self._load_blobs(value["channel_values"]),
                 },
             },
