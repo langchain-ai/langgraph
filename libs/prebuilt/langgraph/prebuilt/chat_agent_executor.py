@@ -557,14 +557,14 @@ def create_react_agent(
             model = cast(BaseChatModel, init_chat_model(model))
 
         if (
-            _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))
+            _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
             and len(tool_classes + llm_builtin_tools) > 0
         ):
             model = cast(BaseChatModel, model).bind_tools(
                 tool_classes + llm_builtin_tools  # type: ignore[operator]
             )
 
-        static_model: Optional[Runnable] = _get_prompt_runnable(prompt) | model
+        static_model: Optional[Runnable] = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
     else:
         # For dynamic models, we'll create the runnable at runtime
         static_model = None
@@ -576,7 +576,7 @@ def create_react_agent(
     def _resolve_model(state: StateSchema, config: RunnableConfig) -> LanguageModelLike:
         """Resolve the model to use, handling both static and dynamic models."""
         if is_dynamic_model:
-            return _get_prompt_runnable(prompt) | model(state, config)
+            return _get_prompt_runnable(prompt) | model(state, config)  # type: ignore[operator]
         else:
             return static_model
 
@@ -630,9 +630,9 @@ def create_react_agent(
         if is_dynamic_model:
             # Resolve dynamic model at runtime and apply prompt
             dynamic_model = _resolve_model(state, config)
-            response = cast(AIMessage, dynamic_model.invoke(model_input, config))
+            response = cast(AIMessage, dynamic_model.invoke(model_input, config))  # type: ignore[arg-type]
         else:
-            response = cast(AIMessage, static_model.invoke(model_input, config))
+            response = cast(AIMessage, static_model.invoke(model_input, config))  # type: ignore[union-attr]
 
         # add agent name to the AIMessage
         response.name = name
@@ -655,9 +655,9 @@ def create_react_agent(
         if is_dynamic_model:
             # Resolve dynamic model at runtime and apply prompt
             dynamic_model = _resolve_model(state, config)
-            response = cast(AIMessage, await dynamic_model.ainvoke(model_input, config))
+            response = cast(AIMessage, await dynamic_model.ainvoke(model_input, config))  # type: ignore[arg-type]
         else:
-            response = cast(AIMessage, await static_model.ainvoke(model_input, config))
+            response = cast(AIMessage, await static_model.ainvoke(model_input, config))  # type: ignore[union-attr]
 
         # add agent name to the AIMessage
         response.name = name
