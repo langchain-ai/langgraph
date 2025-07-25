@@ -1,6 +1,7 @@
 import inspect
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Literal,
     Optional,
@@ -44,8 +45,10 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt._internal import ToolCallWithContext
 from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
+from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 StructuredResponse = Union[dict, BaseModel]
@@ -246,7 +249,12 @@ def _validate_chat_history(
 
 
 def create_react_agent(
-    model: Union[str, LanguageModelLike],
+    model: Union[
+        str,
+        LanguageModelLike,
+        Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
+        Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
+    ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
@@ -271,7 +279,43 @@ def create_react_agent(
     For more details on using `create_react_agent`, visit [Agents](https://langchain-ai.github.io/langgraph/agents/overview/) documentation.
 
     Args:
-        model: The `LangChain` chat model that supports tool calling.
+        model: The language model for the agent. Supports static and dynamic
+            model selection.
+
+            - **Static model**: A chat model instance (e.g., `ChatOpenAI()`) or
+              string identifier (e.g., `"openai:gpt-4"`)
+            - **Dynamic model**: A callable with signature
+              `(state, runtime) -> BaseChatModel` that returns different models
+              based on runtime context
+
+            Dynamic functions receive graph state and runtime, enabling
+            context-dependent model selection. Must return a `BaseChatModel`
+            instance. For tool calling, bind tools using `.bind_tools()`.
+            Bound tools must be a subset of the `tools` parameter.
+
+            Dynamic model example:
+            ```python
+            from dataclasses import dataclass
+
+            @dataclass
+            class ModelContext:
+                model_name: str = "gpt-3.5-turbo"
+
+            # Instantiate models globally
+            gpt4_model = ChatOpenAI(model="gpt-4")
+            gpt35_model = ChatOpenAI(model="gpt-3.5-turbo")
+
+            def select_model(state: AgentState, runtime: Runtime[ModelContext]) -> ChatOpenAI:
+                model_name = runtime.context.model_name
+                model = gpt4_model if model_name == "gpt-4" else gpt35_model
+                return model.bind_tools(tools)
+            ```
+
+            !!! note "Dynamic Model Requirements"
+                Ensure returned models have appropriate tools bound via
+                `.bind_tools()` and support required functionality. Bound tools
+                must be a subset of those specified in the `tools` parameter.
+
         tools: A list of tools or a ToolNode instance.
             If an empty list is provided, the agent will consist of a single LLM node without tool calling.
         prompt: An optional prompt for the LLM. Can take a few different forms:
@@ -452,31 +496,62 @@ def create_react_agent(
         tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
         tool_classes = list(tool_node.tools_by_name.values())
 
-    if isinstance(model, str):
-        try:
-            from langchain.chat_models import (  # type: ignore[import-not-found]
-                init_chat_model,
-            )
-        except ImportError:
-            raise ImportError(
-                "Please install langchain (`pip install langchain`) to use '<provider>:<model>' string syntax for `model` parameter."
-            )
-
-        model = cast(BaseChatModel, init_chat_model(model))
+    is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
+    is_async_dynamic_model = is_dynamic_model and inspect.iscoroutinefunction(model)
 
     tool_calling_enabled = len(tool_classes) > 0
 
-    if (
-        _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))
-        and len(tool_classes + llm_builtin_tools) > 0
-    ):
-        model = cast(BaseChatModel, model).bind_tools(tool_classes + llm_builtin_tools)  # type: ignore[operator]
+    if not is_dynamic_model:
+        if isinstance(model, str):
+            try:
+                from langchain.chat_models import (  # type: ignore[import-not-found]
+                    init_chat_model,
+                )
+            except ImportError:
+                raise ImportError(
+                    "Please install langchain (`pip install langchain`) to "
+                    "use '<provider>:<model>' string syntax for `model` parameter."
+                )
 
-    model_runnable = _get_prompt_runnable(prompt) | model
+            model = cast(BaseChatModel, init_chat_model(model))
+
+        if (
+            _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
+            and len(tool_classes + llm_builtin_tools) > 0
+        ):
+            model = cast(BaseChatModel, model).bind_tools(
+                tool_classes + llm_builtin_tools  # type: ignore[operator]
+            )
+
+        static_model: Optional[Runnable] = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
+    else:
+        # For dynamic models, we'll create the runnable at runtime
+        static_model = None
 
     # If any of the tools are configured to return_directly after running,
     # our graph needs to check if these were called
     should_return_direct = {t.name for t in tool_classes if t.return_direct}
+
+    def _resolve_model(
+        state: StateSchema, runtime: Runtime[ContextT]
+    ) -> LanguageModelLike:
+        """Resolve the model to use, handling both static and dynamic models."""
+        if is_dynamic_model:
+            return _get_prompt_runnable(prompt) | model(state, runtime)  # type: ignore[operator]
+        else:
+            return static_model
+
+    async def _aresolve_model(
+        state: StateSchema, runtime: Runtime[ContextT]
+    ) -> LanguageModelLike:
+        """Async resolve the model to use, handling both static and dynamic models."""
+        if is_async_dynamic_model:
+            resolved_model = await model(state, runtime)  # type: ignore[misc,operator]
+            return _get_prompt_runnable(prompt) | resolved_model
+        elif is_dynamic_model:
+            return _get_prompt_runnable(prompt) | model(state, runtime)  # type: ignore[operator]
+        else:
+            return static_model
 
     def _are_more_steps_needed(state: StateSchema, response: BaseMessage) -> bool:
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
@@ -522,9 +597,26 @@ def create_react_agent(
         return state
 
     # Define the function that calls the model
-    def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        state = _get_model_input_state(state)
-        response = cast(AIMessage, model_runnable.invoke(state, config))
+    def call_model(
+        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+    ) -> StateSchema:
+        if is_async_dynamic_model:
+            msg = (
+                "Async model callable provided but agent invoked synchronously. "
+                "Use agent.ainvoke() or agent.astream(), or "
+                "provide a sync model callable."
+            )
+            raise RuntimeError(msg)
+
+        model_input = _get_model_input_state(state)
+
+        if is_dynamic_model:
+            # Resolve dynamic model at runtime and apply prompt
+            dynamic_model = _resolve_model(state, runtime)
+            response = cast(AIMessage, dynamic_model.invoke(model_input, config))  # type: ignore[arg-type]
+        else:
+            response = cast(AIMessage, static_model.invoke(model_input, config))  # type: ignore[union-attr]
+
         # add agent name to the AIMessage
         response.name = name
 
@@ -540,9 +632,19 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
-        state = _get_model_input_state(state)
-        response = cast(AIMessage, await model_runnable.ainvoke(state, config))
+    async def acall_model(
+        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+    ) -> StateSchema:
+        model_input = _get_model_input_state(state)
+
+        if is_dynamic_model:
+            # Resolve dynamic model at runtime and apply prompt
+            # (supports both sync and async)
+            dynamic_model = await _aresolve_model(state, runtime)
+            response = cast(AIMessage, await dynamic_model.ainvoke(model_input, config))  # type: ignore[arg-type]
+        else:
+            response = cast(AIMessage, await static_model.ainvoke(model_input, config))  # type: ignore[union-attr]
+
         # add agent name to the AIMessage
         response.name = name
         if _are_more_steps_needed(state, response):
@@ -579,22 +681,32 @@ def create_react_agent(
         input_schema = state_schema
 
     def generate_structured_response(
-        state: StateSchema, config: RunnableConfig
+        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
     ) -> StateSchema:
+        if is_async_dynamic_model:
+            msg = (
+                "Async model callable provided but agent invoked synchronously. "
+                "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
+            )
+            raise RuntimeError(msg)
+
         messages = _get_state_value(state, "messages")
         structured_response_schema = response_format
         if isinstance(response_format, tuple):
             system_prompt, structured_response_schema = response_format
             messages = [SystemMessage(content=system_prompt)] + list(messages)
 
-        model_with_structured_output = _get_model(model).with_structured_output(
+        resolved_model = _resolve_model(state, runtime)
+        model_with_structured_output = _get_model(
+            resolved_model
+        ).with_structured_output(
             cast(StructuredResponseSchema, structured_response_schema)
         )
         response = model_with_structured_output.invoke(messages, config)
         return {"structured_response": response}
 
     async def agenerate_structured_response(
-        state: StateSchema, config: RunnableConfig
+        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
     ) -> StateSchema:
         messages = _get_state_value(state, "messages")
         structured_response_schema = response_format
@@ -602,7 +714,10 @@ def create_react_agent(
             system_prompt, structured_response_schema = response_format
             messages = [SystemMessage(content=system_prompt)] + list(messages)
 
-        model_with_structured_output = _get_model(model).with_structured_output(
+        resolved_model = await _aresolve_model(state, runtime)
+        model_with_structured_output = _get_model(
+            resolved_model
+        ).with_structured_output(
             cast(StructuredResponseSchema, structured_response_schema)
         )
         response = await model_with_structured_output.ainvoke(messages, config)
