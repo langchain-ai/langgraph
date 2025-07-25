@@ -276,16 +276,16 @@ def create_react_agent(
     Args:
         model: The language model for the agent. Supports static and dynamic
             model selection.
-            
+
             - **Static model**: A chat model instance (e.g., `ChatOpenAI()`) or
               string identifier (e.g., `"openai:gpt-4"`)
-            - **Dynamic model**: A callable with signature 
+            - **Dynamic model**: A callable with signature
               `(state, config) -> BaseChatModel` that returns different models
               based on runtime context
-            
+
             Dynamic functions receive graph state and configuration, enabling
             context-dependent model selection. Must return a `BaseChatModel`
-            instance. For tool calling, bind tools using `.bind_tools()`. 
+            instance. For tool calling, bind tools using `.bind_tools()`.
             Bound tools must be a subset of the `tools` parameter.
 
             Dynamic model example:
@@ -293,18 +293,18 @@ def create_react_agent(
             # Instantiate models globally
             gpt4_model = ChatOpenAI(model="gpt-4")
             gpt35_model = ChatOpenAI(model="gpt-3.5-turbo")
-            
+
             def select_model(state: AgentState, config: RunnableConfig) -> ChatOpenAI:
                 model_name = config.get("configurable", {}).get("model", "gpt-3.5-turbo")
                 model = gpt4_model if model_name == "gpt-4" else gpt35_model
                 return model.bind_tools(tools)
             ```
-            
+
             !!! note "Dynamic Model Requirements"
-                Ensure returned models have appropriate tools bound via 
+                Ensure returned models have appropriate tools bound via
                 `.bind_tools()` and support required functionality. Bound tools
                 must be a subset of those specified in the `tools` parameter.
-        
+
         tools: A list of tools or a ToolNode instance.
             If an empty list is provided, the agent will consist of a single LLM node without tool calling.
         prompt: An optional prompt for the LLM. Can take a few different forms:
@@ -439,7 +439,7 @@ def create_react_agent(
         for chunk in graph.stream(inputs, stream_mode="updates"):
             print(chunk)
         ```
-        
+
         Dynamic model selection example:
         ```python
         from langchain_core.runnables import RunnableConfig
@@ -458,12 +458,12 @@ def create_react_agent(
         def select_model(state: AgentState, config: RunnableConfig) -> ChatOpenAI:
             # Select model based on configuration
             model_name = config.get("configurable", {}).get("model", "gpt-3.5-turbo")
-            
+
             if model_name == "gpt-4":
                 model = gpt4_model
             else:
                 model = gpt35_model
-            
+
             # Bind tools to the selected model
             return model.bind_tools([check_weather])
 
@@ -472,7 +472,7 @@ def create_react_agent(
             tools=[check_weather],
             prompt="You are a helpful assistant",
         )
-        
+
         # Use different models via configuration
         config = {"configurable": {"model": "gpt-4"}}
         inputs = {"messages": [{"role": "user", "content": "what is the weather in sf"}]}

@@ -1667,6 +1667,71 @@ def test_dynamic_model_vs_static_model_behavior():
     assert static_result["messages"][1].content == dynamic_result["messages"][1].content
 
 
+def test_dynamic_model_receives_correct_state():
+    """Test that the dynamic model function receives the correct state, not the model input."""
+    received_states = []
+
+    class CustomAgentState(AgentState):
+        custom_field: str
+
+    def dynamic_model(state, config):
+        # Capture the state that's passed to the dynamic model function
+        received_states.append(state)
+        return FakeToolCallingModel(tool_calls=[])
+
+    agent = create_react_agent(dynamic_model, [], state_schema=CustomAgentState)
+
+    # Test with initial state
+    input_state = {"messages": [HumanMessage("hello")], "custom_field": "test_value"}
+    agent.invoke(input_state)
+
+    # The dynamic model function should receive the original state, not the processed model input
+    assert len(received_states) == 1
+    received_state = received_states[0]
+
+    # Should have the custom field from original state
+    assert "custom_field" in received_state
+    assert received_state["custom_field"] == "test_value"
+
+    # Should have the original messages
+    assert len(received_state["messages"]) == 1
+    assert received_state["messages"][0].content == "hello"
+
+
+async def test_dynamic_model_receives_correct_state_async():
+    """Test that the async dynamic model function receives the correct state, not the model input."""
+    received_states = []
+
+    class CustomAgentStateAsync(AgentState):
+        custom_field: str
+
+    def dynamic_model(state, config):
+        # Capture the state that's passed to the dynamic model function
+        received_states.append(state)
+        return FakeToolCallingModel(tool_calls=[])
+
+    agent = create_react_agent(dynamic_model, [], state_schema=CustomAgentStateAsync)
+
+    # Test with initial state
+    input_state = {
+        "messages": [HumanMessage("hello async")],
+        "custom_field": "test_value_async",
+    }
+    await agent.ainvoke(input_state)
+
+    # The dynamic model function should receive the original state, not the processed model input
+    assert len(received_states) == 1
+    received_state = received_states[0]
+
+    # Should have the custom field from original state
+    assert "custom_field" in received_state
+    assert received_state["custom_field"] == "test_value_async"
+
+    # Should have the original messages
+    assert len(received_state["messages"]) == 1
+    assert received_state["messages"][0].content == "hello async"
+
+
 def test_pre_model_hook() -> None:
     model = FakeToolCallingModel(tool_calls=[])
 
