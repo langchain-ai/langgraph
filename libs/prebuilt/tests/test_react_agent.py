@@ -1445,7 +1445,7 @@ class Context:
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_dynamic_model_with_config(version: str) -> None:
+def test_dynamic_model_with_context(version: str) -> None:
     """Test dynamic model using config parameters."""
 
     def dynamic_model(state, runtime: Runtime[Context]):
@@ -1482,7 +1482,7 @@ def test_dynamic_model_with_state_schema(version: Literal["v1", "v2"]) -> None:
     class CustomDynamicState(AgentState):
         model_preference: str = "default"
 
-    def dynamic_model(state: dict, runtime: Runtime) -> BaseChatModel:
+    def dynamic_model(state: CustomDynamicState, runtime: Runtime) -> BaseChatModel:
         # Use custom state field to determine model
         if state.get("model_preference") == "advanced":
             return FakeToolCallingModel(tool_calls=[])

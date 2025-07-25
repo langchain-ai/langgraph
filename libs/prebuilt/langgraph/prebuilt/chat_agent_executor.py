@@ -745,7 +745,7 @@ def create_react_agent(
         return {"structured_response": response}
 
     async def agenerate_structured_response(
-        state: StateSchema, runtime: Runtime, config: RunnableConfig
+        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
     ) -> StateSchema:
         messages = _get_state_value(state, "messages")
         structured_response_schema = response_format
