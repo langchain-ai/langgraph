@@ -930,9 +930,8 @@ class RemoteGraph(PregelProtocol):
         except UnboundLocalError:
             return None
 
-def _merge_tracing_headers(
-     headers: dict[str, str] | None
-) -> dict[str, str] | None:
+
+def _merge_tracing_headers(headers: dict[str, str] | None) -> dict[str, str] | None:
     if rt := ls.get_current_run_tree():
         tracing_headers = rt.to_headers()
         baggage = tracing_headers.pop("baggage")
