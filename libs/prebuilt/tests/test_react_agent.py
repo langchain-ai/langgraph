@@ -1557,10 +1557,17 @@ def test_dynamic_model_with_checkpointer(sync_checkpointer):
     """Test dynamic model with checkpointer."""
     call_count = 0
 
-    def dynamic_model(state, config):
+    def dynamic_model(state: AgentState, config: RunnableConfig) -> BaseChatModel:
         nonlocal call_count
         call_count += 1
-        return FakeToolCallingModel(tool_calls=[])
+        return FakeToolCallingModel(
+            tool_calls=[],
+            # Incrementing the call count as it is used to assign an id
+            # to the AIMessage.
+            # The default reducer semantics are to overwrite an existing message
+            # with the new one if the id matches.
+            index=call_count,
+        )
 
     agent = create_react_agent(dynamic_model, [], checkpointer=sync_checkpointer)
     config = {"configurable": {"thread_id": "test_dynamic"}}
