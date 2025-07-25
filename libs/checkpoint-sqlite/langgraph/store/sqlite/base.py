@@ -390,7 +390,6 @@ class BaseSqliteStore:
             filter_conditions = []
             if op.filter:
                 for key, value in op.filter.items():
-                    # Validate filter key to prevent SQL injection
                     _validate_filter_key(key)
 
                     if isinstance(value, dict):
@@ -643,7 +642,6 @@ class BaseSqliteStore:
 
     def _get_filter_condition(self, key: str, op: str, value: Any) -> tuple[str, list]:
         """Helper to generate filter conditions."""
-        # Validate filter key to prevent SQL injection
         _validate_filter_key(key)
 
         # We need to properly format values for SQLite JSON extraction comparison
@@ -882,7 +880,6 @@ class SqliteStore(BaseSqliteStore, BaseStore):
 
     def _get_filter_condition(self, key: str, op: str, value: Any) -> tuple[str, list]:
         """Helper to generate filter conditions."""
-        # Validate filter key to prevent SQL injection
         _validate_filter_key(key)
 
         # We need to properly format values for SQLite JSON extraction comparison
