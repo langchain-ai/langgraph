@@ -131,7 +131,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     !!! warning "`config_schema` Deprecated"
         The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
-        Please use `context_schema` instead to specify the schema run run-scoped context.
+        Please use `context_schema` instead to specify the schema for run-scoped context.
 
     Example:
         ```python
