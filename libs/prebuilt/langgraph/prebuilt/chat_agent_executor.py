@@ -1,6 +1,7 @@
 import inspect
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Literal,
     Optional,
@@ -247,7 +248,10 @@ def _validate_chat_history(
 
 def create_react_agent(
     model: Union[
-        str, LanguageModelLike, Callable[[StateSchema, RunnableConfig], BaseChatModel]
+        str,
+        LanguageModelLike,
+        Callable[[StateSchema, RunnableConfig], BaseChatModel],
+        Callable[[StateSchema, RunnableConfig], Awaitable[BaseChatModel]],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
@@ -521,6 +525,7 @@ def create_react_agent(
         tool_classes = list(tool_node.tools_by_name.values())
 
     is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
+    is_async_dynamic_model = is_dynamic_model and inspect.iscoroutinefunction(model)
 
     # To ensure future compatibility with langgraph 1.0 where we'll want to
     # provide RunContext as the 2nd argument, we'll require that the dynamic
@@ -579,6 +584,18 @@ def create_react_agent(
         else:
             return static_model
 
+    async def _aresolve_model(
+        state: StateSchema, config: RunnableConfig
+    ) -> LanguageModelLike:
+        """Async resolve the model to use, handling both static and dynamic models."""
+        if is_async_dynamic_model:
+            resolved_model = await model(state, config)  # type: ignore[misc]
+            return _get_prompt_runnable(prompt) | resolved_model  # type: ignore[operator]
+        elif is_dynamic_model:
+            return _get_prompt_runnable(prompt) | model(state, config)  # type: ignore[operator]
+        else:
+            return static_model
+
     def _are_more_steps_needed(state: StateSchema, response: BaseMessage) -> bool:
         has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
         all_tools_return_direct = (
@@ -624,6 +641,13 @@ def create_react_agent(
 
     # Define the function that calls the model
     def call_model(state: StateSchema, config: RunnableConfig) -> StateSchema:
+        if is_async_dynamic_model:
+            msg = (
+                "Async model callable provided but agent invoked synchronously. "
+                "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
+            )
+            raise RuntimeError(msg)
+
         model_input = _get_model_input_state(state)
 
         if is_dynamic_model:
@@ -652,8 +676,8 @@ def create_react_agent(
         model_input = _get_model_input_state(state)
 
         if is_dynamic_model:
-            # Resolve dynamic model at runtime and apply prompt
-            dynamic_model = _resolve_model(state, config)
+            # Resolve dynamic model at runtime and apply prompt (supports both sync and async)
+            dynamic_model = await _aresolve_model(state, config)
             response = cast(AIMessage, await dynamic_model.ainvoke(model_input, config))  # type: ignore[arg-type]
         else:
             response = cast(AIMessage, await static_model.ainvoke(model_input, config))  # type: ignore[union-attr]
@@ -696,6 +720,13 @@ def create_react_agent(
     def generate_structured_response(
         state: StateSchema, config: RunnableConfig
     ) -> StateSchema:
+        if is_async_dynamic_model:
+            msg = (
+                "Async model callable provided but agent invoked synchronously. "
+                "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
+            )
+            raise RuntimeError(msg)
+
         messages = _get_state_value(state, "messages")
         structured_response_schema = response_format
         if isinstance(response_format, tuple):
@@ -720,7 +751,7 @@ def create_react_agent(
             system_prompt, structured_response_schema = response_format
             messages = [SystemMessage(content=system_prompt)] + list(messages)
 
-        resolved_model = _resolve_model(state, config)
+        resolved_model = await _aresolve_model(state, config)
         model_with_structured_output = _get_model(
             resolved_model
         ).with_structured_output(
