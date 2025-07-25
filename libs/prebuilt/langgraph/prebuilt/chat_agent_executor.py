@@ -432,7 +432,6 @@ def create_react_agent(
     ```
 
     Example:
-        Basic usage with static model:
         ```python
         from langgraph.prebuilt import create_react_agent
 
@@ -447,52 +446,6 @@ def create_react_agent(
         )
         inputs = {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
         for chunk in graph.stream(inputs, stream_mode="updates"):
-            print(chunk)
-        ```
-
-        Dynamic model selection example:
-        ```python
-        from dataclasses import dataclass
-        from langchain_openai import ChatOpenAI
-        from langgraph.prebuilt import create_react_agent
-        from langgraph.prebuilt.chat_agent_executor import AgentState
-        from langgraph.runtime import Runtime
-
-        @dataclass
-        class ModelContext:
-            model_name: str = "gpt-3.5-turbo"
-
-        def check_weather(location: str) -> str:
-            '''Return the weather forecast for the specified location.'''
-            return f"It's always sunny in {location}"
-
-        # Instantiate models in global scope to avoid recreating clients
-        gpt4_model = ChatOpenAI(model="gpt-4")
-        gpt35_model = ChatOpenAI(model="gpt-3.5-turbo")
-
-        def select_model(state: AgentState, runtime: Runtime[ModelContext]) -> ChatOpenAI:
-            # Select model based on context
-            model_name = runtime.context.model_name
-
-            if model_name == "gpt-4":
-                model = gpt4_model
-            else:
-                model = gpt35_model
-
-            # Bind tools to the selected model
-            return model.bind_tools([check_weather])
-
-        graph = create_react_agent(
-            select_model,
-            tools=[check_weather],
-            prompt="You are a helpful assistant",
-            context_schema=ModelContext,
-        )
-
-        # Use different models via context
-        context = ModelContext(model_name="gpt-4")
-        inputs = {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
-        for chunk in graph.stream(inputs, context=context, stream_mode="updates"):
             print(chunk)
         ```
     """
