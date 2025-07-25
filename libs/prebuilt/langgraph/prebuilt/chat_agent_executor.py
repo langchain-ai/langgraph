@@ -245,11 +245,10 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-DynamicModel = Callable[[StateSchema, RunnableConfig], BaseChatModel]
-
-
 def create_react_agent(
-    model: Union[str, LanguageModelLike, DynamicModel],
+    model: Union[
+        str, LanguageModelLike, Callable[[StateSchema, RunnableConfig], BaseChatModel]
+    ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
