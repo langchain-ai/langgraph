@@ -1613,7 +1613,7 @@ from IPython.display import display, Image
 display(Image(graph.get_graph().draw_mermaid_png()))
 ```
 
-![Command-based graph navigation](assets/graph_api_image_6.png)
+![Command-based graph navigation](assets/graph_api_image_11.png)
 
 If we run the graph multiple times, we'd see it take different paths (A -> B or A -> C) based on the random choice in node A.
 
