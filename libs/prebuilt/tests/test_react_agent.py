@@ -1682,7 +1682,7 @@ def test_dynamic_model_receives_correct_state():
     class CustomAgentState(AgentState):
         custom_field: str
 
-    def dynamic_model(state, runtime: Runtime):
+    def dynamic_model(state, runtime: Runtime) -> BaseChatModel:
         # Capture the state that's passed to the dynamic model function
         received_states.append(state)
         return FakeToolCallingModel(tool_calls=[])

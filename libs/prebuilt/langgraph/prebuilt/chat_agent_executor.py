@@ -48,6 +48,7 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
+from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 StructuredResponse = Union[dict, BaseModel]
@@ -251,8 +252,8 @@ def create_react_agent(
     model: Union[
         str,
         LanguageModelLike,
-        Callable[[StateSchema, Runtime], BaseChatModel],
-        Callable[[StateSchema, Runtime], Awaitable[BaseChatModel]],
+        Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
+        Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
@@ -526,7 +527,9 @@ def create_react_agent(
     # our graph needs to check if these were called
     should_return_direct = {t.name for t in tool_classes if t.return_direct}
 
-    def _resolve_model(state: StateSchema, runtime: Runtime) -> LanguageModelLike:
+    def _resolve_model(
+        state: StateSchema, runtime: Runtime[ContextT]
+    ) -> LanguageModelLike:
         """Resolve the model to use, handling both static and dynamic models."""
         if is_dynamic_model:
             return _get_prompt_runnable(prompt) | model(state, runtime)  # type: ignore[operator]
@@ -534,7 +537,7 @@ def create_react_agent(
             return static_model
 
     async def _aresolve_model(
-        state: StateSchema, runtime: Runtime
+        state: StateSchema, runtime: Runtime[ContextT]
     ) -> LanguageModelLike:
         """Async resolve the model to use, handling both static and dynamic models."""
         if is_async_dynamic_model:
@@ -590,7 +593,7 @@ def create_react_agent(
 
     # Define the function that calls the model
     def call_model(
-        state: StateSchema, runtime: Runtime, config: RunnableConfig
+        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
     ) -> StateSchema:
         if is_async_dynamic_model:
             msg = (
@@ -625,7 +628,7 @@ def create_react_agent(
         return {"messages": [response]}
 
     async def acall_model(
-        state: StateSchema, runtime: Runtime, config: RunnableConfig
+        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
     ) -> StateSchema:
         model_input = _get_model_input_state(state)
 
@@ -673,7 +676,7 @@ def create_react_agent(
         input_schema = state_schema
 
     def generate_structured_response(
-        state: StateSchema, runtime: Runtime, config: RunnableConfig
+        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
     ) -> StateSchema:
         if is_async_dynamic_model:
             msg = (
