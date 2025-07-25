@@ -149,10 +149,25 @@ class Interrupt:
     """Information about an interrupt that occurred in a node.
 
     !!! version-added "Added in version 0.2.24."
+
+    !!! version-changed "Changed in version v0.4.0"
+        * `interrupt_id` was introduced as a property
+
+    !!! version-changed "Changed in version v0.6.0"
+
+        The following attributes have been removed:
+
+        * `ns`
+        * `when`
+        * `resumable`
+        * `interrupt_id`, deprecated in favor of `id`
     """
 
     value: Any
+    """The value associated with the interrupt."""
+
     id: str
+    """The ID of the interrupt. Can be used to resume the interrupt directly."""
 
     def __init__(
         self,

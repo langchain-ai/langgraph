@@ -364,6 +364,11 @@ def create_react_agent(
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
 
+    !!! warning "`config_schema` Deprecated"
+        The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
+        Please use `context_schema` instead to specify the schema for run-scoped context.
+
+
     Returns:
         A compiled LangChain runnable that can be used for chat interactions.
 

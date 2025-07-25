@@ -602,6 +602,7 @@ class Pregel(
     Defaults to None."""
 
     context_schema: type[ContextT] | None = None
+    """Specifies the schema for the context object that will be passed to the workflow."""
 
     config: RunnableConfig | None = None
 
@@ -2438,6 +2439,8 @@ class Pregel(
         Args:
             input: The input to the graph.
             config: The configuration to use for the run.
+            context: The static context to use for the run.
+                !!! version-added "Added in version 0.6.0."
             stream_mode: The mode to stream output, defaults to `self.stream_mode`.
                 Options are:
 
@@ -2694,6 +2697,8 @@ class Pregel(
         Args:
             input: The input to the graph.
             config: The configuration to use for the run.
+            context: The static context to use for the run.
+                !!! version-added "Added in version 0.6.0."
             stream_mode: The mode to stream output, defaults to `self.stream_mode`.
                 Options are:
 
@@ -2981,6 +2986,8 @@ class Pregel(
         Args:
             input: The input data for the graph. It can be a dictionary or any other type.
             config: Optional. The configuration for the graph run.
+            context: The static context to use for the run.
+                !!! version-added "Added in version 0.6.0."
             stream_mode: Optional[str]. The stream mode for the graph run. Default is "values".
             print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
             output_keys: Optional. The output keys to retrieve from the graph run.
@@ -3058,6 +3065,8 @@ class Pregel(
         Args:
             input: The input data for the computation. It can be a dictionary or any other type.
             config: Optional. The configuration for the computation.
+            context: The static context to use for the run.
+                !!! version-added "Added in version 0.6.0."
             stream_mode: Optional. The stream mode for the computation. Default is "values".
             print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
             output_keys: Optional. The output keys to include in the result. Default is None.
