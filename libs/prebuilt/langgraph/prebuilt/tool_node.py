@@ -52,6 +52,7 @@ from typing import (
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
+    RemoveMessage,
     ToolCall,
     ToolMessage,
     convert_to_messages,
@@ -72,6 +73,7 @@ from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt._internal import ToolCallWithContext
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
@@ -755,7 +757,16 @@ class ToolNode(RunnableCallable):
         # convert to message objects if updates are in a dict format
         messages_update = convert_to_messages(messages_update)
         has_matching_tool_message = False
+        all_messages_removed = False
         for message in messages_update:
+            if (
+                isinstance(message, RemoveMessage)
+                and message.id == REMOVE_ALL_MESSAGES
+                and len(messages_update) == 1
+            ):
+                all_messages_removed = True
+                break
+
             if not isinstance(message, ToolMessage):
                 continue
 
@@ -764,8 +775,13 @@ class ToolNode(RunnableCallable):
                 has_matching_tool_message = True
 
         # validate that we always have a ToolMessage matching the tool call in
-        # Command.update if command is sent to the CURRENT graph
-        if updated_command.graph is None and not has_matching_tool_message:
+        # Command.update if command is sent to the CURRENT graph.
+        # This check is bypassed if all messages are being removed.
+        if (
+            updated_command.graph is None
+            and not has_matching_tool_message
+            and not all_messages_removed
+        ):
             example_update = (
                 '`Command(update={"messages": [ToolMessage("Success", tool_call_id=tool_call_id), ...]}, ...)`'
                 if input_type == "dict"
