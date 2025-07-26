@@ -12,6 +12,7 @@ from typing import (
     Callable,
     Generic,
     TypeVar,
+    cast,
     get_args,
     get_origin,
     overload,
@@ -19,14 +20,15 @@ from typing import (
 
 from typing_extensions import Unpack
 
-from langgraph._typing import UNSET, DeprecatedKwargs
+from langgraph._internal._constants import CACHE_NS_WRITES, PREVIOUS
+from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import CACHE_NS_WRITES, END, PREVIOUS, START
+from langgraph.constants import END, START
 from langgraph.pregel import Pregel
-from langgraph.pregel.call import (
+from langgraph.pregel._call import (
     P,
     SyncAsyncFuture,
     T,
@@ -34,14 +36,17 @@ from langgraph.pregel.call import (
     get_runnable_for_entrypoint,
     identifier,
 )
-from langgraph.pregel.read import PregelNode
-from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
+from langgraph.pregel._read import PregelNode
+from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
-from langgraph.warnings import LangGraphDeprecatedSinceV05
+from langgraph.typing import ContextT
+from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
+
+__all__ = ("task", "entrypoint")
 
 
-class TaskFunction(Generic[P, T]):
+class _TaskFunction(Generic[P, T]):
     def __init__(
         self,
         func: Callable[P, T],
@@ -97,14 +102,14 @@ def task(
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> Callable[
     [Callable[P, Awaitable[T]] | Callable[P, T]],
-    TaskFunction[P, T],
+    _TaskFunction[P, T],
 ]: ...
 
 
 @overload
 def task(
     __func_or_none__: Callable[P, Awaitable[T]] | Callable[P, T],
-) -> TaskFunction[P, T]: ...
+) -> _TaskFunction[P, T]: ...
 
 
 def task(
@@ -115,8 +120,8 @@ def task(
     cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> (
-    Callable[[Callable[P, Awaitable[T]] | Callable[P, T]], TaskFunction[P, T]]
-    | TaskFunction[P, T]
+    Callable[[Callable[P, Awaitable[T]] | Callable[P, T]], _TaskFunction[P, T]]
+    | _TaskFunction[P, T]
 ):
     """Define a LangGraph task using the `task` decorator.
 
@@ -176,7 +181,7 @@ def task(
         await add_one.ainvoke([1, 2, 3])  # Returns [2, 3, 4]
         ```
     """
-    if (retry := kwargs.get("retry", UNSET)) is not UNSET:
+    if (retry := kwargs.get("retry", MISSING)) is not MISSING:
         warnings.warn(
             "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
             category=LangGraphDeprecatedSinceV05,
@@ -196,7 +201,7 @@ def task(
     def decorator(
         func: Callable[P, Awaitable[T]] | Callable[P, T],
     ) -> Callable[P, concurrent.futures.Future[T]] | Callable[P, asyncio.Future[T]]:
-        return TaskFunction(
+        return _TaskFunction(
             func, retry_policy=retry_policies, cache_policy=cache_policy, name=name
         )
 
@@ -214,7 +219,7 @@ S = TypeVar("S")
 # In this form, the `final` attribute should play nicely with IDE autocompletion,
 # and type checking tools.
 # In addition, we'll be able to surface this information in the API Reference.
-class entrypoint:
+class entrypoint(Generic[ContextT]):
     """Define a LangGraph workflow using the `entrypoint` decorator.
 
     ### Function signature
@@ -230,10 +235,9 @@ class entrypoint:
 
     | Parameter        | Description                                                                                        |
     |------------------|----------------------------------------------------------------------------------------------------|
-    | **`store`**      | An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for long-term memory.           |
-    | **`writer`**     | A [StreamWriter][langgraph.types.StreamWriter] instance for writing custom data to a stream.       |
     | **`config`**     | A configuration object (aka RunnableConfig) that holds run-time configuration values.              |
     | **`previous`**   | The previous return value for the given thread (available only when a checkpointer is provided).   |
+    | **`runtime`**    | A Runtime object that contains information about the current run, including context, store, writer |                                |
 
     The entrypoint decorator can be applied to sync functions or async functions.
 
@@ -253,10 +257,15 @@ class entrypoint:
         store: A generalized key-value store. Some implementations may support
             semantic search capabilities through an optional `index` configuration.
         cache: A cache to use for caching the results of the workflow.
-        config_schema: Specifies the schema for the configuration object that will be
+        context_schema: Specifies the schema for the context object that will be
             passed to the workflow.
         cache_policy: A cache policy to use for caching the results of the workflow.
         retry_policy: A retry policy (or list of policies) to use for the workflow in case of a failure.
+
+    !!! warning "`config_schema` Deprecated"
+        The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
+        Please use `context_schema` instead to specify the schema for run-scoped context.
+
 
     Example: Using entrypoint and tasks
         ```python
@@ -264,14 +273,14 @@ class entrypoint:
 
         from langgraph.func import entrypoint, task
         from langgraph.types import interrupt, Command
-        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.checkpoint.memory import InMemorySaver
 
         @task
         def compose_essay(topic: str) -> str:
             time.sleep(1.0)  # Simulate slow operation
             return f"An essay about {topic}"
 
-        @entrypoint(checkpointer=MemorySaver())
+        @entrypoint(checkpointer=InMemorySaver())
         def review_workflow(topic: str) -> dict:
             \"\"\"Manages the workflow for generating and reviewing an essay.
 
@@ -326,10 +335,10 @@ class entrypoint:
         of the previous invocation on the same thread id.
 
         ```python
-        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.checkpoint.memory import InMemorySaver
         from langgraph.func import entrypoint
 
-        @entrypoint(checkpointer=MemorySaver())
+        @entrypoint(checkpointer=InMemorySaver())
         def my_workflow(input_data: str, previous: Optional[str] = None) -> str:
             return "world"
 
@@ -348,10 +357,10 @@ class entrypoint:
         long as the same thread id is used.
 
         ```python
-        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.checkpoint.memory import InMemorySaver
         from langgraph.func import entrypoint
 
-        @entrypoint(checkpointer=MemorySaver())
+        @entrypoint(checkpointer=InMemorySaver())
         def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
             previous = previous or 0
             # This will return the previous value to the caller, saving
@@ -375,27 +384,36 @@ class entrypoint:
         checkpointer: BaseCheckpointSaver | None = None,
         store: BaseStore | None = None,
         cache: BaseCache | None = None,
-        config_schema: type[Any] | None = None,
+        context_schema: type[ContextT] | None = None,
         cache_policy: CachePolicy | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         """Initialize the entrypoint decorator."""
-        if (retry := kwargs.get("retry", UNSET)) is not UNSET:
+        if (config_schema := kwargs.get("config_schema", MISSING)) is not MISSING:
+            warnings.warn(
+                "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+            if context_schema is None:
+                context_schema = cast(type[ContextT], config_schema)
+
+        if (retry := kwargs.get("retry", MISSING)) is not MISSING:
             warnings.warn(
                 "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
                 category=LangGraphDeprecatedSinceV05,
                 stacklevel=2,
             )
             if retry_policy is None:
-                retry_policy = retry  # type: ignore[assignment]
+                retry_policy = cast("RetryPolicy | Sequence[RetryPolicy]", retry)
 
         self.checkpointer = checkpointer
         self.store = store
         self.cache = cache
         self.cache_policy = cache_policy
         self.retry_policy = retry_policy
-        self.config_schema = config_schema
+        self.context_schema = context_schema
 
     @dataclass(**_DC_KWARGS)
     class final(Generic[R, S]):
@@ -406,10 +424,10 @@ class entrypoint:
 
         Example: Decoupling the return value and the save value
             ```python
-            from langgraph.checkpoint.memory import MemorySaver
+            from langgraph.checkpoint.memory import InMemorySaver
             from langgraph.func import entrypoint
 
-            @entrypoint(checkpointer=MemorySaver())
+            @entrypoint(checkpointer=InMemorySaver())
             def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
                 previous = previous or 0
                 # This will return the previous value to the caller, saving
@@ -527,5 +545,5 @@ class entrypoint:
             cache=self.cache,
             cache_policy=self.cache_policy,
             retry_policy=self.retry_policy or (),
-            config_type=self.config_schema,
+            context_schema=self.context_schema,  # type: ignore[arg-type]
         )

@@ -13,16 +13,16 @@ from typing import Any, Callable, Generic, TypeVar, cast
 from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec
 
-from langgraph.constants import CONF, CONFIG_KEY_CALL, RETURN
-from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
-from langgraph.types import CachePolicy, RetryPolicy
-from langgraph.utils.config import get_config
-from langgraph.utils.runnable import (
+from langgraph._internal._constants import CONF, CONFIG_KEY_CALL, RETURN
+from langgraph._internal._runnable import (
     RunnableCallable,
     RunnableSeq,
     is_async_callable,
     run_in_executor,
 )
+from langgraph.config import get_config
+from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
+from langgraph.types import CachePolicy, RetryPolicy
 
 ##
 # Utilities borrowed from cloudpickle.
@@ -78,8 +78,8 @@ def _whichmodule(obj: Any, name: str) -> str | None:
 
 def identifier(obj: Any, name: str | None = None) -> str | None:
     """Return the module and name of an object."""
-    from langgraph.pregel.read import PregelNode
-    from langgraph.utils.runnable import RunnableCallable, RunnableSeq
+    from langgraph._internal._runnable import RunnableCallable, RunnableSeq
+    from langgraph.pregel._read import PregelNode
 
     if isinstance(obj, PregelNode):
         obj = obj.bound

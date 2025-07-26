@@ -49,12 +49,12 @@ def call_model(state, config):
 tool_node = ToolNode(tools)
 
 
-class ConfigSchema(TypedDict):
+class ContextSchema(TypedDict):
     model: Literal["anthropic", "openai"]
 
 
 # Define a new graph
-workflow = StateGraph(AgentState, config_schema=ConfigSchema)
+workflow = StateGraph(AgentState, context_schema=ContextSchema)
 
 # Define the two nodes we will cycle between
 workflow.add_node("agent", call_model)
