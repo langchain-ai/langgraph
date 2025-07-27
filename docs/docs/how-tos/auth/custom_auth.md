@@ -6,7 +6,7 @@
 
       *  [**Authentication & Access Control**](../../concepts/auth.md)
       *  [**LangGraph Platform**](../../concepts/langgraph_platform.md)
-    
+
     For a more guided walkthrough, see [**setting up custom authentication**](../../tutorials/auth/getting_started.md) tutorial.
 
 ???+ note "Support by deployment type"
@@ -16,6 +16,8 @@
 This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Platform and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
 
 ## 1. Implement authentication
+
+:::python
 
 ```python
 from langgraph_sdk import Auth
@@ -55,9 +57,50 @@ async def authorize_store(ctx: Auth.types.AuthContext, value: dict):
 
 ```
 
+:::
+
+:::js
+
+```typescript
+import { Auth, HTTPException } from "@langchain/langgraph-sdk/auth";
+
+const auth = new Auth()
+  .authenticate(async (request) => {
+    const authorization = request.headers.get("Authorization");
+    const token = authorization?.split(" ")[1]; // "Bearer <token>"
+    if (!token) {
+      throw new HTTPException(401, "No token provided");
+    }
+    try {
+      const user = await verifyToken(token);
+      return user;
+    } catch (error) {
+      throw new HTTPException(401, "Invalid token");
+    }
+  })
+  // Add authorization rules to actually control access to resources
+  .on("*", async ({ user, value }) => {
+    const filters = { owner: user.identity };
+    const metadata = value.metadata ?? {};
+    metadata.update(filters);
+    return filters;
+  })
+  // Assumes you organize information in store like (user_id, resource_type, resource_id)
+  .on("store", async ({ user, value }) => {
+    const namespace = value.namespace;
+    if (namespace[0] !== user.identity) {
+      throw new HTTPException(403, "Not authorized");
+    }
+  });
+```
+
+:::
+
 ## 2. Update configuration
 
 In your `langgraph.json`, add the path to your auth file:
+
+:::python
 
 ```json hl_lines="7-9"
 {
@@ -72,11 +115,31 @@ In your `langgraph.json`, add the path to your auth file:
 }
 ```
 
+:::
+
+:::js
+
+```json hl_lines="7-9"
+{
+  "dependencies": ["."],
+  "graphs": {
+    "agent": "./agent.ts:graph"
+  },
+  "env": ".env",
+  "auth": {
+    "path": "./auth.ts:my_auth"
+  }
+}
+```
+
+:::
+
 ## 3. Connect from the client
 
 Once you've set up authentication in your server, requests must include the required authorization information based on your chosen scheme.
 Assuming you are using JWT token authentication, you could access your deployments using any of the following methods:
 
+:::python
 === "Python Client"
 
     ```python
@@ -94,7 +157,7 @@ Assuming you are using JWT token authentication, you could access your deploymen
 
     ```python
     from langgraph.pregel.remote import RemoteGraph
-    
+
     my_token = "your-token" # In practice, you would generate a signed token with your auth provider
     remote_graph = RemoteGraph(
         "agent",
@@ -104,9 +167,18 @@ Assuming you are using JWT token authentication, you could access your deploymen
     threads = await remote_graph.ainvoke(...)
     ```
 
-=== "JavaScript Client"
+=== "CURL"
 
-    ```javascript
+    ```bash
+    curl -H "Authorization: Bearer ${your-token}" http://localhost:2024/threads
+    ```
+
+:::
+
+:::js
+=== "Client"
+
+    ```typescript
     import { Client } from "@langchain/langgraph-sdk";
 
     const my_token = "your-token"; // In practice, you would generate a signed token with your auth provider
@@ -117,9 +189,9 @@ Assuming you are using JWT token authentication, you could access your deploymen
     const threads = await client.threads.search();
     ```
 
-=== "JavaScript RemoteGraph"
+=== "RemoteGraph"
 
-    ```javascript
+    ```typescript
     import { RemoteGraph } from "@langchain/langgraph/remote";
 
     const my_token = "your-token"; // In practice, you would generate a signed token with your auth provider
@@ -136,3 +208,5 @@ Assuming you are using JWT token authentication, you could access your deploymen
     ```bash
     curl -H "Authorization: Bearer ${your-token}" http://localhost:2024/threads
     ```
+
+:::

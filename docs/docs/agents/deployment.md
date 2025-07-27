@@ -11,18 +11,20 @@ hide:
 
 To deploy your LangGraph agent, create and configure a LangGraph app. This setup supports both local development and production deployments.
 
-Features: 
+Features:
 
-* 🖥️ Local server for development
-* 🧩 Studio Web UI for visual debugging
-* ☁️ Cloud and 🔧 self-hosted deployment options
-* 📊 LangSmith integration for tracing and observability
+- 🖥️ Local server for development
+- 🧩 Studio Web UI for visual debugging
+- ☁️ Cloud and 🔧 self-hosted deployment options
+- 📊 LangSmith integration for tracing and observability
 
-!!! info "Requirements" 
+!!! info "Requirements"
 
     - ✅ You **must** have a [LangSmith account](https://www.langchain.com/langsmith). You can sign up for **free** and get started with the free tier.
 
 ## Create a LangGraph app
+
+:::python
 
 ```bash
 pip install -U "langgraph-cli[inmem]"
@@ -45,6 +47,46 @@ graph = create_react_agent(
 )
 ```
 
+:::
+
+:::js
+
+```bash
+npm install -g @langchain/langgraph-cli
+langgraph new path/to/your/app --template new-langgraph-project-js
+```
+
+This will create an empty LangGraph project. You can modify it by replacing the code in `src/agent/graph.ts` with your agent code. For example:
+
+```typescript
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
+
+const getWeather = tool(
+  (input) => {
+    return `It's always sunny in ${input.city}!`;
+  },
+  {
+    name: "get_weather",
+    description: "Get weather for a given city.",
+    schema: z.object({
+      city: z.string().describe("The city to get weather for"),
+    }),
+  }
+);
+
+export const graph = createReactAgent({
+  llm: "anthropic:claude-3-5-sonnet-latest",
+  tools: [getWeather],
+  stateModifier: "You are a helpful assistant",
+});
+```
+
+:::
+
+:::python
+
 ### Install dependencies
 
 In the root of your new LangGraph app, install the dependencies in `edit` mode so your local changes are used by the server:
@@ -52,6 +94,8 @@ In the root of your new LangGraph app, install the dependencies in `edit` mode s
 ```shell
 pip install -e .
 ```
+
+:::
 
 ### Create an `.env` file
 
@@ -71,13 +115,13 @@ langgraph dev
 
 This will start up the LangGraph API server locally. If this runs successfully, you should see something like:
 
->    Ready!
-> 
->    - API: [http://localhost:2024](http://localhost:2024/)
->     
->    - Docs: http://localhost:2024/docs
->     
->    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+> Ready!
+>
+> - API: [http://localhost:2024](http://localhost:2024/)
+>
+> - Docs: http://localhost:2024/docs
+>
+> - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 
 See this [tutorial](https://langchain-ai.github.io/langgraph/tutorials/langgraph-platform/local-server/) to learn more about running LangGraph app locally.
 
@@ -85,7 +129,7 @@ See this [tutorial](https://langchain-ai.github.io/langgraph/tutorials/langgraph
 
 LangGraph Studio Web is a specialized UI that you can connect to LangGraph API server to enable visualization, interaction, and debugging of your application locally. Test your graph in the LangGraph Studio Web UI by visiting the URL provided in the output of the `langgraph dev` command.
 
->    - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
+> - LangGraph Studio Web UI: https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024
 
 ## Deployment
 

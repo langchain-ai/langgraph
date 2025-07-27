@@ -49,7 +49,7 @@ This section describes various features of the control plane.
 For simplicity, the control plane offers two deployment types with different resource allocations: `Development` and `Production`.
 
 | **Deployment Type** | **CPU/Memory**  | **Scaling**         | **Database**                                                                     |
-|---------------------|-----------------|---------------------|----------------------------------------------------------------------------------|
+| ------------------- | --------------- | ------------------- | -------------------------------------------------------------------------------- |
 | Development         | 1 CPU, 1 GB RAM | Up to 1 container   | 10 GB disk, no backups                                                           |
 | Production          | 2 CPU, 2 GB RAM | Up to 10 containers | Autoscaling disk, automatic backups, highly available (multi-zone configuration) |
 
@@ -60,7 +60,7 @@ CPU and memory resources are per container.
     Once a deployment is created, the deployment type cannot be changed.
 
 !!! info "Resource Customization"
-    For `Production` type deployments, resources can be manually increased on a case-by-case basis depending on use case and capacity constraints. Contact support@langchain.dev to request an increase in resources.
+For `Production` type deployments, resources can be manually increased on a case-by-case basis depending on use case and capacity constraints. Contact support@langchain.dev to request an increase in resources.
 
     For `Development` types deployments, database disk size can be manually increased on a case-by-case basis depending on use case and capacity constraints. For most use cases, [TTLs](../how-tos/ttl/configure_ttl.md) should be configured to manage disk usage. Contact support@langchain.dev to request an increase in resources.
 
@@ -77,7 +77,7 @@ There is no direct access to the database. All access to the database occurs thr
 The database is never deleted until the deployment itself is deleted.
 
 !!! info
-    A custom Postgres instance can be configured for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
+A custom Postgres instance can be configured for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 ### Asynchronous Deployment
 

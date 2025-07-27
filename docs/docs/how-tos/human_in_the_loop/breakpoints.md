@@ -10,7 +10,12 @@ To use breakpoints, you will need to:
 1. [**Specify a checkpointer**](../../concepts/persistence.md#checkpoints) to save the graph state after each step.
 2. **Set breakpoints** to specify where execution should pause.
 3. **Run the graph** with a [**thread ID**](../../concepts/persistence.md#threads) to pause execution at the breakpoint.
-4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` passing a `None` as the argument for the inputs.
+
+:::python 4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` passing a `None` as the argument for the inputs.
+:::
+
+:::js 4. **Resume execution** using `invoke`/`stream` passing `null` as the argument for the inputs.
+:::
 
 !!! tip
 
@@ -18,13 +23,20 @@ To use breakpoints, you will need to:
 
 ## Static breakpoints
 
+:::python
 Static breakpoints are triggered either before or after a node executes. You can set static breakpoints by specifying `interrupt_before` and `interrupt_after` at compile time or run time.
+:::
+
+:::js
+Static breakpoints are triggered either before or after a node executes. You can set static breakpoints by specifying `interruptBefore` and `interruptAfter` at compile time or run time.
+:::
 
 Static breakpoints can be especially useful for debugging if you want to step through the graph execution one
 node at a time or if you want to pause the graph execution at specific nodes.
 
 === "Compile time"
 
+    :::python
     ```python
     # highlight-next-line
     graph = graph_builder.compile( # (1)!
@@ -54,20 +66,54 @@ node at a time or if you want to pause the graph execution at specific nodes.
     4. A checkpointer is required to enable breakpoints.
     5. The graph is run until the first breakpoint is hit.
     6. The graph is resumed by passing in `None` for the input. This will run the graph until the next breakpoint is hit.
+    :::
+
+    :::js
+    ```typescript
+    // highlight-next-line
+    const graph = graphBuilder.compile({ // (1)!
+        // highlight-next-line
+        interruptBefore: ["nodeA"], // (2)!
+        // highlight-next-line
+        interruptAfter: ["nodeB", "nodeC"], // (3)!
+        checkpointer: checkpointer, // (4)!
+    });
+
+    const config = {
+        configurable: {
+            thread_id: "some_thread"
+        }
+    };
+
+    // Run the graph until the breakpoint
+    await graph.invoke(inputs, config); // (5)!
+
+    // Resume the graph
+    await graph.invoke(null, config); // (6)!
+    ```
+
+    1. The breakpoints are set during `compile` time.
+    2. `interruptBefore` specifies the nodes where execution should pause before the node is executed.
+    3. `interruptAfter` specifies the nodes where execution should pause after the node is executed.
+    4. A checkpointer is required to enable breakpoints.
+    5. The graph is run until the first breakpoint is hit.
+    6. The graph is resumed by passing in `null` for the input. This will run the graph until the next breakpoint is hit.
+    :::
 
 === "Run time"
 
+    :::python
     ```python
     # highlight-next-line
     graph.invoke( # (1)!
-        inputs, 
+        inputs,
         # highlight-next-line
         interrupt_before=["node_a"], # (2)!
         # highlight-next-line
         interrupt_after=["node_b", "node_c"] # (3)!
         config={
             "configurable": {"thread_id": "some_thread"}
-        }, 
+        },
     )
 
     config = {
@@ -88,6 +134,30 @@ node at a time or if you want to pause the graph execution at specific nodes.
     3. `interrupt_after` specifies the nodes where execution should pause after the node is executed.
     4. The graph is run until the first breakpoint is hit.
     5. The graph is resumed by passing in `None` for the input. This will run the graph until the next breakpoint is hit.
+    :::
+
+    :::js
+    ```typescript
+    const config = {
+        configurable: { thread_id: "some_thread" },
+        // highlight-next-line
+        interruptBefore: ["nodeA"], // (1)!
+        // highlight-next-line
+        interruptAfter: ["nodeB", "nodeC"] // (2)!
+    };
+
+    // Run the graph until the breakpoint
+    await graph.invoke(inputs, config); // (3)!
+
+    // Resume the graph
+    await graph.invoke(null, config); // (4)!
+    ```
+
+    1. `interruptBefore` specifies the nodes where execution should pause before the node is executed.
+    2. `interruptAfter` specifies the nodes where execution should pause after the node is executed.
+    3. The graph is run until the first breakpoint is hit.
+    4. The graph is resumed by passing in `null` for the input. This will run the graph until the next breakpoint is hit.
+    :::
 
     !!! note
 
@@ -96,33 +166,34 @@ node at a time or if you want to pause the graph execution at specific nodes.
 
 ??? example "Setting static breakpoints"
 
+    :::python
     ```python
     from IPython.display import Image, display
     from typing_extensions import TypedDict
-    
-    from langgraph.checkpoint.memory import InMemorySaver 
+
+    from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.graph import StateGraph, START, END
-    
-    
+
+
     class State(TypedDict):
         input: str
-    
-    
+
+
     def step_1(state):
         print("---Step 1---")
         pass
-    
-    
+
+
     def step_2(state):
         print("---Step 2---")
         pass
-    
-    
+
+
     def step_3(state):
         print("---Step 3---")
         pass
-    
-    
+
+
     builder = StateGraph(State)
     builder.add_node("step_1", step_1)
     builder.add_node("step_2", step_2)
@@ -131,41 +202,107 @@ node at a time or if you want to pause the graph execution at specific nodes.
     builder.add_edge("step_1", "step_2")
     builder.add_edge("step_2", "step_3")
     builder.add_edge("step_3", END)
-    
-    # Set up a checkpointer 
+
+    # Set up a checkpointer
     checkpointer = InMemorySaver() # (1)!
-    
+
     graph = builder.compile(
         checkpointer=checkpointer, # (2)!
         interrupt_before=["step_3"] # (3)!
     )
-    
+
     # View
     display(Image(graph.get_graph().draw_mermaid_png()))
-    
-    
+
+
     # Input
     initial_input = {"input": "hello world"}
-    
+
     # Thread
     thread = {"configurable": {"thread_id": "1"}}
-    
+
     # Run the graph until the first interruption
     for event in graph.stream(initial_input, thread, stream_mode="values"):
         print(event)
-        
+
     # This will run until the breakpoint
     # You can get the state of the graph at this point
     print(graph.get_state(config))
-    
+
     # You can continue the graph execution by passing in `None` for the input
     for event in graph.stream(None, thread, stream_mode="values"):
         print(event)
     ```
+    :::
+
+    :::js
+    ```typescript
+    import { z } from "zod";
+    import { MemorySaver, StateGraph, START, END } from "@langchain/langgraph";
+
+    const State = z.object({
+        input: z.string(),
+    });
+
+    const builder = new StateGraph(State)
+        .addNode("step1", (state) => {
+            console.log("---Step 1---");
+            return state;
+        })
+        .addNode("step2", (state) => {
+            console.log("---Step 2---");
+            return state;
+        })
+        .addNode("step3", (state) => {
+            console.log("---Step 3---");
+            return state;
+        })
+        .addEdge(START, "step1")
+        .addEdge("step1", "step2")
+        .addEdge("step2", "step3")
+        .addEdge("step3", END);
+
+    // Set up a checkpointer
+    const checkpointer = new MemorySaver(); // (1)!
+
+    const graph = builder.compile({
+        checkpointer: checkpointer, // (2)!
+        interruptBefore: ["step3"] // (3)!
+    });
+
+    // Input
+    const initialInput = { input: "hello world" };
+
+    // Thread
+    const threadConfig = { configurable: { thread_id: "1" } };
+
+    // Run the graph until the first interruption
+    for await (const event of await graph.stream(initialInput, {
+        ...threadConfig,
+        streamMode: "values"
+    })) {
+        console.log(event);
+    }
+
+    // This will run until the breakpoint
+    // You can get the state of the graph at this point
+    console.log(await graph.getState(threadConfig));
+
+    // You can continue the graph execution by passing in `null` for the input
+    for await (const event of await graph.stream(null, {
+        ...threadConfig,
+        streamMode: "values"
+    })) {
+        console.log(event);
+    }
+    ```
+    :::
 
 ## Dynamic breakpoints
 
 Use dynamic breakpoints if you need to interrupt the graph from inside a given node based on a condition.
+
+:::python
 
 ```python
 from langgraph.errors import NodeInterrupt
@@ -181,8 +318,31 @@ def step_2(state: State) -> State:
 ```
 
 1. raise NodeInterrupt exception based on a some condition. In this example, we create a dynamic breakpoint if the length of the attribute `input` is longer than 5 characters.
+   :::
+
+:::js
+
+```typescript
+import { NodeInterrupt } from "@langchain/langgraph";
+
+graph.addNode("step2", (state) => {
+  // highlight-next-line
+  if (state.input.length > 5) {
+    // highlight-next-line
+    throw new NodeInterrupt( // (1)!
+      `Received input that is longer than 5 characters: ${state.input}`
+    );
+  }
+  return state;
+});
+```
+
+1. Throw NodeInterrupt exception based on some condition. In this example, we create a dynamic breakpoint if the length of the attribute `input` is longer than 5 characters.
+   :::
 
 <details class="example"><summary>Using dynamic breakpoints</summary>
+
+:::python
 
 ```python
 from typing_extensions import TypedDict
@@ -288,16 +448,126 @@ print(state.next)
 print(state.tasks)
 ```
 
+:::
+
+:::js
+
+```typescript
+import { z } from "zod";
+import {
+  StateGraph,
+  START,
+  END,
+  MemorySaver,
+  NodeInterrupt,
+} from "@langchain/langgraph";
+
+const State = z.object({
+  input: z.string(),
+});
+
+const builder = new StateGraph(State)
+  .addNode("step1", (state) => {
+    console.log("---Step 1---");
+    return state;
+  })
+  .addNode("step2", (state) => {
+    console.log("---Step 2---");
+    return state;
+  })
+  .addNode("step3", (state) => {
+    console.log("---Step 3---");
+    return state;
+  })
+  .addEdge(START, "step1")
+  .addEdge("step1", "step2")
+  .addEdge("step2", "step3")
+  .addEdge("step3", END);
+
+// Set up memory
+const memory = new MemorySaver();
+
+// Compile the graph with memory
+const graph = builder.compile({ checkpointer: memory });
+```
+
+First, let's run the graph with an input that's <= 5 characters long. This should safely ignore the interrupt condition we defined and return the original input at the end of the graph execution.
+
+```typescript
+const initialInput = { input: "hello" };
+const threadConfig = { configurable: { thread_id: "1" } };
+
+for await (const event of await graph.stream(initialInput, {
+  ...threadConfig,
+  streamMode: "values",
+})) {
+  console.log(event);
+}
+```
+
+If we inspect the graph at this point, we can see that there are no more tasks left to run and that the graph indeed finished execution.
+
+```typescript
+const state = await graph.getState(threadConfig);
+console.log(state.next);
+console.log(state.tasks);
+```
+
+Now, let's run the graph with an input that's longer than 5 characters. This should trigger the dynamic interrupt we defined via throwing a `NodeInterrupt` error inside the `step2` node.
+
+```typescript
+const initialInput2 = { input: "hello world" };
+const threadConfig2 = { configurable: { thread_id: "2" } };
+
+// Run the graph until the first interruption
+for await (const event of await graph.stream(initialInput2, {
+  ...threadConfig2,
+  streamMode: "values",
+})) {
+  console.log(event);
+}
+```
+
+We can see that the graph now stopped while executing `step2`. If we inspect the graph state at this point, we can see the information on what node is set to execute next (`step2`), as well as what node raised the interrupt (also `step2`), and additional information about the interrupt.
+
+```typescript
+const state2 = await graph.getState(threadConfig2);
+console.log(state2.next);
+console.log(state2.tasks);
+```
+
+If we try to resume the graph from the breakpoint, we will simply interrupt again as our inputs & graph state haven't changed.
+
+```typescript
+// NOTE: to resume the graph from a dynamic interrupt we use the same syntax as with regular interrupts -- we pass null as the input
+for await (const event of await graph.stream(null, {
+  ...threadConfig2,
+  streamMode: "values",
+})) {
+  console.log(event);
+}
+```
+
+```typescript
+const state3 = await graph.getState(threadConfig2);
+console.log(state3.next);
+console.log(state3.tasks);
+```
+
+:::
+
 </details>
 
 ## Use with subgraphs
 
 To add breakpoints to subgraph either:
 
-* Define [static breakpoints](#static-breakpoints) by specifying them when **compiling** the subgraph.
-* Define [dynamic breakpoints](#dynamic-breakpoints).
+- Define [static breakpoints](#static-breakpoints) by specifying them when **compiling** the subgraph.
+- Define [dynamic breakpoints](#dynamic-breakpoints).
 
 <details class="example"><summary>Add breakpoints to subgraphs</summary>
+
+:::python
 
 ```python
 from typing_extensions import TypedDict
@@ -339,4 +609,47 @@ print(graph.get_state(config, subgraphs=True).tasks[0].state)
 graph.invoke(None, config)
 ```
 
-</details> 
+:::
+
+:::js
+
+```typescript
+import { z } from "zod";
+import { StateGraph, START, MemorySaver } from "@langchain/langgraph";
+
+const State = z.object({
+  foo: z.string(),
+});
+
+const subgraphBuilder = new StateGraph(State)
+  .addNode("subgraphNode1", (state) => {
+    return { foo: state.foo };
+  })
+  .addEdge(START, "subgraphNode1");
+
+const subgraph = subgraphBuilder.compile({
+  interruptBefore: ["subgraphNode1"],
+});
+
+const builder = new StateGraph(State)
+  .addNode("node1", subgraph) // directly include subgraph as a node
+  .addEdge(START, "node1");
+
+const checkpointer = new MemorySaver();
+const graph = builder.compile({ checkpointer });
+
+const config = { configurable: { thread_id: "1" } };
+
+await graph.invoke({ foo: "" }, config);
+
+// Fetch state including subgraph state.
+const state = await graph.getState(config, { subgraphs: true });
+console.log(state.tasks[0].state);
+
+// resume the subgraph
+await graph.invoke(null, config);
+```
+
+:::
+
+</details>
