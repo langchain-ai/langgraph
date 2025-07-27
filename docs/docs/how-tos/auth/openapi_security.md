@@ -3,7 +3,7 @@
 This guide shows how to customize the OpenAPI security schema for your LangGraph Platform API documentation. A well-documented security schema helps API consumers understand how to authenticate with your API and even enables automatic client generation. See the [Authentication & Access Control conceptual guide](../../concepts/auth.md) for more details about LangGraph's authentication system.
 
 !!! note "Implementation vs Documentation"
-    This guide only covers how to document your security requirements in OpenAPI. To implement the actual authentication logic, see [How to add custom authentication](./custom_auth.md).
+This guide only covers how to document your security requirements in OpenAPI. To implement the actual authentication logic, see [How to add custom authentication](./custom_auth.md).
 
 This guide applies to all LangGraph Platform deployments (Cloud and self-hosted). It does not apply to usage of the LangGraph open source library if you are not using LangGraph Platform.
 
@@ -38,6 +38,7 @@ To customize the security schema in your OpenAPI documentation, add an `openapi`
 
 Note that LangGraph Platform does not provide authentication endpoints - you'll need to handle user authentication in your client application and pass the resulting credentials to the LangGraph API.
 
+:::python
 === "OAuth2 with Bearer Token"
 
     ```json
@@ -88,6 +89,62 @@ Note that LangGraph Platform does not provide authentication endpoints - you'll 
       }
     }
     ```
+
+:::
+
+:::js
+=== "OAuth2 with Bearer Token"
+
+    ```json
+    {
+      "auth": {
+        "path": "./auth.ts:my_auth",  // Implement auth logic here
+        "openapi": {
+          "securitySchemes": {
+            "OAuth2": {
+              "type": "oauth2",
+              "flows": {
+                "implicit": {
+                  "authorizationUrl": "https://your-auth-server.com/oauth/authorize",
+                  "scopes": {
+                    "me": "Read information about the current user",
+                    "threads": "Access to create and manage threads"
+                  }
+                }
+              }
+            }
+          },
+          "security": [
+            {"OAuth2": ["me", "threads"]}
+          ]
+        }
+      }
+    }
+    ```
+
+=== "API Key"
+
+    ```json
+    {
+      "auth": {
+        "path": "./auth.ts:my_auth",  // Implement auth logic here
+        "openapi": {
+          "securitySchemes": {
+            "apiKeyAuth": {
+              "type": "apiKey",
+              "in": "header",
+              "name": "X-API-Key"
+            }
+          },
+          "security": [
+            {"apiKeyAuth": []}
+          ]
+        }
+      }
+    }
+    ```
+
+:::
 
 ## Testing
 

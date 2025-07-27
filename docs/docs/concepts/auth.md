@@ -95,7 +95,7 @@ Your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_s
 :::
 
 :::js
-Your [`@auth.authenticate`](<insert-ref (https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#authenticate)>) handler in LangGraph handles steps 4-6, while your [`@auth.on`](<insert-ref https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#on>) handlers implement step 7.
+Your [`auth.authenticate`](<insert-ref (https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#authenticate)>) handler in LangGraph handles steps 4-6, while your [`auth.on`](<insert-ref https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#on>) handlers implement step 7.
 :::
 
 ## Authentication
@@ -149,15 +149,15 @@ Authentication in LangGraph runs as middleware on every request. Your [`authenti
 3. Raise an [HTTPException](<insert-ref https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#class-httpexception>) if invalid
 
 ```typescript
-import { Auth } from "@langchain/langgraph-sdk";
+import { Auth, HTTPException } from "@langchain/langgraph-sdk";
 
 export const auth = new Auth();
 
-auth.authenticate(async (headers: Record<string, string>) => {
+auth.authenticate(async (request) => {
   // Validate credentials (e.g., API key, JWT token)
-  const apiKey = headers["x-api-key"];
+  const apiKey = request.headers.get("x-api-key");
   if (!apiKey || !isValidKey(apiKey)) {
-    throw new Auth.exceptions.HTTPException(401, "Invalid API key");
+    throw new HTTPException(401, "Invalid API key");
   }
 
   // Return user info - only identity and isAuthenticated are required
