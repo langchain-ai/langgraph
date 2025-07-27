@@ -585,31 +585,31 @@ class _AgentBuilder:
         """Check if agent has tools enabled."""
         return len(self._tool_classes) > 0
 
-    def _get_model_paths(self) -> list[str]:
-        """Get possible paths from model node."""
-        paths = []
+    def _get_model_edges(self) -> list[str]:
+        """Get possible edge destinations from model node."""
+        edges = []
 
-        # If post_model_hook exists, we don't add paths here - we use direct edge instead
+        # If post_model_hook exists, we don't add edges here - we use direct edge instead
         if not self.post_model_hook:
             if self._has_tools():
-                paths.append("tools")
+                edges.append("tools")
             if self.response_format:
-                paths.append("generate_structured_response")
+                edges.append("generate_structured_response")
             if not self._has_tools() and not self.response_format:
-                paths.append(END)
+                edges.append(END)
 
-        return paths
+        return edges
 
-    def _get_post_model_hook_paths(self) -> list[str]:
-        """Get possible paths from post_model_hook node."""
-        paths = [self._get_entry_point()]
+    def _get_post_model_hook_edges(self) -> list[str]:
+        """Get possible edge destinations from post_model_hook node."""
+        edges = [self._get_entry_point()]
         if self._has_tools():
-            paths.append("tools")
+            edges.append("tools")
         if self.response_format:
-            paths.append("generate_structured_response")
+            edges.append("generate_structured_response")
         else:
-            paths.append(END)
-        return paths
+            edges.append(END)
+        return edges
 
     def build(self) -> StateGraph:
         """Build the agent workflow graph (uncompiled)."""
@@ -651,15 +651,15 @@ class _AgentBuilder:
             # Direct edge from model node to post_model_hook when post_model_hook exists
             workflow.add_edge("agent", "post_model_hook")
             # Post-model hook conditional edges
-            post_hook_paths = self._get_post_model_hook_paths()
+            post_hook_edges = self._get_post_model_hook_edges()
             workflow.add_conditional_edges(
-                "post_model_hook", self.post_model_hook_router, path_map=post_hook_paths
+                "post_model_hook", self.post_model_hook_router, path_map=post_hook_edges
             )  # type: ignore[arg-type]
         else:
             # Conditional edges from model node when no post_model_hook
             model_router = self.create_model_router()
-            model_paths = self._get_model_paths()
-            workflow.add_conditional_edges("agent", model_router, path_map=model_paths)  # type: ignore[arg-type]
+            model_edges = self._get_model_edges()
+            workflow.add_conditional_edges("agent", model_router, path_map=model_edges)  # type: ignore[arg-type]
 
         # Tools edges
         if self._has_tools():
