@@ -4,6 +4,9 @@
 
 ---
 
+## v0.2.105 (2025-07-27)
+- Added a `/heapdump` endpoint to capture and save heap data to a file for analysis.
+
 ## v0.2.103 (2025-07-25)
 - Corrected the metadata endpoint to ensure accurate data retrieval.
 
