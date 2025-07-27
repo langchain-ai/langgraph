@@ -5,10 +5,10 @@
 ---
 
 ## v0.2.106 (2025-07-27)
-- Made log streams resumable to enhance reliability in case of interruptions.
+- Log whether run uses resumable streams.
 
 ## v0.2.105 (2025-07-27)
-- Added a `/heapdump` endpoint to capture and save heap data to a file for analysis.
+- Added a `/heapdump` endpoint to capture and save JS process heap data.
 
 ## v0.2.103 (2025-07-25)
 - Corrected the metadata endpoint to ensure accurate data retrieval.
