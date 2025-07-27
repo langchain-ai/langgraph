@@ -4,6 +4,10 @@
 
 ---
 
+## v0.2.107 (2025-07-27)
+- Implemented caching for authentication processes to improve performance.
+- Merged count and select queries to improve database query efficiency.
+
 ## v0.2.106 (2025-07-27)
 - Log whether run uses resumable streams.
 
