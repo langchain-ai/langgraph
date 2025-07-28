@@ -758,8 +758,120 @@ class _AgentBuilder:
         
     def build(self) -> CompiledStateGraph:
         """Assemble the complete graph based on all configuration options."""
-        # Implementation will be added in next task
-        pass
+        # Setup model and tools first
+        self._setup_model_and_tools()
+        
+        # Handle tool-calling vs non-tool-calling workflows
+        if not self.tool_calling_enabled:
+            # Create StateGraph with proper schema
+            workflow = StateGraph(state_schema=self.state_schema, context_schema=self.context_schema)
+            
+            # Add agent node with _create_model_node
+            agent_node = self._create_model_node()
+            workflow.add_node("agent", agent_node, input_schema=agent_node.input_schema)
+            
+            # Set up hooks and get entrypoint
+            entrypoint = self._setup_hooks(workflow)
+            workflow.set_entry_point(entrypoint)
+
+            # Add structured response node if needed
+            structured_response_node = self._create_structured_response_node()
+            if structured_response_node is not None:
+                workflow.add_node("generate_structured_response", structured_response_node)
+                if self.post_model_hook is not None:
+                    workflow.add_edge("post_model_hook", "generate_structured_response")
+                else:
+                    workflow.add_edge("agent", "generate_structured_response")
+
+            # Compile with all provided options
+            return workflow.compile(
+                checkpointer=self.checkpointer,
+                store=self.store,
+                interrupt_before=self.interrupt_before,
+                interrupt_after=self.interrupt_after,
+                debug=self.debug,
+                name=self.name,
+            )
+
+        # Tool-calling workflow
+        # Create StateGraph with proper schema
+        workflow = StateGraph(
+            state_schema=self.state_schema or AgentState, 
+            context_schema=self.context_schema
+        )
+
+        # Add agent node with _create_model_node
+        agent_node = self._create_model_node()
+        workflow.add_node("agent", agent_node, input_schema=agent_node.input_schema)
+        
+        # Add tools node
+        workflow.add_node("tools", self.tool_node)
+
+        # Set up hooks and get entrypoint
+        entrypoint = self._setup_hooks(workflow)
+        workflow.set_entry_point(entrypoint)
+
+        # Set up path mappings for conditional edges
+        agent_paths = []
+        post_model_hook_paths = [entrypoint, "tools"]
+
+        # Configure agent paths based on post_model_hook
+        if self.post_model_hook is not None:
+            agent_paths.append("post_model_hook")
+        else:
+            agent_paths.append("tools")
+
+        # Add structured response node if needed
+        structured_response_node = self._create_structured_response_node()
+        if structured_response_node is not None:
+            workflow.add_node("generate_structured_response", structured_response_node)
+            if self.post_model_hook is not None:
+                post_model_hook_paths.append("generate_structured_response")
+            else:
+                agent_paths.append("generate_structured_response")
+        else:
+            if self.post_model_hook is not None:
+                post_model_hook_paths.append(END)
+            else:
+                agent_paths.append(END)
+
+        # Set up all conditional edges with proper path mappings
+        # Add conditional edges for agent node
+        should_continue = self._create_model_router()
+        workflow.add_conditional_edges(
+            "agent",
+            should_continue,
+            path_map=agent_paths,
+        )
+
+        # Add conditional edges for post_model_hook if present
+        if self.post_model_hook is not None:
+            workflow.add_conditional_edges(
+                "post_model_hook",
+                self.post_model_hook_router,
+                path_map=post_model_hook_paths,
+            )
+
+        # Add conditional edges for tools node based on return_direct
+        tools_router = self._create_tools_router()
+        if tools_router is not None:
+            workflow.add_conditional_edges(
+                "tools", 
+                tools_router, 
+                path_map=[entrypoint, END]
+            )
+        else:
+            workflow.add_edge("tools", entrypoint)
+
+        # Compile with all provided options
+        return workflow.compile(
+            checkpointer=self.checkpointer,
+            store=self.store,
+            interrupt_before=self.interrupt_before,
+            interrupt_after=self.interrupt_after,
+            debug=self.debug,
+            name=self.name,
+        )
 
 
 def create_react_agent(
@@ -1466,6 +1578,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
