@@ -698,8 +698,63 @@ class _AgentBuilder:
         
     def _setup_hooks(self, workflow: StateGraph) -> str:
         """Add pre/post model hook nodes and return entrypoint."""
-        # Implementation will be added in next task
-        pass
+        # Add pre_model_hook node with edge to agent if provided
+        if self.pre_model_hook is not None:
+            workflow.add_node("pre_model_hook", self.pre_model_hook)  # type: ignore[arg-type]
+            workflow.add_edge("pre_model_hook", "agent")
+            entrypoint = "pre_model_hook"
+        else:
+            entrypoint = "agent"
+
+        # Add post_model_hook node with conditional routing if provided
+        if self.post_model_hook is not None:
+            workflow.add_node("post_model_hook", self.post_model_hook)  # type: ignore[arg-type]
+
+            def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
+                """Route to the next node after post_model_hook.
+
+                Routes to one of:
+                * "tools": if there are pending tool calls without a corresponding message.
+                * "generate_structured_response": if no pending tool calls exist and response_format is specified.
+                * END: if no pending tool calls exist and no response_format is specified.
+                """
+                messages = _get_state_value(state, "messages")
+                tool_messages = [
+                    m.tool_call_id for m in messages if isinstance(m, ToolMessage)
+                ]
+                last_ai_message = next(
+                    m for m in reversed(messages) if isinstance(m, AIMessage)
+                )
+                pending_tool_calls = [
+                    c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
+                ]
+
+                # Handle pending tool calls
+                if pending_tool_calls:
+                    return [
+                        Send(
+                            "tools",
+                            ToolCallWithContext(
+                                __type="tool_call_with_context",
+                                tool_call=tool_call,
+                                state=state,
+                            ),
+                        )
+                        for tool_call in pending_tool_calls
+                    ]
+                # Structured response generation
+                elif isinstance(messages[-1], ToolMessage):
+                    return entrypoint
+                elif self.response_format is not None:
+                    return "generate_structured_response"
+                # END routing based on state
+                else:
+                    return END
+
+            # Store the router function for use in build method
+            self.post_model_hook_router = post_model_hook_router
+
+        return entrypoint
         
     def build(self) -> CompiledStateGraph:
         """Assemble the complete graph based on all configuration options."""
@@ -1411,6 +1466,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
