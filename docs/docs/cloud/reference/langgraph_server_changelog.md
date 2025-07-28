@@ -4,6 +4,13 @@
 
 ---
 
+## v0.2.108 (2025-07-28)
+- Added compatibility for langgraph v0.6, including new context API support and a migration to enhance context handling in assistant operations.
+
+## v0.2.107 (2025-07-27)
+- Implemented caching for authentication processes to improve performance.
+- Merged count and select queries to improve database query efficiency.
+
 ## v0.2.106 (2025-07-27)
 - Log whether run uses resumable streams.
 
