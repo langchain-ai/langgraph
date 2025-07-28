@@ -427,8 +427,142 @@ class _AgentBuilder:
         
     def _create_model_node(self) -> RunnableCallable:
         """Create the core LLM interaction node."""
-        # Implementation will be added in next task
-        pass
+        def _are_more_steps_needed(state: StateSchema, response: BaseMessage) -> bool:
+            has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
+            all_tools_return_direct = (
+                all(call["name"] in self.should_return_direct for call in response.tool_calls)
+                if isinstance(response, AIMessage)
+                else False
+            )
+            remaining_steps = _get_state_value(state, "remaining_steps", None)
+            is_last_step = _get_state_value(state, "is_last_step", False)
+            return (
+                (remaining_steps is None and is_last_step and has_tool_calls)
+                or (
+                    remaining_steps is not None
+                    and remaining_steps < 1
+                    and all_tools_return_direct
+                )
+                or (remaining_steps is not None and remaining_steps < 2 and has_tool_calls)
+            )
+
+        def _get_model_input_state(state: StateSchema) -> StateSchema:
+            if self.pre_model_hook is not None:
+                messages = (
+                    _get_state_value(state, "llm_input_messages")
+                ) or _get_state_value(state, "messages")
+                error_msg = f"Expected input to call_model to have 'llm_input_messages' or 'messages' key, but got {state}"
+            else:
+                messages = _get_state_value(state, "messages")
+                error_msg = (
+                    f"Expected input to call_model to have 'messages' key, but got {state}"
+                )
+
+            if messages is None:
+                raise ValueError(error_msg)
+
+            # Message validation with _validate_chat_history
+            _validate_chat_history(messages)
+            
+            # we're passing messages under `messages` key, as this is expected by the prompt
+            if isinstance(self.state_schema, type) and issubclass(self.state_schema, BaseModel):
+                state.messages = messages  # type: ignore
+            else:
+                state["messages"] = messages  # type: ignore
+
+            return state
+
+        # Define the function that calls the model
+        def call_model(
+            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+        ) -> StateSchema:
+            if self.is_async_dynamic_model:
+                msg = (
+                    "Async model callable provided but agent invoked synchronously. "
+                    "Use agent.ainvoke() or agent.astream(), or "
+                    "provide a sync model callable."
+                )
+                raise RuntimeError(msg)
+
+            model_input = _get_model_input_state(state)
+
+            # Model resolution
+            if self.is_dynamic_model:
+                # Resolve dynamic model at runtime and apply prompt
+                dynamic_model = self._resolve_model(state, runtime)
+                response = cast(AIMessage, dynamic_model.invoke(model_input, config))  # type: ignore[arg-type]
+            else:
+                response = cast(AIMessage, self.static_model.invoke(model_input, config))  # type: ignore[union-attr]
+
+            # add agent name to the AIMessage
+            response.name = self.name
+
+            # Remaining steps management
+            if _are_more_steps_needed(state, response):
+                return {
+                    "messages": [
+                        AIMessage(
+                            id=response.id,
+                            content="Sorry, need more steps to process this request.",
+                        )
+                    ]
+                }
+            # We return a list, because this will get added to the existing list
+            return {"messages": [response]}
+
+        async def acall_model(
+            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+        ) -> StateSchema:
+            model_input = _get_model_input_state(state)
+
+            # Model resolution
+            if self.is_dynamic_model:
+                # Resolve dynamic model at runtime and apply prompt
+                # (supports both sync and async)
+                dynamic_model = await self._aresolve_model(state, runtime)
+                response = cast(AIMessage, await dynamic_model.ainvoke(model_input, config))  # type: ignore[arg-type]
+            else:
+                response = cast(AIMessage, await self.static_model.ainvoke(model_input, config))  # type: ignore[union-attr]
+
+            # add agent name to the AIMessage
+            response.name = self.name
+            
+            # Remaining steps management
+            if _are_more_steps_needed(state, response):
+                return {
+                    "messages": [
+                        AIMessage(
+                            id=response.id,
+                            content="Sorry, need more steps to process this request.",
+                        )
+                    ]
+                }
+            # We return a list, because this will get added to the existing list
+            return {"messages": [response]}
+
+        # Proper input schema handling
+        input_schema: StateSchemaType
+        if self.pre_model_hook is not None:
+            # Dynamically create a schema that inherits from state_schema and adds 'llm_input_messages'
+            if isinstance(self.state_schema, type) and issubclass(self.state_schema, BaseModel):
+                # For Pydantic schemas
+                from pydantic import create_model
+
+                input_schema = create_model(
+                    "CallModelInputSchema",
+                    llm_input_messages=(list[AnyMessage], ...),
+                    __base__=self.state_schema,
+                )
+            else:
+                # For TypedDict schemas
+                class CallModelInputSchema(self.state_schema):  # type: ignore
+                    llm_input_messages: list[AnyMessage]
+
+                input_schema = CallModelInputSchema
+        else:
+            input_schema = self.state_schema
+
+        return RunnableCallable(call_model, acall_model, input_schema=input_schema)
         
     def _create_structured_response_node(self) -> Optional[RunnableCallable]:
         """Create structured output generation node if needed."""
@@ -1160,6 +1294,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
