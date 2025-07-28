@@ -3,10 +3,12 @@
 **Context engineering** is the [art and science of filling the context window with just the right information](https://x.com/karpathy/status/1937902205765607626) so that an AI application can accomplish a task. Context can be characterized along two key dimensions:
 
 **By mutability:**
+
 - **Static context**: Immutable data that doesn't change during execution (e.g., user metadata, database connections, tools)
 - **Dynamic context**: Mutable data that evolves as the application runs (e.g., conversation history, intermediate results, tool call observations)
 
 **By lifetime:**
+
 - **Runtime context**: Data scoped to a single run or invocation
 - **Cross-conversation context**: Data that persists across multiple conversations or sessions
 
