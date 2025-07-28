@@ -20,7 +20,7 @@ LangGraph provides **three** primary ways to manage context:
 
 Runtime context is for immutable data like user metadata, tools, db connections, etc. Use this when you have values that don't change mid-run.
 
-!!! version-added "New in LangGraph v0.6: `Runtime.context` replaces config['configurable']"
+!!! version-added "New in LangGraph v0.6: `Runtime.context` replaces `config['configurable']`"
 
     The `Runtime` object is recommended to access static context and runtime-specific information like the store and stream writer.
 
@@ -32,7 +32,7 @@ Runtime context is for immutable data like user metadata, tools, db connections,
     * The "context window", which is the maximum number of tokens that can be passed to the LLM.
 
     You likely want to use the local context to optimize the llm's context window. For example, you
-    could use a user_id to fetch a user's name and information from a database to populate the context window with relevant memories.
+    could use a user id to fetch a user's name and information from a database to populate the context window with relevant memories.
 
 Specify static context via the `context` argument to `invoke` / `stream`, which is reserved for this purpose:
 
