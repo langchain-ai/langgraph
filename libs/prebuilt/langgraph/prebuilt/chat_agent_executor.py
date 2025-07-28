@@ -673,8 +673,28 @@ class _AgentBuilder:
         
     def _create_tools_router(self) -> Optional[Callable]:
         """Create post-tool-call routing based on return_direct."""
-        # Implementation will be added in next task
-        pass
+        if not self.should_return_direct:
+            # No return_direct tools, so no routing needed
+            return None
+
+        def route_tool_responses(state: StateSchema) -> str:
+            # Check for return_direct tools in reversed message order
+            for m in reversed(_get_state_value(state, "messages")):
+                if not isinstance(m, ToolMessage):
+                    break
+                if m.name in self.should_return_direct:
+                    return END
+
+            # Handle parallel tool call scenarios with return_direct
+            # the tool w/ `return_direct` was executed in a different `Send`
+            if isinstance(m, AIMessage) and m.tool_calls:
+                if any(call["name"] in self.should_return_direct for call in m.tool_calls):
+                    return END
+
+            # Route to entrypoint accordingly
+            return self.entrypoint
+
+        return route_tool_responses
         
     def _setup_hooks(self, workflow: StateGraph) -> str:
         """Add pre/post model hook nodes and return entrypoint."""
@@ -1391,6 +1411,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
