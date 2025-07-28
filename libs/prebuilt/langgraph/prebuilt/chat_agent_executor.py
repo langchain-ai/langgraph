@@ -566,8 +566,71 @@ class _AgentBuilder:
         
     def _create_structured_response_node(self) -> Optional[RunnableCallable]:
         """Create structured output generation node if needed."""
-        # Implementation will be added in next task
-        pass
+        if self.response_format is None:
+            return None
+
+        def generate_structured_response(
+            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+        ) -> StateSchema:
+            if self.is_async_dynamic_model:
+                msg = (
+                    "Async model callable provided but agent invoked synchronously. "
+                    "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
+                )
+                raise RuntimeError(msg)
+
+            messages = _get_state_value(state, "messages")
+            structured_response_schema = self.response_format
+            
+            # System prompt injection for tuple response_format
+            if isinstance(self.response_format, tuple):
+                system_prompt, structured_response_schema = self.response_format
+                messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+            # Model resolution
+            resolved_model = self._resolve_model(state, runtime)
+            
+            # Structured output generation using with_structured_output
+            model_with_structured_output = _get_model(
+                resolved_model
+            ).with_structured_output(
+                cast(StructuredResponseSchema, structured_response_schema)
+            )
+            response = model_with_structured_output.invoke(messages, config)
+            
+            # Return structured_response in state
+            return {"structured_response": response}
+
+        async def agenerate_structured_response(
+            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+        ) -> StateSchema:
+            messages = _get_state_value(state, "messages")
+            structured_response_schema = self.response_format
+            
+            # System prompt injection for tuple response_format
+            if isinstance(self.response_format, tuple):
+                system_prompt, structured_response_schema = self.response_format
+                messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+            # Model resolution
+            resolved_model = await self._aresolve_model(state, runtime)
+            
+            # Structured output generation using with_structured_output
+            model_with_structured_output = _get_model(
+                resolved_model
+            ).with_structured_output(
+                cast(StructuredResponseSchema, structured_response_schema)
+            )
+            response = await model_with_structured_output.ainvoke(messages, config)
+            
+            # Return structured_response in state
+            return {"structured_response": response}
+
+        return RunnableCallable(
+            generate_structured_response, 
+            agenerate_structured_response, 
+            input_schema=self.state_schema
+        )
         
     def _create_model_router(self) -> Callable:
         """Create execution flow routing after model call."""
@@ -1294,6 +1357,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
