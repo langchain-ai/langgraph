@@ -507,7 +507,7 @@ graph = builder.compile(checkpointer=checkpointer)
 :::js
 
 ```typescript
-import { StateGraph, START, InMemorySaver } from "@langchain/langgraph";
+import { StateGraph, START, MemorySaver } from "@langchain/langgraph";
 import { z } from "zod";
 
 const State = z.object({ foo: z.string() });
@@ -523,7 +523,7 @@ const builder = new StateGraph(State)
   .addNode("node_1", subgraph)
   .addEdge(START, "node_1");
 
-const checkpointer = new InMemorySaver();
+const checkpointer = new MemorySaver();
 const graph = builder.compile({ checkpointer });
 ```
 
