@@ -339,8 +339,10 @@ Now that you can control who accesses your bot, you might want to:
 1. Continue the tutorial by going to [Make conversations private](resource_auth.md) to learn about resource authorization.
 2. Read more about [authentication concepts](../../concepts/auth.md).
 
-:::python 3. Check out the [API reference](../../cloud/reference/sdk/python_sdk_ref.md) for more authentication details.
+:::python
+3. Check out the [API reference](../../cloud/reference/sdk/python_sdk_ref.md) for more authentication details.
 :::
 
-:::js 3. Check out the [API reference](../../cloud/reference/sdk/js_sdk_ref.md) for more authentication details.
+:::js
+3. Check out the [API reference](../../cloud/reference/sdk/js_sdk_ref.md) for more authentication details.
 :::

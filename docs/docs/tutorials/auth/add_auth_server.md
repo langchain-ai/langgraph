@@ -485,8 +485,10 @@ Now that you have production authentication, consider:
 1. Building a web UI with your preferred framework (see the [Custom Auth](https://github.com/langchain-ai/custom-auth) template for an example)
 2. Learn more about the other aspects of authentication and authorization in the [conceptual guide on authentication](../../concepts/auth.md).
 
-:::python 3. Customize your handlers and setup further after reading the [reference docs](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth).
+:::python
+3. Customize your handlers and setup further after reading the [reference docs](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth).
 :::
 
-:::js 3. Customize your handlers and setup further after reading the [reference docs](../../cloud/reference/sdk/typescript_sdk_ref.md#auth).
+:::js
+3. Customize your handlers and setup further after reading the [reference docs](../../cloud/reference/sdk/typescript_sdk_ref.md#auth).
 :::

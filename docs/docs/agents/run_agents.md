@@ -19,13 +19,13 @@ Agents can be executed in two primary modes:
 
 - **Synchronous** using `.invoke()` or `.stream()`
 - **Asynchronous** using `await .ainvoke()` or `async for` with `.astream()`
-  :::
+:::
 
 :::js
 
 - **Synchronous** using `.invoke()` or `.stream()`
 - **Asynchronous** using `await .invoke()` or `for await` with `.stream()`
-  :::
+:::
 
 :::python
 === "Sync invocation"
@@ -41,13 +41,13 @@ Agents can be executed in two primary modes:
 
 === "Async invocation"
 
-````python
-from langgraph.prebuilt import create_react_agent
+  ```python
+  from langgraph.prebuilt import create_react_agent
 
-    agent = create_react_agent(...)
-    # highlight-next-line
-    response = await agent.ainvoke({"messages": [{"role": "user", "content": "what is the weather in sf"}]})
-    ```
+  agent = create_react_agent(...)
+  # highlight-next-line
+  response = await agent.ainvoke({"messages": [{"role": "user", "content": "what is the weather in sf"}]})
+  ```
 
 :::
 
@@ -63,8 +63,7 @@ const response = await agent.invoke({
         { "role": "user", "content": "what is the weather in sf" }
     ]
 });
-````
-
+```
 :::
 
 ## Inputs and outputs
@@ -320,4 +319,4 @@ To control agent execution and avoid infinite loops, set a recursion limit. This
 ## Additional Resources
 
 - [Async programming in LangChain](https://python.langchain.com/docs/concepts/async)
-  :::
+:::
