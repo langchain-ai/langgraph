@@ -8,7 +8,7 @@ Context includes *any* data outside the message list that can shape behavior. Th
 - Internal state updated during a multi-step reasoning process.
 - Persistent memory or facts from previous interactions.
 
-LangGraph provides **three** primary ways to supply context:
+LangGraph provides **three** primary ways to manage context:
 
 | Type                                                                         | Description                                   | Mutable? | Lifetime                |
 |------------------------------------------------------------------------------|-----------------------------------------------|----------|-------------------------|
@@ -20,12 +20,26 @@ LangGraph provides **three** primary ways to supply context:
 
 !!! note "`config['configurable']` -> `runtime.context`"
 
-    In LangGraph < v1.0, static runtime context was passed via the `config['configurable']` key, paired with a `config_schema` argument
+    In LangGraph < v0.6, static runtime context was passed via the `config['configurable']` key, paired with a `config_schema` argument
     to `StateGraph` or `Pregel`. This is now deprecated and will be removed in v2.0.
 
-    As of LangGraph v1.0, the Runtime object is recommended to access static context and runtime-specific information like the store and stream writer.
+    As of LangGraph v0.6, the `Runtime` object is recommended to access static context and runtime-specific information like the store and stream writer.
 
-Runtime context is for immutable data like user metadata or API keys. Use this when you have values that don't change mid-run.
+!!! warning "Context is an overloaded term"
+
+    In the world of LLMs, "context" is quite the overloaded term.
+
+    There are two main types of context that you will encounter:
+
+    1. Local context: data and dependencies your code needs to run. This might be helpful for tools, node invocations,
+    conditional branching, etc.
+    2. LLM context: often talked about regarding the "context window" of an LLM. This is the data the LLM sees when generating a response.
+    The field of "context engineering" refers to the practice of optimizing the content of the context window to improve the LLM's performance.
+
+    The context discussed in this section is the local context. As a developer, you might use the local context to eventually optimize
+    the LLM context (ex: use a user_id to fetch a user's name and information from a database to populate the context window with relevant memories).
+
+Runtime context is for immutable data like user metadata, tools, db connections, etc. Use this when you have values that don't change mid-run.
 
 Specify static context via the `context` argument to `invoke` / `stream`, which is reserved for this purpose:
 
