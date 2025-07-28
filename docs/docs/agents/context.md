@@ -26,9 +26,8 @@ Runtime context is for immutable data like user metadata, tools, db connections,
 
 !!! note "'Context' is an overloaded term"
 
-    Runtime context refers to local context: data and dependencies your code needs to run.
+    Runtime context refers to local context: data and dependencies your code needs to run. It does not refer to:
 
-    It does not refer to:
     * The LLM context, which is the data passed into the LLM's prompt.
     * The "context window", which is the maximum number of tokens that can be passed to the LLM.
 
