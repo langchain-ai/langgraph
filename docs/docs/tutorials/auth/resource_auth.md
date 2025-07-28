@@ -588,8 +588,10 @@ Now that you can control access to resources, you might want to:
 1. Move on to [Connect an authentication provider](add_auth_server.md) to add real user accounts.
 2. Read more about [authorization patterns](../../concepts/auth.md#authorization).
 
-:::python 3. Check out the [API reference](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) for details about the interfaces and methods used in this tutorial.
+:::python 
+3. Check out the [API reference](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) for details about the interfaces and methods used in this tutorial.
 :::
 
-:::js 3. Check out the [API reference](../../cloud/reference/sdk/js_sdk_ref.md#langgraph_sdk.auth.Auth) for details about the interfaces and methods used in this tutorial.
+:::js 
+3. Check out the [API reference](../../cloud/reference/sdk/js_sdk_ref.md#langgraph_sdk.auth.Auth) for details about the interfaces and methods used in this tutorial.
 :::

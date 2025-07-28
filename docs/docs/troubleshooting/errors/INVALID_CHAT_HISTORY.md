@@ -17,7 +17,7 @@ There could be a few reasons you're seeing this error:
    and you invoked it with an input that is not None or a ToolMessage,
    e.g. `graph.invoke({'messages': [HumanMessage(...)]}, config)`.
    This interrupt could have been triggered in one of the following ways: - You manually set `interrupt_before = ['tools']` in `create_react_agent` - One of the tools raised an error that wasn't handled by the [ToolNode][langgraph.prebuilt.tool_node.ToolNode] (`"tools"`)
-   :::
+:::
 
 :::js
 
@@ -26,7 +26,7 @@ There could be a few reasons you're seeing this error:
    and you invoked it with an input that is not null or a ToolMessage,
    e.g. `graph.invoke({messages: [new HumanMessage(...)]}, config)`.
    This interrupt could have been triggered in one of the following ways: - You manually set `interruptBefore: ['tools']` in `createReactAgent` - One of the tools raised an error that wasn't handled by the [ToolNode](insert-ref) (`"tools"`)
-   :::
+:::
 
 ## Troubleshooting
 
@@ -35,7 +35,8 @@ To resolve this, you can do one of the following:
 1. Don't invoke the graph with a malformed list of messages
 2. In case of an interrupt (manual or due to an error) you can:
 
-:::python - provide ToolMessages that match existing tool calls and call `graph.invoke({'messages': [ToolMessage(...)]})`.
+:::python 
+- provide ToolMessages that match existing tool calls and call `graph.invoke({'messages': [ToolMessage(...)]})`.
 **NOTE**: this will append the messages to the history and run the graph from the START node. - manually update the state and resume the graph from the interrupt:
 
         1. get the list of most recent messages from the graph state with `graph.get_state(config)`
@@ -44,7 +45,8 @@ To resolve this, you can do one of the following:
 or add ToolMessages with tool_call_ids that match unanswered tool calls 3. call `graph.update_state(config, {'messages': ...})` with the modified list of messages 4. resume the graph, e.g. call `graph.invoke(None, config)`
 :::
 
-:::js - provide ToolMessages that match existing tool calls and call `graph.invoke({messages: [new ToolMessage(...)]})`.
+:::js 
+- provide ToolMessages that match existing tool calls and call `graph.invoke({messages: [new ToolMessage(...)]})`.
 **NOTE**: this will append the messages to the history and run the graph from the START node. - manually update the state and resume the graph from the interrupt:
 
         1. get the list of most recent messages from the graph state with `graph.getState(config)`
