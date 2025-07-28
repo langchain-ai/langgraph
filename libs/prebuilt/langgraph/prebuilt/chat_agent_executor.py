@@ -634,8 +634,42 @@ class _AgentBuilder:
         
     def _create_model_router(self) -> Callable:
         """Create execution flow routing after model call."""
-        # Implementation will be added in next task
-        pass
+        def should_continue(state: StateSchema) -> Union[str, list[Send]]:
+            messages = _get_state_value(state, "messages")
+            last_message = messages[-1]
+            
+            # If there is no function call, then we finish
+            if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+                # Route to post_model_hook/generate_structured_response/END
+                if self.post_model_hook is not None:
+                    return "post_model_hook"
+                elif self.response_format is not None:
+                    return "generate_structured_response"
+                else:
+                    return END
+            # Otherwise if there is, we continue
+            else:
+                if self.version == "v1":
+                    # Route to tools (v1)
+                    return "tools"
+                elif self.version == "v2":
+                    # Proper post_model_hook integration for v2
+                    if self.post_model_hook is not None:
+                        return "post_model_hook"
+                    # Send list for parallel execution (v2)
+                    return [
+                        Send(
+                            "tools",
+                            ToolCallWithContext(
+                                __type="tool_call_with_context",
+                                tool_call=tool_call,
+                                state=state,
+                            ),
+                        )
+                        for tool_call in last_message.tool_calls
+                    ]
+        
+        return should_continue
         
     def _create_tools_router(self) -> Optional[Callable]:
         """Create post-tool-call routing based on return_direct."""
@@ -1357,6 +1391,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
