@@ -1192,7 +1192,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.6.0a1"
+version = "0.6.0a2"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },
@@ -1364,7 +1364,7 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.10"
+version = "2.0.11"
 source = { editable = "../checkpoint-sqlite" }
 dependencies = [
     { name = "aiosqlite" },
@@ -1394,7 +1394,7 @@ dev = [
 
 [[package]]
 name = "langgraph-cli"
-version = "0.3.5"
+version = "0.3.6"
 source = { editable = "../cli" }
 dependencies = [
     { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -1433,7 +1433,7 @@ dev = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.5.2"
+version = "0.6.0a1"
 source = { editable = "../prebuilt" }
 dependencies = [
     { name = "langchain-core" },
