@@ -207,7 +207,7 @@ def get_database_schema():
         "nodes": {
             "Movie": {
                 "properties": ["id", "title", "released", "imdbRating"],
-                "description": "Movie nodes with unique ID, title, release date, and IMDB rating"
+                "description": "Movie nodes with unique ID, title, release date, and IMDB rating. `released` is a date property, e.g., 1995-05-05"
             },
             "Person": {
                 "properties": ["name"],
