@@ -248,6 +248,109 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
+class _AgentBuilder:
+    """Internal helper class for building ReAct-style agent graphs.
+    
+    This class encapsulates the complex logic of constructing a configurable
+    agent graph with proper model integration, tool binding, state management,
+    and routing logic.
+    """
+    
+    def __init__(
+        self,
+        model: Union[
+            str,
+            LanguageModelLike,
+            Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
+            Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
+        ],
+        tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
+        *,
+        prompt: Optional[Prompt] = None,
+        response_format: Optional[
+            Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
+        ] = None,
+        pre_model_hook: Optional[RunnableLike] = None,
+        post_model_hook: Optional[RunnableLike] = None,
+        state_schema: Optional[StateSchemaType] = None,
+        context_schema: Optional[Type[Any]] = None,
+        checkpointer: Optional[Checkpointer] = None,
+        store: Optional[BaseStore] = None,
+        interrupt_before: Optional[list[str]] = None,
+        interrupt_after: Optional[list[str]] = None,
+        debug: bool = False,
+        version: Literal["v1", "v2"] = "v2",
+        name: Optional[str] = None,
+    ) -> None:
+        """Initialize the AgentBuilder with all configuration parameters."""
+        # Store all parameters as instance variables
+        self.model = model
+        self.tools = tools
+        self.prompt = prompt
+        self.response_format = response_format
+        self.pre_model_hook = pre_model_hook
+        self.post_model_hook = post_model_hook
+        self.state_schema = state_schema
+        self.context_schema = context_schema
+        self.checkpointer = checkpointer
+        self.store = store
+        self.interrupt_before = interrupt_before
+        self.interrupt_after = interrupt_after
+        self.debug = debug
+        self.version = version
+        self.name = name
+        
+        # These will be set during initialization
+        self.tool_node = None
+        self.tool_classes = []
+        self.llm_builtin_tools = []
+        self.is_dynamic_model = False
+        self.is_async_dynamic_model = False
+        self.should_return_direct = set()
+        self.static_model = None
+        self.tool_calling_enabled = False
+        
+    def _validate_state_schema(self) -> None:
+        """Validate custom state schema requirements."""
+        # Implementation will be added in next task
+        pass
+        
+    def _setup_model_and_tools(self) -> None:
+        """Handle model resolution and tool binding."""
+        # Implementation will be added in next task
+        pass
+        
+    def _create_model_node(self) -> RunnableCallable:
+        """Create the core LLM interaction node."""
+        # Implementation will be added in next task
+        pass
+        
+    def _create_structured_response_node(self) -> Optional[RunnableCallable]:
+        """Create structured output generation node if needed."""
+        # Implementation will be added in next task
+        pass
+        
+    def _create_model_router(self) -> Callable:
+        """Create execution flow routing after model call."""
+        # Implementation will be added in next task
+        pass
+        
+    def _create_tools_router(self) -> Optional[Callable]:
+        """Create post-tool-call routing based on return_direct."""
+        # Implementation will be added in next task
+        pass
+        
+    def _setup_hooks(self, workflow: StateGraph) -> str:
+        """Add pre/post model hook nodes and return entrypoint."""
+        # Implementation will be added in next task
+        pass
+        
+    def build(self) -> CompiledStateGraph:
+        """Assemble the complete graph based on all configuration options."""
+        # Implementation will be added in next task
+        pass
+
+
 def create_react_agent(
     model: Union[
         str,
@@ -952,3 +1055,4 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
