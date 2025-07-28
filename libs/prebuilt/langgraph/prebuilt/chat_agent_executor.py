@@ -281,8 +281,44 @@ class _AgentBuilder:
         debug: bool = False,
         version: Literal["v1", "v2"] = "v2",
         name: Optional[str] = None,
+        **deprecated_kwargs: Any,
     ) -> None:
         """Initialize the AgentBuilder with all configuration parameters."""
+        # Handle deprecated config_schema parameter with warning
+        if (
+            config_schema := deprecated_kwargs.pop("config_schema", MISSING)
+        ) is not MISSING:
+            warn(
+                "`config_schema` is no longer supported. Use `context_schema` instead.",
+                category=LangGraphDeprecatedSinceV10,
+            )
+            if context_schema is None:
+                context_schema = config_schema
+
+        # Validate version parameter
+        if version not in ("v1", "v2"):
+            raise ValueError(
+                f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
+            )
+
+        # Validate state_schema requirements
+        if state_schema is not None:
+            required_keys = {"messages", "remaining_steps"}
+            if response_format is not None:
+                required_keys.add("structured_response")
+
+            schema_keys = set(get_type_hints(state_schema))
+            if missing_keys := required_keys - set(schema_keys):
+                raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
+
+        # Set default state_schema based on response_format
+        if state_schema is None:
+            state_schema = (
+                AgentStateWithStructuredResponse
+                if response_format is not None
+                else AgentState
+            )
+
         # Store all parameters as instance variables
         self.model = model
         self.tools = tools
@@ -299,16 +335,29 @@ class _AgentBuilder:
         self.debug = debug
         self.version = version
         self.name = name
-        
-        # These will be set during initialization
-        self.tool_node = None
-        self.tool_classes = []
-        self.llm_builtin_tools = []
-        self.is_dynamic_model = False
-        self.is_async_dynamic_model = False
-        self.should_return_direct = set()
+
+        # Process tools (ToolNode vs sequence)
+        self.llm_builtin_tools: list[dict] = []
+        if isinstance(tools, ToolNode):
+            self.tool_classes = list(tools.tools_by_name.values())
+            self.tool_node = tools
+        else:
+            self.llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
+            self.tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
+            self.tool_classes = list(self.tool_node.tools_by_name.values())
+
+        # Determine model characteristics
+        self.is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
+        self.is_async_dynamic_model = self.is_dynamic_model and inspect.iscoroutinefunction(model)
+
+        # Identify tools with return_direct behavior
+        self.should_return_direct = {t.name for t in self.tool_classes if t.return_direct}
+
+        # Set tool calling enabled flag
+        self.tool_calling_enabled = len(self.tool_classes) > 0
+
+        # Initialize static_model (will be set in _setup_model_and_tools)
         self.static_model = None
-        self.tool_calling_enabled = False
         
     def _validate_state_schema(self) -> None:
         """Validate custom state schema requirements."""
@@ -1055,4 +1104,5 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
