@@ -130,9 +130,7 @@ agent = create_react_agent(
         """Returns the direction the user is facing."""
         return "North"
 
-
     model = init_chat_model("anthropic:claude-sonnet-4-20250514")
-
 
     # highlight-next-line
     def configure_model(state: AgentState, runtime: Runtime[CustomContext]):
