@@ -89,111 +89,113 @@ except Exception as e:
     print("Please check your Neo4j credentials and ensure the database is running.")
     exit(1)
 
-# Create database constraints for better performance
-print("Creating database constraints...")
-constraints = [
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (m:Movie) REQUIRE m.id IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (u:User) REQUIRE u.id IS UNIQUE", 
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (p:Person) REQUIRE p.name IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (g:Genre) REQUIRE g.name IS UNIQUE"
-]
+load_fixtures = False
+if load_fixtures:
+    # Create database constraints for better performance
+    print("Creating database constraints...")
+    constraints = [
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (m:Movie) REQUIRE m.id IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (u:User) REQUIRE u.id IS UNIQUE", 
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (p:Person) REQUIRE p.name IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (g:Genre) REQUIRE g.name IS UNIQUE"
+    ]
 
-for constraint in constraints:
+    for constraint in constraints:
+        try:
+            graph.query(constraint)
+        except Exception as e:
+            print(f"Warning: Could not create constraint: {e}")
+
+        # Data ingestion from tomasonjo/llm-movieagent dataset
+        print("Loading movie dataset...")
+
+    # Import movie information from CSV
+    movies_query = """
+    LOAD CSV WITH HEADERS FROM 
+    'https://raw.githubusercontent.com/tomasonjo/blog-datasets/main/movies/movies.csv'
+    AS row
+    CALL (row) {
+        WITH row
+        MERGE (m:Movie {id:row.movieId})
+        SET m.released = date(row.released),
+            m.title = row.title,
+            m.imdbRating = toFloat(row.imdbRating)
+        FOREACH (director in split(row.director, '|') | 
+            MERGE (p:Person {name:trim(director)})
+            MERGE (p)-[:DIRECTED]->(m))
+        FOREACH (actor in split(row.actors, '|') | 
+            MERGE (p:Person {name:trim(actor)})
+            MERGE (p)-[:ACTED_IN]->(m))
+        FOREACH (genre in split(row.genres, '|') | 
+            MERGE (g:Genre {name:trim(genre)})
+            MERGE (m)-[:IN_GENRE]->(g))
+    } IN TRANSACTIONS
+    """
+
     try:
-        graph.query(constraint)
+        graph.query(movies_query)
+        print("Movie data loaded successfully!")
     except Exception as e:
-        print(f"Warning: Could not create constraint: {e}")
+        print(f"Movie data loading failed: {e}")
 
-# Data ingestion from tomasonjo/llm-movieagent dataset
-print("Loading movie dataset...")
+    # Import rating information  
+    print("Loading ratings data...")
+    rating_query = """
+    LOAD CSV WITH HEADERS FROM 
+    'https://raw.githubusercontent.com/tomasonjo/blog-datasets/main/movies/ratings.csv'
+    AS row
+    CALL (row) {
+        WITH row
+        MATCH (m:Movie {id:row.movieId})
+        MERGE (u:User {id:row.userId})
+        MERGE (u)-[r:RATED]->(m)
+        SET r.rating = toFloat(row.rating),
+            r.timestamp = row.timestamp
+    } IN TRANSACTIONS OF 10000 ROWS
+    """
 
-# Import movie information from CSV
-movies_query = """
-LOAD CSV WITH HEADERS FROM 
-'https://raw.githubusercontent.com/tomasonjo/blog-datasets/main/movies/movies.csv'
-AS row
-CALL (row) {
-    WITH row
-    MERGE (m:Movie {id:row.movieId})
-    SET m.released = date(row.released),
-        m.title = row.title,
-        m.imdbRating = toFloat(row.imdbRating)
-    FOREACH (director in split(row.director, '|') | 
-        MERGE (p:Person {name:trim(director)})
-        MERGE (p)-[:DIRECTED]->(m))
-    FOREACH (actor in split(row.actors, '|') | 
-        MERGE (p:Person {name:trim(actor)})
-        MERGE (p)-[:ACTED_IN]->(m))
-    FOREACH (genre in split(row.genres, '|') | 
-        MERGE (g:Genre {name:trim(genre)})
-        MERGE (m)-[:IN_GENRE]->(g))
-} IN TRANSACTIONS
-"""
-
-try:
-    graph.query(movies_query)
-    print("Movie data loaded successfully!")
-except Exception as e:
-    print(f"Movie data loading failed: {e}")
-
-# Import rating information  
-print("Loading ratings data...")
-rating_query = """
-LOAD CSV WITH HEADERS FROM 
-'https://raw.githubusercontent.com/tomasonjo/blog-datasets/main/movies/ratings.csv'
-AS row
-CALL (row) {
-    WITH row
-    MATCH (m:Movie {id:row.movieId})
-    MERGE (u:User {id:row.userId})
-    MERGE (u)-[r:RATED]->(m)
-    SET r.rating = toFloat(row.rating),
-        r.timestamp = row.timestamp
-} IN TRANSACTIONS OF 10000 ROWS
-"""
-
-try:
-    graph.query(rating_query)
-    print("Ratings data loaded successfully!")
-except Exception as e:
-    print(f"Ratings data loading failed: {e}")
-
-# Create full-text indices for searching
-print("Creating full-text search indices...")
-
-# Drop existing indices if they exist to ensure clean creation
-try:
-    graph.query("DROP INDEX movie IF EXISTS")
-    graph.query("DROP INDEX person IF EXISTS")
-except Exception as e:
-    print(f"Note: Could not drop existing indices: {e}")
-
-# Create new indices
-indices = [
-    ("CREATE FULLTEXT INDEX movie FOR (m:Movie) ON EACH [m.title]", "movie"),
-    ("CREATE FULLTEXT INDEX person FOR (p:Person) ON EACH [p.name]", "person")
-]
-
-for index_query, index_name in indices:
     try:
-        graph.query(index_query)
-        print(f"Created full-text index: {index_name}")
+        graph.query(rating_query)
+        print("Ratings data loaded successfully!")
     except Exception as e:
-        print(f"Warning: Could not create {index_name} index: {e}")
+        print(f"Ratings data loading failed: {e}")
 
-# Verify indices exist
-print("Verifying full-text indices...")
-try:
-    result = graph.query("CALL db.indexes() YIELD name, type WHERE type = 'FULLTEXT' RETURN name")
-    available_indices = [r['name'] for r in result]
-    print(f"Available full-text indices: {available_indices}")
-    
-    if 'movie' not in available_indices or 'person' not in available_indices:
-        print("Warning: Not all required indices are available. Fallback search will be used.")
-except Exception as e:
-    print(f"Could not verify indices: {e}")
+    # Create full-text indices for searching
+    print("Creating full-text search indices...")
 
-print("Database setup complete!")
+    # Drop existing indices if they exist to ensure clean creation
+    try:
+        graph.query("DROP INDEX movie IF EXISTS")
+        graph.query("DROP INDEX person IF EXISTS")
+    except Exception as e:
+        print(f"Note: Could not drop existing indices: {e}")
+
+    # Create new indices
+    indices = [
+        ("CREATE FULLTEXT INDEX movie FOR (m:Movie) ON EACH [m.title]", "movie"),
+        ("CREATE FULLTEXT INDEX person FOR (p:Person) ON EACH [p.name]", "person")
+    ]
+
+    for index_query, index_name in indices:
+        try:
+            graph.query(index_query)
+            print(f"Created full-text index: {index_name}")
+        except Exception as e:
+            print(f"Warning: Could not create {index_name} index: {e}")
+
+    # Verify indices exist
+    print("Verifying full-text indices...")
+    try:
+        result = graph.query("CALL db.indexes() YIELD name, type WHERE type = 'FULLTEXT' RETURN name")
+        available_indices = [r['name'] for r in result]
+        print(f"Available full-text indices: {available_indices}")
+        
+        if 'movie' not in available_indices or 'person' not in available_indices:
+            print("Warning: Not all required indices are available. Fallback search will be used.")
+    except Exception as e:
+        print(f"Could not verify indices: {e}")
+
+    print("Database setup complete!")
 
 # =============================================================================
 # Database Schema and Query Generation 
