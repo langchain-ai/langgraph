@@ -797,3 +797,48 @@ print("Self-GraphRAG workflow compiled successfully!")
 
 print("\n=== Running Self-GraphRAG Tests ===")
 
+# Test cases from selfgraph_rag.evals.md
+test_queries = [
+    # 1. Empty/No Results
+    {"category": "Empty/No Results", "query": "What movies has Zxywick Johnson been in?"},
+    {"category": "Empty/No Results", "query": "Tell me about the movie 'Nonexistent Film 2024'"},
+    
+    # 2. Ambiguous/Vague Queries
+    {"category": "Ambiguous/Vague", "query": "Movies with Johnson"},
+    {"category": "Ambiguous/Vague", "query": "Batman movies"},
+
+    # 3. Malformed Natural Language
+    {"category": "Malformed Language", "query": "Movies Tom Hanks in been has what?"},
+    
+    # 6. Case Sensitivity & Spelling
+    {"category": "Case/Spelling", "query": "TOM HANKS movies"},
+    {"category": "Case/Spelling", "query": "Forrest Gummp"},
+    
+    # 7. Injection Attempts
+    {"category": "Injection Attempt", "query": "Tom Hanks'; DROP TABLE Movie; --"},
+    
+    # 9. Meta/System Queries
+    {"category": "Meta Query", "query": "How does this database work?"},
+    
+    # A more complex query from the list
+    {"category": "Complex Query", "query": "I want to know about movies that have Tom Hanks or maybe someone like him in action movies from the 90s but not too violent"},
+]
+
+for i, test in enumerate(test_queries):
+    print(f"\n\n{'='*20} Test Case {i+1}: {test['category']} {'='*20}")
+    print(f"Query: \"{test['query']}\"")
+    print(f"{'='* (42 + len(test['category']))}\n")
+    
+    # The initial state for the graph, only question is needed.
+    inputs = {"question": test['query']}
+    
+    try:
+        final_state = app.invoke(inputs)
+        print("\n--- Final Response ---")
+        pprint(final_state.get('generation', 'No generation found.'))
+        print("----------------------\n")
+    except Exception as e:
+        print(f"\n[ERROR] Test failed with exception: {e}")
+
+print("\n=== All tests completed! ===")
+
