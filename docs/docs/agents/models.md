@@ -92,7 +92,6 @@ def select_model(state, runtime: Runtime[CustomContext]) -> BaseChatModel:
    # highlight-next-line
    return model.bind_tools(tools_to_use)
 
-# Create agent with dynamic model selection
 agent = create_react_agent(
    # highlight-next-line
    select_model, 
