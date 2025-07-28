@@ -145,7 +145,7 @@ To resume execution, use the [`Command`][langgraph.types.Command] primitive, whi
 graph.invoke(Command(resume={"age": "25"}), thread_config)
 ```
 
-### Multiple interrupts
+## Resuming Multiple interrupts
 
 When nodes with interrupt conditions are run in parallel, it's possible to have multiple interrupts in the task queue.
 For example, the following graph has two nodes run in parallel that require human input:
@@ -156,87 +156,57 @@ For example, the following graph has two nodes run in parallel that require huma
 
 Once your graph has been interrupted and is stalled, you can resume all the interrupts at once with `Command.resume`, passing a dictionary mapping of interrupt ids to resume values.
 
+
 ```python
-# Run the graph, resulting in two interrupts
+from typing import TypedDict
+import uuid
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.constants import START
+from langgraph.graph import StateGraph
+from langgraph.types import interrupt, Command
+
+
+class State(TypedDict):
+    text_1: str
+    text_2: str
+
+
+def human_node_1(state: State):
+    value = interrupt({"text_to_revise": state["text_1"]})
+    return {"text_1": value}
+
+
+def human_node_2(state: State):
+    value = interrupt({"text_to_revise": state["text_2"]})
+    return {"text_2": value}
+
+
+graph_builder = StateGraph(State)
+graph_builder.add_node("human_node_1", human_node_1)
+graph_builder.add_node("human_node_2", human_node_2)
+
+# Add both nodes in parallel from START
+graph_builder.add_edge(START, "human_node_1")
+graph_builder.add_edge(START, "human_node_2")
+
+checkpointer = InMemorySaver()
+graph = graph_builder.compile(checkpointer=checkpointer)
+
+thread_id = str(uuid.uuid4())
+config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 result = graph.invoke(
-    {
-        'text_1': 'original text 1',
-        'text_2': 'original text 2'
-    },
-    config=thread_config
+    {"text_1": "original text 1", "text_2": "original text 2"}, config=config
 )
 
-print(result["__interrupt__"])
-"""
-[
-    Interrupt(value={'text_to_revise': 'original text 1'}, id='bba46aa8d060d6e1edbc6cd913a96494'),
-    Interrupt(value={'text_to_revise': 'original text 2'}, id='22632249d75d67e0e718c1d18596c78a')
-]
-"""
-
-# Create a mapping of interrupt ids to corresponding resume values
+# Resume with mapping of interrupt IDs to values
 resume_map = {
     i.id: f"edited text for {i.value['text_to_revise']}"
     for i in result["__interrupt__"]
 }
-graph.invoke(Command(resume=resume_map), config=thread_config)
+print(graph.invoke(Command(resume=resume_map), config=config))
+# > {'text_1': 'edited text for original text 1', 'text_2': 'edited text for original text 2'}
 ```
-
-!!! example "Extended example: resume multiple interrupts"
-
-    ```python
-    from typing import TypedDict
-    import uuid
-    from langchain_core.runnables import RunnableConfig
-    from langgraph.checkpoint.memory import InMemorySaver
-    from langgraph.constants import START
-    from langgraph.graph import StateGraph
-    from langgraph.types import interrupt, Command
-
-
-    class State(TypedDict):
-        text_1: str
-        text_2: str
-
-
-    def human_node_1(state: State):
-        value = interrupt({"text_to_revise": state["text_1"]})
-        return {"text_1": value}
-
-
-    def human_node_2(state: State):
-        value = interrupt({"text_to_revise": state["text_2"]})
-        return {"text_2": value}
-
-
-    # Build the graph
-    graph_builder = StateGraph(State)
-    graph_builder.add_node("human_node_1", human_node_1)
-    graph_builder.add_node("human_node_2", human_node_2)
-
-    # Add both nodes in parallel from START
-    graph_builder.add_edge(START, "human_node_1")
-    graph_builder.add_edge(START, "human_node_2")
-
-    checkpointer = InMemorySaver()
-    graph = graph_builder.compile(checkpointer=checkpointer)
-
-    # Pass a thread ID to the graph to run it
-    thread_id = str(uuid.uuid4())
-    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
-
-    # Run the graph until both interrupts are hit
-    result = graph.invoke(
-        {"text_1": "original text 1", "text_2": "original text 2"}, config=config
-    )
-
-    interrupts = result["__interrupt__"]
-    resume_map = {i.id: f"edited text for {i.value['text_to_revise']}" for i in interrupts}
-
-    # Resume with mapping of interrupt IDs to values
-    print(graph.invoke(Command(resume=resume_map), config=config))
-    # > {'text_1': 'edited text for original text 1', 'text_2': 'edited text for original text 2'}
-    ```
 
 ## Common patterns
 
@@ -1105,7 +1075,7 @@ def node_in_parent_graph(state: State):
     {'parent_node': {'state_counter': 1}}
     ```
 
-### Using multiple interrupts
+### Using multiple interrupts in a single node
 
 Using multiple interrupts within a **single** node can be helpful for patterns like [validating human input](#validate-human-input). However, using multiple interrupts in the same node can lead to unexpected behavior if not handled carefully.
 
