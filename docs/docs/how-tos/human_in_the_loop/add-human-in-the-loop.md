@@ -182,7 +182,7 @@ resume_map = {
 graph.invoke(Command(resume=resume_map), config=thread_config)
 ```
 
-!!! example "Extended example: resume multiple interrupts"
+??? example "Extended example: resume multiple interrupts"
 
     ```python
     from typing import TypedDict
