@@ -11,10 +11,12 @@ To use breakpoints, you will need to:
 2. **Set breakpoints** to specify where execution should pause.
 3. **Run the graph** with a [**thread ID**](../../concepts/persistence.md#threads) to pause execution at the breakpoint.
 
-:::python 4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` passing a `None` as the argument for the inputs.
+:::python 
+4. **Resume execution** using `invoke`/`ainvoke`/`stream`/`astream` passing a `None` as the argument for the inputs.
 :::
 
-:::js 4. **Resume execution** using `invoke`/`stream` passing `null` as the argument for the inputs.
+:::js 
+4. **Resume execution** using `invoke`/`stream` passing `null` as the argument for the inputs.
 :::
 
 !!! tip

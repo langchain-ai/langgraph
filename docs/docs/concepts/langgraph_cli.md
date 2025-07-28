@@ -7,53 +7,55 @@ search:
 
 **LangGraph CLI** is a multi-platform command-line tool for building and running the [LangGraph API server](./langgraph_server.md) locally. The resulting server includes all API endpoints for your graph's runs, threads, assistants, etc. as well as the other services required to run your agent, including a managed database for checkpointing and storage.
 
-::: python
+:::python
 
 ## Installation
 
 The LangGraph CLI can be installed via pip or [Homebrew](https://brew.sh/):
 
 === "pip"
-`bash
+
+    ```bash
     pip install langgraph-cli
-    `
+    ```
 
 === "Homebrew"
-`bash
+
+    ```bash
     brew install langgraph-cli
-    `
+    ```
 :::
 
-::: js
+:::js
 
 ## Installation
 
 The LangGraph.js CLI can be installed from the NPM registry:
 
 === "npx"
-`bash
+    ```bash
     npx @langchain/langgraph-cli
-    `
+    ```
 
 === "npm"
-`bash
+    ```bash
     npm install @langchain/langgraph-cli
-    `
+    ```
 
 === "yarn"
-`bash
+    ```bash
     yarn add @langchain/langgraph-cli
-    `
+    ```
 
 === "pnpm"
-`bash
+    ```bash
     pnpm add @langchain/langgraph-cli
-    `
+    ```
 
 === "bun"
-`bash
+    ```bash
     bun add @langchain/langgraph-cli
-    `
+    ```
 :::
 
 ## Commands
@@ -61,7 +63,7 @@ The LangGraph.js CLI can be installed from the NPM registry:
 LangGraph CLI provides the following core functionality:
 
 | Command                                                        | Description                                                                                                                                                                                                                                                                            |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|----------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [`langgraph build`](../cloud/reference/cli.md#build)           | Builds a Docker image for the [LangGraph API server](./langgraph_server.md) that can be directly deployed.                                                                                                                                                                             |
 | [`langgraph dev`](../cloud/reference/cli.md#dev)               | Starts a lightweight development server that requires no Docker installation. This server is ideal for rapid development and testing.                                                                                                                                                  |
 | [`langgraph dockerfile`](../cloud/reference/cli.md#dockerfile) | Generates a [Dockerfile](https://docs.docker.com/reference/dockerfile/) that can be used to build images for and deploy instances of the [LangGraph API server](./langgraph_server.md). This is useful if you want to further customize the dockerfile or deploy in a more custom way. |
