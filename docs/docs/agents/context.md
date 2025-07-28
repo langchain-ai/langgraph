@@ -8,7 +8,7 @@ Context includes *any* data outside the message list that can shape behavior. Th
 - Internal state updated during a multi-step reasoning process.
 - Persistent memory or facts from previous interactions.
 
-LangGraph provides **three** primary ways to supply context:
+LangGraph provides **three** primary ways to manage context:
 
 | Type                                                                         | Description                                   | Mutable? | Lifetime                |
 |------------------------------------------------------------------------------|-----------------------------------------------|----------|-------------------------|
@@ -18,14 +18,21 @@ LangGraph provides **three** primary ways to supply context:
 
 ### Runtime Context
 
-!!! note "`config['configurable']` -> `runtime.context`"
+Runtime context is for immutable data like user metadata, tools, db connections, etc. Use this when you have values that don't change mid-run.
 
-    In LangGraph < v1.0, static runtime context was passed via the `config['configurable']` key, paired with a `config_schema` argument
-    to `StateGraph` or `Pregel`. This is now deprecated and will be removed in v2.0.
+!!! version-added "New in LangGraph v0.6: `Runtime.context` replaces `config['configurable']`"
 
-    As of LangGraph v1.0, the Runtime object is recommended to access static context and runtime-specific information like the store and stream writer.
+    The `Runtime` object is recommended to access static context and runtime-specific information like the store and stream writer.
 
-Runtime context is for immutable data like user metadata or API keys. Use this when you have values that don't change mid-run.
+!!! note 
+
+    Runtime context refers to local context: data and dependencies your code needs to run. It does not refer to:
+
+    * The LLM context, which is the data passed into the LLM's prompt.
+    * The "context window", which is the maximum number of tokens that can be passed to the LLM.
+
+    You likely want to use the local context to optimize the LLM's context window. For example, you
+    could use a user id to fetch a user's name and information from a database to populate the context window with relevant memories.
 
 Specify static context via the `context` argument to `invoke` / `stream`, which is reserved for this purpose:
 
