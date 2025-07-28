@@ -268,7 +268,9 @@ nav:
       - SDK (Python): cloud/reference/sdk/python_sdk_ref.md
       - SDK (JS/TS): https://langchain-ai.github.io/langgraphjs/reference/modules/sdk.html
       - RemoteGraph: reference/remote_graph.md
-      - Environment variables: cloud/reference/env_var.md
+      - Environment variables: "cloud/reference/env_var.md"
+  - Community:
+    - community.md
 
   - Examples:
     - examples/index.md
@@ -308,6 +310,7 @@ nav:
           - troubleshooting/errors/INVALID_LICENSE.md
         - LangGraph Studio: troubleshooting/studio.md
     
+
 
 markdown_extensions:
   - abbr
