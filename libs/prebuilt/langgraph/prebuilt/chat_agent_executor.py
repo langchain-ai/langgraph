@@ -366,8 +366,64 @@ class _AgentBuilder:
         
     def _setup_model_and_tools(self) -> None:
         """Handle model resolution and tool binding."""
-        # Implementation will be added in next task
-        pass
+        # Handle static model initialization
+        if not self.is_dynamic_model:
+            model = self.model
+            
+            # String to BaseChatModel conversion using init_chat_model
+            if isinstance(model, str):
+                try:
+                    from langchain.chat_models import (  # type: ignore[import-not-found]
+                        init_chat_model,
+                    )
+                except ImportError:
+                    raise ImportError(
+                        "Please install langchain (`pip install langchain`) to "
+                        "use '<provider>:<model>' string syntax for `model` parameter."
+                    )
+
+                model = cast(BaseChatModel, init_chat_model(model))
+
+            # Tool binding with _should_bind_tools check
+            if (
+                _should_bind_tools(model, self.tool_classes, num_builtin=len(self.llm_builtin_tools))  # type: ignore[arg-type]
+                and len(self.tool_classes + self.llm_builtin_tools) > 0
+            ):
+                model = cast(BaseChatModel, model).bind_tools(
+                    self.tool_classes + self.llm_builtin_tools  # type: ignore[operator]
+                )
+
+            # Prompt runnable creation
+            self.static_model: Optional[Runnable] = _get_prompt_runnable(self.prompt) | model  # type: ignore[operator]
+        else:
+            # Dynamic model setup - runnable created at runtime
+            self.static_model = None
+
+        # Create _resolve_model/_aresolve_model functions for runtime model resolution
+        def _resolve_model(
+            state: StateSchema, runtime: Runtime[ContextT]
+        ) -> LanguageModelLike:
+            """Resolve the model to use, handling both static and dynamic models."""
+            if self.is_dynamic_model:
+                return _get_prompt_runnable(self.prompt) | self.model(state, runtime)  # type: ignore[operator]
+            else:
+                return self.static_model
+
+        async def _aresolve_model(
+            state: StateSchema, runtime: Runtime[ContextT]
+        ) -> LanguageModelLike:
+            """Async resolve the model to use, handling both static and dynamic models."""
+            if self.is_async_dynamic_model:
+                resolved_model = await self.model(state, runtime)  # type: ignore[misc,operator]
+                return _get_prompt_runnable(self.prompt) | resolved_model
+            elif self.is_dynamic_model:
+                return _get_prompt_runnable(self.prompt) | self.model(state, runtime)  # type: ignore[operator]
+            else:
+                return self.static_model
+
+        # Store the resolver functions as instance methods
+        self._resolve_model = _resolve_model
+        self._aresolve_model = _aresolve_model
         
     def _create_model_node(self) -> RunnableCallable:
         """Create the core LLM interaction node."""
@@ -1104,5 +1160,6 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
