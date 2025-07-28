@@ -22,11 +22,11 @@ LangGraph provides three ways to manage context, combining the mutability and li
 
 ## Static Runtime Context
 
-Static runtime context represents immutable data like user metadata, tools, and database connections that's passed to an application at the start of a run via the `context` argument to `invoke`/`stream`. This data doesn't change during execution.
+**Static runtime context** represents immutable data like user metadata, tools, and database connections that's passed to an application at the start of a run via the `context` argument to `invoke`/`stream`. This data doesn't change during execution.
 
 !!! version-added "New in LangGraph v0.6: `Runtime.context` replaces `config['configurable']`"
 
-    The `Runtime` object is recommended to access static context and runtime-specific information like the store and stream writer.
+    The `Runtime` object is recommended to access static context and other utilities like the active store and stream writer.
 
 !!! note "Application configuration vs. LLM Context"
 
