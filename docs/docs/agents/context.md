@@ -20,7 +20,7 @@ LangGraph provides three ways to manage context, combining the mutability and li
 | [**Dynamic Runtime Context (State)**](#dynamic-runtime-context-state)        | Mutable data that evolves during a single run         | Dynamic    | Single run              | LangGraph state object           |
 | [**Dynamic Cross-Conversation Context (Store)**](#dynamic-cross-conversation-context-store) | Persistent data shared across conversations            | Dynamic    | Cross-conversation      | LangGraph store                  |
 
-### Static Runtime Context
+## Static Runtime Context
 
 Static runtime context represents immutable data like user metadata, tools, and database connections that's passed to an application at the start of a run via the `context` argument to `invoke`/`stream`. This data doesn't change during execution.
 
@@ -110,9 +110,9 @@ graph.invoke( # (1)!
 
     See the [tool calling guide](../how-tos/tool-calling.md#configuration) for details.
 
-### Dynamic Runtime Context (State)
+## Dynamic Runtime Context (State)
 
-**Dynamic runtime context** represents mutable data that can evolve during a single run and is managed through the LangGraph state object. This includes conversation history, intermediate results, and values derived from tools or LLM outputs. In LangGraph, the state object acts as [short-term memory](../concepts/memory.md) during a run. It holds dynamic data that can evolve during execution, such as values derived from tools or LLM outputs.
+**Dynamic runtime context** represents mutable data that can evolve during a single run and is managed through the LangGraph state object. This includes conversation history, intermediate results, and values derived from tools or LLM outputs. In LangGraph, the state object acts as [short-term memory](../concepts/memory.md) during a run.
 
 === "In an agent"
 
@@ -194,6 +194,6 @@ graph.invoke( # (1)!
 
 ## Dynamic Cross-Conversation Context (Store)
 
-**Dynamic cross-conversation context** represents persistent, mutable data that spans across multiple conversations or sessions and is managed through the LangGraph store. This includes user profiles, preferences, and historical interactions. For context that spans *across* conversations or sessions, LangGraph allows access to **long-term memory** via a `store`. This can be used to read or update persistent facts (e.g., user profiles, preferences, prior interactions). 
+**Dynamic cross-conversation context** represents persistent, mutable data that spans across multiple conversations or sessions and is managed through the LangGraph store. This includes user profiles, preferences, and historical interactions. The LangGraph store acts as [**long-term memory**](../concepts/memory.md#long-term-memory) across multiple runs. This can be used to read or update persistent facts (e.g., user profiles, preferences, prior interactions). 
 
 For more information, see the [Memory guide](../how-tos/memory/add-memory.md).
