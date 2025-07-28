@@ -37,7 +37,7 @@ LangGraph provides **three** primary ways to manage context:
     The field of "context engineering" refers to the practice of optimizing the content of the context window to improve the LLM's performance.
 
     The context discussed in this section is the local context. As a developer, you might use the local context to eventually optimize
-    the LLM context (ex: use a user_id to fetch a user's name and information from a database to populate the context window with relevant memories).
+    the LLM context. For example, use a user_id to fetch a user's name and information from a database to populate the context window with relevant memories.
 
 Runtime context is for immutable data like user metadata, tools, db connections, etc. Use this when you have values that don't change mid-run.
 
