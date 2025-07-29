@@ -128,7 +128,7 @@ print(graph.invoke(Command(resume="Edited text"), config=config)) # (7)!
 
 !!! tip "New in 0.4.0"
 
-      `__interrupt__` is a special key that will be returned when running the graph if the graph is interrupted. Support for `__interrupt__` in `invoke` and `ainvoke` has been added in version 0.4.0. If you're on an older version, you will only see `__interrupt__` in the result if you use `stream` or `astream`. You can also use `graph.get_state(thread_id)` to get the interrupt value.
+      `__interrupt__` is a special key that will be returned when running the graph if the graph is interrupted. Support for `__interrupt__` in `invoke` and `ainvoke` has been added in version 0.4.0. If you're on an older version, you will only see `__interrupt__` in the result if you use `stream` or `astream`. You can also use `graph.get_state(thread_id)` to get the interrupt value(s).
 
 !!! warning
 
@@ -145,19 +145,67 @@ To resume execution, use the [`Command`][langgraph.types.Command] primitive, whi
 graph.invoke(Command(resume={"age": "25"}), thread_config)
 ```
 
-### Resume multiple interrupts with one invocation
+## Resuming Multiple interrupts
 
-If you have multiple interrupts in the task queue, you can use `Command.resume` with a dictionary mapping of interrupt ids to resume with a single `invoke` / `stream` call.
+When nodes with interrupt conditions are run in parallel, it's possible to have multiple interrupts in the task queue.
+For example, the following graph has two nodes run in parallel that require human input:
 
-For example, once your graph has been interrupted (multiple times, theoretically) and is stalled:
+<figure markdown="1">
+![image](../assets/human_in_loop_parallel.png){: style="max-height:400px"}
+</figure>
+
+Once your graph has been interrupted and is stalled, you can resume all the interrupts at once with `Command.resume`, passing a dictionary mapping of interrupt ids to resume values.
+
 
 ```python
-resume_map = {
-    i.id: f"human input for prompt {i.value}"
-    for i in parent.get_state(thread_config).interrupts
-}
+from typing import TypedDict
+import uuid
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.constants import START
+from langgraph.graph import StateGraph
+from langgraph.types import interrupt, Command
 
-parent_graph.invoke(Command(resume=resume_map), config=thread_config)
+
+class State(TypedDict):
+    text_1: str
+    text_2: str
+
+
+def human_node_1(state: State):
+    value = interrupt({"text_to_revise": state["text_1"]})
+    return {"text_1": value}
+
+
+def human_node_2(state: State):
+    value = interrupt({"text_to_revise": state["text_2"]})
+    return {"text_2": value}
+
+
+graph_builder = StateGraph(State)
+graph_builder.add_node("human_node_1", human_node_1)
+graph_builder.add_node("human_node_2", human_node_2)
+
+# Add both nodes in parallel from START
+graph_builder.add_edge(START, "human_node_1")
+graph_builder.add_edge(START, "human_node_2")
+
+checkpointer = InMemorySaver()
+graph = graph_builder.compile(checkpointer=checkpointer)
+
+thread_id = str(uuid.uuid4())
+config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+result = graph.invoke(
+    {"text_1": "original text 1", "text_2": "original text 2"}, config=config
+)
+
+# Resume with mapping of interrupt IDs to values
+resume_map = {
+    i.id: f"edited text for {i.value['text_to_revise']}"
+    for i in result["__interrupt__"]
+}
+print(graph.invoke(Command(resume=resume_map), config=config))
+# > {'text_1': 'edited text for original text 1', 'text_2': 'edited text for original text 2'}
 ```
 
 ## Common patterns
@@ -1027,7 +1075,7 @@ def node_in_parent_graph(state: State):
     {'parent_node': {'state_counter': 1}}
     ```
 
-### Using multiple interrupts
+### Using multiple interrupts in a single node
 
 Using multiple interrupts within a **single** node can be helpful for patterns like [validating human input](#validate-human-input). However, using multiple interrupts in the same node can lead to unexpected behavior if not handled carefully.
 

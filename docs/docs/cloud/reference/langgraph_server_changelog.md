@@ -4,6 +4,22 @@
 
 ---
 
+## v0.2.109 (2025-07-28)
+- Fixed an issue where missing config schema occurred when `config_type` was not set.
+
+## v0.2.108 (2025-07-28)
+- Added compatibility for langgraph v0.6, including new context API support and a migration to enhance context handling in assistant operations.
+
+## v0.2.107 (2025-07-27)
+- Implemented caching for authentication processes to improve performance.
+- Merged count and select queries to improve database query efficiency.
+
+## v0.2.106 (2025-07-27)
+- Log whether run uses resumable streams.
+
+## v0.2.105 (2025-07-27)
+- Added a `/heapdump` endpoint to capture and save JS process heap data.
+
 ## v0.2.103 (2025-07-25)
 - Corrected the metadata endpoint to ensure accurate data retrieval.
 

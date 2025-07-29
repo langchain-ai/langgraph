@@ -16,7 +16,7 @@ from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
 
 from _scripts.generate_api_reference_links import update_markdown_with_imports
-from _scripts.link_map import JS_LINK_MAP
+from _scripts.handle_auto_links import _replace_autolinks
 from _scripts.notebook_convert import convert_notebook
 
 logger = logging.getLogger(__name__)
@@ -176,31 +176,7 @@ def _add_path_to_code_blocks(markdown: str, page: Page) -> str:
     return code_block_pattern.sub(replace_code_block_header, markdown)
 
 
-def _resolve_cross_references(md_text: str, link_map: dict[str, str]) -> str:
-    """Replace [title][identifier] with [title](url) using language-specific link_map.
-
-    Args:
-        md_text: The markdown text to process.
-        link_map: mapping of identifier to URL.
-
-    Returns:
-        The processed markdown text with cross-references resolved.
-    """
-    # Pattern to match [title][identifier]
-    pattern = re.compile(r"\[([^\]]+)\]\[([^\]]+)\]")
-
-    def replace_reference(match: re.Match) -> str:
-        """Replace the matched reference with the corresponding URL."""
-        title, identifier = match.group(1), match.group(2)
-        url = link_map.get(identifier)
-
-        if url:
-            return f"[{title}]({url})"
-        else:
-            # Leave it unchanged if not found
-            return match.group(0)
-
-    return pattern.sub(replace_reference, md_text)
+# Compiled regex patterns for better performance and readability
 
 
 def _apply_conditional_rendering(md_text: str, target_language: str) -> str:
@@ -295,7 +271,7 @@ def _highlight_code_blocks(markdown: str) -> str:
             opening_fence += f" {attributes}"
 
         if highlighted_lines:
-            opening_fence += f" hl_lines=\"{' '.join(highlighted_lines)}\""
+            opening_fence += f' hl_lines="{" ".join(highlighted_lines)}"'
 
         return (
             # The indent and opening fence
@@ -325,6 +301,9 @@ def _on_page_markdown_with_config(
         # logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         markdown = convert_notebook(page.file.abs_src_path)
 
+    # Apply cross-reference preprocessing to all markdown content
+    markdown = _replace_autolinks(markdown, page.file.src_path)
+
     # Append API reference links to code blocks
     if add_api_references:
         markdown = update_markdown_with_imports(markdown, page.file.abs_src_path)
@@ -334,16 +313,6 @@ def _on_page_markdown_with_config(
     # Apply conditional rendering for code blocks
     target_language = kwargs.get("target_language", "python")
     markdown = _apply_conditional_rendering(markdown, target_language)
-    if target_language == "js":
-        markdown = _resolve_cross_references(markdown, JS_LINK_MAP)
-    elif target_language == "python":
-        # Via a dedicated plugin
-        pass
-    else:
-        raise ValueError(
-            f"Unsupported target language: {target_language}. "
-            "Supported languages are 'python' and 'js'."
-        )
 
     # Add file path as an attribute to code blocks that are executable.
     # This file path is used to associate fixtures with the executable code
@@ -358,13 +327,11 @@ def _on_page_markdown_with_config(
 
 
 def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
-    finalized_markdown = (
-        _on_page_markdown_with_config(
-            markdown,
-            page,
-            add_api_references=True,
-            **kwargs,
-        )
+    finalized_markdown = _on_page_markdown_with_config(
+        markdown,
+        page,
+        add_api_references=True,
+        **kwargs,
     )
     page.meta["original_markdown"] = finalized_markdown
     return finalized_markdown
@@ -437,6 +404,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     else:
         return html  # fallback if no <body> found
 
+
 def _inject_markdown_into_html(html: str, page: Page) -> str:
     """Inject the original markdown content into the HTML page as JSON."""
     original_markdown = page.meta.get("original_markdown", "")
@@ -469,6 +437,7 @@ def _inject_markdown_into_html(html: str, page: Page) -> str:
         )
     return html.replace("</head>", f"{script_content}</head>")
 
+
 def on_post_page(html: str, page: Page, config: MkDocsConfig) -> str:
     """Inject Google Tag Manager noscript tag immediately after <body>.
 
@@ -482,6 +451,7 @@ def on_post_page(html: str, page: Page, config: MkDocsConfig) -> str:
     """
     html = _inject_markdown_into_html(html, page)
     return _inject_gtm(html)
+
 
 # Create HTML files for redirects after site dir has been built
 def on_post_build(config):
