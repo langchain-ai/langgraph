@@ -381,7 +381,7 @@ def test_config_injection() -> None:
         "test", config={"tags": ["test"], "configurable": {}}
     ) == ["test"]
 
-    def func_optional(x: Any, config: Optional[RunnableConfig]) -> list[str]:
+    def func_optional(x: Any, config: Optional[RunnableConfig]) -> list[str]:  # noqa: UP045
         return config.get("tags", []) if config else []
 
     assert RunnableCallable(func_optional).invoke(
