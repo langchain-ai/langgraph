@@ -451,6 +451,119 @@ class _AgentBuilder:
 
         return state
 
+    def _create_model_node(self) -> tuple[Callable, Callable]:
+        """Create the model node functions (call_model and acall_model)."""
+        def call_model(
+            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+        ) -> StateSchema:
+            if self.is_async_dynamic_model:
+                msg = (
+                    "Async model callable provided but agent invoked synchronously. "
+                    "Use agent.ainvoke() or agent.astream(), or "
+                    "provide a sync model callable."
+                )
+                raise RuntimeError(msg)
+
+            model_input = self._get_model_input_state(state)
+
+            if self.is_dynamic_model:
+                # Resolve dynamic model at runtime and apply prompt
+                dynamic_model = self._resolve_model(state, runtime)
+                response = cast(AIMessage, dynamic_model.invoke(model_input, config))  # type: ignore[arg-type]
+            else:
+                response = cast(AIMessage, self.static_model.invoke(model_input, config))  # type: ignore[union-attr]
+
+            # add agent name to the AIMessage
+            response.name = self.name
+
+            if self._are_more_steps_needed(state, response):
+                return {
+                    "messages": [
+                        AIMessage(
+                            id=response.id,
+                            content="Sorry, need more steps to process this request.",
+                        )
+                    ]
+                }
+            # We return a list, because this will get added to the existing list
+            return {"messages": [response]}
+
+        async def acall_model(
+            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+        ) -> StateSchema:
+            model_input = self._get_model_input_state(state)
+
+            if self.is_dynamic_model:
+                # Resolve dynamic model at runtime and apply prompt
+                # (supports both sync and async)
+                dynamic_model = await self._aresolve_model(state, runtime)
+                response = cast(AIMessage, await dynamic_model.ainvoke(model_input, config))  # type: ignore[arg-type]
+            else:
+                response = cast(AIMessage, await self.static_model.ainvoke(model_input, config))  # type: ignore[union-attr]
+
+            # add agent name to the AIMessage
+            response.name = self.name
+            if self._are_more_steps_needed(state, response):
+                return {
+                    "messages": [
+                        AIMessage(
+                            id=response.id,
+                            content="Sorry, need more steps to process this request.",
+                        )
+                    ]
+                }
+            # We return a list, because this will get added to the existing list
+            return {"messages": [response]}
+
+        return call_model, acall_model
+
+    def _create_structured_response_node(self) -> tuple[Callable, Callable]:
+        """Create the structured response node functions."""
+        def generate_structured_response(
+            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+        ) -> StateSchema:
+            if self.is_async_dynamic_model:
+                msg = (
+                    "Async model callable provided but agent invoked synchronously. "
+                    "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
+                )
+                raise RuntimeError(msg)
+
+            messages = _get_state_value(state, "messages")
+            structured_response_schema = self.response_format
+            if isinstance(self.response_format, tuple):
+                system_prompt, structured_response_schema = self.response_format
+                messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+            resolved_model = self._resolve_model(state, runtime)
+            model_with_structured_output = _get_model(
+                resolved_model
+            ).with_structured_output(
+                cast(StructuredResponseSchema, structured_response_schema)
+            )
+            response = model_with_structured_output.invoke(messages, config)
+            return {"structured_response": response}
+
+        async def agenerate_structured_response(
+            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+        ) -> StateSchema:
+            messages = _get_state_value(state, "messages")
+            structured_response_schema = self.response_format
+            if isinstance(self.response_format, tuple):
+                system_prompt, structured_response_schema = self.response_format
+                messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+            resolved_model = await self._aresolve_model(state, runtime)
+            model_with_structured_output = _get_model(
+                resolved_model
+            ).with_structured_output(
+                cast(StructuredResponseSchema, structured_response_schema)
+            )
+            response = await model_with_structured_output.ainvoke(messages, config)
+            return {"structured_response": response}
+
+        return generate_structured_response, agenerate_structured_response
+
 
 def create_react_agent(
     model: Union[
@@ -1156,6 +1269,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
