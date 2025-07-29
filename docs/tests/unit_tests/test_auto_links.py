@@ -44,9 +44,7 @@ def test_global_cross_refs(mock_link_maps) -> None:
     lines = ["@[global-link]\n", "Text with @[unknown-link].\n"]
     markdown = "".join(lines)
     result = _replace_autolinks(markdown, "test.md")
-    expected = "".join(
-        ["@[global-link]\n", "Text with @[unknown-link].\n"]
-    )
+    expected = "".join(["@[global-link]\n", "Text with @[unknown-link].\n"])
     assert result == expected
 
 
@@ -95,7 +93,7 @@ def test_all_scopes(mock_link_maps) -> None:
             ":::js\n",
             "[js-link](https://example.com/js)\n",
             ":::\n",
-            "@[global-link]\n"
+            "@[global-link]\n",
         ]
     )
     assert result == expected
