@@ -307,10 +307,11 @@ print(selected_state.values)
 
 **Output:**
 
-````
+```
 ('write_joke',)
 {'topic': 'How about "The Secret Life of Socks in the Dryer"? You know, exploring the mysterious phenomenon of how socks go into the laundry as pairs but come out as singles. Where do they go? Are they starting new lives elsewhere? Is there a sock paradise we don\\'t know about? There\\'s a lot of comedic potential in the everyday mystery that unites us all!'}
 ```
+
 :::
 
 :::js
@@ -320,7 +321,7 @@ print(selected_state.values)
 const selectedState = states[1];
 console.log(selectedState.next);
 console.log(selectedState.values);
-````
+```
 
 **Output:**
 

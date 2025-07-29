@@ -1459,7 +1459,7 @@ for await (const chunk of await graph.stream(
 ??? example "Extended example: streaming arbitrary chat model"
 
       :::python
-      ````python
+      ```python
       import operator
       import json
 

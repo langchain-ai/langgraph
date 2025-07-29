@@ -17,13 +17,11 @@ Create a `MemorySaver` checkpointer:
 
 :::python
 
-````python
-
 ```python
 from langgraph.checkpoint.memory import MemorySaver
 
 memory = InMemorySaver()
-````
+```
 
 :::
 
@@ -45,11 +43,9 @@ Compile the graph with the provided checkpointer, which will checkpoint the `Sta
 
 :::python
 
-````python
-
 ```python
 graph = graph_builder.compile(checkpointer=memory)
-````
+```
 
 :::
 

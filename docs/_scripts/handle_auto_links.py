@@ -139,6 +139,8 @@ def _replace_autolinks(markdown: str, file_path: str, *, default_scope: str = "p
         Output:
             "[StateGraph](url)\\n:::python\\n[Command](url)\\n:::\\n"
     """
+    # Track the current scope context
+    current_scope = default_scope
     lines = markdown.splitlines(keepends=True)
     processed_lines = []
 

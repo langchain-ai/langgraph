@@ -35,7 +35,7 @@ The Python SDK provides both synchronous (`get_sync_client`) and asynchronous (`
 
 === "Async"
 
-    ````python
+    ```python
     from langgraph_sdk import get_client
 
     client = get_client(url=..., api_key=...)

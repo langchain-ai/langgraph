@@ -202,8 +202,6 @@ Visualizing the graph, you get the same layout as before – just with the added
 
 :::python
 
-````python
-
 ```python
 from IPython.display import Image, display
 
@@ -212,7 +210,7 @@ try:
 except Exception:
     # This requires some extra dependencies and is optional
     pass
-````
+```
 
 :::
 
@@ -355,11 +353,9 @@ const snapshot = await graph.getState({ configurable: { thread_id: "1" } });
 snapshot.next;
 ```
 
-````json
-["tools"]
 ```json
 ["tools"]
-````
+```
 
 :::
 
@@ -431,7 +427,6 @@ To resume execution, pass a [`Command`](../../concepts/low_level.md#command) obj
 
 For this example, use a dict with a key `"data"`:
 
-````python
 ```python
 human_response = (
     "We, the experts are here to help! We'd recommend you check out LangGraph to build your agent."
@@ -444,7 +439,7 @@ events = graph.stream(human_command, config, stream_mode="values")
 for event in events:
     if "messages" in event:
         event["messages"][-1].pretty_print()
-````
+```
 
 ```
 ================================== Ai Message ==================================
