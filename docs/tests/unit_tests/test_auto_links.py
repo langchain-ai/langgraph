@@ -30,6 +30,17 @@ def test_transform_link_basic(mock_link_maps) -> None:
     assert result is None
 
 
+def test_transform_link_with_custom_title(mock_link_maps) -> None:
+    """Test link transformation with custom title."""
+    # Test with a known link and custom title
+    result = _transform_link("py-link", "python", "test.md", 1, "Custom Python Link")
+    assert result == "[Custom Python Link](https://example.com/python)"
+
+    # Test with unknown link and custom title (should still return None)
+    result = _transform_link("unknown-link", "python", "test.md", 1, "Custom Title")
+    assert result is None
+
+
 def test_no_cross_refs(mock_link_maps) -> None:
     """Test markdown with no @[references]."""
     lines = ["# Title\n", "Regular text.\n"]
@@ -143,4 +154,63 @@ def test_indented_conditional_fences(mock_link_maps) -> None:
             "@[global-link]\n",
         ]
     )
+    assert result == expected
+
+
+def test_custom_title_syntax(mock_link_maps) -> None:
+    """Test @[title][ref] syntax with custom titles."""
+    lines = [
+        ":::python\n",
+        "@[Custom Python Title][py-link]\n",
+        ":::\n",
+        ":::js\n", 
+        "@[Custom JS Title][js-link]\n",
+        ":::\n"
+    ]
+    markdown = "".join(lines)
+    result = _replace_autolinks(markdown, "test.md")
+    expected = "".join([
+        ":::python\n",
+        "[Custom Python Title](https://example.com/python)\n",
+        ":::\n",
+        ":::js\n",
+        "[Custom JS Title](https://example.com/js)\n",
+        ":::\n"
+    ])
+    assert result == expected
+
+
+def test_mixed_syntax_compatibility(mock_link_maps) -> None:
+    """Test that both @[ref] and @[title][ref] syntax work together."""
+    lines = [
+        ":::python\n",
+        "@[py-link]\n",  # Old syntax
+        "@[Custom Title][py-link]\n",  # New syntax
+        ":::\n"
+    ]
+    markdown = "".join(lines)
+    result = _replace_autolinks(markdown, "test.md")
+    expected = "".join([
+        ":::python\n",
+        "[py-link](https://example.com/python)\n",
+        "[Custom Title](https://example.com/python)\n",
+        ":::\n"
+    ])
+    assert result == expected
+
+
+def test_custom_title_with_unknown_link(mock_link_maps) -> None:
+    """Test @[title][ref] syntax with unknown reference."""
+    lines = [
+        ":::python\n",
+        "@[Custom Title][unknown-link]\n",
+        ":::\n"
+    ]
+    markdown = "".join(lines)
+    result = _replace_autolinks(markdown, "test.md")
+    expected = "".join([
+        ":::python\n",
+        "@[Custom Title][unknown-link]\n",  # Should remain unchanged
+        ":::\n"
+    ])
     assert result == expected
