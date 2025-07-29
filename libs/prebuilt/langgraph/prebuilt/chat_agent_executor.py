@@ -380,10 +380,112 @@ class _AgentBuilder:
                     self.tool_classes + self.llm_builtin_tools  # type: ignore[operator]
                 )
 
-            self.static_model = _get_prompt_runnable(self.prompt) | model  # type: ignore[operator]
+            self.static_model = self._get_prompt_runnable() | model  # type: ignore[operator]
         else:
             # For dynamic models, we'll create the runnable at runtime
             self.static_model = None
+
+    def _get_prompt_runnable(self) -> Runnable:
+        """Get the prompt runnable based on the prompt configuration."""
+        prompt_runnable: Runnable
+        if self.prompt is None:
+            prompt_runnable = RunnableCallable(
+                lambda state: _get_state_value(state, "messages"), name=PROMPT_RUNNABLE_NAME
+            )
+        elif isinstance(self.prompt, str):
+            _system_message: BaseMessage = SystemMessage(content=self.prompt)
+            prompt_runnable = RunnableCallable(
+                lambda state: [_system_message] + _get_state_value(state, "messages"),
+                name=PROMPT_RUNNABLE_NAME,
+            )
+        elif isinstance(self.prompt, SystemMessage):
+            prompt_runnable = RunnableCallable(
+                lambda state: [self.prompt] + _get_state_value(state, "messages"),
+                name=PROMPT_RUNNABLE_NAME,
+            )
+        elif inspect.iscoroutinefunction(self.prompt):
+            prompt_runnable = RunnableCallable(
+                None,
+                self.prompt,
+                name=PROMPT_RUNNABLE_NAME,
+            )
+        elif callable(self.prompt):
+            prompt_runnable = RunnableCallable(
+                self.prompt,
+                name=PROMPT_RUNNABLE_NAME,
+            )
+        elif isinstance(self.prompt, Runnable):
+            prompt_runnable = self.prompt
+        else:
+            raise ValueError(f"Got unexpected type for `prompt`: {type(self.prompt)}")
+
+        return prompt_runnable
+
+    def _resolve_model(
+        self, state: StateSchema, runtime: Runtime[ContextT]
+    ) -> LanguageModelLike:
+        """Resolve the model to use, handling both static and dynamic models."""
+        if self.is_dynamic_model:
+            return self._get_prompt_runnable() | self.model(state, runtime)  # type: ignore[operator]
+        else:
+            return self.static_model
+
+    async def _aresolve_model(
+        self, state: StateSchema, runtime: Runtime[ContextT]
+    ) -> LanguageModelLike:
+        """Async resolve the model to use, handling both static and dynamic models."""
+        if self.is_async_dynamic_model:
+            resolved_model = await self.model(state, runtime)  # type: ignore[misc,operator]
+            return self._get_prompt_runnable() | resolved_model
+        elif self.is_dynamic_model:
+            return self._get_prompt_runnable() | self.model(state, runtime)  # type: ignore[operator]
+        else:
+            return self.static_model
+
+    def _are_more_steps_needed(self, state: StateSchema, response: BaseMessage) -> bool:
+        """Check if more steps are needed based on the response and state."""
+        has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
+        all_tools_return_direct = (
+            all(call["name"] in self.should_return_direct for call in response.tool_calls)
+            if isinstance(response, AIMessage)
+            else False
+        )
+        remaining_steps = _get_state_value(state, "remaining_steps", None)
+        is_last_step = _get_state_value(state, "is_last_step", False)
+        return (
+            (remaining_steps is None and is_last_step and has_tool_calls)
+            or (
+                remaining_steps is not None
+                and remaining_steps < 1
+                and all_tools_return_direct
+            )
+            or (remaining_steps is not None and remaining_steps < 2 and has_tool_calls)
+        )
+
+    def _get_model_input_state(self, state: StateSchema) -> StateSchema:
+        """Get the model input state, handling pre_model_hook if present."""
+        if self.pre_model_hook is not None:
+            messages = (
+                _get_state_value(state, "llm_input_messages")
+            ) or _get_state_value(state, "messages")
+            error_msg = f"Expected input to call_model to have 'llm_input_messages' or 'messages' key, but got {state}"
+        else:
+            messages = _get_state_value(state, "messages")
+            error_msg = (
+                f"Expected input to call_model to have 'messages' key, but got {state}"
+            )
+
+        if messages is None:
+            raise ValueError(error_msg)
+
+        _validate_chat_history(messages)
+        # we're passing messages under `messages` key, as this is expected by the prompt
+        if isinstance(self.state_schema, type) and issubclass(self.state_schema, BaseModel):
+            state.messages = messages  # type: ignore
+        else:
+            state["messages"] = messages  # type: ignore
+
+        return state
 
 
 def create_react_agent(
@@ -1090,4 +1192,5 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
