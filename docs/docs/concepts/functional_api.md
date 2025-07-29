@@ -351,27 +351,18 @@ const myWorkflow = entrypoint(
 
     The **inputs** and **outputs** of entrypoints must be JSON-serializable to support checkpointing. Please see the [serialization](#serialization) section for more details.
 
+:::python
+
 ### Injectable parameters
 
-When declaring an `entrypoint`, you can request access to additional parameters that will be injected automatically at run time by using the [`getPreviousState()`](https://langchain-ai.github.io/langgraphjs/reference/functions/langgraph.getPreviousState.html>) function. These parameters include:
+When declaring an `entrypoint`, you can request access to additional parameters that will be injected automatically at run time. These parameters include:
 
-:::python
-| Parameter | Description |
-|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **previous** | Access the state associated with the previous `checkpoint` for the given thread. See [short-term-memory](#short-term-memory). |
-| **store** | An instance of @[BaseStore]. Useful for [long-term memory](../how-tos/use-functional-api.md#long-term-memory). |
-| **writer** | Use to access the StreamWriter when working with Async Python < 3.11. See [streaming with functional API for details](../how-tos/use-functional-api.md#streaming). |
-| **config** | For accessing run time configuration. See [RunnableConfig](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) for information. |
-:::
-
-:::js
-| Parameter | Description |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **config** | For accessing runtime configuration. Automatically populated as the second argument to the `entrypoint` function (but not `task`, since tasks can have a variable number of arguments). See [RunnableConfig](https://js.langchain.com/docs/concepts/runnables/#runnableconfig) for information. |
-| **config.store** | An instance of [BaseStore](/langgraphjs/reference/classes/checkpoint.BaseStore.html). Useful for [long-term memory](#long-term-memory). |
-| **config.writer** | A `writer` used for streaming back custom data. See the [guide on streaming custom data](../how-tos/streaming-content.ipynb) |
-| **getPreviousState()** | Access the state associated with the previous `checkpoint` for the given thread using [`getPreviousState`](/langgraphjs/reference/functions/langgraph.getPreviousState.html). See [state management](#state-management). |
-:::
+| Parameter    | Description                                                                                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **previous** | Access the state associated with the previous `checkpoint` for the given thread. See [short-term-memory](#short-term-memory).                                      |
+| **store**    | An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for [long-term memory](../how-tos/use-functional-api.md#long-term-memory).                      |
+| **writer**   | Use to access the StreamWriter when working with Async Python < 3.11. See [streaming with functional API for details](../how-tos/use-functional-api.md#streaming). |
+| **config**   | For accessing run time configuration. See [RunnableConfig](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) for information.                  |
 
 !!! important
 
@@ -401,27 +392,8 @@ When declaring an `entrypoint`, you can request access to additional parameters 
         config: RunnableConfig  # For accessing the configuration passed to the entrypoint
     ) -> ...:
     ```
-    :::
 
-    :::js
-    ```typescript
-    import { entrypoint, BaseStore, InMemoryStore, LangGraphRunnableConfig } from "@langchain/langgraph";
-
-    const inMemoryStore = new InMemoryStore(); // An instance of InMemoryStore for long-term memory
-
-    const myWorkflow = entrypoint(
-      {
-        checkpointer, name: "workflow",  // Specify the checkpointer
-        store: inMemoryStore,        // Specify the store
-        name: "myWorkflow",
-      },
-      async (someInput: Record<string, any>) => {
-        const previous = getPreviousState<any>(); // For short-term memory
-        // Rest of workflow logic...
-      }
-    );
-    ```
-    :::
+:::
 
 ### Executing
 
