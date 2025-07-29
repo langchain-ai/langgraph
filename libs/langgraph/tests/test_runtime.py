@@ -72,7 +72,7 @@ def test_merge_runtime() -> None:
     runtime3 = Runtime(context=None)
 
     assert runtime1.merge(runtime2).context.api_key == "def"
-    # override only appies to non-falsy values
+    # override only applies to non-falsy values
     assert runtime1.merge(runtime3).context.api_key == "abc"  # type: ignore
 
 
