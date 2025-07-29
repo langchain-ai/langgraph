@@ -1,6 +1,6 @@
 # Context
 
-**Context engineering** is the [art and science of filling the context window with just the right information](https://x.com/karpathy/status/1937902205765607626) so that an AI application can accomplish a task. Context can be characterized along two key dimensions:
+**Context engineering** is the practice of building dynamic systems that provide the right information and tools, in the right format, so that an AI application can accomplish a task. Context can be characterized along two key dimensions:
 
 1. By **mutability**:
 
@@ -32,7 +32,7 @@ LangGraph provides three ways to manage context, which combines the mutability a
 
     Runtime context can include data that will be passed to the LLM (e.g., system prompt, tools) as well as application configuration (e.g., model settings, temperature, API keys, database connections) that governs application behavior but is not explicitly passed to the LLM.
             
-Application configuration can be passed via the `context` argument, which replaces `config['configurable']`. And, as before, any context you want to write to state for use in the application can be passed directly as a dictionary to `invoke` / `stream`. 
+Use the `Runtime` object  to access static context and other utilities like the active store and stream writer. Any context you want to write to state for application use can be passed directly as a dictionary to `invoke` / `stream`. 
 
 ```python
 @dataclass
