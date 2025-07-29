@@ -199,7 +199,7 @@ This is a special case of updating the graph state from tools where, in addition
     If you want to use tools that return `Command`, you can either use prebuilt components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them:
 
 :::python
-You can use prebuilt [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] / [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] components, or implement your own:
+You can use prebuilt @[`create_react_agent`][create_react_agent] / @[`ToolNode`][ToolNode] components, or implement your own:
 
 ```python
 def call_tools(state):
@@ -211,7 +211,7 @@ def call_tools(state):
 :::
 
 :::js
-You can use prebuilt [`createReactAgent`][<insert-ref>] / [`ToolNode`][<insert-ref>] components, or implement your own:
+You can use prebuilt [`createReactAgent`][<insert-ref>] / @[ToolNode] components, or implement your own:
 
 ```typescript
 graph.addNode("call_tools", async (state) => {

@@ -22,7 +22,7 @@ To leverage durable execution in LangGraph, you need to:
 2. Specify a [thread identifier](./persistence.md#threads) when executing a workflow. This will track the execution history for a particular instance of the workflow.
 
 :::python 
-3. Wrap any non-deterministic operations (e.g., random number generation) or operations with side effects (e.g., file writes, API calls) inside [tasks][langgraph.func.task] to ensure that when a workflow is resumed, these operations are not repeated for the particular run, and instead their results are retrieved from the persistence layer. For more information, see [Determinism and Consistent Replay](#determinism-and-consistent-replay).
+3. Wrap any non-deterministic operations (e.g., random number generation) or operations with side effects (e.g., file writes, API calls) inside @[tasks][task] to ensure that when a workflow is resumed, these operations are not repeated for the particular run, and instead their results are retrieved from the persistence layer. For more information, see [Determinism and Consistent Replay](#determinism-and-consistent-replay).
 :::
 
 :::js 
@@ -43,7 +43,7 @@ To ensure that your workflow is deterministic and can be consistently replayed, 
 
 :::python
 For some examples of pitfalls to avoid, see the [Common Pitfalls](./functional_api.md#common-pitfalls) section in the functional API, which shows
-how to structure your code using **tasks** to avoid these issues. The same principles apply to the [StateGraph (Graph API)][langgraph.graph.state.StateGraph].
+how to structure your code using **tasks** to avoid these issues. The same principles apply to the @[StateGraph (Graph API)][StateGraph].
 :::
 
 :::js
@@ -263,7 +263,7 @@ Once you have enabled durable execution in your workflow, you can resume executi
 
 :::python
 
-- **Pausing and Resuming Workflows:** Use the [interrupt][langgraph.types.interrupt] function to pause a workflow at specific points and the [Command][langgraph.types.Command] primitive to resume it with updated state. See [**Human-in-the-Loop**](./human_in_the_loop.md) for more details.
+- **Pausing and Resuming Workflows:** Use the @[interrupt][interrupt] function to pause a workflow at specific points and the @[Command] primitive to resume it with updated state. See [**Human-in-the-Loop**](./human_in_the_loop.md) for more details.
 - **Recovering from Failures:** Automatically resume workflows from the last successful checkpoint after an exception (e.g., LLM provider outage). This involves executing the workflow with the same thread identifier by providing it with a `None` as the input value (see this [example](../how-tos/use-functional-api.md#resuming-after-an-error) with the functional API).
   :::
 
@@ -277,7 +277,7 @@ Once you have enabled durable execution in your workflow, you can resume executi
 
 :::python
 
-- If you're using a [StateGraph (Graph API)][langgraph.graph.state.StateGraph], the starting point is the beginning of the [**node**](./low_level.md#nodes) where execution stopped.
+- If you're using a @[StateGraph (Graph API)][StateGraph], the starting point is the beginning of the [**node**](./low_level.md#nodes) where execution stopped.
 - If you're making a subgraph call inside a node, the starting point will be the **parent** node that called the subgraph that was halted.
   Inside the subgraph, the starting point will be the specific [**node**](./low_level.md#nodes) where execution stopped.
 - If you're using the Functional API, the starting point is the beginning of the [**entrypoint**](./functional_api.md#entrypoint) where execution stopped.

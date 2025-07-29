@@ -1,7 +1,7 @@
 # INVALID_CHAT_HISTORY
 
 :::python
-This error is raised in the prebuilt [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent] when the `call_model` graph node receives a malformed list of messages. Specifically, it is malformed when there are `AIMessages` with `tool_calls` (LLM requesting to call a tool) that do not have a corresponding `ToolMessage` (result of a tool invocation to return to the LLM).
+This error is raised in the prebuilt @[create_react_agent][create_react_agent] when the `call_model` graph node receives a malformed list of messages. Specifically, it is malformed when there are `AIMessages` with `tool_calls` (LLM requesting to call a tool) that do not have a corresponding `ToolMessage` (result of a tool invocation to return to the LLM).
 :::
 
 :::js
@@ -20,7 +20,7 @@ There could be a few reasons you're seeing this error:
    This interrupt could have been triggered in one of the following ways:
 
    - You manually set `interrupt_before = ['tools']` in `create_react_agent`
-   - One of the tools raised an error that wasn't handled by the [ToolNode][langgraph.prebuilt.tool_node.ToolNode] (`"tools"`)
+   - One of the tools raised an error that wasn't handled by the @[ToolNode][ToolNode] (`"tools"`)
 
 :::
 

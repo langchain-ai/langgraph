@@ -1360,7 +1360,7 @@ agent.invoke(
 ```
 
 1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation](../../reference/store.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
-2. For this example, we write some sample data to the store using the `put` method. Please see the [BaseStore.put][langgraph.store.base.BaseStore.put] API reference for more details.
+2. For this example, we write some sample data to the store using the `put` method. Please see the @[BaseStore.put] API reference for more details.
 3. The first argument is the namespace. This is used to group related data together. In this case, we are using the `users` namespace to group user data.
 4. A key within the namespace. This example uses a user ID for the key.
 5. The data that we want to store for the given user.
@@ -1724,7 +1724,7 @@ Most LLMs have a maximum supported context window (denominated in tokens). One w
 === "In an agent"
 
     :::python
-    To trim message history in an agent, use [`pre_model_hook`][langgraph.prebuilt.chat_agent_executor.create_react_agent] with the [`trim_messages`](https://python.langchain.com/api_reference/core/messages/langchain_core.messages.utils.trim_messages.html) function:
+    To trim message history in an agent, use @[`pre_model_hook`][create_react_agent] with the [`trim_messages`](https://python.langchain.com/api_reference/core/messages/langchain_core.messages.utils.trim_messages.html) function:
 
     ```python
     # highlight-next-line
@@ -1943,7 +1943,7 @@ Most LLMs have a maximum supported context window (denominated in tokens). One w
 You can delete messages from the graph state to manage the message history. This is useful when you want to remove specific messages or clear the entire message history.
 
 :::python
-To delete messages from the graph state, you can use the `RemoveMessage`. For `RemoveMessage` to work, you need to use a state key with [`add_messages`][langgraph.graph.message.add_messages] [reducer](../../concepts/low_level.md#reducers), like [`MessagesState`](../../concepts/low_level.md#messagesstate).
+To delete messages from the graph state, you can use the `RemoveMessage`. For `RemoveMessage` to work, you need to use a state key with @[`add_messages`][add_messages] [reducer](../../concepts/low_level.md#reducers), like [`MessagesState`](../../concepts/low_level.md#messagesstate).
 
 To remove specific messages:
 
@@ -2118,7 +2118,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
 === "In an agent"
 
     :::python
-    To summarize message history in an agent, use [`pre_model_hook`][langgraph.prebuilt.chat_agent_executor.create_react_agent] with a prebuilt [`SummarizationNode`](https://langchain-ai.github.io/langmem/reference/short_term/#langmem.short_term.SummarizationNode) abstraction:
+    To summarize message history in an agent, use @[`pre_model_hook`][create_react_agent] with a prebuilt [`SummarizationNode`](https://langchain-ai.github.io/langmem/reference/short_term/#langmem.short_term.SummarizationNode) abstraction:
 
     ```python
     from langchain_anthropic import ChatAnthropic
@@ -2162,7 +2162,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
     1. The `InMemorySaver` is a checkpointer that stores the agent's state in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [checkpointer documentation](../../reference/checkpoints.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready checkpointer for you.
     2. The `context` key is added to the agent's state. The key contains book-keeping information for the summarization node. It is used to keep track of the last summary information and ensure that the agent doesn't summarize on every LLM call, which can be inefficient.
     3. The `checkpointer` is passed to the agent. This enables the agent to persist its state across invocations.
-    4. The `pre_model_hook` is set to the `SummarizationNode`. This node will summarize the message history before sending it to the LLM. The summarization node will automatically handle the summarization process and update the agent's state with the new summary. You can replace this with a custom implementation if you prefer. Please see the [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent] API reference for more details.
+    4. The `pre_model_hook` is set to the `SummarizationNode`. This node will summarize the message history before sending it to the LLM. The summarization node will automatically handle the summarization process and update the agent's state with the new summary. You can replace this with a custom implementation if you prefer. Please see the @[create_react_agent][create_react_agent] API reference for more details.
     5. The `state_schema` is set to the `State` class, which is the custom state that contains an extra `context` key.
     :::
 

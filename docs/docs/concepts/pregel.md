@@ -6,9 +6,9 @@ search:
 # LangGraph runtime
 
 :::python
-[Pregel][langgraph.pregel.Pregel] implements LangGraph's runtime, managing the execution of LangGraph applications.
+@[Pregel] implements LangGraph's runtime, managing the execution of LangGraph applications.
 
-Compiling a [StateGraph][langgraph.graph.StateGraph] or creating an [entrypoint][langgraph.func.entrypoint] produces a [Pregel][langgraph.pregel.Pregel] instance that can be invoked with input.
+Compiling a @[StateGraph][StateGraph] or creating an @[entrypoint][entrypoint] produces a @[Pregel] instance that can be invoked with input.
 :::
 
 :::js
@@ -21,7 +21,7 @@ This guide explains the runtime at a high level and provides instructions for di
 
 :::python
 
-> **Note:** The [Pregel][langgraph.pregel.Pregel] runtime is named after [Google's Pregel algorithm](https://research.google/pubs/pub37252/), which describes an efficient method for large-scale parallel computation using graphs.
+> **Note:** The @[Pregel] runtime is named after [Google's Pregel algorithm](https://research.google/pubs/pub37252/), which describes an efficient method for large-scale parallel computation using graphs.
 
 :::
 
@@ -53,9 +53,9 @@ Channels are used to communicate between actors (PregelNodes). Each channel has 
 
 :::python
 
-- [LastValue][langgraph.channels.LastValue]: The default channel, stores the last value sent to the channel, useful for input and output values, or for sending data from one step to the next.
-- [Topic][langgraph.channels.Topic]: A configurable PubSub Topic, useful for sending multiple values between **actors**, or for accumulating output. Can be configured to deduplicate values or to accumulate values over the course of multiple steps.
-- [BinaryOperatorAggregate][langgraph.channels.BinaryOperatorAggregate]: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps; e.g.,`total = BinaryOperatorAggregate(int, operator.add)`
+- @[LastValue][LastValue]: The default channel, stores the last value sent to the channel, useful for input and output values, or for sending data from one step to the next.
+- @[Topic][Topic]: A configurable PubSub Topic, useful for sending multiple values between **actors**, or for accumulating output. Can be configured to deduplicate values or to accumulate values over the course of multiple steps.
+- @[BinaryOperatorAggregate][BinaryOperatorAggregate]: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps; e.g.,`total = BinaryOperatorAggregate(int, operator.add)`
   :::
 
 :::js
@@ -68,7 +68,7 @@ Channels are used to communicate between actors (PregelNodes). Each channel has 
 ## Examples
 
 :::python
-While most users will interact with Pregel through the [StateGraph][langgraph.graph.StateGraph] API or the [entrypoint][langgraph.func.entrypoint] decorator, it is possible to interact with Pregel directly.
+While most users will interact with Pregel through the @[StateGraph][StateGraph] API or the @[entrypoint][entrypoint] decorator, it is possible to interact with Pregel directly.
 :::
 
 :::js
@@ -437,7 +437,7 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
 
     :::python
 
-    The [StateGraph (Graph API)][langgraph.graph.StateGraph] is a higher-level abstraction that simplifies the creation of Pregel applications. It allows you to define a graph of nodes and edges. When you compile the graph, the StateGraph API automatically creates the Pregel application for you.
+    The @[StateGraph (Graph API)][StateGraph] is a higher-level abstraction that simplifies the creation of Pregel applications. It allows you to define a graph of nodes and edges. When you compile the graph, the StateGraph API automatically creates the Pregel application for you.
 
     ```python
     from typing import TypedDict, Optional
@@ -595,7 +595,7 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
 
     :::python
 
-    In the [Functional API](functional_api.md), you can use an [`entrypoint`][langgraph.func.entrypoint] to create a Pregel application. The `entrypoint` decorator allows you to define a function that takes input and returns output.
+    In the [Functional API](functional_api.md), you can use an @[`entrypoint`][entrypoint] to create a Pregel application. The `entrypoint` decorator allows you to define a function that takes input and returns output.
 
     ```python
     from typing import TypedDict, Optional
@@ -633,7 +633,7 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
 
     :::js
 
-    In the [Functional API](functional_api.md), you can use an [`entrypoint`][<insert-ref>] to create a Pregel application. The `entrypoint` decorator allows you to define a function that takes input and returns output.
+    In the [Functional API](functional_api.md), you can use an @[`entrypoint`][entrypoint] to create a Pregel application. The `entrypoint` decorator allows you to define a function that takes input and returns output.
 
     ```typescript
     import { MemorySaver } from "@langchain/langgraph";
