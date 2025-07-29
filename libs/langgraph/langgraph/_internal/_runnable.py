@@ -499,6 +499,10 @@ class _PregelWrapper(Runnable):
         self.pregel = pregel
         self._name = name or getattr(pregel, "name", None) or pregel.__class__.__name__
 
+    def __getattr__(self, name: str) -> Any:
+        """Delegate attribute access to the wrapped pregel instance."""
+        return getattr(self.pregel, name)
+
     def get_name(self, suffix: str | None = None, *, name: str | None = None) -> str:
         """Get the name of the runnable."""
         name = name or self._name
@@ -951,3 +955,4 @@ async def _consume_aiter(it: AsyncIterator[Any]) -> Any:
         else:
             output = chunk
     return output
+
