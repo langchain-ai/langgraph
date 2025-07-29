@@ -59,7 +59,7 @@ def _transform_link(
             "In file: %s, line %d, link_name: %s",
             file_path,
             line_number,
-            link_name
+            link_name,
         )
     link_map = SCOPE_LINK_MAPS.get(scope, {})
     url = link_map.get(link_name)
@@ -68,9 +68,15 @@ def _transform_link(
         return f"[{link_name}]({url})"
     else:
         # Log error with file location information
-        logger.error(
-            f"Link '{link_name}' not found in scope '{scope}' in {file_path}:{line_number}. "
-            f"Available links in scope: {list(link_map.keys())}"
+        logger.info(
+            # Using %s
+            "Link '%s' not found in scope '%s'. "
+            "In file: %s, line %d. Available links in scope: %s",
+            link_name,
+            scope,
+            file_path,
+            line_number,
+            list(link_map.keys() if link_map else []),
         )
         return None
 
