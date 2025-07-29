@@ -22,6 +22,7 @@ from typing import (
     Protocol,
     Union,
     cast,
+    get_type_hints,
 )
 
 from langchain_core.runnables.base import (
@@ -127,77 +128,27 @@ ANY_TYPE = object()
 
 ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
 
-# List of keyword arguments that can be injected into nodes / tasks / tools at runtime.
-# A named argument may appear multiple times if it appears with distinct types.
-KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
-    (
-        "config",
-        (
-            RunnableConfig,
-            "RunnableConfig",
-            Optional[RunnableConfig],
-            "Optional[RunnableConfig]",
-            inspect.Parameter.empty,
-        ),
-        # for now, use config directly, eventually, will pop off of Runtime
-        "N/A",
-        inspect.Parameter.empty,
-    ),
-    (
-        "writer",
-        (StreamWriter, "StreamWriter", inspect.Parameter.empty),
-        "stream_writer",
-        lambda _: None,
-    ),
-    (
-        "store",
-        (
-            BaseStore,
-            "BaseStore",
-            inspect.Parameter.empty,
-        ),
-        "store",
-        inspect.Parameter.empty,
-    ),
-    (
-        "store",
-        (
-            Optional[BaseStore],
-            "Optional[BaseStore]",
-        ),
-        "store",
-        None,
-    ),
-    (
-        "previous",
-        (ANY_TYPE,),
-        "previous",
-        inspect.Parameter.empty,
-    ),
-    (
-        "runtime",
-        (ANY_TYPE,),
-        # we never hit this block, we just inject runtime directly
-        "N/A",
-        inspect.Parameter.empty,
-    ),
+# Configuration for keyword arguments that can be injected at runtime
+KWARGS_CONFIG_KEYS: tuple[tuple[str, str, Any], ...] = (
+    ("config", "N/A", inspect.Parameter.empty),
+    ("writer", "stream_writer", lambda _: None),
+    ("store", "store", inspect.Parameter.empty),
+    ("previous", "previous", inspect.Parameter.empty),
+    ("runtime", "N/A", inspect.Parameter.empty),
 )
 """List of kwargs that can be passed to functions, and their corresponding
-config keys, default values and type annotations.
+runtime keys and default values.
 
 Used to configure keyword arguments that can be injected at runtime
 from the `Runtime` object as kwargs to `invoke`, `ainvoke`, `stream` and `astream`.
 
 For a keyword to be injected from the config object, the function signature
-must contain a kwarg with the same name and a matching type annotation.
+must contain a kwarg with the same name and a compatible type annotation.
 
 Each tuple contains:
 - the name of the kwarg in the function signature
-- the type annotation(s) for the kwarg
-- the `Runtime` attribute for fetching the value (N/A if not applicable)
-
-This is fully internal and should be further refactored to use `get_type_hints`
-to resolve forward references and optional types formatted like BaseStore | None.
+- the `Runtime` attribute for fetching the value (N/A if not applicable)  
+- the default value to use if the runtime value is missing
 """
 
 VALID_KINDS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
@@ -291,22 +242,63 @@ class RunnableCallable(Runnable):
             raise ValueError("At least one of func or afunc must be provided.")
 
         self.func_accepts: dict[str, tuple[str, Any]] = {}
-        params = inspect.signature(cast(Callable, func or afunc)).parameters
+        func_or_afunc = cast(Callable, func or afunc)
+        params = inspect.signature(func_or_afunc).parameters
+        
+        # Get resolved type hints to properly handle forward references and unions
+        try:
+            type_hints = get_type_hints(func_or_afunc)
+        except (NameError, AttributeError):
+            # Fallback to raw annotations if type resolution fails
+            type_hints = getattr(func_or_afunc, '__annotations__', {})
 
-        for kw, typ, runtime_key, default in KWARGS_CONFIG_KEYS:
+        for kw, runtime_key, default in KWARGS_CONFIG_KEYS:
             p = params.get(kw)
 
             if p is None or p.kind not in VALID_KINDS:
                 # If parameter is not found or is not a valid kind, skip
                 continue
 
-            if typ != (ANY_TYPE,) and p.annotation not in typ:
-                # A specific type is required, but the function annotation does
-                # not match the expected type.
-                continue
-
-            # If the kwarg is accepted by the function, store the key / runtime attribute to inject
-            self.func_accepts[kw] = (runtime_key, default)
+            # Get the resolved type hint for this parameter
+            param_type = type_hints.get(kw, p.annotation)
+            
+            # Check if this parameter should be injected based on its type
+            if self._should_inject_param(kw, param_type):
+                self.func_accepts[kw] = (runtime_key, default)
+    
+    def _should_inject_param(self, param_name: str, param_type: Any) -> bool:
+        """Determine if a parameter should be injected based on its name and type."""
+        if param_name == "config":
+            # Accept RunnableConfig, Optional[RunnableConfig], or no annotation
+            return (
+                param_type is inspect.Parameter.empty
+                or param_type is RunnableConfig
+                or param_type == Optional[RunnableConfig]
+                or (hasattr(param_type, '__origin__') and param_type.__origin__ is Union
+                    and RunnableConfig in param_type.__args__
+                    and type(None) in param_type.__args__)
+            )
+        elif param_name == "writer":
+            # Accept StreamWriter or no annotation
+            return (
+                param_type is inspect.Parameter.empty
+                or param_type is StreamWriter
+            )
+        elif param_name == "store":
+            # Accept BaseStore, Optional[BaseStore], or no annotation
+            return (
+                param_type is inspect.Parameter.empty
+                or param_type is BaseStore
+                or param_type == Optional[BaseStore]
+                or (hasattr(param_type, '__origin__') and param_type.__origin__ is Union
+                    and BaseStore in param_type.__args__
+                    and type(None) in param_type.__args__)
+            )
+        elif param_name in ("previous", "runtime"):
+            # Accept any type for previous and runtime
+            return True
+        
+        return False
 
     def __repr__(self) -> str:
         repr_args = {
