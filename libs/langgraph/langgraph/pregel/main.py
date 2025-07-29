@@ -12,7 +12,6 @@ from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass
 from typing import Any, Callable, Generic, Optional, Union, cast, get_type_hints
-from unittest.mock import DEFAULT
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
