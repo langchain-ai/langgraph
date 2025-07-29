@@ -30,7 +30,6 @@ docs = [
     "langchain-mcp-adapters",
     "langchain-ollama",
     "mkdocs",
-    "mkdocs-autorefs",
     "mkdocstrings",
     "mkdocstrings-python",
     "mkdocs-minify-plugin",
