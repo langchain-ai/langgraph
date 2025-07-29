@@ -353,7 +353,7 @@ const myWorkflow = entrypoint(
 
 ### Injectable parameters
 
-When declaring an `entrypoint`, you can request access to additional parameters that will be injected automatically at run time by using the [`getPreviousState()`](<insert-ref https://langchain-ai.github.io/langgraphjs/reference/functions/langgraph.getPreviousState.html>) function. These parameters include:
+When declaring an `entrypoint`, you can request access to additional parameters that will be injected automatically at run time by using the [`getPreviousState()`](https://langchain-ai.github.io/langgraphjs/reference/functions/langgraph.getPreviousState.html>) function. These parameters include:
 
 :::python
 | Parameter | Description |
@@ -574,7 +574,7 @@ Resuming an execution after an @[interrupt][interrupt] can be done by passing a 
 :::
 
 :::js
-Resuming an execution after an @[interrupt][interrupt] can be done by passing a **resume** value to the [`Command`](insert-ref) primitive.
+Resuming an execution after an @[interrupt][interrupt] can be done by passing a **resume** value to the @[`Command`][Command] primitive.
 
 === "Invoke"
 

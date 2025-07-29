@@ -2225,7 +2225,7 @@ https://smith.langchain.com/public/abab6a44-29f6-4b97-8164-af77413e494d/r
 :::
 
 :::js
-LangGraph also provides a **pre-built method** for creating an agent as defined above (using the [`createReactAgent`][<insert-ref>] function):
+LangGraph also provides a **pre-built method** for creating an agent as defined above (using the @[`createReactAgent`][create_react_agent] function):
 
 ```typescript
 import { createReactAgent } from "@langchain/langgraph/prebuilt";

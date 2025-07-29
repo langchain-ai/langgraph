@@ -5,7 +5,7 @@ This error is raised in the prebuilt @[create_react_agent][create_react_agent] w
 :::
 
 :::js
-This error is raised in the prebuilt [createReactAgent](insert-ref) when the `callModel` graph node receives a malformed list of messages. Specifically, it is malformed when there are `AIMessage`s with `tool_calls` (LLM requesting to call a tool) that do not have a corresponding `ToolMessage` (result of a tool invocation to return to the LLM).
+This error is raised in the prebuilt @[createReactAgent][create_react_agent] when the `callModel` graph node receives a malformed list of messages. Specifically, it is malformed when there are `AIMessage`s with `tool_calls` (LLM requesting to call a tool) that do not have a corresponding `ToolMessage` (result of a tool invocation to return to the LLM).
 :::
 
 There could be a few reasons you're seeing this error:
@@ -34,7 +34,7 @@ There could be a few reasons you're seeing this error:
    This interrupt could have been triggered in one of the following ways:
 
    - You manually set `interruptBefore: ['tools']` in `createReactAgent`
-   - One of the tools raised an error that wasn't handled by the [ToolNode](insert-ref) (`"tools"`)
+   - One of the tools raised an error that wasn't handled by the [ToolNode][ToolNode] (`"tools"`)
 
 :::
 

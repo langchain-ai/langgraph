@@ -211,7 +211,7 @@ def call_tools(state):
 :::
 
 :::js
-You can use prebuilt [`createReactAgent`][<insert-ref>] / @[ToolNode] components, or implement your own:
+You can use prebuilt @[`createReactAgent`][create_react_agent] / @[ToolNode] components, or implement your own:
 
 ```typescript
 graph.addNode("call_tools", async (state) => {

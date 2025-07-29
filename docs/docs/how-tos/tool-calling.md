@@ -1100,7 +1100,7 @@ agent.invoke({"messages": "what's my name?"})
 :::
 
 :::js
-To **access** (read) the graph state inside the tools, you can use the [`getContextVariable`][<insert-ref>] function:
+To **access** (read) the graph state inside the tools, you can use the @[`getContextVariable`][getContextVariable] function:
 
 ```typescript
 import { tool } from "@langchain/core/tools";
@@ -1218,7 +1218,7 @@ const updateUserName = tool(
     :::
 
     :::js
-    If you want to use tools that return `Command` and update graph state, you can either use prebuilt [`createReactAgent`][<insert-ref>] / @[ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
+    If you want to use tools that return `Command` and update graph state, you can either use prebuilt @[`createReactAgent`][create_react_agent] / @[ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
 
     ```typescript
     const callTools = async (state: State) => {

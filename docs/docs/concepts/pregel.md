@@ -473,7 +473,7 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
 
     :::js
 
-    The [StateGraph (Graph API)][<insert-ref>] is a higher-level abstraction that simplifies the creation of Pregel applications. It allows you to define a graph of nodes and edges. When you compile the graph, the StateGraph API automatically creates the Pregel application for you.
+    The @[StateGraph (Graph API)][StateGraph] is a higher-level abstraction that simplifies the creation of Pregel applications. It allows you to define a graph of nodes and edges. When you compile the graph, the StateGraph API automatically creates the Pregel application for you.
 
     ```typescript
     import { START, StateGraph } from "@langchain/langgraph";

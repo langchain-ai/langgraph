@@ -48,7 +48,7 @@ how to structure your code using **tasks** to avoid these issues. The same princ
 
 :::js
 For some examples of pitfalls to avoid, see the [Common Pitfalls](./functional_api.md#common-pitfalls) section in the functional API, which shows
-how to structure your code using **tasks** to avoid these issues. The same principles apply to the [StateGraph (Graph API)][<insert-ref>].
+how to structure your code using **tasks** to avoid these issues. The same principles apply to the @[StateGraph (Graph API)][StateGraph].
 :::
 
 ## Using tasks in nodes

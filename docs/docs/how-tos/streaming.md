@@ -9,7 +9,7 @@ Pass one or more of the following stream modes as a list to the @[`stream()`][Co
 :::
 
 :::js
-Pass one or more of the following stream modes as a list to the [`stream()`][<insert-ref>] method:
+Pass one or more of the following stream modes as a list to the @[`stream()`][CompiledStateGraph.stream] method:
 :::
 
 | Mode       | Description                                                                                                                                                                         |
@@ -29,7 +29,7 @@ To stream agent progress, use the @[`stream()`][CompiledStateGraph.stream] or @[
 :::
 
 :::js
-To stream agent progress, use the [`stream()`][<insert-ref>] method with `streamMode: "updates"`. This emits an event after every agent step.
+To stream agent progress, use the [`stream()`][CompiledStateGraph.stream] method with `streamMode: "updates"`. This emits an event after every agent step.
 :::
 
 For example, if you have an agent that calls a tool once, you should see the following updates:
