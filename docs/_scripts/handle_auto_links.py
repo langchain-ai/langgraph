@@ -21,6 +21,7 @@ The transformation value depends on the scope in which the link is used.
 
 import logging
 import re
+from typing import Optional
 
 from _scripts.link_map import SCOPE_LINK_MAPS
 
@@ -28,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 
 def _transform_link(
-    link_name: str, scope: str, file_path: str, line_number: int
-) -> str | None:
+    link_name: str, scope: str, file_path: str, line_number: int, custom_title: Optional[str] = None
+) -> Optional[str]:
     """Transform a cross-reference link based on the current scope.
 
     Args:
@@ -37,6 +38,7 @@ def _transform_link(
         scope: The current scope context ("global", "python", "js", etc.).
         file_path: The file path for error reporting.
         line_number: The line number for error reporting.
+        custom_title: Optional custom title for the link. If None, uses link_name.
 
     Returns:
         A formatted markdown link if the link is found in the scope mapping,
@@ -45,6 +47,9 @@ def _transform_link(
     Example:
         >>> _transform_link("StateGraph", "python", "file.md", 5)
         "[StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph)"
+
+        >>> _transform_link("StateGraph", "python", "file.md", 5, "Custom Title")
+        "[Custom Title](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph)"
 
         >>> _transform_link("unknown-link", "python", "file.md", 5)
         None
@@ -65,7 +70,8 @@ def _transform_link(
     url = link_map.get(link_name)
 
     if url:
-        return f"[{link_name}]({url})"
+        title = custom_title if custom_title is not None else link_name
+        return f"[{title}]({url})"
     else:
         # Log error with file location information
         logger.info(
@@ -95,9 +101,18 @@ CONDITIONAL_FENCE_PATTERN = re.compile(
 CROSS_REFERENCE_PATTERN = re.compile(
     r"""
     @                       # Literal @ symbol
-    \[                      # Opening bracket
-    (?P<link_name>[^\]]+)   # Link name - one or more non-bracket characters
-    \]                      # Closing bracket
+    (?:                     # Non-capturing group for two possible formats:
+        \[                  # Opening bracket for title
+        (?P<title>[^\]]+)   # Custom title - one or more non-bracket characters
+        \]                  # Closing bracket for title
+        \[                  # Opening bracket for link name
+        (?P<link_name_with_title>[^\]]+)  # Link name - one or more non-bracket characters
+        \]                  # Closing bracket for link name
+        |                   # OR
+        \[                  # Opening bracket
+        (?P<link_name>[^\]]+)   # Link name - one or more non-bracket characters
+        \]                  # Closing bracket
+    )
     """,
     re.VERBOSE,
 )
@@ -144,9 +159,19 @@ def _replace_autolinks(markdown: str, file_path: str) -> str:
         # Transform all @[link_name] references in this line based on current scope
         def replace_cross_reference(match: re.Match[str]) -> str:
             """Replace a single @[link_name] with the scoped equivalent."""
-            link_name = match.group("link_name")
+            # Check if this is the @[title][ref] format or @[ref] format
+            title = match.group("title")
+            if title is not None:
+                # This is @[title][ref] format
+                link_name = match.group("link_name_with_title")
+                custom_title = title
+            else:
+                # This is @[ref] format
+                link_name = match.group("link_name")
+                custom_title = None
+            
             transformed = _transform_link(
-                link_name, current_scope, file_path, line_number
+                link_name, current_scope, file_path, line_number, custom_title
             )
             return transformed if transformed is not None else match.group(0)
 
