@@ -862,7 +862,6 @@ builder.addNode("myNode", myNode, {
 
 Check out this [how-to guide](../how-tos/graph-api.ipynb#combine-control-flow-and-state-updates-with-command) for an end-to-end example of how to use `Command`.
 :::
-:::
 
 !!! important
 
@@ -921,8 +920,6 @@ graph.addNode("myNode", (state) => {
 !!! important "State updates with `Command.PARENT`"
 
     When you send updates from a subgraph node to a parent graph node for a key that's shared by both parent and subgraph [state schemas](#schema), you **must** define a [reducer](#reducers) for the key you're updating in the parent graph state.
-
-:::
 
 :::
 

@@ -317,17 +317,17 @@ To implement handoffs with `create_react_agent`, you need to:
 
 3.  Define a parent graph that contains individual agents as nodes:
 
-        ```python
-        from langgraph.graph import StateGraph, MessagesState
-        multi_agent_graph = (
-            StateGraph(MessagesState)
-            .add_node(flight_assistant)
-            .add_node(hotel_assistant)
-            ...
-        )
-        ```
+    ```python
+    from langgraph.graph import StateGraph, MessagesState
+    multi_agent_graph = (
+        StateGraph(MessagesState)
+        .add_node(flight_assistant)
+        .add_node(hotel_assistant)
+        ...
+    )
+    ```
 
-    :::
+:::
 
 :::js
 This is used both by `@langchain/langgraph-supervisor` (supervisor hands off to individual agents) and `@langchain/langgraph-swarm` (an individual agent can hand off to other agents).
@@ -622,7 +622,8 @@ for await (const chunk of multiAgentGraph.stream({
    :::
 
 !!! Note
-This handoff implementation assumes that:
+
+    This handoff implementation assumes that:
 
     - each agent receives overall message history (across all agents) in the multi-agent system as its input
     - each agent outputs its internal messages history to the overall message history of the multi-agent system

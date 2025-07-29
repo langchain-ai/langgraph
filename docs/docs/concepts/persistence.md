@@ -128,10 +128,6 @@ await graph.invoke({ foo: "" }, config);
 
 :::
 
-:::python
-
-:::
-
 :::js
 
 ```typescript

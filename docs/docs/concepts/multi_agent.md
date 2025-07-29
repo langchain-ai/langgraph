@@ -439,8 +439,6 @@ const supervisorGraph = builder.compile();
 
 :::
 
-:::
-
 :::js
 
 ```typescript

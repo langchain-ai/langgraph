@@ -17,6 +17,5 @@
     "@types/msgpack-lite": "^0.1.11",
     "@types/nock": "^11.1.0",
     "@types/node": "^22.13.1"
-  },
-  "packageManager": "yarn@4.6.0+sha224.acd0786f07ffc6c933940eb65fc1d627131ddf5455bddcc295dc90fd"
+  }
 }

@@ -44,8 +44,9 @@ Custom auth **is supported** for all plans in LangGraph Platform.
 - You control all aspects of authentication and authorization
 
 !!! note "Custom auth"
-Custom auth is supported for **Enterprise** self-hosted deployments.
-Standalone Container (Lite) deployments do not support custom auth natively.
+
+    Custom auth is supported for **Enterprise** self-hosted deployments.
+    Standalone Container (Lite) deployments do not support custom auth natively.
 
 ## System Architecture
 
@@ -212,7 +213,7 @@ The returned user information is available:
 
 ### Agent authentication
 
-Custom authentication permits delegated access. The values you return in  `@auth.authenticate` are added to the run context, giving agents user-scoped credentials lets them access resources on the user’s behalf.
+Custom authentication permits delegated access. The values you return in `@auth.authenticate` are added to the run context, giving agents user-scoped credentials lets them access resources on the user’s behalf.
 
 ```mermaid
 sequenceDiagram
@@ -244,7 +245,7 @@ sequenceDiagram
   ExternalService  -->> LangGraph: 10. Service response
 
   %% Return to caller
-  LangGraph  -->> ClientApp: 11. Return resources 
+  LangGraph  -->> ClientApp: 11. Return resources
 ```
 
 After authentication, the platform creates a special configuration object that is passed to your graph and all nodes via the configurable context.
