@@ -132,7 +132,13 @@ ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
 KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
     (
         "config",
-        (RunnableConfig, "RunnableConfig", inspect.Parameter.empty),
+        (
+            RunnableConfig,
+            "RunnableConfig",
+            Optional[RunnableConfig],
+            "Optional[RunnableConfig]",
+            inspect.Parameter.empty,
+        ),
         # for now, use config directly, eventually, will pop off of Runtime
         "N/A",
         inspect.Parameter.empty,
