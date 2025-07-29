@@ -79,11 +79,11 @@ def test_runtime_propogated_to_subgraph() -> None:
         username: str
 
     class State(TypedDict, total=False):
-        foo: str
-        bar: str
+        subgraph: str
+        main: str
 
     def subgraph_node_1(state: State, runtime: Runtime[Context]):
-        return {"bar": f"hi {runtime.context.username}!"}
+        return {"subgraph": f"{runtime.context.username}!"}
 
     subgraph_builder = StateGraph(State, context_schema=Context)
     subgraph_builder.add_node(subgraph_node_1)
@@ -91,7 +91,7 @@ def test_runtime_propogated_to_subgraph() -> None:
     subgraph = subgraph_builder.compile()
 
     def main_node(state: State, runtime: Runtime[Context]):
-        return {"foo": f"hello {runtime.context.username}!"}
+        return {"main": f"{runtime.context.username}!"}
 
     builder = StateGraph(State, context_schema=Context)
     builder.add_node(main_node)
@@ -102,4 +102,4 @@ def test_runtime_propogated_to_subgraph() -> None:
 
     context = Context(username="Alice")
     result = graph.invoke({}, context=context)
-    assert result == {"foo": "hello Alice!", "bar": "hi Alice!"}
+    assert result == {"subgraph": "Alice!", "main": "Alice!"}
