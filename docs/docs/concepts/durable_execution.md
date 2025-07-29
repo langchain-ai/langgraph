@@ -26,7 +26,7 @@ To leverage durable execution in LangGraph, you need to:
 :::
 
 :::js 
-3. Wrap any non-deterministic operations (e.g., random number generation) or operations with side effects (e.g., file writes, API calls) inside [tasks][<insert-ref>] to ensure that when a workflow is resumed, these operations are not repeated for the particular run, and instead their results are retrieved from the persistence layer. For more information, see [Determinism and Consistent Replay](#determinism-and-consistent-replay).
+3. Wrap any non-deterministic operations (e.g., random number generation) or operations with side effects (e.g., file writes, API calls) inside @[tasks][task] to ensure that when a workflow is resumed, these operations are not repeated for the particular run, and instead their results are retrieved from the persistence layer. For more information, see [Determinism and Consistent Replay](#determinism-and-consistent-replay).
 :::
 
 ## Determinism and Consistent Replay
@@ -269,7 +269,7 @@ Once you have enabled durable execution in your workflow, you can resume executi
 
 :::js
 
-- **Pausing and Resuming Workflows:** Use the [interrupt](insert-ref) function to pause a workflow at specific points and the [Command](insert-ref) primitive to resume it with updated state. See [**Human-in-the-Loop**](./human_in_the_loop.md) for more details.
+- **Pausing and Resuming Workflows:** Use the @[interrupt][interrupt] function to pause a workflow at specific points and the @[Command] primitive to resume it with updated state. See [**Human-in-the-Loop**](./human_in_the_loop.md) for more details.
 - **Recovering from Failures:** Automatically resume workflows from the last successful checkpoint after an exception (e.g., LLM provider outage). This involves executing the workflow with the same thread identifier by providing it with a `null` as the input value (see this [example](../how-tos/use-functional-api.md#resuming-after-an-error) with the functional API).
   :::
 

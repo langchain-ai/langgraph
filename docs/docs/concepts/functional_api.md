@@ -574,7 +574,7 @@ Resuming an execution after an @[interrupt][interrupt] can be done by passing a 
 :::
 
 :::js
-Resuming an execution after an [`interrupt`](insert-ref) can be done by passing a **resume** value to the [`Command`](insert-ref) primitive.
+Resuming an execution after an @[interrupt][interrupt] can be done by passing a **resume** value to the [`Command`](insert-ref) primitive.
 
 === "Invoke"
 
@@ -798,7 +798,7 @@ my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocat
 :::
 
 :::js
-[`entrypoint.final`](insert-ref) is a special primitive that can be returned from an entrypoint and allows **decoupling** the value that is **saved in the checkpoint** from the **return value of the entrypoint**.
+@[`entrypoint.final`][entrypoint.final] is a special primitive that can be returned from an entrypoint and allows **decoupling** the value that is **saved in the checkpoint** from the **return value of the entrypoint**.
 
 The first value is the return value of the entrypoint, and the second value is the value that will be saved in the checkpoint.
 

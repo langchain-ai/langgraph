@@ -1158,9 +1158,9 @@ Under the hood, checkpointing is powered by checkpointer objects that conform to
 
 :::js
 
-- `@langchain/langgraph-checkpoint`: The base interface for checkpointer savers ([BaseCheckpointSaver][<insert-ref>]) and serialization/deserialization interface ([SerializerProtocol][<insert-ref>]). Includes in-memory checkpointer implementation ([MemorySaver][<insert-ref>]) for experimentation. LangGraph comes with `@langchain/langgraph-checkpoint` included.
-- `@langchain/langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database ([SqliteSaver][<insert-ref>]). Ideal for experimentation and local workflows. Needs to be installed separately.
-- `@langchain/langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database ([PostgresSaver][<insert-ref>]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
+- `@langchain/langgraph-checkpoint`: The base interface for checkpointer savers (@[BaseCheckpointSaver][BaseCheckpointSaver]) and serialization/deserialization interface (@[SerializerProtocol][SerializerProtocol]). Includes in-memory checkpointer implementation (@[InMemorySaver) for experimentation. LangGraph comes with `@langchain/langgraph-checkpoint` included.
+- `@langchain/langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database (@[SqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
+- `@langchain/langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresSaver]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
   :::
 
 ### Checkpointer interface
@@ -1180,7 +1180,7 @@ For running your graph asynchronously, you can use `InMemorySaver`, or async ver
 :::
 
 :::js
-Each checkpointer conforms to the [BaseCheckpointSaver][<insert-ref>] interface and implements the following methods:
+Each checkpointer conforms to the @[BaseCheckpointSaver][BaseCheckpointSaver] interface and implements the following methods:
 
 - `.put` - Store a checkpoint with its configuration and metadata.
 - `.putWrites` - Store intermediate writes linked to a checkpoint (i.e. [pending writes](#pending-writes)).

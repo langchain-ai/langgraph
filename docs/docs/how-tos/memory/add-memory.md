@@ -1419,7 +1419,7 @@ await agent.invoke(
 ```
 
 1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation](../../reference/store.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
-2. For this example, we write some sample data to the store using the `put` method. Please see the [BaseStore.put][<insert-ref>] API reference for more details.
+2. For this example, we write some sample data to the store using the `put` method. Please see the @[BaseStore.put] API reference for more details.
 3. The first argument is the namespace. This is used to group related data together. In this case, we are using the `users` namespace to group user data.
 4. A key within the namespace. This example uses a user ID for the key.
 5. The data that we want to store for the given user.

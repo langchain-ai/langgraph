@@ -12,9 +12,9 @@ Compiling a @[StateGraph][StateGraph] or creating an @[entrypoint][entrypoint] p
 :::
 
 :::js
-[Pregel][<insert-ref>] implements LangGraph's runtime, managing the execution of LangGraph applications.
+@[Pregel] implements LangGraph's runtime, managing the execution of LangGraph applications.
 
-Compiling a [StateGraph][<insert-ref>] or creating an [entrypoint][<insert-ref>] produces a [Pregel][<insert-ref>] instance that can be invoked with input.
+Compiling a @[StateGraph][StateGraph] or creating an @[entrypoint][entrypoint] produces a @[Pregel] instance that can be invoked with input.
 :::
 
 This guide explains the runtime at a high level and provides instructions for directly implementing applications with Pregel.
@@ -27,7 +27,7 @@ This guide explains the runtime at a high level and provides instructions for di
 
 :::js
 
-> **Note:** The [Pregel][<insert-ref>] runtime is named after [Google's Pregel algorithm](https://research.google/pubs/pub37252/), which describes an efficient method for large-scale parallel computation using graphs.
+> **Note:** The @[Pregel] runtime is named after [Google's Pregel algorithm](https://research.google/pubs/pub37252/), which describes an efficient method for large-scale parallel computation using graphs.
 
 :::
 
@@ -60,9 +60,9 @@ Channels are used to communicate between actors (PregelNodes). Each channel has 
 
 :::js
 
-- [LastValue][<insert-ref>]: The default channel, stores the last value sent to the channel, useful for input and output values, or for sending data from one step to the next.
-- [Topic][<insert-ref>]: A configurable PubSub Topic, useful for sending multiple values between **actors**, or for accumulating output. Can be configured to deduplicate values or to accumulate values over the course of multiple steps.
-- [BinaryOperatorAggregate][<insert-ref>]: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps; e.g.,`total = BinaryOperatorAggregate(int, operator.add)`
+- @[LastValue]: The default channel, stores the last value sent to the channel, useful for input and output values, or for sending data from one step to the next.
+- @[Topic]: A configurable PubSub Topic, useful for sending multiple values between **actors**, or for accumulating output. Can be configured to deduplicate values or to accumulate values over the course of multiple steps.
+- @[BinaryOperatorAggregate]: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps; e.g.,`total = BinaryOperatorAggregate(int, operator.add)`
   :::
 
 ## Examples
@@ -72,7 +72,7 @@ While most users will interact with Pregel through the @[StateGraph][StateGraph]
 :::
 
 :::js
-While most users will interact with Pregel through the [StateGraph][<insert-ref>] API or the [entrypoint][<insert-ref>] decorator, it is possible to interact with Pregel directly.
+While most users will interact with Pregel through the @[StateGraph] API or the @[entrypoint] decorator, it is possible to interact with Pregel directly.
 :::
 
 Below are a few different examples to give you a sense of the Pregel API.
