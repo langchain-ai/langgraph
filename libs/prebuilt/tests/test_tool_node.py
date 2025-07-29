@@ -7,6 +7,7 @@ from typing import (
 import pytest
 from langchain_core.messages import (
     AIMessage,
+    RemoveMessage,
     ToolMessage,
 )
 from langchain_core.tools import BaseTool, ToolException
@@ -15,6 +16,7 @@ from pydantic import BaseModel, ValidationError
 from pydantic.v1 import ValidationError as ValidationErrorV1
 
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import TOOL_CALL_ERROR_TEMPLATE
 from langgraph.types import Command, Send
@@ -1129,3 +1131,28 @@ def test_tool_node_parent_command_with_send():
             graph=Command.PARENT,
         )
     ]
+
+
+async def test_tool_node_command_remove_all_messages():
+    from langchain_core.tools.base import InjectedToolCallId
+
+    @dec_tool
+    def remove_all_messages_tool(tool_call_id: Annotated[str, InjectedToolCallId]):
+        """A tool that removes all messages."""
+        return Command(update={"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]})
+
+    tool_node = ToolNode([remove_all_messages_tool])
+    tool_call = {
+        "name": "remove_all_messages_tool",
+        "args": {},
+        "id": "tool_call_123",
+    }
+    result = await tool_node.ainvoke(
+        {"messages": [AIMessage(content="", tool_calls=[tool_call])]}
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    command = result[0]
+    assert isinstance(command, Command)
+    assert command.update == {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]}
