@@ -2,27 +2,27 @@
 
 **Context engineering** is the [art and science of filling the context window with just the right information](https://x.com/karpathy/status/1937902205765607626) so that an AI application can accomplish a task. Context can be characterized along two key dimensions:
 
-**By mutability:**
+1. By **mutability**:
 
-- **Static context**: Immutable data that doesn't change during execution (e.g., user metadata, database connections, tools)
-- **Dynamic context**: Mutable data that evolves as the application runs (e.g., conversation history, intermediate results, tool call observations)
+    - **Static context**: Immutable data that doesn't change during execution (e.g., user metadata, database connections, tools)
+    - **Dynamic context**: Mutable data that evolves as the application runs (e.g., conversation history, intermediate results, tool call observations)
 
-**By lifetime:**
+2. By **lifetime**:
 
-- **Runtime context**: Data scoped to a single run or invocation
-- **Cross-conversation context**: Data that persists across multiple conversations or sessions
+    - **Runtime context**: Data scoped to a single run or invocation
+    - **Cross-conversation context**: Data that persists across multiple conversations or sessions
 
-LangGraph provides three ways to manage context, combining the mutability and lifetime dimensions:
+LangGraph provides three ways to manage context, which combines the mutability and lifetime dimensions:
 
-| Context Type                                                                 | Description                                            | Mutability | Lifetime                | Access Method                    |
+| Context type                                                                 | Description                                            | Mutability | Lifetime                | Access method                    |
 |------------------------------------------------------------------------------|--------------------------------------------------------|------------|-------------------------|-----------------------------------|
-| [**Static Runtime Context**](#static-runtime-context)                        | User metadata, tools, db connections passed at startup | Static     | Single run              | `context` argument to `invoke`/`stream` |
-| [**Dynamic Runtime Context (State)**](#dynamic-runtime-context-state)        | Mutable data that evolves during a single run         | Dynamic    | Single run              | LangGraph state object           |
-| [**Dynamic Cross-Conversation Context (Store)**](#dynamic-cross-conversation-context-store) | Persistent data shared across conversations            | Dynamic    | Cross-conversation      | LangGraph store                  |
+| [**Static runtime context**](#static-runtime-context)                        | User metadata, tools, db connections passed at startup | Static     | Single run              | `context` argument to `invoke`/`stream` |
+| [**Dynamic runtime context (state)**](#dynamic-runtime-context-state)        | Mutable data that evolves during a single run         | Dynamic    | Single run              | LangGraph state object           |
+| [**Dynamic cross-conversation context (store)**](#dynamic-cross-conversation-context-store) | Persistent data shared across conversations            | Dynamic    | Cross-conversation      | LangGraph store                  |
 
-## Static Runtime Context
+## Static runtime context
 
-**Static runtime context** represents immutable data like user metadata, tools, and database connections that's passed to an application at the start of a run via the `context` argument to `invoke`/`stream`. This data doesn't change during execution.
+**Static runtime context** represents immutable data like user metadata, tools, and database connections that are passed to an application at the start of a run via the `context` argument to `invoke`/`stream`. This data does not change during execution.
 
 !!! version-added "New in LangGraph v0.6: `Runtime.context` replaces `config['configurable']`"
 
@@ -110,7 +110,7 @@ graph.invoke( # (1)!
 
     See the [tool calling guide](../how-tos/tool-calling.md#configuration) for details.
 
-## Dynamic Runtime Context (State)
+## Dynamic runtime context (state)
 
 **Dynamic runtime context** represents mutable data that can evolve during a single run and is managed through the LangGraph state object. This includes conversation history, intermediate results, and values derived from tools or LLM outputs. In LangGraph, the state object acts as [short-term memory](../concepts/memory.md) during a run.
 
@@ -192,8 +192,8 @@ graph.invoke( # (1)!
 
     Please see the [memory guide](../how-tos/memory/add-memory.md) for more details on how to enable memory. This is a powerful feature that allows you to persist the agent's state across multiple invocations. Otherwise, the state is scoped only to a single run.
 
-## Dynamic Cross-Conversation Context (Store)
+## Dynamic cross-conversation context (store)
 
-**Dynamic cross-conversation context** represents persistent, mutable data that spans across multiple conversations or sessions and is managed through the LangGraph store. This includes user profiles, preferences, and historical interactions. The LangGraph store acts as [**long-term memory**](../concepts/memory.md#long-term-memory) across multiple runs. This can be used to read or update persistent facts (e.g., user profiles, preferences, prior interactions). 
+**Dynamic cross-conversation context** represents persistent, mutable data that spans across multiple conversations or sessions and is managed through the LangGraph store. This includes user profiles, preferences, and historical interactions. The LangGraph store acts as [long-term memory](../concepts/memory.md#long-term-memory) across multiple runs. This can be used to read or update persistent facts (e.g., user profiles, preferences, prior interactions). 
 
 For more information, see the [Memory guide](../how-tos/memory/add-memory.md).
