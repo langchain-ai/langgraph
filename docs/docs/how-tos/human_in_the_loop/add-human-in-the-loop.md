@@ -2215,9 +2215,9 @@ When a node contains multiple interrupt calls, LangGraph keeps a list of resume 
 
 To avoid issues, refrain from dynamically changing the node's structure between executions. This includes adding, removing, or reordering interrupt calls, as such changes can result in mismatched indices. These problems often arise from unconventional patterns, such as mutating state via `Command(resume=..., update=SOME_STATE_MUTATION)` or relying on global variables to modify the node's structure dynamically.
 
+:::python
 ??? example "Extended example: incorrect code that introduces non-determinism"
 
-    :::python
     ```python
     import uuid
     from typing import TypedDict, Optional
@@ -2280,3 +2280,5 @@ To avoid issues, refrain from dynamically changing the node's structure between 
     Name: N/A. Age: John
     {'human_node': {'age': 'John', 'name': 'N/A'}}
     ```
+
+:::
