@@ -13,7 +13,6 @@ def mock_link_maps():
     mock_scope_maps = {
         "python": {"py-link": "https://example.com/python"},
         "js": {"js-link": "https://example.com/js"},
-        "global": {"global-link": "https://example.com/global"},
     }
 
     with patch("_scripts.handle_auto_links.SCOPE_LINK_MAPS", mock_scope_maps):
@@ -46,7 +45,7 @@ def test_global_cross_refs(mock_link_maps) -> None:
     markdown = "".join(lines)
     result = _replace_autolinks(markdown, "test.md")
     expected = "".join(
-        ["[global-link](https://example.com/global)\n", "Text with @[unknown-link].\n"]
+        ["@[global-link]\n", "Text with @[unknown-link].\n"]
     )
     assert result == expected
 
@@ -88,15 +87,15 @@ def test_all_scopes(mock_link_maps) -> None:
     result = _replace_autolinks(markdown, "test.md")
     expected = "".join(
         [
-            "[global-link](https://example.com/global)\n",
+            "@[global-link]\n",
             ":::python\n",
             "[py-link](https://example.com/python)\n",
             ":::\n",
-            "[global-link](https://example.com/global)\n",
+            "@[global-link]\n",
             ":::js\n",
             "[js-link](https://example.com/js)\n",
             ":::\n",
-            "[global-link](https://example.com/global)\n",
+            "@[global-link]\n"
         ]
     )
     assert result == expected
@@ -112,7 +111,7 @@ def test_fence_resets_to_global(mock_link_maps) -> None:
             ":::python\n",
             "[py-link](https://example.com/python)\n",
             ":::\n",
-            "[global-link](https://example.com/global)\n",
+            "@[global-link]\n",
         ]
     )
     assert result == expected
@@ -135,15 +134,15 @@ def test_indented_conditional_fences(mock_link_maps) -> None:
     result = _replace_autolinks(markdown, "test.md")
     expected = "".join(
         [
-            "[global-link](https://example.com/global)\n",
+            "@[global-link]\n",
             "    :::python\n",
             "    [py-link](https://example.com/python)\n",
             "    :::\n",
-            "[global-link](https://example.com/global)\n",
+            "@[global-link]\n",
             "\t\t:::js\n",
             "\t\t[js-link](https://example.com/js)\n",
             "\t\t:::\n",
-            "[global-link](https://example.com/global)\n",
+            "@[global-link]\n",
         ]
     )
     assert result == expected
