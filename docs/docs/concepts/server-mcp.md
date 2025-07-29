@@ -195,7 +195,7 @@ Use an MCP-compliant client to connect to the LangGraph server. The following ex
 npm install @langchain/mcp-adapters
 ```
 
-Here is an example of how to connect to a remote MCP endpont and use an agent as a tool:
+Here is an example of how to connect to a remote MCP endpoint and use an agent as a tool:
 
 ```typescript
 import { MultiServerMCPClient } from "@langchain/mcp-adapters";
