@@ -61,6 +61,11 @@ try:
 except ImportError:
     _StreamingCallbackHandler = None  # type: ignore
 
+try:
+    from langgraph.pregel.protocol import PregelProtocol
+except ImportError:
+    PregelProtocol = None  # type: ignore
+
 
 def _set_config_context(
     config: RunnableConfig, run: Any = None
@@ -896,3 +901,4 @@ async def _consume_aiter(it: AsyncIterator[Any]) -> Any:
         else:
             output = chunk
     return output
+
