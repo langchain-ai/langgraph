@@ -261,8 +261,6 @@ on the graph builder. This creates a `CompiledGraph` we can invoke on our state.
 
 :::python
 
-:::python
-
 ```python
 graph = graph_builder.compile()
 ```
@@ -435,8 +433,6 @@ Goodbye!
 :::python
 
 Below is the full code for this tutorial:
-
-:::python
 
 ```python
 from typing import Annotated

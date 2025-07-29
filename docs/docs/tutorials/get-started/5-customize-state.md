@@ -493,8 +493,6 @@ llm = init_chat_model("anthropic:claude-3-5-sonnet-latest")
 ```
 -->
 
-:::python
-
 ```python
 from typing import Annotated
 

@@ -24,8 +24,6 @@ Rewind your graph by fetching a checkpoint using the graph's `getStateHistory` m
 
 {% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
-:::python
-
 <!---
 ```python
 from langchain.chat_models import init_chat_model

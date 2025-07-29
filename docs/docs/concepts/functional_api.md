@@ -370,7 +370,6 @@ When declaring an `entrypoint`, you can request access to additional parameters 
 
 ??? example "Requesting Injectable Parameters"
 
-    :::python
     ```python
     from langchain_core.runnables import RunnableConfig
     from langgraph.func import entrypoint
@@ -593,7 +592,6 @@ To resume after an error, run the `entrypoint` with a `None` and the same **thre
 
 This assumes that the underlying **error** has been resolved and execution can proceed successfully.
 
-:::python
 === "Invoke"
 
     ```python

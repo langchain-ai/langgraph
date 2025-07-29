@@ -742,7 +742,6 @@ Each handler has type hints available for its `value` parameter. For example:
     ):
         ...
     ```
-    :::
 
     More specific handlers provide better type hints since they handle fewer action types.
 

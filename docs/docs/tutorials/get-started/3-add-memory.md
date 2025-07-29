@@ -256,8 +256,6 @@ ai: I don't have the ability to remember personal information about users betwee
 
 :::python
 
-:::python
-
 By now, we have made a few checkpoints across two different threads. But what goes into a checkpoint? To inspect a graph's `state` for a given config at any time, call `get_state(config)`.
 
 ```python
