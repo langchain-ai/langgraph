@@ -26,8 +26,8 @@ LangGraph provides three ways to manage context, which combines the mutability a
 
 !!! version-added "New in LangGraph v0.6: `context` replaces `config['configurable']`"
 
-    Runtime context should be passed to the `context` argument of `invoke`/`stream`.
-    This replaces the previous pattern of passing application configuration to `config['configurable']`.
+    Runtime context is now passed to the `context` argument of `invoke`/`stream`,
+    which replaces the previous pattern of passing application configuration to `config['configurable']`.
 
 !!! tip "Runtime context vs LLM context"
 
@@ -115,7 +115,7 @@ graph.invoke( # (1)!
 
     See the [tool calling guide](../how-tos/tool-calling.md#configuration) for details.
 
-!!! tip "Using the `Runtime` object in nodes and tools"
+!!! tip
 
     The `Runtime` object can be used to access static context and other utilities like the active store and stream writer.
     See the [Runtime][langgraph.runtime.Runtime] documentation for details.
