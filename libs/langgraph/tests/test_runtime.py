@@ -7,16 +7,14 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime, get_runtime
 
 
-@dataclass
-class Context:
-    api_key: str
-
-
-class State(TypedDict):
-    message: str
-
-
 def test_injected_runtime() -> None:
+    @dataclass
+    class Context:
+        api_key: str
+
+    class State(TypedDict):
+        message: str
+
     def injected_runtime(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
         return {"message": f"api key: {runtime.context.api_key}"}
 
@@ -32,6 +30,13 @@ def test_injected_runtime() -> None:
 
 
 def test_context_runtime() -> None:
+    @dataclass
+    class Context:
+        api_key: str
+
+    class State(TypedDict):
+        message: str
+
     def context_runtime(state: State) -> dict[str, Any]:
         runtime = get_runtime(Context)
         return {"message": f"api key: {runtime.context.api_key}"}
@@ -45,3 +50,56 @@ def test_context_runtime() -> None:
         {"message": "hello world"}, context=Context(api_key="sk_123456")
     )
     assert result == {"message": "api key: sk_123456"}
+
+
+def test_override_runtime() -> None:
+    @dataclass
+    class Context:
+        api_key: str
+
+    runtime1 = Runtime(context=Context(api_key="abc"))
+    runtime = runtime1.override(context=Context(api_key="def"))
+    assert runtime.context.api_key == "def"
+
+
+def test_merge_runtime() -> None:
+    @dataclass
+    class Context:
+        api_key: str
+
+    runtime1 = Runtime(context=Context(api_key="abc"))
+    runtime2 = Runtime(context=Context(api_key="def"))
+    runtime = runtime1.merge(runtime2)
+    assert runtime.context.api_key == "def"
+
+
+def test_runtime_propogated_to_subgraph() -> None:
+    @dataclass
+    class Context:
+        username: str
+
+    class State(TypedDict, total=False):
+        foo: str
+        bar: str
+
+    def subgraph_node_1(state: State, runtime: Runtime[Context]):
+        return {"bar": f"hi {runtime.context.username}!"}
+
+    subgraph_builder = StateGraph(State, context_schema=Context)
+    subgraph_builder.add_node(subgraph_node_1)
+    subgraph_builder.set_entry_point("subgraph_node_1")
+    subgraph = subgraph_builder.compile()
+
+    def main_node(state: State, runtime: Runtime[Context]):
+        return {"foo": f"hello {runtime.context.username}!"}
+
+    builder = StateGraph(State, context_schema=Context)
+    builder.add_node(main_node)
+    builder.add_node("node_1", subgraph)
+    builder.set_entry_point("main_node")
+    builder.add_edge("main_node", "node_1")
+    graph = builder.compile()
+
+    context = Context(username="Alice")
+    result = graph.invoke({}, context=context)
+    assert result == {"foo": "hello Alice!", "bar": "hi Alice!"}
