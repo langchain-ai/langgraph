@@ -12,6 +12,16 @@
     - **Runtime context**: Data scoped to a single run or invocation
     - **Cross-conversation context**: Data that persists across multiple conversations or sessions
 
+!!! tip "Runtime context vs LLM context"
+
+    Runtime context refers to local context: data and dependencies your code needs to run. It does **not** refer to:
+
+    * The LLM context, which is the data passed into the LLM's prompt.
+    * The "context window", which is the maximum number of tokens that can be passed to the LLM.
+
+    Runtime context can be used to optimize the LLM context. For example, you can use user metadata
+    in the runtime context to fetch user preferences and feed them into the context window.
+
 LangGraph provides three ways to manage context, which combines the mutability and lifetime dimensions:
 
 | Context type                                                                 | Description                                            | Mutability | Lifetime                | Access method                    |
@@ -28,16 +38,6 @@ LangGraph provides three ways to manage context, which combines the mutability a
 
     Runtime context is now passed to the `context` argument of `invoke`/`stream`,
     which replaces the previous pattern of passing application configuration to `config['configurable']`.
-
-!!! tip "Runtime context vs LLM context"
-
-    Runtime context refers to local context: data and dependencies your code needs to run. It does **not** refer to:
-
-    * The LLM context, which is the data passed into the LLM's prompt.
-    * The "context window", which is the maximum number of tokens that can be passed to the LLM.
-
-    Runtime context can be used to optimize the LLM context. For example, you can use user metadata
-    in the runtime context to fetch user preferences and feed them into the context window.
 
 ```python
 @dataclass
