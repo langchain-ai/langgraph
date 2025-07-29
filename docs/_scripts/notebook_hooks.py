@@ -286,12 +286,6 @@ def _highlight_code_blocks(markdown: str) -> str:
     return markdown
 
 
-TARGET_LANGUAGE = os.environ.get("TARGET_LANGUAGE", "python")
-
-if TARGET_LANGUAGE not in {"python", "js"}:
-    raise ValueError(f"TARGET_LANGUAGE must be 'python' or 'js', got {TARGET_LANGUAGE}")
-
-
 def _on_page_markdown_with_config(
     markdown: str,
     page: Page,
@@ -317,17 +311,11 @@ def _on_page_markdown_with_config(
     markdown = _highlight_code_blocks(markdown)
 
     # Apply conditional rendering for code blocks
-    markdown = _apply_conditional_rendering(markdown, TARGET_LANGUAGE)
-    if TARGET_LANGUAGE == "js":
-        markdown = _resolve_cross_references(markdown, JS_LINK_MAP)
-    elif TARGET_LANGUAGE == "python":
-        # Via a dedicated plugin
-        pass
-    else:
-        raise ValueError(
-            f"Unsupported target language: {TARGET_LANGUAGE}. "
-            "Supported languages are 'python' and 'js'."
-        )
+    target_language = kwargs.get(
+        "target_language",
+        os.environ.get("TARGET_LANGUAGE", "python")
+    )
+    markdown = _apply_conditional_rendering(markdown, target_language)
 
     # Add file path as an attribute to code blocks that are executable.
     # This file path is used to associate fixtures with the executable code
