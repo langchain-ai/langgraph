@@ -564,6 +564,102 @@ class _AgentBuilder:
 
         return generate_structured_response, agenerate_structured_response
 
+    def _create_model_router(self, entrypoint: str) -> Callable:
+        """Create the model router function (should_continue)."""
+        def should_continue(state: StateSchema) -> Union[str, list[Send]]:
+            messages = _get_state_value(state, "messages")
+            last_message = messages[-1]
+            # If there is no function call, then we finish
+            if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+                if self.post_model_hook is not None:
+                    return "post_model_hook"
+                elif self.response_format is not None:
+                    return "generate_structured_response"
+                else:
+                    return END
+            # Otherwise if there is, we continue
+            else:
+                if self.version == "v1":
+                    return "tools"
+                elif self.version == "v2":
+                    if self.post_model_hook is not None:
+                        return "post_model_hook"
+                    return [
+                        Send(
+                            "tools",
+                            ToolCallWithContext(
+                                __type="tool_call_with_context",
+                                tool_call=tool_call,
+                                state=state,
+                            ),
+                        )
+                        for tool_call in last_message.tool_calls
+                    ]
+
+        return should_continue
+
+    def _create_tools_router(self, entrypoint: str) -> Callable:
+        """Create the tools router function (route_tool_responses)."""
+        def route_tool_responses(state: StateSchema) -> str:
+            for m in reversed(_get_state_value(state, "messages")):
+                if not isinstance(m, ToolMessage):
+                    break
+                if m.name in self.should_return_direct:
+                    return END
+
+            # handle a case of parallel tool calls where
+            # the tool w/ `return_direct` was executed in a different `Send`
+            if isinstance(m, AIMessage) and m.tool_calls:
+                if any(call["name"] in self.should_return_direct for call in m.tool_calls):
+                    return END
+
+            return entrypoint
+
+        return route_tool_responses
+
+    def _create_post_model_hook_router(self, entrypoint: str) -> Callable:
+        """Create the post model hook router function."""
+        def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
+            """Route to the next node after post_model_hook.
+
+            Routes to one of:
+            * "tools": if there are pending tool calls without a corresponding message.
+            * "generate_structured_response": if no pending tool calls exist and response_format is specified.
+            * END: if no pending tool calls exist and no response_format is specified.
+            """
+
+            messages = _get_state_value(state, "messages")
+            tool_messages = [
+                m.tool_call_id for m in messages if isinstance(m, ToolMessage)
+            ]
+            last_ai_message = next(
+                m for m in reversed(messages) if isinstance(m, AIMessage)
+            )
+            pending_tool_calls = [
+                c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
+            ]
+
+            if pending_tool_calls:
+                return [
+                    Send(
+                        "tools",
+                        ToolCallWithContext(
+                            __type="tool_call_with_context",
+                            tool_call=tool_call,
+                            state=state,
+                        ),
+                    )
+                    for tool_call in pending_tool_calls
+                ]
+            elif isinstance(messages[-1], ToolMessage):
+                return entrypoint
+            elif self.response_format is not None:
+                return "generate_structured_response"
+            else:
+                return END
+
+        return post_model_hook_router
+
 
 def create_react_agent(
     model: Union[
@@ -1269,6 +1365,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
