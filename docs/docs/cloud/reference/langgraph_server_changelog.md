@@ -4,6 +4,9 @@
 
 ---
 
+## v0.2.109 (2025-07-28)
+- Fixed an issue where missing config schema occurred when `config_type` was not set.
+
 ## v0.2.108 (2025-07-28)
 - Added compatibility for langgraph v0.6, including new context API support and a migration to enhance context handling in assistant operations.
 
