@@ -149,10 +149,10 @@ LangGraph provides prebuilt components for this:
 
 - @[`ToolNode`][ToolNode]: A prebuilt node that executes tools.
 - @[`create_react_agent`][create_react_agent]: Constructs a full agent that manages tool calling automatically.
-  :::
+:::
 
 :::js
 
 - @[ToolNode]: A prebuilt node that executes tools.
 - @[`createReactAgent`][create_react_agent]: Constructs a full agent that manages tool calling automatically.
-  :::
+:::

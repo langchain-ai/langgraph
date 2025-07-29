@@ -29,7 +29,7 @@ To stream agent progress, use the @[`stream()`][CompiledStateGraph.stream] or @[
 :::
 
 :::js
-To stream agent progress, use the [`stream()`][CompiledStateGraph.stream] method with `streamMode: "updates"`. This emits an event after every agent step.
+To stream agent progress, use the @[`stream()`][CompiledStateGraph.stream] method with `streamMode: "updates"`. This emits an event after every agent step.
 :::
 
 For example, if you have an agent that calls a tool once, you should see the following updates:
@@ -1519,8 +1519,6 @@ for await (const chunk of await graph.stream(
 
       # this is the tool-calling graph node
       async def call_tool(state: State):
-          ai_message = state["messages"][-1]
-          tool_call = ai_message["tool_calls"][-1]
 
           function_name = tool_call["function"]["name"]
           if function_name != "get_items":
