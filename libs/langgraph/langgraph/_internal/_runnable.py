@@ -489,46 +489,46 @@ def is_async_generator(
 
 class _PregelWrapper(Runnable):
     """Wrapper for PregelProtocol instances to handle runtime context propagation.
-    
+
     When a compiled subgraph (PregelProtocol) is added as a node, this wrapper
     extracts the runtime context from the config and passes it explicitly to
     the subgraph's invoke method.
     """
-    
+
     def __init__(self, pregel: "PregelProtocol", name: str | None = None):
         self.pregel = pregel
         self._name = name or getattr(pregel, "name", None) or pregel.__class__.__name__
-    
+
     def get_name(self, suffix: str | None = None, *, name: str | None = None) -> str:
         """Get the name of the runnable."""
         name = name or self._name
         return f"{name}{suffix}" if suffix else name
-    
+
     def invoke(
         self, input: Any, config: RunnableConfig | None = None, **kwargs: Any
     ) -> Any:
         """Invoke the wrapped PregelProtocol with runtime context extracted from config."""
         if config is None:
             config = ensure_config()
-        
+
         # Extract runtime context from config
         runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
         context = runtime.context if runtime else None
-        
+
         # Invoke the subgraph with the extracted context
         return self.pregel.invoke(input, config, context=context, **kwargs)
-    
+
     async def ainvoke(
         self, input: Any, config: RunnableConfig | None = None, **kwargs: Any
     ) -> Any:
         """Async invoke the wrapped PregelProtocol with runtime context extracted from config."""
         if config is None:
             config = ensure_config()
-        
+
         # Extract runtime context from config
         runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
         context = runtime.context if runtime else None
-        
+
         # Invoke the subgraph with the extracted context
         return await self.pregel.ainvoke(input, config, context=context, **kwargs)
 
@@ -951,6 +951,3 @@ async def _consume_aiter(it: AsyncIterator[Any]) -> Any:
         else:
             output = chunk
     return output
-
-
-
