@@ -57,9 +57,9 @@ def test_override_runtime() -> None:
     class Context:
         api_key: str
 
-    runtime1 = Runtime(context=Context(api_key="abc"))
-    runtime = runtime1.override(context=Context(api_key="def"))
-    assert runtime.context.api_key == "def"
+    prev = Runtime(context=Context(api_key="abc"))
+    new = prev.override(context=Context(api_key="def"))
+    assert new.override(context=Context(api_key="def")).context.api_key == "def"
 
 
 def test_merge_runtime() -> None:
@@ -69,8 +69,11 @@ def test_merge_runtime() -> None:
 
     runtime1 = Runtime(context=Context(api_key="abc"))
     runtime2 = Runtime(context=Context(api_key="def"))
-    runtime = runtime1.merge(runtime2)
-    assert runtime.context.api_key == "def"
+    runtime3 = Runtime(context=None)
+
+    assert runtime1.merge(runtime2).context.api_key == "def"
+    # override only appies to non-falsy values
+    assert runtime1.merge(runtime3).context.api_key == "abc"  # type: ignore
 
 
 def test_runtime_propogated_to_subgraph() -> None:
