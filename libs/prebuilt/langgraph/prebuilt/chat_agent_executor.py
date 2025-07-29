@@ -248,6 +248,144 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
+class _AgentBuilder:
+    """Internal builder class for constructing ReAct-style agent graphs."""
+
+    def __init__(
+        self,
+        model: Union[
+            str,
+            LanguageModelLike,
+            Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
+            Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
+        ],
+        tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
+        *,
+        prompt: Optional[Prompt] = None,
+        response_format: Optional[
+            Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
+        ] = None,
+        pre_model_hook: Optional[RunnableLike] = None,
+        post_model_hook: Optional[RunnableLike] = None,
+        state_schema: Optional[StateSchemaType] = None,
+        context_schema: Optional[Type[Any]] = None,
+        checkpointer: Optional[Checkpointer] = None,
+        store: Optional[BaseStore] = None,
+        interrupt_before: Optional[list[str]] = None,
+        interrupt_after: Optional[list[str]] = None,
+        debug: bool = False,
+        version: Literal["v1", "v2"] = "v2",
+        name: Optional[str] = None,
+    ):
+        """Initialize the agent builder with all parameters."""
+        # Store all parameters
+        self.model = model
+        self.tools = tools
+        self.prompt = prompt
+        self.response_format = response_format
+        self.pre_model_hook = pre_model_hook
+        self.post_model_hook = post_model_hook
+        self.state_schema = state_schema
+        self.context_schema = context_schema
+        self.checkpointer = checkpointer
+        self.store = store
+        self.interrupt_before = interrupt_before
+        self.interrupt_after = interrupt_after
+        self.debug = debug
+        self.version = version
+        self.name = name
+
+        # Initialize derived attributes
+        self.tool_node: ToolNode
+        self.tool_classes: list[Type[BaseTool]]
+        self.llm_builtin_tools: list[dict] = []
+        self.is_dynamic_model: bool
+        self.is_async_dynamic_model: bool
+        self.tool_calling_enabled: bool
+        self.static_model: Optional[Runnable] = None
+        self.should_return_direct: set[str] = set()
+
+        # Run validation and setup
+        self._validate_version()
+        self._validate_state_schema()
+        self._validate_and_setup_tools()
+        self._validate_and_setup_model()
+
+    def _validate_version(self) -> None:
+        """Validate the version parameter."""
+        if self.version not in ("v1", "v2"):
+            raise ValueError(
+                f"Invalid version {self.version}. Supported versions are 'v1' and 'v2'."
+            )
+
+    def _validate_state_schema(self) -> None:
+        """Validate and set up the state schema."""
+        if self.state_schema is not None:
+            required_keys = {"messages", "remaining_steps"}
+            if self.response_format is not None:
+                required_keys.add("structured_response")
+
+            schema_keys = set(get_type_hints(self.state_schema))
+            if missing_keys := required_keys - set(schema_keys):
+                raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
+
+        if self.state_schema is None:
+            self.state_schema = (
+                AgentStateWithStructuredResponse
+                if self.response_format is not None
+                else AgentState
+            )
+
+    def _validate_and_setup_tools(self) -> None:
+        """Validate and set up tools and tool node."""
+        if isinstance(self.tools, ToolNode):
+            self.tool_classes = list(self.tools.tools_by_name.values())
+            self.tool_node = self.tools
+        else:
+            self.llm_builtin_tools = [t for t in self.tools if isinstance(t, dict)]
+            self.tool_node = ToolNode([t for t in self.tools if not isinstance(t, dict)])
+            self.tool_classes = list(self.tool_node.tools_by_name.values())
+
+        self.tool_calling_enabled = len(self.tool_classes) > 0
+
+        # If any of the tools are configured to return_directly after running,
+        # our graph needs to check if these were called
+        self.should_return_direct = {t.name for t in self.tool_classes if t.return_direct}
+
+    def _validate_and_setup_model(self) -> None:
+        """Validate and set up the model."""
+        self.is_dynamic_model = not isinstance(self.model, (str, Runnable)) and callable(self.model)
+        self.is_async_dynamic_model = self.is_dynamic_model and inspect.iscoroutinefunction(self.model)
+
+        if not self.is_dynamic_model:
+            model = self.model
+            if isinstance(model, str):
+                try:
+                    from langchain.chat_models import (  # type: ignore[import-not-found]
+                        init_chat_model,
+                    )
+                except ImportError:
+                    raise ImportError(
+                        "Please install langchain (`pip install langchain`) to "
+                        "use '<provider>:<model>' string syntax for `model` parameter."
+                    )
+
+                model = cast(BaseChatModel, init_chat_model(model))
+
+            if (
+                _should_bind_tools(model, self.tool_classes, num_builtin=len(self.llm_builtin_tools))  # type: ignore[arg-type]
+                and len(self.tool_classes + self.llm_builtin_tools) > 0
+            ):
+                model = cast(BaseChatModel, model).bind_tools(
+                    self.tool_classes + self.llm_builtin_tools  # type: ignore[operator]
+                )
+
+            self.static_model = _get_prompt_runnable(self.prompt) | model  # type: ignore[operator]
+        else:
+            # For dynamic models, we'll create the runnable at runtime
+            self.static_model = None
+
+
 def create_react_agent(
     model: Union[
         str,
@@ -952,3 +1090,4 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
