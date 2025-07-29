@@ -756,17 +756,13 @@ class ToolNode(RunnableCallable):
 
         # convert to message objects if updates are in a dict format
         messages_update = convert_to_messages(messages_update)
-        has_matching_tool_message = False
-        all_messages_removed = False
-        for message in messages_update:
-            if (
-                isinstance(message, RemoveMessage)
-                and message.id == REMOVE_ALL_MESSAGES
-                and len(messages_update) == 1
-            ):
-                all_messages_removed = True
-                break
 
+        # no validation needed if all messages are being removed
+        if messages_update == [RemoveMessage(id=REMOVE_ALL_MESSAGES)]:
+            return updated_command
+
+        has_matching_tool_message = False
+        for message in messages_update:
             if not isinstance(message, ToolMessage):
                 continue
 
@@ -775,13 +771,8 @@ class ToolNode(RunnableCallable):
                 has_matching_tool_message = True
 
         # validate that we always have a ToolMessage matching the tool call in
-        # Command.update if command is sent to the CURRENT graph.
-        # This check is bypassed if all messages are being removed.
-        if (
-            updated_command.graph is None
-            and not has_matching_tool_message
-            and not all_messages_removed
-        ):
+        # Command.update if command is sent to the CURRENT graph
+        if updated_command.graph is None and not has_matching_tool_message:
             example_update = (
                 '`Command(update={"messages": [ToolMessage("Success", tool_call_id=tool_call_id), ...]}, ...)`'
                 if input_type == "dict"
