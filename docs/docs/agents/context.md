@@ -31,12 +31,12 @@ LangGraph provides three ways to manage context, which combines the mutability a
 
 !!! tip "Runtime context vs LLM context"
 
-    Runtime context refers to local context: data and dependencies your code needs to run. It does not refer to:
+    Runtime context refers to local context: data and dependencies your code needs to run. It does **not** refer to:
 
     * The LLM context, which is the data passed into the LLM's prompt.
     * The "context window", which is the maximum number of tokens that can be passed to the LLM.
 
-    Runtime context can be **used to** optimize the LLM context. For example, you can use user metadata
+    Runtime context can be used to optimize the LLM context. For example, you can use user metadata
     in the runtime context to fetch user preferences and feed them into the context window.
 
 ```python
