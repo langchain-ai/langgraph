@@ -15,7 +15,7 @@ build-prebuilt:
 	fi
 	uv run python -m _scripts.third_party_page.create_third_party_page stats.yml docs/agents/prebuilt.md
 
-build-docs: build-typedoc build-prebuilt
+build-docs: build-prebuilt
 	TARGET_LANGUAGE=python uv run python -m mkdocs build --clean -f mkdocs.yml --strict
 
 llms-text:
