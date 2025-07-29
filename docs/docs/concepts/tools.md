@@ -147,12 +147,12 @@ LangGraph provides prebuilt components for this:
 
 :::python
 
-- [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode]: A prebuilt node that executes tools.
-- [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]: Constructs a full agent that manages tool calling automatically.
-  :::
+- @[`ToolNode`][ToolNode]: A prebuilt node that executes tools.
+- @[`create_react_agent`][create_react_agent]: Constructs a full agent that manages tool calling automatically.
+:::
 
 :::js
 
-- [`ToolNode`][<insert-ref>]: A prebuilt node that executes tools.
-- [`createReactAgent`][<insert-ref>]: Constructs a full agent that manages tool calling automatically.
-  :::
+- @[ToolNode]: A prebuilt node that executes tools.
+- @[`createReactAgent`][create_react_agent]: Constructs a full agent that manages tool calling automatically.
+:::

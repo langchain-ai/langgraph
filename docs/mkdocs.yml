@@ -52,7 +52,6 @@ theme:
 plugins:
   - search:
       separator: '[\s\u200b\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;'
-  - autorefs
   - tags
   - include-markdown
   - mkdocstrings:

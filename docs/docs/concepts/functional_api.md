@@ -277,11 +277,11 @@ const workflow = entrypoint(
 ## Entrypoint
 
 :::python
-The [`@entrypoint`][langgraph.func.entrypoint] decorator can be used to create a workflow from a function. It encapsulates workflow logic and manages execution flow, including handling _long-running tasks_ and [interrupts](./human_in_the_loop.md).
+The @[`@entrypoint`][entrypoint] decorator can be used to create a workflow from a function. It encapsulates workflow logic and manages execution flow, including handling _long-running tasks_ and [interrupts](./human_in_the_loop.md).
 :::
 
 :::js
-The [`entrypoint`][<insert-ref>] function can be used to create a workflow from a function. It encapsulates workflow logic and manages execution flow, including handling _long-running tasks_ and [interrupts](./human_in_the_loop.md).
+The @[`entrypoint`][entrypoint] function can be used to create a workflow from a function. It encapsulates workflow logic and manages execution flow, including handling _long-running tasks_ and [interrupts](./human_in_the_loop.md).
 :::
 
 ### Definition
@@ -291,7 +291,7 @@ An **entrypoint** is defined by decorating a function with the `@entrypoint` dec
 
 The function **must accept a single positional argument**, which serves as the workflow input. If you need to pass multiple pieces of data, use a dictionary as the input type for the first argument.
 
-Decorating a function with an `entrypoint` produces a [`Pregel`][langgraph.pregel.Pregel.stream] instance which helps to manage the execution of the workflow (e.g., handles streaming, resumption, and checkpointing).
+Decorating a function with an `entrypoint` produces a @[`Pregel`][Pregel.stream] instance which helps to manage the execution of the workflow (e.g., handles streaming, resumption, and checkpointing).
 
 You will usually want to pass a **checkpointer** to the `@entrypoint` decorator to enable persistence and use features like **human-in-the-loop**.
 
@@ -353,13 +353,13 @@ const myWorkflow = entrypoint(
 
 ### Injectable parameters
 
-When declaring an `entrypoint`, you can request access to additional parameters that will be injected automatically at run time by using the [`getPreviousState()`](<insert-ref https://langchain-ai.github.io/langgraphjs/reference/functions/langgraph.getPreviousState.html>) function. These parameters include:
+When declaring an `entrypoint`, you can request access to additional parameters that will be injected automatically at run time by using the [`getPreviousState()`](https://langchain-ai.github.io/langgraphjs/reference/functions/langgraph.getPreviousState.html>) function. These parameters include:
 
 :::python
 | Parameter | Description |
 |--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **previous** | Access the state associated with the previous `checkpoint` for the given thread. See [short-term-memory](#short-term-memory). |
-| **store** | An instance of [BaseStore][langgraph.store.base.BaseStore]. Useful for [long-term memory](../how-tos/use-functional-api.md#long-term-memory). |
+| **store** | An instance of @[BaseStore]. Useful for [long-term memory](../how-tos/use-functional-api.md#long-term-memory). |
 | **writer** | Use to access the StreamWriter when working with Async Python < 3.11. See [streaming with functional API for details](../how-tos/use-functional-api.md#streaming). |
 | **config** | For accessing run time configuration. See [RunnableConfig](https://python.langchain.com/docs/concepts/runnables/#runnableconfig) for information. |
 :::
@@ -426,7 +426,7 @@ When declaring an `entrypoint`, you can request access to additional parameters 
 ### Executing
 
 :::python
-Using the [`@entrypoint`](#entrypoint) yields a [`Pregel`][langgraph.pregel.Pregel.stream] object that can be executed using the `invoke`, `ainvoke`, `stream`, and `astream` methods.
+Using the [`@entrypoint`](#entrypoint) yields a @[`Pregel`][Pregel.stream] object that can be executed using the `invoke`, `ainvoke`, `stream`, and `astream` methods.
 
 === "Invoke"
 
@@ -511,7 +511,7 @@ Using the [`entrypoint`](#entrypoint) function will return an object that can be
 ### Resuming
 
 :::python
-Resuming an execution after an [interrupt][langgraph.types.interrupt] can be done by passing a **resume** value to the [Command][langgraph.types.Command] primitive.
+Resuming an execution after an @[interrupt][interrupt] can be done by passing a **resume** value to the @[Command] primitive.
 
 === "Invoke"
 
@@ -574,7 +574,7 @@ Resuming an execution after an [interrupt][langgraph.types.interrupt] can be don
 :::
 
 :::js
-Resuming an execution after an [`interrupt`](insert-ref) can be done by passing a **resume** value to the [`Command`](insert-ref) primitive.
+Resuming an execution after an @[interrupt][interrupt] can be done by passing a **resume** value to the @[`Command`][Command] primitive.
 
 === "Invoke"
 
@@ -772,7 +772,7 @@ await myWorkflow.invoke(2, config); // 3 (previous was 1 from the previous invoc
 #### `entrypoint.final`
 
 :::python
-[`entrypoint.final`][langgraph.func.entrypoint.final] is a special primitive that can be returned from an entrypoint and allows **decoupling** the value that is **saved in the checkpoint** from the **return value of the entrypoint**.
+@[`entrypoint.final`][entrypoint.final] is a special primitive that can be returned from an entrypoint and allows **decoupling** the value that is **saved in the checkpoint** from the **return value of the entrypoint**.
 
 The first value is the return value of the entrypoint, and the second value is the value that will be saved in the checkpoint. The type annotation is `entrypoint.final[return_type, save_type]`.
 
@@ -798,7 +798,7 @@ my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocat
 :::
 
 :::js
-[`entrypoint.final`](insert-ref) is a special primitive that can be returned from an entrypoint and allows **decoupling** the value that is **saved in the checkpoint** from the **return value of the entrypoint**.
+@[`entrypoint.final`][entrypoint.final] is a special primitive that can be returned from an entrypoint and allows **decoupling** the value that is **saved in the checkpoint** from the **return value of the entrypoint**.
 
 The first value is the return value of the entrypoint, and the second value is the value that will be saved in the checkpoint.
 

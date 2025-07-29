@@ -96,7 +96,7 @@ Your [`@auth.authenticate`](../cloud/reference/sdk/python_sdk_ref.md#langgraph_s
 :::
 
 :::js
-Your [`auth.authenticate`](<insert-ref (https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#authenticate)>) handler in LangGraph handles steps 4-6, while your [`auth.on`](<insert-ref https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#on>) handlers implement step 7.
+Your [`auth.authenticate`](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#authenticate) handler in LangGraph handles steps 4-6, while your [`auth.on`](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#on>) handlers implement step 7.
 :::
 
 ## Authentication
@@ -143,11 +143,11 @@ The returned user information is available:
   :::
 
 :::js
-Authentication in LangGraph runs as middleware on every request. Your [`authenticate`](<insert-ref https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#authenticate>) handler receives request information and should:
+Authentication in LangGraph runs as middleware on every request. Your [`authenticate`](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#authenticate>) handler receives request information and should:
 
 1. Validate the credentials
 2. Return user information containing the user's identity and user information if valid
-3. Raise an [HTTPException](<insert-ref https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#class-httpexception>) if invalid
+3. Raise an [HTTPException](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#class-httpexception>) if invalid
 
 ```typescript
 import { Auth, HTTPException } from "@langchain/langgraph-sdk";
@@ -196,7 +196,7 @@ The returned user information is available:
     :::
 
     :::js
-    The [`authenticate`](<insert-ref https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#authenticate>) handler can accept any of the following parameters:
+    The [`authenticate`](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#authenticate) handler can accept any of the following parameters:
 
     * request (Request): The raw request object
     * body (object): The parsed request body

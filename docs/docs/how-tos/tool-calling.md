@@ -114,7 +114,7 @@ ToolMessage {
 ## Use in an agent
 
 :::python
-To create a tool-calling agent, you can use the prebuilt [create_react_agent][langgraph.prebuilt.chat_agent_executor.create_react_agent]:
+To create a tool-calling agent, you can use the prebuilt @[create_react_agent][create_react_agent]:
 
 ```python
 from langchain_core.tools import tool
@@ -282,7 +282,7 @@ LLMs automatically determine if a tool invocation is necessary and handle callin
 #### ToolNode
 
 :::python
-To execute tools in custom workflows, use the prebuilt [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] or implement your own custom node.
+To execute tools in custom workflows, use the prebuilt @[`ToolNode`][ToolNode] or implement your own custom node.
 
 `ToolNode` is a specialized node for executing tools in a workflow. It provides the following features:
 
@@ -1065,7 +1065,7 @@ await agent.invoke(
 Short-term memory maintains **dynamic** state that changes during a single execution.
 
 :::python
-To **access** (read) the graph state inside the tools, you can use a special parameter **annotation** — [`InjectedState`][langgraph.prebuilt.InjectedState]:
+To **access** (read) the graph state inside the tools, you can use a special parameter **annotation** — @[`InjectedState`][InjectedState]:
 
 ```python
 from typing import Annotated, NotRequired
@@ -1100,7 +1100,7 @@ agent.invoke({"messages": "what's my name?"})
 :::
 
 :::js
-To **access** (read) the graph state inside the tools, you can use the [`getContextVariable`][<insert-ref>] function:
+To **access** (read) the graph state inside the tools, you can use the @[`getContextVariable`][getContextVariable] function:
 
 ```typescript
 import { tool } from "@langchain/core/tools";
@@ -1207,7 +1207,7 @@ const updateUserName = tool(
 !!! important
 
     :::python
-    If you want to use tools that return `Command` and update graph state, you can either use prebuilt [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] / [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
+    If you want to use tools that return `Command` and update graph state, you can either use prebuilt @[`create_react_agent`][create_react_agent] / @[`ToolNode`][ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
 
     ```python
     def call_tools(state):
@@ -1218,7 +1218,7 @@ const updateUserName = tool(
     :::
 
     :::js
-    If you want to use tools that return `Command` and update graph state, you can either use prebuilt [`createReactAgent`][<insert-ref>] / [`ToolNode`][<insert-ref>] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
+    If you want to use tools that return `Command` and update graph state, you can either use prebuilt @[`createReactAgent`][create_react_agent] / @[ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
 
     ```typescript
     const callTools = async (state: State) => {
@@ -1350,7 +1350,7 @@ const getUserInfo = tool(
     ```
 
     1. The `InMemoryStore` is a store that stores data in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [store documentation][../reference/store.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready store for you.
-    2. For this example, we write some sample data to the store using the `put` method. Please see the [BaseStore.put][langgraph.store.base.BaseStore.put] API reference for more details.
+    2. For this example, we write some sample data to the store using the `put` method. Please see the @[BaseStore.put] API reference for more details.
     3. The first argument is the namespace. This is used to group related data together. In this case, we are using the `users` namespace to group user data.
     4. A key within the namespace. This example uses a user ID for the key.
     5. The data that we want to store for the given user.
@@ -1976,7 +1976,7 @@ model.bindTools(
 ### Handle errors
 
 :::python
-LangGraph provides built-in error handling for tool execution through the prebuilt [ToolNode][langgraph.prebuilt.tool_node.ToolNode] component, used both independently and in prebuilt agents.
+LangGraph provides built-in error handling for tool execution through the prebuilt @[ToolNode][ToolNode] component, used both independently and in prebuilt agents.
 
 By **default**, `ToolNode` catches exceptions raised during tool execution and returns them as `ToolMessage` objects with a status indicating an error.
 

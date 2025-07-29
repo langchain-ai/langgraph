@@ -164,4 +164,4 @@ The default `store.ttl` settings from `langgraph.json` can be overridden at runt
 
 After configuring TTLs in `langgraph.json`, deploy or restart your LangGraph application for the changes to take effect. Use `langgraph dev` for local development or `langgraph up` for Docker deployment.
 
-See the [langgraph.json CLI reference][configuration-file] for more details on the other configurable options.
+See the @[langgraph.json CLI reference][langgraph.json] for more details on the other configurable options.

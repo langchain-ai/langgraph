@@ -1147,26 +1147,28 @@ See the [deployment guide](../cloud/deployment/semantic_search.md) for more deta
 
 ## Checkpointer libraries
 
-Under the hood, checkpointing is powered by checkpointer objects that conform to [BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver] interface. LangGraph provides several checkpointer implementations, all implemented via standalone, installable libraries:
+Under the hood, checkpointing is powered by checkpointer objects that conform to @[BaseCheckpointSaver] interface. LangGraph provides several checkpointer implementations, all implemented via standalone, installable libraries:
 
 :::python
 
-- `langgraph-checkpoint`: The base interface for checkpointer savers ([BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver]) and serialization/deserialization interface ([SerializerProtocol][langgraph.checkpoint.serde.base.SerializerProtocol]). Includes in-memory checkpointer implementation ([InMemorySaver][langgraph.checkpoint.memory.InMemorySaver]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
-- `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database ([SqliteSaver][langgraph.checkpoint.sqlite.SqliteSaver] / [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
-- `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database ([PostgresSaver][langgraph.checkpoint.postgres.PostgresSaver] / [AsyncPostgresSaver][langgraph.checkpoint.postgres.aio.AsyncPostgresSaver]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
-  :::
+- `langgraph-checkpoint`: The base interface for checkpointer savers (@[BaseCheckpointSaver]) and serialization/deserialization interface (@[SerializerProtocol][SerializerProtocol]). Includes in-memory checkpointer implementation (@[InMemorySaver][InMemorySaver]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
+- `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database (@[SqliteSaver][SqliteSaver] / @[AsyncSqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
+- `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresSaver][PostgresSaver] / @[AsyncPostgresSaver]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
+ 
+:::
 
 :::js
 
-- `@langchain/langgraph-checkpoint`: The base interface for checkpointer savers ([BaseCheckpointSaver][<insert-ref>]) and serialization/deserialization interface ([SerializerProtocol][<insert-ref>]). Includes in-memory checkpointer implementation ([MemorySaver][<insert-ref>]) for experimentation. LangGraph comes with `@langchain/langgraph-checkpoint` included.
-- `@langchain/langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database ([SqliteSaver][<insert-ref>]). Ideal for experimentation and local workflows. Needs to be installed separately.
-- `@langchain/langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database ([PostgresSaver][<insert-ref>]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
-  :::
+- `@langchain/langgraph-checkpoint`: The base interface for checkpointer savers (@[BaseCheckpointSaver][BaseCheckpointSaver]) and serialization/deserialization interface (@[SerializerProtocol][SerializerProtocol]). Includes in-memory checkpointer implementation (@[InMemorySaver) for experimentation. LangGraph comes with `@langchain/langgraph-checkpoint` included.
+- `@langchain/langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database (@[SqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
+- `@langchain/langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresSaver]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
+ 
+:::
 
 ### Checkpointer interface
 
 :::python
-Each checkpointer conforms to [BaseCheckpointSaver][langgraph.checkpoint.base.BaseCheckpointSaver] interface and implements the following methods:
+Each checkpointer conforms to @[BaseCheckpointSaver] interface and implements the following methods:
 
 - `.put` - Store a checkpoint with its configuration and metadata.
 - `.put_writes` - Store intermediate writes linked to a checkpoint (i.e. [pending writes](#pending-writes)).
@@ -1175,29 +1177,31 @@ Each checkpointer conforms to [BaseCheckpointSaver][langgraph.checkpoint.base.Ba
 
 If the checkpointer is used with asynchronous graph execution (i.e. executing the graph via `.ainvoke`, `.astream`, `.abatch`), asynchronous versions of the above methods will be used (`.aput`, `.aput_writes`, `.aget_tuple`, `.alist`).
 
-!!! note Note
-For running your graph asynchronously, you can use `InMemorySaver`, or async versions of Sqlite/Postgres checkpointers -- `AsyncSqliteSaver` / `AsyncPostgresSaver` checkpointers.
+!!! note 
+
+    For running your graph asynchronously, you can use `InMemorySaver`, or async versions of Sqlite/Postgres checkpointers -- `AsyncSqliteSaver` / `AsyncPostgresSaver` checkpointers.
+
 :::
 
 :::js
-Each checkpointer conforms to the [BaseCheckpointSaver][<insert-ref>] interface and implements the following methods:
+Each checkpointer conforms to the @[BaseCheckpointSaver][BaseCheckpointSaver] interface and implements the following methods:
 
 - `.put` - Store a checkpoint with its configuration and metadata.
 - `.putWrites` - Store intermediate writes linked to a checkpoint (i.e. [pending writes](#pending-writes)).
 - `.getTuple` - Fetch a checkpoint tuple using for a given configuration (`thread_id` and `checkpoint_id`). This is used to populate `StateSnapshot` in `graph.getState()`.
 - `.list` - List checkpoints that match a given configuration and filter criteria. This is used to populate state history in `graph.getStateHistory()`
-  :::
+:::
 
 ### Serializer
 
 When checkpointers save the graph state, they need to serialize the channel values in the state. This is done using serializer objects.
 
 :::python
-`langgraph_checkpoint` defines [protocol][langgraph.checkpoint.serde.base.SerializerProtocol] for implementing serializers provides a default implementation ([JsonPlusSerializer][langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer]) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
+`langgraph_checkpoint` defines @[protocol][SerializerProtocol] for implementing serializers provides a default implementation (@[JsonPlusSerializer][JsonPlusSerializer]) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
 
 #### Serialization with `pickle`
 
-The default serializer, [`JsonPlusSerializer`][langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer], uses ormsgpack and JSON under the hood, which is not suitable for all types of objects.
+The default serializer, @[`JsonPlusSerializer`][JsonPlusSerializer], uses ormsgpack and JSON under the hood, which is not suitable for all types of objects.
 
 If you want to fallback to pickle for objects not currently supported by our msgpack encoder (such as Pandas dataframes),
 you can use the `pickle_fallback` argument of the `JsonPlusSerializer`:
@@ -1214,7 +1218,7 @@ graph.compile(
 
 #### Encryption
 
-Checkpointers can optionally encrypt all persisted state. To enable this, pass an instance of [`EncryptedSerializer`][langgraph.checkpoint.serde.encrypted.EncryptedSerializer] to the `serde` argument of any `BaseCheckpointSaver` implementation. The easiest way to create an encrypted serializer is via [`from_pycryptodome_aes`][langgraph.checkpoint.serde.encrypted.EncryptedSerializer.from_pycryptodome_aes], which reads the AES key from the `LANGGRAPH_AES_KEY` environment variable (or accepts a `key` argument):
+Checkpointers can optionally encrypt all persisted state. To enable this, pass an instance of @[`EncryptedSerializer`][EncryptedSerializer] to the `serde` argument of any `BaseCheckpointSaver` implementation. The easiest way to create an encrypted serializer is via @[`from_pycryptodome_aes`][from_pycryptodome_aes], which reads the AES key from the `LANGGRAPH_AES_KEY` environment variable (or accepts a `key` argument):
 
 ```python
 import sqlite3
@@ -1235,7 +1239,7 @@ checkpointer = PostgresSaver.from_conn_string("postgresql://...", serde=serde)
 checkpointer.setup()
 ```
 
-When running on LangGraph Platform, encryption is automatically enabled whenever `LANGGRAPH_AES_KEY` is present, so you only need to provide the environment variable. Other encryption schemes can be used by implementing [`CipherProtocol`][langgraph.checkpoint.serde.base.CipherProtocol] and supplying it to `EncryptedSerializer`.
+When running on LangGraph Platform, encryption is automatically enabled whenever `LANGGRAPH_AES_KEY` is present, so you only need to provide the environment variable. Other encryption schemes can be used by implementing @[`CipherProtocol`][CipherProtocol] and supplying it to `EncryptedSerializer`.
 :::
 
 :::js

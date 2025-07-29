@@ -5,11 +5,11 @@ You can [stream outputs](../concepts/streaming.md) from a LangGraph agent or wor
 ## Supported stream modes
 
 :::python
-Pass one or more of the following stream modes as a list to the [`stream()`][langgraph.graph.state.CompiledStateGraph.stream] or [`astream()`][langgraph.graph.state.CompiledStateGraph.astream] methods:
+Pass one or more of the following stream modes as a list to the @[`stream()`][CompiledStateGraph.stream] or @[`astream()`][CompiledStateGraph.astream] methods:
 :::
 
 :::js
-Pass one or more of the following stream modes as a list to the [`stream()`][<insert-ref>] method:
+Pass one or more of the following stream modes as a list to the @[`stream()`][CompiledStateGraph.stream] method:
 :::
 
 | Mode       | Description                                                                                                                                                                         |
@@ -25,11 +25,11 @@ Pass one or more of the following stream modes as a list to the [`stream()`][<in
 ### Agent progress
 
 :::python
-To stream agent progress, use the [`stream()`][langgraph.graph.state.CompiledStateGraph.stream] or [`astream()`][langgraph.graph.state.CompiledStateGraph.astream] methods with `stream_mode="updates"`. This emits an event after every agent step.
+To stream agent progress, use the @[`stream()`][CompiledStateGraph.stream] or @[`astream()`][CompiledStateGraph.astream] methods with `stream_mode="updates"`. This emits an event after every agent step.
 :::
 
 :::js
-To stream agent progress, use the [`stream()`][<insert-ref>] method with `streamMode: "updates"`. This emits an event after every agent step.
+To stream agent progress, use the @[`stream()`][CompiledStateGraph.stream] method with `streamMode: "updates"`. This emits an event after every agent step.
 :::
 
 For example, if you have an agent that calls a tool once, you should see the following updates:
@@ -161,7 +161,7 @@ for await (const [token, metadata] of await agent.stream(
 ### Tool updates
 
 :::python
-To stream updates from tools as they are executed, you can use [get_stream_writer][langgraph.config.get_stream_writer].
+To stream updates from tools as they are executed, you can use @[get_stream_writer][get_stream_writer].
 
 === "Sync"
 
@@ -336,7 +336,7 @@ See the [Models](../agents/models.md#disable-streaming) guide to learn how to di
 ### Basic usage example
 
 :::python
-LangGraph graphs expose the [`.stream()`][langgraph.pregel.Pregel.stream] (sync) and [`.astream()`][langgraph.pregel.Pregel.astream] (async) methods to yield streamed outputs as iterators.
+LangGraph graphs expose the @[`.stream()`][Pregel.stream] (sync) and @[`.astream()`][Pregel.astream] (async) methods to yield streamed outputs as iterators.
 
 === "Sync"
 
@@ -355,7 +355,7 @@ LangGraph graphs expose the [`.stream()`][langgraph.pregel.Pregel.stream] (sync)
 :::
 
 :::js
-LangGraph graphs expose the [`.stream()`][<insert-ref>] method to yield streamed outputs as iterators.
+LangGraph graphs expose the @[`.stream()`][Pregel.stream] method to yield streamed outputs as iterators.
 
 ```typescript
 for await (const chunk of await graph.stream(inputs, {
