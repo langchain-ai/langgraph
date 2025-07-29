@@ -545,6 +545,10 @@ def coerce_to_runnable(
         A Runnable.
     """
     if isinstance(thing, Runnable):
+        # Check if this is a PregelProtocol instance (compiled subgraph)
+        # and wrap it to handle runtime context propagation
+        if PregelProtocol is not None and isinstance(thing, PregelProtocol):
+            return _PregelWrapper(thing, name=name)
         return thing
     elif is_async_generator(thing) or inspect.isgeneratorfunction(thing):
         return RunnableLambda(thing, name=name)
@@ -947,5 +951,6 @@ async def _consume_aiter(it: AsyncIterator[Any]) -> Any:
         else:
             output = chunk
     return output
+
 
 
