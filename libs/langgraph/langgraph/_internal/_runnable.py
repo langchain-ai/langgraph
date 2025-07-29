@@ -495,7 +495,7 @@ class _PregelWrapper(Runnable):
     the subgraph's invoke method.
     """
 
-    def __init__(self, pregel: "PregelProtocol", name: str | None = None):
+    def __init__(self, pregel: PregelProtocol, name: str | None = None):
         self.pregel = pregel
         self._name = name or getattr(pregel, "name", None) or pregel.__class__.__name__
 
@@ -951,3 +951,4 @@ async def _consume_aiter(it: AsyncIterator[Any]) -> Any:
         else:
             output = chunk
     return output
+
