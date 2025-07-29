@@ -111,42 +111,6 @@ def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
     )
 
 
-def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
-    prompt_runnable: Runnable
-    if prompt is None:
-        prompt_runnable = RunnableCallable(
-            lambda state: _get_state_value(state, "messages"), name=PROMPT_RUNNABLE_NAME
-        )
-    elif isinstance(prompt, str):
-        _system_message: BaseMessage = SystemMessage(content=prompt)
-        prompt_runnable = RunnableCallable(
-            lambda state: [_system_message] + _get_state_value(state, "messages"),
-            name=PROMPT_RUNNABLE_NAME,
-        )
-    elif isinstance(prompt, SystemMessage):
-        prompt_runnable = RunnableCallable(
-            lambda state: [prompt] + _get_state_value(state, "messages"),
-            name=PROMPT_RUNNABLE_NAME,
-        )
-    elif inspect.iscoroutinefunction(prompt):
-        prompt_runnable = RunnableCallable(
-            None,
-            prompt,
-            name=PROMPT_RUNNABLE_NAME,
-        )
-    elif callable(prompt):
-        prompt_runnable = RunnableCallable(
-            prompt,
-            name=PROMPT_RUNNABLE_NAME,
-        )
-    elif isinstance(prompt, Runnable):
-        prompt_runnable = prompt
-    else:
-        raise ValueError(f"Got unexpected type for `prompt`: {type(prompt)}")
-
-    return prompt_runnable
-
-
 def _should_bind_tools(
     model: LanguageModelLike, tools: Sequence[BaseTool], num_builtin: int = 0
 ) -> bool:
@@ -1192,5 +1156,6 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
