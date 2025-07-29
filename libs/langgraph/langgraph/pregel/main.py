@@ -116,7 +116,7 @@ from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
-from langgraph.runtime import Runtime
+from langgraph.runtime import DEFAULT_RUNTIME, Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
@@ -2570,12 +2570,16 @@ class Pregel(
             if durability is not None or deprecated_checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
-            config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
+            runtime = Runtime(
                 context=context,
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
             )
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            runtime = parent_runtime.merge(runtime)
+            config[CONF][CONFIG_KEY_RUNTIME] = runtime
+
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
@@ -2861,12 +2865,16 @@ class Pregel(
             if durability is not None or deprecated_checkpoint_during is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
-            config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
+            runtime = Runtime(
                 context=context,
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
             )
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            runtime = parent_runtime.merge(runtime)
+            config[CONF][CONFIG_KEY_RUNTIME] = runtime
+
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
