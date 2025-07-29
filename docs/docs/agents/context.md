@@ -24,15 +24,20 @@ LangGraph provides three ways to manage context, which combines the mutability a
 
 **Static runtime context** represents immutable data like user metadata, tools, and database connections that are passed to an application at the start of a run via the `context` argument to `invoke`/`stream`. This data does not change during execution.
 
-!!! version-added "New in LangGraph v0.6: `Runtime.context` replaces `config['configurable']`"
+!!! version-added "New in LangGraph v0.6: `context` replaces `config['configurable']`"
 
-    The `Runtime` object is recommended to access static context and other utilities like the active store and stream writer.
+    Runtime context should be passed to the `context` argument of `invoke`/`stream`.
+    This replaces the previous pattern of passing application configuration to `config['configurable']`.
 
-!!! note "Application configuration vs. LLM Context"
+!!! tip "Runtime context vs LLM context"
 
-    Runtime context can include data that will be passed to the LLM (e.g., system prompt, tools) as well as application configuration (e.g., model settings, temperature, API keys, database connections) that governs application behavior but is not explicitly passed to the LLM.
-            
-Use the `Runtime` object  to access static context and other utilities like the active store and stream writer. Any context you want to write to state for application use can be passed directly as a dictionary to `invoke` / `stream`. 
+    Runtime context refers to local context: data and dependencies your code needs to run. It does not refer to:
+
+    * The LLM context, which is the data passed into the LLM's prompt.
+    * The "context window", which is the maximum number of tokens that can be passed to the LLM.
+
+    Runtime context can be **used to** optimize the LLM context. For example, you can use user metadata
+    in the runtime context to fetch user preferences and feed them into the context window.
 
 ```python
 @dataclass
@@ -109,6 +114,11 @@ graph.invoke( # (1)!
     ```
 
     See the [tool calling guide](../how-tos/tool-calling.md#configuration) for details.
+
+!!! tip "Using the `Runtime` object in nodes and tools"
+
+    The `Runtime` object can be used to access static context and other utilities like the active store and stream writer.
+    See the [Runtime][langgraph.runtime.Runtime] documentation for details.
 
 ## Dynamic runtime context (state)
 
