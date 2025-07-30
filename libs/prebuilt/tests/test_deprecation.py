@@ -6,12 +6,12 @@ from langgraph.warnings import LangGraphDeprecatedSinceV06
 from tests.model import FakeToolCallingModel
 
 
-@pytest.mark.filterwarnings("ignore:`config_schema` is deprecated")
-@pytest.mark.filterwarnings("ignore:`get_config_jsonschema` is deprecated")
 class Config(TypedDict):
     model: str
 
 
+@pytest.mark.filterwarnings("ignore:`config_schema` is deprecated")
+@pytest.mark.filterwarnings("ignore:`get_config_jsonschema` is deprecated")
 def test_config_schema_deprecation() -> None:
     with pytest.warns(
         LangGraphDeprecatedSinceV06,
