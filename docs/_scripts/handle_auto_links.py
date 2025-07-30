@@ -100,16 +100,15 @@ CONDITIONAL_FENCE_PATTERN = re.compile(
 )
 CROSS_REFERENCE_PATTERN = re.compile(
     r"""
-    @                       # Literal @ symbol
     (?:                     # Non-capturing group for two possible formats:
-        \[                  # Opening bracket for title
+        @\[                 # @ symbol followed by opening bracket for title
         (?P<title>[^\]]+)   # Custom title - one or more non-bracket characters
         \]                  # Closing bracket for title
         \[                  # Opening bracket for link name
         (?P<link_name_with_title>[^\]]+)  # Link name - one or more non-bracket characters
         \]                  # Closing bracket for link name
         |                   # OR
-        \[                  # Opening bracket
+        @\[                 # @ symbol followed by opening bracket
         (?P<link_name>[^\]]+)   # Link name - one or more non-bracket characters
         \]                  # Closing bracket
     )
@@ -118,7 +117,7 @@ CROSS_REFERENCE_PATTERN = re.compile(
 )
 
 
-def _replace_autolinks(markdown: str, file_path: str) -> str:
+def _replace_autolinks(markdown: str, file_path: str, *, default_scope: str = "python") -> str:
     """Preprocess markdown lines to handle @[links] with conditional fence scopes.
 
     This function processes markdown content to transform @[link_name] references
@@ -128,6 +127,7 @@ def _replace_autolinks(markdown: str, file_path: str) -> str:
     Args:
         markdown: The markdown content to process.
         file_path: The file path for error reporting.
+        default_scope: The default scope to use if no scope is matched.
 
     Returns:
         Processed markdown content with @[references] transformed to proper
@@ -140,7 +140,7 @@ def _replace_autolinks(markdown: str, file_path: str) -> str:
             "[StateGraph](url)\\n:::python\\n[Command](url)\\n:::\\n"
     """
     # Track the current scope context
-    current_scope = "global"
+    current_scope = default_scope
     lines = markdown.splitlines(keepends=True)
     processed_lines = []
 
@@ -152,7 +152,7 @@ def _replace_autolinks(markdown: str, file_path: str) -> str:
         if fence_match:
             language = fence_match.group("language")
             # Set scope to the specified language, or reset to global if no language
-            current_scope = language.lower() if language else "global"
+            current_scope = language.lower() if language else default_scope
             processed_lines.append(line)
             continue
 

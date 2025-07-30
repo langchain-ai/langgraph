@@ -186,7 +186,7 @@ def _apply_conditional_rendering(md_text: str, target_language: str) -> str:
     pattern = re.compile(
         r"(?P<indent>[ \t]*):::(?P<language>\w+)\s*\n"
         r"(?P<content>((?:.*\n)*?))"  # Capture the content inside the block
-        r"(?P=indent):::"  # Match closing with the same indentation
+        r"(?P=indent)[ \t]*:::"  # Match closing with the same indentation + any additional whitespace
     )
 
     def replace_conditional_blocks(match: re.Match) -> str:
@@ -301,8 +301,13 @@ def _on_page_markdown_with_config(
         # logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         markdown = convert_notebook(page.file.abs_src_path)
 
+    target_language = kwargs.get(
+        "target_language",
+        os.environ.get("TARGET_LANGUAGE", "python")
+    )
+
     # Apply cross-reference preprocessing to all markdown content
-    markdown = _replace_autolinks(markdown, page.file.src_path)
+    markdown = _replace_autolinks(markdown, page.file.src_path, default_scope=target_language)
 
     # Append API reference links to code blocks
     if add_api_references:
@@ -311,7 +316,6 @@ def _on_page_markdown_with_config(
     markdown = _highlight_code_blocks(markdown)
 
     # Apply conditional rendering for code blocks
-    target_language = kwargs.get("target_language", "python")
     markdown = _apply_conditional_rendering(markdown, target_language)
 
     # Add file path as an attribute to code blocks that are executable.
