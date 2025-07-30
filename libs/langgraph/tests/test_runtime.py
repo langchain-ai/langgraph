@@ -279,6 +279,7 @@ def test_context_coercion_errors() -> None:
         )
 
 
+@pytest.mark.anyio
 async def test_context_coercion_async() -> None:
     """Test context coercion with async methods."""
 
@@ -361,3 +362,4 @@ def test_context_coercion_stream() -> None:
             break
 
     assert node_output == {"message": "stream api_key: sk_stream, mode: fast"}
+
