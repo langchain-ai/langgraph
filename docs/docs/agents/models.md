@@ -99,7 +99,7 @@ agent = create_react_agent(
 )
 ```
 
-!!! version-added "Support with langgraph>=0.6"
+!!! version-added "New in LangGraph v0.6"
 
 
 ??? example "Extended example: dynamically select model and tools"
