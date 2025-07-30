@@ -22,21 +22,26 @@ def _coerce_context(
     if context is None or context_schema is None:
         return context
     
-    # If context is already the correct type, return as-is
-    if isinstance(context, context_schema):
-        return context
-    
     # If context is a dict and we have a schema, try to coerce
     if isinstance(context, dict):
+        # Handle TypedDict first - pass through as-is since TypedDicts are just dicts at runtime
+        if is_typeddict(context_schema):
+            return context
         # Handle Pydantic BaseModel
-        if isclass(context_schema) and issubclass(context_schema, BaseModel):
+        elif isclass(context_schema) and issubclass(context_schema, BaseModel):
             return context_schema(**context)
         # Handle dataclass
         elif is_dataclass(context_schema):
             return context_schema(**context)
-        # Handle TypedDict - pass through as-is since TypedDicts are just dicts at runtime
-        elif is_typeddict(context_schema):
+    
+    # If context is already the correct type, return as-is
+    # This check is done after dict check to avoid TypedDict isinstance issues
+    try:
+        if isinstance(context, context_schema):
             return context
+    except TypeError:
+        # TypedDict raises TypeError on isinstance check
+        pass
     
     # If we can't coerce, return the context as-is
     return context
@@ -88,3 +93,4 @@ if __name__ == "__main__":
     dc_instance = DataclassContext(api_key="key", user_id="user")
     same_result = _coerce_context(DataclassContext, dc_instance)
     print(f"Already correct type: {same_result is dc_instance}")
+
