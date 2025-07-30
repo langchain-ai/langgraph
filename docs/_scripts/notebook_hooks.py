@@ -506,16 +506,51 @@ def on_post_page(html: str, page: Page, config: MkDocsConfig) -> str:
 def on_post_build(config):
     use_directory_urls = config.get("use_directory_urls")
     for page_old, page_new in REDIRECT_MAP.items():
+        # Convert .ipynb to .md for path calculation
         page_old = page_old.replace(".ipynb", ".md")
-        page_new = page_new.replace(".ipynb", ".md")
-        page_new_before_hash, hash, suffix = page_new.partition("#")
-        old_html_path = File(page_old, "", "", use_directory_urls).dest_path.replace(
-            os.sep, "/"
-        )
-        new_html_path = File(page_new_before_hash, "", "", True).url
-        new_html_path = (
-            posixpath.relpath(new_html_path, start=posixpath.dirname(old_html_path))
-            + hash
-            + suffix
-        )
-        _write_html(config["site_dir"], old_html_path, new_html_path)
+        
+        # Calculate the HTML path for the old page (whether it exists or not)
+        if use_directory_urls:
+            # With directory URLs: /path/to/page/ becomes /path/to/page/index.html
+            if page_old.endswith(".md"):
+                old_html_path = page_old[:-3] + "/index.html"
+            else:
+                old_html_path = page_old + "/index.html"
+        else:
+            # Without directory URLs: /path/to/page.md becomes /path/to/page.html
+            if page_old.endswith(".md"):
+                old_html_path = page_old[:-3] + ".html"
+            else:
+                old_html_path = page_old + ".html"
+        
+        if isinstance(page_new, str) and page_new.startswith("http"):
+            # Handle external redirects
+            _write_html(config["site_dir"], old_html_path, page_new)
+        else:
+            # Handle internal redirects
+            page_new = page_new.replace(".ipynb", ".md")
+            page_new_before_hash, hash, suffix = page_new.partition("#")
+            
+            # Try to get the new path using File class, but fallback to manual calculation
+            try:
+                new_html_path = File(page_new_before_hash, "", "", True).url
+                new_html_path = (
+                    posixpath.relpath(new_html_path, start=posixpath.dirname(old_html_path))
+                    + hash
+                    + suffix
+                )
+            except:
+                # Fallback: calculate relative path manually
+                if use_directory_urls:
+                    if page_new_before_hash.endswith(".md"):
+                        new_html_path = page_new_before_hash[:-3] + "/"
+                    else:
+                        new_html_path = page_new_before_hash + "/"
+                else:
+                    if page_new_before_hash.endswith(".md"):
+                        new_html_path = page_new_before_hash[:-3] + ".html"
+                    else:
+                        new_html_path = page_new_before_hash + ".html"
+                new_html_path += hash + suffix
+            
+            _write_html(config["site_dir"], old_html_path, new_html_path)
