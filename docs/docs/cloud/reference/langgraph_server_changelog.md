@@ -4,6 +4,9 @@
 
 ---
 
+## v0.2.110 (2025-07-29)
+- Added interrupts as default values for all operations except streams to maintain consistent behavior.
+
 ## v0.2.109 (2025-07-28)
 - Fixed an issue where missing config schema occurred when `config_type` was not set.
 
