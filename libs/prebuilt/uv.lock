@@ -316,7 +316,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.6.0a1"
+version = "0.6.1"
 source = { editable = "../langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -430,7 +430,7 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.10"
+version = "2.0.11"
 source = { editable = "../checkpoint-sqlite" }
 dependencies = [
     { name = "aiosqlite" },
@@ -460,7 +460,7 @@ dev = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.5.2"
+version = "0.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },

@@ -129,6 +129,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: The schema class that defines the input to the graph.
         output_schema: The schema class that defines the output from the graph.
 
+    !!! warning "`config_schema` Deprecated"
+        The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
+        Please use `context_schema` instead to specify the schema for run-scoped context.
+
     Example:
         ```python
         from langchain_core.runnables import RunnableConfig

@@ -52,7 +52,6 @@ theme:
 plugins:
   - search:
       separator: '[\s\u200b\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;'
-  - autorefs
   - tags
   - include-markdown
   - mkdocstrings:
@@ -250,6 +249,7 @@ nav:
       - Storage: reference/store.md
       - Caching: reference/cache.md
       - Types: reference/types.md
+      - Runtime: reference/runtime.md
       - Config: reference/config.md
       - Errors: reference/errors.md
       - Constants: reference/constants.md

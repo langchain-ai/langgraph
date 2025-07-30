@@ -2337,7 +2337,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.6.0a1"
+version = "0.6.1"
 source = { editable = "../libs/langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -2466,7 +2466,7 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.10"
+version = "2.0.11"
 source = { editable = "../libs/checkpoint-sqlite" }
 dependencies = [
     { name = "aiosqlite" },
@@ -2523,7 +2523,6 @@ docs = [
     { name = "markdown-callouts" },
     { name = "markdown-include" },
     { name = "mkdocs" },
-    { name = "mkdocs-autorefs" },
     { name = "mkdocs-exclude" },
     { name = "mkdocs-git-committers-plugin-2" },
     { name = "mkdocs-include-markdown-plugin" },
@@ -2595,7 +2594,6 @@ docs = [
     { name = "markdown-callouts" },
     { name = "markdown-include" },
     { name = "mkdocs" },
-    { name = "mkdocs-autorefs" },
     { name = "mkdocs-exclude" },
     { name = "mkdocs-git-committers-plugin-2" },
     { name = "mkdocs-include-markdown-plugin", specifier = ">=7.1.6" },
@@ -2643,7 +2641,7 @@ test = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.5.2"
+version = "0.6.1"
 source = { editable = "../libs/prebuilt" }
 dependencies = [
     { name = "langchain-core" },
@@ -2674,7 +2672,7 @@ dev = [
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.2.0a1"
+version = "0.2.0"
 source = { editable = "../libs/sdk-py" }
 dependencies = [
     { name = "httpx" },
