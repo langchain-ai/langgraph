@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Script to add durability parameter to invoke method signature."""
+"""Script to add durability parameter to invoke method signature and update docstring."""
 
 import re
 
@@ -10,21 +10,21 @@ def modify_invoke_method():
     with open(file_path, 'r') as f:
         content = f.read()
     
-    # Find the invoke method and add durability parameter
-    # Pattern to match the invoke method signature
-    invoke_pattern = r'(    def invoke\(\s*\n.*?interrupt_after: All \| Sequence\[str\] \| None = None,)\s*\n(        \*\*kwargs: Any,)'
+    # Update the invoke method docstring to include durability parameter
+    docstring_pattern = r'(            interrupt_before: Optional\. The nodes to interrupt the graph run before\.\s*\n\s*interrupt_after: Optional\. The nodes to interrupt the graph run after\.\s*\n)(            \*\*kwargs: Additional keyword arguments to pass to the graph run\.)'
     
-    # Replacement with durability parameter added
-    invoke_replacement = r'\1\n        durability: Durability | None = None,\n\2'
+    # Replacement with durability parameter documentation added
+    docstring_replacement = r'\1            durability: The durability mode for the graph execution, defaults to "async". Options are:\n                - `"sync"`: Changes are persisted synchronously before the next step starts.\n                - `"async"`: Changes are persisted asynchronously while the next step executes.\n                - `"exit"`: Changes are persisted only when the graph exits.\n\2'
     
     # Apply the replacement
-    content = re.sub(invoke_pattern, invoke_replacement, content, flags=re.DOTALL)
+    content = re.sub(docstring_pattern, docstring_replacement, content, flags=re.DOTALL)
     
     # Write the modified content back
     with open(file_path, 'w') as f:
         f.write(content)
     
-    print("Successfully added durability parameter to invoke method signature")
+    print("Successfully updated invoke method docstring with durability parameter documentation")
 
 if __name__ == "__main__":
     modify_invoke_method()
+
