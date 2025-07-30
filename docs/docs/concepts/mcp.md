@@ -15,7 +15,8 @@ pip install langchain-mcp-adapters
 You can set up [custom authentication middleware](../how-tos/auth/custom_auth.md) to authenticate a user with an MCP server to get access to user-scoped tools within your LangGraph Platform deployment.
 
 !!! note
-Custom authentication is a LangGraph Platform feature.
+
+    Custom authentication is a LangGraph Platform feature.
 
 An example architecture for this flow:
 
