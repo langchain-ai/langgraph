@@ -5,6 +5,7 @@ from __future__ import annotations
 __all__ = (
     "LangGraphDeprecationWarning",
     "LangGraphDeprecatedSinceV05",
+    "LangGraphDeprecatedSinceV06",
     "LangGraphDeprecatedSinceV10",
 )
 

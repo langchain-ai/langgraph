@@ -124,7 +124,7 @@ def test_config_schema_deprecation() -> None:
 @pytest.mark.filterwarnings("ignore:`config_schema` is deprecated")
 def test_config_schema_deprecation_on_entrypoint() -> None:
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
     ):
 
