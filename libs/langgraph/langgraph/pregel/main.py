@@ -3029,6 +3029,7 @@ class Pregel(
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            durability=durability,
             **kwargs,
         ):
             if stream_mode == "values":
