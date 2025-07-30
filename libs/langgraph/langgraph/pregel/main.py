@@ -72,7 +72,7 @@ from langgraph._internal._runnable import (
     RunnableSeq,
     coerce_to_runnable,
 )
-from langgraph._internal._typing import DeprecatedKwargs
+from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -636,7 +636,10 @@ class Pregel(
         name: str = "LangGraph",
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
-        if config_type := deprecated_kwargs.get("config_type"):
+        if (
+            config_type := deprecated_kwargs.get("config_type"),
+            MISSING,
+        ) is not MISSING:
             warnings.warn(
                 "`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
                 category=LangGraphDeprecatedSinceV10,

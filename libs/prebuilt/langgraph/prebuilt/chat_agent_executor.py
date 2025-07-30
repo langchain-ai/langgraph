@@ -459,11 +459,11 @@ def create_react_agent(
         config_schema := deprecated_kwargs.pop("config_schema", MISSING)
     ) is not MISSING:
         warn(
-            "`config_schema` is no longer supported. Use `context_schema` instead.",
+            "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
             category=LangGraphDeprecatedSinceV10,
         )
 
-        if context_schema is not None:
+        if context_schema is None:
             context_schema = config_schema
 
     if version not in ("v1", "v2"):
