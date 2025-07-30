@@ -2987,6 +2987,7 @@ class Pregel(
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Run the graph with a single input and config.
