@@ -4,6 +4,13 @@
 
 ---
 
+## v0.2.113 (2025-07-30)
+- Improved thread search pagination by refining response headers for better navigation and accuracy.
+
+## v0.2.112 (2025-07-30)
+- Ensured asynchronous handling for sync logging methods and added a linter to prevent future issues.
+- Fixed an issue where JavaScript tasks were not populating correctly in graphs.
+
 ## v0.2.111 (2025-07-29)
 - Started the heartbeat immediately upon connection to prevent JS graph streaming errors during long startups.
 
