@@ -286,6 +286,21 @@ def _highlight_code_blocks(markdown: str) -> str:
     return markdown
 
 
+def _save_page_output(markdown: str, output_path: str):
+    """Save markdown content to a file, creating parent directories if needed.
+
+    Args:
+        markdown: The markdown content to save
+        output_path: The file path to save to
+    """
+    # Create parent directories recursively if they don't exist
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    # Write the markdown content to the file
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(markdown)
+
+
 def _on_page_markdown_with_config(
     markdown: str,
     page: Page,
@@ -338,6 +353,12 @@ def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
         **kwargs,
     )
     page.meta["original_markdown"] = finalized_markdown
+
+    output_path = os.environ.get("MD_OUTPUT_PATH")
+    if output_path:
+        file_path = os.path.join(output_path, page.file.src_path)
+        _save_page_output(finalized_markdown, file_path)
+
     return finalized_markdown
 
 
