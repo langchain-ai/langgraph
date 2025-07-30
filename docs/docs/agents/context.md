@@ -2,13 +2,12 @@
 
 **Context engineering** is the practice of building dynamic systems that provide the right information and tools, in the right format, so that an AI application can accomplish a task. Context can be characterized along two key dimensions:
 
-
 1. By **mutability**:
-      - **Static context**: Immutable data that doesn't change during execution (e.g., user metadata, database connections, tools)
-      - **Dynamic context**: Mutable data that evolves as the application runs (e.g., conversation history, intermediate results, tool call observations)
+   - **Static context**: Immutable data that doesn't change during execution (e.g., user metadata, database connections, tools)
+   - **Dynamic context**: Mutable data that evolves as the application runs (e.g., conversation history, intermediate results, tool call observations)
 2. By **lifetime**:
-      - **Runtime context**: Data scoped to a single run or invocation
-      - **Cross-conversation context**: Data that persists across multiple conversations or sessions
+   - **Runtime context**: Data scoped to a single run or invocation
+   - **Cross-conversation context**: Data that persists across multiple conversations or sessions
 
 !!! tip "Runtime context vs LLM context"
 
@@ -126,7 +125,7 @@ graph.invoke( # (1)!
 
 | Context type                                                                                | Description                                   | Mutability | Lifetime           |
 | ------------------------------------------------------------------------------------------- | --------------------------------------------- | ---------- | ------------------ |
-| [**Config**](#config-static-context)                                                        | data passed at the start of a run             | ❌         | per run            |
+| [**Config**](#config-static-context)                                                        | data passed at the start of a run             | Static     | Single run         |
 | [**Dynamic runtime context (state)**](#dynamic-runtime-context-state)                       | Mutable data that evolves during a single run | Dynamic    | Single run         |
 | [**Dynamic cross-conversation context (store)**](#dynamic-cross-conversation-context-store) | Persistent data shared across conversations   | Dynamic    | Cross-conversation |
 
