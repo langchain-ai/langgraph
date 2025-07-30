@@ -89,7 +89,9 @@ After deployment, you can update the name and description using the LangGraph SD
 
 Define clear, minimal input and output schemas to avoid exposing unnecessary internal complexity to the LLM.
 
+:::python
 The default [MessagesState](./low_level.md#messagesstate) uses `AnyMessage`, which supports many message types but is too general for direct LLM exposure.
+:::
 
 Instead, define **custom agents or workflows** that use explicitly typed input and output structures.
 

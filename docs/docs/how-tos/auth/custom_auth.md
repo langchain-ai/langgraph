@@ -137,7 +137,8 @@ def my_node(state, config):
 ```
 
 !!! note
-Fetch user credentials from a secure secret store. Storing secrets in graph state is not recommended.
+
+    Fetch user credentials from a secure secret store. Storing secrets in graph state is not recommended.
 
 ### Authorizing a Studio user
 
@@ -263,6 +264,25 @@ Only use this if you want to permit developer access to a graph deployed on the 
         ```bash
         curl -H "Authorization: Bearer ${your-token}" http://localhost:2024/threads
         ```
+
+## Enable agent authentication
+
+After [authentication](#add-custom-authentication-to-your-deployment), the platform creates a special configuration object (`config`) that is passed to LangGraph Platform deployment. This object contains information about the current user, including any custom fields you return from your `authenticate` handler.
+
+To allow an agent to perform authenticated actions on behalf of the user, access this object in your graph with the `langgraph_auth_user` key:
+
+```ts
+async function myNode(state, config) {
+  const userConfig = config["configurable"]["langgraph_auth_user"];
+  // token was resolved during the authenticate function
+  const token = userConfig["github_token"];
+  ...
+}
+```
+
+!!! note
+
+    Fetch user credentials from a secure secret store. Storing secrets in graph state is not recommended.
 
 :::
 

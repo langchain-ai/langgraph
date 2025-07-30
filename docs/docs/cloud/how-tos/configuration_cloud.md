@@ -43,7 +43,9 @@ First, as a brief refresher on the concept of runtime context, consider the foll
     }
     ```
 
+:::python
 For more information on runtime context, [see here](../../concepts/low_level.md#runtime-context).
+:::
 
 ## Create an assistant
 
@@ -327,4 +329,4 @@ If you now run your graph and pass in this assistant id, it will use the first v
 If using LangGraph Studio, to set the active version of your assistant, click the "Manage Assistants" button and locate the assistant you would like to use. Select the assistant and the version, and then click the "Active" toggle. This will update the assistant to make the selected version active.
 
 !!! warning "Deleting Assistants"
-    Deleting as assistant will delete ALL of its versions. There is currently no way to delete a single version, but by pointing your assistant to the correct version you can skip any versions that you don't wish to use.
+Deleting as assistant will delete ALL of its versions. There is currently no way to delete a single version, but by pointing your assistant to the correct version you can skip any versions that you don't wish to use.

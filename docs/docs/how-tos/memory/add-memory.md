@@ -1973,7 +1973,7 @@ def delete_messages(state):
 :::
 
 :::js
-To delete messages from the graph state, you can use the `RemoveMessage`. For `RemoveMessage` to work, you need to use a state key with @[`messagesStateReducer`][messagesStateReducer] [reducer](../../concepts/low_level.md#reducers), like [`MessagesZodState`](../../concepts/low_level.md#messageszodstate).
+To delete messages from the graph state, you can use the `RemoveMessage`. For `RemoveMessage` to work, you need to use a state key with @[`messagesStateReducer`][messagesStateReducer] [reducer](../../concepts/low_level.md#reducers), like `MessagesZodState`.
 
 To remove specific messages:
 

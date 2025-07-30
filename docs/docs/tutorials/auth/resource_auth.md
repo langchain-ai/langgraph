@@ -212,7 +212,7 @@ The handler receives two parameters:
 :::js
 The handler receives an object with the following properties:
 
-1. `user` ([ProxyUser](../../cloud/reference/sdk/js_ts_sdk_ref.md#langgraph_sdk.auth.types.ProxyUser)): contains info about the current `user`, the user's `permissions`, the `resource` ("threads", "crons", "assistants")
+1. `user` contains info about the current `user`, the user's `permissions`, the `resource` ("threads", "crons", "assistants")
 2. `action` contains information about the action being taken ("create", "read", "update", "delete", "search", "create_run")
 3. `value` (`Record<string, any>`): data that is being created or accessed. The contents of this object depend on the resource and action being accessed. See [adding scoped authorization handlers](#scoped-authorization) below for information on how to get more tightly scoped access control.
    :::
@@ -588,10 +588,14 @@ Now that you can control access to resources, you might want to:
 1. Move on to [Connect an authentication provider](add_auth_server.md) to add real user accounts.
 2. Read more about [authorization patterns](../../concepts/auth.md#authorization).
 
-:::python 
+:::python
+
 3. Check out the [API reference](../../cloud/reference/sdk/python_sdk_ref.md#langgraph_sdk.auth.Auth) for details about the interfaces and methods used in this tutorial.
+
 :::
 
-:::js 
+:::js
+
 3. Check out the [API reference](../../cloud/reference/sdk/js_sdk_ref.md#langgraph_sdk.auth.Auth) for details about the interfaces and methods used in this tutorial.
+
 :::

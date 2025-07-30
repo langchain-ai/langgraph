@@ -34,7 +34,7 @@ There could be a few reasons you're seeing this error:
    This interrupt could have been triggered in one of the following ways:
 
    - You manually set `interruptBefore: ['tools']` in `createReactAgent`
-   - One of the tools raised an error that wasn't handled by the [ToolNode][ToolNode] (`"tools"`)
+   - One of the tools raised an error that wasn't handled by the @[ToolNode][ToolNode] (`"tools"`)
 
 :::
 
