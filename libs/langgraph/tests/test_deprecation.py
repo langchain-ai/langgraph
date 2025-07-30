@@ -102,6 +102,7 @@ def test_config_schema_deprecation() -> None:
         match="`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
     ):
         builder = StateGraph(PlainState, config_schema=PlainState)
+        assert builder.context_schema == PlainState
 
     builder.add_node("test_node", lambda state: state)
     builder.set_entry_point("test_node")
@@ -111,13 +112,28 @@ def test_config_schema_deprecation() -> None:
         LangGraphDeprecatedSinceV10,
         match="`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
     ):
-        graph.config_schema()
+        assert graph.config_schema() is not None
 
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
         match="`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead.",
     ):
         graph.get_config_jsonschema()
+
+
+@pytest.mark.filterwarnings("ignore:`config_schema` is deprecated")
+def test_config_schema_deprecation_on_entrypoint() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
+    ):
+
+        @entrypoint(config_schema=PlainState)  # type: ignore[arg-type]
+        def my_entrypoint(state: PlainState) -> PlainState:
+            return state
+
+        assert my_entrypoint.context_schema == PlainState
+        assert my_entrypoint.config_schema() is not None
 
 
 def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
@@ -128,7 +144,7 @@ def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
         LangGraphDeprecatedSinceV10,
         match="`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
     ):
-        Pregel(
+        instance = Pregel(
             nodes={
                 "one": chain,
             },
@@ -140,6 +156,7 @@ def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
             output_channels="output",
             config_type=PlainState,
         )
+        assert instance.context_schema == PlainState
 
 
 @pytest.mark.filterwarnings("ignore:`interrupt_id` is deprecated. Use `id` instead.")
