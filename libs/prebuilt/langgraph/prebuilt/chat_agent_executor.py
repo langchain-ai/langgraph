@@ -285,12 +285,13 @@ def create_react_agent(
             - **Static model**: A chat model instance (e.g., `ChatOpenAI()`) or
               string identifier (e.g., `"openai:gpt-4"`)
             - **Dynamic model**: A callable with signature
-              `(state, runtime) -> BaseChatModel` that returns different models
+              `(state, runtime) -> LanguageModelLike` that returns different models
               based on runtime context
 
             Dynamic functions receive graph state and runtime, enabling
-            context-dependent model selection. Must return a `BaseChatModel`
-            instance. For tool calling, bind tools using `.bind_tools()`.
+            context-dependent model selection. Must return a `LanguageModelLike`
+            instance (e.g., `BaseChatModel` or result of `model.bind_tools()`).
+            For tool calling, bind tools using `.bind_tools()`.
             Bound tools must be a subset of the `tools` parameter.
 
             Dynamic model example:
@@ -952,4 +953,5 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
