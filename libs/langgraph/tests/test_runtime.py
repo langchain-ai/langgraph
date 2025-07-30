@@ -362,4 +362,3 @@ def test_context_coercion_stream() -> None:
             break
 
     assert node_output == {"message": "stream api_key: sk_stream, mode: fast"}
-
