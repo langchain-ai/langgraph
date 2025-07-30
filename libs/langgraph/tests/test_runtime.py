@@ -112,6 +112,7 @@ def test_runtime_propogated_to_subgraph() -> None:
 
 def test_context_coercion_dataclass() -> None:
     """Test that dict context is coerced to dataclass."""
+
     @dataclass
     class Context:
         api_key: str
@@ -150,6 +151,7 @@ def test_context_coercion_dataclass() -> None:
 
 def test_context_coercion_pydantic() -> None:
     """Test that dict context is coerced to Pydantic model."""
+
     class Context(BaseModel):
         api_key: str
         timeout: int = 30
@@ -190,6 +192,7 @@ def test_context_coercion_pydantic() -> None:
 
 def test_context_coercion_typeddict() -> None:
     """Test that dict context with TypedDict schema passes through as-is."""
+
     class Context(TypedDict):
         api_key: str
         timeout: int
@@ -218,6 +221,7 @@ def test_context_coercion_typeddict() -> None:
 
 def test_context_coercion_none() -> None:
     """Test that None context is handled properly."""
+
     @dataclass
     class Context:
         api_key: str
@@ -247,6 +251,7 @@ def test_context_coercion_none() -> None:
 
 def test_context_coercion_errors() -> None:
     """Test error handling for invalid context."""
+
     @dataclass
     class Context:
         api_key: str  # Required field
@@ -276,6 +281,7 @@ def test_context_coercion_errors() -> None:
 
 async def test_context_coercion_async() -> None:
     """Test context coercion with async methods."""
+
     @dataclass
     class Context:
         api_key: str
@@ -307,19 +313,20 @@ async def test_context_coercion_async() -> None:
         {"message": "test"}, context={"api_key": "sk_stream"}
     ):
         chunks.append(chunk)
-    
+
     # Find the chunk with our node output
     node_output = None
     for chunk in chunks:
         if "node" in chunk:
             node_output = chunk["node"]
             break
-    
+
     assert node_output == {"message": "async api_key: sk_stream, async_mode: True"}
 
 
 def test_context_coercion_stream() -> None:
     """Test context coercion with sync stream method."""
+
     @dataclass
     class Context:
         api_key: str
@@ -345,15 +352,12 @@ def test_context_coercion_stream() -> None:
         {"message": "test"}, context={"api_key": "sk_stream", "stream_mode": "fast"}
     ):
         chunks.append(chunk)
-    
+
     # Find the chunk with our node output
     node_output = None
     for chunk in chunks:
         if "node" in chunk:
             node_output = chunk["node"]
             break
-    
+
     assert node_output == {"message": "stream api_key: sk_stream, mode: fast"}
-
-
-
