@@ -2612,7 +2612,7 @@ class Pregel(
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             runtime = Runtime(
-                context=context,
+                context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
@@ -2907,7 +2907,7 @@ class Pregel(
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             runtime = Runtime(
-                context=context,
+                context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
