@@ -363,8 +363,6 @@ snapshot.next;
 
     :::python
 
-    :::python
-
     Take a closer look at the `human_assistance` tool:
 
     ```python
@@ -415,7 +413,6 @@ snapshot.next;
     );
     ```
 
-    Calling `interrupt` inside the tool will pause execution. Progress is persisted based on the [checkpointer](../../concepts/persistence.md#checkpointer-libraries); so if it is persisting with Postgres, it can resume at any time as long as the database is alive. In this example, it is persisting with the in-memory checkpointer and can resume any time if the JavaScript runtime is running.
     Calling `interrupt` inside the tool will pause execution. Progress is persisted based on the [checkpointer](../../concepts/persistence.md#checkpointer-libraries); so if it is persisting with Postgres, it can resume at any time as long as the database is alive. In this example, it is persisting with the in-memory checkpointer and can resume any time if the JavaScript runtime is running.
     :::
 
@@ -536,7 +533,7 @@ Check out the code snippet below to review the graph from this tutorial:
 
 :::python
 
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 ```python
 from typing import Annotated
