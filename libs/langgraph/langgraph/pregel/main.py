@@ -3251,6 +3251,6 @@ def _coerce_context(
         context_schema
     )
     if isinstance(context, dict) and schema_is_class:
-        return context_schema(**context)
+        return context_schema(**context)  # type: ignore[misc]
 
     return cast(ContextT, context)
