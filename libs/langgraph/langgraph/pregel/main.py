@@ -3071,6 +3071,7 @@ class Pregel(
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Asynchronously invoke the graph on a single input.
@@ -3085,6 +3086,10 @@ class Pregel(
             output_keys: Optional. The output keys to include in the result. Default is None.
             interrupt_before: Optional. The nodes to interrupt before. Default is None.
             interrupt_after: Optional. The nodes to interrupt after. Default is None.
+            durability: The durability mode for the graph execution, defaults to "async". Options are:
+                - `"sync"`: Changes are persisted synchronously before the next step starts.
+                - `"async"`: Changes are persisted asynchronously while the next step executes.
+                - `"exit"`: Changes are persisted only when the graph exits.
             **kwargs: Additional keyword arguments.
 
         Returns:
