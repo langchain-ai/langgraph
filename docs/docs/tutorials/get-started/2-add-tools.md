@@ -182,7 +182,7 @@ For the `StateGraph` you created in the [first tutorial](./1-build-basic-chatbot
 Let's first select our LLM:
 
 :::python
-{!snippets/chat_model_tabs.md!}
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 <!---
 ```python
@@ -208,7 +208,7 @@ We can now incorporate it into a `StateGraph`:
 
 :::python
 
-```python hl_lines="15"
+```python
 from typing import Annotated
 
 from typing_extensions import TypedDict

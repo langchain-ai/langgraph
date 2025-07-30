@@ -51,8 +51,6 @@ pip install -U langgraph langsmith
 !!! tip
 
     Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph. For more information on how to get started, see [LangSmith docs](https://docs.smith.langchain.com).
-    Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph. For more information on how to get started, see [LangSmith docs](https://docs.smith.langchain.com).
-    Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph. For more information on how to get started, see [LangSmith docs](https://docs.smith.langchain.com).
 
 ## 2. Create a `StateGraph`
 
@@ -101,12 +99,6 @@ Our graph can now handle two key tasks:
 1. Each `node` can receive the current `State` as input and output an update to the state.
 2. Updates to `messages` will be appended to the existing list rather than overwriting it, thanks to the prebuilt reducer function.
 
----
-
----
-
----
-
 !!! tip "Concept"
 
     When defining a graph, the first step is to define its `State`. The `State` includes the graph's schema and [reducer functions](https://langchain-ai.github.io/langgraph/concepts/low_level/#reducers) that handle state updates. In our example, `State` is a schema with one key: `messages`. The reducer function is used to append new messages to the list instead of overwriting it. Keys without a reducer annotation will overwrite previous values.
@@ -120,7 +112,8 @@ Next, add a "`chatbot`" node. **Nodes** represent units of work and are typicall
 Let's first select a chat model:
 
 :::python
-{!snippets/chat_model_tabs.md!}
+
+{% include-markdown "../../../snippets/chat_model_tabs.md" %}
 
 <!---
 ```python
