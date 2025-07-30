@@ -123,7 +123,6 @@ nav:
       - Streaming:
           - Overview: concepts/streaming.md
           - Stream outputs: how-tos/streaming.md
-          - Use Server API: cloud/how-tos/streaming.md
       - Persistence:
           - Overview: concepts/persistence.md
       - Durable execution:
@@ -141,11 +140,9 @@ nav:
       - Human-in-the-loop:
           - Overview: concepts/human_in_the_loop.md
           - Add human intervention: how-tos/human_in_the_loop/add-human-in-the-loop.md
-          - Use Server API: cloud/how-tos/add-human-in-the-loop.md
       - Time travel:
           - Overview: concepts/time-travel.md
           - Use time travel: how-tos/human_in_the_loop/time-travel.md
-          - Use Server API: cloud/how-tos/human_in_the_loop_time_travel.md
       - Subgraphs:
           - Overview: concepts/subgraphs.md
           - Use subgraphs: how-tos/subgraph.md
@@ -156,7 +153,6 @@ nav:
       - MCP:
           - Overview: concepts/mcp.md
           - Use MCP: agents/mcp.md
-          - Server API: concepts/server-mcp.md
       - Tracing:
           - Overview: concepts/tracing.md
           - Enable tracing: how-tos/enable-tracing.md
