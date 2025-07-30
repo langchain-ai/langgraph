@@ -3242,7 +3242,7 @@ def _coerce_context(
         The coerced context value or None if context is None
     """
     if context is None:
-        return context
+        return None
 
     if context_schema is None:
         return context
