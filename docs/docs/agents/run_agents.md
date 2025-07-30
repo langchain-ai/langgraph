@@ -41,13 +41,13 @@ Agents can be executed in two primary modes:
 
 === "Async invocation"
 
-```python
-from langgraph.prebuilt import create_react_agent
+    ```python
+    from langgraph.prebuilt import create_react_agent
 
-agent = create_react_agent(...)
-# highlight-next-line
-response = await agent.ainvoke({"messages": [{"role": "user", "content": "what is the weather in sf"}]})
-```
+    agent = create_react_agent(...)
+    # highlight-next-line
+    response = await agent.ainvoke({"messages": [{"role": "user", "content": "what is the weather in sf"}]})
+    ```
 
 :::
 
@@ -105,25 +105,25 @@ more about [LangChain messages](https://js.langchain.com/docs/concepts/messages/
 
 !!! tip "Using custom agent state"
 
-:::python
-You can provide additional fields defined in your agent's state schema directly in the input dictionary. This allows dynamic behavior based on runtime data or prior tool outputs.
-See the [context guide](./context.md) for full details.
-:::
+    :::python
+    You can provide additional fields defined in your agent's state schema directly in the input dictionary. This allows dynamic behavior based on runtime data or prior tool outputs.
+    See the [context guide](./context.md) for full details.
+    :::
 
-:::js
-You can provide additional fields defined in your agent's state directly in the state definition. This allows dynamic behavior based on runtime data or prior tool outputs.
-See the [context guide](./context.md) for full details.
-:::
+    :::js
+    You can provide additional fields defined in your agent's state directly in the state definition. This allows dynamic behavior based on runtime data or prior tool outputs.
+    See the [context guide](./context.md) for full details.
+    :::
 
 !!! note
 
-:::python
-A string input for `messages` is converted to a [HumanMessage](https://python.langchain.com/docs/concepts/messages/#humanmessage). This behavior differs from the `prompt` parameter in `create_react_agent`, which is interpreted as a [SystemMessage](https://python.langchain.com/docs/concepts/messages/#systemmessage) when passed as a string.
-:::
+    :::python
+    A string input for `messages` is converted to a [HumanMessage](https://python.langchain.com/docs/concepts/messages/#humanmessage). This behavior differs from the `prompt` parameter in `create_react_agent`, which is interpreted as a [SystemMessage](https://python.langchain.com/docs/concepts/messages/#systemmessage) when passed as a string.
+    :::
 
-:::js
-A string input for `messages` is converted to a [HumanMessage](https://js.langchain.com/docs/concepts/messages/#humanmessage). This behavior differs from the `prompt` parameter in `createReactAgent`, which is interpreted as a [SystemMessage](https://js.langchain.com/docs/concepts/messages/#systemmessage) when passed as a string.
-:::
+    :::js
+    A string input for `messages` is converted to a [HumanMessage](https://js.langchain.com/docs/concepts/messages/#humanmessage). This behavior differs from the `prompt` parameter in `createReactAgent`, which is interpreted as a [SystemMessage](https://js.langchain.com/docs/concepts/messages/#systemmessage) when passed as a string.
+    :::
 
 ## Output format
 
@@ -133,7 +133,7 @@ Agent output is a dictionary containing:
 - `messages`: A list of all messages exchanged during execution (user input, assistant replies, tool invocations).
 - Optionally, `structured_response` if [structured output](./agents.md#6-configure-structured-output) is configured.
 - If using a custom `state_schema`, additional keys corresponding to your defined fields may also be present in the output. These can hold updated state values from tool execution or prompt logic.
-  :::
+:::
 
 :::js
 Agent output is a dictionary containing:
@@ -141,7 +141,7 @@ Agent output is a dictionary containing:
 - `messages`: A list of all messages exchanged during execution (user input, assistant replies, tool invocations).
 - Optionally, `structuredResponse` if [structured output](./agents.md#6-configure-structured-output) is configured.
 - If using a custom state definition, additional keys corresponding to your defined fields may also be present in the output. These can hold updated state values from tool execution or prompt logic.
-  :::
+:::
 
 See the [context guide](./context.md) for more details on working with custom state schemas and accessing context.
 

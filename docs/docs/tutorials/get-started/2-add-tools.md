@@ -67,15 +67,11 @@ Install the requirements to use the [Tavily Search Engine](https://docs.tavily.c
 Configure your environment with your search engine API key:
 
 :::python
+```python
+import os
 
-```bash
-_set_env("TAVILY_API_KEY")
+os.environ["TAVILY_API_KEY"] = "tvly-..."
 ```
-
-```
-os.environ["TAVILY_API_KEY"]:  "········"
-```
-
 :::
 
 :::js

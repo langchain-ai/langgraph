@@ -222,7 +222,9 @@ To stream updates from tools as they are executed, you can use @[get_stream_writ
     ```
 
 !!! Note
-If you add `get_stream_writer` inside your tool, you won't be able to invoke the tool outside of a LangGraph execution context.
+
+      If you add `get_stream_writer` inside your tool, you won't be able to invoke the tool outside of a LangGraph execution context.
+
 :::
 
 :::js
@@ -261,7 +263,7 @@ for await (const chunk of await agent.stream(
 ```
 
 !!! Note
-If you add the `writer` parameter to your tool, you won't be able to invoke the tool outside of a LangGraph execution context without providing a writer function.
+      If you add the `writer` parameter to your tool, you won't be able to invoke the tool outside of a LangGraph execution context without providing a writer function.
 :::
 
 ### Stream multiple modes

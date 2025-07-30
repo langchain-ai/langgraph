@@ -196,34 +196,30 @@ This is a special case of updating the graph state from tools where, in addition
 
 !!! important
 
-    If you want to use tools that return `Command`, you can either use prebuilt components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them:
+      :::python
+      If you want to use tools that return `Command`, you can use the prebuilt @[`create_react_agent`][create_react_agent] / @[`ToolNode`][ToolNode] components, or else implement your own logic:
 
-:::python
-You can use prebuilt @[`create_react_agent`][create_react_agent] / @[`ToolNode`][ToolNode] components, or implement your own:
+      ```python
+      def call_tools(state):
+          ...
+          commands = [tools_by_name[tool_call["name"]].invoke(tool_call) for tool_call in tool_calls]
+          return commands
+      ```
+      :::
 
-```python
-def call_tools(state):
-    ...
-    commands = [tools_by_name[tool_call["name"]].invoke(tool_call) for tool_call in tool_calls]
-    return commands
-```
+      :::js
+      If you want to use tools that return `Command`, you can use the prebuilt @[`createReactAgent`][create_react_agent] / @[ToolNode] components, or else implement your own logic:
 
-:::
-
-:::js
-You can use prebuilt @[`createReactAgent`][create_react_agent] / @[ToolNode] components, or implement your own:
-
-```typescript
-graph.addNode("call_tools", async (state) => {
-  // ... tool execution logic
-  const commands = toolCalls.map((toolCall) =>
-    toolsByName[toolCall.name].invoke(toolCall)
-  );
-  return commands;
-});
-```
-
-:::
+      ```typescript
+      graph.addNode("call_tools", async (state) => {
+        // ... tool execution logic
+        const commands = toolCalls.map((toolCall) =>
+          toolsByName[toolCall.name].invoke(toolCall)
+        );
+        return commands;
+      });
+      ```
+      :::
 
 Let's now take a closer look at the different multi-agent architectures.
 
@@ -873,7 +869,7 @@ You therefore have two options:
 
 1. Add an extra [tool message](https://js.langchain.com/docs/concepts/messages/#toolmessage) to the message list, e.g., "Successfully transferred to agent X"
 2. Remove the AI message with the tool calls
-   :::
+:::
 
 In practice, we see that most developers opt for option (1).
 
@@ -889,13 +885,13 @@ There are two high-level approaches to achieve that:
 
 1. Store these messages in the shared message list, but filter the list before passing it to the subagent LLM. For example, you can choose to filter out all tool calls from **other** agents.
 2. Store a separate message list for each agent (e.g., `alice_messages`) in the subagent's graph state. This would be their "view" of what the message history looks like.
-   :::
+:::
 
 :::js
 
 1. Store these messages in the shared message list, but filter the list before passing it to the subagent LLM. For example, you can choose to filter out all tool calls from **other** agents.
 2. Store a separate message list for each agent (e.g., `aliceMessages`) in the subagent's graph state. This would be their "view" of what the message history looks like.
-   :::
+:::
 
 ### Using different state schemas
 
