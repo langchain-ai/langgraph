@@ -1154,15 +1154,15 @@ Under the hood, checkpointing is powered by checkpointer objects that conform to
 - `langgraph-checkpoint`: The base interface for checkpointer savers (@[BaseCheckpointSaver]) and serialization/deserialization interface (@[SerializerProtocol][SerializerProtocol]). Includes in-memory checkpointer implementation (@[InMemorySaver][InMemorySaver]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
 - `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database (@[SqliteSaver][SqliteSaver] / @[AsyncSqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
 - `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresSaver][PostgresSaver] / @[AsyncPostgresSaver]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
- 
+
 :::
 
 :::js
 
-- `@langchain/langgraph-checkpoint`: The base interface for checkpointer savers (@[BaseCheckpointSaver][BaseCheckpointSaver]) and serialization/deserialization interface (@[SerializerProtocol][SerializerProtocol]). Includes in-memory checkpointer implementation (@[InMemorySaver) for experimentation. LangGraph comes with `@langchain/langgraph-checkpoint` included.
+- `@langchain/langgraph-checkpoint`: The base interface for checkpointer savers (@[BaseCheckpointSaver][BaseCheckpointSaver]) and serialization/deserialization interface (@[SerializerProtocol][SerializerProtocol]). Includes in-memory checkpointer implementation (@[MemorySaver]) for experimentation. LangGraph comes with `@langchain/langgraph-checkpoint` included.
 - `@langchain/langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database (@[SqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
 - `@langchain/langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresSaver]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
- 
+
 :::
 
 ### Checkpointer interface
@@ -1177,7 +1177,7 @@ Each checkpointer conforms to @[BaseCheckpointSaver] interface and implements th
 
 If the checkpointer is used with asynchronous graph execution (i.e. executing the graph via `.ainvoke`, `.astream`, `.abatch`), asynchronous versions of the above methods will be used (`.aput`, `.aput_writes`, `.aget_tuple`, `.alist`).
 
-!!! note 
+!!! note
 
     For running your graph asynchronously, you can use `InMemorySaver`, or async versions of Sqlite/Postgres checkpointers -- `AsyncSqliteSaver` / `AsyncPostgresSaver` checkpointers.
 
@@ -1190,7 +1190,7 @@ Each checkpointer conforms to the @[BaseCheckpointSaver][BaseCheckpointSaver] in
 - `.putWrites` - Store intermediate writes linked to a checkpoint (i.e. [pending writes](#pending-writes)).
 - `.getTuple` - Fetch a checkpoint tuple using for a given configuration (`thread_id` and `checkpoint_id`). This is used to populate `StateSnapshot` in `graph.getState()`.
 - `.list` - List checkpoints that match a given configuration and filter criteria. This is used to populate state history in `graph.getStateHistory()`
-:::
+  :::
 
 ### Serializer
 
