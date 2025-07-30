@@ -252,8 +252,8 @@ def create_react_agent(
     model: Union[
         str,
         LanguageModelLike,
-        Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
-        Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
+        Callable[[StateSchema, Runtime[ContextT]], LanguageModelLike],
+        Callable[[StateSchema, Runtime[ContextT]], Awaitable[LanguageModelLike]],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
@@ -952,3 +952,4 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
