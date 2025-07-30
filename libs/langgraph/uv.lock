@@ -1433,7 +1433,7 @@ dev = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.6.1"
+version = "0.6.2"
 source = { editable = "../prebuilt" }
 dependencies = [
     { name = "langchain-core" },
