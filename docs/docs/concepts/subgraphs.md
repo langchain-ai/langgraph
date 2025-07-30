@@ -12,71 +12,152 @@ Some reasons for using subgraphs are:
 
 The main question when adding subgraphs is how the parent graph and subgraph communicate, i.e. how they pass the [state](./low_level.md#state) between each other during the graph execution. There are two scenarios:
 
-* parent and subgraph have **shared state keys** in their state [schemas](./low_level.md#state). In this case, you can [include the subgraph as a node in the parent graph](../how-tos/subgraph.md#shared-state-schemas)
+- parent and subgraph have **shared state keys** in their state [schemas](./low_level.md#state). In this case, you can [include the subgraph as a node in the parent graph](../how-tos/subgraph.ipynb#shared-state-schemas)
 
-    ```python
-    from langgraph.graph import StateGraph, MessagesState, START
+  :::python
 
-    # Subgraph
+  ```python
+  from langgraph.graph import StateGraph, MessagesState, START
 
-    def call_model(state: MessagesState):
-        response = model.invoke(state["messages"])
-        return {"messages": response}
+  # Subgraph
 
-    subgraph_builder = StateGraph(State)
-    subgraph_builder.add_node(call_model)
-    ...
-    # highlight-next-line
-    subgraph = subgraph_builder.compile()
+  def call_model(state: MessagesState):
+      response = model.invoke(state["messages"])
+      return {"messages": response}
 
-    # Parent graph
+  subgraph_builder = StateGraph(State)
+  subgraph_builder.add_node(call_model)
+  ...
+  # highlight-next-line
+  subgraph = subgraph_builder.compile()
 
-    builder = StateGraph(State)
-    # highlight-next-line
-    builder.add_node("subgraph_node", subgraph)
-    builder.add_edge(START, "subgraph_node")
-    graph = builder.compile()
-    ...
-    graph.invoke({"messages": [{"role": "user", "content": "hi!"}]})
-    ```
+  # Parent graph
 
-* parent graph and subgraph have **different schemas** (no shared state keys in their state [schemas](./low_level.md#state)). In this case, you have to [call the subgraph from inside a node in the parent graph](../how-tos/subgraph.md#different-state-schemas): this is useful when the parent graph and the subgraph have different state schemas and you need to transform state before or after calling the subgraph
+  builder = StateGraph(State)
+  # highlight-next-line
+  builder.add_node("subgraph_node", subgraph)
+  builder.add_edge(START, "subgraph_node")
+  graph = builder.compile()
+  ...
+  graph.invoke({"messages": [{"role": "user", "content": "hi!"}]})
+  ```
 
-    ```python
-    from typing_extensions import TypedDict, Annotated
-    from langchain_core.messages import AnyMessage
-    from langgraph.graph import StateGraph, MessagesState, START
-    from langgraph.graph.message import add_messages
+  :::
 
-    class SubgraphMessagesState(TypedDict):
-        # highlight-next-line
-        subgraph_messages: Annotated[list[AnyMessage], add_messages]
+  :::js
 
-    # Subgraph
+  ```typescript
+  import { StateGraph, MessagesZodState, START } from "@langchain/langgraph";
 
-    # highlight-next-line
-    def call_model(state: SubgraphMessagesState):
-        response = model.invoke(state["subgraph_messages"])
-        return {"subgraph_messages": response}
+  // Subgraph
 
-    subgraph_builder = StateGraph(SubgraphMessagesState)
-    subgraph_builder.add_node("call_model_from_subgraph", call_model)
-    subgraph_builder.add_edge(START, "call_model_from_subgraph")
-    ...
-    # highlight-next-line
-    subgraph = subgraph_builder.compile()
+  const subgraphBuilder = new StateGraph(MessagesZodState).addNode(
+    "callModel",
+    async (state) => {
+      const response = await model.invoke(state.messages);
+      return { messages: response };
+    }
+  );
+  // ... other nodes and edges
+  // highlight-next-line
+  const subgraph = subgraphBuilder.compile();
 
-    # Parent graph
+  // Parent graph
 
-    def call_subgraph(state: MessagesState):
-        response = subgraph.invoke({"subgraph_messages": state["messages"]})
-        return {"messages": response["subgraph_messages"]}
+  const builder = new StateGraph(MessagesZodState)
+    // highlight-next-line
+    .addNode("subgraphNode", subgraph)
+    .addEdge(START, "subgraphNode");
+  const graph = builder.compile();
+  // ...
+  await graph.invoke({ messages: [{ role: "user", content: "hi!" }] });
+  ```
 
-    builder = StateGraph(State)
-    # highlight-next-line
-    builder.add_node("subgraph_node", call_subgraph)
-    builder.add_edge(START, "subgraph_node")
-    graph = builder.compile()
-    ...
-    graph.invoke({"messages": [{"role": "user", "content": "hi!"}]})
-    ```
+  :::
+
+- parent graph and subgraph have **different schemas** (no shared state keys in their state [schemas](./low_level.md#state)). In this case, you have to [call the subgraph from inside a node in the parent graph](../how-tos/subgraph.ipynb#different-state-schemas): this is useful when the parent graph and the subgraph have different state schemas and you need to transform state before or after calling the subgraph
+
+  :::python
+
+  ```python
+  from typing_extensions import TypedDict, Annotated
+  from langchain_core.messages import AnyMessage
+  from langgraph.graph import StateGraph, MessagesState, START
+  from langgraph.graph.message import add_messages
+
+  class SubgraphMessagesState(TypedDict):
+      # highlight-next-line
+      subgraph_messages: Annotated[list[AnyMessage], add_messages]
+
+  # Subgraph
+
+  # highlight-next-line
+  def call_model(state: SubgraphMessagesState):
+      response = model.invoke(state["subgraph_messages"])
+      return {"subgraph_messages": response}
+
+  subgraph_builder = StateGraph(SubgraphMessagesState)
+  subgraph_builder.add_node("call_model_from_subgraph", call_model)
+  subgraph_builder.add_edge(START, "call_model_from_subgraph")
+  ...
+  # highlight-next-line
+  subgraph = subgraph_builder.compile()
+
+  # Parent graph
+
+  def call_subgraph(state: MessagesState):
+      response = subgraph.invoke({"subgraph_messages": state["messages"]})
+      return {"messages": response["subgraph_messages"]}
+
+  builder = StateGraph(State)
+  # highlight-next-line
+  builder.add_node("subgraph_node", call_subgraph)
+  builder.add_edge(START, "subgraph_node")
+  graph = builder.compile()
+  ...
+  graph.invoke({"messages": [{"role": "user", "content": "hi!"}]})
+  ```
+
+  :::
+
+  :::js
+
+  ```typescript
+  import { StateGraph, MessagesZodState, START } from "@langchain/langgraph";
+  import { z } from "zod";
+
+  const SubgraphState = z.object({
+    // highlight-next-line
+    subgraphMessages: MessagesZodState.shape.messages,
+  });
+
+  // Subgraph
+
+  const subgraphBuilder = new StateGraph(SubgraphState)
+    // highlight-next-line
+    .addNode("callModelFromSubgraph", async (state) => {
+      const response = await model.invoke(state.subgraphMessages);
+      return { subgraphMessages: response };
+    })
+    .addEdge(START, "callModelFromSubgraph");
+  // ...
+  // highlight-next-line
+  const subgraph = subgraphBuilder.compile();
+
+  // Parent graph
+
+  const builder = new StateGraph(MessagesZodState)
+    // highlight-next-line
+    .addNode("subgraphNode", async (state) => {
+      const response = await subgraph.invoke({
+        subgraphMessages: state.messages,
+      });
+      return { messages: response.subgraphMessages };
+    })
+    .addEdge(START, "subgraphNode");
+  const graph = builder.compile();
+  // ...
+  await graph.invoke({ messages: [{ role: "user", content: "hi!" }] });
+  ```
+
+  :::

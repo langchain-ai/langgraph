@@ -1,93 +1,4 @@
 # serializer version: 1
-# name: test_conditional_entrypoint_graph
-  '{"title": "LangGraphInput"}'
-# ---
-# name: test_conditional_entrypoint_graph.1
-  '{"title": "LangGraphOutput"}'
-# ---
-# name: test_conditional_entrypoint_graph.2
-  '''
-  {
-    "nodes": [
-      {
-        "id": "left",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "runnable",
-            "RunnableCallable"
-          ],
-          "name": "left"
-        }
-      },
-      {
-        "id": "right",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "runnable",
-            "RunnableCallable"
-          ],
-          "name": "right"
-        }
-      },
-      {
-        "id": "__start__",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "runnable",
-            "RunnableCallable"
-          ],
-          "name": "__start__"
-        }
-      },
-      {
-        "id": "__end__"
-      }
-    ],
-    "edges": [
-      {
-        "source": "__start__",
-        "target": "left",
-        "data": "go-left",
-        "conditional": true
-      },
-      {
-        "source": "__start__",
-        "target": "right",
-        "data": "go-right",
-        "conditional": true
-      },
-      {
-        "source": "left",
-        "target": "__end__",
-        "conditional": true
-      },
-      {
-        "source": "right",
-        "target": "__end__"
-      }
-    ]
-  }
-  '''
-# ---
-# name: test_conditional_entrypoint_graph.3
-  '''
-  graph TD;
-  	__start__ -. &nbsp;go-left&nbsp; .-> left;
-  	__start__ -. &nbsp;go-right&nbsp; .-> right;
-  	left -.-> __end__;
-  	right --> __end__;
-  
-  '''
-# ---
 # name: test_conditional_entrypoint_graph_state
   '{"properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}, "steps": {"items": {"type": "string"}, "title": "Steps", "type": "array"}}, "title": "AgentState", "type": "object"}'
 # ---
@@ -104,8 +15,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "__start__"
@@ -117,8 +28,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "left"
@@ -130,8 +41,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "right"
@@ -193,8 +104,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "__start__"
@@ -206,8 +117,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "get_weather"
@@ -249,8 +160,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "__start__"
@@ -262,8 +173,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "A"
@@ -275,8 +186,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "B"
@@ -327,8 +238,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "__start__"
@@ -340,8 +251,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "human"
@@ -353,8 +264,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "agent"
@@ -406,8 +317,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "__start__"
@@ -461,8 +372,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "__start__"
@@ -474,8 +385,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "worker_node"
@@ -767,8 +678,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': '__start__',
@@ -780,8 +691,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_one',
@@ -793,8 +704,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_three',
@@ -809,8 +720,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_two:__start__',
@@ -822,8 +733,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_two:tool_two_slow',
@@ -835,8 +746,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_two:tool_two_fast',
@@ -914,7 +825,7 @@
   '''
 # ---
 # name: test_state_graph_w_config_inherited_state_keys
-  '{"$defs": {"Config": {"properties": {"tools": {"items": {"type": "string"}, "title": "Tools", "type": "array"}}, "title": "Config", "type": "object"}}, "properties": {"configurable": {"$ref": "#/$defs/Config", "default": null}}, "title": "LangGraphConfig", "type": "object"}'
+  '{"properties": {"tools": {"items": {"type": "string"}, "title": "Tools", "type": "array"}}, "title": "Context", "type": "object"}'
 # ---
 # name: test_state_graph_w_config_inherited_state_keys.1
   '{"$defs": {"AgentAction": {"description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"anyOf": [{"type": "string"}, {"additionalProperties": true, "type": "object"}], "title": "Tool Input"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentAction", "default": "AgentAction", "title": "Type", "type": "string"}}, "required": ["tool", "tool_input", "log"], "title": "AgentAction", "type": "object"}, "AgentFinish": {"description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "properties": {"return_values": {"additionalProperties": true, "title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentFinish", "default": "AgentFinish", "title": "Type", "type": "string"}}, "required": ["return_values", "log"], "title": "AgentFinish", "type": "object"}}, "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"anyOf": [{"$ref": "#/$defs/AgentAction"}, {"$ref": "#/$defs/AgentFinish"}, {"type": "null"}], "title": "Agent Outcome"}, "intermediate_steps": {"items": {"maxItems": 2, "minItems": 2, "prefixItems": [{"$ref": "#/$defs/AgentAction"}, {"type": "string"}], "type": "array"}, "title": "Intermediate Steps", "type": "array"}}, "required": ["input", "agent_outcome"], "title": "AgentState", "type": "object"}'
@@ -1020,8 +931,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': '__start__',
@@ -1033,8 +944,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'ask_question',
@@ -1046,8 +957,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'answer_question',
@@ -1087,8 +998,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': '__start__',
@@ -1100,8 +1011,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_analysts',
@@ -1126,8 +1037,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_sections',
@@ -1185,8 +1096,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': '__start__',
@@ -1198,8 +1109,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_analysts',
@@ -1211,8 +1122,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_sections',
@@ -1227,8 +1138,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'conduct_interview:__start__',
@@ -1240,8 +1151,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'conduct_interview:ask_question',
@@ -1253,8 +1164,8 @@
         'data': dict({
           'id': list([
             'langgraph',
-            'utils',
-            'runnable',
+            '_internal',
+            '_runnable',
             'RunnableCallable',
           ]),
           'name': 'conduct_interview:answer_question',

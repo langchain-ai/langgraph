@@ -306,7 +306,7 @@ Name: math_agent
 
 ## 2. Create supervisor with `langgraph-supervisor`
 
-To implement out multi-agent system, we will use [`create_supervisor`][langgraph_supervisor.supervisor.create_supervisor] from the prebuilt `langgraph-supervisor` library:
+To implement out multi-agent system, we will use @[`create_supervisor`][create_supervisor] from the prebuilt `langgraph-supervisor` library:
 
 ```python
 from langgraph_supervisor import create_supervisor
@@ -478,7 +478,7 @@ assign_to_math_agent = create_handoff_tool(
 
 ### Create supervisor agent
 
-Then, let's create the supervisor agent with the handoff tools we just defined. We will use the prebuilt [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]:
+Then, let's create the supervisor agent with the handoff tools we just defined. We will use the prebuilt @[`create_react_agent`][create_react_agent]:
 
 ```python
 supervisor_agent = create_react_agent(
@@ -654,7 +654,7 @@ Name: tavily_search
 !!! important
     You can see that the supervisor system appends **all** of the individual agent messages (i.e., their internal tool-calling loop) to the full message history. This means that on every supervisor turn, supervisor agent sees this full history. If you want more control over:
 
-    * **how inputs are passed to agents**: you can use LangGraph [`Send()`][langgraph.types.Send] primitive to directly send data to the worker agents during the handoff. See the [task delegation](#4-create-delegation-tasks) example below
+    * **how inputs are passed to agents**: you can use LangGraph @[`Send()`][Send] primitive to directly send data to the worker agents during the handoff. See the [task delegation](#4-create-delegation-tasks) example below
     * **how agent outputs are added**: you can control how much of the agent's internal message history is added to the overall supervisor message history by wrapping the agent in a separate node function:
 
         ```python
@@ -742,7 +742,7 @@ supervisor_with_description = (
 ```
 
 !!! note
-    We're using [`Send()`][langgraph.types.Send] primitive in the `handoff_tool`. This means that instead of receiving the full `supervisor` graph state as input, each worker agent only sees the contents of the `Send` payload. In this example, we're sending the task description as a single "human" message.
+    We're using @[`Send()`][Send] primitive in the `handoff_tool`. This means that instead of receiving the full `supervisor` graph state as input, each worker agent only sees the contents of the `Send` payload. In this example, we're sending the task description as a single "human" message.
 
 Let's now running it with the same input query:
 

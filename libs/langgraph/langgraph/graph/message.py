@@ -24,8 +24,14 @@ from langchain_core.messages import (
 )
 from typing_extensions import TypedDict
 
-from langgraph.constants import CONF, CONFIG_KEY_SEND
+from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, NS_SEP
 from langgraph.graph.state import StateGraph
+
+__all__ = (
+    "add_messages",
+    "MessagesState",
+    "MessageGraph",
+)
 
 Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
 
@@ -314,8 +320,7 @@ def push_message(
     )
 
     from langgraph.config import get_config
-    from langgraph.constants import NS_SEP
-    from langgraph.pregel.messages import StreamMessagesHandler
+    from langgraph.pregel._messages import StreamMessagesHandler
 
     config = get_config()
     message = next(x for x in convert_to_messages([message]))

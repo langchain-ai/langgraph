@@ -3,6 +3,7 @@ import sys
 from typing import Annotated, Union
 from unittest.mock import AsyncMock, MagicMock
 
+import langsmith as ls
 import pytest
 from langchain_core.messages import AnyMessage, BaseMessage
 from langchain_core.runnables import RunnableConfig
@@ -15,8 +16,8 @@ from langgraph.errors import GraphInterrupt
 from langgraph.graph import StateGraph, add_messages
 from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
-from langgraph.pregel.types import StateSnapshot
-from langgraph.types import Interrupt
+from langgraph.types import Interrupt, StateSnapshot
+from tests.any_str import AnyStr
 from tests.conftest import NO_DOCKER
 from tests.example_app.example_graph import app
 
@@ -460,9 +461,7 @@ def test_stream():
                 "__interrupt__": [
                     {
                         "value": {"question": "Does this look good?"},
-                        "resumable": True,
-                        "ns": ["some_ns"],
-                        "when": "during",
+                        "id": AnyStr(),
                     }
                 ]
             },
@@ -490,9 +489,7 @@ def test_stream():
     assert exc.value.args[0] == [
         Interrupt(
             value={"question": "Does this look good?"},
-            resumable=True,
-            ns=["some_ns"],
-            when="during",
+            id=AnyStr(),
         )
     ]
 
@@ -633,9 +630,7 @@ async def test_astream():
                 "__interrupt__": [
                     {
                         "value": {"question": "Does this look good?"},
-                        "resumable": True,
-                        "ns": ["some_ns"],
-                        "when": "during",
+                        "id": AnyStr(),
                     }
                 ]
             },
@@ -664,9 +659,7 @@ async def test_astream():
     assert exc.value.args[0] == [
         Interrupt(
             value={"question": "Does this look good?"},
-            resumable=True,
-            ns=["some_ns"],
-            when="during",
+            id=AnyStr(),
         )
     ]
 
@@ -877,7 +870,7 @@ async def test_ainvoke():
 async def test_langgraph_cloud_integration():
     from langgraph_sdk.client import get_client, get_sync_client
 
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.graph import END, START, MessagesState, StateGraph
 
     # create RemotePregel instance
@@ -894,7 +887,7 @@ async def test_langgraph_cloud_integration():
     workflow.add_node("agent", remote_pregel)
     workflow.add_edge(START, "agent")
     workflow.add_edge("agent", END)
-    app = workflow.compile(checkpointer=MemorySaver())
+    app = workflow.compile(checkpointer=InMemorySaver())
 
     # test invocation
     input = {
@@ -907,21 +900,20 @@ async def test_langgraph_cloud_integration():
     }
 
     # test invoke
-    response = app.invoke(
+    app.invoke(
         input,
         config={"configurable": {"thread_id": "39a6104a-34e7-4f83-929c-d9eb163003c9"}},
         interrupt_before=["agent"],
     )
-    print("response:", response["messages"][-1].content)
 
     # test stream
-    async for chunk in app.astream(
+    async for _ in app.astream(
         input,
         config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
         subgraphs=True,
         stream_mode=["debug", "messages"],
     ):
-        print("chunk:", chunk)
+        pass
 
     # test stream events
     async for chunk in remote_pregel.astream_events(
@@ -931,17 +923,16 @@ async def test_langgraph_cloud_integration():
         subgraphs=True,
         stream_mode=[],
     ):
-        print("chunk:", chunk)
+        pass
 
     # test get state
-    state_snapshot = await remote_pregel.aget_state(
+    await remote_pregel.aget_state(
         config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
         subgraphs=True,
     )
-    print("state snapshot:", state_snapshot)
 
     # test update state
-    response = await remote_pregel.aupdate_state(
+    await remote_pregel.aupdate_state(
         config={"configurable": {"thread_id": "6645e002-ed50-4022-92a3-d0d186fdf812"}},
         values={
             "messages": [
@@ -952,18 +943,16 @@ async def test_langgraph_cloud_integration():
             ]
         },
     )
-    print("response:", response)
 
     # test get history
     async for state in remote_pregel.aget_state_history(
         config={"configurable": {"thread_id": "2dc3e3e7-39ac-4597-aa57-4404b944e82a"}},
     ):
-        print("state snapshot:", state)
+        pass
 
     # test get graph
     remote_pregel.graph_id = "fe096781-5601-53d2-b2f6-0d3403f7e9ca"  # must be UUID
-    graph = await remote_pregel.aget_graph(xray=True)
-    print("graph:", graph)
+    await remote_pregel.aget_graph(xray=True)
 
 
 def test_sanitize_config():
@@ -1189,3 +1178,73 @@ async def test_remote_graph_stream_messages_tuple(
     assert coerced_events == coerced_inmem_events
     # TODO: Fix the namespace matching in the next api release.
     # assert namespaces == inmem_namespaces
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("distributed_tracing", [False, True])
+@pytest.mark.parametrize("stream", [False, True])
+async def test_include_headers(distributed_tracing: bool, stream: bool):
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    return_value = [
+        StreamPart(event="values", data={"chunk": "data1"}),
+    ]
+    async_iter.__aiter__.return_value = return_value
+    astream_mock = mock_async_client.runs.stream
+    astream_mock.return_value = async_iter
+
+    mock_sync_client = MagicMock()
+    sync_iter = MagicMock()
+    sync_iter.__iter__.return_value = return_value
+    stream_mock = mock_sync_client.runs.stream
+    stream_mock.return_value = async_iter
+
+    remote_pregel = RemoteGraph(
+        "test_graph_id",
+        client=mock_async_client,
+        sync_client=mock_sync_client,
+        distributed_tracing=distributed_tracing,
+    )
+
+    config = {"configurable": {"thread_id": "thread_1"}}
+    with ls.tracing_context(enabled=True, client=MagicMock()):
+        with ls.trace("foo"):
+            if stream:
+                async for _ in remote_pregel.astream(
+                    {"input": {"messages": [{"type": "human", "content": "hello"}]}},
+                    config,
+                    headers={"foo": "bar"},
+                ):
+                    pass
+
+            else:
+                await remote_pregel.ainvoke(
+                    {"input": {"messages": [{"type": "human", "content": "hello"}]}},
+                    config,
+                    headers={"foo": "bar"},
+                )
+    expected = {"foo": "bar"}
+    if distributed_tracing:
+        expected["langsmith-trace"] = AnyStr()
+        expected["baggage"] = AnyStr()
+
+    assert astream_mock.call_args.kwargs["headers"] == expected
+    stream_mock.assert_not_called()
+
+    with ls.tracing_context(enabled=True, client=MagicMock()):
+        with ls.trace("foo"):
+            if stream:
+                for _ in remote_pregel.stream(
+                    {"input": {"messages": [{"type": "human", "content": "hello"}]}},
+                    config,
+                    headers={"foo": "bar"},
+                ):
+                    pass
+
+            else:
+                remote_pregel.invoke(
+                    {"input": {"messages": [{"type": "human", "content": "hello"}]}},
+                    config,
+                    headers={"foo": "bar"},
+                )
+    assert stream_mock.call_args.kwargs["headers"] == expected
