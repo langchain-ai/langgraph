@@ -27,7 +27,7 @@ from langgraph._internal._fields import get_cached_annotated_keys, get_update_as
 from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV06
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -198,7 +198,7 @@ class Interrupt:
     def interrupt_id(self) -> str:
         warn(
             "`interrupt_id` is deprecated. Use `id` instead.",
-            LangGraphDeprecatedSinceV10,
+            LangGraphDeprecatedSinceV06,
             stacklevel=2,
         )
         return self.id

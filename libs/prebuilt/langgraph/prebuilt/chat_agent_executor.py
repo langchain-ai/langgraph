@@ -49,7 +49,7 @@ from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
 from langgraph.typing import ContextT
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV06
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
@@ -460,7 +460,7 @@ def create_react_agent(
     ) is not MISSING:
         warn(
             "`config_schema` is no longer supported. Use `context_schema` instead.",
-            category=LangGraphDeprecatedSinceV10,
+            category=LangGraphDeprecatedSinceV06,
         )
 
         if context_schema is not None:

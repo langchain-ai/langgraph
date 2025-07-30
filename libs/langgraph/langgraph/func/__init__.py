@@ -41,7 +41,7 @@ from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, CachePolicy, RetryPolicy, StreamMode
 from langgraph.typing import ContextT
-from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV06
 
 __all__ = ("task", "entrypoint")
 
@@ -393,7 +393,7 @@ class entrypoint(Generic[ContextT]):
         if (config_schema := kwargs.get("config_schema", MISSING)) is not MISSING:
             warnings.warn(
                 "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
-                category=LangGraphDeprecatedSinceV10,
+                category=LangGraphDeprecatedSinceV06,
                 stacklevel=2,
             )
             if context_schema is None:

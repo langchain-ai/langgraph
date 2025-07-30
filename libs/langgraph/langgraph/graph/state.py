@@ -81,7 +81,7 @@ from langgraph.types import (
     Send,
 )
 from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
-from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV06
 
 if sys.version_info < (3, 10):
     NoneType = type(None)
@@ -196,7 +196,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         if (config_schema := kwargs.get("config_schema", MISSING)) is not MISSING:
             warnings.warn(
                 "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
-                category=LangGraphDeprecatedSinceV10,
+                category=LangGraphDeprecatedSinceV06,
                 stacklevel=2,
             )
             if context_schema is None:

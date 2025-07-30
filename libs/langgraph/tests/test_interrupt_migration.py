@@ -4,13 +4,13 @@ import pytest
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.types import Interrupt
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV06
 
 
-@pytest.mark.filterwarnings("ignore:LangGraphDeprecatedSinceV10")
+@pytest.mark.filterwarnings("ignore:LangGraphDeprecatedSinceV06")
 def test_interrupt_legacy_ns() -> None:
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=LangGraphDeprecatedSinceV10)
+        warnings.filterwarnings("ignore", category=LangGraphDeprecatedSinceV06)
 
         old_interrupt = Interrupt(
             value="abc", resumable=True, when="during", ns=["a:b", "c:d"]
