@@ -4,6 +4,9 @@
 
 ---
 
+## v0.2.111 (2025-07-29)
+- Started the heartbeat immediately upon connection to prevent JS graph streaming errors during long startups.
+
 ## v0.2.110 (2025-07-29)
 - Added interrupts as default values for all operations except streams to maintain consistent behavior.
 
