@@ -3002,6 +3002,10 @@ class Pregel(
             output_keys: Optional. The output keys to retrieve from the graph run.
             interrupt_before: Optional. The nodes to interrupt the graph run before.
             interrupt_after: Optional. The nodes to interrupt the graph run after.
+            durability: The durability mode for the graph execution, defaults to "async". Options are:
+                - `"sync"`: Changes are persisted synchronously before the next step starts.
+                - `"async"`: Changes are persisted asynchronously while the next step executes.
+                - `"exit"`: Changes are persisted only when the graph exits.
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
