@@ -2571,7 +2571,7 @@ class Pregel(
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             runtime = Runtime(
-                context=context,
+                context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
@@ -2866,7 +2866,7 @@ class Pregel(
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             runtime = Runtime(
-                context=context,
+                context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
@@ -3224,3 +3224,48 @@ def _output(
                 yield (ns, payload)
             else:
                 yield payload
+
+
+def _coerce_context(
+    context_schema: type[ContextT] | None, context: ContextT | dict[str, Any] | None
+) -> ContextT | None:
+    """Coerce dict context to typed context schema (dataclass, pydantic model, etc.)"""
+    if context is None or context_schema is None:
+        return context
+    
+    # If context is a dict and schema is not a dict type, coerce it
+    if isinstance(context, dict):
+        from inspect import isclass
+        from typing_extensions import is_typeddict
+        from dataclasses import is_dataclass
+        from pydantic import BaseModel
+        
+        # Check if the schema is a typed dict, dataclass, or pydantic model
+        if (
+            (isclass(context_schema) and issubclass(context_schema, BaseModel)) or
+            is_typeddict(context_schema) or
+            is_dataclass(context_schema)
+        ):
+            try:
+                return context_schema(**context)
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to coerce context dict to {context_schema}: {e}"
+                ) from e
+    
+    # For non-dict contexts, check type compatibility (but avoid isinstance with TypedDict)
+    # If it's not a dict and the schema is a TypedDict, we can't do much validation
+    # For dataclasses and pydantic models, we can check type
+    if not isinstance(context, dict):
+        from inspect import isclass
+        from typing_extensions import is_typeddict
+        from dataclasses import is_dataclass
+        from pydantic import BaseModel
+        
+        # Only check isinstance for non-TypedDict schemas
+        if not is_typeddict(context_schema):
+            if isclass(context_schema) and isinstance(context, context_schema):
+                return context
+    
+    # Return as-is if no coercion is needed/possible
+    return context
