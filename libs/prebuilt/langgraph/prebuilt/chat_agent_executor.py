@@ -254,6 +254,9 @@ def create_react_agent(
         LanguageModelLike,
         Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
         Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
+        Callable[
+            [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]
+        ],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
