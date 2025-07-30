@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -229,8 +229,7 @@ def test_context_coercion_none() -> None:
     class State(TypedDict):
         message: str
 
-    def node_without_context(state: State) -> dict[str, Any]:
-        runtime = get_runtime(Context)
+    def node_without_context(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
         # Should be None when no context provided
         return {"message": f"context is None: {runtime.context is None}"}
 
@@ -362,3 +361,31 @@ def test_context_coercion_stream() -> None:
             break
 
     assert node_output == {"message": "stream api_key: sk_stream, mode: fast"}
+
+
+def test_context_coercion_pydantic_validation_errors() -> None:
+    """Test that Pydantic validation errors are raised."""
+
+    class Context(BaseModel):
+        api_key: str
+        timeout: int
+
+    class State(TypedDict):
+        message: str
+
+    def node_with_context(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+        return {
+            "message": f"api_key: {runtime.context.api_key}, timeout: {runtime.context.timeout}"
+        }
+
+    graph = StateGraph(state_schema=State, context_schema=Context)
+    graph.add_node("node", node_with_context)
+    graph.add_edge(START, "node")
+    graph.add_edge("node", END)
+
+    compiled = graph.compile()
+
+    with pytest.raises(ValidationError):
+        compiled.invoke(
+            {"message": "test"}, context={"api_key": "sk_test", "timeout": "not_an_int"}
+        )
