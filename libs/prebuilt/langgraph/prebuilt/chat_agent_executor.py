@@ -248,15 +248,20 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
+# A chat model that has some bound runtime configuration
+# associated with it. This usually appears when we bind tools to a model
+# e.g., `model.bind_tools(tools)`
+ConfiguredChatModel = Runnable[LanguageModelInput, BaseMessage]
+
+
 def create_react_agent(
     model: Union[
         str,
         LanguageModelLike,
         Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
         Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
-        Callable[
-            [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]
-        ],
+        Callable[[StateSchema, Runtime[ContextT]], ConfiguredChatModel],
+        Callable[[StateSchema, Runtime[ContextT]], Awaitable[ConfiguredChatModel]],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
