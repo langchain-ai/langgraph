@@ -145,6 +145,76 @@ const agent = createReactAgent({
 
 :::
 
+:::python
+
+### Dynamic model selection
+
+Pass a callable function to `create_react_agent` to dynamically select the model at runtime. This is useful for scenarios where you want to choose a model based on user input, configuration settings, or other runtime conditions.
+
+The selector function must return an instance of a `BaseChatModel`. If you're using tools, you must bind the tools to the model within the selector function.
+
+  ```python
+from dataclasses import dataclass
+from typing import Literal
+from langchain.chat_models import init_chat_model
+from langchain_core.language_models import BaseChatModel
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt.chat_agent_executor import AgentState
+from langgraph.runtime import Runtime
+
+@tool
+def weather() -> str:
+    """Returns the current weather conditions."""
+    return "It's nice and sunny."
+
+
+# Define the runtime context
+@dataclass
+class CustomContext:
+    provider: Literal["anthropic", "openai"]
+
+# Initialize models
+openai_model = init_chat_model("openai:gpt-4o")
+anthropic_model = init_chat_model("anthropic:claude-sonnet-4-20250514")
+
+
+# Selector function for model choice
+def select_model(state: AgentState, runtime: Runtime[CustomContext]) -> BaseChatModel:
+    if runtime.context.provider == "anthropic":
+        model = anthropic_model
+    elif runtime.context.provider == "openai":
+        model = openai_model
+    else:
+        raise ValueError(f"Unsupported provider: {runtime.context.provider}")
+
+    # With dynamic model selection, you must bind tools explicitly
+    return model.bind_tools([weather])
+
+
+# Create agent with dynamic model selection
+agent = create_react_agent(select_model, tools=[weather])
+
+# Invoke with context to select model
+output = agent.invoke(
+    {
+        "messages": [
+            {
+                "role": "user",
+                "content": "Which model is handling this?",
+            }
+        ]
+    },
+    context=CustomContext(provider="openai"),
+)
+
+print(output["messages"][-1].text())
+```
+
+!!! version-added "New in LangGraph v0.6"
+
+:::
+
 ## Advanced model configuration
 
 ### Disable streaming
