@@ -698,7 +698,8 @@ By default, the `retry_on` parameter uses the `default_retry_on` function, which
 In addition, for exceptions from popular http request libraries such as `requests` and `httpx` it only retries on 5xx status codes.
 
 ??? example "Extended example: customizing retry policies"
-Consider an example in which we are reading from a SQL database. Below we pass two different retry policies to nodes:
+
+    Consider an example in which we are reading from a SQL database. Below we pass two different retry policies to nodes:
 
     ```python
     import sqlite3
