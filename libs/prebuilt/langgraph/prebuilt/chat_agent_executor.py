@@ -76,6 +76,7 @@ class AgentStatePydantic(BaseModel):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
     remaining_steps: RemainingSteps = 25
+    is_last_step: Optional[bool] = None
 
 
 class AgentStateWithStructuredResponse(AgentState):
@@ -962,6 +963,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
