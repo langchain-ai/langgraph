@@ -569,32 +569,40 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
 
     ```python
     from dataclasses import dataclass
+
     from langchain.chat_models import init_chat_model
     from langgraph.graph import MessagesState, END, StateGraph, START
     from langgraph.runtime import Runtime
     from typing_extensions import TypedDict
+
     @dataclass
     class ContextSchema:
         model_provider: str = "anthropic"
+
     MODELS = {
         "anthropic": init_chat_model("anthropic:claude-3-5-haiku-latest"),
         "openai": init_chat_model("openai:gpt-4.1-mini"),
     }
+
     def call_model(state: MessagesState, runtime: Runtime[ContextSchema]):
         model = MODELS[runtime.context.model_provider]
         response = model.invoke(state["messages"])
         return {"messages": [response]}
+
     builder = StateGraph(MessagesState, context_schema=ContextSchema)
     builder.add_node("model", call_model)
     builder.add_edge(START, "model")
     builder.add_edge("model", END)
+
     graph = builder.compile()
+
     # Usage
     input_message = {"role": "user", "content": "hi"}
     # With no configuration, uses default (Anthropic)
     response_1 = graph.invoke({"messages": [input_message]})["messages"][-1]
     # Or, can set OpenAI
     response_2 = graph.invoke({"messages": [input_message]}, context={"model_provider": "openai"})["messages"][-1]
+
     print(response_1.response_metadata["model_name"])
     print(response_2.response_metadata["model_name"])
     ```
@@ -604,6 +612,7 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
     ```
 
 ??? example "Extended example: specifying model and system message at runtime"
+
     Below we demonstrate a practical example in which we configure two parameters: the LLM and system message to use at runtime.
 
     ```python
@@ -614,14 +623,17 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
     from langgraph.graph import END, MessagesState, StateGraph, START
     from langgraph.runtime import Runtime
     from typing_extensions import TypedDict
+
     @dataclass
     class ContextSchema:
         model_provider: str = "anthropic"
         system_message: str | None = None
+
     MODELS = {
         "anthropic": init_chat_model("anthropic:claude-3-5-haiku-latest"),
         "openai": init_chat_model("openai:gpt-4.1-mini"),
     }
+
     def call_model(state: MessagesState, runtime: Runtime[ContextSchema]):
         model = MODELS[runtime.context.model_provider]
         messages = state["messages"]
@@ -629,11 +641,14 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
             messages = [SystemMessage(system_message)] + messages
         response = model.invoke(messages)
         return {"messages": [response]}
+
     builder = StateGraph(MessagesState, context_schema=ContextSchema)
     builder.add_node("model", call_model)
     builder.add_edge(START, "model")
     builder.add_edge("model", END)
+
     graph = builder.compile()
+
     # Usage
     input_message = {"role": "user", "content": "hi"}
     response = graph.invoke({"messages": [input_message]}, context={"model_provider": "openai", "system_message": "Respond in Italian."})
@@ -642,8 +657,10 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
     ```
     ```
     ================================ Human Message ================================
+
     hi
     ================================== Ai Message ==================================
+
     Ciao! Come posso aiutarti oggi?
     ```
 
