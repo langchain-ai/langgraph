@@ -1,8 +1,90 @@
 # LangGraph Server Changelog
 
+> **Note:** This changelog is no longer actively maintained. For the most up-to-date LangGraph Server changelog, please visit our new documentation site: [LangGraph Server Changelog](https://docs.langchain.com/langgraph-platform/langgraph-server-changelog#langgraph-server-changelog)
+
 [LangGraph Server](../../concepts/langgraph_server.md) is an API platform for creating and managing agent-based applications. It provides built-in persistence, a task queue, and supports deploying, configuring, and running assistants (agentic workflows) at scale. This changelog documents all notable updates, features, and fixes to LangGraph Server releases.
 
 ---
+
+## v0.2.111 (2025-07-29)
+- Started the heartbeat immediately upon connection to prevent JS graph streaming errors during long startups.
+
+## v0.2.110 (2025-07-29)
+- Added interrupts as default values for all operations except streams to maintain consistent behavior.
+
+## v0.2.109 (2025-07-28)
+- Fixed an issue where missing config schema occurred when `config_type` was not set.
+
+## v0.2.108 (2025-07-28)
+- Added compatibility for langgraph v0.6, including new context API support and a migration to enhance context handling in assistant operations.
+
+## v0.2.107 (2025-07-27)
+- Implemented caching for authentication processes to improve performance.
+- Merged count and select queries to improve database query efficiency.
+
+## v0.2.106 (2025-07-27)
+- Log whether run uses resumable streams.
+
+## v0.2.105 (2025-07-27)
+- Added a `/heapdump` endpoint to capture and save JS process heap data.
+
+## v0.2.103 (2025-07-25)
+- Corrected the metadata endpoint to ensure accurate data retrieval.
+
+## v0.2.102 (2025-07-24)
+- Captured interrupt events in the wait method to preserve legacy behavior and stream updates by default.
+- Added support for SDK structlog in the JavaScript environment, enhancing logging capabilities.
+
+## v0.2.101 (2025-07-24)
+- Used the correct metadata endpoint for self-hosted environments, resolving an access issue.
+
+## v0.2.99 (2025-07-22)
+- Improved license validation by adding an in-memory cache and handling Redis connection errors more effectively.
+- Automatically remove agents from memory that are removed from `langgraph.json` to prevent persistence issues.
+- Ensured the UI namespace for generated UI is a valid JavaScript property name to prevent errors.
+- Raised a 422 error for improved request validation feedback.
+
+## v0.2.98 (2025-07-19)
+- Added langgraph node context for improved log filtering and trace visibility.
+
+## v0.2.97 (2025-07-19)
+- Fixed scheduling issue with ckpt ingestion worker that occurred on isolated background loops.
+- Ensured queue worker starts only after all migrations have completed.
+- Added more detailed error messages for thread state issues and improved response handling when state updates fail.
+- Exposed interrupt ID while retrieving thread state for enhanced API response details.
+
+## v0.2.96 (2025-07-17)
+- Added a fallback mechanism for configurable header patterns to handle exclude/include settings more effectively.
+
+## v0.2.95 (2025-07-17)
+- Avoided setting the future if it is already done to prevent redundant operations.
+- Resolved compatibility errors in CI by switching from `typing.TypedDict` to `typing_extensions.TypedDict` for Python versions below 3.12.
+
+## v0.2.94 (2025-07-16)
+- Improved performance by omitting pending sends for langgraph versions 0.5 and above.
+- Improved server startup logs to provide clearer warnings when the DD_API_KEY environment variable is set.
+
+## v0.2.93 (2025-07-16)
+- Removed the GIN index for run metadata to improve performance.
+
+## v0.2.92 (2025-07-16)
+- Enabled copying functionality for blobs and checkpoints, improving data management flexibility.
+
+## v0.2.91 (2025-07-16)
+- Reduced writes to the `checkpoint_blobs` table by inlining small values (null, numeric, str, etc.). This means we don't need to store extra values for channels that haven't been updated.
+
+## v0.2.90 (2025-07-16)
+- Improve checkpoint writes via node-local background queueing.
+
+
+## v0.2.89 (2025-07-15)
+- Decoupled checkpoint writing from thread/run state by removing foreign keys and updated logger to prevent timeout-related failures.
+
+## v0.2.88 (2025-07-14)
+- Removed the foreign key constraint for `thread` in the `run` table to simplify database schema.
+
+## v0.2.87 (2025-07-14)
+- Added more detailed logs for Redis worker signaling to improve debugging.
 
 ## v0.2.86 (2025-07-11)
 - Honored tool descriptions in the `/mcp` endpoint to align with expected functionality.

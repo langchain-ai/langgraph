@@ -2,21 +2,20 @@
 
 In this guide we will show how to create, configure, and manage an [assistant](../../concepts/assistants.md).
 
-First, as a brief refresher on the concept of configurations, consider the following simple `call_model` node and configuration schema. Observe that this node tries to read and use the `model_name` as defined by the `config` object's `configurable`.
+First, as a brief refresher on the concept of runtime context, consider the following simple `call_model` node and context schema. Observe that this node tries to read and use the `model_provider` as defined by the `Runtime` object's `context` property.
 
 === "Python"
 
     ```python
+    @dataclass
+    class ContextSchema:
+        llm_provider: str = "anthropic"
 
-    class ConfigSchema(TypedDict):
-        model_name: str
+    builder = StateGraph(AgentState, context_schema=ContextSchema)
 
-    builder = StateGraph(AgentState, config_schema=ConfigSchema)
-
-    def call_model(state, config):
+    def call_model(state, runtime: Runtime[ContextSchema]):
         messages = state["messages"]
-        model_name = config.get('configurable', {}).get("model_name", "anthropic")
-        model = _get_model(model_name)
+        model = _get_model(runtime.context.llm_provider)
         response = model.invoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
@@ -44,7 +43,9 @@ First, as a brief refresher on the concept of configurations, consider the follo
     }
     ```
 
-For more information on configurations, [see here](../../concepts/low_level.md#configuration).
+:::python
+For more information on runtime context, [see here](../../concepts/low_level.md#runtime-context).
+:::
 
 ## Create an assistant
 
@@ -328,4 +329,4 @@ If you now run your graph and pass in this assistant id, it will use the first v
 If using LangGraph Studio, to set the active version of your assistant, click the "Manage Assistants" button and locate the assistant you would like to use. Select the assistant and the version, and then click the "Active" toggle. This will update the assistant to make the selected version active.
 
 !!! warning "Deleting Assistants"
-    Deleting as assistant will delete ALL of its versions. There is currently no way to delete a single version, but by pointing your assistant to the correct version you can skip any versions that you don't wish to use.
+Deleting as assistant will delete ALL of its versions. There is currently no way to delete a single version, but by pointing your assistant to the correct version you can skip any versions that you don't wish to use.

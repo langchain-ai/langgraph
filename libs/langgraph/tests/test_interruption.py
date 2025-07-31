@@ -3,12 +3,13 @@ from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Durability
 
 pytestmark = pytest.mark.anyio
 
 
 def test_interruption_without_state_updates(
-    sync_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
     """Test interruption without state updates. This test confirms that
     interrupting doesn't require a state key having been updated in the prev step"""
@@ -33,24 +34,24 @@ def test_interruption_without_state_updates(
     initial_input = {"input": "hello world"}
     thread = {"configurable": {"thread_id": "1"}}
 
-    graph.invoke(initial_input, thread, checkpoint_during=checkpoint_during)
+    graph.invoke(initial_input, thread, durability=durability)
     assert graph.get_state(thread).next == ("step_2",)
     n_checkpoints = len([c for c in graph.get_state_history(thread)])
-    assert n_checkpoints == (3 if checkpoint_during else 1)
+    assert n_checkpoints == (3 if durability != "exit" else 1)
 
-    graph.invoke(None, thread, checkpoint_during=checkpoint_during)
+    graph.invoke(None, thread, durability=durability)
     assert graph.get_state(thread).next == ("step_3",)
     n_checkpoints = len([c for c in graph.get_state_history(thread)])
-    assert n_checkpoints == (4 if checkpoint_during else 2)
+    assert n_checkpoints == (4 if durability != "exit" else 2)
 
-    graph.invoke(None, thread, checkpoint_during=checkpoint_during)
+    graph.invoke(None, thread, durability=durability)
     assert graph.get_state(thread).next == ()
     n_checkpoints = len([c for c in graph.get_state_history(thread)])
-    assert n_checkpoints == (5 if checkpoint_during else 3)
+    assert n_checkpoints == (5 if durability != "exit" else 3)
 
 
 async def test_interruption_without_state_updates_async(
-    async_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
+    async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
     """Test interruption without state updates. This test confirms that
     interrupting doesn't require a state key having been updated in the prev step"""
@@ -75,17 +76,17 @@ async def test_interruption_without_state_updates_async(
     initial_input = {"input": "hello world"}
     thread = {"configurable": {"thread_id": "1"}}
 
-    await graph.ainvoke(initial_input, thread, checkpoint_during=checkpoint_during)
+    await graph.ainvoke(initial_input, thread, durability=durability)
     assert (await graph.aget_state(thread)).next == ("step_2",)
     n_checkpoints = len([c async for c in graph.aget_state_history(thread)])
-    assert n_checkpoints == (3 if checkpoint_during else 1)
+    assert n_checkpoints == (3 if durability != "exit" else 1)
 
-    await graph.ainvoke(None, thread, checkpoint_during=checkpoint_during)
+    await graph.ainvoke(None, thread, durability=durability)
     assert (await graph.aget_state(thread)).next == ("step_3",)
     n_checkpoints = len([c async for c in graph.aget_state_history(thread)])
-    assert n_checkpoints == (4 if checkpoint_during else 2)
+    assert n_checkpoints == (4 if durability != "exit" else 2)
 
-    await graph.ainvoke(None, thread, checkpoint_during=checkpoint_during)
+    await graph.ainvoke(None, thread, durability=durability)
     assert (await graph.aget_state(thread)).next == ()
     n_checkpoints = len([c async for c in graph.aget_state_history(thread)])
-    assert n_checkpoints == (5 if checkpoint_during else 3)
+    assert n_checkpoints == (5 if durability != "exit" else 3)

@@ -155,6 +155,43 @@ async def test_async_batch_store(mocker: MockerFixture) -> None:
     ]
 
 
+async def test_async_batch_store_handles_cancellation() -> None:
+    class MockStore(AsyncBatchedBaseStore):
+        def batch(self, ops: Iterable[Op]) -> list[Result]:
+            raise NotImplementedError
+
+        async def abatch(self, ops: Iterable[Op]) -> list[Result]:
+            assert all(isinstance(op, GetOp) for op in ops)
+            return [
+                Item(
+                    value={},
+                    key=getattr(op, "key", ""),
+                    namespace=getattr(op, "namespace", ()),
+                    created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+                    updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+                )
+                for op in ops
+            ]
+
+    store = MockStore()
+
+    # Simulate cancellation
+    task = asyncio.create_task(store.aget(namespace=("a",), key="b"))
+    await asyncio.sleep(0)
+    task.cancel()
+    await asyncio.sleep(0)
+
+    # Cancelling individual queries against the store should not break the store
+    result = await store.aget(namespace=("c",), key="d")
+    assert result == Item(
+        value={},
+        key="d",
+        namespace=("c",),
+        created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+        updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+    )
+
+
 def test_list_namespaces_basic() -> None:
     store = InMemoryStore()
 
