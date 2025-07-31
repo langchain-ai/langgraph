@@ -5,7 +5,6 @@ to resolve @[link_name] references to actual URLs.
 """
 
 # Python-specific link mappings
-# Python-specific link mappings
 PYTHON_LINK_MAP = {
     "StateGraph": "reference/graphs/#langgraph.graph.StateGraph",
     "add_conditional_edges": "reference/graphs/#langgraph.graph.state.StateGraph.add_conditional_edges",
