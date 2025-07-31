@@ -52,7 +52,6 @@ theme:
 plugins:
   - search:
       separator: '[\s\u200b\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;'
-  - autorefs
   - tags
   - include-markdown
   - mkdocstrings:
@@ -385,4 +384,3 @@ extra_css:
   - stylesheets/logos.css
   - stylesheets/sticky_navigation.css
   - stylesheets/agent_graph_widget.css
-
