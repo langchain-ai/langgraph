@@ -1,6 +1,7 @@
 import pytest
+from langchain_core.runnables import RunnableConfig
 from pytest_mock import MockerFixture
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from langgraph.channels.last_value import LastValue
 from langgraph.errors import NodeInterrupt
@@ -190,33 +191,41 @@ def test_deprecated_import() -> None:
 
 @pytest.mark.filterwarnings("ignore:`checkpoint_during` is deprecated")
 def test_checkpoint_during_deprecation_state_graph() -> None:
-    builder = StateGraph(PlainState)
-    builder.add_node("test_node", lambda state: state)
-    builder.set_entry_point("test_node")
+    class CheckDurability(TypedDict):
+        durability: NotRequired[str]
+
+    def plain_node(state: CheckDurability, config: RunnableConfig) -> CheckDurability:
+        return {"durability": config["configurable"]["__pregel_durability"]}
+
+    builder = StateGraph(CheckDurability)
+    builder.add_node("plain_node", plain_node)
+    builder.set_entry_point("plain_node")
     graph = builder.compile()
 
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
         match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
     ):
-        graph.invoke({}, checkpoint_during=True)
+        result = graph.invoke({}, checkpoint_during=True)
+        assert result["durability"] == "async"
 
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
         match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
     ):
-        graph.invoke({}, checkpoint_during=False)
+        result = graph.invoke({}, checkpoint_during=False)
+        assert result["durability"] == "exit"
 
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
         match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
     ):
-        for _ in graph.stream({}, checkpoint_during=True):  # type: ignore[arg-type]
-            pass
+        for chunk in graph.stream({}, checkpoint_during=True):  # type: ignore[arg-type]
+            assert chunk["plain_node"]["durability"] == "async"
 
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
         match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
     ):
-        for _ in graph.stream({}, checkpoint_during=False):  # type: ignore[arg-type]
-            pass
+        for chunk in graph.stream({}, checkpoint_during=False):  # type: ignore[arg-type]
+            assert chunk["plain_node"]["durability"] == "exit"
