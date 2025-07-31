@@ -165,7 +165,7 @@ def patch_config(
           Defaults to None.
         recursion_limit: The recursion limit to set.
           Defaults to None.
-        max_concurrency: The max concurrency to set.
+        max_concurrency: The max number of concurrent steps to run, which also applies to parallelized steps.
           Defaults to None.
         run_name: The run name to set. Defaults to None.
         configurable: The configurable to set.

@@ -1,8 +1,48 @@
 # LangGraph Server Changelog
 
+> **Note:** This changelog is no longer actively maintained. For the most up-to-date LangGraph Server changelog, please visit our new documentation site: [LangGraph Server Changelog](https://docs.langchain.com/langgraph-platform/langgraph-server-changelog#langgraph-server-changelog)
+
 [LangGraph Server](../../concepts/langgraph_server.md) is an API platform for creating and managing agent-based applications. It provides built-in persistence, a task queue, and supports deploying, configuring, and running assistants (agentic workflows) at scale. This changelog documents all notable updates, features, and fixes to LangGraph Server releases.
 
 ---
+
+## v0.2.111 (2025-07-29)
+- Started the heartbeat immediately upon connection to prevent JS graph streaming errors during long startups.
+
+## v0.2.110 (2025-07-29)
+- Added interrupts as default values for all operations except streams to maintain consistent behavior.
+
+## v0.2.109 (2025-07-28)
+- Fixed an issue where missing config schema occurred when `config_type` was not set.
+
+## v0.2.108 (2025-07-28)
+- Added compatibility for langgraph v0.6, including new context API support and a migration to enhance context handling in assistant operations.
+
+## v0.2.107 (2025-07-27)
+- Implemented caching for authentication processes to improve performance.
+- Merged count and select queries to improve database query efficiency.
+
+## v0.2.106 (2025-07-27)
+- Log whether run uses resumable streams.
+
+## v0.2.105 (2025-07-27)
+- Added a `/heapdump` endpoint to capture and save JS process heap data.
+
+## v0.2.103 (2025-07-25)
+- Corrected the metadata endpoint to ensure accurate data retrieval.
+
+## v0.2.102 (2025-07-24)
+- Captured interrupt events in the wait method to preserve legacy behavior and stream updates by default.
+- Added support for SDK structlog in the JavaScript environment, enhancing logging capabilities.
+
+## v0.2.101 (2025-07-24)
+- Used the correct metadata endpoint for self-hosted environments, resolving an access issue.
+
+## v0.2.99 (2025-07-22)
+- Improved license validation by adding an in-memory cache and handling Redis connection errors more effectively.
+- Automatically remove agents from memory that are removed from `langgraph.json` to prevent persistence issues.
+- Ensured the UI namespace for generated UI is a valid JavaScript property name to prevent errors.
+- Raised a 422 error for improved request validation feedback.
 
 ## v0.2.98 (2025-07-19)
 - Added langgraph node context for improved log filtering and trace visibility.
