@@ -151,7 +151,7 @@ const agent = createReactAgent({
 
 Pass a callable function to `create_react_agent` to dynamically select the model at runtime. This is useful for scenarios where you want to choose a model based on user input, configuration settings, or other runtime conditions.
 
-The selector function must return an instance of a `BaseChatModel`. If you're using tools, you must bind the tools to the model within the selector function.
+The selector function must return a chat model. If you're using tools, you must bind the tools to the model within the selector function.
 
   ```python
 from dataclasses import dataclass
