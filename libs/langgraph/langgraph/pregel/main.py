@@ -2351,7 +2351,6 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None,
         interrupt_after: All | Sequence[str] | None,
         durability: Durability | None = None,
-        checkpoint_during: bool | None = None,
     ) -> tuple[
         set[StreamMode],
         str | Sequence[str],
@@ -2399,15 +2398,6 @@ class Pregel(
             cache: BaseCache | None = config[CONF][CONFIG_KEY_CACHE]
         else:
             cache = self.cache
-        if checkpoint_during is not None:
-            if durability is not None:
-                raise ValueError(
-                    "Cannot use both `checkpoint_during` and `durability` parameters."
-                )
-            elif checkpoint_during:
-                durability = "async"
-            else:
-                durability = "exit"
         if durability is None:
             durability = config.get(CONF, {}).get(CONFIG_KEY_DURABILITY, "async")
         return (
@@ -2511,6 +2501,14 @@ class Pregel(
                     "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
                     category=LangGraphDeprecatedSinceV10,
                 )
+                if durability is not None:
+                    raise ValueError(
+                        "Cannot use both `checkpoint_during` and `durability` parameters."
+                    )
+                elif deprecated_checkpoint_during:
+                    durability = "async"
+                else:
+                    durability = "exit"
             # assign defaults
             (
                 stream_modes,
@@ -2529,11 +2527,8 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
-                checkpoint_during=deprecated_checkpoint_during,
             )
-            if checkpointer is None and (
-                durability is not None or deprecated_checkpoint_during is not None
-            ):
+            if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
                 )
@@ -2570,7 +2565,7 @@ class Pregel(
                     pass
 
             # set durability mode for subgraphs
-            if durability is not None or deprecated_checkpoint_during is not None:
+            if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             runtime = Runtime(
@@ -2791,6 +2786,14 @@ class Pregel(
                     "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
                     category=LangGraphDeprecatedSinceV10,
                 )
+                if durability is not None:
+                    raise ValueError(
+                        "Cannot use both `checkpoint_during` and `durability` parameters."
+                    )
+                elif deprecated_checkpoint_during:
+                    durability = "async"
+                else:
+                    durability = "exit"
             # assign defaults
             (
                 stream_modes,
@@ -2809,11 +2812,8 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
-                checkpoint_during=deprecated_checkpoint_during,
             )
-            if checkpointer is None and (
-                durability is not None or deprecated_checkpoint_during is not None
-            ):
+            if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
                 )
@@ -2865,7 +2865,7 @@ class Pregel(
                     pass
 
             # set durability mode for subgraphs
-            if durability is not None or deprecated_checkpoint_during is not None:
+            if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             runtime = Runtime(
