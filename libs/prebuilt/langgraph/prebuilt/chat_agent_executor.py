@@ -392,7 +392,7 @@ def create_react_agent(
             !!! Note
                 Only available with `version="v2"`.
         state_schema: An optional state schema that defines graph state.
-            Must have `messages` and `remaining_steps` keys.
+            Must have `messages` key. May optionally have `remaining_steps` and `is_last_step` keys.
             Defaults to `AgentState` that defines those two keys.
         context_schema: An optional schema for runtime context.
         checkpointer: An optional checkpoint saver object. This is used for persisting
@@ -963,6 +963,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
