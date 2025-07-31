@@ -59,7 +59,6 @@ PYTHON_LINK_MAP = {
     "update_state": "reference/graphs/#langgraph.graph.state.CompiledStateGraph.update_state",
 }
 
-
 # JavaScript-specific link mappings
 JS_LINK_MAP = {
     "Auth": "reference/classes/sdk_auth.Auth.html",
@@ -86,7 +85,6 @@ JS_LINK_MAP = {
     "getContextVariable": "https://v03.api.js.langchain.com/functions/_langchain_core.context.getContextVariable.html",
     "get_state_history": "reference/classes/langgraph.CompiledStateGraph.html#getStateHistory",
     "HumanInterrupt": "reference/interfaces/langgraph_prebuilt.HumanInterrupt.html",
-    # "InjectedState": "reference/classes/langgraph_prebuilt.InjectedState.html",
     "interrupt": "reference/functions/langgraph.interrupt-2.html",
     "CompiledStateGraph.invoke": "reference/classes/langgraph.CompiledStateGraph.html#invoke",
     "langgraph.json": "cloud/reference/cli/#configuration-file",
