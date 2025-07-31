@@ -35,11 +35,8 @@ The Standalone Container deployment option supports deploying data plane infrast
 
 The Standalone Container deployment option supports deploying data plane infrastructure to any Docker-supported compute platform.
 
-## Lite vs. Enterprise
+## Server Versions
 
-The Standalone Container deployment option supports both of the [server versions](../concepts/langgraph_server.md#langgraph-server):
+The Standalone Container deployment option supports the [Enterprise server version](../concepts/langgraph_server.md#langgraph-server) with custom pricing and full features.
 
-- The `Lite` version is free, but has limited features.
-- The `Enterprise` version has custom pricing and is fully featured.
-
-For more details on feature difference, see [LangGraph Server](../concepts/langgraph_server.md#server-versions).
+For more details on features, see [LangGraph Server](../concepts/langgraph_server.md#server-versions).

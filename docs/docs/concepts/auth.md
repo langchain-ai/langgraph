@@ -45,8 +45,7 @@ Custom auth **is supported** for all plans in LangGraph Platform.
 
 !!! note "Custom auth"
 
-    Custom auth is supported for **Enterprise** self-hosted deployments.
-    Standalone Container (Lite) deployments do not support custom auth natively.
+    Custom auth is only supported for **Enterprise** self-hosted deployments.
 
 ## System Architecture
 

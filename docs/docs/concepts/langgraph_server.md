@@ -15,18 +15,12 @@ Use LangGraph Server to create and manage [assistants](assistants.md), [threads]
 
 ## Server versions
 
-There are two versions of LangGraph Server:
+LangGraph Server is available as the `Enterprise` version, which is the full-featured version of LangGraph Server. To use the `Enterprise` version, you must acquire a license key that you will need to specify when running the Docker image. To acquire a license key, please email sales@langchain.dev.
 
-- `Lite` is a limited version of the LangGraph Server that you can run locally or in a self-hosted manner (up to 1 million [nodes executed](../concepts/faq.md#what-does-nodes-executed-mean-for-langgraph-platform-usage) per year).
-- `Enterprise` is the full version of the LangGraph Server. To use the `Enterprise` version, you must acquire a license key that you will need to specify when running the Docker image. To acquire a license key, please email sales@langchain.dev.
-
-Feature Differences:
-
-|       | Lite       | Enterprise |
-|-------|------------|------------|
-| [Cron Jobs](../cloud/concepts/cron_jobs.md) |❌|✅|
-| [Custom Authentication](../concepts/auth.md) |❌|✅|
-| [Deployment options](../concepts/deployment_options.md) | Standalone container | Cloud SaaS, Self-Hosted Data Plane, Self-Hosted Control Plane, Standalone container
+The Enterprise version includes:
+- [Cron Jobs](../cloud/concepts/cron_jobs.md)
+- [Custom Authentication](../concepts/auth.md)
+- All [deployment options](../concepts/deployment_options.md): Cloud SaaS, Self-Hosted Data Plane, Self-Hosted Control Plane, and Standalone Container
 
 ## Application structure
 
