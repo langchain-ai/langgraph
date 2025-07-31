@@ -1,11 +1,29 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
 from enum import Enum
 from typing import Any
+from warnings import warn
 
+from typing_extensions import deprecated
+
+# EmptyChannelError is re-exported from langgraph.channels.base
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
 from langgraph.types import Command, Interrupt
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
-# EmptyChannelError re-exported for backwards compatibility
+__all__ = (
+    "EmptyChannelError",
+    "ErrorCode",
+    "GraphRecursionError",
+    "InvalidUpdateError",
+    "GraphBubbleUp",
+    "GraphInterrupt",
+    "NodeInterrupt",
+    "ParentCommand",
+    "EmptyInputError",
+    "TaskNotFound",
+)
 
 
 class ErrorCode(Enum):
@@ -71,11 +89,26 @@ class GraphInterrupt(GraphBubbleUp):
         super().__init__(interrupts)
 
 
+@deprecated(
+    "NodeInterrupt is deprecated. Please use `langgraph.types.interrupt` instead.",
+    stacklevel=2,
+)
 class NodeInterrupt(GraphInterrupt):
-    """Raised by a node to interrupt execution."""
+    """Raised by a node to interrupt execution.
 
-    def __init__(self, value: Any) -> None:
-        super().__init__([Interrupt(value=value)])
+    Deprecated in V1.0.0 in favor of [`interrupt`][langgraph.types.interrupt].
+    """
+
+    def __init__(self, value: Any, id: str | None = None) -> None:
+        warn(
+            "NodeInterrupt is deprecated. Please use `langgraph.types.interrupt` instead.",
+            LangGraphDeprecatedSinceV10,
+            stacklevel=2,
+        )
+        if id is None:
+            super().__init__([Interrupt(value=value)])
+        else:
+            super().__init__([Interrupt(value=value, id=id)])
 
 
 class ParentCommand(GraphBubbleUp):

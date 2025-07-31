@@ -108,7 +108,7 @@ my-app/
 
 ## Define Graphs
 
-Implement your graphs! Graphs can be defined in a single file or multiple files. Make note of the variable names of each [CompiledStateGraph][langgraph.graph.state.CompiledStateGraph] to be included in the LangGraph application. The variable names will be used later when creating the [LangGraph configuration file](../reference/cli.md#configuration-file).
+Implement your graphs! Graphs can be defined in a single file or multiple files. Make note of the variable names of each @[CompiledStateGraph][CompiledStateGraph] to be included in the LangGraph application. The variable names will be used later when creating the [LangGraph configuration file](../reference/cli.md#configuration-file).
 
 Example `agent.py` file, which shows how to import from other modules you define (code for the modules is not shown here, please see [this repository](https://github.com/langchain-ai/langgraph-example-pyproject) to see their implementation):
 
@@ -121,11 +121,11 @@ from langgraph.graph import StateGraph, END, START
 from my_agent.utils.nodes import call_model, should_continue, tool_node # import nodes
 from my_agent.utils.state import AgentState # import state
 
-# Define the config
-class GraphConfig(TypedDict):
+# Define the runtime context
+class GraphContext(TypedDict):
     model_name: Literal["anthropic", "openai"]
 
-workflow = StateGraph(AgentState, config_schema=GraphConfig)
+workflow = StateGraph(AgentState, context_schema=GraphContext)
 workflow.add_node("agent", call_model)
 workflow.add_node("action", tool_node)
 workflow.add_edge(START, "agent")

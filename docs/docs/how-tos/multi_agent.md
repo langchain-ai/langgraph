@@ -57,7 +57,7 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
     return handoff_tool
 ```
 
-1. Access the [state](../concepts/low_level.md#state) of the agent that is calling the handoff tool using the [InjectedState][langgraph.prebuilt.InjectedState] annotation. 
+1. Access the [state](../concepts/low_level.md#state) of the agent that is calling the handoff tool using the @[InjectedState][InjectedState] annotation. 
 2. The `Command` primitive allows specifying a state update and a node transition as a single operation, making it useful for implementing handoffs.
 3. Name of the agent or node to hand off to.
 4. Take the agent's messages and **add** them to the parent's **state** as part of the handoff. The next agent will see the parent state.
@@ -65,7 +65,7 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
 
 !!! tip
 
-    If you want to use tools that return `Command`, you can either use prebuilt [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent] / [`ToolNode`][langgraph.prebuilt.tool_node.ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
+    If you want to use tools that return `Command`, you can either use prebuilt @[`create_react_agent`][create_react_agent] / @[`ToolNode`][ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
     
     ```python
     def call_tools(state):
@@ -92,7 +92,7 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
 
 ### Control agent inputs
 
-You can use the [`Send()`][langgraph.types.Send] primitive to directly send data to the worker agents during the handoff. For example, you can request that the calling agent populate a task description for the next agent:
+You can use the @[`Send()`][Send] primitive to directly send data to the worker agents during the handoff. For example, you can request that the calling agent populate a task description for the next agent:
 
 ```python
 
@@ -130,7 +130,7 @@ def create_task_description_handoff_tool(
     return handoff_tool
 ```
 
-See the multi-agent [supervisor](../tutorials/multi_agent/agent_supervisor.md#4-create-delegation-tasks) example for a full example of using [`Send()`][langgraph.types.Send] in handoffs.
+See the multi-agent [supervisor](../tutorials/multi_agent/agent_supervisor.md#4-create-delegation-tasks) example for a full example of using @[`Send()`][Send] in handoffs.
 
 ## Build a multi-agent system
 
@@ -326,7 +326,7 @@ multi_agent_graph = (
 
 ## Multi-turn conversation
 
-Users might want to engage in a *multi-turn conversation* with one or more agents. To build a system that can handle this, you can create a node that uses an [`interrupt`][langgraph.types.interrupt] to collect user input and routes back to the **active** agent.
+Users might want to engage in a *multi-turn conversation* with one or more agents. To build a system that can handle this, you can create a node that uses an @[`interrupt`][interrupt] to collect user input and routes back to the **active** agent.
 
 The agents can then be implemented as nodes in a graph that executes agent steps and determines the next action:
 
@@ -375,7 +375,7 @@ def agent(state) -> Command[Literal["agent", "another_agent", "human"]]:
     from langgraph.graph import MessagesState, StateGraph, START
     from langgraph.prebuilt import create_react_agent, InjectedState
     from langgraph.types import Command, interrupt
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
     
     
     model = ChatAnthropic(model="claude-3-5-sonnet-latest")
@@ -467,7 +467,7 @@ def agent(state) -> Command[Literal["agent", "another_agent", "human"]]:
     builder.add_edge(START, "travel_advisor")
     
     
-    checkpointer = MemorySaver()
+    checkpointer = InMemorySaver()
     graph = builder.compile(checkpointer=checkpointer)
     ```
     
