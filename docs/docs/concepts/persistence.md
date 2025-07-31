@@ -472,6 +472,83 @@ In our example, the output of `getStateHistory` will look like this:
 
 ![State](img/persistence/get_state.jpg)
 
+## Durability
+
+Durability controls when and how checkpoint writes are persisted during graph execution. LangGraph supports three durability modes that allow you to balance performance and data consistency based on your application's requirements.
+
+### Durability Modes
+
+#### `"async"` (Default)
+Changes are persisted asynchronously while the next step executes. This provides the best performance as checkpoint writes don't block graph execution, but there's a small risk that checkpoints might not be written if the process crashes during execution.
+
+#### `"sync"`
+Changes are persisted synchronously before the next step starts. This ensures that every checkpoint is written before continuing execution, providing maximum data consistency at the cost of some performance overhead.
+
+#### `"exit"`
+Changes are persisted only when the graph execution completes (either successfully or with an error). This provides the best performance for long-running graphs but means intermediate state is not saved, so you cannot recover from mid-execution failures or interrupt the graph execution.
+
+### Using Durability
+
+You can specify the durability mode when calling any graph execution method:
+
+:::python
+
+```python
+# Using invoke with sync durability
+result = graph.invoke(
+    {"input": "test"}, 
+    {"configurable": {"thread_id": "1"}}, 
+    durability="sync"
+)
+
+# Using stream with async durability (default)
+for chunk in graph.stream(
+    {"input": "test"}, 
+    {"configurable": {"thread_id": "1"}}, 
+    durability="async"
+):
+    print(chunk)
+
+# Using ainvoke with exit durability
+result = await graph.ainvoke(
+    {"input": "test"}, 
+    {"configurable": {"thread_id": "1"}}, 
+    durability="exit"
+)
+```
+
+:::
+
+:::js
+
+```typescript
+// Using invoke with sync durability
+const result = await graph.invoke(
+  { input: "test" }, 
+  { configurable: { thread_id: "1" } }, 
+  { durability: "sync" }
+);
+
+// Using stream with async durability (default)
+for await (const chunk of graph.stream(
+  { input: "test" }, 
+  { configurable: { thread_id: "1" } }, 
+  { durability: "async" }
+)) {
+  console.log(chunk);
+}
+```
+
+:::
+
+### When to Use Each Mode
+
+- **`"async"`**: Best for most applications where you want good performance and can tolerate very rare checkpoint loss in case of process crashes.
+
+- **`"sync"`**: Use when data consistency is critical and you need to guarantee that every step is checkpointed before proceeding. Ideal for financial applications, compliance-sensitive workflows, or when debugging complex state transitions.
+
+- **`"exit"`**: Best for batch processing, long-running computations where intermediate state recovery isn't needed, or when maximum performance is required and you can re-run the entire graph if needed.
+
 ### Replay
 
 It's also possible to play-back a prior graph execution. If we `invoke` a graph with a `thread_id` and a `checkpoint_id`, then we will _re-play_ the previously executed steps _before_ a checkpoint that corresponds to the `checkpoint_id`, and only execute the steps _after_ the checkpoint.

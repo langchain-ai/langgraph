@@ -2990,6 +2990,7 @@ class Pregel(
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Run the graph with a single input and config.
@@ -3004,6 +3005,7 @@ class Pregel(
             output_keys: Optional. The output keys to retrieve from the graph run.
             interrupt_before: Optional. The nodes to interrupt the graph run before.
             interrupt_after: Optional. The nodes to interrupt the graph run after.
+            durability: Optional. The durability mode for the graph run. Default is None.
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
@@ -3027,6 +3029,7 @@ class Pregel(
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            durability=durability,
             **kwargs,
         ):
             if stream_mode == "values":
@@ -3069,6 +3072,7 @@ class Pregel(
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Asynchronously invoke the graph on a single input.
@@ -3083,6 +3087,7 @@ class Pregel(
             output_keys: Optional. The output keys to include in the result. Default is None.
             interrupt_before: Optional. The nodes to interrupt before. Default is None.
             interrupt_after: Optional. The nodes to interrupt after. Default is None.
+            durability: Optional. The durability mode for the computation. Default is None.
             **kwargs: Additional keyword arguments.
 
         Returns:
@@ -3107,6 +3112,7 @@ class Pregel(
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            durability=durability,
             **kwargs,
         ):
             if stream_mode == "values":
