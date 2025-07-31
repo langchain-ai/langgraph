@@ -72,7 +72,7 @@ from langgraph._internal._runnable import (
     RunnableSeq,
     coerce_to_runnable,
 )
-from langgraph._internal._typing import DeprecatedKwargs
+from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -636,7 +636,10 @@ class Pregel(
         name: str = "LangGraph",
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
-        if config_type := deprecated_kwargs.get("config_type"):
+        if (
+            config_type := deprecated_kwargs.get("config_type"),
+            MISSING,
+        ) is not MISSING:
             warnings.warn(
                 "`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
                 category=LangGraphDeprecatedSinceV10,
@@ -1302,7 +1305,7 @@ class Pregel(
     ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         config = ensure_config(config)
-        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointSaver | None = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -2571,7 +2574,7 @@ class Pregel(
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             runtime = Runtime(
-                context=context,
+                context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
@@ -2866,7 +2869,7 @@ class Pregel(
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
             runtime = Runtime(
-                context=context,
+                context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
@@ -3224,3 +3227,33 @@ def _output(
                 yield (ns, payload)
             else:
                 yield payload
+
+
+def _coerce_context(
+    context_schema: type[ContextT] | None, context: Any
+) -> ContextT | None:
+    """Coerce context input to the appropriate schema type.
+
+    If context is a dict and context_schema is a dataclass or pydantic model, we coerce.
+    Else, we return the context as-is.
+
+    Args:
+        context_schema: The schema type to coerce to (BaseModel, dataclass, or TypedDict)
+        context: The context value to coerce
+
+    Returns:
+        The coerced context value or None if context is None
+    """
+    if context is None:
+        return None
+
+    if context_schema is None:
+        return context
+
+    schema_is_class = issubclass(context_schema, BaseModel) or is_dataclass(
+        context_schema
+    )
+    if isinstance(context, dict) and schema_is_class:
+        return context_schema(**context)  # type: ignore[misc]
+
+    return cast(ContextT, context)

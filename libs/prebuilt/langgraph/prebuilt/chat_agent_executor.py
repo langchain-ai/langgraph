@@ -254,6 +254,13 @@ def create_react_agent(
         LanguageModelLike,
         Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
         Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
+        Callable[
+            [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]
+        ],
+        Callable[
+            [StateSchema, Runtime[ContextT]],
+            Awaitable[Runnable[LanguageModelInput, BaseMessage]],
+        ],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
@@ -287,6 +294,9 @@ def create_react_agent(
             - **Dynamic model**: A callable with signature
               `(state, runtime) -> BaseChatModel` that returns different models
               based on runtime context
+              If the model has tools bound via `.bind_tools()` or other configurations,
+              the return type should be a Runnable[LanguageModelInput, BaseMessage]
+              Coroutines are also supported, allowing for asynchronous model selection.
 
             Dynamic functions receive graph state and runtime, enabling
             context-dependent model selection. Must return a `BaseChatModel`
@@ -459,11 +469,11 @@ def create_react_agent(
         config_schema := deprecated_kwargs.pop("config_schema", MISSING)
     ) is not MISSING:
         warn(
-            "`config_schema` is no longer supported. Use `context_schema` instead.",
+            "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
             category=LangGraphDeprecatedSinceV10,
         )
 
-        if context_schema is not None:
+        if context_schema is None:
             context_schema = config_schema
 
     if version not in ("v1", "v2"):

@@ -564,7 +564,8 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
 ```
 
 ??? example "Extended example: specifying LLM at runtime"
-Below we demonstrate a practical example in which we configure what LLM to use at runtime. We will use both OpenAI and Anthropic models.
+
+    Below we demonstrate a practical example in which we configure what LLM to use at runtime. We will use both OpenAI and Anthropic models.
 
     ```python
     from dataclasses import dataclass
@@ -611,7 +612,8 @@ Below we demonstrate a practical example in which we configure what LLM to use a
     ```
 
 ??? example "Extended example: specifying model and system message at runtime"
-Below we demonstrate a practical example in which we configure two parameters: the LLM and system message to use at runtime.
+
+    Below we demonstrate a practical example in which we configure two parameters: the LLM and system message to use at runtime.
 
     ```python
     from dataclasses import dataclass
@@ -696,7 +698,8 @@ By default, the `retry_on` parameter uses the `default_retry_on` function, which
 In addition, for exceptions from popular http request libraries such as `requests` and `httpx` it only retries on 5xx status codes.
 
 ??? example "Extended example: customizing retry policies"
-Consider an example in which we are reading from a SQL database. Below we pass two different retry policies to nodes:
+
+    Consider an example in which we are reading from a SQL database. Below we pass two different retry policies to nodes:
 
     ```python
     import sqlite3

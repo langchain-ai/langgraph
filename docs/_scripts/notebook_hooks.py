@@ -88,12 +88,12 @@ REDIRECT_MAP = {
     "cloud/how-tos/human_in_the_loop_user_input.md": "cloud/how-tos/add-human-in-the-loop.md",
     "concepts/platform_architecture.md": "concepts/langgraph_cloud#architecture",
     # cloud streaming redirects
-    "cloud/how-tos/stream_values.md": "cloud/how-tos/streaming.md#stream-graph-state",
-    "cloud/how-tos/stream_updates.md": "cloud/how-tos/streaming.md#stream-graph-state",
-    "cloud/how-tos/stream_messages.md": "cloud/how-tos/streaming.md#messages",
-    "cloud/how-tos/stream_events.md": "cloud/how-tos/streaming.md#stream-events",
-    "cloud/how-tos/stream_debug.md": "cloud/how-tos/streaming.md#debug",
-    "cloud/how-tos/stream_multiple.md": "cloud/how-tos/streaming.md#stream-multiple-modes",
+    "cloud/how-tos/stream_values.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/how-tos/stream_updates.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/how-tos/stream_messages.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/how-tos/stream_events.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/how-tos/stream_debug.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/how-tos/stream_multiple.md": "https://docs.langchain.com/langgraph-platform/streaming",
     "cloud/concepts/streaming.md": "concepts/streaming.md",
     "agents/streaming.md": "how-tos/streaming.md",
     # prebuilt redirects
@@ -127,6 +127,85 @@ REDIRECT_MAP = {
     "how-tos/human_in_the_loop/breakpoints.md": "how-tos/human_in_the_loop/add-human-in-the-loop.md",
     "cloud/how-tos/human_in_the_loop_breakpoint.md": "cloud/how-tos/add-human-in-the-loop.md",
     "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.md",
+
+    # LGP mintlify migration redirects
+    "tutorials/auth/getting_started.md": "https://docs.langchain.com/langgraph-platform/auth",
+    "tutorials/auth/resource_auth.md": "https://docs.langchain.com/langgraph-platform/resource-auth",
+    "tutorials/auth/add_auth_server.md": "https://docs.langchain.com/langgraph-platform/add-auth-server",
+    "how-tos/use-remote-graph.md": "https://docs.langchain.com/langgraph-platform/use-remote-graph",
+    "how-tos/autogen-integration.md": "https://docs.langchain.com/langgraph-platform/autogen-integration",
+    "cloud/how-tos/use_stream_react.md": "https://docs.langchain.com/langgraph-platform/use-stream-react",
+    "cloud/how-tos/generative_ui_react.md": "https://docs.langchain.com/langgraph-platform/generative-ui-react",
+    "concepts/langgraph_platform.md": "https://docs.langchain.com/langgraph-platform/index",
+    "concepts/langgraph_components.md": "https://docs.langchain.com/langgraph-platform/components",
+    "concepts/langgraph_server.md": "https://docs.langchain.com/langgraph-platform/langgraph-server",
+    "concepts/langgraph_data_plane.md": "https://docs.langchain.com/langgraph-platform/data-plane",
+    "concepts/langgraph_control_plane.md": "https://docs.langchain.com/langgraph-platform/control-plane",
+    "concepts/langgraph_cli.md": "https://docs.langchain.com/langgraph-platform/langgraph-cli",
+    "concepts/langgraph_studio.md": "https://docs.langchain.com/langgraph-platform/langgraph-studio",
+    "cloud/how-tos/studio/quick_start.md": "https://docs.langchain.com/langgraph-platform/quick-start-studio",
+    "cloud/how-tos/invoke_studio.md": "https://docs.langchain.com/langgraph-platform/invoke-studio",
+    "cloud/how-tos/studio/manage_assistants.md": "https://docs.langchain.com/langgraph-platform/manage-assistants-studio",
+    "cloud/how-tos/threads_studio.md": "https://docs.langchain.com/langgraph-platform/threads-studio",
+    "cloud/how-tos/iterate_graph_studio.md": "https://docs.langchain.com/langgraph-platform/iterate-graph-studio",
+    "cloud/how-tos/studio/run_evals.md": "https://docs.langchain.com/langgraph-platform/run-evals-studio",
+    "cloud/how-tos/clone_traces_studio.md": "https://docs.langchain.com/langgraph-platform/clone-traces-studio",
+    "cloud/how-tos/datasets_studio.md": "https://docs.langchain.com/langgraph-platform/datasets-studio",
+    "concepts/sdk.md": "https://docs.langchain.com/langgraph-platform/sdk",
+    "concepts/plans.md": "https://docs.langchain.com/langgraph-platform/plans",
+    "concepts/application_structure.md": "https://docs.langchain.com/langgraph-platform/application-structure",
+    "concepts/scalability_and_resilience.md": "https://docs.langchain.com/langgraph-platform/scalability-and-resilience",
+    "concepts/auth.md": "https://docs.langchain.com/langgraph-platform/auth",
+    "how-tos/auth/custom_auth.md": "https://docs.langchain.com/langgraph-platform/custom-auth",
+    "how-tos/auth/openapi_security.md": "https://docs.langchain.com/langgraph-platform/openapi-security",
+    "concepts/assistants.md": "https://docs.langchain.com/langgraph-platform/assistants",
+    "cloud/how-tos/configuration_cloud.md": "https://docs.langchain.com/langgraph-platform/configuration-cloud",
+    "cloud/how-tos/use_threads.md": "https://docs.langchain.com/langgraph-platform/use-threads",
+    "cloud/how-tos/background_run.md": "https://docs.langchain.com/langgraph-platform/background-run",
+    "cloud/how-tos/same-thread.md": "https://docs.langchain.com/langgraph-platform/same-thread",
+    "cloud/how-tos/stateless_runs.md": "https://docs.langchain.com/langgraph-platform/stateless-runs",
+    "cloud/how-tos/configurable_headers.md": "https://docs.langchain.com/langgraph-platform/configurable-headers",
+    "concepts/double_texting.md": "https://docs.langchain.com/langgraph-platform/double-texting",
+    "cloud/how-tos/interrupt_concurrent.md": "https://docs.langchain.com/langgraph-platform/interrupt-concurrent",
+    "cloud/how-tos/rollback_concurrent.md": "https://docs.langchain.com/langgraph-platform/rollback-concurrent",
+    "cloud/how-tos/reject_concurrent.md": "https://docs.langchain.com/langgraph-platform/reject-concurrent",
+    "cloud/how-tos/enqueue_concurrent.md": "https://docs.langchain.com/langgraph-platform/enqueue-concurrent",
+    "cloud/concepts/webhooks.md": "https://docs.langchain.com/langgraph-platform/use-webhooks",
+    "cloud/how-tos/webhooks.md": "https://docs.langchain.com/langgraph-platform/use-webhooks",
+    "cloud/concepts/cron_jobs.md": "https://docs.langchain.com/langgraph-platform/cron-jobs",
+    "cloud/how-tos/cron_jobs.md": "https://docs.langchain.com/langgraph-platform/cron-jobs",
+    "how-tos/http/custom_lifespan.md": "https://docs.langchain.com/langgraph-platform/custom-lifespan",
+    "how-tos/http/custom_middleware.md": "https://docs.langchain.com/langgraph-platform/custom-middleware",
+    "how-tos/http/custom_routes.md": "https://docs.langchain.com/langgraph-platform/custom-routes",
+    "cloud/concepts/data_storage_and_privacy.md": "https://docs.langchain.com/langgraph-platform/data-storage-and-privacy",
+    "cloud/deployment/semantic_search.md": "https://docs.langchain.com/langgraph-platform/semantic-search",
+    "how-tos/ttl/configure_ttl.md": "https://docs.langchain.com/langgraph-platform/configure-ttl",
+    "concepts/deployment_options.md": "https://docs.langchain.com/langgraph-platform/deployment-options",
+    "cloud/quick_start.md": "https://docs.langchain.com/langgraph-platform/deployment-quickstart",
+    "cloud/deployment/setup.md": "https://docs.langchain.com/langgraph-platform/setup-app-requirements-txt",
+    "cloud/deployment/setup_pyproject.md": "https://docs.langchain.com/langgraph-platform/setup-pyproject",
+    "cloud/deployment/setup_javascript.md": "https://docs.langchain.com/langgraph-platform/setup-javascript",
+    "cloud/deployment/custom_docker.md": "https://docs.langchain.com/langgraph-platform/custom-docker",
+    "cloud/deployment/graph_rebuild.md": "https://docs.langchain.com/langgraph-platform/graph-rebuild",
+    "concepts/langgraph_cloud.md": "https://docs.langchain.com/langgraph-platform/cloud",
+    "concepts/langgraph_self_hosted_data_plane.md": "https://docs.langchain.com/langgraph-platform/self-hosted-data-plane",
+    "concepts/langgraph_self_hosted_control_plane.md": "https://docs.langchain.com/langgraph-platform/self-hosted-control-plane",
+    "concepts/langgraph_standalone_container.md": "https://docs.langchain.com/langgraph-platform/standalone-container",
+    "cloud/deployment/cloud.md": "https://docs.langchain.com/langgraph-platform/cloud",
+    "cloud/deployment/self_hosted_data_plane.md": "https://docs.langchain.com/langgraph-platform/deploy-self-hosted-data-plane",
+    "cloud/deployment/self_hosted_control_plane.md": "https://docs.langchain.com/langgraph-platform/deploy-self-hosted-control-plane",
+    "cloud/deployment/standalone_container.md": "https://docs.langchain.com/langgraph-platform/deploy-standalone-container",
+    "concepts/server-mcp.md": "https://docs.langchain.com/langgraph-platform/server-mcp",
+    "cloud/how-tos/human_in_the_loop_time_travel.md": "https://docs.langchain.com/langgraph-platform/human-in-the-loop-time-travel",
+    "cloud/how-tos/add-human-in-the-loop.md": "https://docs.langchain.com/langgraph-platform/add-human-in-the-loop",
+    "cloud/deployment/egress.md": "https://docs.langchain.com/langgraph-platform/env-var",
+    "cloud/how-tos/streaming.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/reference/api/api_ref.md": "https://docs.langchain.com/langgraph-platform/server-api-ref",
+    "cloud/reference/langgraph_server_changelog.md": "https://docs.langchain.com/langgraph-platform/langgraph-server-changelog",
+    "cloud/reference/api/api_ref_control_plane.md": "https://docs.langchain.com/langgraph-platform/api-ref-control-plane",
+    "cloud/reference/cli.md": "https://docs.langchain.com/langgraph-platform/cli",
+    "cloud/reference/env_var.md": "https://docs.langchain.com/langgraph-platform/env-var",
+    "troubleshooting/studio.md": "https://docs.langchain.com/langgraph-platform/troubleshooting-studio",
 }
 
 
@@ -482,16 +561,51 @@ def on_post_page(html: str, page: Page, config: MkDocsConfig) -> str:
 def on_post_build(config):
     use_directory_urls = config.get("use_directory_urls")
     for page_old, page_new in REDIRECT_MAP.items():
+        # Convert .ipynb to .md for path calculation
         page_old = page_old.replace(".ipynb", ".md")
-        page_new = page_new.replace(".ipynb", ".md")
-        page_new_before_hash, hash, suffix = page_new.partition("#")
-        old_html_path = File(page_old, "", "", use_directory_urls).dest_path.replace(
-            os.sep, "/"
-        )
-        new_html_path = File(page_new_before_hash, "", "", True).url
-        new_html_path = (
-            posixpath.relpath(new_html_path, start=posixpath.dirname(old_html_path))
-            + hash
-            + suffix
-        )
-        _write_html(config["site_dir"], old_html_path, new_html_path)
+        
+        # Calculate the HTML path for the old page (whether it exists or not)
+        if use_directory_urls:
+            # With directory URLs: /path/to/page/ becomes /path/to/page/index.html
+            if page_old.endswith(".md"):
+                old_html_path = page_old[:-3] + "/index.html"
+            else:
+                old_html_path = page_old + "/index.html"
+        else:
+            # Without directory URLs: /path/to/page.md becomes /path/to/page.html
+            if page_old.endswith(".md"):
+                old_html_path = page_old[:-3] + ".html"
+            else:
+                old_html_path = page_old + ".html"
+        
+        if isinstance(page_new, str) and page_new.startswith("http"):
+            # Handle external redirects
+            _write_html(config["site_dir"], old_html_path, page_new)
+        else:
+            # Handle internal redirects
+            page_new = page_new.replace(".ipynb", ".md")
+            page_new_before_hash, hash, suffix = page_new.partition("#")
+            
+            # Try to get the new path using File class, but fallback to manual calculation
+            try:
+                new_html_path = File(page_new_before_hash, "", "", True).url
+                new_html_path = (
+                    posixpath.relpath(new_html_path, start=posixpath.dirname(old_html_path))
+                    + hash
+                    + suffix
+                )
+            except:
+                # Fallback: calculate relative path manually
+                if use_directory_urls:
+                    if page_new_before_hash.endswith(".md"):
+                        new_html_path = page_new_before_hash[:-3] + "/"
+                    else:
+                        new_html_path = page_new_before_hash + "/"
+                else:
+                    if page_new_before_hash.endswith(".md"):
+                        new_html_path = page_new_before_hash[:-3] + ".html"
+                    else:
+                        new_html_path = page_new_before_hash + ".html"
+                new_html_path += hash + suffix
+            
+            _write_html(config["site_dir"], old_html_path, new_html_path)

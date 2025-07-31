@@ -39,6 +39,7 @@ docs = [
     "markdown-callouts",
     "markdown-include",
     "mkdocs-exclude",
+    "mkdocs-exclude-search",
     "psycopg[binary]",
     "psycopg-pool",
     "pygments-ansi-color",
