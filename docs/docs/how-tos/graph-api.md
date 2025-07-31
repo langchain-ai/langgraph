@@ -636,7 +636,7 @@ print(graph.invoke({}, context={"my_runtime_value": "b"}))
     graph = builder.compile()
     # Usage
     input_message = {"role": "user", "content": "hi"}
-    response = graph.invoke({"messages": [input_message]}, context={"model_provider": "openai", "system_message": "Respondin Italian."})
+    response = graph.invoke({"messages": [input_message]}, context={"model_provider": "openai", "system_message": "Respond in Italian."})
     for message in response["messages"]:
         message.pretty_print()
     ```
