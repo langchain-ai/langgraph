@@ -1,17 +1,24 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
-from typing import Generic
+from typing import Any, Generic
 
 from typing_extensions import Self
 
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
+
+__all__ = ("UntrackedValue",)
 
 
 class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, never checkpointed."""
 
     __slots__ = ("value", "guard")
+
+    guard: bool
+    value: Value | Any
 
     def __init__(self, typ: type[Value], guard: bool = True) -> None:
         super().__init__(typ)
@@ -38,7 +45,7 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
         empty.value = self.value
         return empty
 
-    def checkpoint(self) -> Value:
+    def checkpoint(self) -> Value | Any:
         return MISSING
 
     def from_checkpoint(self, checkpoint: Value) -> Self:

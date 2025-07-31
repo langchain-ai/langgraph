@@ -1047,3 +1047,23 @@ def test_search_items(
         for ns in test_namespaces:
             key = f"item_{ns[-1]}"
             store.delete(ns, key)
+
+
+def test_sql_injection_vulnerability(store: SqliteStore) -> None:
+    """Test that SQL injection via malicious filter keys is prevented."""
+    # Add public and private documents
+    store.put(("docs",), "public", {"access": "public", "data": "public info"})
+    store.put(
+        ("docs",), "private", {"access": "private", "data": "secret", "password": "123"}
+    )
+
+    # Normal query - returns 1 public document
+    normal = store.search(("docs",), filter={"access": "public"})
+    assert len(normal) == 1
+    assert normal[0].value["access"] == "public"
+
+    # SQL injection attempt via malicious key should raise ValueError
+    malicious_key = "access') = 'public' OR '1'='1' OR json_extract(value, '$."
+
+    with pytest.raises(ValueError, match="Invalid filter key"):
+        store.search(("docs",), filter={malicious_key: "dummy"})

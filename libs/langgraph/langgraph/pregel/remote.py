@@ -8,6 +8,7 @@ from typing import (
     cast,
 )
 
+import langsmith as ls
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
@@ -29,8 +30,8 @@ from langgraph_sdk.schema import Command as CommandSDK
 from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
-from langgraph.checkpoint.base import CheckpointMetadata
-from langgraph.constants import (
+from langgraph._internal._config import merge_configs
+from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
@@ -40,13 +41,21 @@ from langgraph.constants import (
     INTERRUPT,
     NS_SEP,
 )
+from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.errors import GraphInterrupt, ParentCommand
-from langgraph.pregel.protocol import PregelProtocol
-from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
-from langgraph.types import Command, Interrupt, StreamProtocol
-from langgraph.utils.config import merge_configs
+from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
+from langgraph.types import (
+    All,
+    Command,
+    Interrupt,
+    PregelTask,
+    StateSnapshot,
+    StreamMode,
+)
 
-CONF_DROPLIST = frozenset(
+__all__ = ("RemoteGraph", "RemoteException")
+
+_CONF_DROPLIST = frozenset(
     (
         CONFIG_KEY_CHECKPOINT_MAP,
         CONFIG_KEY_CHECKPOINT_ID,
@@ -56,7 +65,7 @@ CONF_DROPLIST = frozenset(
 )
 
 
-def sanitize_config_value(v: Any) -> Any:
+def _sanitize_config_value(v: Any) -> Any:
     """Recursively sanitize a config value to ensure it contains only primitives."""
     if isinstance(v, (str, int, float, bool)):
         return v
@@ -64,14 +73,14 @@ def sanitize_config_value(v: Any) -> Any:
         sanitized_dict = {}
         for k, val in v.items():
             if isinstance(k, str):
-                sanitized_value = sanitize_config_value(val)
+                sanitized_value = _sanitize_config_value(val)
                 if sanitized_value is not None:
                     sanitized_dict[k] = sanitized_value
         return sanitized_dict
     elif isinstance(v, (list, tuple)):
         sanitized_list = []
         for item in v:
-            sanitized_item = sanitize_config_value(item)
+            sanitized_item = _sanitize_config_value(item)
             if sanitized_item is not None:
                 sanitized_list.append(sanitized_item)
         return sanitized_list
@@ -110,6 +119,7 @@ class RemoteGraph(PregelProtocol):
         sync_client: SyncLangGraphClient | None = None,
         config: RunnableConfig | None = None,
         name: str | None = None,
+        distributed_tracing: bool = False,
     ):
         """Specify `url`, `api_key`, and/or `headers` to create default sync and async clients.
 
@@ -128,6 +138,7 @@ class RemoteGraph(PregelProtocol):
             name: Human-readable name to attach to the RemoteGraph instance.
                 This is useful for adding `RemoteGraph` as a subgraph via `graph.add_node(remote_graph)`.
                 If not provided, defaults to the assistant ID.
+            distributed_tracing: Whether to enable sending LangSmith distributed tracing headers.
         """
         self.assistant_id = assistant_id
         if name is None:
@@ -135,6 +146,7 @@ class RemoteGraph(PregelProtocol):
         else:
             self.name = name
         self.config = config
+        self.distributed_tracing = distributed_tracing
 
         if client is None and url is not None:
             client = get_client(url=url, api_key=api_key, headers=headers)
@@ -252,9 +264,9 @@ class RemoteGraph(PregelProtocol):
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
         tasks: list[PregelTask] = []
         for task in state["tasks"]:
-            interrupts = []
-            for interrupt in task["interrupts"]:
-                interrupts.append(Interrupt(**interrupt))
+            interrupts = tuple(
+                Interrupt(**interrupt) for interrupt in task["interrupts"]
+            )
 
             tasks.append(
                 PregelTask(
@@ -262,7 +274,7 @@ class RemoteGraph(PregelProtocol):
                     name=task["name"],
                     path=tuple(),
                     error=Exception(task["error"]) if task["error"] else None,
-                    interrupts=tuple(interrupts),
+                    interrupts=interrupts,
                     state=(
                         self._create_state_snapshot(task["state"])
                         if task["state"]
@@ -347,7 +359,7 @@ class RemoteGraph(PregelProtocol):
             for k, v in config["metadata"].items():
                 if (
                     isinstance(k, str)
-                    and (sanitized_value := sanitize_config_value(v)) is not None
+                    and (sanitized_value := _sanitize_config_value(v)) is not None
                 ):
                     sanitized["metadata"][k] = sanitized_value
 
@@ -356,8 +368,8 @@ class RemoteGraph(PregelProtocol):
             for k, v in config["configurable"].items():
                 if (
                     isinstance(k, str)
-                    and k not in CONF_DROPLIST
-                    and (sanitized_value := sanitize_config_value(v)) is not None
+                    and k not in _CONF_DROPLIST
+                    and (sanitized_value := _sanitize_config_value(v)) is not None
                 ):
                     sanitized["configurable"][k] = sanitized_value
 
@@ -621,6 +633,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> Iterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -636,6 +649,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             subgraphs: Stream from subgraphs.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to client.runs.stream.
 
         Yields:
@@ -664,6 +678,9 @@ class RemoteGraph(PregelProtocol):
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
+            headers=_merge_tracing_headers(headers)
+            if self.distributed_tracing
+            else headers,
             **kwargs,
         ):
             # split mode and ns
@@ -723,6 +740,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -738,6 +756,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             subgraphs: Stream from subgraphs.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to client.runs.stream.
 
         Yields:
@@ -766,6 +785,9 @@ class RemoteGraph(PregelProtocol):
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
+            headers=_merge_tracing_headers(headers)
+            if self.distributed_tracing
+            else headers,
             **kwargs,
         ):
             # split mode and ns
@@ -839,6 +861,7 @@ class RemoteGraph(PregelProtocol):
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -848,6 +871,7 @@ class RemoteGraph(PregelProtocol):
             config: A `RunnableConfig` for graph invocation.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to RemoteGraph.stream.
 
         Returns:
@@ -858,6 +882,7 @@ class RemoteGraph(PregelProtocol):
             config=config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            headers=headers,
             stream_mode="values",
             **kwargs,
         ):
@@ -874,6 +899,7 @@ class RemoteGraph(PregelProtocol):
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -883,6 +909,7 @@ class RemoteGraph(PregelProtocol):
             config: A `RunnableConfig` for graph invocation.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to RemoteGraph.astream.
 
         Returns:
@@ -893,6 +920,7 @@ class RemoteGraph(PregelProtocol):
             config=config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            headers=headers,
             stream_mode="values",
             **kwargs,
         ):
@@ -901,3 +929,17 @@ class RemoteGraph(PregelProtocol):
             return chunk
         except UnboundLocalError:
             return None
+
+
+def _merge_tracing_headers(headers: dict[str, str] | None) -> dict[str, str] | None:
+    if rt := ls.get_current_run_tree():
+        tracing_headers = rt.to_headers()
+        baggage = tracing_headers.pop("baggage")
+        if headers:
+            if "baggage" in headers:
+                baggage = headers["baggage"] + "," + baggage
+            tracing_headers["baggage"] = baggage
+            headers.update(tracing_headers)
+        else:
+            headers = tracing_headers
+    return headers
