@@ -205,6 +205,7 @@ REDIRECT_MAP = {
     "cloud/reference/api/api_ref_control_plane.md": "https://docs.langchain.com/langgraph-platform/api-ref-control-plane",
     "cloud/reference/cli.md": "https://docs.langchain.com/langgraph-platform/cli",
     "cloud/reference/env_var.md": "https://docs.langchain.com/langgraph-platform/env-var",
+    "troubleshooting/studio.md": "https://docs.langchain.com/langgraph-platform/troubleshooting-studio",
 }
 
 
