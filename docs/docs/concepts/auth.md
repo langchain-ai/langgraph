@@ -43,10 +43,6 @@ Custom auth **is supported** for all plans in LangGraph Platform.
 - Complete flexibility to implement your security model
 - You control all aspects of authentication and authorization
 
-!!! note "Custom auth"
-
-    Custom auth is only supported for **Enterprise** self-hosted deployments.
-
 ## System Architecture
 
 A typical authentication setup involves three main components:

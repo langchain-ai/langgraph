@@ -13,15 +13,6 @@ Use LangGraph Server to create and manage [assistants](assistants.md), [threads]
   
     For detailed information on the API endpoints and data models, see [LangGraph Platform API reference docs](../cloud/reference/api/api_ref.html).
 
-## Server versions
-
-LangGraph Server is available as the `Enterprise` version, which is the full-featured version of LangGraph Server. To use the `Enterprise` version, you must acquire a license key that you will need to specify when running the Docker image. To acquire a license key, please email sales@langchain.dev.
-
-The Enterprise version includes:
-- [Cron Jobs](../cloud/concepts/cron_jobs.md)
-- [Custom Authentication](../concepts/auth.md)
-- All [deployment options](../concepts/deployment_options.md): Cloud SaaS, Self-Hosted Data Plane, Self-Hosted Control Plane, and Standalone Container
-
 ## Application structure
 
 To deploy a LangGraph Server application, you need to specify the graph(s) you want to deploy, as well as any relevant configuration settings, such as dependencies and environment variables.

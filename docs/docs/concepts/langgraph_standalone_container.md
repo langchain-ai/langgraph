@@ -34,9 +34,3 @@ The Standalone Container deployment option supports deploying data plane infrast
 ### Docker
 
 The Standalone Container deployment option supports deploying data plane infrastructure to any Docker-supported compute platform.
-
-## Server Versions
-
-The Standalone Container deployment option supports the [Enterprise server version](../concepts/langgraph_server.md#langgraph-server) with custom pricing and full features.
-
-For more details on features, see [LangGraph Server](../concepts/langgraph_server.md#server-versions).
