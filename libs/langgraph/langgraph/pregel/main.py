@@ -1305,7 +1305,7 @@ class Pregel(
     ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         config = ensure_config(config)
-        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointSaver | None = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
