@@ -483,7 +483,7 @@ def create_react_agent(
         )
 
     if state_schema is not None:
-        required_keys = {"messages", "remaining_steps"}
+        required_keys = {"messages"}
         if response_format is not None:
             required_keys.add("structured_response")
 
@@ -963,6 +963,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
