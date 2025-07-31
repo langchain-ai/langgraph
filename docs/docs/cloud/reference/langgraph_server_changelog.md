@@ -1,5 +1,7 @@
 # LangGraph Server Changelog
 
+> **Note:** This changelog is no longer actively maintained. For the most up-to-date LangGraph Server changelog, please visit our new documentation site: [LangGraph Server Changelog](https://docs.langchain.com/langgraph-platform/langgraph-server-changelog#langgraph-server-changelog)
+
 [LangGraph Server](../../concepts/langgraph_server.md) is an API platform for creating and managing agent-based applications. It provides built-in persistence, a task queue, and supports deploying, configuring, and running assistants (agentic workflows) at scale. This changelog documents all notable updates, features, and fixes to LangGraph Server releases.
 
 ---
