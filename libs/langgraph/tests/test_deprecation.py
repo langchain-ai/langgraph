@@ -136,6 +136,7 @@ def test_config_schema_deprecation_on_entrypoint() -> None:
         assert my_entrypoint.config_schema() is not None
 
 
+@pytest.mark.filterwarnings("ignore:`config_type` is deprecated")
 def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
@@ -185,3 +186,37 @@ def test_deprecated_import() -> None:
         match="Importing PREVIOUS from langgraph.constants is deprecated. This constant is now private and should not be used directly.",
     ):
         from langgraph.constants import PREVIOUS  # noqa: F401
+
+
+@pytest.mark.filterwarnings("ignore:`checkpoint_during` is deprecated")
+def test_checkpoint_during_deprecation_state_graph() -> None:
+    builder = StateGraph(PlainState)
+    builder.add_node("test_node", lambda state: state)
+    builder.set_entry_point("test_node")
+    graph = builder.compile()
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+    ):
+        graph.invoke({}, checkpoint_during=True)
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+    ):
+        graph.invoke({}, checkpoint_during=False)
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+    ):
+        for _ in graph.stream({}, checkpoint_during=True):  # type: ignore[arg-type]
+            pass
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+    ):
+        for _ in graph.stream({}, checkpoint_during=False):  # type: ignore[arg-type]
+            pass

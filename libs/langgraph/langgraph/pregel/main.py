@@ -2470,6 +2470,17 @@ class Pregel(
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
         """
+        if (checkpoint_during := kwargs.get("checkpoint_during")) is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+            if durability is not None:
+                raise ValueError(
+                    "Cannot use both `checkpoint_during` and `durability` parameters. Please use `durability` instead."
+                )
+            durability = "async" if checkpoint_during else "exit"
 
         if stream_mode is None:
             # if being called as a node in another graph, default to values mode
@@ -2493,22 +2504,6 @@ class Pregel(
             run_id=config.get("run_id"),
         )
         try:
-            deprecated_checkpoint_during = cast(
-                Optional[bool], kwargs.get("checkpoint_during")
-            )
-            if deprecated_checkpoint_during is not None:
-                warnings.warn(
-                    "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
-                    category=LangGraphDeprecatedSinceV10,
-                )
-                if durability is not None:
-                    raise ValueError(
-                        "Cannot use both `checkpoint_during` and `durability` parameters."
-                    )
-                elif deprecated_checkpoint_during:
-                    durability = "async"
-                else:
-                    durability = "exit"
             # assign defaults
             (
                 stream_modes,
@@ -2736,6 +2731,17 @@ class Pregel(
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
         """
+        if (checkpoint_during := kwargs.get("checkpoint_during")) is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+            if durability is not None:
+                raise ValueError(
+                    "Cannot use both `checkpoint_during` and `durability` parameters. Please use `durability` instead."
+                )
+            durability = "async" if checkpoint_during else "exit"
 
         if stream_mode is None:
             # if being called as a node in another graph, default to values mode
@@ -2778,22 +2784,6 @@ class Pregel(
             else False
         )
         try:
-            deprecated_checkpoint_during = cast(
-                Optional[bool], kwargs.get("checkpoint_during")
-            )
-            if deprecated_checkpoint_during is not None:
-                warnings.warn(
-                    "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
-                    category=LangGraphDeprecatedSinceV10,
-                )
-                if durability is not None:
-                    raise ValueError(
-                        "Cannot use both `checkpoint_during` and `durability` parameters."
-                    )
-                elif deprecated_checkpoint_during:
-                    durability = "async"
-                else:
-                    durability = "exit"
             # assign defaults
             (
                 stream_modes,
