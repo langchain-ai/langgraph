@@ -65,7 +65,7 @@ class AgentState(TypedDict):
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
-    is_last_step: IsLastStep
+    is_last_step: NotRequired[IsLastStep]
 
     remaining_steps: RemainingSteps
 
@@ -962,4 +962,5 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
