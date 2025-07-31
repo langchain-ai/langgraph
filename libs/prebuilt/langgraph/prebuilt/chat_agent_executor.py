@@ -248,20 +248,19 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-# A chat model that has some bound runtime configuration
-# associated with it. This usually appears when we bind tools to a model
-# e.g., `model.bind_tools(tools)`
-ConfiguredChatModel = Runnable[LanguageModelInput, BaseMessage]
-
-
 def create_react_agent(
     model: Union[
         str,
         LanguageModelLike,
         Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
         Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
-        Callable[[StateSchema, Runtime[ContextT]], ConfiguredChatModel],
-        Callable[[StateSchema, Runtime[ContextT]], Awaitable[ConfiguredChatModel]],
+        Callable[
+            [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]
+        ],
+        Callable[
+            [StateSchema, Runtime[ContextT]],
+            Awaitable[Runnable[LanguageModelInput, BaseMessage]],
+        ],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
@@ -295,6 +294,9 @@ def create_react_agent(
             - **Dynamic model**: A callable with signature
               `(state, runtime) -> BaseChatModel` that returns different models
               based on runtime context
+              If the model has tools bound via `.bind_tools()` or other configurations,
+              the return type should be a Runnable[LanguageModelInput, BaseMessage]
+              Coroutines are also supported, allowing for asynchronous model selection.
 
             Dynamic functions receive graph state and runtime, enabling
             context-dependent model selection. Must return a `BaseChatModel`
