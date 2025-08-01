@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from langgraph.managed.base import ManagedValue
-from langgraph.pregel._scratchpad import PregelScratchpad
+from langgraph.types import PregelScratchpad
 
 __all__ = ("IsLastStep", "RemainingStepsManager")
 
@@ -22,3 +22,4 @@ class RemainingStepsManager(ManagedValue[int]):
 
 
 RemainingSteps = Annotated[int, RemainingStepsManager]
+
