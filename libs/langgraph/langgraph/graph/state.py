@@ -1312,6 +1312,7 @@ def _get_channels(
         for name, typ in type_hints.items()
         if name != "__slots__"
     }
+
     return (
         {k: v for k, v in all_keys.items() if isinstance(v, BaseChannel)},
         {k: v for k, v in all_keys.items() if is_managed_value(v)},
@@ -1383,12 +1384,21 @@ def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
 
 
 def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | None:
+    # accounts for Annotated[ManagedValue, ...] and NotRequired/Required[ManagedValue]
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1:
             decoration = get_origin(meta[-1]) or meta[-1]
             if is_managed_value(decoration):
                 return decoration
+
+    # Handle Required, NotRequired, etc wrapped types by extracting the inner type
+    if (
+        get_origin(typ) is not None
+        and (args := get_args(typ))
+        and (inner_type := args[0])
+    ):
+        return _is_field_managed_value(name, inner_type)
 
     return None
 

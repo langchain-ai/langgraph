@@ -48,6 +48,7 @@ from langgraph._internal._constants import (
     PUSH,
     RESUME,
 )
+from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
@@ -100,7 +101,6 @@ from langgraph.pregel._io import (
     read_channels,
 )
 from langgraph.pregel._read import PregelNode
-from langgraph.pregel._scratchpad import PregelScratchpad
 from langgraph.pregel._utils import get_new_channel_versions, is_xxh3_128_hexdigest
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
