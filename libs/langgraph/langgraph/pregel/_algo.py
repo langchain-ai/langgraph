@@ -69,7 +69,7 @@ from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
-from langgraph.pregel._scratchpad import PregelScratchpad
+from langgraph.types import PregelScratchpad
 from langgraph.runtime import DEFAULT_RUNTIME, Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import (
@@ -1105,3 +1105,4 @@ class LazyAtomicCounter:
                 if self._counter is None:
                     self._counter = itertools.count(0).__next__
         return self._counter()
+
