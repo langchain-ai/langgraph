@@ -1390,6 +1390,18 @@ def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | Non
             if is_managed_value(decoration):
                 return decoration
 
+    # Handle NotRequired wrapped types by extracting the inner type
+    origin = get_origin(typ)
+    if origin is not None:
+        # Check if this is a NotRequired type (from typing_extensions)
+        if hasattr(origin, '__name__') and origin.__name__ == 'NotRequired':
+            # Extract the inner type from NotRequired[T]
+            args = get_args(typ)
+            if args:
+                inner_type = args[0]
+                # Recursively check if the inner type is a managed value
+                return _is_field_managed_value(name, inner_type)
+
     return None
 
 
@@ -1428,3 +1440,4 @@ def _get_json_schema(
                     if k in channels and isinstance(channels[k], BaseChannel)
                 },
             ).model_json_schema()
+
