@@ -472,37 +472,6 @@ In our example, the output of `getStateHistory` will look like this:
 
 ![State](img/persistence/get_state.jpg)
 
-## Durability
-
-Durability controls when and how checkpoint writes are persisted during graph execution. LangGraph supports three durability modes that allow you to balance performance and data consistency based on your application's requirements.
-
-### Durability Modes
-
-#### `"sync"`
-Changes are persisted synchronously before the next step starts. This ensures that every checkpoint is written before continuing execution, providing maximal data consistency at the cost of some performance overhead.
-
-#### `"async"` (Default)
-Changes are persisted asynchronously while the next step executes. This provides the best performance as checkpoint writes don't block graph execution, but there's a small risk that checkpoints might not be written if the process crashes during execution.
-
-#### `"exit"`
-Changes are persisted only when graph execution completes (either successfully or with an error). This provides the best performance for long-running graphs but means intermediate state is not saved, so you cannot recover from mid-execution failures or interrupt the graph execution.
-
-### Using Durability
-
-You can specify the durability mode when calling any graph execution method:
-
-:::python
-
-```python
-result = graph.invoke(
-    {"input": "test"}, 
-    {"configurable": {"thread_id": "1"}}, 
-    durability="sync"
-)
-```
-
-:::
-
 ### Replay
 
 It's also possible to play-back a prior graph execution. If we `invoke` a graph with a `thread_id` and a `checkpoint_id`, then we will _re-play_ the previously executed steps _before_ a checkpoint that corresponds to the `checkpoint_id`, and only execute the steps _after_ the checkpoint.
