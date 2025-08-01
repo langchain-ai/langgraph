@@ -637,8 +637,7 @@ class Pregel(
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         if (
-            config_type := deprecated_kwargs.get("config_type"),
-            MISSING,
+            config_type := deprecated_kwargs.get("config_type", MISSING)
         ) is not MISSING:
             warnings.warn(
                 "`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
@@ -785,7 +784,8 @@ class Pregel(
         return self
 
     @deprecated(
-        "`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead."
+        "`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
+        category=None,
     )
     def config_schema(self, *, include: Sequence[str] | None = None) -> type[BaseModel]:
         warnings.warn(
@@ -810,7 +810,8 @@ class Pregel(
         return create_model(self.get_name("Config"), field_definitions=fields)
 
     @deprecated(
-        "`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead."
+        "`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead.",
+        category=None,
     )
     def get_config_jsonschema(
         self, *, include: Sequence[str] | None = None

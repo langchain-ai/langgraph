@@ -94,8 +94,6 @@ def test_pregel_types_deprecation() -> None:
         from langgraph.pregel.types import StateSnapshot  # noqa: F401
 
 
-@pytest.mark.filterwarnings("ignore:`config_schema` is deprecated")
-@pytest.mark.filterwarnings("ignore:`get_config_jsonschema` is deprecated")
 def test_config_schema_deprecation() -> None:
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
@@ -121,7 +119,6 @@ def test_config_schema_deprecation() -> None:
         graph.get_config_jsonschema()
 
 
-@pytest.mark.filterwarnings("ignore:`config_schema` is deprecated")
 def test_config_schema_deprecation_on_entrypoint() -> None:
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
@@ -132,6 +129,10 @@ def test_config_schema_deprecation_on_entrypoint() -> None:
         def my_entrypoint(state: PlainState) -> PlainState:
             return state
 
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
+    ):
         assert my_entrypoint.context_schema == PlainState
         assert my_entrypoint.config_schema() is not None
 
@@ -159,7 +160,6 @@ def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
         assert instance.context_schema == PlainState
 
 
-@pytest.mark.filterwarnings("ignore:`interrupt_id` is deprecated. Use `id` instead.")
 def test_interrupt_attributes_deprecation() -> None:
     interrupt = Interrupt(value="question", id="abc")
 
@@ -170,7 +170,6 @@ def test_interrupt_attributes_deprecation() -> None:
         interrupt.interrupt_id
 
 
-@pytest.mark.filterwarnings("ignore:NodeInterrupt is deprecated.")
 def test_node_interrupt_deprecation() -> None:
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
