@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import Any, Optional
 
 import pytest
@@ -287,42 +288,47 @@ def test_config_parameter_incorrect_typing() -> None:
 
         builder.add_node(async_node_with_any_config)
 
-    def node_with_correct_config(
-        state: PlainState, config: RunnableConfig
-    ) -> PlainState:
-        return state
+    with warnings.catch_warnings(record=True) as w:
 
-    builder.add_node(node_with_correct_config)
+        def node_with_correct_config(
+            state: PlainState, config: RunnableConfig
+        ) -> PlainState:
+            return state
 
-    def node_with_optional_config(
-        state: PlainState,
-        config: Optional[RunnableConfig],  # noqa: UP045
-    ) -> PlainState:
-        return state
+        builder.add_node(node_with_correct_config)
 
-    builder.add_node(node_with_optional_config)
+        def node_with_optional_config(
+            state: PlainState,
+            config: Optional[RunnableConfig],  # noqa: UP045
+        ) -> PlainState:
+            return state
 
-    def node_with_untyped_config(state: PlainState, config) -> PlainState:
-        return state
+        builder.add_node(node_with_optional_config)
 
-    builder.add_node(node_with_untyped_config)
+        def node_with_untyped_config(state: PlainState, config) -> PlainState:
+            return state
 
-    async def async_node_with_correct_config(
-        state: PlainState, config: RunnableConfig
-    ) -> PlainState:
-        return state
+        builder.add_node(node_with_untyped_config)
 
-    builder.add_node(async_node_with_correct_config)
+        async def async_node_with_correct_config(
+            state: PlainState, config: RunnableConfig
+        ) -> PlainState:
+            return state
 
-    def async_node_with_optional_config(
-        state: PlainState,
-        config: Optional[RunnableConfig],  # noqa: UP045
-    ) -> PlainState:
-        return state
+        builder.add_node(async_node_with_correct_config)
 
-    builder.add_node(async_node_with_optional_config)
+        async def async_node_with_optional_config(
+            state: PlainState,
+            config: Optional[RunnableConfig],  # noqa: UP045
+        ) -> PlainState:
+            return state
 
-    def async_node_with_untyped_config(state: PlainState, config) -> PlainState:
-        return state
+        builder.add_node(async_node_with_optional_config)
 
-    builder.add_node(async_node_with_untyped_config)
+        async def async_node_with_untyped_config(
+            state: PlainState, config
+        ) -> PlainState:
+            return state
+
+        builder.add_node(async_node_with_untyped_config)
+        assert len(w) == 0
