@@ -51,6 +51,51 @@ For some examples of pitfalls to avoid, see the [Common Pitfalls](./functional_a
 how to structure your code using **tasks** to avoid these issues. The same principles apply to the @[StateGraph (Graph API)][StateGraph].
 :::
 
+## Durability modes
+
+LangGraph supports three durability modes that allow you to balance performance and data consistency based on your application's requirements. The durability modes, from least to most durable, are as follows:
+
+- [`"exit"`](#exit)
+- [`"async"`](#async)
+- [`"sync"`](#sync)
+
+A higher durability mode add more overhead to the workflow execution.
+
+!!! version-added "Added in v0.6.0"
+
+    Use the `durability` parameter instead of `checkpoint_during` (deprecated in v0.6.0) for persistence policy management:
+    
+    * `durability="async"` replaces `checkpoint_during=True`
+    * `durability="exit"` replaces `checkpoint_during=False`
+    
+    for persistence policy management, with the following mapping:
+
+    * `checkpoint_during=True` -> `durability="async"`
+    * `checkpoint_during=False` -> `durability="exit"`
+
+
+### `"exit"`
+Changes are persisted only when graph execution completes (either successfully or with an error). This provides the best performance for long-running graphs but means intermediate state is not saved, so you cannot recover from mid-execution failures or interrupt the graph execution.
+
+### `"async"`
+Changes are persisted asynchronously while the next step executes. This provides good performance and durability, but there's a small risk that checkpoints might not be written if the process crashes during execution.
+
+### `"sync"`
+Changes are persisted synchronously before the next step starts. This ensures that every checkpoint is written before continuing execution, providing high durability at the cost of some performance overhead.
+
+You can specify the durability mode when calling any graph execution method:
+
+:::python
+
+```python
+graph.stream(
+    {"input": "test"}, 
+    durability="sync"
+)
+```
+
+:::
+
 ## Using tasks in nodes
 
 If a [node](./low_level.md#nodes) contains multiple operations, you may find it easier to convert each operation into a **task** rather than refactor the operations into individual nodes.
