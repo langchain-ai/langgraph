@@ -8,7 +8,7 @@ from typing import (
 
 from typing_extensions import TypeGuard
 
-from langgraph.pregel._scratchpad import PregelScratchpad
+from langgraph.types import PregelScratchpad
 
 V = TypeVar("V")
 U = TypeVar("U")
@@ -30,3 +30,4 @@ def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
 
 
 ManagedValueMapping = dict[str, ManagedValueSpec]
+
