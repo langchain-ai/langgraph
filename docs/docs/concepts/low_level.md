@@ -88,8 +88,6 @@ Typically, all graph nodes communicate with a single schema. This means that the
 
 It is possible to have nodes write to private state channels inside the graph for internal node communication. We can simply define a private schema, `PrivateState`.
 
-See [this guide](../how-tos/graph-api.ipynb#pass-private-state-between-nodes) for more detail.
-
 It is also possible to define explicit input and output schemas for a graph. In these cases, we define an "internal" schema that contains _all_ keys relevant to graph operations. But, we also define `input` and `output` schemas that are sub-sets of the "internal" schema to constrain the input and output of the graph. See [this guide](../how-tos/graph-api.md#define-input-and-output-schemas) for more detail.
 
 Let's look at an example:
@@ -473,7 +471,7 @@ const builder = new StateGraph(State);
 
 :::
 
-Behind the scenes, functions are converted to [RunnableLambda](https://api.python.langchain.com/en/latest/runnables/langchain_core.runnables.base.RunnableLambda.html#langchain_core.runnables.base.RunnableLambda)s, which add batch and async support to your function, along with native tracing and debugging.
+Behind the scenes, functions are converted to [RunnableLambda](https://python.langchain.com/api_reference/core/runnables/langchain_core.runnables.base.RunnableLambda.html)s, which add batch and async support to your function, along with native tracing and debugging.
 
 If you add a node to a graph without specifying a name, it will be given a default name equivalent to the function name.
 
@@ -821,7 +819,6 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
         return Command(update={"foo": "baz"}, goto="my_other_node")
 ```
 
-Check out this [how-to guide](../how-tos/graph-api.ipynb#combine-control-flow-and-state-updates-with-command) for an end-to-end example of how to use `Command`.
 :::
 
 :::js
@@ -861,7 +858,6 @@ builder.addNode("myNode", myNode, {
 });
 ```
 
-Check out this [how-to guide](../how-tos/graph-api.ipynb#combine-control-flow-and-state-updates-with-command) for an end-to-end example of how to use `Command`.
 :::
 
 !!! important
