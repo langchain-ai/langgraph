@@ -485,7 +485,7 @@ Changes are persisted synchronously before the next step starts. This ensures th
 Changes are persisted asynchronously while the next step executes. This provides the best performance as checkpoint writes don't block graph execution, but there's a small risk that checkpoints might not be written if the process crashes during execution.
 
 #### `"exit"`
-Changes are persisted only when the graph execution completes (either successfully or with an error). This provides the best performance for long-running graphs but means intermediate state is not saved, so you cannot recover from mid-execution failures or interrupt the graph execution.
+Changes are persisted only when graph execution completes (either successfully or with an error). This provides the best performance for long-running graphs but means intermediate state is not saved, so you cannot recover from mid-execution failures or interrupt the graph execution.
 
 ### Using Durability
 
