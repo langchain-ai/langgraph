@@ -305,14 +305,15 @@ class RunnableCallable(Runnable):
             if typ != (ANY_TYPE,) and p.annotation not in typ:
                 # A specific type is required, but the function annotation does
                 # not match the expected type.
+
                 # If this is a config parameter with incorrect typing, emit a warning
+                # because we used to support any type but are moving towards more correct typing
                 if kw == "config" and p.annotation != inspect.Parameter.empty:
                     warnings.warn(
                         f"The 'config' parameter should be typed as 'RunnableConfig' or "
-                        f"'Optional[RunnableConfig]', not '{p.annotation}'. "
-                        f"The config will not be injected automatically when typed incorrectly",
-                        LangGraphDeprecatedSinceV10,
-                        stacklevel=2,
+                        f"'RunnableConfig | None', not '{p.annotation}'. ",
+                        UserWarning,
+                        stacklevel=4,
                     )
                 continue
 

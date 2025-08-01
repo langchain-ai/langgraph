@@ -1,4 +1,6 @@
-from typing import Optional
+from __future__ import annotations
+
+from typing import Any, Optional
 
 import pytest
 from langchain_core.runnables import RunnableConfig
@@ -190,7 +192,9 @@ def test_deprecated_import() -> None:
         from langgraph.constants import PREVIOUS  # noqa: F401
 
 
-@pytest.mark.filterwarnings("ignore:`checkpoint_during` is deprecated")
+@pytest.mark.filterwarnings(
+    "ignore:`durability` has no effect when no checkpointer is present"
+)
 def test_checkpoint_during_deprecation_state_graph() -> None:
     class CheckDurability(TypedDict):
         durability: NotRequired[str]
@@ -234,23 +238,23 @@ def test_checkpoint_during_deprecation_state_graph() -> None:
 
 def test_config_parameter_incorrect_typing() -> None:
     """Test that a warning is raised when config parameter is typed incorrectly."""
+    builder = StateGraph(PlainState)
 
     # Test sync function with config: dict
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
-        match="The 'config' parameter should be typed as 'RunnableConfig' or 'Optional\\[RunnableConfig\\]', not '.*dict.*'. The config will not be injected automatically when typed incorrectly",
+        UserWarning,
+        match="The 'config' parameter should be typed as 'RunnableConfig' or 'RunnableConfig | None', not '.*dict.*'. ",
     ):
 
         def sync_node_with_dict_config(state: PlainState, config: dict) -> PlainState:
             return state
 
-        builder = StateGraph(PlainState)
         builder.add_node("sync_node", sync_node_with_dict_config)
 
     # Test async function with config: dict
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
-        match="The 'config' parameter should be typed as 'RunnableConfig' or 'Optional\\[RunnableConfig\\]', not '.*dict.*'. The config will not be injected automatically when typed incorrectly",
+        UserWarning,
+        match="The 'config' parameter should be typed as 'RunnableConfig' or 'RunnableConfig | None', not '.*dict.*'. ",
     ):
 
         async def async_node_with_dict_config(
@@ -258,50 +262,43 @@ def test_config_parameter_incorrect_typing() -> None:
         ) -> PlainState:
             return state
 
-        builder = StateGraph(PlainState)
         builder.add_node("async_node", async_node_with_dict_config)
 
     # Test with other incorrect types
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
-        match="The 'config' parameter should be typed as 'RunnableConfig' or 'Optional\\[RunnableConfig\\]', not '.*str.*'. The config will not be injected automatically when typed incorrectly",
+        UserWarning,
+        match="The 'config' parameter should be typed as 'RunnableConfig' or 'RunnableConfig | None', not '.*str.*'. ",
     ):
 
-        def node_with_str_config(state: PlainState, config: str) -> PlainState:
+        def node_with_str_config(state: PlainState, config: Any) -> PlainState:
             return state
 
-        builder = StateGraph(PlainState)
         builder.add_node("str_node", node_with_str_config)
 
-    # Test that no warning is raised for correct typing - RunnableConfig
     def node_with_correct_config(
         state: PlainState, config: RunnableConfig
     ) -> PlainState:
         return state
 
-    builder = StateGraph(PlainState)
-    builder.add_node(
-        "correct_node", node_with_correct_config
-    )  # Should not raise warning
+    builder.add_node("correct_node", node_with_correct_config)
 
-    # Test that no warning is raised for correct typing - Optional[RunnableConfig]
     def node_with_optional_config(
         state: PlainState, config: Optional[RunnableConfig]
     ) -> PlainState:
         return state
 
-    builder = StateGraph(PlainState)
-    builder.add_node(
-        "optional_node", node_with_optional_config
-    )  # Should not raise warning
+    builder.add_node("optional_node", node_with_optional_config)
 
-    # Test async function with correct typing
     async def async_node_with_correct_config(
         state: PlainState, config: RunnableConfig
     ) -> PlainState:
         return state
 
-    builder = StateGraph(PlainState)
-    builder.add_node(
-        "async_correct_node", async_node_with_correct_config
-    )  # Should not raise warning
+    builder.add_node("async_correct_node", async_node_with_correct_config)
+
+    def async_node_with_optional_config(
+        state: PlainState, config: Optional[RunnableConfig]
+    ) -> PlainState:
+        return state
+
+    builder.add_node("async_optional_node", async_node_with_optional_config)
