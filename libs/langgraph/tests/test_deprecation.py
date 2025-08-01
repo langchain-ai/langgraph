@@ -1,6 +1,7 @@
 import pytest
 from langchain_core.runnables import RunnableConfig
 from pytest_mock import MockerFixture
+from typing import Optional
 from typing_extensions import NotRequired, TypedDict
 
 from langgraph.channels.last_value import LastValue
@@ -228,3 +229,4 @@ def test_checkpoint_during_deprecation_state_graph() -> None:
     ):
         for chunk in graph.stream({}, checkpoint_during=False):  # type: ignore[arg-type]
             assert chunk["plain_node"]["durability"] == "exit"
+
