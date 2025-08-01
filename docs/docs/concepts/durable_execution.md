@@ -51,19 +51,28 @@ For some examples of pitfalls to avoid, see the [Common Pitfalls](./functional_a
 how to structure your code using **tasks** to avoid these issues. The same principles apply to the @[StateGraph (Graph API)][StateGraph].
 :::
 
-## Durability Modes
+## Durability modes
 
-LangGraph supports three durability modes that allow you to balance performance and data consistency based on your application's requirements. Higher durability modes add more overhead to the workflow execution.
+LangGraph supports three durability modes that allow you to balance performance and data consistency based on your application's requirements. The durability modes, from least to most durable, are as follows:
+
+- [`"exit"`](#exit)
+- [`"async"`](#async)
+- [`"sync"`](#sync)
+
+A higher durability mode add more overhead to the workflow execution.
 
 !!! version-added "Added in v0.6.0"
 
-    The `durability` parameter was added in v0.6.0. Previously, the `checkpoint_during` parameter was used
+    Use the `durability` parameter instead of `checkpoint_during` (deprecated in v0.6.0) for persistence policy management:
+    
+    * `durability="async"` replaces `checkpoint_during=True`
+    * `durability="exit"` replaces `checkpoint_during=False`
+    
     for persistence policy management, with the following mapping:
 
     * `checkpoint_during=True` -> `durability="async"`
     * `checkpoint_during=False` -> `durability="exit"`
 
-From least to most durable:
 
 ### `"exit"`
 Changes are persisted only when graph execution completes (either successfully or with an error). This provides the best performance for long-running graphs but means intermediate state is not saved, so you cannot recover from mid-execution failures or interrupt the graph execution.
