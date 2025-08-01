@@ -52,6 +52,7 @@ __all__ = (
     "StateUpdate",
     "PregelTask",
     "PregelExecutableTask",
+    "PregelScratchpad",
     "StateSnapshot",
     "Send",
     "Command",
@@ -538,4 +539,5 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
+
 
