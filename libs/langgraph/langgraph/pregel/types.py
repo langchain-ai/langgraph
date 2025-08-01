@@ -28,11 +28,11 @@ __all__ = [
 
 from warnings import warn
 
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV06
 
 warn(
     "Importing from langgraph.pregel.types is deprecated. "
     "Please use 'from langgraph.types import ...' instead.",
-    LangGraphDeprecatedSinceV10,
+    LangGraphDeprecatedSinceV06,
     stacklevel=2,
 )

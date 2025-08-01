@@ -10,7 +10,7 @@ from typing_extensions import deprecated
 # EmptyChannelError is re-exported from langgraph.channels.base
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
 from langgraph.types import Command, Interrupt
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV06
 
 __all__ = (
     "EmptyChannelError",
@@ -102,7 +102,7 @@ class NodeInterrupt(GraphInterrupt):
     def __init__(self, value: Any, id: str | None = None) -> None:
         warn(
             "NodeInterrupt is deprecated. Please use `langgraph.types.interrupt` instead.",
-            LangGraphDeprecatedSinceV10,
+            LangGraphDeprecatedSinceV06,
             stacklevel=2,
         )
         if id is None:

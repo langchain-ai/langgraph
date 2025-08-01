@@ -2,7 +2,7 @@ import pytest
 from typing_extensions import TypedDict
 
 from langgraph.prebuilt import create_react_agent
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV06
 from tests.model import FakeToolCallingModel
 
 
@@ -14,20 +14,20 @@ class Config(TypedDict):
 @pytest.mark.filterwarnings("ignore:`get_config_jsonschema` is deprecated")
 def test_config_schema_deprecation() -> None:
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
     ):
         agent = create_react_agent(FakeToolCallingModel(), [], config_schema=Config)
         assert agent.context_schema == Config
 
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
     ):
         assert agent.config_schema() is not None
 
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead.",
     ):
         assert agent.get_config_jsonschema() is not None

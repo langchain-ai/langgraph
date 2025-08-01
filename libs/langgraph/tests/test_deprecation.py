@@ -8,7 +8,7 @@ from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
 from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import Interrupt, RetryPolicy
-from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV06
 
 
 class PlainState(TypedDict): ...
@@ -74,13 +74,13 @@ def test_add_node_input_schema() -> None:
 
 def test_constants_deprecation() -> None:
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="Importing Send from langgraph.constants is deprecated. Please use 'from langgraph.types import Send' instead.",
     ):
         from langgraph.constants import Send  # noqa: F401
 
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="Importing Interrupt from langgraph.constants is deprecated. Please use 'from langgraph.types import Interrupt' instead.",
     ):
         from langgraph.constants import Interrupt  # noqa: F401
@@ -88,7 +88,7 @@ def test_constants_deprecation() -> None:
 
 def test_pregel_types_deprecation() -> None:
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="Importing from langgraph.pregel.types is deprecated. Please use 'from langgraph.types import ...' instead.",
     ):
         from langgraph.pregel.types import StateSnapshot  # noqa: F401
@@ -98,7 +98,7 @@ def test_pregel_types_deprecation() -> None:
 @pytest.mark.filterwarnings("ignore:`get_config_jsonschema` is deprecated")
 def test_config_schema_deprecation() -> None:
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
     ):
         builder = StateGraph(PlainState, config_schema=PlainState)
@@ -109,13 +109,13 @@ def test_config_schema_deprecation() -> None:
     graph = builder.compile()
 
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
     ):
         assert graph.config_schema() is not None
 
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead.",
     ):
         graph.get_config_jsonschema()
@@ -124,7 +124,7 @@ def test_config_schema_deprecation() -> None:
 @pytest.mark.filterwarnings("ignore:`config_schema` is deprecated")
 def test_config_schema_deprecation_on_entrypoint() -> None:
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
     ):
 
@@ -141,7 +141,7 @@ def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
     chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
 
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
     ):
         instance = Pregel(
@@ -164,7 +164,7 @@ def test_interrupt_attributes_deprecation() -> None:
     interrupt = Interrupt(value="question", id="abc")
 
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="`interrupt_id` is deprecated. Use `id` instead.",
     ):
         interrupt.interrupt_id
@@ -173,7 +173,7 @@ def test_interrupt_attributes_deprecation() -> None:
 @pytest.mark.filterwarnings("ignore:NodeInterrupt is deprecated.")
 def test_node_interrupt_deprecation() -> None:
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="NodeInterrupt is deprecated. Please use `langgraph.types.interrupt` instead.",
     ):
         NodeInterrupt(value="test")
@@ -181,7 +181,7 @@ def test_node_interrupt_deprecation() -> None:
 
 def test_deprecated_import() -> None:
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        LangGraphDeprecatedSinceV06,
         match="Importing PREVIOUS from langgraph.constants is deprecated. This constant is now private and should not be used directly.",
     ):
         from langgraph.constants import PREVIOUS  # noqa: F401

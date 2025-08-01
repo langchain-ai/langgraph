@@ -131,7 +131,7 @@ from langgraph.types import (
     StreamMode,
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV06
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -642,7 +642,7 @@ class Pregel(
         ) is not MISSING:
             warnings.warn(
                 "`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
-                category=LangGraphDeprecatedSinceV10,
+                category=LangGraphDeprecatedSinceV06,
                 stacklevel=2,
             )
 
@@ -790,7 +790,7 @@ class Pregel(
     def config_schema(self, *, include: Sequence[str] | None = None) -> type[BaseModel]:
         warnings.warn(
             "`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
-            category=LangGraphDeprecatedSinceV10,
+            category=LangGraphDeprecatedSinceV06,
             stacklevel=2,
         )
 
@@ -817,12 +817,12 @@ class Pregel(
     ) -> dict[str, Any]:
         warnings.warn(
             "`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead.",
-            category=LangGraphDeprecatedSinceV10,
+            category=LangGraphDeprecatedSinceV06,
             stacklevel=2,
         )
 
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=LangGraphDeprecatedSinceV10)
+            warnings.filterwarnings("ignore", category=LangGraphDeprecatedSinceV06)
             schema = self.config_schema(include=include)
         return schema.model_json_schema()
 
@@ -2509,7 +2509,7 @@ class Pregel(
             if deprecated_checkpoint_during is not None:
                 warnings.warn(
                     "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
-                    category=LangGraphDeprecatedSinceV10,
+                    category=LangGraphDeprecatedSinceV06,
                 )
             # assign defaults
             (
@@ -2789,7 +2789,7 @@ class Pregel(
             if deprecated_checkpoint_during is not None:
                 warnings.warn(
                     "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
-                    category=LangGraphDeprecatedSinceV10,
+                    category=LangGraphDeprecatedSinceV06,
                 )
             # assign defaults
             (

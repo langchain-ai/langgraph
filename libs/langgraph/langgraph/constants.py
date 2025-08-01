@@ -7,7 +7,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINTER,
     TASKS,
 )
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV06
 
 __all__ = (
     "TAG_NOSTREAM",
@@ -36,7 +36,7 @@ def __getattr__(name: str) -> Any:
         warn(
             f"Importing {name} from langgraph.constants is deprecated. "
             f"Please use 'from langgraph.types import {name}' instead.",
-            LangGraphDeprecatedSinceV10,
+            LangGraphDeprecatedSinceV06,
             stacklevel=2,
         )
 
@@ -54,7 +54,7 @@ def __getattr__(name: str) -> Any:
             f"Importing {name} from langgraph.constants is deprecated. "
             f"This constant is now private and should not be used directly. "
             "Please let the LangGraph team know if you need this value.",
-            LangGraphDeprecatedSinceV10,
+            LangGraphDeprecatedSinceV06,
             stacklevel=2,
         )
         return attr
