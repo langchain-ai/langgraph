@@ -53,17 +53,15 @@ how to structure your code using **tasks** to avoid these issues. The same princ
 
 ## Durability Modes
 
-LangGraph supports three durability modes that allow you to balance performance and data consistency based on your application's requirements. The more durable the mode, the more overhead it adds to the workflow execution.
+LangGraph supports three durability modes that allow you to balance performance and data consistency based on your application's requirements. Higher durability modes add more overhead to the workflow execution.
 
 !!! version-added "Added in v0.6.0"
 
     The `durability` parameter was added in v0.6.0. Previously, the `checkpoint_during` parameter was used
     for persistence policy management, with the following mapping:
 
-    | `checkpoint_during` value | `durability` value  |
-    | ------------------------- | ------------------- |
-    | `True`                    | `"async"`           |
-    | `False`                   | `"exit"`            |
+    * `checkpoint_during=True` -> `durability="async"`
+    * `checkpoint_during=False` -> `durability="exit"`
 
 From least to most durable:
 
