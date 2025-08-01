@@ -178,7 +178,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     managed: dict[str, ManagedValueSpec]
     schemas: dict[type[Any], dict[str, BaseChannel | ManagedValueSpec]]
     waiting_edges: set[tuple[tuple[str, ...], str]]
-    name: str = "StateGraph"
+    name: str = "LangGraph"
     compiled: bool
     state_schema: type[StateT]
     context_schema: type[ContextT] | None
