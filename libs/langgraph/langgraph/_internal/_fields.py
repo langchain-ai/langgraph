@@ -105,16 +105,21 @@ def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
             
             # Check for default_factory first
             if hasattr(field_info, 'default_factory') and field_info.default_factory is not None:
-                return field_info.default_factory()
+                # Check if it's actually set (not PydanticUndefined)
+                if (
+                    not hasattr(field_info.default_factory, '__class__')
+                    or getattr(field_info.default_factory.__class__, '__name__', '') != 'PydanticUndefinedType'
+                ):
+                    return field_info.default_factory()
             
             # Check for default value
-            if hasattr(field_info, 'default') and field_info.default is not None:
+            if hasattr(field_info, 'default'):
                 # Check if it's Pydantic's PydanticUndefined
                 if (
                     hasattr(field_info.default, '__class__')
-                    and getattr(field_info.default.__class__, '__name__', '') == 'PydanticUndefined'
+                    and getattr(field_info.default.__class__, '__name__', '') == 'PydanticUndefinedType'
                 ):
-                    pass  # No default value set
+                    pass  # No default value set, continue to other checks
                 else:
                     return field_info.default
     
