@@ -1308,7 +1308,7 @@ def _get_channels(
 
     type_hints = get_type_hints(schema, include_extras=True)
     all_keys = {
-        name: _get_channel(name, typ)
+        name: _get_channel(name, typ, schema=schema)
         for name, typ in type_hints.items()
         if name != "__slots__"
     }
@@ -1332,7 +1332,7 @@ def _get_channel(
 
 
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: bool = True
+    name: str, annotation: Any, *, allow_managed: bool = True, schema: type[Any] | None = None
 ) -> BaseChannel | ManagedValueSpec:
     if manager := _is_field_managed_value(name, annotation):
         if allow_managed:
@@ -1342,7 +1342,7 @@ def _get_channel(
     elif channel := _is_field_channel(annotation):
         channel.key = name
         return channel
-    elif channel := _is_field_binop(annotation):
+    elif channel := _is_field_binop(annotation, name, schema):
         channel.key = name
         return channel
 
@@ -1361,7 +1361,9 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
     return None
 
 
-def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
+def _is_field_binop(
+    typ: type[Any], name: str | None = None, schema: type[Any] | None = None
+) -> BinaryOperatorAggregate | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1 and callable(meta[-1]):
@@ -1374,7 +1376,12 @@ def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
                 )
                 == 2
             ):
-                return BinaryOperatorAggregate(typ, meta[-1])
+                # Get default value if schema and name are provided
+                default_value = ...
+                if name is not None and schema is not None:
+                    default_value = get_field_default(name, typ, schema)
+                
+                return BinaryOperatorAggregate(typ, meta[-1], default_value)
             else:
                 raise ValueError(
                     f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"

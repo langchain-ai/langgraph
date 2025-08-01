@@ -78,6 +78,8 @@ def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
             - Required/NotRequired
             - total=False -> everything optional
         - Type annotation (Optional/Union[None])
+        If Pydantic BaseModel:
+            - Field defaults and default_factory
     """
     optional_keys = getattr(schema, "__optional_keys__", _DEFAULT_KEYS)
     irq = _is_required_type(type_)
@@ -95,6 +97,27 @@ def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
             return ...
         # Handle NotRequired[<type>] for earlier versions of python
         return None
+    
+    # Handle Pydantic BaseModel
+    if isinstance(schema, type) and issubclass(schema, BaseModel):
+        if hasattr(schema, 'model_fields') and name in schema.model_fields:
+            field_info = schema.model_fields[name]
+            
+            # Check for default_factory first
+            if hasattr(field_info, 'default_factory') and field_info.default_factory is not None:
+                return field_info.default_factory()
+            
+            # Check for default value
+            if hasattr(field_info, 'default') and field_info.default is not None:
+                # Check if it's Pydantic's PydanticUndefined
+                if (
+                    hasattr(field_info.default, '__class__')
+                    and getattr(field_info.default.__class__, '__name__', '') == 'PydanticUndefined'
+                ):
+                    pass  # No default value set
+                else:
+                    return field_info.default
+    
     if dataclasses.is_dataclass(schema):
         field_info = next(
             (f for f in dataclasses.fields(schema) if f.name == name), None
