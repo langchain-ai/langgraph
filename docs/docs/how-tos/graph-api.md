@@ -11,7 +11,8 @@ pip install -U langgraph
 ```
 
 !!! tip "Set up LangSmith for better debugging"
-Sign up for [LangSmith](https://smith.langchain.com) to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph — read more about how to get started in the [docs](https://docs.smith.langchain.com).
+
+    Sign up for [LangSmith](https://smith.langchain.com) to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph — read more about how to get started in the [docs](https://docs.smith.langchain.com).
 
 ## Define and update state
 
@@ -57,7 +58,8 @@ def node(state: State):
 This node simply appends a message to our message list, and populates an extra field.
 
 !!! important
-Nodes should return updates to the state directly, instead of mutating the state.
+
+    Nodes should return updates to the state directly, instead of mutating the state.
 
 Let's next define a simple graph containing this node. We use [StateGraph](../concepts/low_level.md#stategraph) to define a graph that operates on this state. We then use [add_node](../concepts/low_level.md#nodes) populate our graph.
 
@@ -341,7 +343,12 @@ In our examples, we typically use a python-native `TypedDict` or [`dataclass`](h
 
 Here, we'll see how a [Pydantic BaseModel](https://docs.pydantic.dev/latest/api/base_model/) can be used for `state_schema` to add run-time validation on **inputs**.
 
-!!! note "Known Limitations" - Currently, the output of the graph will **NOT** be an instance of a pydantic model. - Run-time validation only occurs on inputs into nodes, not on the outputs. - The validation error trace from pydantic does not show which node the error arises in. - Pydantic's recursive validation can be slow. For performance-sensitive applications, you may want to consider using a `dataclass` instead.
+!!! note "Known Limitations" 
+
+    - Currently, the output of the graph will **NOT** be an instance of a pydantic model. 
+    - Run-time validation only occurs on inputs into nodes, not on the outputs. 
+    - The validation error trace from pydantic does not show which node the error arises in. 
+    - Pydantic's recursive validation can be slow. For performance-sensitive applications, you may want to consider using a `dataclass` instead.
 
 ```python
 from langgraph.graph import StateGraph, START, END
@@ -762,7 +769,8 @@ graph = builder.compile(cache=InMemoryCache())
 ## Create a sequence of steps
 
 !!! info "Prerequisites"
-This guide assumes familiarity with the above section on [state](#define-and-update-state).
+
+    This guide assumes familiarity with the above section on [state](#define-and-update-state).
 
 Here we demonstrate how to construct a simple sequence of steps. We will show:
 
@@ -838,7 +846,8 @@ def step_3(state: State):
 ```
 
 !!! note
-Note that when issuing updates to the state, each node can just specify the value of the key it wishes to update.
+
+    Note that when issuing updates to the state, each node can just specify the value of the key it wishes to update.
 
     By default, this will **overwrite** the value of the corresponding key. You can also use [reducers](../concepts/low_level.md#reducers) to control how updates are processed— for example, you can append successive updates to a key instead. See [this section](#process-state-updates-with-reducers) for more detail.
 
@@ -865,7 +874,8 @@ builder.add_edge("step_2", "step_3")
 ```
 
 !!! tip "Specifying custom names"
-You can specify custom names for nodes using `.add_node`:
+
+    You can specify custom names for nodes using `.add_node`:
 
     ```python
     builder.add_node("my_node", step_1)
@@ -911,7 +921,8 @@ Note that:
 - The third node populated a different value.
 
 !!! tip "Built-in shorthand"
-`langgraph>=0.2.46` includes a built-in short-hand `add_sequence` for adding node sequences. You can compile the same graph as follows:
+
+    `langgraph>=0.2.46` includes a built-in short-hand `add_sequence` for adding node sequences. You can compile the same graph as follows:
 
     ```python
     # highlight-next-line
@@ -993,12 +1004,14 @@ Adding "D" to ['A', 'B', 'C']
 ```
 
 !!! note
-In the above example, nodes `"b"` and `"c"` are executed concurrently in the same [superstep](../concepts/low_level.md#graphs). Because they are in the same step, node `"d"` executes after both `"b"` and `"c"` are finished.
+
+    In the above example, nodes `"b"` and `"c"` are executed concurrently in the same [superstep](../concepts/low_level.md#graphs). Because they are in the same step, node `"d"` executes after both `"b"` and `"c"` are finished.
 
     Importantly, updates from a parallel superstep may not be ordered consistently. If you need a consistent, predetermined ordering of updates from a parallel superstep, you should write the outputs to a separate field in the state together with a value with which to order them.
 
 ??? note "Exception handling?"
-LangGraph executes nodes within [supersteps](../concepts/low_level.md#graphs), meaning that while parallel branches are executed in parallel, the entire superstep is **transactional**. If any of these branches raises an exception, **none** of the updates are applied to the state (the entire superstep errors).
+
+    LangGraph executes nodes within [supersteps](../concepts/low_level.md#graphs), meaning that while parallel branches are executed in parallel, the entire superstep is **transactional**. If any of these branches raises an exception, **none** of the updates are applied to the state (the entire superstep errors).
 
     Importantly, when using a [checkpointer](../concepts/persistence.md), results from successful nodes within a superstep are saved, and don't repeat when resumed.
 
@@ -1152,7 +1165,8 @@ Adding "C" to ['A']
 ```
 
 !!! tip
-Your conditional edges can route to multiple destination nodes. For example:
+
+    Your conditional edges can route to multiple destination nodes. For example:
 
     ```python
     def route_bc_or_cd(state: State) -> Sequence[str]:
@@ -1237,7 +1251,8 @@ You can also set the graph recursion limit when invoking or streaming the graph.
 Let's consider a simple graph with a loop to better understand how these mechanisms work.
 
 !!! tip
-To return the last value of your state instead of receiving a recursion limit error, see the [next section](#impose-a-recursion-limit).
+
+    To return the last value of your state instead of receiving a recursion limit error, see the [next section](#impose-a-recursion-limit).
 
 When creating a loop, you can include a conditional edge that specifies a termination condition:
 
@@ -1554,7 +1569,8 @@ result = await graph.ainvoke({"messages": [input_message]}) # (3)!
 3. Use async invocations on the graph object itself.
 
 !!! tip "Async streaming"
-See the [streaming guide](./streaming.md) for examples of streaming with async.
+
+    See the [streaming guide](./streaming.md) for examples of streaming with async.
 
 ## Combine control flow and state updates with `Command`
 
@@ -1624,7 +1640,8 @@ graph = builder.compile()
 ```
 
 !!! important
-You might have noticed that we used `Command` as a return type annotation, e.g. `Command[Literal["node_b", "node_c"]]`. This is necessary for the graph rendering and tells LangGraph that `node_a` can navigate to `node_b` and `node_c`.
+
+    You might have noticed that we used `Command` as a return type annotation, e.g. `Command[Literal["node_b", "node_c"]]`. This is necessary for the graph rendering and tells LangGraph that `node_a` can navigate to `node_b` and `node_c`.
 
 ```python
 from IPython.display import display, Image
@@ -1661,7 +1678,8 @@ def my_node(state: State) -> Command[Literal["my_other_node"]]:
 Let's demonstrate this using the above example. We'll do so by changing `node_a` in the above example into a single-node graph that we'll add as a subgraph to our parent graph.
 
 !!! important "State updates with `Command.PARENT`"
-When you send updates from a subgraph node to a parent graph node for a key that's shared by both parent and subgraph [state schemas](../concepts/low_level.md#schema), you **must** define a [reducer](../concepts/low_level.md#reducers) for the key you're updating in the parent graph state. See the example below.
+
+    When you send updates from a subgraph node to a parent graph node for a key that's shared by both parent and subgraph [state schemas](../concepts/low_level.md#schema), you **must** define a [reducer](../concepts/low_level.md#reducers) for the key you're updating in the parent graph state. See the example below.
 
 ```python
 import operator
@@ -1744,7 +1762,8 @@ def lookup_user_info(tool_call_id: Annotated[str, InjectedToolCallId], config: R
 ```
 
 !!! important
-You MUST include `messages` (or any state key used for the message history) in `Command.update` when returning `Command` from a tool and the list of messages in `messages` MUST contain a `ToolMessage`. This is necessary for the resulting message history to be valid (LLM providers require AI messages with tool calls to be followed by the tool result messages).
+
+    You MUST include `messages` (or any state key used for the message history) in `Command.update` when returning `Command` from a tool and the list of messages in `messages` MUST contain a `ToolMessage`. This is necessary for the resulting message history to be valid (LLM providers require AI messages with tool calls to be followed by the tool result messages).
 
 If you are using tools that update state via `Command`, we recommend using prebuilt [`ToolNode`](../reference/agents.md#langgraph.prebuilt.tool_node.ToolNode) which automatically handles tools returning `Command` objects and propagates them to the graph state. If you're writing a custom node that calls tools, you would need to manually propagate `Command` objects returned by the tools as the update from the node.
 
