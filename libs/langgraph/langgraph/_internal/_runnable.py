@@ -305,6 +305,15 @@ class RunnableCallable(Runnable):
             if typ != (ANY_TYPE,) and p.annotation not in typ:
                 # A specific type is required, but the function annotation does
                 # not match the expected type.
+                # If this is a config parameter with incorrect typing, emit a warning
+                if kw == "config" and p.annotation != inspect.Parameter.empty:
+                    warnings.warn(
+                        f"The 'config' parameter should be typed as 'RunnableConfig' or "
+                        f"'Optional[RunnableConfig]', not '{p.annotation}'. "
+                        f"The config will not be injected automatically when typed incorrectly",
+                        LangGraphDeprecatedSinceV10,
+                        stacklevel=2,
+                    )
                 continue
 
             # If the kwarg is accepted by the function, store the key / runtime attribute to inject
@@ -904,4 +913,5 @@ async def _consume_aiter(it: AsyncIterator[Any]) -> Any:
         else:
             output = chunk
     return output
+
 
