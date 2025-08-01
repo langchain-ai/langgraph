@@ -249,7 +249,7 @@ def test_config_parameter_incorrect_typing() -> None:
         def sync_node_with_dict_config(state: PlainState, config: dict) -> PlainState:
             return state
 
-        builder.add_node("sync_node", sync_node_with_dict_config)
+        builder.add_node(sync_node_with_dict_config)
 
     # Test async function with config: dict
     with pytest.warns(
@@ -262,43 +262,67 @@ def test_config_parameter_incorrect_typing() -> None:
         ) -> PlainState:
             return state
 
-        builder.add_node("async_node", async_node_with_dict_config)
+        builder.add_node(async_node_with_dict_config)
 
     # Test with other incorrect types
     with pytest.warns(
         UserWarning,
-        match="The 'config' parameter should be typed as 'RunnableConfig' or 'RunnableConfig | None', not '.*str.*'. ",
+        match="The 'config' parameter should be typed as 'RunnableConfig' or 'RunnableConfig | None', not '.*Any.*'. ",
     ):
 
-        def node_with_str_config(state: PlainState, config: Any) -> PlainState:
+        def sync_node_with_any_config(state: PlainState, config: Any) -> PlainState:
             return state
 
-        builder.add_node("str_node", node_with_str_config)
+        builder.add_node(sync_node_with_any_config)
+
+    with pytest.warns(
+        UserWarning,
+        match="The 'config' parameter should be typed as 'RunnableConfig' or 'RunnableConfig | None', not '.*Any.*'. ",
+    ):
+
+        async def async_node_with_any_config(
+            state: PlainState, config: Any
+        ) -> PlainState:
+            return state
+
+        builder.add_node(async_node_with_any_config)
 
     def node_with_correct_config(
         state: PlainState, config: RunnableConfig
     ) -> PlainState:
         return state
 
-    builder.add_node("correct_node", node_with_correct_config)
+    builder.add_node(node_with_correct_config)
 
     def node_with_optional_config(
-        state: PlainState, config: Optional[RunnableConfig]
+        state: PlainState,
+        config: Optional[RunnableConfig],  # noqa: UP045
     ) -> PlainState:
         return state
 
-    builder.add_node("optional_node", node_with_optional_config)
+    builder.add_node(node_with_optional_config)
+
+    def node_with_untyped_config(state: PlainState, config) -> PlainState:
+        return state
+
+    builder.add_node(node_with_untyped_config)
 
     async def async_node_with_correct_config(
         state: PlainState, config: RunnableConfig
     ) -> PlainState:
         return state
 
-    builder.add_node("async_correct_node", async_node_with_correct_config)
+    builder.add_node(async_node_with_correct_config)
 
     def async_node_with_optional_config(
-        state: PlainState, config: Optional[RunnableConfig]
+        state: PlainState,
+        config: Optional[RunnableConfig],  # noqa: UP045
     ) -> PlainState:
         return state
 
-    builder.add_node("async_optional_node", async_node_with_optional_config)
+    builder.add_node(async_node_with_optional_config)
+
+    def async_node_with_untyped_config(state: PlainState, config) -> PlainState:
+        return state
+
+    builder.add_node(async_node_with_untyped_config)
