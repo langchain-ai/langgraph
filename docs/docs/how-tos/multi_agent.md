@@ -57,7 +57,7 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
     return handoff_tool
 ```
 
-1. Access the [state](../concepts/low_level.md#state) of the agent that is calling the handoff tool using the @[InjectedState][InjectedState] annotation. 
+1. Access the [state](../concepts/low_level.md#state) of the agent that is calling the handoff tool using the @[InjectedState] annotation. 
 2. The `Command` primitive allows specifying a state update and a node transition as a single operation, making it useful for implementing handoffs.
 3. Name of the agent or node to hand off to.
 4. Take the agent's messages and **add** them to the parent's **state** as part of the handoff. The next agent will see the parent state.
