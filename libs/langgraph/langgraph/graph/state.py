@@ -128,6 +128,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             Use this to expose immutable context data to your nodes, like user_id, db_conn, etc.
         input_schema: The schema class that defines the input to the graph.
         output_schema: The schema class that defines the output from the graph.
+        name: The default name to use when compiling the graph.
 
     !!! warning "`config_schema` Deprecated"
         The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
@@ -177,7 +178,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     managed: dict[str, ManagedValueSpec]
     schemas: dict[type[Any], dict[str, BaseChannel | ManagedValueSpec]]
     waiting_edges: set[tuple[tuple[str, ...], str]]
-
+    name: str = "StateGraph"
     compiled: bool
     state_schema: type[StateT]
     context_schema: type[ContextT] | None
@@ -874,7 +875,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             debug=debug,
             store=store,
             cache=cache,
-            name=name or "LangGraph",
+            name=name or self.name,
         )
 
         compiled.attach_node(START, None)
