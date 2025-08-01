@@ -538,6 +538,3 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
-
-
-

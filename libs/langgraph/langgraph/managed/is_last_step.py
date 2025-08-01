@@ -22,4 +22,3 @@ class RemainingStepsManager(ManagedValue[int]):
 
 
 RemainingSteps = Annotated[int, RemainingStepsManager]
-

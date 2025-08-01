@@ -100,7 +100,6 @@ from langgraph.pregel._io import (
     read_channels,
 )
 from langgraph.pregel._read import PregelNode
-from langgraph.types import PregelScratchpad
 from langgraph.pregel._utils import get_new_channel_versions, is_xxh3_128_hexdigest
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
@@ -115,6 +114,7 @@ from langgraph.types import (
     Command,
     Durability,
     PregelExecutableTask,
+    PregelScratchpad,
     RetryPolicy,
     StreamMode,
 )
@@ -1233,4 +1233,3 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             # consumer to await it before e.g., reusing the DB connection.
             e.args = (*e.args, exit_task)
             raise
-

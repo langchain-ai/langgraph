@@ -36,10 +36,10 @@ from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.pregel._algo import Call
 from langgraph.pregel._executor import Submit
 from langgraph.pregel._retry import arun_with_retry, run_with_retry
-from langgraph.types import PregelScratchpad
 from langgraph.types import (
     CachePolicy,
     PregelExecutableTask,
+    PregelScratchpad,
     RetryPolicy,
 )
 
@@ -758,4 +758,3 @@ async def _acall_impl(
             destination.set_exception(RuntimeError("Task not scheduled"))
     except Exception as exc:
         destination.set_exception(exc)
-
