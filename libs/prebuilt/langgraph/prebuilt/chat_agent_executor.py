@@ -67,7 +67,7 @@ class AgentState(TypedDict):
 
     is_last_step: IsLastStep
 
-    remaining_steps: RemainingSteps
+    remaining_steps: NotRequired[RemainingSteps]
 
 
 class AgentStatePydantic(BaseModel):
@@ -962,4 +962,5 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
