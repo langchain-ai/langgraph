@@ -1394,7 +1394,7 @@ def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | Non
     origin = get_origin(typ)
     if origin is not None:
         # Check if this is a NotRequired type (from typing_extensions)
-        if hasattr(origin, '__name__') and origin.__name__ == 'NotRequired':
+        if hasattr(origin, "__name__") and origin.__name__ == "NotRequired":
             # Extract the inner type from NotRequired[T]
             args = get_args(typ)
             if args:
@@ -1440,4 +1440,3 @@ def _get_json_schema(
                     if k in channels and isinstance(channels[k], BaseChannel)
                 },
             ).model_json_schema()
-
