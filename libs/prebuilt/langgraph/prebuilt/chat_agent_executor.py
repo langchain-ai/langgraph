@@ -34,7 +34,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
-from typing_extensions import Annotated, TypedDict
+from typing_extensions import Annotated, NotRequired, TypedDict
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
@@ -962,3 +962,4 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
