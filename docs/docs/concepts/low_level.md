@@ -701,7 +701,8 @@ graph.addConditionalEdges("nodeA", routingFunction, {
 :::
 
 !!! tip
-Use [`Command`](#command) instead of conditional edges if you want to combine state updates and routing in a single function.
+
+    Use [`Command`](#command) instead of conditional edges if you want to combine state updates and routing in a single function.
 
 ### Entry Point
 
