@@ -105,7 +105,9 @@ def generate_package_table(resolved_packages: List[ResolvedPackage]) -> str:
         )
         stars = f"![GitHub stars]({stars_badge})"
         downloads = package["weekly_downloads"] or "-"
-        row = f"| {name} | {repo_url} | {package['description']} | {downloads} | {stars}"
+        row = (
+            f"| {name} | {repo_url} | {package['description']} | {downloads} | {stars}"
+        )
         rows.append(row)
     return "\n".join(rows)
 
