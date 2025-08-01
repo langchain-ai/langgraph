@@ -4,6 +4,7 @@ import asyncio
 import enum
 import inspect
 import sys
+import warnings
 from collections.abc import (
     AsyncIterator,
     Awaitable,
@@ -55,6 +56,7 @@ from langgraph._internal._constants import (
 from langgraph._internal._typing import MISSING
 from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -902,3 +904,4 @@ async def _consume_aiter(it: AsyncIterator[Any]) -> Any:
         else:
             output = chunk
     return output
+
