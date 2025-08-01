@@ -103,6 +103,20 @@ else:
     _DC_KWARGS = {"frozen": True}
 
 
+@dataclass(**_DC_KWARGS)
+class PregelScratchpad:
+    step: int
+    stop: int
+    # call
+    call_counter: Callable[[], int]
+    # interrupt
+    interrupt_counter: Callable[[], int]
+    get_null_resume: Callable[[bool], Any]
+    resume: list[Any]
+    # subgraph
+    subgraph_counter: Callable[[], int]
+
+
 class RetryPolicy(NamedTuple):
     """Configuration for retrying nodes.
 
@@ -524,3 +538,4 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
+
