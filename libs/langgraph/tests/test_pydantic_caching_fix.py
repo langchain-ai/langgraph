@@ -135,7 +135,7 @@ def test_pydantic_cache_key_consistency():
 
 
 def test_pydantic_pickle_hash_consistency():
-    
+    """Test pickle hash consistency for Pydantic models."""
     # Create two identical Pydantic models (same logical content)
     user_request1 = UserRequest(name="test_user", email="test@example.com", user_id=42)
     user_request2 = UserRequest(name="test_user", email="test@example.com", user_id=42)
