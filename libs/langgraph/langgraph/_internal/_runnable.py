@@ -4,6 +4,7 @@ import asyncio
 import enum
 import inspect
 import sys
+import warnings
 from collections.abc import (
     AsyncIterator,
     Awaitable,
@@ -132,7 +133,13 @@ ASYNCIO_ACCEPTS_CONTEXT = sys.version_info >= (3, 11)
 KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
     (
         "config",
-        (RunnableConfig, "RunnableConfig", inspect.Parameter.empty),
+        (
+            RunnableConfig,
+            "RunnableConfig",
+            Optional[RunnableConfig],
+            "Optional[RunnableConfig]",
+            inspect.Parameter.empty,
+        ),
         # for now, use config directly, eventually, will pop off of Runtime
         "N/A",
         inspect.Parameter.empty,
@@ -297,6 +304,16 @@ class RunnableCallable(Runnable):
             if typ != (ANY_TYPE,) and p.annotation not in typ:
                 # A specific type is required, but the function annotation does
                 # not match the expected type.
+
+                # If this is a config parameter with incorrect typing, emit a warning
+                # because we used to support any type but are moving towards more correct typing
+                if kw == "config" and p.annotation != inspect.Parameter.empty:
+                    warnings.warn(
+                        f"The 'config' parameter should be typed as 'RunnableConfig' or "
+                        f"'RunnableConfig | None', not '{p.annotation}'. ",
+                        UserWarning,
+                        stacklevel=4,
+                    )
                 continue
 
             # If the kwarg is accepted by the function, store the key / runtime attribute to inject

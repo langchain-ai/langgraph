@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 import pytest
+from langchain_core.runnables.config import RunnableConfig
 
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.runtime import Runtime
@@ -370,3 +371,26 @@ async def test_runnable_callable_injectable_arguments_async() -> None:
         )
         == "success"
     )
+
+
+def test_config_injection() -> None:
+    def func(x: Any, config: RunnableConfig) -> list[str]:
+        return config.get("tags", [])
+
+    assert RunnableCallable(func).invoke(
+        "test", config={"tags": ["test"], "configurable": {}}
+    ) == ["test"]
+
+    def func_optional(x: Any, config: Optional[RunnableConfig]) -> list[str]:  # noqa: UP045
+        return config.get("tags", []) if config else []
+
+    assert RunnableCallable(func_optional).invoke(
+        "test", config={"tags": ["test"], "configurable": {}}
+    ) == ["test"]
+
+    def func_untyped(x: Any, config) -> list[str]:
+        return config.get("tags", [])
+
+    assert RunnableCallable(func_untyped).invoke(
+        "test", config={"tags": ["test"], "configurable": {}}
+    ) == ["test"]

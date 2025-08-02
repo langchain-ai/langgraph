@@ -16,6 +16,7 @@ Checkpoints capture the state of conversation threads. Setting a TTL ensures old
 
 Add a `checkpointer.ttl` configuration to your `langgraph.json` file:
 
+:::python
 ```json
 {
   "dependencies": ["."],
@@ -31,6 +32,25 @@ Add a `checkpointer.ttl` configuration to your `langgraph.json` file:
   }
 }
 ```
+:::
+
+:::js
+```json
+{
+  "dependencies": ["."],
+  "graphs": {
+    "agent": "./agent.ts:graph"
+  },
+  "checkpointer": {
+    "ttl": {
+      "strategy": "delete",
+      "sweep_interval_minutes": 60,
+      "default_ttl": 43200 
+    }
+  }
+}
+```
+:::
 
 *   `strategy`: Specifies the action taken on expiration. Currently, only `"delete"` is supported, which deletes all checkpoints in the thread upon expiration.
 *   `sweep_interval_minutes`: Defines how often, in minutes, the system checks for expired checkpoints.
@@ -42,6 +62,7 @@ Store items allow cross-thread data persistence. Configuring TTL for store items
 
 Add a `store.ttl` configuration to your `langgraph.json` file:
 
+:::python
 ```json
 {
   "dependencies": ["."],
@@ -57,6 +78,25 @@ Add a `store.ttl` configuration to your `langgraph.json` file:
   }
 }
 ```
+:::
+
+:::js
+```json
+{
+  "dependencies": ["."],
+  "graphs": {
+    "agent": "./agent.ts:graph"
+  },
+  "store": {
+    "ttl": {
+      "refresh_on_read": true,
+      "sweep_interval_minutes": 120,
+      "default_ttl": 10080
+    }
+  }
+}
+```
+:::
 
 *   `refresh_on_read`: (Optional, default `true`) If `true`, accessing an item via `get` or `search` resets its expiration timer. If `false`, TTL only refreshes on `put`.
 *   `sweep_interval_minutes`: (Optional) Defines how often, in minutes, the system checks for expired items. If omitted, no sweeping occurs.
@@ -66,6 +106,7 @@ Add a `store.ttl` configuration to your `langgraph.json` file:
 
 You can configure TTLs for both checkpoints and store items in the same `langgraph.json` file to set different policies for each data type. Here is an example:
 
+:::python
 ```json
 {
   "dependencies": ["."],
@@ -88,6 +129,32 @@ You can configure TTLs for both checkpoints and store items in the same `langgra
   }
 }
 ```
+:::
+
+:::js
+```json
+{
+  "dependencies": ["."],
+  "graphs": {
+    "agent": "./agent.ts:graph"
+  },
+  "checkpointer": {
+    "ttl": {
+      "strategy": "delete",
+      "sweep_interval_minutes": 60,
+      "default_ttl": 43200
+    }
+  },
+  "store": {
+    "ttl": {
+      "refresh_on_read": true,
+      "sweep_interval_minutes": 120,
+      "default_ttl": 10080
+    }
+  }
+}
+```
+:::
 
 ## Runtime Overrides
 
@@ -97,6 +164,4 @@ The default `store.ttl` settings from `langgraph.json` can be overridden at runt
 
 After configuring TTLs in `langgraph.json`, deploy or restart your LangGraph application for the changes to take effect. Use `langgraph dev` for local development or `langgraph up` for Docker deployment.
 
-
-See the [langgraph.json CLI reference][configuration-file] for more details on the other configurable options.
-
+See the @[langgraph.json CLI reference][langgraph.json] for more details on the other configurable options.

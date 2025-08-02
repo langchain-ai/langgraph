@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass
-from typing import Any, Callable, Generic, Optional, Union, cast, get_type_hints
+from typing import Any, Callable, Generic, Union, cast, get_type_hints
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -72,7 +72,7 @@ from langgraph._internal._runnable import (
     RunnableSeq,
     coerce_to_runnable,
 )
-from langgraph._internal._typing import DeprecatedKwargs
+from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -116,7 +116,7 @@ from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
-from langgraph.runtime import Runtime
+from langgraph.runtime import DEFAULT_RUNTIME, Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
@@ -636,7 +636,9 @@ class Pregel(
         name: str = "LangGraph",
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
-        if config_type := deprecated_kwargs.get("config_type"):
+        if (
+            config_type := deprecated_kwargs.get("config_type", MISSING)
+        ) is not MISSING:
             warnings.warn(
                 "`config_type` is deprecated and will be removed. Please use `context_schema` instead.",
                 category=LangGraphDeprecatedSinceV10,
@@ -782,7 +784,8 @@ class Pregel(
         return self
 
     @deprecated(
-        "`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead."
+        "`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
+        category=None,
     )
     def config_schema(self, *, include: Sequence[str] | None = None) -> type[BaseModel]:
         warnings.warn(
@@ -807,7 +810,8 @@ class Pregel(
         return create_model(self.get_name("Config"), field_definitions=fields)
 
     @deprecated(
-        "`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead."
+        "`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead.",
+        category=None,
     )
     def get_config_jsonschema(
         self, *, include: Sequence[str] | None = None
@@ -1302,7 +1306,7 @@ class Pregel(
     ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         config = ensure_config(config)
-        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointSaver | None = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -2348,7 +2352,6 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None,
         interrupt_after: All | Sequence[str] | None,
         durability: Durability | None = None,
-        checkpoint_during: bool | None = None,
     ) -> tuple[
         set[StreamMode],
         str | Sequence[str],
@@ -2396,15 +2399,6 @@ class Pregel(
             cache: BaseCache | None = config[CONF][CONFIG_KEY_CACHE]
         else:
             cache = self.cache
-        if checkpoint_during is not None:
-            if durability is not None:
-                raise ValueError(
-                    "Cannot use both `checkpoint_during` and `durability` parameters."
-                )
-            elif checkpoint_during:
-                durability = "async"
-            else:
-                durability = "exit"
         if durability is None:
             durability = config.get(CONF, {}).get(CONFIG_KEY_DURABILITY, "async")
         return (
@@ -2477,6 +2471,17 @@ class Pregel(
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
         """
+        if (checkpoint_during := kwargs.get("checkpoint_during")) is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+            if durability is not None:
+                raise ValueError(
+                    "Cannot use both `checkpoint_during` and `durability` parameters. Please use `durability` instead."
+                )
+            durability = "async" if checkpoint_during else "exit"
 
         if stream_mode is None:
             # if being called as a node in another graph, default to values mode
@@ -2500,14 +2505,6 @@ class Pregel(
             run_id=config.get("run_id"),
         )
         try:
-            deprecated_checkpoint_during = cast(
-                Optional[bool], kwargs.get("checkpoint_during")
-            )
-            if deprecated_checkpoint_during is not None:
-                warnings.warn(
-                    "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
-                    category=LangGraphDeprecatedSinceV10,
-                )
             # assign defaults
             (
                 stream_modes,
@@ -2526,11 +2523,8 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
-                checkpoint_during=deprecated_checkpoint_during,
             )
-            if checkpointer is None and (
-                durability is not None or deprecated_checkpoint_during is not None
-            ):
+            if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
                 )
@@ -2567,15 +2561,19 @@ class Pregel(
                     pass
 
             # set durability mode for subgraphs
-            if durability is not None or deprecated_checkpoint_during is not None:
+            if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
-            config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
-                context=context,
+            runtime = Runtime(
+                context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
             )
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            runtime = parent_runtime.merge(runtime)
+            config[CONF][CONFIG_KEY_RUNTIME] = runtime
+
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
@@ -2734,6 +2732,17 @@ class Pregel(
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
         """
+        if (checkpoint_during := kwargs.get("checkpoint_during")) is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+                category=LangGraphDeprecatedSinceV10,
+                stacklevel=2,
+            )
+            if durability is not None:
+                raise ValueError(
+                    "Cannot use both `checkpoint_during` and `durability` parameters. Please use `durability` instead."
+                )
+            durability = "async" if checkpoint_during else "exit"
 
         if stream_mode is None:
             # if being called as a node in another graph, default to values mode
@@ -2776,14 +2785,6 @@ class Pregel(
             else False
         )
         try:
-            deprecated_checkpoint_during = cast(
-                Optional[bool], kwargs.get("checkpoint_during")
-            )
-            if deprecated_checkpoint_during is not None:
-                warnings.warn(
-                    "`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
-                    category=LangGraphDeprecatedSinceV10,
-                )
             # assign defaults
             (
                 stream_modes,
@@ -2802,11 +2803,8 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
-                checkpoint_during=deprecated_checkpoint_during,
             )
-            if checkpointer is None and (
-                durability is not None or deprecated_checkpoint_during is not None
-            ):
+            if checkpointer is None and durability is not None:
                 warnings.warn(
                     "`durability` has no effect when no checkpointer is present.",
                 )
@@ -2858,15 +2856,19 @@ class Pregel(
                     pass
 
             # set durability mode for subgraphs
-            if durability is not None or deprecated_checkpoint_during is not None:
+            if durability is not None:
                 config[CONF][CONFIG_KEY_DURABILITY] = durability_
 
-            config[CONF][CONFIG_KEY_RUNTIME] = Runtime(
-                context=context,
+            runtime = Runtime(
+                context=_coerce_context(self.context_schema, context),
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
             )
+            parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
+            runtime = parent_runtime.merge(runtime)
+            config[CONF][CONFIG_KEY_RUNTIME] = runtime
+
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
@@ -2979,6 +2981,7 @@ class Pregel(
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Run the graph with a single input and config.
@@ -2993,6 +2996,10 @@ class Pregel(
             output_keys: Optional. The output keys to retrieve from the graph run.
             interrupt_before: Optional. The nodes to interrupt the graph run before.
             interrupt_after: Optional. The nodes to interrupt the graph run after.
+            durability: The durability mode for the graph execution, defaults to "async". Options are:
+                - `"sync"`: Changes are persisted synchronously before the next step starts.
+                - `"async"`: Changes are persisted asynchronously while the next step executes.
+                - `"exit"`: Changes are persisted only when the graph exits.
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
@@ -3016,6 +3023,7 @@ class Pregel(
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            durability=durability,
             **kwargs,
         ):
             if stream_mode == "values":
@@ -3058,6 +3066,7 @@ class Pregel(
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Asynchronously invoke the graph on a single input.
@@ -3072,6 +3081,10 @@ class Pregel(
             output_keys: Optional. The output keys to include in the result. Default is None.
             interrupt_before: Optional. The nodes to interrupt before. Default is None.
             interrupt_after: Optional. The nodes to interrupt after. Default is None.
+            durability: The durability mode for the graph execution, defaults to "async". Options are:
+                - `"sync"`: Changes are persisted synchronously before the next step starts.
+                - `"async"`: Changes are persisted asynchronously while the next step executes.
+                - `"exit"`: Changes are persisted only when the graph exits.
             **kwargs: Additional keyword arguments.
 
         Returns:
@@ -3096,6 +3109,7 @@ class Pregel(
             output_keys=output_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            durability=durability,
             **kwargs,
         ):
             if stream_mode == "values":
@@ -3216,3 +3230,33 @@ def _output(
                 yield (ns, payload)
             else:
                 yield payload
+
+
+def _coerce_context(
+    context_schema: type[ContextT] | None, context: Any
+) -> ContextT | None:
+    """Coerce context input to the appropriate schema type.
+
+    If context is a dict and context_schema is a dataclass or pydantic model, we coerce.
+    Else, we return the context as-is.
+
+    Args:
+        context_schema: The schema type to coerce to (BaseModel, dataclass, or TypedDict)
+        context: The context value to coerce
+
+    Returns:
+        The coerced context value or None if context is None
+    """
+    if context is None:
+        return None
+
+    if context_schema is None:
+        return context
+
+    schema_is_class = issubclass(context_schema, BaseModel) or is_dataclass(
+        context_schema
+    )
+    if isinstance(context, dict) and schema_is_class:
+        return context_schema(**context)  # type: ignore[misc]
+
+    return cast(ContextT, context)
