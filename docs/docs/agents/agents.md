@@ -29,7 +29,7 @@ pip install -U langgraph "langchain[anthropic]"
 
 !!! info
 
-    LangChain is installed so the agent can call the [model](https://python.langchain.com/docs/integrations/chat/).
+    `langchain[anthropic]` is installed so the agent can call the [model](https://python.langchain.com/docs/integrations/chat/).
 
 :::
 
@@ -41,7 +41,7 @@ npm install @langchain/langgraph @langchain/core @langchain/anthropic
 
 !!! info
 
-    LangChain is installed so the agent can call the [model](https://js.langchain.com/docs/integrations/chat/).
+    `@langchain/core` `@langchain/anthropic` are installed so the agent can call the [model](https://js.langchain.com/docs/integrations/chat/).
 
 :::
 
