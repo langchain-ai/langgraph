@@ -1,6 +1,12 @@
+from __future__ import annotations
+
+import warnings
+from typing import Any, Optional
+
 import pytest
+from langchain_core.runnables import RunnableConfig
 from pytest_mock import MockerFixture
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from langgraph.channels.last_value import LastValue
 from langgraph.errors import NodeInterrupt
@@ -94,8 +100,6 @@ def test_pregel_types_deprecation() -> None:
         from langgraph.pregel.types import StateSnapshot  # noqa: F401
 
 
-@pytest.mark.filterwarnings("ignore:`config_schema` is deprecated")
-@pytest.mark.filterwarnings("ignore:`get_config_jsonschema` is deprecated")
 def test_config_schema_deprecation() -> None:
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
@@ -121,7 +125,6 @@ def test_config_schema_deprecation() -> None:
         graph.get_config_jsonschema()
 
 
-@pytest.mark.filterwarnings("ignore:`config_schema` is deprecated")
 def test_config_schema_deprecation_on_entrypoint() -> None:
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
@@ -132,10 +135,15 @@ def test_config_schema_deprecation_on_entrypoint() -> None:
         def my_entrypoint(state: PlainState) -> PlainState:
             return state
 
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`config_schema` is deprecated. Use `get_context_jsonschema` for the relevant schema instead.",
+    ):
         assert my_entrypoint.context_schema == PlainState
         assert my_entrypoint.config_schema() is not None
 
 
+@pytest.mark.filterwarnings("ignore:`config_type` is deprecated")
 def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
@@ -159,7 +167,6 @@ def test_config_type_deprecation_pregel(mocker: MockerFixture) -> None:
         assert instance.context_schema == PlainState
 
 
-@pytest.mark.filterwarnings("ignore:`interrupt_id` is deprecated. Use `id` instead.")
 def test_interrupt_attributes_deprecation() -> None:
     interrupt = Interrupt(value="question", id="abc")
 
@@ -170,7 +177,6 @@ def test_interrupt_attributes_deprecation() -> None:
         interrupt.interrupt_id
 
 
-@pytest.mark.filterwarnings("ignore:NodeInterrupt is deprecated.")
 def test_node_interrupt_deprecation() -> None:
     with pytest.warns(
         LangGraphDeprecatedSinceV10,
@@ -185,3 +191,144 @@ def test_deprecated_import() -> None:
         match="Importing PREVIOUS from langgraph.constants is deprecated. This constant is now private and should not be used directly.",
     ):
         from langgraph.constants import PREVIOUS  # noqa: F401
+
+
+@pytest.mark.filterwarnings(
+    "ignore:`durability` has no effect when no checkpointer is present"
+)
+def test_checkpoint_during_deprecation_state_graph() -> None:
+    class CheckDurability(TypedDict):
+        durability: NotRequired[str]
+
+    def plain_node(state: CheckDurability, config: RunnableConfig) -> CheckDurability:
+        return {"durability": config["configurable"]["__pregel_durability"]}
+
+    builder = StateGraph(CheckDurability)
+    builder.add_node("plain_node", plain_node)
+    builder.set_entry_point("plain_node")
+    graph = builder.compile()
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+    ):
+        result = graph.invoke({}, checkpoint_during=True)
+        assert result["durability"] == "async"
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+    ):
+        result = graph.invoke({}, checkpoint_during=False)
+        assert result["durability"] == "exit"
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+    ):
+        for chunk in graph.stream({}, checkpoint_during=True):  # type: ignore[arg-type]
+            assert chunk["plain_node"]["durability"] == "async"
+
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="`checkpoint_during` is deprecated and will be removed. Please use `durability` instead.",
+    ):
+        for chunk in graph.stream({}, checkpoint_during=False):  # type: ignore[arg-type]
+            assert chunk["plain_node"]["durability"] == "exit"
+
+
+def test_config_parameter_incorrect_typing() -> None:
+    """Test that a warning is raised when config parameter is typed incorrectly."""
+    builder = StateGraph(PlainState)
+
+    # Test sync function with config: dict
+    with pytest.warns(
+        UserWarning,
+        match="The 'config' parameter should be typed as 'RunnableConfig' or 'RunnableConfig | None', not '.*dict.*'. ",
+    ):
+
+        def sync_node_with_dict_config(state: PlainState, config: dict) -> PlainState:
+            return state
+
+        builder.add_node(sync_node_with_dict_config)
+
+    # Test async function with config: dict
+    with pytest.warns(
+        UserWarning,
+        match="The 'config' parameter should be typed as 'RunnableConfig' or 'RunnableConfig | None', not '.*dict.*'. ",
+    ):
+
+        async def async_node_with_dict_config(
+            state: PlainState, config: dict
+        ) -> PlainState:
+            return state
+
+        builder.add_node(async_node_with_dict_config)
+
+    # Test with other incorrect types
+    with pytest.warns(
+        UserWarning,
+        match="The 'config' parameter should be typed as 'RunnableConfig' or 'RunnableConfig | None', not '.*Any.*'. ",
+    ):
+
+        def sync_node_with_any_config(state: PlainState, config: Any) -> PlainState:
+            return state
+
+        builder.add_node(sync_node_with_any_config)
+
+    with pytest.warns(
+        UserWarning,
+        match="The 'config' parameter should be typed as 'RunnableConfig' or 'RunnableConfig | None', not '.*Any.*'. ",
+    ):
+
+        async def async_node_with_any_config(
+            state: PlainState, config: Any
+        ) -> PlainState:
+            return state
+
+        builder.add_node(async_node_with_any_config)
+
+    with warnings.catch_warnings(record=True) as w:
+
+        def node_with_correct_config(
+            state: PlainState, config: RunnableConfig
+        ) -> PlainState:
+            return state
+
+        builder.add_node(node_with_correct_config)
+
+        def node_with_optional_config(
+            state: PlainState,
+            config: Optional[RunnableConfig],  # noqa: UP045
+        ) -> PlainState:
+            return state
+
+        builder.add_node(node_with_optional_config)
+
+        def node_with_untyped_config(state: PlainState, config) -> PlainState:
+            return state
+
+        builder.add_node(node_with_untyped_config)
+
+        async def async_node_with_correct_config(
+            state: PlainState, config: RunnableConfig
+        ) -> PlainState:
+            return state
+
+        builder.add_node(async_node_with_correct_config)
+
+        async def async_node_with_optional_config(
+            state: PlainState,
+            config: Optional[RunnableConfig],  # noqa: UP045
+        ) -> PlainState:
+            return state
+
+        builder.add_node(async_node_with_optional_config)
+
+        async def async_node_with_untyped_config(
+            state: PlainState, config
+        ) -> PlainState:
+            return state
+
+        builder.add_node(async_node_with_untyped_config)
+        assert len(w) == 0

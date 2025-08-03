@@ -34,7 +34,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
-from typing_extensions import Annotated, TypedDict
+from typing_extensions import Annotated, NotRequired, TypedDict
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
@@ -42,7 +42,7 @@ from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.managed import IsLastStep, RemainingSteps
+from langgraph.managed import RemainingSteps
 from langgraph.prebuilt._internal import ToolCallWithContext
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
@@ -65,9 +65,7 @@ class AgentState(TypedDict):
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
-    is_last_step: IsLastStep
-
-    remaining_steps: RemainingSteps
+    remaining_steps: NotRequired[RemainingSteps]
 
 
 class AgentStatePydantic(BaseModel):
@@ -254,6 +252,13 @@ def create_react_agent(
         LanguageModelLike,
         Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
         Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
+        Callable[
+            [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]
+        ],
+        Callable[
+            [StateSchema, Runtime[ContextT]],
+            Awaitable[Runnable[LanguageModelInput, BaseMessage]],
+        ],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
@@ -287,6 +292,9 @@ def create_react_agent(
             - **Dynamic model**: A callable with signature
               `(state, runtime) -> BaseChatModel` that returns different models
               based on runtime context
+              If the model has tools bound via `.bind_tools()` or other configurations,
+              the return type should be a Runnable[LanguageModelInput, BaseMessage]
+              Coroutines are also supported, allowing for asynchronous model selection.
 
             Dynamic functions receive graph state and runtime, enabling
             context-dependent model selection. Must return a `BaseChatModel`
@@ -561,16 +569,13 @@ def create_react_agent(
             else False
         )
         remaining_steps = _get_state_value(state, "remaining_steps", None)
-        is_last_step = _get_state_value(state, "is_last_step", False)
-        return (
-            (remaining_steps is None and is_last_step and has_tool_calls)
-            or (
-                remaining_steps is not None
-                and remaining_steps < 1
-                and all_tools_return_direct
-            )
-            or (remaining_steps is not None and remaining_steps < 2 and has_tool_calls)
-        )
+        if remaining_steps is not None:
+            if remaining_steps < 1 and all_tools_return_direct:
+                return True
+            elif remaining_steps < 2 and has_tool_calls:
+                return True
+
+        return False
 
     def _get_model_input_state(state: StateSchema) -> StateSchema:
         if pre_model_hook is not None:

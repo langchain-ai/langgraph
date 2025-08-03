@@ -30,7 +30,7 @@ A quick comparison:
 | **CI/CD** | Managed internally by platform | Managed externally by you | Managed externally by you | Managed externally by you |
 | **Data/compute residency** | LangChain's cloud | Your cloud | Your cloud | Your cloud |
 | **LangSmith compatibility** | Trace to LangSmith SaaS | Trace to LangSmith SaaS | Trace to Self-Hosted LangSmith | Optional tracing |
-| **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Developer |
+| **[Pricing](https://www.langchain.com/pricing-langgraph-platform)** | Plus | Enterprise | Enterprise | Enterprise |
 
 ## Cloud SaaS
 

@@ -31,15 +31,3 @@ These capabilities are available in both LangGraph OSS and the LangGraph Platfor
 - [MCP](../concepts/mcp.md): Use MCP servers in a LangGraph graph.
 - [Evaluation](../agents/evals.md): Use LangSmith to evaluate your graph's performance.
 
-## Platform-only capabilities
-
-These capabilities are only available in [LangGraph Platform](../concepts/langgraph_platform.md).
-
-- [Authentication and access control](../concepts/auth.md): Authenticate and authorize users to access a LangGraph graph.
-- [Assistants](../concepts/assistants.md): Build assistants that can be used to interact with a LangGraph graph.
-- [Double-texting](../concepts/double_texting.md): Handle double-texting (consecutive messages before a first response is returned) in a LangGraph graph.
-- [Webhooks](../cloud/concepts/webhooks.md): Send webhooks to a LangGraph graph.
-- [Cron jobs](../cloud/concepts/cron_jobs.md): Schedule jobs to run at a specific time.
-- [Server customization](../how-tos/http/custom_lifespan.md): Customize the server that runs a LangGraph graph.
-- [Data management](../cloud/concepts/data_storage_and_privacy.md): Manage data in a LangGraph graph.
-- [Deployment](../concepts/deployment_options.md): Deploy a LangGraph graph to a server.
