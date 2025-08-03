@@ -1,34 +1,12 @@
-# Use Pydantic models as state with reliable caching
+# Use Pydantic models as state with caching
 
-This guide explains how Pydantic models work as state objects with LangGraph's caching system after the fixes implemented in [issue #5733](https://github.com/langchain-ai/langgraph/issues/5733).
+This guide shows how to use Pydantic models as state objects with LangGraph's caching system for improved performance.
 
+## Overview
 
-## The Problem (Fixed)
+LangGraph's caching system works with both regular Python dictionaries and Pydantic models as state objects. When using caching, ensure your state objects are deterministic - identical data should always produce identical cache keys.
 
-Previously, identical Pydantic models would produce different cache keys due to non-deterministic pickle serialization:
-
-```python
-from pydantic import BaseModel
-import hashlib
-import pickle
-
-class MyState(BaseModel):
-    name: str
-    value: int
-
-# Before the fix - these would produce different hashes
-state1 = MyState(name="test", value=42) 
-state2 = MyState(name="test", value=42)
-
-# These would be different even though content is identical
-hash1 = hashlib.sha256(pickle.dumps(state1)).hexdigest()  
-hash2 = hashlib.sha256(pickle.dumps(state2)).hexdigest()
-print(hash1 == hash2)  # False (problematic!)
-```
-
-## The Solution
-
-LangGraph now uses `model_dump(mode='python')` for deterministic Pydantic serialization in cache key generation. This ensures identical model data always produces identical cache keys.
+> **Note**: LangGraph automatically handles deterministic serialization for Pydantic models, so you can use them directly without additional configuration.
 
 ## Usage
 
