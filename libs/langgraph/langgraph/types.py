@@ -191,10 +191,7 @@ class Interrupt:
         return cls(value=value, id=xxh3_128_hexdigest(ns.encode()))
 
     @property
-    @deprecated(
-        "`interrupt_id` is deprecated. Use `id` instead.",
-        stacklevel=2,
-    )
+    @deprecated("`interrupt_id` is deprecated. Use `id` instead.", category=None)
     def interrupt_id(self) -> str:
         warn(
             "`interrupt_id` is deprecated. Use `id` instead.",

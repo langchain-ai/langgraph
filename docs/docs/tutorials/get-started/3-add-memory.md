@@ -17,7 +17,7 @@ Create a `MemorySaver` checkpointer:
 :::python
 
 ```python
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 memory = InMemorySaver()
 ```
@@ -447,3 +447,4 @@ const graph = new StateGraph(State)
 ## Next steps
 
 In the next tutorial, you will [add human-in-the-loop to the chatbot](./4-human-in-the-loop.md) to handle situations where it may need guidance or verification before proceeding.
+

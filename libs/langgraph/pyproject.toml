@@ -5,7 +5,6 @@ build-backend = "hatchling.build"
 [project]
 name = "langgraph"
 dynamic = ["version"]
-
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.9"
