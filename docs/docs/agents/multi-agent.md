@@ -619,7 +619,8 @@ for await (const chunk of multiAgentGraph.stream({
 3. Name of the agent or node to hand off to.
 4. Take the agent's messages and **add** them to the parent's **state** as part of the handoff. The next agent will see the parent state.
 5. Indicate to LangGraph that we need to navigate to agent node in a **parent** multi-agent graph.
-   :::
+
+:::
 
 !!! Note
 
