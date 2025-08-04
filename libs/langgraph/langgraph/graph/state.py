@@ -1390,6 +1390,14 @@ def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | Non
             if is_managed_value(decoration):
                 return decoration
 
+    # Handle Required, NotRequired, etc wrapped types by extracting the inner type
+    if (
+        get_origin(typ) is not None
+        and (args := get_args(typ))
+        and (inner_type := args[0])
+    ):
+        return _is_field_managed_value(name, inner_type)
+
     return None
 
 
