@@ -4,11 +4,11 @@ LangGraph provides the [**time travel**](../../concepts/time-travel.md) function
 
 To time travel using the LangGraph Server API (via the LangGraph SDK):
 
-1. **Run the graph** with initial inputs using [LangGraph SDK](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/)'s [`client.runs.wait`][langgraph_sdk.client.RunsClient.wait] or [`client.runs.stream`][langgraph_sdk.client.RunsClient.stream] APIs.
-2. **Identify a checkpoint in an existing thread**: Use [`client.threads.get_history`][langgraph_sdk.client.ThreadsClient.get_history] method to retrieve the execution history for a specific `thread_id` and locate the desired `checkpoint_id`.
+1. **Run the graph** with initial inputs using [LangGraph SDK](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/)'s @[`client.runs.wait`][client.runs.wait] or @[`client.runs.stream`][client.runs.stream] APIs.
+2. **Identify a checkpoint in an existing thread**: Use @[`client.threads.get_history`][client.threads.get_history] method to retrieve the execution history for a specific `thread_id` and locate the desired `checkpoint_id`.
    Alternatively, set a [breakpoint](./human_in_the_loop_breakpoint.md) before the node(s) where you want execution to pause. You can then find the most recent checkpoint recorded up to that breakpoint.
-3. **(Optional) modify the graph state**: Use the [`client.threads.update_state`][langgraph_sdk.client.ThreadsClient.update_state] method to modify the graph’s state at the checkpoint and resume execution from alternative state.
-4. **Resume execution from the checkpoint**: Use the [`client.runs.wait`][langgraph_sdk.client.RunsClient.wait] or [`client.runs.stream`][langgraph_sdk.client.RunsClient.stream] APIs with an input of `None` and the appropriate `thread_id` and `checkpoint_id`.
+3. **(Optional) modify the graph state**: Use the @[`client.threads.update_state`][client.threads.update_state] method to modify the graph’s state at the checkpoint and resume execution from alternative state.
+4. **Resume execution from the checkpoint**: Use the @[`client.runs.wait`][client.runs.wait] or @[`client.runs.stream`][client.runs.stream] APIs with an input of `None` and the appropriate `thread_id` and `checkpoint_id`.
 
 ## Use time travel in a workflow
 

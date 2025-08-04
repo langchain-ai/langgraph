@@ -12,7 +12,7 @@ Below is an example using FastAPI.
 
 ## Create app
 
-Starting from an **existing** LangGraph Platform application, add the following middleware code to your `webapp.py` file. If you are starting from scratch, you can create a new app from a template using the CLI.
+Starting from an **existing** LangGraph Platform application, add the following middleware code to your webapp file. If you are starting from scratch, you can create a new app from a template using the CLI.
 
 ```bash
 langgraph new --template=new-langgraph-project-python my_new_project

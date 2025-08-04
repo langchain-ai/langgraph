@@ -2337,7 +2337,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.6.0a1"
+version = "0.6.2"
 source = { editable = "../libs/langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -2466,7 +2466,7 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.10"
+version = "2.0.11"
 source = { editable = "../libs/checkpoint-sqlite" }
 dependencies = [
     { name = "aiosqlite" },
@@ -2523,8 +2523,8 @@ docs = [
     { name = "markdown-callouts" },
     { name = "markdown-include" },
     { name = "mkdocs" },
-    { name = "mkdocs-autorefs" },
     { name = "mkdocs-exclude" },
+    { name = "mkdocs-exclude-search" },
     { name = "mkdocs-git-committers-plugin-2" },
     { name = "mkdocs-include-markdown-plugin" },
     { name = "mkdocs-material", extra = ["imaging"] },
@@ -2595,8 +2595,8 @@ docs = [
     { name = "markdown-callouts" },
     { name = "markdown-include" },
     { name = "mkdocs" },
-    { name = "mkdocs-autorefs" },
     { name = "mkdocs-exclude" },
+    { name = "mkdocs-exclude-search" },
     { name = "mkdocs-git-committers-plugin-2" },
     { name = "mkdocs-include-markdown-plugin", specifier = ">=7.1.6" },
     { name = "mkdocs-material", extras = ["imaging"] },
@@ -2643,7 +2643,7 @@ test = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.5.2"
+version = "0.6.2"
 source = { editable = "../libs/prebuilt" }
 dependencies = [
     { name = "langchain-core" },
@@ -2674,7 +2674,7 @@ dev = [
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.2.0a1"
+version = "0.2.0"
 source = { editable = "../libs/sdk-py" }
 dependencies = [
     { name = "httpx" },
@@ -3031,6 +3031,18 @@ dependencies = [
     { name = "mkdocs" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/54/b5/3a8e289282c9e8d7003f8a2f53d673d4fdaa81d493dc6966092d9985b6fc/mkdocs-exclude-1.0.2.tar.gz", hash = "sha256:ba6fab3c80ddbe3fd31d3e579861fd3124513708271180a5f81846da8c7e2a51", size = 6751, upload-time = "2019-02-20T23:34:12.81Z" }
+
+[[package]]
+name = "mkdocs-exclude-search"
+version = "0.6.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mkdocs" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1d/52/8243589d294cf6091c1145896915fe50feea0e91d64d843942d0175770c2/mkdocs-exclude-search-0.6.6.tar.gz", hash = "sha256:3cdff1b9afdc1b227019cd1e124f401453235b92153d60c0e5e651a76be4f044", size = 9501, upload-time = "2023-12-03T22:58:21.259Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3b/ef/9af45ffb1bdba684a0694922abae0bb771e9777aba005933f838b7f1bcea/mkdocs_exclude_search-0.6.6-py3-none-any.whl", hash = "sha256:2b4b941d1689808db533fe4a6afba75ce76c9bab8b21d4e31efc05fd8c4e0a4f", size = 7821, upload-time = "2023-12-03T22:58:19.355Z" },
+]
 
 [[package]]
 name = "mkdocs-get-deps"

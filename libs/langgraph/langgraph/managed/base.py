@@ -8,7 +8,7 @@ from typing import (
 
 from typing_extensions import TypeGuard
 
-from langgraph.pregel._scratchpad import PregelScratchpad
+from langgraph._internal._scratchpad import PregelScratchpad
 
 V = TypeVar("V")
 U = TypeVar("U")

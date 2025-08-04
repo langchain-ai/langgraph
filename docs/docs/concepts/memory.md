@@ -87,11 +87,25 @@ Regardless of memory management approach, the central point is that the agent wi
 
 [Episodic memory](https://en.wikipedia.org/wiki/Episodic_memory), in both humans and AI agents, involves recalling past events or actions. The [CoALA paper](https://arxiv.org/pdf/2309.02427) frames this well: facts can be written to semantic memory, whereas *experiences* can be written to episodic memory. For AI agents, episodic memory is often used to help an agent remember how to accomplish a task. 
 
+:::python
 In practice, episodic memories are often implemented through [few-shot example prompting](https://python.langchain.com/docs/concepts/few_shot_prompting/), where agents learn from past sequences to perform tasks correctly. Sometimes it's easier to "show" than "tell" and LLMs learn well from examples. Few-shot learning lets you ["program"](https://x.com/karpathy/status/1627366413840322562) your LLM by updating the prompt with input-output examples to illustrate the intended behavior. While various [best-practices](https://python.langchain.com/docs/concepts/#1-generating-examples) can be used to generate few-shot examples, often the challenge lies in selecting the most relevant examples based on user input.
+:::
 
+:::js
+In practice, episodic memories are often implemented through few-shot example prompting, where agents learn from past sequences to perform tasks correctly. Sometimes it's easier to "show" than "tell" and LLMs learn well from examples. Few-shot learning lets you ["program"](https://x.com/karpathy/status/1627366413840322562) your LLM by updating the prompt with input-output examples to illustrate the intended behavior. While various best-practices can be used to generate few-shot examples, often the challenge lies in selecting the most relevant examples based on user input.
+:::
+
+:::python
 Note that the memory [store](persistence.md#memory-store) is just one way to store data as few-shot examples. If you want to have more developer involvement, or tie few-shots more closely to your evaluation harness, you can also use a [LangSmith Dataset](https://docs.smith.langchain.com/evaluation/how_to_guides/datasets/index_datasets_for_dynamic_few_shot_example_selection) to store your data. Then dynamic few-shot example selectors can be used out-of-the box to achieve this same goal. LangSmith will index the dataset for you and enable retrieval of few shot examples that are most relevant to the user input based upon keyword similarity ([using a BM25-like algorithm](https://docs.smith.langchain.com/how_to_guides/datasets/index_datasets_for_dynamic_few_shot_example_selection) for keyword based similarity). 
 
 See this how-to [video](https://www.youtube.com/watch?v=37VaU7e7t5o) for example usage of dynamic few-shot example selection in LangSmith. Also, see this [blog post](https://blog.langchain.dev/few-shot-prompting-to-improve-tool-calling-performance/) showcasing few-shot prompting to improve tool calling performance and this [blog post](https://blog.langchain.dev/aligning-llm-as-a-judge-with-human-preferences/) using few-shot example to align an LLMs to human preferences.
+:::
+
+:::js
+Note that the memory [store](persistence.md#memory-store) is just one way to store data as few-shot examples. If you want to have more developer involvement, or tie few-shots more closely to your evaluation harness, you can also use a LangSmith Dataset to store your data. Then dynamic few-shot example selectors can be used out-of-the box to achieve this same goal. LangSmith will index the dataset for you and enable retrieval of few shot examples that are most relevant to the user input based upon keyword similarity.
+
+See this how-to [video](https://www.youtube.com/watch?v=37VaU7e7t5o) for example usage of dynamic few-shot example selection in LangSmith. Also, see this [blog post](https://blog.langchain.dev/few-shot-prompting-to-improve-tool-calling-performance/) showcasing few-shot prompting to improve tool calling performance and this [blog post](https://blog.langchain.dev/aligning-llm-as-a-judge-with-human-preferences/) using few-shot example to align an LLMs to human preferences.
+:::
 
 #### Procedural memory
 
@@ -105,6 +119,7 @@ For example, we built a [Tweet generator](https://www.youtube.com/watch?v=Vn8A3B
 
 The below pseudo-code shows how you might implement this with the LangGraph memory [store](persistence.md#memory-store), using the store to save a prompt, the `update_instructions` node to get the current prompt (as well as feedback from the conversation with the user captured in `state["messages"]`), update the prompt, and save the new prompt back to the store. Then, the `call_model` get the updated prompt from the store and uses it to generate a response.
 
+:::python
 ```python
 # Node that *uses* the instructions
 def call_model(state: State, store: BaseStore):
@@ -125,6 +140,39 @@ def update_instructions(state: State, store: BaseStore):
     store.put(("agent_instructions",), "agent_a", {"instructions": new_instructions})
     ...
 ```
+:::
+
+:::js
+```typescript
+// Node that *uses* the instructions
+const callModel = async (state: State, store: BaseStore) => {
+    const namespace = ["agent_instructions"];
+    const instructions = await store.get(namespace, "agent_a");
+    // Application logic
+    const prompt = promptTemplate.format({ 
+        instructions: instructions[0].value.instructions 
+    });
+    // ...
+};
+
+// Node that updates instructions
+const updateInstructions = async (state: State, store: BaseStore) => {
+    const namespace = ["instructions"];
+    const currentInstructions = await store.search(namespace);
+    // Memory logic
+    const prompt = promptTemplate.format({ 
+        instructions: currentInstructions[0].value.instructions, 
+        conversation: state.messages 
+    });
+    const output = await llm.invoke(prompt);
+    const newInstructions = output.new_instructions;
+    await store.put(["agent_instructions"], "agent_a", { 
+        instructions: newInstructions 
+    });
+    // ...
+};
+```
+:::
 
 ![](img/memory/update-instructions.png)
 
@@ -154,6 +202,7 @@ See our [memory-service](https://github.com/langchain-ai/memory-template) templa
 
 LangGraph stores long-term memories as JSON documents in a [store](persistence.md#memory-store). Each memory is organized under a custom `namespace` (similar to a folder) and a distinct `key` (like a file name). Namespaces often include user or org IDs or other labels that makes it easier to organize information. This structure enables hierarchical organization of memories. Cross-namespace searching is then supported through content filters.
 
+:::python
 ```python
 from langgraph.store.memory import InMemoryStore
 
@@ -186,5 +235,47 @@ items = store.search(
     namespace, filter={"my-key": "my-value"}, query="language preferences"
 )
 ```
+:::
+
+:::js
+```typescript
+import { InMemoryStore } from "@langchain/langgraph";
+
+const embed = (texts: string[]): number[][] => {
+    // Replace with an actual embedding function or LangChain embeddings object
+    return texts.map(() => [1.0, 2.0]);
+};
+
+// InMemoryStore saves data to an in-memory dictionary. Use a DB-backed store in production use.
+const store = new InMemoryStore({ index: { embed, dims: 2 } });
+const userId = "my-user";
+const applicationContext = "chitchat";
+const namespace = [userId, applicationContext];
+
+await store.put(
+    namespace,
+    "a-memory",
+    {
+        rules: [
+            "User likes short, direct language",
+            "User only speaks English & TypeScript",
+        ],
+        "my-key": "my-value",
+    }
+);
+
+// get the "memory" by ID
+const item = await store.get(namespace, "a-memory");
+
+// search for "memories" within this namespace, filtering on content equivalence, sorted by vector similarity
+const items = await store.search(
+    namespace, 
+    { 
+        filter: { "my-key": "my-value" }, 
+        query: "language preferences" 
+    }
+);
+```
+:::
 
 For more information about the memory store, see the [Persistence](persistence.md#memory-store) guide.

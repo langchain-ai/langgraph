@@ -643,6 +643,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> Iterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -658,6 +659,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             subgraphs: Stream from subgraphs.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to client.runs.stream.
 
         Yields:
@@ -686,7 +688,9 @@ class RemoteGraph(PregelProtocol):
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
-            headers=self._merge_tracing_headers(kwargs.pop("headers", None) or {}),
+            headers=_merge_tracing_headers(headers)
+            if self.distributed_tracing
+            else headers,
             **kwargs,
         ):
             # split mode and ns
@@ -746,6 +750,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -761,6 +766,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             subgraphs: Stream from subgraphs.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to client.runs.stream.
 
         Yields:
@@ -789,7 +795,9 @@ class RemoteGraph(PregelProtocol):
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
-            headers=self._merge_tracing_headers(kwargs.pop("headers", None) or {}),
+            headers=_merge_tracing_headers(headers)
+            if self.distributed_tracing
+            else headers,
             **kwargs,
         ):
             # split mode and ns
@@ -863,6 +871,7 @@ class RemoteGraph(PregelProtocol):
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -872,6 +881,7 @@ class RemoteGraph(PregelProtocol):
             config: A `RunnableConfig` for graph invocation.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to RemoteGraph.stream.
 
         Returns:
@@ -882,6 +892,7 @@ class RemoteGraph(PregelProtocol):
             config=config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            headers=headers,
             stream_mode="values",
             **kwargs,
         ):
@@ -898,6 +909,7 @@ class RemoteGraph(PregelProtocol):
         *,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -907,6 +919,7 @@ class RemoteGraph(PregelProtocol):
             config: A `RunnableConfig` for graph invocation.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to RemoteGraph.astream.
 
         Returns:
@@ -917,6 +930,7 @@ class RemoteGraph(PregelProtocol):
             config=config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            headers=headers,
             stream_mode="values",
             **kwargs,
         ):
@@ -926,12 +940,16 @@ class RemoteGraph(PregelProtocol):
         except UnboundLocalError:
             return None
 
-    def _merge_tracing_headers(self, headers: dict[str, str]) -> dict[str, str]:
-        if rt := ls.get_current_run_tree():
-            tracing_headers = rt.to_headers()
-            baggage = tracing_headers.pop("baggage")
+
+def _merge_tracing_headers(headers: dict[str, str] | None) -> dict[str, str] | None:
+    if rt := ls.get_current_run_tree():
+        tracing_headers = rt.to_headers()
+        baggage = tracing_headers.pop("baggage")
+        if headers:
             if "baggage" in headers:
                 baggage = headers["baggage"] + "," + baggage
             tracing_headers["baggage"] = baggage
             headers.update(tracing_headers)
-        return headers
+        else:
+            headers = tracing_headers
+    return headers

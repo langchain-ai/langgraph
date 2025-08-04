@@ -52,6 +52,7 @@ from typing import (
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
+    RemoveMessage,
     ToolCall,
     ToolMessage,
     convert_to_messages,
@@ -72,6 +73,7 @@ from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt._internal import ToolCallWithContext
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
@@ -754,6 +756,11 @@ class ToolNode(RunnableCallable):
 
         # convert to message objects if updates are in a dict format
         messages_update = convert_to_messages(messages_update)
+
+        # no validation needed if all messages are being removed
+        if messages_update == [RemoveMessage(id=REMOVE_ALL_MESSAGES)]:
+            return updated_command
+
         has_matching_tool_message = False
         for message in messages_update:
             if not isinstance(message, ToolMessage):

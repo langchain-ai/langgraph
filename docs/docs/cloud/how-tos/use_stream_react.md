@@ -137,7 +137,7 @@ const thread = useStream<{ messages: Message[] }>({
 
 You can also manually manage the resuming process by using the run callbacks to persist the run metadata and the `joinStream` function to resume the stream. Make sure to pass `streamResumable: true` when creating the run; otherwise some events might be lost.
 
-````tsx
+```tsx
 import type { Message } from "@langchain/langgraph-sdk";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import { useCallback, useState, useEffect, useRef } from "react";
@@ -236,7 +236,7 @@ const thread = useStream<{ messages: Message[] }>({
   threadId: threadId,
   onThreadId: setThreadId,
 });
-````
+```
 
 We recommend storing the `threadId` in your URL's query parameters to let users resume conversations after page refreshes.
 
