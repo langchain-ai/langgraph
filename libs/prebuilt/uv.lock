@@ -359,7 +359,6 @@ dev = [
     { name = "pytest-repeat" },
     { name = "pytest-watcher" },
     { name = "pytest-xdist", extras = ["psutil"] },
-    { name = "redis" },
     { name = "ruff" },
     { name = "syrupy" },
     { name = "types-requests" },
@@ -393,7 +392,6 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
-    { name = "redis" },
     { name = "ruff" },
 ]
 
