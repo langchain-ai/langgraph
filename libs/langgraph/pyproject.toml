@@ -41,6 +41,7 @@ dev = [
     "langgraph-checkpoint",
     "langgraph-checkpoint-sqlite",
     "langgraph-checkpoint-postgres",
+    "langgraph-checkpoint-redis",
     "langgraph-sdk",
     "psycopg[binary]",
     "uvloop==0.21.0beta1",
@@ -49,7 +50,6 @@ dev = [
     "types-requests",
     "pycryptodome",
     "langgraph-cli[inmem]",
-    "redis",
 ]
 
 [tool.uv]
@@ -60,6 +60,7 @@ langgraph-prebuilt = { path = "../prebuilt", editable = true }
 langgraph-checkpoint = { path = "../checkpoint", editable = true }
 langgraph-checkpoint-sqlite = { path = "../checkpoint-sqlite", editable = true }
 langgraph-checkpoint-postgres = { path = "../checkpoint-postgres", editable = true }
+langgraph-checkpoint-redis = { path = "../checkpoint-redis", editable = true }
 langgraph-sdk = { path = "../sdk-py", editable = true }
 langgraph-cli = { path = "../cli", editable = true }
 
