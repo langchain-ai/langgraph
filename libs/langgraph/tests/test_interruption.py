@@ -6,9 +6,10 @@ import operator
 
 =======
 import operator
+from typing import Annotated
 
 import pytest
-from typing_extensions import Annotated, TypedDict
+from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 >>>>>>> 0ce981a0 (Test with multiple interrupts)
