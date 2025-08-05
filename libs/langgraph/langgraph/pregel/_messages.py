@@ -43,7 +43,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         stream: Callable[[StreamChunk], None],
         subgraphs: bool,
         *,
-        created_in_ns: tuple[str] | None = None,
+        created_in_ns: tuple[str, ...] | None = None,
     ) -> None:
         """Configure the handler to stream messages from LLMs and nodes.
 
