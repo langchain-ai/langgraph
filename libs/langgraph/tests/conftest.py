@@ -3,10 +3,12 @@ from collections.abc import AsyncIterator, Iterator
 from uuid import UUID
 
 import pytest
+import redis
 from pytest_mock import MockerFixture
 
 from langgraph.cache.base import BaseCache
 from langgraph.cache.memory import InMemoryCache
+from langgraph.cache.redis import RedisCache
 from langgraph.cache.sqlite import SqliteCache
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
@@ -55,12 +57,24 @@ def durability(request: pytest.FixtureRequest) -> Durability:
     return request.param
 
 
-@pytest.fixture(scope="function", params=["sqlite", "memory"])
+@pytest.fixture(
+    scope="function", 
+    params=["sqlite", "memory"] if NO_DOCKER else ["sqlite", "memory", "redis"]
+)
 def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
     if request.param == "sqlite":
         yield SqliteCache(path=":memory:")
     elif request.param == "memory":
         yield InMemoryCache()
+    elif request.param == "redis":
+        redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=False)
+        cache = RedisCache(redis_client, prefix="test:cache:")
+        yield cache
+
+        try:
+            redis_client.flushdb()
+        except Exception:
+            pass
     else:
         raise ValueError(f"Unknown cache type: {request.param}")
 
