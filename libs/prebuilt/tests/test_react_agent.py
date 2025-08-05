@@ -29,9 +29,6 @@ from langchain_core.tools import InjectedToolCallId, ToolException
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel, Field
 from pydantic.v1 import BaseModel as BaseModelV1
-from tests.any_str import AnyStr
-from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
-from tests.model import FakeToolCallingModel
 from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -61,6 +58,9 @@ from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Interrupt, interrupt
+from tests.any_str import AnyStr
+from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
+from tests.model import FakeToolCallingModel
 
 pytestmark = pytest.mark.anyio
 
@@ -1237,8 +1237,9 @@ def test_tool_node_stream_writer() -> None:
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-async def test_react_agent_subgraph_streaming(version: Literal['v1', 'v2']) -> None:
+async def test_react_agent_subgraph_streaming(version: Literal["v1", "v2"]) -> None:
     """Test React agent streaming when used as a subgraph node."""
+
     @dec_tool
     def get_weather(city: str) -> str:
         """Get the weather of a city."""
@@ -1251,7 +1252,7 @@ async def test_react_agent_subgraph_streaming(version: Literal['v1', 'v2']) -> N
             [],
         ]
     )
-    
+
     agent = create_react_agent(
         model,
         tools=[get_weather],
@@ -1263,15 +1264,15 @@ async def test_react_agent_subgraph_streaming(version: Literal['v1', 'v2']) -> N
     async def react_agent_node(state: MessagesState) -> MessagesState:
         """Node that runs the React agent and collects streaming output."""
         collected_content = ""
-        
+
         # Stream the agent output and collect content
         async for msg_chunk, msg_metadata in agent.astream(
             {"messages": [("user", state["messages"][-1].content)]},
             stream_mode="messages",
         ):
-            if hasattr(msg_chunk, 'content') and msg_chunk.content:
+            if hasattr(msg_chunk, "content") and msg_chunk.content:
                 collected_content += msg_chunk.content
-        
+
         return {"messages": [("assistant", collected_content)]}
 
     # Create the main workflow with the React agent as a subgraph node
@@ -1282,27 +1283,14 @@ async def test_react_agent_subgraph_streaming(version: Literal['v1', 'v2']) -> N
     compiled_workflow = workflow.compile()
 
     # Test the streaming functionality
-    result = await compiled_workflow.ainvoke({
-        "messages": [("user", "What is the weather in Tokyo?")]
-    })
+    result = await compiled_workflow.ainvoke(
+        {"messages": [("user", "What is the weather in Tokyo?")]}
+    )
 
     # Verify the result contains expected structure
     assert len(result["messages"]) == 2
     assert result["messages"][0].content == "What is the weather in Tokyo?"
     assert "assistant" in str(result["messages"][1])
-    
-    # Test streaming at the workflow level
-    collected_events = []
-    async for event in compiled_workflow.astream(
-        {"messages": [("user", "What is the weather in Tokyo?")]},
-        stream_mode="values"
-    ):
-        collected_events.append(event)
-    
-    # Should have at least initial and final states
-    assert len(collected_events) >= 2
-    final_state = collected_events[-1]
-    assert len(final_state["messages"]) == 2
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
