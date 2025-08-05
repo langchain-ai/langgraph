@@ -2398,7 +2398,7 @@ await fs.writeFile("graph.png", imageBuffer);
 ```
 :::
 
-This architecture is similar to a [ReAct agent](../agents/overview.md) in which node `"a"` is a tool-calling model, and node `"b"` represents the tools.
+This architecture is similar to a [React agent](../agents/overview.md) in which node `"a"` is a tool-calling model, and node `"b"` represents the tools.
 
 In our `route` conditional edge, we specify that we should end after the `"aggregate"` list in the state passes a threshold length.
 
@@ -2485,9 +2485,10 @@ Recursion Error
 ```
 :::
 
-??? example "Extended example: return state on hitting recursion limit"
 
     :::python
+??? example "Extended example: return state on hitting recursion limit"
+
     Instead of raising `GraphRecursionError`, we can introduce a new key to the state that keeps track of the number of steps remaining until reaching the recursion limit. We can then use this key to determine if we should end the run.
 
     LangGraph implements a special `RemainingSteps` annotation. Under the hood, it creates a `ManagedValue` channel -- a state channel that will exist for the duration of our graph run and no longer.
@@ -2540,9 +2541,10 @@ Recursion Error
     ```
     :::
 
+    :::python
+
 ??? example "Extended example: loops with branches"
 
-    :::python
     To better understand how the recursion limit works, let's consider a more complex example. Below we implement a loop, but one step fans out into two nodes:
 
     ```python
