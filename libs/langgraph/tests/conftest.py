@@ -58,8 +58,8 @@ def durability(request: pytest.FixtureRequest) -> Durability:
 
 
 @pytest.fixture(
-    scope="function", 
-    params=["sqlite", "memory"] if NO_DOCKER else ["sqlite", "memory", "redis"]
+    scope="function",
+    params=["sqlite", "memory"] if NO_DOCKER else ["sqlite", "memory", "redis"],
 )
 def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
     if request.param == "sqlite":
@@ -67,7 +67,9 @@ def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
     elif request.param == "memory":
         yield InMemoryCache()
     elif request.param == "redis":
-        redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=False)
+        redis_client = redis.Redis(
+            host="localhost", port=6379, db=0, decode_responses=False
+        )
         cache = RedisCache(redis_client, prefix="test:cache:")
         yield cache
 
