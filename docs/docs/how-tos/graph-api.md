@@ -674,9 +674,10 @@ Output of graph invocation: {"a":"set by node3"}
 ```
 :::
 
+:::python
+
 ### Use Pydantic models for graph state
 
-:::python
 A [StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs.md#langgraph.graph.StateGraph) accepts a `state_schema` argument on initialization that specifies the "shape" of the state that the nodes in the graph can access and update.
 
 In our examples, we typically use a python-native `TypedDict` or [`dataclass`](https://docs.python.org/3/library/dataclasses.html) for `state_schema`, but `state_schema` can be any [type](https://docs.python.org/3/library/stdtypes.html#type-objects).
@@ -1358,9 +1359,10 @@ By default, the retry policy retries on any exception except for the following:
     ```
     :::
 
+:::python
+
 ## Add node caching
 
-:::python
 Node caching is useful in cases where you want to avoid repeating operations, like when doing something expensive (either in terms of time or cost). LangGraph lets you add individualized caching policies to nodes in a graph.
 
 To configure a cache policy, pass the `cache_policy` parameter to the [add_node](https://langchain-ai.github.io/langgraph/reference/graphs.md#langgraph.graph.state.StateGraph.add_node) function. In the following example, a [`CachePolicy`](https://langchain-ai.github.io/langgraph/reference/types/?h=cachepolicy#langgraph.types.CachePolicy) object is instantiated with a time to live of 120 seconds and the default `key_func` generator. Then it is associated with a node:
@@ -1839,9 +1841,10 @@ Adding "D" to ['A', 'B', 'C']
 
     Together, these let you perform parallel execution and fully control exception handling.
 
+:::python
+
 ### Defer node execution
 
-:::python
 Deferring node execution is useful when you want to delay the execution of a node until all other pending tasks are completed. This is particularly relevant when branches have different lengths, which is common in workflows like map-reduce flows.
 
 The above example showed how to fan-out and fan-in when each path was only one step. But what if one branch had more than one step? Let's add a node `"b_2"` in the `"b"` branch:
