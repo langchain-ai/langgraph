@@ -37,18 +37,6 @@ coverage:
 		--cov-report xml \
 		--cov-report term-missing:skip-covered
 
-start-postgres:
-	docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait --remove-orphans
-
-stop-postgres:
-	docker compose -f tests/compose-postgres.yml down -v
-
-start-redis:
-	docker compose -f tests/compose-redis.yml up -V --force-recreate --wait --remove-orphans
-
-stop-redis:
-	docker compose -f tests/compose-redis.yml down -v
-
 start-services:
 	docker compose -f tests/compose-postgres.yml -f tests/compose-redis.yml up -V --force-recreate --wait --remove-orphans
 

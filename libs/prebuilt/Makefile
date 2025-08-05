@@ -7,17 +7,11 @@ all: help
 # TESTING AND COVERAGE
 ######################
 
-start-postgres:
-	docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait --remove-orphans
+start-services:
+	docker compose -f tests/compose-postgres.yml -f tests/compose-redis.yml up -V --force-recreate --wait --remove-orphans
 
-stop-postgres:
-	docker compose -f tests/compose-postgres.yml down -v
-
-start-redis:
-	docker compose -f tests/compose-redis.yml up -V --force-recreate --wait --remove-orphans
-
-stop-redis:
-	docker compose -f tests/compose-redis.yml down -v
+stop-services:
+	docker compose -f tests/compose-postgres.yml -f tests/compose-redis.yml down -v
 
 TEST ?= .
 
@@ -25,17 +19,15 @@ test-fast:
 	LANGGRAPH_TEST_FAST=1 uv run pytest $(TEST)
 
 test:
-	make start-postgres && make start-redis && LANGGRAPH_TEST_FAST=0 uv run pytest $(TEST); \
+	make start-services && LANGGRAPH_TEST_FAST=0 uv run pytest $(TEST); \
 	EXIT_CODE=$$?; \
-	make stop-postgres; \
-	make stop-redis; \
+	make stop-services; \
 	exit $$EXIT_CODE
 
 test_watch:
-	make start-postgres && make start-redis && LANGGRAPH_TEST_FAST=0 uv run ptw $(TEST); \
+	make start-services && LANGGRAPH_TEST_FAST=0 uv run ptw $(TEST); \
 	EXIT_CODE=$$?; \
-	make stop-postgres; \
-	make stop-redis; \
+	make stop-services; \
 	exit $$EXIT_CODE
 
 ######################
