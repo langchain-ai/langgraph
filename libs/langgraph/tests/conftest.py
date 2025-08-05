@@ -67,14 +67,22 @@ def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
     elif request.param == "memory":
         yield InMemoryCache()
     elif request.param == "redis":
+        # Get worker ID for parallel test isolation
+        worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
+        
         redis_client = redis.Redis(
             host="localhost", port=6379, db=0, decode_responses=False
         )
-        cache = RedisCache(redis_client, prefix="test:cache:")
+        # Use worker-specific prefix to avoid cache pollution between parallel tests
+        cache = RedisCache(redis_client, prefix=f"test:cache:{worker_id}:")
         yield cache
 
         try:
-            redis_client.flushdb()
+            # Only clear keys with our specific prefix
+            pattern = f"test:cache:{worker_id}:*"
+            keys = redis_client.keys(pattern)
+            if keys:
+                redis_client.delete(*keys)
         except Exception:
             pass
     else:
