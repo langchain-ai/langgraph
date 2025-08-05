@@ -1,4 +1,4 @@
-name: langgraph-tests
+name: langgraph-tests-redis
 services:
   redis-test:
     image: redis:7-alpine
