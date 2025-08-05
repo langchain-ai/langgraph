@@ -1,7 +1,8 @@
 import operator
+from typing import Annotated
 
 import pytest
-from typing_extensions import Annotated, TypedDict
+from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
