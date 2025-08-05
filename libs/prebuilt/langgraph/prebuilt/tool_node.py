@@ -445,6 +445,8 @@ class ToolNode(RunnableCallable):
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
         try:
+            if call.get("args") is None:
+                call["args"] = {}
             call_args = {**call, **{"type": "tool_call"}}
             response = self.tools_by_name[call["name"]].invoke(call_args, config)
 
@@ -502,6 +504,8 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
+            if call.get("args") is None:
+                call["args"] = {}
             input = {**call, **{"type": "tool_call"}}
             response = await self.tools_by_name[call["name"]].ainvoke(input, config)
 
