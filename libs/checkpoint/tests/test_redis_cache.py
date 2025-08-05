@@ -220,3 +220,94 @@ class TestRedisCache:
         
         # Cleanup
         await client.aclose()
+
+    def test_redis_unavailable_get(self):
+        """Test behavior when Redis is unavailable during get operations."""
+        # Create cache with non-existent Redis server
+        bad_client = redis.Redis(host="nonexistent", port=9999, socket_connect_timeout=0.1)
+        cache = RedisCache(bad_client, prefix="test:cache:")
+        
+        keys = [(("graph", "node"), "key")]
+        result = cache.get(keys)
+        
+        # Should return empty dict when Redis unavailable
+        assert result == {}
+
+    def test_redis_unavailable_set(self):
+        """Test behavior when Redis is unavailable during set operations."""
+        # Create cache with non-existent Redis server
+        bad_client = redis.Redis(host="nonexistent", port=9999, socket_connect_timeout=0.1)
+        cache = RedisCache(bad_client, prefix="test:cache:")
+        
+        keys = [(("graph", "node"), "key")]
+        values = {keys[0]: ({"data": "test"}, None)}
+        
+        # Should not raise exception when Redis unavailable
+        cache.set(values)  # Should silently fail
+
+    @pytest.mark.asyncio
+    async def test_redis_unavailable_async(self):
+        """Test async behavior when Redis is unavailable."""
+        # Create async cache with non-existent Redis server
+        bad_client = aioredis.Redis(host="nonexistent", port=9999, socket_connect_timeout=0.1)
+        cache = RedisCache(bad_client, prefix="test:cache:")
+        
+        keys = [(("graph", "node"), "key")]
+        values = {keys[0]: ({"data": "test"}, None)}
+        
+        # Should return empty dict for get
+        result = await cache.aget(keys)
+        assert result == {}
+        
+        # Should not raise exception for set
+        await cache.aset(values)  # Should silently fail
+        
+        # Cleanup
+        await bad_client.aclose()
+
+    def test_corrupted_data_handling(self):
+        """Test handling of corrupted data in Redis."""
+        # Set some valid data first
+        keys = [(("graph", "node"), "valid_key")]
+        values = {keys[0]: ({"data": "valid"}, None)}
+        self.cache.set(values)
+        
+        # Manually insert corrupted data
+        corrupted_key = self.cache._make_key(("graph", "node"), "corrupted_key")
+        self.client.set(corrupted_key, b"invalid:data:format:too:many:colons")
+        
+        # Should skip corrupted entry and return only valid ones
+        all_keys = [keys[0], (("graph", "node"), "corrupted_key")]
+        result = self.cache.get(all_keys)
+        
+        assert len(result) == 1
+        assert result[keys[0]] == {"data": "valid"}
+
+    def test_key_parsing_edge_cases(self):
+        """Test key parsing with edge cases."""
+        # Test empty namespace
+        key1 = ((), "empty_ns")
+        values = {key1: ({"data": "empty_ns"}, None)}
+        self.cache.set(values)
+        result = self.cache.get([key1])
+        assert result[key1] == {"data": "empty_ns"}
+        
+        # Test namespace with special characters
+        key2 = (("graph:with:colons", "node-with-dashes"), "key_with_underscores")
+        values = {key2: ({"data": "special_chars"}, None)}
+        self.cache.set(values)
+        result = self.cache.get([key2])
+        assert result[key2] == {"data": "special_chars"}
+
+    def test_large_data_serialization(self):
+        """Test handling of large data objects."""
+        # Create a large data structure
+        large_data = {"large_list": list(range(1000)), "nested": {"data": "x" * 1000}}
+        key = (("graph", "node"), "large_key")
+        values = {key: (large_data, None)}
+        
+        self.cache.set(values)
+        result = self.cache.get([key])
+        
+        assert len(result) == 1
+        assert result[key] == large_data
