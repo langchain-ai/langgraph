@@ -8,7 +8,11 @@ CLIENT_PATH = os.path.join(ROOT_PATH, "libs", "sdk-py", "langgraph_sdk", "client
 
 
 def get_class_methods(node: ast.ClassDef) -> List[str]:
-    return [n.name for n in node.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    return [
+        n.name
+        for n in node.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
 
 
 def find_classes(tree: ast.AST) -> List[Tuple[str, List[str]]]:
@@ -20,7 +24,9 @@ def find_classes(tree: ast.AST) -> List[Tuple[str, List[str]]]:
     return classes
 
 
-def compare_sync_async_methods(sync_methods: List[str], async_methods: List[str]) -> List[str]:
+def compare_sync_async_methods(
+    sync_methods: List[str], async_methods: List[str]
+) -> List[str]:
     sync_set = set(sync_methods)
     async_set = set(async_methods)
     missing_in_sync = list(async_set - sync_set)
@@ -33,12 +39,18 @@ def main():
         tree = ast.parse(file.read())
 
     classes = find_classes(tree)
-  
+
     def is_sync(class_spec: Tuple[str, List[str]]) -> bool:
         return class_spec[0].startswith("Sync")
 
-    sync_class_name_to_methods = {class_name: class_methods for class_name, class_methods in filter(is_sync, classes)}
-    async_class_name_to_methods = {class_name: class_methods for class_name, class_methods in filterfalse(is_sync, classes)}
+    sync_class_name_to_methods = {
+        class_name: class_methods
+        for class_name, class_methods in filter(is_sync, classes)
+    }
+    async_class_name_to_methods = {
+        class_name: class_methods
+        for class_name, class_methods in filterfalse(is_sync, classes)
+    }
 
     mismatches = []
 
