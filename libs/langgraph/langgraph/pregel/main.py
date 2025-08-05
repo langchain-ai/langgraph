@@ -2814,8 +2814,13 @@ class Pregel(
                 config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
+                ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(stream_put, subgraphs)
+                    StreamMessagesHandler(
+                        stream_put,
+                        subgraphs,
+                        created_in_ns=tuple(ns.split(NS_SEP)) if ns else None,
+                    )
                 )
 
             # set up custom stream mode

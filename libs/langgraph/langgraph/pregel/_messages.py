@@ -29,16 +29,36 @@ Meta = tuple[tuple[str, ...], dict[str, Any]]
 
 class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     """A callback handler that implements stream_mode=messages.
-    Collects messages from (1) chat model stream events and (2) node outputs."""
+
+    Collects messages from:
+    (1) chat model stream events; and
+    (2) node outputs.
+    """
 
     run_inline = True
-    """We want this callback to run in the main thread, to avoid order/locking issues."""
+    """We want this callback to run in the main thread to avoid order/locking issues."""
 
-    def __init__(self, stream: Callable[[StreamChunk], None], subgraphs: bool):
+    def __init__(
+        self,
+        stream: Callable[[StreamChunk], None],
+        subgraphs: bool,
+        *,
+        created_in_ns: tuple[str] | None = None,
+    ) -> None:
+        """Configure the handler to stream messages from LLMs and nodes.
+
+        Args:
+            stream: A callable that takes a StreamChunk and emits it.
+            subgraphs: Whether to emit messages from subgraphs.
+            created_in_ns: The namespace where the handler was created.
+                This is used to allow emitting chat messages from subgraphs
+                that specified `messages` in their stream mode.
+        """
         self.stream = stream
         self.subgraphs = subgraphs
         self.metadata: dict[UUID, Meta] = {}
         self.seen: set[int | str] = set()
+        self.created_in_ns = created_in_ns
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         if dedupe and message.id in self.seen:
@@ -100,7 +120,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
                 :-1
             ]
-            if not self.subgraphs and len(ns) > 0:
+            if not self.subgraphs and len(ns) > 0 and ns != self.created_in_ns:
                 return
             if tags:
                 if filtered_tags := [t for t in tags if not t.startswith("seq:step")]:
