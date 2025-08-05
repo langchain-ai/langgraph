@@ -1,10 +1,11 @@
-import pytest
-from typing_extensions import TypedDict, Annotated
 import operator
+
+import pytest
+from typing_extensions import Annotated, TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import Send, interrupt, Command, Durability
+from langgraph.types import Command, Durability, Send, interrupt
 
 pytestmark = pytest.mark.anyio
 
@@ -95,51 +96,65 @@ async def test_interruption_without_state_updates_async(
 
 def test_interrupt_with_send_payloads(sync_checkpointer: BaseCheckpointSaver) -> None:
     """Test interruption in map node with Send payloads and human-in-the-loop resume."""
-    
+
+    # Global counter to track node executions
+    node_counter = {"entry": 0, "map_node": 0}
+
     class State(TypedDict):
         items: list[str]
         processed: Annotated[list[str], operator.add]
-    
+
     def entry_node(state: State):
-        return {"items": ["item1", "item2"]}
-    
+        node_counter["entry"] += 1
+        return {}  # No state updates in entry node
+
     def send_to_map(state: State):
         return [Send("map_node", {"item": item}) for item in state["items"]]
-    
+
     def map_node(state: State):
-        value = interrupt({"processing": state["item"]})
-        return {"processed": [f"processed_{value}"]}
-    
+        node_counter["map_node"] += 1
+        if "dangerous" in state["item"]:
+            value = interrupt({"processing": state["item"]})
+            return {"processed": [f"processed_{value}"]}
+        else:
+            return {"processed": [f"processed_{state['item']}_auto"]}
+
     builder = StateGraph(State)
     builder.add_node("entry", entry_node)
     builder.add_node("map_node", map_node)
     builder.add_edge(START, "entry")
     builder.add_conditional_edges("entry", send_to_map, ["map_node"])
     builder.add_edge("map_node", END)
-    
+
     graph = builder.compile(checkpointer=sync_checkpointer)
-    
+
     config = {"configurable": {"thread_id": "test_interrupt_send"}}
-    
+
     # Run until interrupts
-    result = graph.invoke({"items": [], "processed": []}, config=config)
-    
-    # Verify we have interrupts
+    result = graph.invoke({"items": ["item1", "dangerous_item"]}, config=config)
+
+    # Verify we have interrupts (only one for dangerous_item)
     interrupts = result.get("__interrupt__", [])
-    assert len(interrupts) == 2
-    assert all(i.resumable for i in interrupts)
-    
+    assert len(interrupts) == 1
+    assert "dangerous_item" in interrupts[0].value["processing"]
+
     # Resume with mapping of interrupt IDs to values
     resume_map = {
-        i.interrupt_id: f"human_input_{i.value['processing']}"
-        for i in interrupts
+        i.interrupt_id: f"human_input_{i.value['processing']}" for i in interrupts
     }
-    
+
     final_result = graph.invoke(Command(resume=resume_map), config=config)
-    
+
     # Verify final result contains processed items
     assert "processed" in final_result
     processed_items = final_result["processed"]
     assert len(processed_items) == 2
-    assert "processed_human_input_item1" in processed_items
-    assert "processed_human_input_item2" in processed_items
+    assert "processed_item1_auto" in processed_items  # item1 processed automatically
+    assert (
+        "processed_human_input_dangerous_item" in processed_items
+    )  # dangerous_item processed after interrupt
+
+    # Verify node execution counts
+    assert node_counter["entry"] == 1  # Entry node runs once
+    # Map node runs twice initially (item1 completes, dangerous_item interrupts), then once on resume
+    assert node_counter["map_node"] == 3
