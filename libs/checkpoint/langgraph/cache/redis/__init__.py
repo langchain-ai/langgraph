@@ -18,7 +18,7 @@ class RedisCache(BaseCache[ValueT]):
         prefix: str = "langgraph:cache:",
     ) -> None:
         """Initialize the cache with a Redis client.
-        
+
         Args:
             redis: Redis client instance (sync or async)
             serde: Serializer to use for values
@@ -36,9 +36,11 @@ class RedisCache(BaseCache[ValueT]):
     def _parse_key(self, redis_key: str) -> tuple[Namespace, str]:
         """Parse a Redis key back to namespace and key."""
         if not redis_key.startswith(self.prefix):
-            raise ValueError(f"Key {redis_key} does not start with prefix {self.prefix}")
-        
-        remaining = redis_key[len(self.prefix):]
+            raise ValueError(
+                f"Key {redis_key} does not start with prefix {self.prefix}"
+            )
+
+        remaining = redis_key[len(self.prefix) :]
         if ":" in remaining:
             parts = remaining.split(":")
             key = parts[-1]
@@ -54,7 +56,7 @@ class RedisCache(BaseCache[ValueT]):
 
         # Build Redis keys
         redis_keys = [self._make_key(ns, key) for ns, key in keys]
-        
+
         # Get values from Redis using MGET
         try:
             raw_values = self.redis.mget(redis_keys)
@@ -82,7 +84,7 @@ class RedisCache(BaseCache[ValueT]):
 
         # Build Redis keys
         redis_keys = [self._make_key(ns, key) for ns, key in keys]
-        
+
         # Get values from Redis using MGET
         try:
             raw_values = await self.redis.mget(redis_keys)
@@ -110,19 +112,19 @@ class RedisCache(BaseCache[ValueT]):
 
         # Use pipeline for efficient batch operations
         pipe = self.redis.pipeline()
-        
+
         for (ns, key), (value, ttl) in mapping.items():
             redis_key = self._make_key(ns, key)
             encoding, data = self.serde.dumps_typed(value)
-            
+
             # Store as "encoding:data" format
             serialized_value = f"{encoding}:".encode() + data
-            
+
             if ttl is not None:
                 pipe.setex(redis_key, ttl, serialized_value)
             else:
                 pipe.set(redis_key, serialized_value)
-        
+
         try:
             pipe.execute()
         except Exception:
@@ -136,19 +138,19 @@ class RedisCache(BaseCache[ValueT]):
 
         # Use pipeline for efficient batch operations
         pipe = self.redis.pipeline()
-        
+
         for (ns, key), (value, ttl) in mapping.items():
             redis_key = self._make_key(ns, key)
             encoding, data = self.serde.dumps_typed(value)
-            
+
             # Store as "encoding:data" format
             serialized_value = f"{encoding}:".encode() + data
-            
+
             if ttl is not None:
                 pipe.setex(redis_key, ttl, serialized_value)
             else:
                 pipe.set(redis_key, serialized_value)
-        
+
         try:
             await pipe.execute()
         except Exception:
@@ -170,10 +172,12 @@ class RedisCache(BaseCache[ValueT]):
                 keys_to_delete = []
                 for ns in namespaces:
                     ns_str = ":".join(ns) if ns else ""
-                    pattern = f"{self.prefix}{ns_str}:*" if ns_str else f"{self.prefix}*"
+                    pattern = (
+                        f"{self.prefix}{ns_str}:*" if ns_str else f"{self.prefix}*"
+                    )
                     keys = self.redis.keys(pattern)
                     keys_to_delete.extend(keys)
-                
+
                 if keys_to_delete:
                     self.redis.delete(*keys_to_delete)
         except Exception:
@@ -195,10 +199,12 @@ class RedisCache(BaseCache[ValueT]):
                 keys_to_delete = []
                 for ns in namespaces:
                     ns_str = ":".join(ns) if ns else ""
-                    pattern = f"{self.prefix}{ns_str}:*" if ns_str else f"{self.prefix}*"
+                    pattern = (
+                        f"{self.prefix}{ns_str}:*" if ns_str else f"{self.prefix}*"
+                    )
                     keys = await self.redis.keys(pattern)
                     keys_to_delete.extend(keys)
-                
+
                 if keys_to_delete:
                     await self.redis.delete(*keys_to_delete)
         except Exception:
