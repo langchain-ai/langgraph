@@ -188,7 +188,7 @@ class TestRedisCache:
         
         # Cleanup
         await client.flushdb()
-        await client.close()
+        await client.aclose()
 
     @pytest.mark.asyncio
     async def test_async_clear(self):
@@ -219,4 +219,4 @@ class TestRedisCache:
         assert len(result) == 0
         
         # Cleanup
-        await client.close()
+        await client.aclose()
