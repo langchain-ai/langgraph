@@ -79,7 +79,31 @@ class RedisCache(BaseCache[ValueT]):
 
     async def aget(self, keys: Sequence[FullKey]) -> dict[FullKey, ValueT]:
         """Asynchronously get the cached values for the given keys."""
-        return self.get(keys)
+        if not keys:
+            return {}
+
+        # Build Redis keys
+        redis_keys = [self._make_key(ns, key) for ns, key in keys]
+
+        # Get values from Redis using MGET
+        try:
+            raw_values = await self.redis.mget(redis_keys)
+        except Exception:
+            # If Redis is unavailable, return empty dict
+            return {}
+
+        values: dict[FullKey, ValueT] = {}
+        for i, raw_value in enumerate(raw_values):
+            if raw_value is not None:
+                try:
+                    # Deserialize the value
+                    encoding, data = raw_value.split(b":", 1)
+                    values[keys[i]] = self.serde.loads_typed((encoding.decode(), data))
+                except Exception:
+                    # Skip corrupted entries
+                    continue
+
+        return values
 
     def set(self, mapping: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Set the cached values for the given keys and TTLs."""
@@ -109,7 +133,29 @@ class RedisCache(BaseCache[ValueT]):
 
     async def aset(self, mapping: Mapping[FullKey, tuple[ValueT, int | None]]) -> None:
         """Asynchronously set the cached values for the given keys and TTLs."""
-        self.set(mapping)
+        if not mapping:
+            return
+
+        # Use pipeline for efficient batch operations
+        pipe = self.redis.pipeline()
+
+        for (ns, key), (value, ttl) in mapping.items():
+            redis_key = self._make_key(ns, key)
+            encoding, data = self.serde.dumps_typed(value)
+
+            # Store as "encoding:data" format
+            serialized_value = f"{encoding}:".encode() + data
+
+            if ttl is not None:
+                pipe.setex(redis_key, ttl, serialized_value)
+            else:
+                pipe.set(redis_key, serialized_value)
+
+        try:
+            await pipe.execute()
+        except Exception:
+            # Silently fail if Redis is unavailable
+            pass
 
     def clear(self, namespaces: Sequence[Namespace] | None = None) -> None:
         """Delete the cached values for the given namespaces.
@@ -141,4 +187,26 @@ class RedisCache(BaseCache[ValueT]):
     async def aclear(self, namespaces: Sequence[Namespace] | None = None) -> None:
         """Asynchronously delete the cached values for the given namespaces.
         If no namespaces are provided, clear all cached values."""
-        self.clear(namespaces)
+        try:
+            if namespaces is None:
+                # Clear all keys with our prefix
+                pattern = f"{self.prefix}*"
+                keys = await self.redis.keys(pattern)
+                if keys:
+                    await self.redis.delete(*keys)
+            else:
+                # Clear keys for specific namespaces
+                keys_to_delete = []
+                for ns in namespaces:
+                    ns_str = ":".join(ns) if ns else ""
+                    pattern = (
+                        f"{self.prefix}{ns_str}:*" if ns_str else f"{self.prefix}*"
+                    )
+                    keys = await self.redis.keys(pattern)
+                    keys_to_delete.extend(keys)
+
+                if keys_to_delete:
+                    await self.redis.delete(*keys_to_delete)
+        except Exception:
+            # Silently fail if Redis is unavailable
+            pass
