@@ -1156,3 +1156,39 @@ async def test_tool_node_command_remove_all_messages():
     command = result[0]
     assert isinstance(command, Command)
     assert command.update == {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]}
+
+
+def test_run_one_with_no_args_tool():
+    @dec_tool
+    def no_args_tool() -> str:
+        """A dummy tool that returns 'pong'."""
+        return "pong"
+
+    tool_node = ToolNode([no_args_tool])
+
+    call = {"name": "no_args_tool", "id": "123", "args": None}
+    tool_msg = tool_node._run_one(call, input_type="dict", config={})
+
+    assert tool_msg.name == "no_args_tool"
+    assert tool_msg.tool_call_id == "123"
+    assert tool_msg.content == "pong"
+    assert tool_msg.status != "error"
+
+
+async def test_arun_one_with_no_args_tool():
+    @dec_tool
+    async def no_args_tool() -> str:
+        """An async dummy tool that returns 'pong'."""
+        return "pong"
+
+    tool_node = ToolNode([no_args_tool])
+
+    call = {"name": "no_args_tool", "id": "123", "args": None}
+    tool_msg: ToolMessage = await tool_node._arun_one(
+        call, input_type="dict", config={}
+    )
+
+    assert tool_msg.name == "no_args_tool"
+    assert tool_msg.tool_call_id == "123"
+    assert tool_msg.content == "pong"
+    assert tool_msg.status != "error"
