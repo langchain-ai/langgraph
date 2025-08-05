@@ -1,6 +1,8 @@
 """Unit tests for Redis cache implementation."""
 import pytest
 import redis
+import redis.asyncio as aioredis
+import time
 
 from langgraph.cache.redis import RedisCache
 
@@ -9,21 +11,21 @@ class TestRedisCache:
     @pytest.fixture(autouse=True)
     def setup(self):
         """Set up test Redis client and cache."""
-        self.redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=False)
+        self.client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=False)
         try:
-            self.redis_client.ping()
+            self.client.ping()
         except redis.ConnectionError:
             pytest.skip("Redis server not available")
         
-        self.cache = RedisCache(self.redis_client, prefix="test:cache:")
+        self.cache = RedisCache(self.client, prefix="test:cache:")
         
         # Clean up before each test
-        self.redis_client.flushdb()
+        self.client.flushdb()
 
     def teardown_method(self):
         """Clean up after each test."""
         try:
-            self.redis_client.flushdb()
+            self.client.flushdb()
         except Exception:
             pass
 
@@ -65,8 +67,6 @@ class TestRedisCache:
 
     def test_ttl_behavior(self):
         """Test TTL (time-to-live) functionality."""
-        import time
-        
         key = (("graph", "node"), "ttl_key")
         values = {key: ({"data": "expires_soon"}, 1)}  # 1 second TTL
         
@@ -165,33 +165,58 @@ class TestRedisCache:
 
     @pytest.mark.asyncio
     async def test_async_operations(self):
-        """Test async set and get operations."""
+        """Test async set and get operations with async Redis client."""
+        # Create async Redis client and cache
+        client = aioredis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
+        try:
+            await client.ping()
+        except Exception:
+            pytest.skip("Async Redis client not available")
+        
+        cache = RedisCache(client, prefix="test:async:")
+        
         keys = [(("graph", "node"), "async_key")]
         values = {keys[0]: ({"async": True}, None)}
         
         # Async set
-        await self.cache.aset(values)
+        await cache.aset(values)
         
         # Async get
-        result = await self.cache.aget(keys)
+        result = await cache.aget(keys)
         assert len(result) == 1
         assert result[keys[0]] == {"async": True}
+        
+        # Cleanup
+        await client.flushdb()
+        await client.close()
 
     @pytest.mark.asyncio
     async def test_async_clear(self):
-        """Test async clear operations."""
+        """Test async clear operations with async Redis client."""
+        # Create async Redis client and cache
+        client = aioredis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
+        try:
+            await client.ping()
+        except Exception:
+            pytest.skip("Async Redis client not available")
+        
+        cache = RedisCache(client, prefix="test:async:")
+        
         keys = [(("graph", "node"), "key")]
         values = {keys[0]: ({"data": "test"}, None)}
         
-        await self.cache.aset(values)
+        await cache.aset(values)
         
         # Verify data exists
-        result = await self.cache.aget(keys)
+        result = await cache.aget(keys)
         assert len(result) == 1
         
         # Clear all
-        await self.cache.aclear()
+        await cache.aclear()
         
         # Verify data is gone
-        result = await self.cache.aget(keys)
+        result = await cache.aget(keys)
         assert len(result) == 0
+        
+        # Cleanup
+        await client.close()
