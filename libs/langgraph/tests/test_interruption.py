@@ -139,11 +139,13 @@ def test_interrupt_with_send_payloads(sync_checkpointer: BaseCheckpointSaver) ->
     config = {"configurable": {"thread_id": "test_interrupt_send"}}
 
     # Run until interrupts
-    result = graph.invoke({"items": ["item1", "dangerous_item"]}, config=config)
+    result = graph.invoke(
+        {"items": ["item1", "dangerous_item1", "dangerous_item2"]}, config=config
+    )
 
     # Verify we have interrupts (only one for dangerous_item)
     interrupts = result.get("__interrupt__", [])
-    assert len(interrupts) == 1
+    assert len(interrupts) == 2
     assert "dangerous_item" in interrupts[0].value["processing"]
 
     # Resume with mapping of interrupt IDs to values
@@ -156,13 +158,17 @@ def test_interrupt_with_send_payloads(sync_checkpointer: BaseCheckpointSaver) ->
     # Verify final result contains processed items
     assert "processed" in final_result
     processed_items = final_result["processed"]
-    assert len(processed_items) == 2
+    assert len(processed_items) == 3
     assert "processed_item1_auto" in processed_items  # item1 processed automatically
-    assert (
-        "processed_human_input_dangerous_item" in processed_items
-    )  # dangerous_item processed after interrupt
+    assert any(
+        "processed_human_input_dangerous_item1" in item for item in processed_items
+    )  # dangerous_item1 processed after interrupt
+    assert any(
+        "processed_human_input_dangerous_item2" in item for item in processed_items
+    )  # dangerous_item2 processed after interrupt
 
     # Verify node execution counts
     assert node_counter["entry"] == 1  # Entry node runs once
-    # Map node runs twice initially (item1 completes, dangerous_item interrupts), then once on resume
-    assert node_counter["map_node"] == 3
+    # Map node runs 3 times initially (item1 completes, 2 dangerous_items interrupt),
+    # then 2 times on resume
+    assert node_counter["map_node"] == 5
