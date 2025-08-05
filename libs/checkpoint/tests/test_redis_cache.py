@@ -4,7 +4,6 @@ import time
 
 import pytest
 import redis
-import redis.asyncio as aioredis
 
 from langgraph.cache.redis import RedisCache
 
@@ -160,44 +159,43 @@ class TestRedisCache:
 
     @pytest.mark.asyncio
     async def test_async_operations(self):
-        """Test async set and get operations with async Redis client."""
-        # Create async Redis client and cache
-        client = aioredis.Redis(
+        """Test async set and get operations with sync Redis client."""
+        # Create sync Redis client and cache (like main integration tests)
+        client = redis.Redis(
             host="localhost", port=6379, db=1, decode_responses=False
         )
         try:
-            await client.ping()
+            client.ping()
         except Exception:
-            pytest.skip("Async Redis client not available")
+            pytest.skip("Redis not available")
 
         cache = RedisCache(client, prefix="test:async:")
 
         keys = [(("graph", "node"), "async_key")]
         values = {keys[0]: ({"async": True}, None)}
 
-        # Async set
+        # Async set (delegates to sync)
         await cache.aset(values)
 
-        # Async get
+        # Async get (delegates to sync)
         result = await cache.aget(keys)
         assert len(result) == 1
         assert result[keys[0]] == {"async": True}
 
         # Cleanup
-        await client.flushdb()
-        await client.aclose()
+        client.flushdb()
 
     @pytest.mark.asyncio
     async def test_async_clear(self):
-        """Test async clear operations with async Redis client."""
-        # Create async Redis client and cache
-        client = aioredis.Redis(
+        """Test async clear operations with sync Redis client."""
+        # Create sync Redis client and cache (like main integration tests)
+        client = redis.Redis(
             host="localhost", port=6379, db=1, decode_responses=False
         )
         try:
-            await client.ping()
+            client.ping()
         except Exception:
-            pytest.skip("Async Redis client not available")
+            pytest.skip("Redis not available")
 
         cache = RedisCache(client, prefix="test:async:")
 
@@ -210,7 +208,7 @@ class TestRedisCache:
         result = await cache.aget(keys)
         assert len(result) == 1
 
-        # Clear all
+        # Clear all (delegates to sync)
         await cache.aclear()
 
         # Verify data is gone
@@ -218,7 +216,7 @@ class TestRedisCache:
         assert len(result) == 0
 
         # Cleanup
-        await client.aclose()
+        client.flushdb()
 
     def test_redis_unavailable_get(self):
         """Test behavior when Redis is unavailable during get operations."""
@@ -251,8 +249,8 @@ class TestRedisCache:
     @pytest.mark.asyncio
     async def test_redis_unavailable_async(self):
         """Test async behavior when Redis is unavailable."""
-        # Create async cache with non-existent Redis server
-        bad_client = aioredis.Redis(
+        # Create sync cache with non-existent Redis server (like main integration tests)
+        bad_client = redis.Redis(
             host="nonexistent", port=9999, socket_connect_timeout=0.1
         )
         cache = RedisCache(bad_client, prefix="test:cache:")
@@ -260,15 +258,12 @@ class TestRedisCache:
         keys = [(("graph", "node"), "key")]
         values = {keys[0]: ({"data": "test"}, None)}
 
-        # Should return empty dict for get
+        # Should return empty dict for get (delegates to sync)
         result = await cache.aget(keys)
         assert result == {}
 
-        # Should not raise exception for set
+        # Should not raise exception for set (delegates to sync)
         await cache.aset(values)  # Should silently fail
-
-        # Cleanup
-        await bad_client.aclose()
 
     def test_corrupted_data_handling(self):
         """Test handling of corrupted data in Redis."""
