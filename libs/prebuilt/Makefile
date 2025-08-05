@@ -13,21 +13,29 @@ start-postgres:
 stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v
 
+start-redis:
+	docker compose -f tests/compose-redis.yml up -V --force-recreate --wait --remove-orphans
+
+stop-redis:
+	docker compose -f tests/compose-redis.yml down -v
+
 TEST ?= .
 
 test-fast:
 	LANGGRAPH_TEST_FAST=1 uv run pytest $(TEST)
 
 test:
-	make start-postgres && LANGGRAPH_TEST_FAST=0 uv run pytest $(TEST); \
+	make start-postgres && make start-redis && LANGGRAPH_TEST_FAST=0 uv run pytest $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
+	make stop-redis; \
 	exit $$EXIT_CODE
 
 test_watch:
-	make start-postgres && LANGGRAPH_TEST_FAST=0 uv run ptw $(TEST); \
+	make start-postgres && make start-redis && LANGGRAPH_TEST_FAST=0 uv run ptw $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
+	make stop-redis; \
 	exit $$EXIT_CODE
 
 ######################
