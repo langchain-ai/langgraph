@@ -11,7 +11,7 @@ from typing import (
 )
 
 import pytest
-from langchain_core.messages import ToolCall
+from langchain_core.messages import AnyMessage, ToolCall
 from langchain_core.runnables import RunnableConfig, RunnablePick
 from pytest_mock import MockerFixture
 from typing_extensions import TypedDict
@@ -2117,7 +2117,7 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
             return "continue"
 
     # Define a new graph
-    workflow = StateGraph(state_schema=MessagesState)
+    workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", model)
@@ -2157,9 +2157,7 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
     # meaning you can use it as you would any other runnable
     app = workflow.compile()
 
-    assert await app.ainvoke(
-        {"messages": [HumanMessage(content="what is weather in sf")]}
-    ) == [
+    assert await app.ainvoke([HumanMessage(content="what is weather in sf")]) == [
         _AnyIdHumanMessage(
             content="what is weather in sf",
         ),
