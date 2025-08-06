@@ -575,7 +575,7 @@ def create_react_agent(
             _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
             and len(tool_classes + llm_builtin_tools) > 0
         ):
-            model = cast(Union[BaseChatModelV0, BaseChatModelV1], model).bind_tools(
+            model = cast(Union[BaseChatModelV0, BaseChatModelV1], model).bind_tools(  # type: ignore[assignment]
                 tool_classes + llm_builtin_tools  # type: ignore[operator]
             )
 
@@ -681,6 +681,9 @@ def create_react_agent(
         else:
             response = cast(AIMessageV1, response)
 
+        # Type assertion to help mypy understand the response type
+        assert isinstance(response, (AIMessageV0, AIMessageV1))
+
         # add agent name to the AIMessage
         response.name = name
 
@@ -713,6 +716,9 @@ def create_react_agent(
             response = cast(AIMessageV0, response)
         else:
             response = cast(AIMessageV1, response)
+
+        # Type assertion to help mypy understand the response type
+        assert isinstance(response, (AIMessageV0, AIMessageV1))
 
         # add agent name to the AIMessage
         response.name = name
