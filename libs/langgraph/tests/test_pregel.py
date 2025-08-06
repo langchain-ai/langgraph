@@ -16,6 +16,7 @@ from typing import Annotated, Any, Literal, Optional, Union, get_type_hints
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
+from langchain_core.messages import AnyMessage
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -45,7 +46,7 @@ from langgraph.config import get_stream_writer
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import MessageGraph, MessagesState, add_messages
+from langgraph.graph.message import MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
     NodeBuilder,
@@ -3907,7 +3908,7 @@ def test_remove_message_via_state_update(
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = MessageGraph()
+    workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -3940,7 +3941,7 @@ def test_remove_message_via_state_update(
 def test_remove_message_from_node():
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = MessageGraph()
+    workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
     workflow.add_node(
         "chatbot",
         lambda state: [
