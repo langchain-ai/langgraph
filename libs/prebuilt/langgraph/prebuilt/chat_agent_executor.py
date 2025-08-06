@@ -82,10 +82,20 @@ F = TypeVar("F", bound=Callable[..., Any])
 # This simply involves a list of messages
 # We want steps to return messages to append to the list
 # So we annotate the messages attribute with `add_messages` reducer
+
+
 class AgentState(TypedDict):
     """The state of the agent."""
 
-    messages: Annotated[Sequence[Union[BaseMessageV0, MessageV1]], add_messages]
+    messages: Annotated[Sequence[MessageV0], add_messages]
+
+    remaining_steps: NotRequired[RemainingSteps]
+
+
+class AgentStateV1(TypedDict):
+    """The state of the agent."""
+
+    messages: Annotated[Sequence[MessageV1], add_messages(message_version="v1")]
 
     remaining_steps: NotRequired[RemainingSteps]
 
@@ -281,6 +291,7 @@ def create_react_agent(
     model: Union[
         str,
         LanguageModelLike,
+        BaseChatModelV1,
         Callable[
             [StateSchema, Runtime[ContextT]], Union[BaseChatModelV0, BaseChatModelV1]
         ],
@@ -314,7 +325,7 @@ def create_react_agent(
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
-    message_version: Literal["v0", "v1"] = "v0",
+    message_version: Optional[Literal["v0", "v1"]] = None,
     **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
@@ -518,6 +529,12 @@ def create_react_agent(
             f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
         )
 
+    if message_version is None:
+        if isinstance(model, BaseChatModelV1):
+            message_version = "v1"
+        else:
+            message_version = "v0"
+
     message_constructor: Union[type[AIMessageV0], type[AIMessageV1]]
     if message_version == "v0":
         message_constructor = AIMessageV0
@@ -534,11 +551,14 @@ def create_react_agent(
             raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
     if state_schema is None:
-        state_schema = (
-            AgentStateWithStructuredResponse
-            if response_format is not None
-            else AgentState
-        )
+        if message_version == "v1":
+            state_schema = AgentStateV1
+        else:
+            state_schema = (
+                AgentStateWithStructuredResponse
+                if response_format is not None
+                else AgentState
+            )
 
     llm_builtin_tools: list[dict] = []
     if isinstance(tools, ToolNode):
@@ -675,11 +695,6 @@ def create_react_agent(
             response = dynamic_model.invoke(model_input, config)  # type: ignore[arg-type]
         else:
             response = static_model.invoke(model_input, config)  # type: ignore[union-attr]
-
-        if message_version == "v0":
-            response = cast(AIMessageV0, response)
-        else:
-            response = cast(AIMessageV1, response)
 
         # Type assertion to help mypy understand the response type
         assert isinstance(response, (AIMessageV0, AIMessageV1))

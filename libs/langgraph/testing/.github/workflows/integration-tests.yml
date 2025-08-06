@@ -1,0 +1,42 @@
+# This workflow will run integration tests for the current project once per day
+
+name: Integration Tests
+
+on:
+  schedule:
+    - cron: "37 14 * * *" # Run at 7:37 AM Pacific Time (14:37 UTC) every day
+  workflow_dispatch: # Allows triggering the workflow manually in GitHub UI
+
+# If another scheduled run starts while this workflow is still running,
+# cancel the earlier run in favor of the next run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration-tests:
+    name: Integration Tests
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv venv
+          uv pip install -r pyproject.toml
+          uv pip install -U pytest-asyncio
+      - name: Run integration tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_TRACING: true
+        run: |
+          uv run pytest tests/integration_tests

@@ -22,6 +22,7 @@ from langchain_core.messages import (
     convert_to_messages,
     message_chunk_to_message,
 )
+from langchain_core.messages.utils import convert_to_messages_v1
 from typing_extensions import TypedDict, deprecated
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, NS_SEP
@@ -64,6 +65,7 @@ def add_messages(
     right: Messages,
     *,
     format: Literal["langchain-openai"] | None = None,
+    message_version: Literal["v0", "v1"] = "v0",
 ) -> Messages:
     """Merges two lists of messages, updating existing messages by ID.
 
@@ -83,6 +85,8 @@ def add_messages(
             !!! important "Requirement"
 
                 Must have ``langchain-core>=0.3.11`` installed to use this feature.
+        message_version: The version of the message to return. If "v0" then messages will be returned as is.
+        If "v1" then messages will be returned as members of MessageV1.
 
     Returns:
         A new list of messages with the messages from `right` merged into `left`.
@@ -174,6 +178,7 @@ def add_messages(
         ```
 
     """
+
     remove_all_idx = None
     # coerce to list
     if not isinstance(left, list):
@@ -230,6 +235,9 @@ def add_messages(
         raise ValueError(msg)
     else:
         pass
+
+    if message_version == "v1":
+        merged = convert_to_messages_v1(merged)
 
     return merged
 
