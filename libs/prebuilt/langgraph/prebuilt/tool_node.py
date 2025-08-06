@@ -522,7 +522,6 @@ class ToolNode(RunnableCallable):
             )
             return response
         elif isinstance(response, ToolMessageV1):
-            # TODO: Handle ToolMessageV1
             return response
         else:
             raise TypeError(
@@ -591,7 +590,6 @@ class ToolNode(RunnableCallable):
             )
             return response
         elif isinstance(response, ToolMessageV1):
-            # TODO: Handle ToolMessageV1
             return response
         else:
             raise TypeError(

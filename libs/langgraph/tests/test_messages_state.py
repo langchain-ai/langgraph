@@ -20,7 +20,7 @@ from langgraph.graph.message import REMOVE_ALL_MESSAGES, MessagesState, push_mes
 from langgraph.graph.state import StateGraph
 from tests.messages import _AnyIdHumanMessage
 
-_, CORE_MINOR, CORE_PATCH = (int(v) for v in langchain_core.__version__.split("."))
+_, CORE_MINOR, CORE_PATCH = (int(v) for v in langchain_core.__version__.split(".")[:3])
 
 
 def test_add_single_message():
