@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass
-from typing import Any, Callable, Generic, Union, cast, get_type_hints
+from typing import Any, Callable, Generic, Optional, Union, cast, get_type_hints
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -2814,7 +2814,8 @@ class Pregel(
                 config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
-                ns = cast(str, config[CONF][CONFIG_KEY_CHECKPOINT_NS])
+                # namespace can be None in a root level graph?
+                ns = cast(Optional[str], config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(
                         stream_put,

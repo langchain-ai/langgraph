@@ -29,6 +29,9 @@ from langchain_core.tools import InjectedToolCallId, ToolException
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel, Field
 from pydantic.v1 import BaseModel as BaseModelV1
+from tests.any_str import AnyStr
+from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
+from tests.model import FakeToolCallingModel
 from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -58,9 +61,6 @@ from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Interrupt, interrupt
-from tests.any_str import AnyStr
-from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
-from tests.model import FakeToolCallingModel
 
 pytestmark = pytest.mark.anyio
 
@@ -1291,6 +1291,39 @@ async def test_react_agent_subgraph_streaming(version: Literal["v1", "v2"]) -> N
     assert len(result["messages"]) == 2
     assert result["messages"][0].content == "What is the weather in Tokyo?"
     assert "assistant" in str(result["messages"][1])
+
+    # Test streaming with subgraphs = True
+    result = await compiled_workflow.ainvoke(
+        {"messages": [("user", "What is the weather in Tokyo?")]},
+        subgraphs=True,
+    )
+    assert len(result["messages"]) == 2
+
+    events = []
+    async for event in compiled_workflow.astream(
+        {"messages": [("user", "What is the weather in Tokyo?")]},
+        stream_mode="messages",
+        subgraphs=False,
+    ):
+        events.append(event)
+
+    assert len(events) == 0
+
+    events = []
+    async for event in compiled_workflow.astream(
+        {"messages": [("user", "What is the weather in Tokyo?")]},
+        stream_mode="messages",
+        subgraphs=True,
+    ):
+        events.append(event)
+
+    assert len(events) == 3
+    namespace, (msg, metadata) = events[0]
+    # FakeToolCallingModel returns a single AIMessage with tool calls
+    # The content of the AIMessage reflects the input message
+    assert msg.content.startswith("You are a helpful travel assistant")
+    namespace, (msg, metadata) = events[1]  # ToolMessage
+    assert msg.content.startswith("The weather of Tokyo is sunny.")
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
