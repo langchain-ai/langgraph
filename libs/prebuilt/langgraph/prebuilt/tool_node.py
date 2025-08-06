@@ -50,12 +50,26 @@ from typing import (
 )
 
 from langchain_core.messages import (
-    AIMessage,
-    AnyMessage,
-    RemoveMessage,
-    ToolCall,
-    ToolMessage,
-    convert_to_messages,
+    AIMessage as AIMessageV0,
+)
+from langchain_core.messages import (
+    AIMessage as AIMessageV1,
+)
+from langchain_core.messages import (
+    AnyMessage as MessageV0,
+)
+from langchain_core.messages import (
+    RemoveMessage as RemoveMessageV0,
+)
+from langchain_core.messages import (
+    ToolMessage as ToolMessageV0,
+)
+from langchain_core.messages.tool import ToolCall
+from langchain_core.messages.utils import (
+    convert_to_messages as convert_to_messages_v0,
+)
+from langchain_core.messages.utils import (
+    convert_to_messages_v1,
 )
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import (
@@ -67,6 +81,12 @@ from langchain_core.tools import tool as create_tool
 from langchain_core.tools.base import (
     TOOL_MESSAGE_BLOCK_TYPES,
     get_all_basemodel_annotations,
+)
+from langchain_core.v1.messages import (
+    MessageV1,
+)
+from langchain_core.v1.messages import (
+    ToolMessage as ToolMessageV1,
 )
 from pydantic import BaseModel
 from typing_extensions import Annotated, get_args, get_origin
@@ -326,6 +346,7 @@ class ToolNode(RunnableCallable):
             bool, str, Callable[..., str], tuple[type[Exception], ...]
         ] = True,
         messages_key: str = "messages",
+        message_version: Literal["v0", "v1"] = "v0",
     ) -> None:
         """Initialize the ToolNode with the provided tools and configuration.
 
@@ -342,6 +363,7 @@ class ToolNode(RunnableCallable):
         self.tool_to_store_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
+        self.message_version = message_version
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
                 tool_ = create_tool(tool_)
@@ -352,7 +374,7 @@ class ToolNode(RunnableCallable):
     def _func(
         self,
         input: Union[
-            list[AnyMessage],
+            list[Union[MessageV0, MessageV1]],
             dict[str, Any],
             BaseModel,
         ],
@@ -373,7 +395,7 @@ class ToolNode(RunnableCallable):
     async def _afunc(
         self,
         input: Union[
-            list[AnyMessage],
+            list[Union[MessageV0, MessageV1]],
             dict[str, Any],
             BaseModel,
         ],
@@ -390,9 +412,15 @@ class ToolNode(RunnableCallable):
 
     def _combine_tool_outputs(
         self,
-        outputs: list[ToolMessage],
+        outputs: list[Union[ToolMessageV0, ToolMessageV1, Command]],
         input_type: Literal["list", "dict", "tool_calls"],
-    ) -> list[Union[Command, list[ToolMessage], dict[str, list[ToolMessage]]]]:
+    ) -> list[
+        Union[
+            Command,
+            list[Union[ToolMessageV0, ToolMessageV1]],
+            dict[str, list[Union[ToolMessageV0, ToolMessageV1]]],
+        ]
+    ]:
         # preserve existing behavior for non-command tool outputs for backwards
         # compatibility
         if not any(isinstance(output, Command) for output in outputs):
@@ -402,7 +430,9 @@ class ToolNode(RunnableCallable):
         # LangGraph will automatically handle list of Command and non-command node
         # updates
         combined_outputs: list[
-            Command | list[ToolMessage] | dict[str, list[ToolMessage]]
+            Command
+            | list[Union[ToolMessageV0, ToolMessageV1]]
+            | dict[str, list[Union[ToolMessageV0, ToolMessageV1]]]
         ] = []
 
         # combine all parent commands with goto into a single parent command
@@ -437,7 +467,7 @@ class ToolNode(RunnableCallable):
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
-    ) -> ToolMessage:
+    ) -> Union[ToolMessageV0, ToolMessageV1, Command]:
         """Run a single tool call synchronously."""
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
@@ -469,19 +499,30 @@ class ToolNode(RunnableCallable):
             # Handled
             else:
                 content = _handle_tool_error(e, flag=self.handle_tool_errors)
-            return ToolMessage(
-                content=content,
-                name=call["name"],
-                tool_call_id=call["id"],
-                status="error",
-            )
+            if self.message_version == "v0":
+                return ToolMessageV0(
+                    content=content,
+                    name=call["name"],
+                    tool_call_id=call["id"],
+                    status="error",
+                )
+            else:
+                return ToolMessageV1(
+                    content=content,
+                    name=call["name"],
+                    tool_call_id=cast(str, call["id"]),
+                    status="error",
+                )
 
         if isinstance(response, Command):
             return self._validate_tool_command(response, call, input_type)
-        elif isinstance(response, ToolMessage):
+        elif isinstance(response, ToolMessageV0):
             response.content = cast(
                 Union[str, list], msg_content_output(response.content)
             )
+            return response
+        elif isinstance(response, ToolMessageV1):
+            # TODO: Handle ToolMessageV1
             return response
         else:
             raise TypeError(
@@ -493,7 +534,7 @@ class ToolNode(RunnableCallable):
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
-    ) -> ToolMessage:
+    ) -> Union[ToolMessageV0, ToolMessageV1, Command]:
         """Run a single tool call asynchronously."""
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
@@ -527,19 +568,30 @@ class ToolNode(RunnableCallable):
             else:
                 content = _handle_tool_error(e, flag=self.handle_tool_errors)
 
-            return ToolMessage(
-                content=content,
-                name=call["name"],
-                tool_call_id=call["id"],
-                status="error",
-            )
+            if self.message_version == "v0":
+                return ToolMessageV0(
+                    content=content,
+                    name=call["name"],
+                    tool_call_id=call["id"],
+                    status="error",
+                )
+            else:
+                return ToolMessageV1(
+                    content=content,
+                    name=call["name"],
+                    tool_call_id=cast(str, call["id"]),
+                    status="error",
+                )
 
         if isinstance(response, Command):
             return self._validate_tool_command(response, call, input_type)
-        elif isinstance(response, ToolMessage):
+        elif isinstance(response, ToolMessageV0):
             response.content = cast(
                 Union[str, list], msg_content_output(response.content)
             )
+            return response
+        elif isinstance(response, ToolMessageV1):
+            # TODO: Handle ToolMessageV1
             return response
         else:
             raise TypeError(
@@ -549,7 +601,7 @@ class ToolNode(RunnableCallable):
     def _parse_input(
         self,
         input: Union[
-            list[AnyMessage],
+            list[Union[MessageV0, MessageV1]],
             dict[str, Any],
             BaseModel,
         ],
@@ -574,7 +626,9 @@ class ToolNode(RunnableCallable):
 
         try:
             latest_ai_message = next(
-                m for m in reversed(messages) if isinstance(m, AIMessage)
+                m
+                for m in reversed(messages)
+                if isinstance(m, (AIMessageV0, AIMessageV1))
             )
         except StopIteration:
             raise ValueError("No AIMessage found in input")
@@ -585,15 +639,29 @@ class ToolNode(RunnableCallable):
         ]
         return tool_calls, input_type
 
-    def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
+    def _validate_tool_call(
+        self, call: ToolCall
+    ) -> Optional[Union[ToolMessageV0, ToolMessageV1]]:
         if (requested_tool := call["name"]) not in self.tools_by_name:
             content = INVALID_TOOL_NAME_ERROR_TEMPLATE.format(
                 requested_tool=requested_tool,
                 available_tools=", ".join(self.tools_by_name.keys()),
             )
-            return ToolMessage(
-                content, name=requested_tool, tool_call_id=call["id"], status="error"
-            )
+
+            if self.message_version == "v0":
+                return ToolMessageV0(
+                    content=content,
+                    name=requested_tool,
+                    tool_call_id=call["id"],
+                    status="error",
+                )
+            else:
+                return ToolMessageV1(
+                    content=content,
+                    name=requested_tool,
+                    tool_call_id=cast(str, call["id"]),
+                    status="error",
+                )
         else:
             return None
 
@@ -601,7 +669,7 @@ class ToolNode(RunnableCallable):
         self,
         tool_call: ToolCall,
         input: Union[
-            list[AnyMessage],
+            list[Union[MessageV0, MessageV1]],
             dict[str, Any],
             BaseModel,
         ],
@@ -665,7 +733,7 @@ class ToolNode(RunnableCallable):
         self,
         tool_call: ToolCall,
         input: Union[
-            list[AnyMessage],
+            list[Union[MessageV0, MessageV1]],
             dict[str, Any],
             BaseModel,
         ],
@@ -738,20 +806,23 @@ class ToolNode(RunnableCallable):
                 )
 
             updated_command = deepcopy(command)
-            messages_update = updated_command.update
+            messages_update = updated_command.update or []
         else:
             return command
 
         # convert to message objects if updates are in a dict format
-        messages_update = convert_to_messages(messages_update)
+        if self.message_version == "v0":
+            messages_update = convert_to_messages_v0(messages_update)
+        else:
+            messages_update = convert_to_messages_v1(messages_update)
 
         # no validation needed if all messages are being removed
-        if messages_update == [RemoveMessage(id=REMOVE_ALL_MESSAGES)]:
+        if messages_update == [RemoveMessageV0(id=REMOVE_ALL_MESSAGES)]:
             return updated_command
 
         has_matching_tool_message = False
         for message in messages_update:
-            if not isinstance(message, ToolMessage):
+            if not isinstance(message, (ToolMessageV0, ToolMessageV1)):
                 continue
 
             if message.tool_call_id == call["id"]:
@@ -775,7 +846,7 @@ class ToolNode(RunnableCallable):
 
 
 def tools_condition(
-    state: Union[list[AnyMessage], dict[str, Any], BaseModel],
+    state: Union[list[Union[MessageV0, MessageV1]], dict[str, Any], BaseModel],
     messages_key: str = "messages",
 ) -> Literal["tools", "__end__"]:
     """Conditional routing function for tool-calling workflows.
@@ -846,7 +917,7 @@ def tools_condition(
         ai_message = messages[-1]
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
-    if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
+    if (tool_calls := getattr(ai_message, "tool_calls", [])) and len(tool_calls) > 0:
         return "tools"
     return "__end__"
 

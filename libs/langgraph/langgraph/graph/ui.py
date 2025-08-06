@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Any, Literal, Union, cast
 from uuid import uuid4
 
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AnyMessage as MessageV0
+from langchain_core.v1.messages import MessageV1 as MessageV1
 from typing_extensions import TypedDict
 
 from langgraph.config import get_config, get_stream_writer
@@ -64,7 +65,7 @@ def push_ui_message(
     *,
     id: str | None = None,
     metadata: dict[str, Any] | None = None,
-    message: AnyMessage | None = None,
+    message: MessageV0 | MessageV1 | None = None,
     state_key: str | None = "ui",
     merge: bool = False,
 ) -> UIMessage:

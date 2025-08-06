@@ -11,6 +11,9 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_PRERELEASE: allow
+
 jobs:
   build:
     runs-on: ubuntu-latest

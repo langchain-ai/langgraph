@@ -15,22 +15,26 @@ from typing import (
 from warnings import warn
 
 from langchain_core.language_models import (
-    BaseChatModel,
+    BaseChatModel as BaseChatModelV0,
+)
+from langchain_core.language_models import (
     LanguageModelInput,
     LanguageModelLike,
 )
 from langchain_core.messages import (
     AIMessage as AIMessageV0,
-    AnyMessage as MessageV0,
-    BaseMessage as BaseMessageV0,
-    SystemMessage as SystemMessageV0,
-    ToolMessage as ToolMessageV0,
 )
-from langchain_core.v1.messages import(
-    AIMessage as AIMessageV1,
-    MessageV1,
-    SystemMessage as SystemMessageV1,
-    ToolMessage as ToolMessageV1,
+from langchain_core.messages import (
+    AnyMessage as MessageV0,
+)
+from langchain_core.messages import (
+    BaseMessage as BaseMessageV0,
+)
+from langchain_core.messages import (
+    SystemMessage as SystemMessageV0,
+)
+from langchain_core.messages import (
+    ToolMessage as ToolMessageV0,
 )
 from langchain_core.runnables import (
     Runnable,
@@ -39,6 +43,19 @@ from langchain_core.runnables import (
     RunnableSequence,
 )
 from langchain_core.tools import BaseTool
+from langchain_core.v1.chat_models import BaseChatModel as BaseChatModelV1
+from langchain_core.v1.messages import (
+    AIMessage as AIMessageV1,
+)
+from langchain_core.v1.messages import (
+    MessageV1,
+)
+from langchain_core.v1.messages import (
+    SystemMessage as SystemMessageV1,
+)
+from langchain_core.v1.messages import (
+    ToolMessage as ToolMessageV1,
+)
 from pydantic import BaseModel
 from typing_extensions import Annotated, NotRequired, TypedDict
 
@@ -115,13 +132,16 @@ def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
     )
 
 
-def _get_prompt_runnable(prompt: Optional[Prompt], message_version: Literal["v0", "v1"]) -> Runnable:
+def _get_prompt_runnable(
+    prompt: Optional[Prompt], message_version: Literal["v0", "v1"]
+) -> Runnable:
     prompt_runnable: Runnable
     if prompt is None:
         prompt_runnable = RunnableCallable(
             lambda state: _get_state_value(state, "messages"), name=PROMPT_RUNNABLE_NAME
         )
     elif isinstance(prompt, str):
+        _system_message: Union[SystemMessageV0, SystemMessageV1]
         if message_version == "v0":
             _system_message = SystemMessageV0(content=prompt)
         else:
@@ -162,7 +182,7 @@ def _should_bind_tools(
             (
                 step
                 for step in model.steps
-                if isinstance(step, (RunnableBinding, BaseChatModel))
+                if isinstance(step, (RunnableBinding, BaseChatModelV0))
             ),
             model,
         )
@@ -201,14 +221,14 @@ def _should_bind_tools(
     return False
 
 
-def _get_model(model: LanguageModelLike) -> BaseChatModel:
+def _get_model(model: LanguageModelLike) -> Union[BaseChatModelV0, BaseChatModelV1]:
     """Get the underlying model from a RunnableBinding or return the model itself."""
     if isinstance(model, RunnableSequence):
         model = next(
             (
                 step
                 for step in model.steps
-                if isinstance(step, (RunnableBinding, BaseChatModel))
+                if isinstance(step, (RunnableBinding, BaseChatModelV0))
             ),
             model,
         )
@@ -216,7 +236,7 @@ def _get_model(model: LanguageModelLike) -> BaseChatModel:
     if isinstance(model, RunnableBinding):
         model = model.bound
 
-    if not isinstance(model, BaseChatModel):
+    if not isinstance(model, (BaseChatModelV0, BaseChatModelV1)):
         raise TypeError(
             f"Expected `model` to be a ChatModel or RunnableBinding (e.g. model.bind_tools(...)), got {type(model)}"
         )
@@ -235,7 +255,9 @@ def _validate_chat_history(
         for tool_call in message.tool_calls
     ]
     tool_call_ids_with_results = {
-        message.tool_call_id for message in messages if isinstance(message, (ToolMessageV0, ToolMessageV1))
+        message.tool_call_id
+        for message in messages
+        if isinstance(message, (ToolMessageV0, ToolMessageV1))
     }
     tool_calls_without_results = [
         tool_call
@@ -259,10 +281,16 @@ def create_react_agent(
     model: Union[
         str,
         LanguageModelLike,
-        Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
-        Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
         Callable[
-            [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, Union[BaseMessageV0, MessageV1]]
+            [StateSchema, Runtime[ContextT]], Union[BaseChatModelV0, BaseChatModelV1]
+        ],
+        Callable[
+            [StateSchema, Runtime[ContextT]],
+            Awaitable[Union[BaseChatModelV0, BaseChatModelV1]],
+        ],
+        Callable[
+            [StateSchema, Runtime[ContextT]],
+            Runnable[LanguageModelInput, Union[BaseMessageV0, MessageV1]],
         ],
         Callable[
             [StateSchema, Runtime[ContextT]],
@@ -425,6 +453,7 @@ def create_react_agent(
         name: An optional name for the CompiledStateGraph.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
+        message_version: Version of the message format to use (v0 or v1 langchain).
 
     !!! warning "`config_schema` Deprecated"
         The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
@@ -488,7 +517,8 @@ def create_react_agent(
         raise ValueError(
             f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
         )
-    
+
+    message_constructor: Union[type[AIMessageV0], type[AIMessageV1]]
     if message_version == "v0":
         message_constructor = AIMessageV0
     else:
@@ -516,7 +546,10 @@ def create_react_agent(
         tool_node = tools
     else:
         llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
-        tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
+        tool_node = ToolNode(
+            [t for t in tools if not isinstance(t, dict)],
+            message_version=message_version,
+        )
         tool_classes = list(tool_node.tools_by_name.values())
 
     is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
@@ -536,17 +569,19 @@ def create_react_agent(
                     "use '<provider>:<model>' string syntax for `model` parameter."
                 )
 
-            model = cast(BaseChatModel, init_chat_model(model))
+            model = init_chat_model(model, message_version=message_version)
 
         if (
             _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
             and len(tool_classes + llm_builtin_tools) > 0
         ):
-            model = cast(BaseChatModel, model).bind_tools(
+            model = cast(Union[BaseChatModelV0, BaseChatModelV1], model).bind_tools(
                 tool_classes + llm_builtin_tools  # type: ignore[operator]
             )
 
-        static_model: Optional[Runnable] = _get_prompt_runnable(prompt, message_version) | model  # type: ignore[operator]
+        static_model: Optional[Runnable] = (
+            _get_prompt_runnable(prompt, message_version) | model  # type: ignore[operator]
+        )
     else:
         # For dynamic models, we'll create the runnable at runtime
         static_model = None
@@ -560,7 +595,7 @@ def create_react_agent(
     ) -> LanguageModelLike:
         """Resolve the model to use, handling both static and dynamic models."""
         if is_dynamic_model:
-            return _get_prompt_runnable(prompt) | model(state, runtime)  # type: ignore[operator]
+            return _get_prompt_runnable(prompt, message_version) | model(state, runtime)  # type: ignore[operator]
         else:
             return static_model
 
@@ -570,14 +605,18 @@ def create_react_agent(
         """Async resolve the model to use, handling both static and dynamic models."""
         if is_async_dynamic_model:
             resolved_model = await model(state, runtime)  # type: ignore[misc,operator]
-            return _get_prompt_runnable(prompt) | resolved_model
+            return _get_prompt_runnable(prompt, message_version) | resolved_model
         elif is_dynamic_model:
-            return _get_prompt_runnable(prompt) | model(state, runtime)  # type: ignore[operator]
+            return _get_prompt_runnable(prompt, message_version) | model(state, runtime)  # type: ignore[operator]
         else:
             return static_model
 
-    def _are_more_steps_needed(state: StateSchema, response: Union[BaseMessageV0, MessageV1]) -> bool:
-        has_tool_calls = isinstance(response, (AIMessageV0, AIMessageV1)) and response.tool_calls
+    def _are_more_steps_needed(
+        state: StateSchema, response: Union[AIMessageV0, AIMessageV1]
+    ) -> bool:
+        has_tool_calls = (
+            isinstance(response, (AIMessageV0, AIMessageV1)) and response.tool_calls
+        )
         all_tools_return_direct = (
             all(call["name"] in should_return_direct for call in response.tool_calls)
             if isinstance(response, (AIMessageV0, AIMessageV1))
@@ -691,7 +730,6 @@ def create_react_agent(
 
     input_schema: StateSchemaType
     if pre_model_hook is not None:
-
         # Dynamically create a schema that inherits from state_schema and adds 'llm_input_messages'
         if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
             # For Pydantic schemas
@@ -699,10 +737,10 @@ def create_react_agent(
 
             if message_version == "v0":
                 input_schema = create_model(
-                "CallModelInputSchema",
-                llm_input_messages=(list[MessageV0], ...),
-                __base__=state_schema,
-            )
+                    "CallModelInputSchema",
+                    llm_input_messages=(list[MessageV0], ...),
+                    __base__=state_schema,
+                )
             else:
                 input_schema = create_model(
                     "CallModelInputSchema",
@@ -710,11 +748,12 @@ def create_react_agent(
                     __base__=state_schema,
                 )
         else:
-
             if message_version == "v0":
+
                 class CallModelInputSchema(state_schema):  # type: ignore
                     llm_input_messages: list[MessageV0]
             else:
+
                 class CallModelInputSchema(state_schema):  # type: ignore
                     llm_input_messages: list[MessageV1]
 
@@ -819,7 +858,10 @@ def create_react_agent(
         messages = _get_state_value(state, "messages")
         last_message = messages[-1]
         # If there is no function call, then we finish
-        if not isinstance(last_message, (AIMessageV0, AIMessageV1)) or not last_message.tool_calls:
+        if (
+            not isinstance(last_message, (AIMessageV0, AIMessageV1))
+            or not last_message.tool_calls
+        ):
             if post_model_hook is not None:
                 return "post_model_hook"
             elif response_format is not None:
@@ -908,10 +950,14 @@ def create_react_agent(
 
             messages = _get_state_value(state, "messages")
             tool_messages = [
-                m.tool_call_id for m in messages if isinstance(m, (ToolMessageV0, ToolMessageV1)):
+                m.tool_call_id
+                for m in messages
+                if isinstance(m, (ToolMessageV0, ToolMessageV1))
             ]
             last_ai_message = next(
-                m for m in reversed(messages) if isinstance(m, (AIMessageV0, AIMessageV1))
+                m
+                for m in reversed(messages)
+                if isinstance(m, (AIMessageV0, AIMessageV1))
             )
             pending_tool_calls = [
                 c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
@@ -944,7 +990,7 @@ def create_react_agent(
 
     def route_tool_responses(state: StateSchema) -> str:
         for m in reversed(_get_state_value(state, "messages")):
-            if not isinstance(m, ToolMessage):
+            if not isinstance(m, (ToolMessageV0, ToolMessageV1)):
                 break
             if m.name in should_return_direct:
                 return END

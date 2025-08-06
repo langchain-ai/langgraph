@@ -9,6 +9,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Literal,
     Optional,
     Sequence,
     Tuple,
@@ -18,17 +19,30 @@ from typing import (
 )
 
 from langchain_core.messages import (
-    AIMessage,
-    AnyMessage,
-    ToolCall,
-    ToolMessage,
+    AIMessage as AIMessageV0,
 )
+from langchain_core.messages import (
+    AnyMessage as MessageV0,
+)
+from langchain_core.messages import (
+    ToolMessage as ToolMessageV0,
+)
+from langchain_core.messages.tool import ToolCall
 from langchain_core.runnables import (
     RunnableConfig,
 )
 from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool, create_schema_from_function
 from langchain_core.utils.pydantic import is_basemodel_subclass
+from langchain_core.v1.messages import (
+    AIMessage as AIMessageV1,
+)
+from langchain_core.v1.messages import (
+    MessageV1,
+)
+from langchain_core.v1.messages import (
+    ToolMessage as ToolMessageV1,
+)
 from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
@@ -68,6 +82,7 @@ class ValidationNode(RunnableCallable):
             exception repr and a message to respond after fixing validation errors.
         name: The name of the node.
         tags: A list of tags to add to the node.
+        message_version: Version of the message format to use (v0 or v1 langchain).
 
     Returns:
         (Union[Dict[str, List[ToolMessage]], Sequence[ToolMessage]]): A list of ToolMessages with the validated content or error messages.
@@ -134,6 +149,7 @@ class ValidationNode(RunnableCallable):
         ] = None,
         name: str = "validation",
         tags: Optional[list[str]] = None,
+        message_version: Literal["v0", "v1"] = "v0",
     ) -> None:
         super().__init__(self._func, None, name=name, tags=tags, trace=False)
         self._format_error = format_error or _default_format_error
@@ -163,10 +179,11 @@ class ValidationNode(RunnableCallable):
                 raise ValueError(
                     f"Unsupported input to ValidationNode. Expected BaseModel, tool or function. Got: {type(schema)}."
                 )
+        self.message_version = message_version
 
     def _get_message(
-        self, input: Union[list[AnyMessage], dict[str, Any]]
-    ) -> Tuple[str, AIMessage]:
+        self, input: Union[list[Union[MessageV0, MessageV1]], dict[str, Any]]
+    ) -> Tuple[str, Union[AIMessageV0, AIMessageV1]]:
         """Extract the last AIMessage from the input."""
         if isinstance(input, list):
             output_type = "list"
@@ -175,18 +192,19 @@ class ValidationNode(RunnableCallable):
             output_type = "dict"
         else:
             raise ValueError("No message found in input")
-        message: AnyMessage = messages[-1]
-        if not isinstance(message, AIMessage):
+        if not isinstance((message := messages[-1]), (AIMessageV0, AIMessageV1)):
             raise ValueError("Last message is not an AIMessage")
         return output_type, message
 
     def _func(
-        self, input: Union[list[AnyMessage], dict[str, Any]], config: RunnableConfig
+        self,
+        input: Union[list[Union[MessageV0, MessageV1]], dict[str, Any]],
+        config: RunnableConfig,
     ) -> Any:
         """Validate and run tool calls synchronously."""
         output_type, message = self._get_message(input)
 
-        def run_one(call: ToolCall) -> ToolMessage:
+        def run_one(call: ToolCall) -> Union[ToolMessageV0, ToolMessageV1]:
             schema = self.schemas_by_name[call["name"]]
             try:
                 if issubclass(schema, BaseModel):
@@ -199,18 +217,34 @@ class ValidationNode(RunnableCallable):
                     raise ValueError(
                         f"Unsupported schema type: {type(schema)}. Expected BaseModel or BaseModelV1."
                     )
-                return ToolMessage(
-                    content=content,
-                    name=call["name"],
-                    tool_call_id=cast(str, call["id"]),
-                )
+
+                if self.message_version == "v0":
+                    return ToolMessageV0(
+                        content=content,
+                        name=call["name"],
+                        tool_call_id=cast(str, call["id"]),
+                        additional_kwargs={"is_error": False},
+                    )
+                else:
+                    return ToolMessageV1(
+                        content=content,
+                        name=call["name"],
+                        tool_call_id=cast(str, call["id"]),
+                    )
             except (ValidationError, ValidationErrorV1) as e:
-                return ToolMessage(
-                    content=self._format_error(e, call, schema),
-                    name=call["name"],
-                    tool_call_id=cast(str, call["id"]),
-                    additional_kwargs={"is_error": True},
-                )
+                if self.message_version == "v0":
+                    return ToolMessageV0(
+                        content=self._format_error(e, call, schema),
+                        name=call["name"],
+                        tool_call_id=cast(str, call["id"]),
+                        additional_kwargs={"is_error": True},
+                    )
+                else:
+                    return ToolMessageV1(
+                        content=self._format_error(e, call, schema),
+                        name=call["name"],
+                        tool_call_id=cast(str, call["id"]),
+                    )
 
         with get_executor_for_config(config) as executor:
             outputs = [*executor.map(run_one, message.tool_calls)]

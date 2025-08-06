@@ -33,13 +33,7 @@ if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
 
 
-try:
-    from langchain_core.messages.tool import ToolOutputMixin
-except ImportError:
-
-    class ToolOutputMixin:  # type: ignore[no-redef]
-        pass
-
+from langchain_core.messages.tool import ToolOutputMixin
 
 __all__ = (
     "All",

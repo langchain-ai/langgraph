@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  UV_PRERELEASE: allow
+
 # If another push to the same PR or branch happens while this workflow is still running,
 # cancel the earlier run in favor of the next run.
 #
