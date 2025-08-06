@@ -499,13 +499,14 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
-            input = {**call, **{"type": "tool_call"}}
-            response = await self.tools_by_name[call["name"]].ainvoke(input, config)
+            call_args = {**call, **{"type": "tool_call"}}
+            response = await self.tools_by_name[call["name"]].ainvoke(call_args, config)
 
-        # GraphInterrupt is a special exception that will always be raised.
-        # It can be triggered in the following scenarios:
-        # (1) a NodeInterrupt is raised inside a tool
-        # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
+         # GraphInterrupt is a special exception that will always be raised.
+        # It can be triggered in the following scenarios,
+        # Where GraphInterrupt(GraphBubbleUp) is raised from an `interrupt` invocation most commonly:
+        # (1) a GraphInterrupt is raised inside a tool
+        # (2) a GraphInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         except GraphBubbleUp as e:
@@ -563,8 +564,7 @@ class ToolNode(RunnableCallable):
             else:
                 input_type = "list"
                 messages = input
-
-        if isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
+        elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
             input_type = "dict"
         elif messages := getattr(input, self.messages_key, []):
             # Assume dataclass-like state that can coerce from dict
