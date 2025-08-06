@@ -36,6 +36,6 @@ def test_config_schema_deprecation() -> None:
 def test_extra_kwargs_deprecation() -> None:
     with pytest.raises(
         TypeError,
-        match="create_react_agent() got unexpected keyword arguments: {'extra': 'extra'}",
+        match="create_react_agent\(\) got unexpected keyword arguments: \{'extra': 'extra'\}",
     ):
         create_react_agent(FakeToolCallingModel(), [], extra="extra")
