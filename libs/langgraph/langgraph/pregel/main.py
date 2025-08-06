@@ -2815,12 +2815,12 @@ class Pregel(
             # set up messages stream mode
             if "messages" in stream_modes:
                 # namespace can be None in a root level graph?
-                ns = cast(Optional[str], config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                ns_ = cast(Optional[str], config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(
                         stream_put,
                         subgraphs,
-                        created_in_ns=tuple(ns.split(NS_SEP)) if ns else None,
+                        created_in_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
                     )
                 )
 
