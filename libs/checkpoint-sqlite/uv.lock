@@ -325,7 +325,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=0.2.38" },
+    { name = "langchain-core", specifier = ">=0.2.38,<1.0.0" },
     { name = "ormsgpack", specifier = ">=1.10.0" },
 ]
 

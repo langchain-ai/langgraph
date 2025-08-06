@@ -12,7 +12,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
-    "langchain-core>=0.2.38",
+    "langchain-core>=0.2.38,<1.0.0",
     "ormsgpack>=1.10.0",
 ]
 

@@ -329,7 +329,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=0.1" },
+    { name = "langchain-core", specifier = ">=0.1,<1.0.0" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-prebuilt", editable = "." },
     { name = "langgraph-sdk", editable = "../sdk-py" },
@@ -376,7 +376,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=0.2.38" },
+    { name = "langchain-core", specifier = ">=0.2.38,<1.0.0" },
     { name = "ormsgpack", specifier = ">=1.10.0" },
 ]
 
@@ -485,7 +485,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=0.3.67" },
+    { name = "langchain-core", specifier = ">=0.3.67,<1.0.0" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
 ]
 
