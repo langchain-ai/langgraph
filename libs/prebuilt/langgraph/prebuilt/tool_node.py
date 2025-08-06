@@ -502,7 +502,7 @@ class ToolNode(RunnableCallable):
             call_args = {**call, **{"type": "tool_call"}}
             response = await self.tools_by_name[call["name"]].ainvoke(call_args, config)
 
-         # GraphInterrupt is a special exception that will always be raised.
+        # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios,
         # Where GraphInterrupt(GraphBubbleUp) is raised from an `interrupt` invocation most commonly:
         # (1) a GraphInterrupt is raised inside a tool
