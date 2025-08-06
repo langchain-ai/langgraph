@@ -200,6 +200,7 @@ class PregelLoop:
     tasks: dict[str, PregelExecutableTask]
     output: None | dict[str, Any] | Any = None
     updated_channels: set[str] | None = None
+
     # public
 
     def __init__(
@@ -811,12 +812,11 @@ class PregelLoop:
         stream = self.stream
         if stream is None:
             return
-        modes = stream.modes
         checkpoint_ns = self.checkpoint_ns
 
         # Flags to avoid repeated computation and attribute lookups
-        debug_remap = mode in ("checkpoints", "tasks") and "debug" in modes
-        mode_in_stream = mode in modes
+        debug_remap = mode in ("checkpoints", "tasks") and "debug" in stream.modes
+        mode_in_stream = mode in stream.modes
 
         if not mode_in_stream and not debug_remap:
             return
@@ -834,12 +834,10 @@ class PregelLoop:
                 stream((checkpoint_ns, mode, v))
 
             if debug_remap:
-                # Only determine type once, using as few conditionals/evaluations as possible
                 if type_checkpoint is not None:
                     type_val = type_checkpoint
                     debug_step = step_val
                 else:
-                    # Only determine "task_result" on demand
                     if "result" in v:
                         type_val = "task_result"
                     else:
