@@ -6,7 +6,9 @@ from dataclasses import replace
 from typing import Annotated, Any, Literal, Optional, Union, cast
 
 import pytest
+from langchain_core.messages import AIMessage, AnyMessage, ToolCall
 from langchain_core.runnables import RunnableConfig, RunnableMap, RunnablePick
+from langchain_core.tools import tool
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
@@ -2361,7 +2363,7 @@ def test_state_graph_packets(
     )
 
 
-def test_graph_with_messages_key(
+def test_message_graph(
     snapshot: SnapshotAssertion,
     deterministic_uuids: MockerFixture,
     sync_checkpointer: BaseCheckpointSaver,
@@ -2441,7 +2443,7 @@ def test_graph_with_messages_key(
             return "continue"
 
     # Define a new graph
-    workflow = StateGraph(state_schema=MessagesState)
+    workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", model)
@@ -2487,9 +2489,7 @@ def test_graph_with_messages_key(
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
-    assert app.invoke(
-        {"messages": [HumanMessage(content="what is weather in sf")]}
-    ) == [
+    assert app.invoke([HumanMessage(content="what is weather in sf")]) == [
         _AnyIdHumanMessage(
             content="what is weather in sf",
         ),
@@ -6437,8 +6437,6 @@ def test_weather_subgraph(
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, ToolCall
-    from langchain_core.tools import tool
 
     # setup subgraph
 

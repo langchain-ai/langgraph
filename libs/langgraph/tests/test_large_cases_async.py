@@ -2060,7 +2060,7 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
     )
 
 
-async def test_graph_with_messages_key(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )

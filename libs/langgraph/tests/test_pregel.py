@@ -16,6 +16,7 @@ from typing import Annotated, Any, Literal, Optional, Union, get_type_hints
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
+from langchain_core.messages import AnyMessage
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -3907,7 +3908,7 @@ def test_remove_message_via_state_update(
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = StateGraph(state_schema=MessagesState)
+    workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -3940,7 +3941,7 @@ def test_remove_message_via_state_update(
 def test_remove_message_from_node():
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = StateGraph(state_schema=MessagesState)
+    workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -3958,7 +3959,7 @@ def test_remove_message_from_node():
     workflow.add_edge("delete_messages", END)
 
     app = workflow.compile()
-    output = app.invoke({"messages": [HumanMessage(content="Hi")]})
+    output = app.invoke([HumanMessage(content="Hi")])
     assert len(output) == 2
     assert output[-1].content == "How can I help you?"
 
