@@ -46,10 +46,11 @@ except ImportError:
     OpenTelemetryTracer = None
 
 try:
-    from opentelemetry import trace
+    from opentelemetry import trace, context
     from opentelemetry.trace import SpanKind
 except ImportError:
     trace = None
+    context = None
     SpanKind = None
 
 
@@ -77,6 +78,67 @@ if OpenTelemetryTracer:
 
 # Create callback manager
 callback_manager = CallbackManager(tracers)
+
+
+# Helper function to wrap tool execution with GenAI semantic conventions
+def trace_tool_execution(tool_name: str, tool_description: str, arguments: dict):
+    """Decorator to add GenAI semantic conventions to tool execution"""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            tool_span = None
+            try:
+                if trace:
+                    tracer = trace.get_tracer(__name__)
+                    tool_span = tracer.start_span(
+                        f"execute_tool {tool_name}",
+                        kind=SpanKind.INTERNAL,
+                        attributes={
+                            # Required GenAI attributes for execute_tool
+                            "gen_ai.operation.name": "execute_tool",
+                            
+                            # Conditionally required GenAI attributes
+                            "gen_ai.tool.name": tool_name,
+                            "gen_ai.tool.call.arguments": arguments,
+                            
+                            # Recommended GenAI attributes
+                            "gen_ai.tool.description": tool_description,
+                            "gen_ai.tool.type": "function"
+                        }
+                    )
+                    
+                    # Add tool call event
+                    tool_span.add_event("tool_call_start", {
+                        "tool_name": tool_name,
+                        "arguments": arguments
+                    })
+                
+                # Execute the tool
+                result = func(*args, **kwargs)
+                
+                # Add result to span
+                if tool_span:
+                    tool_span.set_attribute("gen_ai.tool.call.result", str(result)[:500] + "..." if len(str(result)) > 500 else str(result))
+                    tool_span.add_event("tool_call_success", {
+                        "result_length": len(str(result)),
+                        "success": True
+                    })
+                
+                return result
+                
+            except Exception as e:
+                if tool_span:
+                    tool_span.record_exception(e)
+                    tool_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                    tool_span.add_event("tool_call_error", {
+                        "error_message": str(e),
+                        "error_type": type(e).__name__
+                    })
+                raise
+            finally:
+                if tool_span:
+                    tool_span.end()
+        return wrapper
+    return decorator
 
 
 # State management
@@ -132,117 +194,200 @@ def create_llm(agent_name: str, temperature: float = 0.7):
 @tool
 def search_flights(origin: str, destination: str, date: str, travelers: int = 1) -> str:
     """Search for available flights between origin and destination on a specific date."""
-    # Enhanced to handle international flights
-    airlines_by_route = {
-        "international": ["British Airways", "Virgin Atlantic", "United", "American", "Delta"],
-        "domestic": ["United", "Delta", "American", "Southwest", "JetBlue"]
-    }
-    
-    is_international = "london" in destination.lower() or "sea" in origin.lower()
-    airlines = airlines_by_route["international"] if is_international else airlines_by_route["domestic"]
-    
-    flights = []
-    for i in range(3):
-        flight = {
-            "flight_id": f"FL{random.randint(100, 999)}",
-            "airline": random.choice(airlines),
-            "departure_time": f"{random.randint(6, 22):02d}:{random.choice(['00', '30'])}",
-            "arrival_time": f"{random.randint(6, 22):02d}:{random.choice(['00', '30'])}",
-            "price_per_person": random.randint(500, 1500) if is_international else random.randint(150, 800),
-            "duration": f"{random.randint(8, 12)}h {random.randint(0, 59)}m" if is_international else f"{random.randint(1, 8)}h {random.randint(0, 59)}m",
-            "origin": origin,
-            "destination": destination,
-            "date": date,
-            "available_seats": random.randint(5, 50)
+    @trace_tool_execution("search_flights", "Search for available flights between origin and destination", {
+        "origin": origin, "destination": destination, "date": date, "travelers": travelers
+    })
+    def _search_flights():
+        # Enhanced to handle international flights
+        airlines_by_route = {
+            "international": ["British Airways", "Virgin Atlantic", "United", "American", "Delta"],
+            "domestic": ["United", "Delta", "American", "Southwest", "JetBlue"]
         }
-        flights.append(flight)
+        
+        # Determine if this is an international route based on common patterns
+        is_international = any(keyword in destination.lower() for keyword in ["london", "paris", "tokyo", "rome", "madrid", "berlin"]) or \
+                          any(keyword in origin.lower() for keyword in ["sea", "jfk", "lax", "ord", "dfw"])
+        airlines = airlines_by_route["international"] if is_international else airlines_by_route["domestic"]
+        
+        flights = []
+        for i in range(3):
+            flight = {
+                "flight_id": f"FL{random.randint(100, 999)}",
+                "airline": random.choice(airlines),
+                "departure_time": f"{random.randint(6, 22):02d}:{random.choice(['00', '30'])}",
+                "arrival_time": f"{random.randint(6, 22):02d}:{random.choice(['00', '30'])}",
+                "price_per_person": random.randint(500, 1500) if is_international else random.randint(150, 800),
+                "duration": f"{random.randint(8, 12)}h {random.randint(0, 59)}m" if is_international else f"{random.randint(1, 8)}h {random.randint(0, 59)}m",
+                "origin": origin,
+                "destination": destination,
+                "date": date,
+                "available_seats": random.randint(5, 50)
+            }
+            flights.append(flight)
+        
+        result = f"Found {len(flights)} flights from {origin} to {destination} on {date}:\n"
+        for f in flights:
+            result += f"\n- {f['airline']} {f['flight_id']}: Departs {f['departure_time']}, arrives {f['arrival_time']}"
+            result += f"\n  Price: ${f['price_per_person']} per person, Duration: {f['duration']}"
+        
+        return result
     
-    result = f"Found {len(flights)} flights from {origin} to {destination} on {date}:\n"
-    for f in flights:
-        result += f"\n- {f['airline']} {f['flight_id']}: Departs {f['departure_time']}, arrives {f['arrival_time']}"
-        result += f"\n  Price: ${f['price_per_person']} per person, Duration: {f['duration']}"
-    
-    return result
+    return _search_flights()
 
 
 @tool
 def search_hotels(destination: str, check_in: str, check_out: str, travelers: int = 1) -> str:
     """Search for available hotels at the destination for specified dates."""
-    hotels = []
-    
-    # Location-specific hotels
-    if "london" in destination.lower() or "chelsea" in destination.lower():
-        hotel_names = ["The Langham London", "Claridge's", "The Savoy", "Mandarin Oriental Hyde Park", "The Ritz London"]
-        locations = ["Mayfair", "Chelsea", "Westminster", "Kensington", "Covent Garden"]
-        price_range = (300, 800)
-    else:
-        hotel_names = ["Grand Plaza", "Comfort Inn", "Luxury Suites", "Budget Lodge", "City Center Hotel"]
-        locations = ["City Center", "Near Airport", "Beach Front", "Business District"]
-        price_range = (80, 400)
-    
-    for i in range(4):
-        hotel = {
-            "hotel_id": f"HT{random.randint(100, 999)}",
-            "name": random.choice(hotel_names),
-            "price_per_night": random.randint(*price_range),
-            "rating": round(random.uniform(4.0, 5.0), 1),
-            "amenities": random.sample(["WiFi", "Pool", "Gym", "Breakfast", "Parking", "Spa", "Concierge", "Restaurant"], k=random.randint(4, 8)),
-            "rooms_available": random.randint(1, 20),
-            "location": random.choice(locations)
-        }
+    @trace_tool_execution("search_hotels", "Search for available hotels at destination", {
+        "destination": destination, "check_in": check_in, "check_out": check_out, "travelers": travelers
+    })
+    def _search_hotels():
+        hotels = []
         
-        # Add distance to Chelsea stadium if in London
-        if "london" in destination.lower() or "chelsea" in destination.lower():
-            hotel["distance_to_stamford_bridge"] = f"{round(random.uniform(0.5, 5.0), 1)} miles"
+        # Location-specific hotels - can be expanded for different cities
+        destination_lower = destination.lower()
+        if any(city in destination_lower for city in ["london", "uk", "england"]):
+            hotel_names = ["The Langham London", "Claridge's", "The Savoy", "Mandarin Oriental Hyde Park", "The Ritz London"]
+            locations = ["Mayfair", "Westminster", "Kensington", "Covent Garden", "City Centre"]
+            price_range = (300, 800)
+        elif any(city in destination_lower for city in ["paris", "france"]):
+            hotel_names = ["Le Meurice", "Hotel Plaza Athénée", "The Ritz Paris", "Hotel George V", "Le Bristol"]
+            locations = ["Champs-Élysées", "Louvre", "Marais", "Saint-Germain", "Montmartre"]
+            price_range = (250, 700)
+        elif any(city in destination_lower for city in ["new york", "nyc", "manhattan"]):
+            hotel_names = ["The Plaza", "The St. Regis", "The Carlyle", "The Pierre", "The Mark"]
+            locations = ["Midtown", "Upper East Side", "Times Square", "Central Park", "Financial District"]
+            price_range = (400, 900)
+        else:
+            hotel_names = ["Grand Plaza", "Luxury Suites", "Premium Hotel", "City Center Hotel", "Elite Resort"]
+            locations = ["City Center", "Near Airport", "Business District", "Tourist Area", "Downtown"]
+            price_range = (80, 400)
         
-        hotels.append(hotel)
+        for i in range(4):
+            hotel = {
+                "hotel_id": f"HT{random.randint(100, 999)}",
+                "name": random.choice(hotel_names),
+                "price_per_night": random.randint(*price_range),
+                "rating": round(random.uniform(4.0, 5.0), 1),
+                "amenities": random.sample(["WiFi", "Pool", "Gym", "Breakfast", "Parking", "Spa", "Concierge", "Restaurant"], k=random.randint(4, 8)),
+                "rooms_available": random.randint(1, 20),
+                "location": random.choice(locations)
+            }
+            
+            # Add distance to major attractions/venues if applicable
+            if "london" in destination.lower():
+                hotel["distance_to_city_center"] = f"{round(random.uniform(0.5, 5.0), 1)} miles"
+            elif "paris" in destination.lower():
+                hotel["distance_to_louvre"] = f"{round(random.uniform(0.5, 3.0), 1)} km"
+            elif "new york" in destination.lower():
+                hotel["distance_to_times_square"] = f"{round(random.uniform(0.2, 2.0), 1)} miles"
+            
+            hotels.append(hotel)
+        
+        result = f"Found {len(hotels)} hotels in {destination} from {check_in} to {check_out}:\n"
+        for h in hotels:
+            result += f"\n- {h['name']} ({h['rating']}⭐): ${h['price_per_night']}/night"
+            result += f"\n  Location: {h['location']}, Amenities: {', '.join(h['amenities'])}"
+            # Add distance information if available
+            distance_keys = [k for k in h.keys() if k.startswith('distance_to_')]
+            if distance_keys:
+                for key in distance_keys:
+                    attraction = key.replace('distance_to_', '').replace('_', ' ').title()
+                    result += f"\n  Distance to {attraction}: {h[key]}"
+        
+        return result
     
-    result = f"Found {len(hotels)} hotels in {destination} from {check_in} to {check_out}:\n"
-    for h in hotels:
-        result += f"\n- {h['name']} ({h['rating']}⭐): ${h['price_per_night']}/night"
-        result += f"\n  Location: {h['location']}, Amenities: {', '.join(h['amenities'])}"
-        if "distance_to_stamford_bridge" in h:
-            result += f"\n  Distance to Stamford Bridge: {h['distance_to_stamford_bridge']}"
-    
-    return result
+    return _search_hotels()
 
 
 @tool
-def get_premier_league_schedule(team: str = "Chelsea") -> str:
-    """Get the Premier League match schedule for a specific team."""
-    # Simulate Chelsea's first 3 Premier League games for 2024/25 season
-    matches = [
-        {
-            "match_date": "2024-08-17",
-            "opponent": "Manchester City",
-            "venue": "Stamford Bridge",
-            "competition": "Premier League",
-            "kickoff": "16:30"
-        },
-        {
-            "match_date": "2024-08-24",
-            "opponent": "Wolves",
-            "venue": "Molineux Stadium (Away)",
-            "competition": "Premier League",
-            "kickoff": "15:00"
-        },
-        {
-            "match_date": "2024-09-01",
-            "opponent": "Crystal Palace",
-            "venue": "Stamford Bridge",
-            "competition": "Premier League",
-            "kickoff": "14:00"
-        }
-    ]
+def get_sports_schedule(team: str = "", sport: str = "", event_type: str = "") -> str:
+    """Get sports schedule for specific events, teams, or venues."""
+    @trace_tool_execution("get_sports_schedule", "Get sports schedule for events", {
+        "team": team, "sport": sport, "event_type": event_type
+    })
+    def _get_sports_schedule():
+        # Simulate sports events based on request
+        if "soccer" in sport.lower() or "football" in sport.lower() or "premier league" in sport.lower():
+            # Soccer/Football example
+            events = [
+                {
+                    "event_date": "2024-08-17",
+                    "description": f"{team} vs Manchester City",
+                    "venue": "Home Stadium",
+                    "competition": "League",
+                    "start_time": "16:30"
+                },
+                {
+                    "event_date": "2024-08-24", 
+                    "description": f"{team} vs Wolves",
+                    "venue": "Away Stadium",
+                    "competition": "League",
+                    "start_time": "15:00"
+                },
+                {
+                    "event_date": "2024-09-01",
+                    "description": f"{team} vs Crystal Palace",
+                    "venue": "Home Stadium",
+                    "competition": "League",
+                    "start_time": "14:00"
+                }
+            ]
+            result_header = f"{team} - Sports Schedule:"
+        elif "nfl" in sport.lower():
+            # NFL example
+            events = [
+                {
+                    "event_date": "2024-09-08",
+                    "description": "vs Green Bay Packers",
+                    "venue": "MetLife Stadium",
+                    "competition": "NFL Regular Season",
+                    "start_time": "13:00"
+                }
+            ]
+            result_header = "NFL Schedule:"
+        elif "nba" in sport.lower():
+            # NBA example
+            events = [
+                {
+                    "event_date": "2024-10-15",
+                    "description": "vs Boston Celtics",
+                    "venue": "Madison Square Garden",
+                    "competition": "NBA Regular Season",
+                    "start_time": "19:30"
+                }
+            ]
+            result_header = "NBA Schedule:"
+        else:
+            # Generic sports events
+            events = [
+                {
+                    "event_date": "2024-08-20",
+                    "description": "Sports Event 1",
+                    "venue": "Local Stadium",
+                    "competition": "Tournament",
+                    "start_time": "19:00"
+                },
+                {
+                    "event_date": "2024-08-27",
+                    "description": "Sports Event 2", 
+                    "venue": "Arena Center",
+                    "competition": "Championship",
+                    "start_time": "20:00"
+                }
+            ]
+            result_header = "Sports Schedule:"
+        
+        result = f"{result_header}\n"
+        for i, event in enumerate(events, 1):
+            result += f"\nEvent {i}: {event['event_date']}"
+            result += f"\n  {event['description']} at {event['venue']}"
+            result += f"\n  Start time: {event['start_time']}"
+            result += f"\n  Competition: {event['competition']}"
+        
+        return result
     
-    result = f"Chelsea FC - First 3 Premier League Matches 2024/25:\n"
-    for i, match in enumerate(matches, 1):
-        result += f"\nMatch {i}: {match['match_date']}"
-        result += f"\n  vs {match['opponent']} at {match['venue']}"
-        result += f"\n  Kickoff: {match['kickoff']}"
-    
-    result += "\n\nNote: 2 home matches at Stamford Bridge, 1 away match at Wolves."
-    return result
+    return _get_sports_schedule()
 
 
 @tool
@@ -250,10 +395,22 @@ def search_activities(destination: str, activity_type: Optional[str] = None) -> 
     """Search for activities and attractions at the destination."""
     activities = {
         "london": {
-            "football": ["Stamford Bridge Stadium Tour", "Chelsea FC Museum", "Pre-match Pub Experience", "Football Walking Tour"],
+            "sports": ["Stadium Tours", "Sports Museums", "Pre-match Pub Experience", "Football Walking Tour"],
             "sightseeing": ["Tower of London", "Westminster Abbey", "London Eye", "Buckingham Palace"],
             "cultural": ["West End Theater", "British Museum", "National Gallery", "Tate Modern"],
-            "dining": ["Gordon Ramsay Restaurant", "Sketch London", "Dishoom", "Borough Market Food Tour"]
+            "dining": ["Fine Dining Restaurants", "Historic Pubs", "Borough Market Food Tour", "Afternoon Tea"]
+        },
+        "paris": {
+            "sports": ["Stade de France Tour", "Paris Saint-Germain Museum", "Roland Garros Tour"],
+            "sightseeing": ["Eiffel Tower", "Louvre Museum", "Notre-Dame", "Arc de Triomphe"],
+            "cultural": ["Opera House", "Musée d'Orsay", "Versailles Palace", "Seine River Cruise"],
+            "dining": ["Michelin Star Restaurants", "Wine Tasting", "Cooking Classes", "Market Tours"]
+        },
+        "new york": {
+            "sports": ["Madison Square Garden Tour", "Yankee Stadium", "NBA Experience", "Sports Bar Tours"],
+            "sightseeing": ["Statue of Liberty", "Empire State Building", "Central Park", "Times Square"],
+            "cultural": ["Broadway Shows", "Metropolitan Museum", "9/11 Memorial", "High Line"],
+            "dining": ["Food Tours", "Rooftop Dining", "Deli Experience", "Street Food"]
         },
         "default": {
             "sightseeing": ["City Tour", "Museum Visit", "Historical Sites", "Architecture Walk"],
@@ -305,24 +462,30 @@ def get_weather_forecast(location: str, date: str) -> str:
 @tool
 def calculate_trip_cost(flights: str, hotels: str, activities: str, travelers: int = 1) -> str:
     """Calculate the total estimated cost of the trip."""
-    # Enhanced calculation based on actual trip details
-    flight_cost = random.randint(800, 1500) * travelers * 2  # Round trip
-    hotel_nights = 17  # Aug 16 to Sep 2
-    hotel_cost = random.randint(400, 600) * hotel_nights
-    activities_cost = random.randint(200, 800) * travelers
-    match_tickets = 150 * 3 * travelers  # 3 matches
-    
-    total = flight_cost + hotel_cost + activities_cost + match_tickets
-    
-    breakdown = f"""Trip Cost Breakdown for {travelers} traveler(s):
-- Flights (Round Trip SEA-LHR): ${flight_cost}
+    @trace_tool_execution("calculate_trip_cost", "Calculate total estimated trip cost", {
+        "travelers": travelers, "flights": flights[:100] + "..." if len(flights) > 100 else flights
+    })
+    def _calculate_trip_cost():
+        # Enhanced calculation based on actual trip details
+        flight_cost = random.randint(800, 1500) * travelers * 2  # Round trip
+        hotel_nights = random.randint(5, 20)  # Variable trip length
+        hotel_cost = random.randint(150, 600) * hotel_nights
+        activities_cost = random.randint(200, 800) * travelers
+        events_cost = random.randint(50, 200) * travelers  # Events/attractions
+        
+        total = flight_cost + hotel_cost + activities_cost + events_cost
+        
+        breakdown = f"""Trip Cost Breakdown for {travelers} traveler(s):
+- Flights (Round Trip): ${flight_cost}
 - Hotels ({hotel_nights} nights): ${hotel_cost}
-- Match Tickets (3 games): ${match_tickets}
+- Events & Attractions: ${events_cost}
 - Activities & Dining: ${activities_cost}
 - Total: ${total}
 - Per Person: ${total / travelers}"""
+        
+        return breakdown
     
-    return breakdown
+    return _calculate_trip_cost()
 
 
 @tool
@@ -407,7 +570,7 @@ Always provide specific hotel options with details and explain your recommendati
 
 def create_activity_specialist():
     """Create an activity planning specialist agent"""
-    tools = [search_activities, get_weather_forecast, get_premier_league_schedule]
+    tools = [search_activities, get_weather_forecast, get_sports_schedule]
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are an Activity Planning Specialist Agent. Your role is to:
@@ -534,10 +697,7 @@ class MultiAgentTravelPlanner:
     
     def extract_trip_details(self, user_request: str) -> Dict[str, Any]:
         """Extract trip details from user request using LLM"""
-        extraction_prompt = f"""Extract travel details from this request. Be very careful to identify:
-        - If it mentions Chelsea FC or Premier League, the destination is LONDON, UK
-        - SEA means Seattle (origin)
-        - "bougie" means luxury/high-end
+        extraction_prompt = f"""Extract travel details from this request. 
         
         Request: {user_request}
         
@@ -546,7 +706,7 @@ class MultiAgentTravelPlanner:
         - origin (city/country) 
         - budget (if mentioned, otherwise set as None)
         - number of travelers
-        - departure date (if specific dates aren't mentioned, use the dates needed for the events)
+        - departure date (if specific dates aren't mentioned, suggest reasonable dates)
         - return date
         - special requirements (luxury hotels, specific events, etc.)
         
@@ -555,15 +715,15 @@ class MultiAgentTravelPlanner:
         llm = create_llm("detail_extractor", temperature=0)
         response = llm.invoke(extraction_prompt)
         
-        # Parse the request properly
+        # Parse the request with fallback defaults
         details = {
-            "destination": "London" if "chelsea" in user_request.lower() or "premier league" in user_request.lower() else "New York",
-            "origin": "Seattle" if "sea" in user_request.lower() else "San Francisco",
-            "budget": None,  # Let them specify or we'll calculate
-            "travelers": 2 if "2" in user_request else 1,
-            "departure_date": "2024-08-16",  # Day before first Chelsea match
-            "return_date": "2024-09-02",  # Day after third match
-            "special_requirements": "luxury hotels" if "bougie" in user_request.lower() else "standard"
+            "destination": "London",  # Default destination
+            "origin": "Seattle",      # Default origin
+            "budget": None,           # Let them specify or we'll calculate
+            "travelers": 2,           # Default number of travelers
+            "departure_date": "2024-08-16",  # Default departure
+            "return_date": "2024-09-02",     # Default return
+            "special_requirements": "standard accommodations"
         }
         
         return details
@@ -575,7 +735,42 @@ class MultiAgentTravelPlanner:
         print(f"📋 Task: {task}")
         print(f"{'='*60}")
         
+        agent_span = None
         try:
+            # Create GenAI agent span following semantic conventions
+            if trace:
+                tracer = trace.get_tracer(__name__)
+                agent_span = tracer.start_span(
+                    f"invoke_agent {agent_type}",
+                    kind=SpanKind.CLIENT,
+                    attributes={
+                        # Required GenAI attributes
+                        "gen_ai.operation.name": "invoke_agent",
+                        "gen_ai.provider.name": "azure.ai.openai",
+                        
+                        # Conditionally required GenAI attributes
+                        "gen_ai.agent.name": agent_type,
+                        "gen_ai.agent.id": f"{agent_type}_{self.session_id}",
+                        "gen_ai.conversation.id": self.session_id,
+                        "gen_ai.request.model": "gpt-4.1",
+                        
+                        # Recommended GenAI attributes  
+                        "gen_ai.request.temperature": 0.7 if agent_type != "budget_analyst" else 0.3,
+                        "server.address": "ai-naarkalgaihub999971652049.openai.azure.com",
+                        
+                        # Legacy attributes for backwards compatibility
+                        "agent_type": agent_type,
+                        "session_id": self.session_id,
+                        "task": task[:200] + "..." if len(task) > 200 else task  # Truncate long tasks
+                    }
+                )
+                
+                # Add agent input as event
+                agent_span.add_event("agent_invocation_input", {
+                    "input_task": task,
+                    "agent_reports_available": bool(agent_reports)
+                })
+            
             # Create agent-specific config
             config = {
                 "callbacks": callback_manager,
@@ -594,18 +789,39 @@ class MultiAgentTravelPlanner:
                     {"input": task, "agent_reports": agent_reports}, 
                     config=config
                 )
-                return result
             else:
                 # For other agents with AgentExecutor
                 result = agent_executor.invoke({"input": task}, config=config)
-                return result.get("output", str(result))
+                result = result.get("output", str(result))
+            
+            # Add result to span
+            if agent_span:
+                agent_span.add_event("agent_invocation_output", {
+                    "output_length": len(str(result)),
+                    "success": True
+                })
+                agent_span.set_attribute("gen_ai.response.model", "gpt-4.1")
+                
+            return result
                 
         except Exception as e:
             error_msg = f"Error in {agent_type}: {str(e)}"
             print(f"❌ {error_msg}")
+            
+            if agent_span:
+                agent_span.record_exception(e)
+                agent_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                agent_span.add_event("agent_invocation_error", {
+                    "error_message": str(e),
+                    "error_type": type(e).__name__
+                })
+            
             import traceback
             traceback.print_exc()
             return error_msg
+        finally:
+            if agent_span:
+                agent_span.end()
     
     def plan_trip(self, user_request: str):
         """Main orchestration method"""
@@ -617,54 +833,106 @@ class MultiAgentTravelPlanner:
         trip_details = self.extract_trip_details(user_request)
         self.state.update(trip_details)
         
-        # Create root span for tracing
+        # Create root span for tracing that will contain all agent operations as children
         root_span = None
+        root_span_context = None
         if trace:
             tracer = trace.get_tracer(__name__)
             root_span = tracer.start_span(
-                "multi_agent_travel_planning",
+                "invoke_agent multi_agent_travel_planning",
                 kind=SpanKind.CLIENT,
                 attributes={
+                    # Required GenAI attributes
+                    "gen_ai.operation.name": "invoke_agent",
+                    "gen_ai.provider.name": "azure.ai.openai",
+                    
+                    # Conditionally required GenAI attributes
+                    "gen_ai.agent.name": "MultiAgentTravelPlanner",
+                    "gen_ai.agent.id": f"travel_planner_{self.session_id}",
+                    "gen_ai.conversation.id": self.session_id,
+                    "gen_ai.request.model": "gpt-4.1",
+                    "gen_ai.agent.child_agents": [
+                        {
+                            "agent_id": f"activity_specialist_{self.session_id}",
+                            "name": "activity_specialist",
+                            "role": "specialist"
+                        },
+                        {
+                            "agent_id": f"flight_specialist_{self.session_id}",
+                            "name": "flight_specialist", 
+                            "role": "specialist"
+                        },
+                        {
+                            "agent_id": f"hotel_specialist_{self.session_id}",
+                            "name": "hotel_specialist",
+                            "role": "specialist"
+                        },
+                        {
+                            "agent_id": f"budget_analyst_{self.session_id}",
+                            "name": "budget_analyst",
+                            "role": "specialist"
+                        },
+                        {
+                            "agent_id": f"supervisor_{self.session_id}",
+                            "name": "supervisor",
+                            "role": "coordinator"
+                        }
+                    ],
+                    
+                    # Recommended GenAI attributes
+                    "server.address": "ai-naarkalgaihub999971652049.openai.azure.com",
+                    
+                    # Legacy attributes for backwards compatibility
                     "session.id": self.session_id,
                     "user.request": user_request,
-                    "service.name": "multi-agent-travel-planning"
+                    "service.name": "multi-agent-travel-planning",
+                    "travel.destination": self.state.get("destination", ""),
+                    "travel.origin": self.state.get("origin", ""),
+                    "travel.travelers": self.state.get("travelers", 1),
+                    "travel.departure_date": self.state.get("departure_date", ""),
+                    "travel.return_date": self.state.get("return_date", "")
                 }
             )
+            # Set this as the current span context so all child operations will be traced under it
+            root_span_context = trace.set_span_in_context(root_span)
         
         try:
-            # Phase 1: Activity Specialist first for sports events to get dates
-            activity_task = f"""The user wants to watch the first 3 Premier League games at Chelsea FC.
-            First, check the Premier League schedule for Chelsea to get the match dates.
-            Then plan activities in {self.state['destination']} for {self.state['travelers']} travelers.
-            They want luxury experiences ("bougie hotels" mentioned).
-            Create a day-by-day itinerary around the matches."""
+            # Use the root span context for all agent operations
+            token = None
+            if root_span_context and context:
+                token = context.attach(root_span_context)
+            
+            # Phase 1: Activity Specialist
+            activity_task = f"""Plan activities and events in {self.state['destination']} for {self.state['travelers']} travelers.
+            Check for any sports events, cultural attractions, and entertainment options during their stay.
+            Create a day-by-day itinerary based on the traveler preferences and interests.
+            Consider the travel dates: arrival {self.state['departure_date']}, departure {self.state['return_date']}."""
             
             activity_response = self.run_agent("activity_specialist", activity_task, self.activity_specialist)
             self.state["conversation_history"].append({"agent": "activity_specialist", "response": activity_response})
             
-            # Phase 2: Flight Specialist with proper dates
+            # Phase 2: Flight Specialist
             flight_task = f"""Find flights from {self.state['origin']} to {self.state['destination']} 
             departing on {self.state['departure_date']} for {self.state['travelers']} travelers. 
             Also find return flights on {self.state['return_date']}. 
-            The travelers want to attend Chelsea FC matches on Aug 17, 24, and Sep 1, so ensure arrival/departure times work."""
+            Consider the planned activities and events when suggesting flight times for optimal travel experience."""
             
             flight_response = self.run_agent("flight_specialist", flight_task, self.flight_specialist)
             self.state["conversation_history"].append({"agent": "flight_specialist", "response": flight_response})
             
             # Phase 3: Hotel Specialist
-            hotel_task = f"""Find luxury hotels in {self.state['destination']} for check-in on {self.state['departure_date']} 
+            hotel_task = f"""Find suitable hotels in {self.state['destination']} for check-in on {self.state['departure_date']} 
             and check-out on {self.state['return_date']} for {self.state['travelers']} travelers. 
-            They specifically want "bougie" (luxury/high-end) hotels.
-            Prefer hotels near Stamford Bridge stadium or with easy access to it."""
+            Consider the planned activities and provide hotel recommendations with good location access to attractions."""
             
             hotel_response = self.run_agent("hotel_specialist", hotel_task, self.hotel_specialist)
             self.state["conversation_history"].append({"agent": "hotel_specialist", "response": hotel_response})
             
             # Phase 4: Budget Analysis
-            budget_task = f"""Calculate the total cost for this luxury Chelsea FC trip for {self.state['travelers']} travelers.
-            Include: round-trip flights from Seattle to London, luxury hotels for the duration,
-            3 Chelsea match tickets (estimate £150 per ticket per person), and upscale dining/activities.
-            Provide a detailed breakdown."""
+            budget_task = f"""Calculate the total cost for this trip for {self.state['travelers']} travelers.
+            Include: round-trip flights from {self.state['origin']} to {self.state['destination']}, 
+            hotel accommodations for the duration, planned activities and events, and dining experiences.
+            Provide a detailed breakdown with cost estimates."""
             
             budget_response = self.run_agent("budget_analyst", budget_task, self.budget_analyst)
             self.state["conversation_history"].append({"agent": "budget_analyst", "response": budget_response})
@@ -675,17 +943,17 @@ class MultiAgentTravelPlanner:
                 for report in self.state["conversation_history"]
             ])
             
-            final_task = f"""Create a FINAL TRAVEL PLAN for the Chelsea FC Premier League trip.
+            final_task = f"""Create a FINAL TRAVEL PLAN for the trip to {self.state['destination']}.
             Original request: {user_request}
             
             Include:
-            1. Trip Overview (Seattle to London for Chelsea matches)
-            2. Match Schedule (3 Premier League games)
-            3. Flight Details (SEA-LHR round trip)
-            4. Luxury Hotel Recommendations
-            5. Day-by-Day Itinerary (centered around matches)
+            1. Trip Overview 
+            2. Schedule
+            3. Flight Details
+            4. Hotel Recommendations
+            5. Day-by-Day Itinerary
             6. Total Budget Breakdown
-            7. Important Notes (tickets, transport to stadium, etc.)
+            7. Important Notes
             
             Make it comprehensive but easy to read."""
             
@@ -701,8 +969,14 @@ class MultiAgentTravelPlanner:
             print("="*80)
             
             if root_span:
-                root_span.set_attribute("travel.plan.final", final_plan)
-                root_span.add_event("final_plan_generated", {"plan_length": len(final_plan)})
+                # Add GenAI response attributes
+                root_span.set_attribute("gen_ai.response.model", "gpt-4.1")
+                root_span.set_attribute("travel.plan.final", final_plan[:500] + "..." if len(final_plan) > 500 else final_plan)
+                root_span.add_event("final_plan_generated", {
+                    "plan_length": len(final_plan),
+                    "agents_used": len(self.state["conversation_history"]),
+                    "session_completed": True
+                })
                 
         except Exception as e:
             print(f"\n❌ Error in planning process: {e}")
@@ -712,6 +986,10 @@ class MultiAgentTravelPlanner:
                 root_span.record_exception(e)
                 root_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
         finally:
+            # Detach the context token if we attached one
+            if token is not None and context:
+                context.detach(token)
+            
             if root_span:
                 root_span.set_status(trace.Status(trace.StatusCode.OK))
                 root_span.end()
@@ -723,7 +1001,7 @@ def main():
     print("="*60)
     print("This system uses specialized agents to plan your perfect trip!")
     print("\nExample requests:")
-    print("- 'Plan a vacation to watch the first 3 premier league games at chelsea from SEA, 2 people, bougie hotels'")
+    print("- 'Plan a vacation to London for 2 people with luxury accommodations'")
     print("- 'Plan a romantic getaway to Paris for 2 people with a budget of $4000'")
     print("- 'I need a business trip to New York for next week'")
     print("- 'Family vacation to Orlando for 4 people during summer break'")
@@ -731,7 +1009,7 @@ def main():
     user_request = input("\n📝 Please describe your travel plans: ")
     
     if not user_request.strip():
-        user_request = "Plan a vacation to watch the first 3 premier league games at chelsea from SEA, 2 people, bougie hotels. Pick the dates"
+        user_request = "Plan a vacation to London for 2 people with luxury accommodations. Pick the dates"
         print(f"\nUsing example request: {user_request}")
     
     # Create and run the planner
