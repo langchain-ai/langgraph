@@ -802,7 +802,6 @@ def tools_condition(
 
     Args:
         state: The current graph state to examine for tool calls. Supported formats:
-            - List of messages (for MessageGraph)
             - Dictionary containing a messages key (for StateGraph)
             - BaseModel instance with a messages attribute
         messages_key: The key or attribute name containing the message list in the state.

@@ -45,7 +45,7 @@ from langgraph.config import get_stream_writer
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import MessageGraph, MessagesState, add_messages
+from langgraph.graph.message import MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
     NodeBuilder,
@@ -3907,7 +3907,7 @@ def test_remove_message_via_state_update(
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = MessageGraph()
+    workflow = StateGraph(state_schema=MessagesState)
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -3940,7 +3940,7 @@ def test_remove_message_via_state_update(
 def test_remove_message_from_node():
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = MessageGraph()
+    workflow = StateGraph(state_schema=MessagesState)
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -3958,7 +3958,7 @@ def test_remove_message_from_node():
     workflow.add_edge("delete_messages", END)
 
     app = workflow.compile()
-    output = app.invoke([HumanMessage(content="Hi")])
+    output = app.invoke({"messages": [HumanMessage(content="Hi")]})
     assert len(output) == 2
     assert output[-1].content == "How can I help you?"
 
