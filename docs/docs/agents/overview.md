@@ -32,7 +32,7 @@ LangGraph includes several capabilities essential for building robust, productio
 - [**Streaming support**](../how-tos/streaming.md): Real-time streaming of agent state, model tokens, tool outputs, or combined streams.
 - [**Deployment tooling**](../tutorials/langgraph-platform/local-server.md): Includes infrastructure-free deployment tools. [**LangGraph Platform**](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/) supports testing, debugging, and deployment.
   - **[Studio](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio/)**: A visual IDE for inspecting and debugging workflows.
-  - Supports multiple [**deployment options**](https://langchain-ai.github.io/langgraph/concepts/deployment_options.md) for production.
+  - Supports multiple [**deployment options**](../concepts/deployment_options.md) for production.
 
 ## High-level building blocks
 
