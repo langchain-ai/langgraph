@@ -990,26 +990,25 @@ def _update_graph_paths(
                 raise IsADirectoryError(f"Local module must be a file: {resolved}")
             else:
                 for path in local_deps.real_pkgs:
+                    
                     if resolved.is_relative_to(path):
-                        container_path = (
-                            pathlib.Path("/deps")
-                            / path.name
-                            / resolved.relative_to(path)
-                        )
-                        module_str = container_path.as_posix()
+                        container_subpath = resolved.relative_to(path).as_posix()
+                        container_path = f"/deps/{path.name}/{container_subpath}"
+                        module_str = container_path
                         break
-                else:
-                    for faux_pkg, (_, destpath) in local_deps.faux_pkgs.items():
-                        if resolved.is_relative_to(faux_pkg):
-                            container_subpath = resolved.relative_to(faux_pkg)
-                            # Construct the final path, ensuring POSIX style
-                            module_str = f"{destpath}/{container_subpath.as_posix()}"
-                            break
                     else:
-                        raise ValueError(
-                            f"Module '{import_str}' not found in 'dependencies' list. "
-                            "Add its containing package to 'dependencies' list."
-                        )
+                        for faux_pkg, (_, destpath) in local_deps.faux_pkgs.items():
+                            if resolved.is_relative_to(faux_pkg):
+                                container_subpath = resolved.relative_to(faux_pkg).as_posix()
+                                # Construct the final path, ensuring POSIX style
+                                module_str = f"{destpath}/{container_subpath}"
+                                break
+                        else:
+                            raise ValueError(
+                                f"Module '{import_str}' not found in 'dependencies' list. "
+                                "Add its containing package to 'dependencies' list."
+                            )
+
             # update the config
             if isinstance(data, dict):
                 config["graphs"][graph_id]["path"] = f"{module_str}:{attr_str}"
