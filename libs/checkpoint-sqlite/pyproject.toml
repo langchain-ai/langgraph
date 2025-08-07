@@ -25,7 +25,7 @@ dev = [
   "ruff",
   "codespell",
   "pytest",
-  "pytest-asyncio",
+  "pytest-asyncio==1.0.0",
   "pytest-mock",
   "pytest-watcher",
   "mypy",
