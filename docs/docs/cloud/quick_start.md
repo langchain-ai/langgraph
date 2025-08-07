@@ -154,8 +154,9 @@ You can now test the API:
 
     ```bash
     curl -s --request POST \
-        --url <DEPLOYMENT_URL> \
+        --url <DEPLOYMENT_URL>/runs/stream \
         --header 'Content-Type: application/json' \
+        --header "X-Api-Key: <LANGSMITH API KEY> \
         --data "{
             \"assistant_id\": \"agent\",
             \"input\": {

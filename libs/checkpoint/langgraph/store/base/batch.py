@@ -64,13 +64,20 @@ class AsyncBatchedBaseStore(BaseStore):
         super().__init__()
         self._loop = asyncio.get_running_loop()
         self._aqueue: asyncio.Queue[tuple[asyncio.Future, Op]] = asyncio.Queue()
-        self._task = self._loop.create_task(_run(self._aqueue, weakref.ref(self)))
+        self._task: asyncio.Task | None = None
+        self._ensure_task()
 
     def __del__(self) -> None:
         try:
-            self._task.cancel()
+            if self._task:
+                self._task.cancel()
         except RuntimeError:
             pass
+
+    def _ensure_task(self) -> None:
+        """Ensure the background processing loop is running."""
+        if self._task is None or self._task.done():
+            self._task = self._loop.create_task(_run(self._aqueue, weakref.ref(self)))
 
     async def aget(
         self,
@@ -79,7 +86,7 @@ class AsyncBatchedBaseStore(BaseStore):
         *,
         refresh_ttl: bool | None = None,
     ) -> Item | None:
-        assert not self._task.done()
+        self._ensure_task()
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
             (
@@ -104,7 +111,7 @@ class AsyncBatchedBaseStore(BaseStore):
         offset: int = 0,
         refresh_ttl: bool | None = None,
     ) -> list[SearchItem]:
-        assert not self._task.done()
+        self._ensure_task()
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
             (
@@ -130,7 +137,7 @@ class AsyncBatchedBaseStore(BaseStore):
         *,
         ttl: float | None | NotProvided = NOT_PROVIDED,
     ) -> None:
-        assert not self._task.done()
+        self._ensure_task()
         _validate_namespace(namespace)
         fut = self._loop.create_future()
         self._aqueue.put_nowait(
@@ -148,7 +155,7 @@ class AsyncBatchedBaseStore(BaseStore):
         namespace: tuple[str, ...],
         key: str,
     ) -> None:
-        assert not self._task.done()
+        self._ensure_task()
         fut = self._loop.create_future()
         self._aqueue.put_nowait((fut, PutOp(namespace, key, None)))
         return await fut
@@ -162,7 +169,7 @@ class AsyncBatchedBaseStore(BaseStore):
         limit: int = 100,
         offset: int = 0,
     ) -> list[tuple[str, ...]]:
-        assert not self._task.done()
+        self._ensure_task()
         fut = self._loop.create_future()
         match_conditions = []
         if prefix:
@@ -343,10 +350,14 @@ async def _run(
 
                     # set the results of each operation
                     for fut, result in zip(futs, results):
-                        fut.set_result(result)
+                        # guard against future being done (e.g. cancelled)
+                        if not fut.done():
+                            fut.set_result(result)
                 except Exception as e:
                     for fut in futs:
-                        fut.set_exception(e)
+                        # guard against future being done (e.g. cancelled)
+                        if not fut.done():
+                            fut.set_exception(e)
             finally:
                 # remove strong ref to store
                 del s
