@@ -29,16 +29,51 @@ Meta = tuple[tuple[str, ...], dict[str, Any]]
 
 class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     """A callback handler that implements stream_mode=messages.
-    Collects messages from (1) chat model stream events and (2) node outputs."""
+
+    Collects messages from:
+    (1) chat model stream events; and
+    (2) node outputs.
+    """
 
     run_inline = True
-    """We want this callback to run in the main thread, to avoid order/locking issues."""
+    """We want this callback to run in the main thread to avoid order/locking issues."""
 
-    def __init__(self, stream: Callable[[StreamChunk], None], subgraphs: bool):
+    def __init__(
+        self,
+        stream: Callable[[StreamChunk], None],
+        subgraphs: bool,
+        *,
+        parent_ns: tuple[str, ...] | None = None,
+    ) -> None:
+        """Configure the handler to stream messages from LLMs and nodes.
+
+        Args:
+            stream: A callable that takes a StreamChunk and emits it.
+            subgraphs: Whether to emit messages from subgraphs.
+            parent_ns: The namespace where the handler was created.
+                We keep track of this namespace to allow calls to subgraphs that
+                were explicitly requested as a stream with `messages` mode
+                configured.
+
+        Example:
+            parent_ns is used to handle scenarios where the subgraph is explicitly
+            streamed with `stream_mode="messages"`.
+
+            ```python
+            def parent_graph_node():
+                # This node is in the parent graph.
+                async for event in some_subgraph(..., stream_mode="messages"):
+                    do something with event # <-- these events will be emitted
+                return ...
+
+            parent_graph.invoke(subgraphs=False)
+            ```
+        """
         self.stream = stream
         self.subgraphs = subgraphs
         self.metadata: dict[UUID, Meta] = {}
         self.seen: set[int | str] = set()
+        self.parent_ns = parent_ns
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         if dedupe and message.id in self.seen:
@@ -100,7 +135,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
                 :-1
             ]
-            if not self.subgraphs and len(ns) > 0:
+            if not self.subgraphs and len(ns) > 0 and ns != self.parent_ns:
                 return
             if tags:
                 if filtered_tags := [t for t in tags if not t.startswith("seq:step")]:
