@@ -7,6 +7,7 @@ This system uses multiple specialized agents coordinated by a supervisor agent.
 import os
 import json
 import random
+import traceback
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, TypedDict, Tuple
 from uuid import uuid4
@@ -80,67 +81,6 @@ if OpenTelemetryTracer:
 callback_manager = CallbackManager(tracers)
 
 
-# Helper function to wrap tool execution with GenAI semantic conventions
-def trace_tool_execution(tool_name: str, tool_description: str, arguments: dict):
-    """Decorator to add GenAI semantic conventions to tool execution"""
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            tool_span = None
-            try:
-                if trace:
-                    tracer = trace.get_tracer(__name__)
-                    tool_span = tracer.start_span(
-                        f"execute_tool {tool_name}",
-                        kind=SpanKind.INTERNAL,
-                        attributes={
-                            # Required GenAI attributes for execute_tool
-                            "gen_ai.operation.name": "execute_tool",
-                            
-                            # Conditionally required GenAI attributes
-                            "gen_ai.tool.name": tool_name,
-                            "gen_ai.tool.call.arguments": arguments,
-                            
-                            # Recommended GenAI attributes
-                            "gen_ai.tool.description": tool_description,
-                            "gen_ai.tool.type": "function"
-                        }
-                    )
-                    
-                    # Add tool call event
-                    tool_span.add_event("tool_call_start", {
-                        "tool_name": tool_name,
-                        "arguments": arguments
-                    })
-                
-                # Execute the tool
-                result = func(*args, **kwargs)
-                
-                # Add result to span
-                if tool_span:
-                    tool_span.set_attribute("gen_ai.tool.call.result", str(result)[:500] + "..." if len(str(result)) > 500 else str(result))
-                    tool_span.add_event("tool_call_success", {
-                        "result_length": len(str(result)),
-                        "success": True
-                    })
-                
-                return result
-                
-            except Exception as e:
-                if tool_span:
-                    tool_span.record_exception(e)
-                    tool_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
-                    tool_span.add_event("tool_call_error", {
-                        "error_message": str(e),
-                        "error_type": type(e).__name__
-                    })
-                raise
-            finally:
-                if tool_span:
-                    tool_span.end()
-        return wrapper
-    return decorator
-
-
 # State management
 class AgentType(Enum):
     SUPERVISOR = "supervisor"
@@ -194,200 +134,182 @@ def create_llm(agent_name: str, temperature: float = 0.7):
 @tool
 def search_flights(origin: str, destination: str, date: str, travelers: int = 1) -> str:
     """Search for available flights between origin and destination on a specific date."""
-    @trace_tool_execution("search_flights", "Search for available flights between origin and destination", {
-        "origin": origin, "destination": destination, "date": date, "travelers": travelers
-    })
-    def _search_flights():
-        # Enhanced to handle international flights
-        airlines_by_route = {
-            "international": ["British Airways", "Virgin Atlantic", "United", "American", "Delta"],
-            "domestic": ["United", "Delta", "American", "Southwest", "JetBlue"]
-        }
-        
-        # Determine if this is an international route based on common patterns
-        is_international = any(keyword in destination.lower() for keyword in ["london", "paris", "tokyo", "rome", "madrid", "berlin"]) or \
-                          any(keyword in origin.lower() for keyword in ["sea", "jfk", "lax", "ord", "dfw"])
-        airlines = airlines_by_route["international"] if is_international else airlines_by_route["domestic"]
-        
-        flights = []
-        for i in range(3):
-            flight = {
-                "flight_id": f"FL{random.randint(100, 999)}",
-                "airline": random.choice(airlines),
-                "departure_time": f"{random.randint(6, 22):02d}:{random.choice(['00', '30'])}",
-                "arrival_time": f"{random.randint(6, 22):02d}:{random.choice(['00', '30'])}",
-                "price_per_person": random.randint(500, 1500) if is_international else random.randint(150, 800),
-                "duration": f"{random.randint(8, 12)}h {random.randint(0, 59)}m" if is_international else f"{random.randint(1, 8)}h {random.randint(0, 59)}m",
-                "origin": origin,
-                "destination": destination,
-                "date": date,
-                "available_seats": random.randint(5, 50)
-            }
-            flights.append(flight)
-        
-        result = f"Found {len(flights)} flights from {origin} to {destination} on {date}:\n"
-        for f in flights:
-            result += f"\n- {f['airline']} {f['flight_id']}: Departs {f['departure_time']}, arrives {f['arrival_time']}"
-            result += f"\n  Price: ${f['price_per_person']} per person, Duration: {f['duration']}"
-        
-        return result
+    # Enhanced to handle international flights
+    airlines_by_route = {
+        "international": ["British Airways", "Virgin Atlantic", "United", "American", "Delta"],
+        "domestic": ["United", "Delta", "American", "Southwest", "JetBlue"]
+    }
     
-    return _search_flights()
+    # Determine if this is an international route based on common patterns
+    is_international = any(keyword in destination.lower() for keyword in ["london", "paris", "tokyo", "rome", "madrid", "berlin"]) or \
+                      any(keyword in origin.lower() for keyword in ["sea", "jfk", "lax", "ord", "dfw"])
+    airlines = airlines_by_route["international"] if is_international else airlines_by_route["domestic"]
+    
+    flights = []
+    for i in range(3):
+        flight = {
+            "flight_id": f"FL{random.randint(100, 999)}",
+            "airline": random.choice(airlines),
+            "departure_time": f"{random.randint(6, 22):02d}:{random.choice(['00', '30'])}",
+            "arrival_time": f"{random.randint(6, 22):02d}:{random.choice(['00', '30'])}",
+            "price_per_person": random.randint(500, 1500) if is_international else random.randint(150, 800),
+            "duration": f"{random.randint(8, 12)}h {random.randint(0, 59)}m" if is_international else f"{random.randint(1, 8)}h {random.randint(0, 59)}m",
+            "origin": origin,
+            "destination": destination,
+            "date": date,
+            "available_seats": random.randint(5, 50)
+        }
+        flights.append(flight)
+    
+    result = f"Found {len(flights)} flights from {origin} to {destination} on {date}:\n"
+    for f in flights:
+        result += f"\n- {f['airline']} {f['flight_id']}: Departs {f['departure_time']}, arrives {f['arrival_time']}"
+        result += f"\n  Price: ${f['price_per_person']} per person, Duration: {f['duration']}"
+    
+    return result
 
 
 @tool
 def search_hotels(destination: str, check_in: str, check_out: str, travelers: int = 1) -> str:
     """Search for available hotels at the destination for specified dates."""
-    @trace_tool_execution("search_hotels", "Search for available hotels at destination", {
-        "destination": destination, "check_in": check_in, "check_out": check_out, "travelers": travelers
-    })
-    def _search_hotels():
-        hotels = []
-        
-        # Location-specific hotels - can be expanded for different cities
-        destination_lower = destination.lower()
-        if any(city in destination_lower for city in ["london", "uk", "england"]):
-            hotel_names = ["The Langham London", "Claridge's", "The Savoy", "Mandarin Oriental Hyde Park", "The Ritz London"]
-            locations = ["Mayfair", "Westminster", "Kensington", "Covent Garden", "City Centre"]
-            price_range = (300, 800)
-        elif any(city in destination_lower for city in ["paris", "france"]):
-            hotel_names = ["Le Meurice", "Hotel Plaza Athénée", "The Ritz Paris", "Hotel George V", "Le Bristol"]
-            locations = ["Champs-Élysées", "Louvre", "Marais", "Saint-Germain", "Montmartre"]
-            price_range = (250, 700)
-        elif any(city in destination_lower for city in ["new york", "nyc", "manhattan"]):
-            hotel_names = ["The Plaza", "The St. Regis", "The Carlyle", "The Pierre", "The Mark"]
-            locations = ["Midtown", "Upper East Side", "Times Square", "Central Park", "Financial District"]
-            price_range = (400, 900)
-        else:
-            hotel_names = ["Grand Plaza", "Luxury Suites", "Premium Hotel", "City Center Hotel", "Elite Resort"]
-            locations = ["City Center", "Near Airport", "Business District", "Tourist Area", "Downtown"]
-            price_range = (80, 400)
-        
-        for i in range(4):
-            hotel = {
-                "hotel_id": f"HT{random.randint(100, 999)}",
-                "name": random.choice(hotel_names),
-                "price_per_night": random.randint(*price_range),
-                "rating": round(random.uniform(4.0, 5.0), 1),
-                "amenities": random.sample(["WiFi", "Pool", "Gym", "Breakfast", "Parking", "Spa", "Concierge", "Restaurant"], k=random.randint(4, 8)),
-                "rooms_available": random.randint(1, 20),
-                "location": random.choice(locations)
-            }
-            
-            # Add distance to major attractions/venues if applicable
-            if "london" in destination.lower():
-                hotel["distance_to_city_center"] = f"{round(random.uniform(0.5, 5.0), 1)} miles"
-            elif "paris" in destination.lower():
-                hotel["distance_to_louvre"] = f"{round(random.uniform(0.5, 3.0), 1)} km"
-            elif "new york" in destination.lower():
-                hotel["distance_to_times_square"] = f"{round(random.uniform(0.2, 2.0), 1)} miles"
-            
-            hotels.append(hotel)
-        
-        result = f"Found {len(hotels)} hotels in {destination} from {check_in} to {check_out}:\n"
-        for h in hotels:
-            result += f"\n- {h['name']} ({h['rating']}⭐): ${h['price_per_night']}/night"
-            result += f"\n  Location: {h['location']}, Amenities: {', '.join(h['amenities'])}"
-            # Add distance information if available
-            distance_keys = [k for k in h.keys() if k.startswith('distance_to_')]
-            if distance_keys:
-                for key in distance_keys:
-                    attraction = key.replace('distance_to_', '').replace('_', ' ').title()
-                    result += f"\n  Distance to {attraction}: {h[key]}"
-        
-        return result
+    hotels = []
     
-    return _search_hotels()
+    # Location-specific hotels - can be expanded for different cities
+    destination_lower = destination.lower()
+    if any(city in destination_lower for city in ["london", "uk", "england"]):
+        hotel_names = ["The Langham London", "Claridge's", "The Savoy", "Mandarin Oriental Hyde Park", "The Ritz London"]
+        locations = ["Mayfair", "Westminster", "Kensington", "Covent Garden", "City Centre"]
+        price_range = (300, 800)
+    elif any(city in destination_lower for city in ["paris", "france"]):
+        hotel_names = ["Le Meurice", "Hotel Plaza Athénée", "The Ritz Paris", "Hotel George V", "Le Bristol"]
+        locations = ["Champs-Élysées", "Louvre", "Marais", "Saint-Germain", "Montmartre"]
+        price_range = (250, 700)
+    elif any(city in destination_lower for city in ["new york", "nyc", "manhattan"]):
+        hotel_names = ["The Plaza", "The St. Regis", "The Carlyle", "The Pierre", "The Mark"]
+        locations = ["Midtown", "Upper East Side", "Times Square", "Central Park", "Financial District"]
+        price_range = (400, 900)
+    else:
+        hotel_names = ["Grand Plaza", "Luxury Suites", "Premium Hotel", "City Center Hotel", "Elite Resort"]
+        locations = ["City Center", "Near Airport", "Business District", "Tourist Area", "Downtown"]
+        price_range = (80, 400)
+    
+    for i in range(4):
+        hotel = {
+            "hotel_id": f"HT{random.randint(100, 999)}",
+            "name": random.choice(hotel_names),
+            "price_per_night": random.randint(*price_range),
+            "rating": round(random.uniform(4.0, 5.0), 1),
+            "amenities": random.sample(["WiFi", "Pool", "Gym", "Breakfast", "Parking", "Spa", "Concierge", "Restaurant"], k=random.randint(4, 8)),
+            "rooms_available": random.randint(1, 20),
+            "location": random.choice(locations)
+        }
+        
+        # Add distance to major attractions/venues if applicable
+        if "london" in destination.lower():
+            hotel["distance_to_city_center"] = f"{round(random.uniform(0.5, 5.0), 1)} miles"
+        elif "paris" in destination.lower():
+            hotel["distance_to_louvre"] = f"{round(random.uniform(0.5, 3.0), 1)} km"
+        elif "new york" in destination.lower():
+            hotel["distance_to_times_square"] = f"{round(random.uniform(0.2, 2.0), 1)} miles"
+        
+        hotels.append(hotel)
+    
+    result = f"Found {len(hotels)} hotels in {destination} from {check_in} to {check_out}:\n"
+    for h in hotels:
+        result += f"\n- {h['name']} ({h['rating']}⭐): ${h['price_per_night']}/night"
+        result += f"\n  Location: {h['location']}, Amenities: {', '.join(h['amenities'])}"
+        # Add distance information if available
+        distance_keys = [k for k in h.keys() if k.startswith('distance_to_')]
+        if distance_keys:
+            for key in distance_keys:
+                attraction = key.replace('distance_to_', '').replace('_', ' ').title()
+                result += f"\n  Distance to {attraction}: {h[key]}"
+    
+    return result
 
 
 @tool
 def get_sports_schedule(team: str = "", sport: str = "", event_type: str = "") -> str:
     """Get sports schedule for specific events, teams, or venues."""
-    @trace_tool_execution("get_sports_schedule", "Get sports schedule for events", {
-        "team": team, "sport": sport, "event_type": event_type
-    })
-    def _get_sports_schedule():
-        # Simulate sports events based on request
-        if "soccer" in sport.lower() or "football" in sport.lower() or "premier league" in sport.lower():
-            # Soccer/Football example
-            events = [
-                {
-                    "event_date": "2024-08-17",
-                    "description": f"{team} vs Manchester City",
-                    "venue": "Home Stadium",
-                    "competition": "League",
-                    "start_time": "16:30"
-                },
-                {
-                    "event_date": "2024-08-24", 
-                    "description": f"{team} vs Wolves",
-                    "venue": "Away Stadium",
-                    "competition": "League",
-                    "start_time": "15:00"
-                },
-                {
-                    "event_date": "2024-09-01",
-                    "description": f"{team} vs Crystal Palace",
-                    "venue": "Home Stadium",
-                    "competition": "League",
-                    "start_time": "14:00"
-                }
-            ]
-            result_header = f"{team} - Sports Schedule:"
-        elif "nfl" in sport.lower():
-            # NFL example
-            events = [
-                {
-                    "event_date": "2024-09-08",
-                    "description": "vs Green Bay Packers",
-                    "venue": "MetLife Stadium",
-                    "competition": "NFL Regular Season",
-                    "start_time": "13:00"
-                }
-            ]
-            result_header = "NFL Schedule:"
-        elif "nba" in sport.lower():
-            # NBA example
-            events = [
-                {
-                    "event_date": "2024-10-15",
-                    "description": "vs Boston Celtics",
-                    "venue": "Madison Square Garden",
-                    "competition": "NBA Regular Season",
-                    "start_time": "19:30"
-                }
-            ]
-            result_header = "NBA Schedule:"
-        else:
-            # Generic sports events
-            events = [
-                {
-                    "event_date": "2024-08-20",
-                    "description": "Sports Event 1",
-                    "venue": "Local Stadium",
-                    "competition": "Tournament",
-                    "start_time": "19:00"
-                },
-                {
-                    "event_date": "2024-08-27",
-                    "description": "Sports Event 2", 
-                    "venue": "Arena Center",
-                    "competition": "Championship",
-                    "start_time": "20:00"
-                }
-            ]
-            result_header = "Sports Schedule:"
-        
-        result = f"{result_header}\n"
-        for i, event in enumerate(events, 1):
-            result += f"\nEvent {i}: {event['event_date']}"
-            result += f"\n  {event['description']} at {event['venue']}"
-            result += f"\n  Start time: {event['start_time']}"
-            result += f"\n  Competition: {event['competition']}"
-        
-        return result
+    # Simulate sports events based on request
+    if "soccer" in sport.lower() or "football" in sport.lower() or "premier league" in sport.lower():
+        # Soccer/Football example
+        events = [
+            {
+                "event_date": "2024-08-17",
+                "description": f"{team} vs Manchester City",
+                "venue": "Home Stadium",
+                "competition": "League",
+                "start_time": "16:30"
+            },
+            {
+                "event_date": "2024-08-24", 
+                "description": f"{team} vs Wolves",
+                "venue": "Away Stadium",
+                "competition": "League",
+                "start_time": "15:00"
+            },
+            {
+                "event_date": "2024-09-01",
+                "description": f"{team} vs Crystal Palace",
+                "venue": "Home Stadium",
+                "competition": "League",
+                "start_time": "14:00"
+            }
+        ]
+        result_header = f"{team} - Sports Schedule:"
+    elif "nfl" in sport.lower():
+        # NFL example
+        events = [
+            {
+                "event_date": "2024-09-08",
+                "description": "vs Green Bay Packers",
+                "venue": "MetLife Stadium",
+                "competition": "NFL Regular Season",
+                "start_time": "13:00"
+            }
+        ]
+        result_header = "NFL Schedule:"
+    elif "nba" in sport.lower():
+        # NBA example
+        events = [
+            {
+                "event_date": "2024-10-15",
+                "description": "vs Boston Celtics",
+                "venue": "Madison Square Garden",
+                "competition": "NBA Regular Season",
+                "start_time": "19:30"
+            }
+        ]
+        result_header = "NBA Schedule:"
+    else:
+        # Generic sports events
+        events = [
+            {
+                "event_date": "2024-08-20",
+                "description": "Sports Event 1",
+                "venue": "Local Stadium",
+                "competition": "Tournament",
+                "start_time": "19:00"
+            },
+            {
+                "event_date": "2024-08-27",
+                "description": "Sports Event 2", 
+                "venue": "Arena Center",
+                "competition": "Championship",
+                "start_time": "20:00"
+            }
+        ]
+        result_header = "Sports Schedule:"
     
-    return _get_sports_schedule()
+    result = f"{result_header}\n"
+    for i, event in enumerate(events, 1):
+        result += f"\nEvent {i}: {event['event_date']}"
+        result += f"\n  {event['description']} at {event['venue']}"
+        result += f"\n  Start time: {event['start_time']}"
+        result += f"\n  Competition: {event['competition']}"
+    
+    return result
 
 
 @tool
@@ -462,30 +384,24 @@ def get_weather_forecast(location: str, date: str) -> str:
 @tool
 def calculate_trip_cost(flights: str, hotels: str, activities: str, travelers: int = 1) -> str:
     """Calculate the total estimated cost of the trip."""
-    @trace_tool_execution("calculate_trip_cost", "Calculate total estimated trip cost", {
-        "travelers": travelers, "flights": flights[:100] + "..." if len(flights) > 100 else flights
-    })
-    def _calculate_trip_cost():
-        # Enhanced calculation based on actual trip details
-        flight_cost = random.randint(800, 1500) * travelers * 2  # Round trip
-        hotel_nights = random.randint(5, 20)  # Variable trip length
-        hotel_cost = random.randint(150, 600) * hotel_nights
-        activities_cost = random.randint(200, 800) * travelers
-        events_cost = random.randint(50, 200) * travelers  # Events/attractions
-        
-        total = flight_cost + hotel_cost + activities_cost + events_cost
-        
-        breakdown = f"""Trip Cost Breakdown for {travelers} traveler(s):
+    # Enhanced calculation based on actual trip details
+    flight_cost = random.randint(800, 1500) * travelers * 2  # Round trip
+    hotel_nights = random.randint(5, 20)  # Variable trip length
+    hotel_cost = random.randint(150, 600) * hotel_nights
+    activities_cost = random.randint(200, 800) * travelers
+    events_cost = random.randint(50, 200) * travelers  # Events/attractions
+    
+    total = flight_cost + hotel_cost + activities_cost + events_cost
+    
+    breakdown = f"""Trip Cost Breakdown for {travelers} traveler(s):
 - Flights (Round Trip): ${flight_cost}
 - Hotels ({hotel_nights} nights): ${hotel_cost}
 - Events & Attractions: ${events_cost}
 - Activities & Dining: ${activities_cost}
 - Total: ${total}
 - Per Person: ${total / travelers}"""
-        
-        return breakdown
     
-    return _calculate_trip_cost()
+    return breakdown
 
 
 @tool
@@ -696,7 +612,7 @@ class MultiAgentTravelPlanner:
         }
     
     def extract_trip_details(self, user_request: str) -> Dict[str, Any]:
-        """Extract trip details from user request using LLM"""
+        """Extract trip details from user request using LLM with proper tracing"""
         extraction_prompt = f"""Extract travel details from this request. 
         
         Request: {user_request}
@@ -710,23 +626,67 @@ class MultiAgentTravelPlanner:
         - return date
         - special requirements (luxury hotels, specific events, etc.)
         
-        Return as JSON."""
+        Return as JSON only, no other text."""
         
-        llm = create_llm("detail_extractor", temperature=0)
+        # Create LLM with proper callbacks configuration that will use the current context
+        # The LLM will automatically be a child of whatever span is currently active
+        llm = AzureChatOpenAI(
+            azure_deployment="gpt-4.1",
+            api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
+            azure_endpoint="https://ai-naarkalgaihub999971652049.openai.azure.com/",
+            api_version="2024-02-15-preview",
+            temperature=0,
+            callbacks=callback_manager,  # This ensures it uses the same tracers
+            tags=[f"session-{self.session_id}", "detail_extractor", "multi-agent-travel"],
+            metadata={
+                "session_id": self.session_id,
+                "operation": "extract_trip_details",
+                "gen_ai.agent.name": "detail_extractor",
+                "gen_ai.request.model": "gpt-4.1",
+                "gen_ai.provider.name": "azure.ai.openai",
+                "server.address": "ai-naarkalgaihub999971652049.openai.azure.com"
+            }
+        )
+        
+        # Invoke with proper config - since we're in the root span context, this will be a child
         response = llm.invoke(extraction_prompt)
         
-        # Parse the request with fallback defaults
-        details = {
-            "destination": "London",  # Default destination
-            "origin": "Seattle",      # Default origin
-            "budget": None,           # Let them specify or we'll calculate
-            "travelers": 2,           # Default number of travelers
-            "departure_date": "2024-08-16",  # Default departure
-            "return_date": "2024-09-02",     # Default return
+        # Try to parse the LLM response
+        try:
+            import re
+            # Extract JSON from response
+            json_match = re.search(r'\{.*\}', str(response.content if hasattr(response, 'content') else response), re.DOTALL)
+            if json_match:
+                details = json.loads(json_match.group())
+            else:
+                details = {}
+        except:
+            details = {}
+        
+        # Merge with defaults
+        defaults = {
+            "destination": "London",
+            "origin": "Seattle",
+            "budget": None,
+            "travelers": 2,
+            "departure_date": "2024-08-16",
+            "return_date": "2024-09-02",
             "special_requirements": "standard accommodations"
         }
         
-        return details
+        # Update defaults with extracted details
+        for key, value in details.items():
+            if value is not None:
+                defaults[key] = value
+        
+        # Handle budget from request
+        if "budget" not in details and "$" in user_request:
+            import re
+            budget_match = re.search(r'\$(\d+(?:,\d+)?)', user_request)
+            if budget_match:
+                defaults["budget"] = int(budget_match.group(1).replace(',', ''))
+        
+        return defaults
     
     def run_agent(self, agent_type: str, task: str, agent_executor: Any, agent_reports: str = "") -> str:
         """Run a specific agent with callbacks and tracing"""
@@ -735,54 +695,27 @@ class MultiAgentTravelPlanner:
         print(f"📋 Task: {task}")
         print(f"{'='*60}")
         
-        agent_span = None
         try:
-            # Create GenAI agent span following semantic conventions
-            if trace:
-                tracer = trace.get_tracer(__name__)
-                agent_span = tracer.start_span(
-                    f"invoke_agent {agent_type}",
-                    kind=SpanKind.CLIENT,
-                    attributes={
-                        # Required GenAI attributes
-                        "gen_ai.operation.name": "invoke_agent",
-                        "gen_ai.provider.name": "azure.ai.openai",
-                        
-                        # Conditionally required GenAI attributes
-                        "gen_ai.agent.name": agent_type,
-                        "gen_ai.agent.id": f"{agent_type}_{self.session_id}",
-                        "gen_ai.conversation.id": self.session_id,
-                        "gen_ai.request.model": "gpt-4.1",
-                        
-                        # Recommended GenAI attributes  
-                        "gen_ai.request.temperature": 0.7 if agent_type != "budget_analyst" else 0.3,
-                        "server.address": "ai-naarkalgaihub999971652049.openai.azure.com",
-                        
-                        # Legacy attributes for backwards compatibility
-                        "agent_type": agent_type,
-                        "session_id": self.session_id,
-                        "task": task[:200] + "..." if len(task) > 200 else task  # Truncate long tasks
-                    }
-                )
-                
-                # Add agent input as event
-                agent_span.add_event("agent_invocation_input", {
-                    "input_task": task,
-                    "agent_reports_available": bool(agent_reports)
-                })
-            
-            # Create agent-specific config
+            # Create agent-specific config - callbacks will handle ALL tracing
             config = {
-                "callbacks": callback_manager,
+                "callbacks": callback_manager,  # Callbacks will handle ALL span creation
                 "tags": [agent_type, f"session-{self.session_id}"],
                 "metadata": {
                     "agent_type": agent_type,
                     "session_id": self.session_id,
-                    "task": task
+                    "task": task,
+                    # Add GenAI semantic convention metadata for callbacks to use
+                    "gen_ai.agent.name": agent_type,
+                    "gen_ai.agent.id": f"{agent_type}_{self.session_id}",
+                    "gen_ai.conversation.id": self.session_id,
+                    "gen_ai.request.model": "gpt-4.1",
+                    "gen_ai.request.temperature": 0.7 if agent_type != "budget_analyst" else 0.3,
+                    "gen_ai.provider.name": "azure.ai.openai",
+                    "server.address": "ai-naarkalgaihub999971652049.openai.azure.com"
                 }
             }
             
-            # Run the agent
+            # Run the agent - callbacks will create all spans
             if agent_type == "supervisor":
                 # For supervisor chain - provide both input and agent_reports
                 result = agent_executor.invoke(
@@ -794,113 +727,150 @@ class MultiAgentTravelPlanner:
                 result = agent_executor.invoke({"input": task}, config=config)
                 result = result.get("output", str(result))
             
-            # Add result to span
-            if agent_span:
-                agent_span.add_event("agent_invocation_output", {
-                    "output_length": len(str(result)),
-                    "success": True
-                })
-                agent_span.set_attribute("gen_ai.response.model", "gpt-4.1")
-                
             return result
                 
         except Exception as e:
             error_msg = f"Error in {agent_type}: {str(e)}"
             print(f"❌ {error_msg}")
-            
-            if agent_span:
-                agent_span.record_exception(e)
-                agent_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
-                agent_span.add_event("agent_invocation_error", {
-                    "error_message": str(e),
-                    "error_type": type(e).__name__
-                })
-            
-            import traceback
             traceback.print_exc()
             return error_msg
-        finally:
-            if agent_span:
-                agent_span.end()
     
     def plan_trip(self, user_request: str):
         """Main orchestration method"""
         print("\n🌍 Starting Multi-Agent Travel Planning 🌍")
         print("="*80)
         
-        # Initialize state
+        # Initialize session
+        self.session_id = str(uuid4())
         self.state = self.initialize_state(user_request)
-        trip_details = self.extract_trip_details(user_request)
-        self.state.update(trip_details)
         
-        # Create root span for tracing that will contain all agent operations as children
+        # Create root span FIRST - BEFORE any operations
         root_span = None
         root_span_context = None
+        token = None
+        
         if trace:
             tracer = trace.get_tracer(__name__)
+            
+            # Properly format child agents as JSON array
+            child_agents = [
+                {
+                    "id": f"activity_specialist_{self.session_id}",
+                    "name": "activity_specialist",
+                    "role": "activity planning",
+                    "mode": "assistant"
+                },
+                {
+                    "id": f"flight_specialist_{self.session_id}",
+                    "name": "flight_specialist",
+                    "role": "flight booking",
+                    "mode": "assistant"
+                },
+                {
+                    "id": f"hotel_specialist_{self.session_id}",
+                    "name": "hotel_specialist",
+                    "role": "hotel booking",
+                    "mode": "assistant"
+                },
+                {
+                    "id": f"budget_analyst_{self.session_id}",
+                    "name": "budget_analyst",
+                    "role": "cost analysis",
+                    "mode": "assistant"
+                },
+                {
+                    "id": f"supervisor_{self.session_id}",
+                    "name": "supervisor",
+                    "role": "coordination",
+                    "mode": "assistant"
+                }
+            ]
+            
+            # Create the root span with proper naming convention
             root_span = tracer.start_span(
-                "invoke_agent multi_agent_travel_planning",
-                kind=SpanKind.CLIENT,
+                "invoke_agent multi_agent_travel_planning",  # Correct format: "invoke_agent {agent_name}"
+                kind=SpanKind.SERVER,  # Should be SERVER for root span, not CLIENT
                 attributes={
-                    # Required GenAI attributes
+                    # REQUIRED attributes at top level (not nested)
                     "gen_ai.operation.name": "invoke_agent",
-                    "gen_ai.provider.name": "azure.ai.openai",
-                    
-                    # Conditionally required GenAI attributes
-                    "gen_ai.agent.name": "MultiAgentTravelPlanner",
+                    "gen_ai.system": "langchain",
+                    "gen_ai.agent.name": "multi_agent_travel_planning",
                     "gen_ai.agent.id": f"travel_planner_{self.session_id}",
-                    "gen_ai.conversation.id": self.session_id,
+                    
+                    # CONDITIONALLY REQUIRED attributes
                     "gen_ai.request.model": "gpt-4.1",
-                    "gen_ai.agent.child_agents": [
-                        {
-                            "agent_id": f"activity_specialist_{self.session_id}",
-                            "name": "activity_specialist",
-                            "role": "specialist"
-                        },
-                        {
-                            "agent_id": f"flight_specialist_{self.session_id}",
-                            "name": "flight_specialist", 
-                            "role": "specialist"
-                        },
-                        {
-                            "agent_id": f"hotel_specialist_{self.session_id}",
-                            "name": "hotel_specialist",
-                            "role": "specialist"
-                        },
-                        {
-                            "agent_id": f"budget_analyst_{self.session_id}",
-                            "name": "budget_analyst",
-                            "role": "specialist"
-                        },
-                        {
-                            "agent_id": f"supervisor_{self.session_id}",
-                            "name": "supervisor",
-                            "role": "coordinator"
-                        }
-                    ],
+                    "gen_ai.request.temperature": 0.7,
+                    "gen_ai.request.top_p": 1.0,
+                    "gen_ai.request.max_tokens": 4096,
+                    "gen_ai.conversation.id": self.session_id,
                     
-                    # Recommended GenAI attributes
+                    # RECOMMENDED attributes
+                    "gen_ai.agent.mode": "autonomous",  # Add agent mode
+                    "gen_ai.provider.name": "azure_openai",
                     "server.address": "ai-naarkalgaihub999971652049.openai.azure.com",
+                    "server.port": 443,
+                    "gen_ai.request.frequency_penalty": 0.0,
+                    "gen_ai.request.presence_penalty": 0.0,
                     
-                    # Legacy attributes for backwards compatibility
+                    # Child agents as JSON
+                    "gen_ai.agent.child_agents": json.dumps(child_agents),
+                    
+                    # Additional context
                     "session.id": self.session_id,
                     "user.request": user_request,
                     "service.name": "multi-agent-travel-planning",
-                    "travel.destination": self.state.get("destination", ""),
-                    "travel.origin": self.state.get("origin", ""),
-                    "travel.travelers": self.state.get("travelers", 1),
-                    "travel.departure_date": self.state.get("departure_date", ""),
-                    "travel.return_date": self.state.get("return_date", "")
+                    "service.version": "1.0.0",
+                    "span.kind": "server",
                 }
             )
-            # Set this as the current span context so all child operations will be traced under it
             root_span_context = trace.set_span_in_context(root_span)
+            
+            if otel_tracer:
+                otel_tracer.set_root_span(root_span, self.session_id)
+            
+            # ATTACH CONTEXT IMMEDIATELY so all subsequent operations are children
+            if root_span_context and context:
+                token = context.attach(root_span_context) 
         
         try:
-            # Use the root span context for all agent operations
-            token = None
-            if root_span_context and context:
-                token = context.attach(root_span_context)
+            # NOW extract trip details - it will be a child of root span
+            # Ensure we're in the root span context when calling extract_trip_details
+            print(f"🔍 About to extract trip details. Root span active: {root_span is not None}")
+            if trace:
+                current_span = trace.get_current_span()
+                if current_span and current_span != trace.INVALID_SPAN:
+                    print(f"🔍 Current span context available: {current_span.get_span_context().span_id}")
+                else:
+                    print("⚠️ No current span context found!")
+            
+            trip_details = self.extract_trip_details(user_request)
+            
+            # Update state with extracted details
+            self.state.update({
+                "destination": trip_details.get("destination", "London"),
+                "origin": trip_details.get("origin", "Seattle"),  
+                "budget": trip_details.get("budget"),
+                "travelers": trip_details.get("travelers", 2),
+                "departure_date": trip_details.get("departure_date", "2024-08-16"),
+                "return_date": trip_details.get("return_date", "2024-09-02"),
+                "special_requirements": trip_details.get("special_requirements", "")
+            })
+            
+            # Update root span with extracted destination/origin - convert dict to string for OpenTelemetry
+            if root_span:
+                if isinstance(self.state["destination"], dict):
+                    root_span.set_attribute("travel.destination", str(self.state["destination"]))
+                else:
+                    root_span.set_attribute("travel.destination", str(self.state["destination"]))
+                    
+                if isinstance(self.state["origin"], dict):
+                    root_span.set_attribute("travel.origin", str(self.state["origin"]))
+                else:
+                    root_span.set_attribute("travel.origin", str(self.state["origin"]))
+                
+                root_span.set_attribute("travel.travelers", self.state.get("travelers", 1))
+                root_span.set_attribute("travel.departure_date", self.state.get("departure_date", ""))
+                root_span.set_attribute("travel.return_date", self.state.get("return_date", ""))
             
             # Phase 1: Activity Specialist
             activity_task = f"""Plan activities and events in {self.state['destination']} for {self.state['travelers']} travelers.
@@ -973,14 +943,13 @@ class MultiAgentTravelPlanner:
                 root_span.set_attribute("gen_ai.response.model", "gpt-4.1")
                 root_span.set_attribute("travel.plan.final", final_plan[:500] + "..." if len(final_plan) > 500 else final_plan)
                 root_span.add_event("final_plan_generated", {
-                    "plan_length": len(final_plan),
-                    "agents_used": len(self.state["conversation_history"]),
-                    "session_completed": True
+                    "plan_length": str(len(final_plan)),
+                    "agents_used": str(len(self.state["conversation_history"])),
+                    "session_completed": "true"
                 })
                 
         except Exception as e:
             print(f"\n❌ Error in planning process: {e}")
-            import traceback
             traceback.print_exc()
             if root_span:
                 root_span.record_exception(e)
