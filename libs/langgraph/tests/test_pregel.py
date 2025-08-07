@@ -26,7 +26,7 @@ from langsmith import traceable
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph.cache.base import BaseCache
@@ -8262,3 +8262,53 @@ def test_fork_and_update_task_results(sync_checkpointer: BaseCheckpointSaver) ->
             ],
         ],
     ]
+
+
+def test_subgraph_streaming_sync() -> None:
+    """Test subgraph streaming when used as a node in sync version"""
+
+    # Create a fake chat model that returns a simple response
+    model = GenericFakeChatModel(messages=iter(["The weather is sunny today."]))
+
+    # Create a subgraph that uses the fake chat model
+    def call_model_node(state: MessagesState, config: RunnableConfig) -> MessagesState:
+        """Node that calls the model with the last message."""
+        messages = state["messages"]
+        last_message = messages[-1].content if messages else ""
+        response = model.invoke([("user", last_message)], config)
+        return {"messages": [response]}
+
+    # Build the subgraph
+    subgraph = StateGraph(MessagesState)
+    subgraph.add_node("call_model", call_model_node)
+    subgraph.add_edge(START, "call_model")
+    compiled_subgraph = subgraph.compile()
+
+    class SomeCustomState(TypedDict):
+        last_chunk: NotRequired[str]
+        num_chunks: NotRequired[int]
+
+    # Will invoke a subgraph as a function
+    def parent_node(state: SomeCustomState, config: RunnableConfig) -> dict:
+        """Node that runs the subgraph."""
+        msgs = {"messages": [("user", "What is the weather in Tokyo?")]}
+        events = []
+        for event in compiled_subgraph.stream(msgs, config, stream_mode="messages"):
+            events.append(event)
+        ai_msg_chunks = [ai_msg_chunk for ai_msg_chunk, _ in events]
+        return {
+            "last_chunk": ai_msg_chunks[-1],
+            "num_chunks": len(ai_msg_chunks),
+        }
+
+    # Build the main workflow
+    workflow = StateGraph(SomeCustomState)
+    workflow.add_node("subgraph", parent_node)
+    workflow.add_edge(START, "subgraph")
+    compiled_workflow = workflow.compile()
+
+    # Test the basic functionality
+    result = compiled_workflow.invoke({})
+
+    assert result["last_chunk"].content == "today."
+    assert result["num_chunks"] == 9

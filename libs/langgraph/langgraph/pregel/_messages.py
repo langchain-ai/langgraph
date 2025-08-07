@@ -43,22 +43,37 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         stream: Callable[[StreamChunk], None],
         subgraphs: bool,
         *,
-        created_in_ns: tuple[str, ...] | None = None,
+        parent_ns: tuple[str, ...] | None = None,
     ) -> None:
         """Configure the handler to stream messages from LLMs and nodes.
 
         Args:
             stream: A callable that takes a StreamChunk and emits it.
             subgraphs: Whether to emit messages from subgraphs.
-            created_in_ns: The namespace where the handler was created.
-                This is used to allow emitting chat messages from subgraphs
-                that specified `messages` in their stream mode.
+            parent_ns: The namespace where the handler was created.
+                We keep track of this namespace to allow calls to subgraphs that
+                were explicitly requested as a stream with `messages` mode
+                configured.
+
+        Example:
+            parent_ns is used to handle scenarios where the subgraph is explicitly
+            streamed with `stream_mode="messages"`.
+
+            ```python
+            def parent_graph_node():
+                # This node is in the parent graph.
+                async for event in some_subgraph(..., stream_mode="messages"):
+                    do something with event # <-- these events will be emitted
+                return ...
+
+            parent_graph.invoke(subgraphs=False)
+            ```
         """
         self.stream = stream
         self.subgraphs = subgraphs
         self.metadata: dict[UUID, Meta] = {}
         self.seen: set[int | str] = set()
-        self.created_in_ns = created_in_ns
+        self.parent_ns = parent_ns
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         if dedupe and message.id in self.seen:
@@ -120,7 +135,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             ns = tuple(cast(str, metadata["langgraph_checkpoint_ns"]).split(NS_SEP))[
                 :-1
             ]
-            if not self.subgraphs and len(ns) > 0 and ns != self.created_in_ns:
+            if not self.subgraphs and len(ns) > 0 and ns != self.parent_ns:
                 return
             if tags:
                 if filtered_tags := [t for t in tags if not t.startswith("seq:step")]:
