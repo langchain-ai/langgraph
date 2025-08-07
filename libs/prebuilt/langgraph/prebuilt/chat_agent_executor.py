@@ -893,13 +893,13 @@ def create_react_agent(
 
         workflow.add_conditional_edges(
             "post_model_hook",
-            post_model_hook_router,  # type: ignore[arg-type]
+            post_model_hook_router,
             path_map=post_model_hook_paths,
         )
 
     workflow.add_conditional_edges(
         "agent",
-        should_continue,  # type: ignore[arg-type]
+        should_continue,
         path_map=agent_paths,
     )
 
