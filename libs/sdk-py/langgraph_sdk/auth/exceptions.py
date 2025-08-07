@@ -1,7 +1,9 @@
 """Exceptions used in the auth system."""
 
+from __future__ import annotations
+
 import http
-import typing
+from collections.abc import Mapping
 
 
 class HTTPException(Exception):
@@ -10,11 +12,10 @@ class HTTPException(Exception):
     Since this is defined in the auth module, we default to a 401 status code.
 
     Args:
-        status_code (int, optional): HTTP status code for the error. Defaults to 401 "Unauthorized".
-        detail (str | None, optional): Detailed error message. If None, uses a default
+        status_code: HTTP status code for the error. Defaults to 401 "Unauthorized".
+        detail: Detailed error message. If None, uses a default
             message based on the status code.
-        headers (typing.Mapping[str, str] | None, optional): Additional HTTP headers to
-            include in the error response.
+        headers: Additional HTTP headers to include in the error response.
 
     Example:
         Default:
@@ -38,8 +39,8 @@ class HTTPException(Exception):
     def __init__(
         self,
         status_code: int = 401,
-        detail: typing.Optional[str] = None,
-        headers: typing.Optional[typing.Mapping[str, str]] = None,
+        detail: str | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> None:
         if detail is None:
             detail = http.HTTPStatus(status_code).phrase

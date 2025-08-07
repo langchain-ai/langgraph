@@ -1,17 +1,17 @@
-# How to Deploy to LangGraph Cloud
+# How to Deploy to Cloud SaaS
 
-LangGraph Cloud is available within <a href="https://www.langchain.com/langsmith" target="_blank">LangSmith</a>. To deploy a LangGraph Cloud API, navigate to the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>.
+Before deploying, review the [conceptual guide for the Cloud SaaS](../../concepts/langgraph_cloud.md) deployment option.
 
 ## Prerequisites
 
-1. LangGraph Cloud applications are deployed from GitHub repositories. Configure and upload a LangGraph Cloud application to a GitHub repository in order to deploy it to LangGraph Cloud.
-1. [Verify that the LangGraph API runs locally](test_locally.md). If the API does not run successfully (i.e. `langgraph dev`), deploying to LangGraph Cloud will fail as well.
+1. LangGraph Platform applications are deployed from GitHub repositories. Configure and upload a LangGraph Platform application to a GitHub repository in order to deploy it to LangGraph Platform.
+1. [Verify that the LangGraph API runs locally](../../tutorials/langgraph-platform/local-server.md). If the API does not run successfully (i.e. `langgraph dev`), deploying to LangGraph Platform will fail as well.
 
 ## Create New Deployment
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Platform deployments.
 1. In the top-right corner, select `+ New Deployment` to create a new deployment.
 1. In the `Create New Deployment` panel, fill out the required fields.
     1. `Deployment details`
@@ -38,7 +38,7 @@ When [creating a new deployment](#create-new-deployment), a new revision is crea
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Platform deployments.
 1. Select an existing deployment to create a new revision for.
 1. In the `Deployment` view, in the top-right corner, select `+ New Revision`.
 1. In the `New Revision` modal, fill out the required fields.
@@ -62,6 +62,15 @@ Starting from the `LangGraph Platform` view...
 1. In the panel, select the `Server` tab to view server logs for the revision. Server logs are only available after a revision has been deployed.
 1. Within the `Server` tab, adjust the date/time range picker as needed. By default, the date/time range picker is set to the `Last 7 days`.
 
+## View Deployment Metrics
+
+Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
+
+1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Platform deployments.
+1. Select an existing deployment to monitor.
+1. Select the `Monitoring` tab to view the deployment metrics. See a list of [all available metrics](../../concepts/langgraph_control_plane.md#monitoring).
+1. Within the `Monitoring` tab, use the date/time range picker as needed. By default, the date/time range picker is set to the `Last 15 minutes`.
+
 ## Interrupt Revision
 
 Interrupting a revision will stop deployment of the revision.
@@ -79,7 +88,7 @@ Starting from the `LangGraph Platform` view...
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 
-1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Cloud deployments.
+1. In the left-hand navigation panel, select `LangGraph Platform`. The `LangGraph Platform` view contains a list of existing LangGraph Platform deployments.
 1. Select the menu icon (three dots) on the right-hand side of the row for the desired deployment and select `Delete`.
 1. A `Confirmation` modal will appear. Select `Delete`.
 
@@ -107,13 +116,13 @@ After installing and authorizing LangChain's `hosted-langserve` GitHub app, repo
 All traffic from `LangGraph Platform` deployments created after January 6th 2025 will come through a NAT gateway.
 This NAT gateway will have several static ip addresses depending on the region you are deploying in. Refer to the table below for the list of IP addresses to whitelist:
 
-| US             | EU             |
-|----------------|----------------|
-| 35.197.29.146  | 34.13.192.67   |
-| 34.145.102.123 | 34.147.105.64  |
-| 34.169.45.153  | 34.90.22.166   |
-| 34.82.222.17   | 34.147.36.213  |
-| 35.227.171.135 | 34.32.137.113  | 
-| 34.169.88.30   | 34.91.238.184  |
-| 34.19.93.202   | 35.204.101.241 |
-| 34.19.34.50    | 35.204.48.32   |
+| US             | EU              |
+|----------------|-----------------|
+| 35.197.29.146  | 34.90.213.236   |
+| 34.145.102.123 | 34.13.244.114   |
+| 34.169.45.153  | 34.32.180.189   |
+| 34.82.222.17   | 34.34.69.108    |
+| 35.227.171.135 | 34.32.145.240   | 
+| 34.169.88.30   | 34.90.157.44    |
+| 34.19.93.202   | 34.141.242.180  |
+| 34.19.34.50    | 34.32.141.108   |

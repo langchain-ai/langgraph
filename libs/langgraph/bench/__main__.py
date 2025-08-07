@@ -9,8 +9,9 @@ from bench.fanout_to_subgraph import fanout_to_subgraph, fanout_to_subgraph_sync
 from bench.pydantic_state import pydantic_state
 from bench.react_agent import react_agent
 from bench.sequential import create_sequential
+from bench.wide_dict import wide_dict
 from bench.wide_state import wide_state
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph
 from langgraph.pregel import Pregel
 
@@ -25,6 +26,7 @@ async def arun(graph: Pregel, input: dict):
                     "configurable": {"thread_id": str(uuid4())},
                     "recursion_limit": 1000000000,
                 },
+                durability="exit",
             )
         ]
     )
@@ -41,6 +43,7 @@ async def arun_first_event_latency(graph: Pregel, input: dict) -> None:
             "configurable": {"thread_id": str(uuid4())},
             "recursion_limit": 1000000000,
         },
+        durability="exit",
     )
 
     try:
@@ -60,6 +63,7 @@ def run(graph: Pregel, input: dict):
                     "configurable": {"thread_id": str(uuid4())},
                     "recursion_limit": 1000000000,
                 },
+                durability="exit",
             )
         ]
     )
@@ -76,6 +80,7 @@ def run_first_event_latency(graph: Pregel, input: dict) -> None:
             "configurable": {"thread_id": str(uuid4())},
             "recursion_limit": 1000000000,
         },
+        durability="exit",
     )
 
     try:
@@ -103,8 +108,8 @@ benchmarks = (
     ),
     (
         "fanout_to_subgraph_10x_checkpoint",
-        fanout_to_subgraph().compile(checkpointer=MemorySaver()),
-        fanout_to_subgraph_sync().compile(checkpointer=MemorySaver()),
+        fanout_to_subgraph().compile(checkpointer=InMemorySaver()),
+        fanout_to_subgraph_sync().compile(checkpointer=InMemorySaver()),
         {
             "subjects": [
                 random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(10)
@@ -123,8 +128,8 @@ benchmarks = (
     ),
     (
         "fanout_to_subgraph_100x_checkpoint",
-        fanout_to_subgraph().compile(checkpointer=MemorySaver()),
-        fanout_to_subgraph_sync().compile(checkpointer=MemorySaver()),
+        fanout_to_subgraph().compile(checkpointer=InMemorySaver()),
+        fanout_to_subgraph_sync().compile(checkpointer=InMemorySaver()),
         {
             "subjects": [
                 random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(100)
@@ -139,8 +144,8 @@ benchmarks = (
     ),
     (
         "react_agent_10x_checkpoint",
-        react_agent(10, checkpointer=MemorySaver()),
-        react_agent(10, checkpointer=MemorySaver()),
+        react_agent(10, checkpointer=InMemorySaver()),
+        react_agent(10, checkpointer=InMemorySaver()),
         {"messages": [HumanMessage("hi?")]},
     ),
     (
@@ -151,8 +156,8 @@ benchmarks = (
     ),
     (
         "react_agent_100x_checkpoint",
-        react_agent(100, checkpointer=MemorySaver()),
-        react_agent(100, checkpointer=MemorySaver()),
+        react_agent(100, checkpointer=InMemorySaver()),
+        react_agent(100, checkpointer=InMemorySaver()),
         {"messages": [HumanMessage("hi?")]},
     ),
     (
@@ -173,8 +178,8 @@ benchmarks = (
     ),
     (
         "wide_state_25x300_checkpoint",
-        wide_state(300).compile(checkpointer=MemorySaver()),
-        wide_state(300).compile(checkpointer=MemorySaver()),
+        wide_state(300).compile(checkpointer=InMemorySaver()),
+        wide_state(300).compile(checkpointer=InMemorySaver()),
         {
             "messages": [
                 {
@@ -205,8 +210,8 @@ benchmarks = (
     ),
     (
         "wide_state_15x600_checkpoint",
-        wide_state(600).compile(checkpointer=MemorySaver()),
-        wide_state(600).compile(checkpointer=MemorySaver()),
+        wide_state(600).compile(checkpointer=InMemorySaver()),
+        wide_state(600).compile(checkpointer=InMemorySaver()),
         {
             "messages": [
                 {
@@ -237,8 +242,8 @@ benchmarks = (
     ),
     (
         "wide_state_9x1200_checkpoint",
-        wide_state(1200).compile(checkpointer=MemorySaver()),
-        wide_state(1200).compile(checkpointer=MemorySaver()),
+        wide_state(1200).compile(checkpointer=InMemorySaver()),
+        wide_state(1200).compile(checkpointer=InMemorySaver()),
         {
             "messages": [
                 {
@@ -252,27 +257,111 @@ benchmarks = (
         },
     ),
     (
-        "sequential_20",
-        create_sequential(20).compile(),
-        create_sequential(20).compile(),
+        "wide_dict_25x300",
+        wide_dict(300).compile(checkpointer=None),
+        wide_dict(300).compile(checkpointer=None),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(5)
+                }
+            ]
+        },
+    ),
+    (
+        "wide_dict_25x300_checkpoint",
+        wide_dict(300).compile(checkpointer=InMemorySaver()),
+        wide_dict(300).compile(checkpointer=InMemorySaver()),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(5)
+                }
+            ]
+        },
+    ),
+    (
+        "wide_dict_15x600",
+        wide_dict(600).compile(checkpointer=None),
+        wide_dict(600).compile(checkpointer=None),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
+    ),
+    (
+        "wide_dict_15x600_checkpoint",
+        wide_dict(600).compile(checkpointer=InMemorySaver()),
+        wide_dict(600).compile(checkpointer=InMemorySaver()),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(5)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
+    ),
+    (
+        "wide_dict_9x1200",
+        wide_dict(1200).compile(checkpointer=None),
+        wide_dict(1200).compile(checkpointer=None),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(3)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
+    ),
+    (
+        "wide_dict_9x1200_checkpoint",
+        wide_dict(1200).compile(checkpointer=InMemorySaver()),
+        wide_dict(1200).compile(checkpointer=InMemorySaver()),
+        {
+            "messages": [
+                {
+                    str(i) * 10: {
+                        str(j) * 10: ["hi?" * 10, True, 1, 6327816386138, None] * 5
+                        for j in range(3)
+                    }
+                    for i in range(3)
+                }
+            ]
+        },
+    ),
+    (
+        "sequential_10",
+        create_sequential(10).compile(),
+        create_sequential(10).compile(),
         {"messages": []},  # Empty list of messages
     ),
     (
-        "sequential_50",
-        create_sequential(50).compile(),
-        create_sequential(50).compile(),
-        {"messages": []},  # Empty list of messages
-    ),
-    (
-        "sequential_100",
-        create_sequential(100).compile(),
-        create_sequential(100).compile(),
-        {"messages": []},  # Empty list of messages
-    ),
-    (
-        "sequential_200",
-        create_sequential(200).compile(),
-        create_sequential(200).compile(),
+        "sequential_1000",
+        create_sequential(1000).compile(),
+        create_sequential(1000).compile(),
         {"messages": []},  # Empty list of messages
     ),
     (
@@ -293,8 +382,8 @@ benchmarks = (
     ),
     (
         "pydantic_state_25x300_checkpoint",
-        pydantic_state(300).compile(checkpointer=MemorySaver()),
-        pydantic_state(300).compile(checkpointer=MemorySaver()),
+        pydantic_state(300).compile(checkpointer=InMemorySaver()),
+        pydantic_state(300).compile(checkpointer=InMemorySaver()),
         {
             "messages": [
                 {
@@ -325,8 +414,8 @@ benchmarks = (
     ),
     (
         "pydantic_state_15x600_checkpoint",
-        pydantic_state(600).compile(checkpointer=MemorySaver()),
-        pydantic_state(600).compile(checkpointer=MemorySaver()),
+        pydantic_state(600).compile(checkpointer=InMemorySaver()),
+        pydantic_state(600).compile(checkpointer=InMemorySaver()),
         {
             "messages": [
                 {
@@ -357,8 +446,8 @@ benchmarks = (
     ),
     (
         "pydantic_state_9x1200_checkpoint",
-        pydantic_state(1200).compile(checkpointer=MemorySaver()),
-        pydantic_state(1200).compile(checkpointer=MemorySaver()),
+        pydantic_state(1200).compile(checkpointer=InMemorySaver()),
+        pydantic_state(1200).compile(checkpointer=InMemorySaver()),
         {
             "messages": [
                 {
@@ -383,8 +472,17 @@ for name, agraph, graph, input in benchmarks:
         r.bench_func(name + "_sync", run, graph, input)
 
 
+# Pick a handful of graphs to measure the first event latency.
+# At the moment, limiting just due to the size of the annotation on github.
+GRAPHS_FOR_1st_EVENT_LATENCY = (
+    "sequential_1000",
+    "pydantic_state_25x300",
+)
+
 # First event latency
 for name, agraph, graph, input in benchmarks:
+    if graph not in GRAPHS_FOR_1st_EVENT_LATENCY:
+        continue
     r.bench_async_func(
         name + "_first_event_latency",
         arun_first_event_latency,
@@ -404,28 +502,12 @@ compilation_benchmarks = (
         create_sequential(1_000),
     ),
     (
-        "sequential_10000",
-        create_sequential(10_000),
-    ),
-    (
         "pydantic_state_25x300",
         pydantic_state(300),
     ),
     (
-        "pydantic_state_15x600",
-        pydantic_state(600),
-    ),
-    (
-        "pydantic_state_9x1200",
-        pydantic_state(1200),
-    ),
-    (
         "wide_state_15x600",
         wide_state(600),
-    ),
-    (
-        "wide_state_9x1200",
-        wide_state(1200),
     ),
 )
 

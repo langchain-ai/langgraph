@@ -1,7 +1,8 @@
 import operator
+from collections.abc import Sequence
 from functools import partial
 from random import choice
-from typing import Annotated, Optional, Sequence
+from typing import Annotated, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -303,9 +304,9 @@ if __name__ == "__main__":
 
     import uvloop
 
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
 
-    graph = pydantic_state(1000).compile(checkpointer=MemorySaver())
+    graph = pydantic_state(1000).compile(checkpointer=InMemorySaver())
     input = {
         "messages": [
             {

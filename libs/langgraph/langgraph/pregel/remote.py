@@ -1,16 +1,14 @@
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Iterator, Sequence
 from dataclasses import asdict
 from typing import (
     Any,
-    AsyncIterator,
-    Iterator,
     Literal,
-    Optional,
-    Sequence,
-    Union,
     cast,
 )
 
-import orjson
+import langsmith as ls
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.graph import (
     Edge as DrawableEdge,
@@ -32,19 +30,61 @@ from langgraph_sdk.schema import Command as CommandSDK
 from langgraph_sdk.schema import StreamMode as StreamModeSDK
 from typing_extensions import Self
 
-from langgraph.checkpoint.base import CheckpointMetadata
-from langgraph.constants import (
+from langgraph._internal._config import merge_configs
+from langgraph._internal._constants import (
     CONF,
+    CONFIG_KEY_CHECKPOINT_ID,
+    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_TASK_ID,
     INTERRUPT,
     NS_SEP,
 )
-from langgraph.errors import GraphInterrupt
-from langgraph.pregel.protocol import PregelProtocol
-from langgraph.pregel.types import All, PregelTask, StateSnapshot, StreamMode
-from langgraph.types import Command, Interrupt, StreamProtocol
-from langgraph.utils.config import merge_configs
+from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph.errors import GraphInterrupt, ParentCommand
+from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
+from langgraph.types import (
+    All,
+    Command,
+    Interrupt,
+    PregelTask,
+    StateSnapshot,
+    StreamMode,
+)
+
+__all__ = ("RemoteGraph", "RemoteException")
+
+_CONF_DROPLIST = frozenset(
+    (
+        CONFIG_KEY_CHECKPOINT_MAP,
+        CONFIG_KEY_CHECKPOINT_ID,
+        CONFIG_KEY_CHECKPOINT_NS,
+        CONFIG_KEY_TASK_ID,
+    ),
+)
+
+
+def _sanitize_config_value(v: Any) -> Any:
+    """Recursively sanitize a config value to ensure it contains only primitives."""
+    if isinstance(v, (str, int, float, bool)):
+        return v
+    elif isinstance(v, dict):
+        sanitized_dict = {}
+        for k, val in v.items():
+            if isinstance(k, str):
+                sanitized_value = _sanitize_config_value(val)
+                if sanitized_value is not None:
+                    sanitized_dict[k] = sanitized_value
+        return sanitized_dict
+    elif isinstance(v, (list, tuple)):
+        sanitized_list = []
+        for item in v:
+            sanitized_item = _sanitize_config_value(item)
+            if sanitized_item is not None:
+                sanitized_list.append(sanitized_item)
+        return sanitized_list
+    return None
 
 
 class RemoteException(Exception):
@@ -58,25 +98,28 @@ class RemoteGraph(PregelProtocol):
     APIs that implement the LangGraph Server API specification.
 
     For example, the `RemoteGraph` class can be used to call APIs from deployments
-    on LangGraph Cloud.
+    on LangGraph Platform.
 
     `RemoteGraph` behaves the same way as a `Graph` and can be used directly as
     a node in another `Graph`.
     """
 
-    name: str
+    assistant_id: str
+    name: str | None
 
     def __init__(
         self,
-        name: str,  # graph_id
+        assistant_id: str,  # graph_id
         /,
         *,
-        url: Optional[str] = None,
-        api_key: Optional[str] = None,
-        headers: Optional[dict[str, str]] = None,
-        client: Optional[LangGraphClient] = None,
-        sync_client: Optional[SyncLangGraphClient] = None,
-        config: Optional[RunnableConfig] = None,
+        url: str | None = None,
+        api_key: str | None = None,
+        headers: dict[str, str] | None = None,
+        client: LangGraphClient | None = None,
+        sync_client: SyncLangGraphClient | None = None,
+        config: RunnableConfig | None = None,
+        name: str | None = None,
+        distributed_tracing: bool = False,
     ):
         """Specify `url`, `api_key`, and/or `headers` to create default sync and async clients.
 
@@ -85,16 +128,25 @@ class RemoteGraph(PregelProtocol):
         one of `url`, `client`, or `sync_client` must be provided.
 
         Args:
-            name: The name of the graph.
+            assistant_id: The assistant ID or graph name of the remote graph to use.
             url: The URL of the remote API.
             api_key: The API key to use for authentication. If not provided, it will be read from the environment (`LANGGRAPH_API_KEY`, `LANGSMITH_API_KEY`, or `LANGCHAIN_API_KEY`).
             headers: Additional headers to include in the requests.
             client: A `LangGraphClient` instance to use instead of creating a default client.
             sync_client: A `SyncLangGraphClient` instance to use instead of creating a default client.
             config: An optional `RunnableConfig` instance with additional configuration.
+            name: Human-readable name to attach to the RemoteGraph instance.
+                This is useful for adding `RemoteGraph` as a subgraph via `graph.add_node(remote_graph)`.
+                If not provided, defaults to the assistant ID.
+            distributed_tracing: Whether to enable sending LangSmith distributed tracing headers.
         """
-        self.name = name
+        self.assistant_id = assistant_id
+        if name is None:
+            self.name = assistant_id
+        else:
+            self.name = name
         self.config = config
+        self.distributed_tracing = distributed_tracing
 
         if client is None and url is not None:
             client = get_client(url=url, api_key=api_key, headers=headers)
@@ -120,11 +172,9 @@ class RemoteGraph(PregelProtocol):
 
     def copy(self, update: dict[str, Any]) -> Self:
         attrs = {**self.__dict__, **update}
-        return self.__class__(attrs.pop("name"), **attrs)
+        return self.__class__(attrs.pop("assistant_id"), **attrs)
 
-    def with_config(
-        self, config: Optional[RunnableConfig] = None, **kwargs: Any
-    ) -> Self:
+    def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
         return self.copy(
             {"config": merge_configs(self.config, config, cast(RunnableConfig, kwargs))}
         )
@@ -155,9 +205,9 @@ class RemoteGraph(PregelProtocol):
 
     def get_graph(
         self,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig | None = None,
         *,
-        xray: Union[int, bool] = False,
+        xray: int | bool = False,
     ) -> DrawableGraph:
         """Get graph by graph name.
 
@@ -174,7 +224,7 @@ class RemoteGraph(PregelProtocol):
         """
         sync_client = self._validate_sync_client()
         graph = sync_client.assistants.get_graph(
-            assistant_id=self.name,
+            assistant_id=self.assistant_id,
             xray=xray,
         )
         return DrawableGraph(
@@ -184,9 +234,9 @@ class RemoteGraph(PregelProtocol):
 
     async def aget_graph(
         self,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig | None = None,
         *,
-        xray: Union[int, bool] = False,
+        xray: int | bool = False,
     ) -> DrawableGraph:
         """Get graph by graph name.
 
@@ -203,7 +253,7 @@ class RemoteGraph(PregelProtocol):
         """
         client = self._validate_client()
         graph = await client.assistants.get_graph(
-            assistant_id=self.name,
+            assistant_id=self.assistant_id,
             xray=xray,
         )
         return DrawableGraph(
@@ -212,11 +262,11 @@ class RemoteGraph(PregelProtocol):
         )
 
     def _create_state_snapshot(self, state: ThreadState) -> StateSnapshot:
-        tasks = []
+        tasks: list[PregelTask] = []
         for task in state["tasks"]:
-            interrupts = []
-            for interrupt in task["interrupts"]:
-                interrupts.append(Interrupt(**interrupt))
+            interrupts = tuple(
+                Interrupt(**interrupt) for interrupt in task["interrupts"]
+            )
 
             tasks.append(
                 PregelTask(
@@ -224,12 +274,16 @@ class RemoteGraph(PregelProtocol):
                     name=task["name"],
                     path=tuple(),
                     error=Exception(task["error"]) if task["error"] else None,
-                    interrupts=tuple(interrupts),
-                    state=self._create_state_snapshot(task["state"])
-                    if task["state"]
-                    else cast(RunnableConfig, {"configurable": task["checkpoint"]})
-                    if task["checkpoint"]
-                    else None,
+                    interrupts=interrupts,
+                    state=(
+                        self._create_state_snapshot(task["state"])
+                        if task["state"]
+                        else (
+                            cast(RunnableConfig, {"configurable": task["checkpoint"]})
+                            if task["checkpoint"]
+                            else None
+                        )
+                    ),
                     result=task.get("result"),
                 )
             )
@@ -247,22 +301,25 @@ class RemoteGraph(PregelProtocol):
             },
             metadata=CheckpointMetadata(**state["metadata"]),
             created_at=state["created_at"],
-            parent_config={
-                "configurable": {
-                    "thread_id": state["parent_checkpoint"]["thread_id"],
-                    "checkpoint_ns": state["parent_checkpoint"]["checkpoint_ns"],
-                    "checkpoint_id": state["parent_checkpoint"]["checkpoint_id"],
-                    "checkpoint_map": state["parent_checkpoint"].get(
-                        "checkpoint_map", {}
-                    ),
+            parent_config=(
+                {
+                    "configurable": {
+                        "thread_id": state["parent_checkpoint"]["thread_id"],
+                        "checkpoint_ns": state["parent_checkpoint"]["checkpoint_ns"],
+                        "checkpoint_id": state["parent_checkpoint"]["checkpoint_id"],
+                        "checkpoint_map": state["parent_checkpoint"].get(
+                            "checkpoint_map", {}
+                        ),
+                    }
                 }
-            }
-            if state["parent_checkpoint"]
-            else None,
+                if state["parent_checkpoint"]
+                else None
+            ),
             tasks=tuple(tasks),
+            interrupts=tuple([i for task in tasks for i in task.interrupts]),
         )
 
-    def _get_checkpoint(self, config: Optional[RunnableConfig]) -> Optional[Checkpoint]:
+    def _get_checkpoint(self, config: RunnableConfig | None) -> Checkpoint | None:
         if config is None:
             return None
 
@@ -290,46 +347,31 @@ class RemoteGraph(PregelProtocol):
         }
 
     def _sanitize_config(self, config: RunnableConfig) -> RunnableConfig:
-        reserved_configurable_keys = frozenset(
-            [
-                "callbacks",
-                "checkpoint_map",
-                "checkpoint_id",
-                "checkpoint_ns",
-            ]
-        )
-
-        def _sanitize_obj(obj: Any) -> Any:
-            """Remove non-JSON serializable fields from the given object."""
-            if isinstance(obj, dict):
-                return {k: _sanitize_obj(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [_sanitize_obj(v) for v in obj]
-            else:
-                try:
-                    orjson.dumps(obj)
-                    return obj
-                except orjson.JSONEncodeError:
-                    return None
-
-        # Remove non-JSON serializable fields from the config.
-        config = _sanitize_obj(config)
-
-        # Only include configurable keys that are not reserved and
-        # not starting with "__pregel_" prefix.
-        new_configurable = {
-            k: v
-            for k, v in config["configurable"].items()
-            if k not in reserved_configurable_keys and not k.startswith("__pregel_")
-        }
-
-        sanitized: RunnableConfig = {
-            "tags": config.get("tags") or [],
-            "metadata": config.get("metadata") or {},
-            "configurable": new_configurable,
-        }
+        """Sanitize the config to remove non-serializable fields."""
+        sanitized: RunnableConfig = {}
         if "recursion_limit" in config:
             sanitized["recursion_limit"] = config["recursion_limit"]
+        if "tags" in config:
+            sanitized["tags"] = [tag for tag in config["tags"] if isinstance(tag, str)]
+
+        if "metadata" in config:
+            sanitized["metadata"] = {}
+            for k, v in config["metadata"].items():
+                if (
+                    isinstance(k, str)
+                    and (sanitized_value := _sanitize_config_value(v)) is not None
+                ):
+                    sanitized["metadata"][k] = sanitized_value
+
+        if "configurable" in config:
+            sanitized["configurable"] = {}
+            for k, v in config["configurable"].items():
+                if (
+                    isinstance(k, str)
+                    and k not in _CONF_DROPLIST
+                    and (sanitized_value := _sanitize_config_value(v)) is not None
+                ):
+                    sanitized["configurable"][k] = sanitized_value
 
         return sanitized
 
@@ -391,9 +433,9 @@ class RemoteGraph(PregelProtocol):
         self,
         config: RunnableConfig,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> Iterator[StateSnapshot]:
         """Get the state history of a thread.
 
@@ -426,9 +468,9 @@ class RemoteGraph(PregelProtocol):
         self,
         config: RunnableConfig,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> AsyncIterator[StateSnapshot]:
         """Get the state history of a thread.
 
@@ -460,22 +502,22 @@ class RemoteGraph(PregelProtocol):
     def bulk_update_state(
         self,
         config: RunnableConfig,
-        updates: list[tuple[Optional[dict[str, Any]], Optional[str]]],
+        updates: list[tuple[dict[str, Any] | None, str | None]],
     ) -> RunnableConfig:
         raise NotImplementedError
 
     async def abulk_update_state(
         self,
         config: RunnableConfig,
-        updates: list[tuple[Optional[dict[str, Any]], Optional[str]]],
+        updates: list[tuple[dict[str, Any] | None, str | None]],
     ) -> RunnableConfig:
         raise NotImplementedError
 
     def update_state(
         self,
         config: RunnableConfig,
-        values: Optional[Union[dict[str, Any], Any]],
-        as_node: Optional[str] = None,
+        values: dict[str, Any] | Any | None,
+        as_node: str | None = None,
     ) -> RunnableConfig:
         """Update the state of a thread.
 
@@ -504,8 +546,8 @@ class RemoteGraph(PregelProtocol):
     async def aupdate_state(
         self,
         config: RunnableConfig,
-        values: Optional[Union[dict[str, Any], Any]],
-        as_node: Optional[str] = None,
+        values: dict[str, Any] | Any | None,
+        as_node: str | None = None,
     ) -> RunnableConfig:
         """Update the state of a thread.
 
@@ -533,12 +575,10 @@ class RemoteGraph(PregelProtocol):
 
     def _get_stream_modes(
         self,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]],
-        config: Optional[RunnableConfig],
+        stream_mode: StreamMode | list[StreamMode] | None,
+        config: RunnableConfig | None,
         default: StreamMode = "updates",
-    ) -> tuple[
-        list[StreamModeSDK], list[StreamModeSDK], bool, Optional[StreamProtocol]
-    ]:
+    ) -> tuple[list[StreamModeSDK], list[StreamModeSDK], bool, StreamProtocol | None]:
         """Return a tuple of the final list of stream modes sent to the
         remote graph and a boolean flag indicating if stream mode 'updates'
         was present in the original list of stream modes.
@@ -559,7 +599,7 @@ class RemoteGraph(PregelProtocol):
             updated_stream_modes.append(default)
         requested_stream_modes = updated_stream_modes.copy()
         # add any from parent graph
-        stream: Optional[StreamProtocol] = (
+        stream: StreamProtocol | None = (
             (config or {}).get(CONF, {}).get(CONFIG_KEY_STREAM)
         )
         if stream:
@@ -586,15 +626,16 @@ class RemoteGraph(PregelProtocol):
 
     def stream(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
-    ) -> Iterator[Union[dict[str, Any], Any]]:
+    ) -> Iterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
 
         This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
@@ -608,6 +649,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             subgraphs: Stream from subgraphs.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to client.runs.stream.
 
         Yields:
@@ -620,14 +662,14 @@ class RemoteGraph(PregelProtocol):
             stream_mode, config
         )
         if isinstance(input, Command):
-            command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
+            command: CommandSDK | None = cast(CommandSDK, asdict(input))
             input = None
         else:
             command = None
 
         for chunk in sync_client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
-            assistant_id=self.name,
+            assistant_id=self.assistant_id,
             input=input,
             command=command,
             config=sanitized_config,
@@ -636,6 +678,9 @@ class RemoteGraph(PregelProtocol):
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
+            headers=_merge_tracing_headers(headers)
+            if self.distributed_tracing
+            else headers,
             **kwargs,
         ):
             # split mode and ns
@@ -644,6 +689,9 @@ class RemoteGraph(PregelProtocol):
                 ns = tuple(ns_.split(NS_SEP))
             else:
                 mode, ns = chunk.event, ()
+            # raise ParentCommand exception for command events
+            if mode == "command" and chunk.data.get("graph") == Command.PARENT:
+                raise ParentCommand(Command(**chunk.data))
             # prepend caller ns (as it is not passed to remote graph)
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
                 caller_ns = tuple(caller_ns.split(NS_SEP))
@@ -654,12 +702,19 @@ class RemoteGraph(PregelProtocol):
             # raise interrupt or errors
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
-                    raise GraphInterrupt(chunk.data[INTERRUPT])
+                    if caller_ns:
+                        raise GraphInterrupt(
+                            [Interrupt(**i) for i in chunk.data[INTERRUPT]]
+                        )
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
             # filter for what was actually requested
             if mode not in requested:
                 continue
+
+            if chunk.event.startswith("messages"):
+                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+
             # emit chunk
             if subgraphs:
                 if NS_SEP in chunk.event:
@@ -678,15 +733,16 @@ class RemoteGraph(PregelProtocol):
 
     async def astream(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
-    ) -> AsyncIterator[Union[dict[str, Any], Any]]:
+    ) -> AsyncIterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
 
         This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
@@ -700,6 +756,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             subgraphs: Stream from subgraphs.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to client.runs.stream.
 
         Yields:
@@ -712,14 +769,14 @@ class RemoteGraph(PregelProtocol):
             stream_mode, config
         )
         if isinstance(input, Command):
-            command: Optional[CommandSDK] = cast(CommandSDK, asdict(input))
+            command: CommandSDK | None = cast(CommandSDK, asdict(input))
             input = None
         else:
             command = None
 
         async for chunk in client.runs.stream(
             thread_id=sanitized_config["configurable"].get("thread_id"),
-            assistant_id=self.name,
+            assistant_id=self.assistant_id,
             input=input,
             command=command,
             config=sanitized_config,
@@ -728,6 +785,9 @@ class RemoteGraph(PregelProtocol):
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
+            headers=_merge_tracing_headers(headers)
+            if self.distributed_tracing
+            else headers,
             **kwargs,
         ):
             # split mode and ns
@@ -736,6 +796,9 @@ class RemoteGraph(PregelProtocol):
                 ns = tuple(ns_.split(NS_SEP))
             else:
                 mode, ns = chunk.event, ()
+            # raise ParentCommand exception for command events
+            if mode == "command" and chunk.data.get("graph") == Command.PARENT:
+                raise ParentCommand(Command(**chunk.data))
             # prepend caller ns (as it is not passed to remote graph)
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
                 caller_ns = tuple(caller_ns.split(NS_SEP))
@@ -746,12 +809,19 @@ class RemoteGraph(PregelProtocol):
             # raise interrupt or errors
             if chunk.event.startswith("updates"):
                 if isinstance(chunk.data, dict) and INTERRUPT in chunk.data:
-                    raise GraphInterrupt(chunk.data[INTERRUPT])
+                    if caller_ns:
+                        raise GraphInterrupt(
+                            [Interrupt(**i) for i in chunk.data[INTERRUPT]]
+                        )
             elif chunk.event.startswith("error"):
                 raise RemoteException(chunk.data)
             # filter for what was actually requested
             if mode not in requested:
                 continue
+
+            if chunk.event.startswith("messages"):
+                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+
             # emit chunk
             if subgraphs:
                 if NS_SEP in chunk.event:
@@ -771,28 +841,29 @@ class RemoteGraph(PregelProtocol):
     async def astream_events(
         self,
         input: Any,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig | None = None,
         *,
         version: Literal["v1", "v2"],
-        include_names: Optional[Sequence[All]] = None,
-        include_types: Optional[Sequence[All]] = None,
-        include_tags: Optional[Sequence[All]] = None,
-        exclude_names: Optional[Sequence[All]] = None,
-        exclude_types: Optional[Sequence[All]] = None,
-        exclude_tags: Optional[Sequence[All]] = None,
+        include_names: Sequence[All] | None = None,
+        include_types: Sequence[All] | None = None,
+        include_tags: Sequence[All] | None = None,
+        exclude_names: Sequence[All] | None = None,
+        exclude_types: Sequence[All] | None = None,
+        exclude_tags: Sequence[All] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any]]:
         raise NotImplementedError
 
     def invoke(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
-    ) -> Union[dict[str, Any], Any]:
+    ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -800,6 +871,7 @@ class RemoteGraph(PregelProtocol):
             config: A `RunnableConfig` for graph invocation.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to RemoteGraph.stream.
 
         Returns:
@@ -810,6 +882,7 @@ class RemoteGraph(PregelProtocol):
             config=config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            headers=headers,
             stream_mode="values",
             **kwargs,
         ):
@@ -821,13 +894,14 @@ class RemoteGraph(PregelProtocol):
 
     async def ainvoke(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
         *,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
         **kwargs: Any,
-    ) -> Union[dict[str, Any], Any]:
+    ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -835,6 +909,7 @@ class RemoteGraph(PregelProtocol):
             config: A `RunnableConfig` for graph invocation.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
+            headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to RemoteGraph.astream.
 
         Returns:
@@ -845,6 +920,7 @@ class RemoteGraph(PregelProtocol):
             config=config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            headers=headers,
             stream_mode="values",
             **kwargs,
         ):
@@ -853,3 +929,17 @@ class RemoteGraph(PregelProtocol):
             return chunk
         except UnboundLocalError:
             return None
+
+
+def _merge_tracing_headers(headers: dict[str, str] | None) -> dict[str, str] | None:
+    if rt := ls.get_current_run_tree():
+        tracing_headers = rt.to_headers()
+        baggage = tracing_headers.pop("baggage")
+        if headers:
+            if "baggage" in headers:
+                baggage = headers["baggage"] + "," + baggage
+            tracing_headers["baggage"] = baggage
+            headers.update(tracing_headers)
+        else:
+            headers = tracing_headers
+    return headers

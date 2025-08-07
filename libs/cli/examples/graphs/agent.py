@@ -1,4 +1,5 @@
-from typing import Annotated, Literal, Sequence, TypedDict
+from collections.abc import Sequence
+from typing import Annotated, Literal, TypedDict
 
 from langchain_anthropic import ChatAnthropic
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -48,12 +49,12 @@ def call_model(state, config):
 tool_node = ToolNode(tools)
 
 
-class ConfigSchema(TypedDict):
+class ContextSchema(TypedDict):
     model: Literal["anthropic", "openai"]
 
 
 # Define a new graph
-workflow = StateGraph(AgentState, config_schema=ConfigSchema)
+workflow = StateGraph(AgentState, context_schema=ContextSchema)
 
 # Define the two nodes we will cycle between
 workflow.add_node("agent", call_model)

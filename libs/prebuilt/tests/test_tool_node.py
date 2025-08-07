@@ -7,6 +7,7 @@ from typing import (
 import pytest
 from langchain_core.messages import (
     AIMessage,
+    RemoveMessage,
     ToolMessage,
 )
 from langchain_core.tools import BaseTool, ToolException
@@ -14,11 +15,11 @@ from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel, ValidationError
 from pydantic.v1 import ValidationError as ValidationErrorV1
 
-from langgraph.errors import NodeInterrupt
+from langgraph.errors import GraphBubbleUp, GraphInterrupt
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import TOOL_CALL_ERROR_TEMPLATE
 from langgraph.types import Command, Send
-from tests.conftest import IS_LANGCHAIN_CORE_030_OR_GREATER
 
 pytestmark = pytest.mark.anyio
 
@@ -463,16 +464,16 @@ def test_tool_node_incorrect_tool_name():
 
 
 def test_tool_node_node_interrupt():
-    def tool_interrupt(some_val: int) -> str:
+    def tool_interrupt(some_val: int) -> None:
         """Tool docstring."""
-        raise NodeInterrupt("foo")
+        raise GraphBubbleUp("foo")
 
-    def handle(e: NodeInterrupt):
+    def handle(e: GraphInterrupt):
         return "handled"
 
-    for handle_tool_errors in (True, (NodeInterrupt,), "handled", handle, False):
+    for handle_tool_errors in (True, (GraphBubbleUp,), "handled", handle, False):
         node = ToolNode([tool_interrupt], handle_tool_errors=handle_tool_errors)
-        with pytest.raises(NodeInterrupt) as exc_info:
+        with pytest.raises(GraphBubbleUp) as exc_info:
             node.invoke(
                 {
                     "messages": [
@@ -492,10 +493,6 @@ def test_tool_node_node_interrupt():
             assert exc_info.value == "foo"
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
 async def test_tool_node_command(input_type: str):
     from langchain_core.tools.base import InjectedToolCallId
@@ -797,10 +794,6 @@ async def test_tool_node_command(input_type: str):
     ) == [Command(update={"messages": []}, graph=Command.PARENT)]
 
 
-@pytest.mark.skipif(
-    not IS_LANGCHAIN_CORE_030_OR_GREATER,
-    reason="Langchain core 0.3.0 or greater is required",
-)
 async def test_tool_node_command_list_input():
     from langchain_core.tools.base import InjectedToolCallId
 
@@ -1138,3 +1131,28 @@ def test_tool_node_parent_command_with_send():
             graph=Command.PARENT,
         )
     ]
+
+
+async def test_tool_node_command_remove_all_messages():
+    from langchain_core.tools.base import InjectedToolCallId
+
+    @dec_tool
+    def remove_all_messages_tool(tool_call_id: Annotated[str, InjectedToolCallId]):
+        """A tool that removes all messages."""
+        return Command(update={"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]})
+
+    tool_node = ToolNode([remove_all_messages_tool])
+    tool_call = {
+        "name": "remove_all_messages_tool",
+        "args": {},
+        "id": "tool_call_123",
+    }
+    result = await tool_node.ainvoke(
+        {"messages": [AIMessage(content="", tool_calls=[tool_call])]}
+    )
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    command = result[0]
+    assert isinstance(command, Command)
+    assert command.update == {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]}

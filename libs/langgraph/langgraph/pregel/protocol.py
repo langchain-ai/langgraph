@@ -1,42 +1,39 @@
-from abc import ABC, abstractmethod
-from typing import (
-    Any,
-    AsyncIterator,
-    Iterator,
-    Optional,
-    Sequence,
-    Union,
-)
+from __future__ import annotations
+
+from abc import abstractmethod
+from collections.abc import AsyncIterator, Iterator, Sequence
+from typing import Any, Callable, Generic, cast
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
-from langgraph.pregel.types import All, StateSnapshot, StateUpdate, StreamMode
+from langgraph.types import All, Command, StateSnapshot, StateUpdate, StreamMode
+from langgraph.typing import ContextT, InputT, OutputT, StateT
+
+__all__ = ("PregelProtocol", "StreamProtocol")
 
 
-class PregelProtocol(
-    Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]], ABC
-):
+class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, OutputT]):
     @abstractmethod
     def with_config(
-        self, config: Optional[RunnableConfig] = None, **kwargs: Any
+        self, config: RunnableConfig | None = None, **kwargs: Any
     ) -> Self: ...
 
     @abstractmethod
     def get_graph(
         self,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig | None = None,
         *,
-        xray: Union[int, bool] = False,
+        xray: int | bool = False,
     ) -> DrawableGraph: ...
 
     @abstractmethod
     async def aget_graph(
         self,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig | None = None,
         *,
-        xray: Union[int, bool] = False,
+        xray: int | bool = False,
     ) -> DrawableGraph: ...
 
     @abstractmethod
@@ -54,9 +51,9 @@ class PregelProtocol(
         self,
         config: RunnableConfig,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> Iterator[StateSnapshot]: ...
 
     @abstractmethod
@@ -64,9 +61,9 @@ class PregelProtocol(
         self,
         config: RunnableConfig,
         *,
-        filter: Optional[dict[str, Any]] = None,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
     ) -> AsyncIterator[StateSnapshot]: ...
 
     @abstractmethod
@@ -87,58 +84,81 @@ class PregelProtocol(
     def update_state(
         self,
         config: RunnableConfig,
-        values: Optional[Union[dict[str, Any], Any]],
-        as_node: Optional[str] = None,
+        values: dict[str, Any] | Any | None,
+        as_node: str | None = None,
     ) -> RunnableConfig: ...
 
     @abstractmethod
     async def aupdate_state(
         self,
         config: RunnableConfig,
-        values: Optional[Union[dict[str, Any], Any]],
-        as_node: Optional[str] = None,
+        values: dict[str, Any] | Any | None,
+        as_node: str | None = None,
     ) -> RunnableConfig: ...
 
     @abstractmethod
     def stream(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-    ) -> Iterator[Union[dict[str, Any], Any]]: ...
+    ) -> Iterator[dict[str, Any] | Any]: ...
 
     @abstractmethod
     def astream(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-    ) -> AsyncIterator[Union[dict[str, Any], Any]]: ...
+    ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
     @abstractmethod
     def invoke(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
         *,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-    ) -> Union[dict[str, Any], Any]: ...
+        context: ContextT | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+    ) -> dict[str, Any] | Any: ...
 
     @abstractmethod
     async def ainvoke(
         self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
         *,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-    ) -> Union[dict[str, Any], Any]: ...
+        context: ContextT | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+    ) -> dict[str, Any] | Any: ...
+
+
+StreamChunk = tuple[tuple[str, ...], str, Any]
+
+
+class StreamProtocol:
+    __slots__ = ("modes", "__call__")
+
+    modes: set[StreamMode]
+
+    __call__: Callable[[Self, StreamChunk], None]
+
+    def __init__(
+        self,
+        __call__: Callable[[StreamChunk], None],
+        modes: set[StreamMode],
+    ) -> None:
+        self.__call__ = cast(Callable[[Self, StreamChunk], None], __call__)
+        self.modes = modes

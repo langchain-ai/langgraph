@@ -1,8 +1,9 @@
 # mypy: disable-error-code="operator"
 import asyncio
 import json
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Any, Iterable
+from typing import Any
 
 import pytest
 from pytest_mock import MockerFixture
@@ -31,6 +32,42 @@ class MockAsyncBatchedStore(AsyncBatchedBaseStore):
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         return self._store.batch(ops)
+
+
+async def test_async_batch_store_resilience() -> None:
+    """Test that AsyncBatchedBaseStore recovers gracefully from task cancellation."""
+    doc = {"foo": "bar"}
+    async_store = MockAsyncBatchedStore()
+
+    await async_store.aput(("foo", "langgraph", "foo"), "bar", doc)
+
+    # Store the original task reference
+    original_task = async_store._task
+    assert original_task is not None
+    assert not original_task.done()
+
+    # Cancel the background task
+    original_task.cancel()
+    await asyncio.sleep(0.01)
+    assert original_task.cancelled()
+
+    # Perform a new operation - this should trigger _ensure_task() to create a new task
+    result = await async_store.asearch(("foo", "langgraph", "foo"))
+    assert len(result) > 0
+    assert result[0].value == doc
+
+    # Verify a new task was created
+    new_task = async_store._task
+    assert new_task is not None
+    assert new_task is not original_task
+    assert not new_task.done()
+
+    # Test that operations continue to work with the new task
+    doc2 = {"baz": "qux"}
+    await async_store.aput(("test", "namespace"), "key", doc2)
+    result2 = await async_store.aget(("test", "namespace"), "key")
+    assert result2 is not None
+    assert result2.value == doc2
 
 
 def test_get_text_at_path() -> None:
@@ -152,6 +189,43 @@ async def test_async_batch_store(mocker: MockerFixture) -> None:
             GetOp(("c",), "d", refresh_ttl=True),
         ),
     ]
+
+
+async def test_async_batch_store_handles_cancellation() -> None:
+    class MockStore(AsyncBatchedBaseStore):
+        def batch(self, ops: Iterable[Op]) -> list[Result]:
+            raise NotImplementedError
+
+        async def abatch(self, ops: Iterable[Op]) -> list[Result]:
+            assert all(isinstance(op, GetOp) for op in ops)
+            return [
+                Item(
+                    value={},
+                    key=getattr(op, "key", ""),
+                    namespace=getattr(op, "namespace", ()),
+                    created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+                    updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+                )
+                for op in ops
+            ]
+
+    store = MockStore()
+
+    # Simulate cancellation
+    task = asyncio.create_task(store.aget(namespace=("a",), key="b"))
+    await asyncio.sleep(0)
+    task.cancel()
+    await asyncio.sleep(0)
+
+    # Cancelling individual queries against the store should not break the store
+    result = await store.aget(namespace=("c",), key="d")
+    assert result == Item(
+        value={},
+        key="d",
+        namespace=("c",),
+        created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+        updated_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
+    )
 
 
 def test_list_namespaces_basic() -> None:

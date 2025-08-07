@@ -1,17 +1,14 @@
 import collections.abc
-from typing import (
-    Callable,
-    Generic,
-    Optional,
-    Sequence,
-    Type,
-)
+from collections.abc import Sequence
+from typing import Callable, Generic
 
 from typing_extensions import NotRequired, Required, Self
 
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
+
+__all__ = ("BinaryOperatorAggregate",)
 
 
 # Adapted from typing_extensions
@@ -37,7 +34,7 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
 
     __slots__ = ("value", "operator")
 
-    def __init__(self, typ: Type[Value], operator: Callable[[Value, Value], Value]):
+    def __init__(self, typ: type[Value], operator: Callable[[Value, Value], Value]):
         super().__init__(typ)
         self.operator = operator
         # special forms from typing or collections.abc are not instantiable
@@ -63,19 +60,26 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         )
 
     @property
-    def ValueType(self) -> Type[Value]:
+    def ValueType(self) -> type[Value]:
         """The type of the value stored in the channel."""
         return self.typ
 
     @property
-    def UpdateType(self) -> Type[Value]:
+    def UpdateType(self) -> type[Value]:
         """The type of the update received by the channel."""
         return self.typ
 
-    def from_checkpoint(self, checkpoint: Optional[Value]) -> Self:
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
         empty = self.__class__(self.typ, self.operator)
         empty.key = self.key
-        if checkpoint is not None:
+        empty.value = self.value
+        return empty
+
+    def from_checkpoint(self, checkpoint: Value) -> Self:
+        empty = self.__class__(self.typ, self.operator)
+        empty.key = self.key
+        if checkpoint is not MISSING:
             empty.value = checkpoint
         return empty
 
@@ -96,3 +100,6 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def is_available(self) -> bool:
         return self.value is not MISSING
+
+    def checkpoint(self) -> Value:
+        return self.value

@@ -175,7 +175,7 @@ class Auth:
         # will be considered a breaking change.
         self._handlers: dict[tuple[str, str], list[types.Handler]] = {}
         self._global_handlers: list[types.Handler] = []
-        self._authenticate_handler: typing.Optional[types.Authenticator] = None
+        self._authenticate_handler: types.Authenticator | None = None
         self._handler_cache: dict[tuple[str, str], types.Handler] = {}
 
     def authenticate(self, fn: AH) -> AH:
@@ -195,7 +195,7 @@ class Auth:
             - authorization (str | None): The Authorization header value (e.g., "Bearer <token>")
 
         Args:
-            fn (Callable): The authentication handler function to register.
+            fn: The authentication handler function to register.
                 Must return a representation of the user. This could be a:
                     - string (the user id)
                     - dict containing {"identity": str, "permissions": list[str]}
@@ -301,7 +301,7 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
     Generic base class for resource-specific handlers.
     """
 
-    value: type[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]]
+    value: type[VCreate | VUpdate | VRead | VDelete | VSearch]
 
     Create: type[VCreate]
     Read: type[VRead]
@@ -335,40 +335,40 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
     @typing.overload
     def __call__(
         self,
-        fn: typing.Union[
-            _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
-            _ActionHandler[dict[str, typing.Any]],
-        ],
-    ) -> _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]]: ...
+        fn: (
+            _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]
+            | _ActionHandler[dict[str, typing.Any]]
+        ),
+    ) -> _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]: ...
 
     @typing.overload
     def __call__(
         self,
         *,
-        resources: typing.Union[str, Sequence[str]],
-        actions: typing.Optional[typing.Union[str, Sequence[str]]] = None,
+        resources: str | Sequence[str],
+        actions: str | Sequence[str] | None = None,
     ) -> Callable[
-        [_ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]]],
-        _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+        [_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]],
+        _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
     ]: ...
 
     def __call__(
         self,
-        fn: typing.Union[
-            _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
-            _ActionHandler[dict[str, typing.Any]],
-            None,
-        ] = None,
+        fn: (
+            _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]
+            | _ActionHandler[dict[str, typing.Any]]
+            | None
+        ) = None,
         *,
-        resources: typing.Union[str, Sequence[str], None] = None,
-        actions: typing.Optional[typing.Union[str, Sequence[str]]] = None,
-    ) -> typing.Union[
-        _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
-        Callable[
-            [_ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]]],
-            _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
-        ],
-    ]:
+        resources: str | Sequence[str] | None = None,
+        actions: str | Sequence[str] | None = None,
+    ) -> (
+        _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]
+        | Callable[
+            [_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]],
+            _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
+        ]
+    ):
         if fn is not None:
             _validate_handler(fn)
             return typing.cast(
@@ -377,10 +377,8 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
             )
 
         def decorator(
-            handler: _ActionHandler[
-                typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]
-            ],
-        ) -> _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]]:
+            handler: _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
+        ) -> _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]:
             _validate_handler(handler)
             return typing.cast(
                 _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
@@ -482,14 +480,13 @@ class _StoreOn:
     def __call__(
         self,
         *,
-        actions: typing.Optional[
-            typing.Union[
-                typing.Literal["put", "get", "search", "list_namespaces", "delete"],
-                Sequence[
-                    typing.Literal["put", "get", "search", "list_namespaces", "delete"]
-                ],
+        actions: (
+            typing.Literal["put", "get", "search", "list_namespaces", "delete"]
+            | Sequence[
+                typing.Literal["put", "get", "search", "list_namespaces", "delete"]
             ]
-        ] = None,
+            | None
+        ) = None,
     ) -> Callable[[AHO], AHO]: ...
 
     @typing.overload
@@ -497,17 +494,16 @@ class _StoreOn:
 
     def __call__(
         self,
-        fn: typing.Optional[AHO] = None,
+        fn: AHO | None = None,
         *,
-        actions: typing.Optional[
-            typing.Union[
-                typing.Literal["put", "get", "search", "list_namespaces", "delete"],
-                Sequence[
-                    typing.Literal["put", "get", "search", "list_namespaces", "delete"]
-                ],
+        actions: (
+            typing.Literal["put", "get", "search", "list_namespaces", "delete"]
+            | Sequence[
+                typing.Literal["put", "get", "search", "list_namespaces", "delete"]
             ]
-        ] = None,
-    ) -> typing.Union[AHO, Callable[[AHO], AHO]]:
+            | None
+        ) = None,
+    ) -> AHO | Callable[[AHO], AHO]:
         """Register a handler for specific resources and actions.
 
         Can be used as a decorator or with explicit resource/action parameters:
@@ -620,8 +616,8 @@ class _On:
     def __call__(
         self,
         *,
-        resources: typing.Union[str, Sequence[str]],
-        actions: typing.Optional[typing.Union[str, Sequence[str]]] = None,
+        resources: str | Sequence[str],
+        actions: str | Sequence[str] | None = None,
     ) -> Callable[[AHO], AHO]: ...
 
     @typing.overload
@@ -629,11 +625,11 @@ class _On:
 
     def __call__(
         self,
-        fn: typing.Optional[AHO] = None,
+        fn: AHO | None = None,
         *,
-        resources: typing.Union[str, Sequence[str], None] = None,
-        actions: typing.Optional[typing.Union[str, Sequence[str]]] = None,
-    ) -> typing.Union[AHO, Callable[[AHO], AHO]]:
+        resources: str | Sequence[str] | None = None,
+        actions: str | Sequence[str] | None = None,
+    ) -> AHO | Callable[[AHO], AHO]:
         """Register a handler for specific resources and actions.
 
         Can be used as a decorator or with explicit resource/action parameters:
@@ -675,8 +671,8 @@ class _On:
 
 def _register_handler(
     auth: Auth,
-    resource: typing.Optional[str],
-    action: typing.Optional[str],
+    resource: str | None,
+    action: str | None,
     fn: types.Handler,
 ) -> types.Handler:
     _validate_handler(fn)
@@ -722,6 +718,14 @@ def _validate_handler(fn: Callable[..., typing.Any]) -> None:
             " The value contains the mutable data being sent to the endpoint."
             "Update the function signature to include this required parameter."
         )
+
+
+def is_studio_user(user: types.MinimalUser | types.User | types.UserDict) -> bool:
+    return (
+        isinstance(user, types.StudioUser)
+        or isinstance(user, dict)
+        and user.get("kind") == "StudioUser"
+    )
 
 
 __all__ = ["Auth", "types", "exceptions"]

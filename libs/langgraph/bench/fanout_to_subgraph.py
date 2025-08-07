@@ -3,8 +3,9 @@ from typing import Annotated
 
 from typing_extensions import TypedDict
 
-from langgraph.constants import END, START, Send
+from langgraph.constants import END, START
 from langgraph.graph.state import StateGraph
+from langgraph.types import Send
 
 
 def fanout_to_subgraph() -> StateGraph:
@@ -21,6 +22,8 @@ def fanout_to_subgraph() -> StateGraph:
     class JokeOutput(TypedDict):
         jokes: list[str]
 
+    class JokeState(JokeInput, JokeOutput): ...
+
     async def bump(state: JokeOutput):
         return {"jokes": [state["jokes"][0] + " a"]}
 
@@ -35,7 +38,7 @@ def fanout_to_subgraph() -> StateGraph:
         return END if state["jokes"][0].endswith(" a" * 10) else "bump"
 
     # subgraph
-    subgraph = StateGraph(input=JokeInput, output=JokeOutput)
+    subgraph = StateGraph(JokeState, input_schema=JokeInput, output_schema=JokeOutput)
     subgraph.add_node("edit", edit)
     subgraph.add_node("generate", generate)
     subgraph.add_node("bump", bump)
@@ -69,6 +72,8 @@ def fanout_to_subgraph_sync() -> StateGraph:
     class JokeOutput(TypedDict):
         jokes: list[str]
 
+    class JokeState(JokeInput, JokeOutput): ...
+
     def bump(state: JokeOutput):
         return {"jokes": [state["jokes"][0] + " a"]}
 
@@ -83,7 +88,7 @@ def fanout_to_subgraph_sync() -> StateGraph:
         return END if state["jokes"][0].endswith(" a" * 10) else "bump"
 
     # subgraph
-    subgraph = StateGraph(input=JokeInput, output=JokeOutput)
+    subgraph = StateGraph(JokeState, input_schema=JokeInput, output_schema=JokeOutput)
     subgraph.add_node("edit", edit)
     subgraph.add_node("generate", generate)
     subgraph.add_node("bump", bump)
@@ -106,12 +111,13 @@ def fanout_to_subgraph_sync() -> StateGraph:
 if __name__ == "__main__":
     import asyncio
     import random
+    import time
 
     import uvloop
 
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
 
-    graph = fanout_to_subgraph().compile(checkpointer=MemorySaver())
+    graph = fanout_to_subgraph().compile(checkpointer=InMemorySaver())
     input = {
         "subjects": [
             random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(1000)
@@ -123,4 +129,7 @@ if __name__ == "__main__":
         len([c async for c in graph.astream(input, config=config)])
 
     uvloop.install()
+    start = time.time()
     asyncio.run(run())
+    end = time.time()
+    print(f"Time taken: {end - start:.4f} seconds")

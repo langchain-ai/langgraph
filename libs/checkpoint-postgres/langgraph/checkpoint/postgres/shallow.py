@@ -1,5 +1,6 @@
 import asyncio
 import threading
+import warnings
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any, Optional
@@ -150,7 +151,7 @@ def _dump_blobs(
     checkpoint_ns: str,
     values: dict[str, Any],
     versions: ChannelVersions,
-) -> list[tuple[str, str, str, str, str, Optional[bytes]]]:
+) -> list[tuple[str, str, str, str, Optional[bytes]]]:
     if not versions:
         return []
 
@@ -188,6 +189,12 @@ class ShallowPostgresSaver(BasePostgresSaver):
         pipe: Optional[Pipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
+        warnings.warn(
+            "ShallowPostgresSaver is deprecated as of version 2.0.20 and will be removed in 3.0.0. "
+            "Use PostgresSaver instead, and invoke the graph with `graph.invoke(..., durability='exit')`.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__(serde=serde)
         if isinstance(conn, ConnectionPool) and pipe is not None:
             raise ValueError(
@@ -207,8 +214,8 @@ class ShallowPostgresSaver(BasePostgresSaver):
         """Create a new ShallowPostgresSaver instance from a connection string.
 
         Args:
-            conn_string (str): The Postgres connection info string.
-            pipeline (bool): whether to use Pipeline
+            conn_string: The Postgres connection info string.
+            pipeline: whether to use Pipeline
 
         Returns:
             ShallowPostgresSaver: A new ShallowPostgresSaver instance.
@@ -269,11 +276,16 @@ class ShallowPostgresSaver(BasePostgresSaver):
         with self._cursor() as cur:
             cur.execute(self.SELECT_SQL + where, args, binary=True)
             for value in cur:
-                checkpoint = self._load_checkpoint(
-                    value["checkpoint"],
-                    value["channel_values"],
-                    value["pending_sends"],
-                )
+                checkpoint: Checkpoint = {
+                    **value["checkpoint"],
+                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "pending_sends": [
+                        self.serde.loads_typed((t.decode(), v))
+                        for t, v in value["pending_sends"]
+                    ]
+                    if value["pending_sends"]
+                    else [],
+                }
                 yield CheckpointTuple(
                     config={
                         "configurable": {
@@ -283,7 +295,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                         }
                     },
                     checkpoint=checkpoint,
-                    metadata=self._load_metadata(value["metadata"]),
+                    metadata=value["metadata"],
                     pending_writes=self._load_writes(value["pending_writes"]),
                 )
 
@@ -294,7 +306,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
         provided config (matching the thread ID in the config).
 
         Args:
-            config (RunnableConfig): The config to use for retrieving the checkpoint.
+            config: The config to use for retrieving the checkpoint.
 
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
@@ -333,11 +345,16 @@ class ShallowPostgresSaver(BasePostgresSaver):
             )
 
             for value in cur:
-                checkpoint = self._load_checkpoint(
-                    value["checkpoint"],
-                    value["channel_values"],
-                    value["pending_sends"],
-                )
+                checkpoint: Checkpoint = {
+                    **value["checkpoint"],
+                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "pending_sends": [
+                        self.serde.loads_typed((t.decode(), v))
+                        for t, v in value["pending_sends"]
+                    ]
+                    if value["pending_sends"]
+                    else [],
+                }
                 return CheckpointTuple(
                     config={
                         "configurable": {
@@ -347,7 +364,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                         }
                     },
                     checkpoint=checkpoint,
-                    metadata=self._load_metadata(value["metadata"]),
+                    metadata=value["metadata"],
                     pending_writes=self._load_writes(value["pending_writes"]),
                 )
 
@@ -365,10 +382,10 @@ class ShallowPostgresSaver(BasePostgresSaver):
         checkpoint and overwrites a previous checkpoint, if it exists.
 
         Args:
-            config (RunnableConfig): The config to associate with the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to save.
-            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
-            new_versions (ChannelVersions): New channel versions as of this write.
+            config: The config to associate with the checkpoint.
+            checkpoint: The checkpoint to save.
+            metadata: Additional metadata to save with the checkpoint.
+            new_versions: New channel versions as of this write.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -423,8 +440,8 @@ class ShallowPostgresSaver(BasePostgresSaver):
                 (
                     thread_id,
                     checkpoint_ns,
-                    Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
+                    Jsonb(copy),
+                    Jsonb(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -441,9 +458,9 @@ class ShallowPostgresSaver(BasePostgresSaver):
         This method saves intermediate writes associated with a checkpoint to the Postgres database.
 
         Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
-            writes (List[Tuple[str, Any]]): List of writes to store.
-            task_id (str): Identifier for the task creating the writes.
+            config: Configuration of the related checkpoint.
+            writes: List of writes to store.
+            task_id: Identifier for the task creating the writes.
         """
         query = (
             self.UPSERT_CHECKPOINT_WRITES_SQL
@@ -468,7 +485,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
         """Create a database cursor as a context manager.
 
         Args:
-            pipeline (bool): whether to use pipeline for the DB operations inside the context manager.
+            pipeline: whether to use pipeline for the DB operations inside the context manager.
                 Will be applied regardless of whether the ShallowPostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
@@ -528,6 +545,12 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         pipe: Optional[AsyncPipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
+        warnings.warn(
+            "AsyncShallowPostgresSaver is deprecated as of version 2.0.20 and will be removed in 3.0.0. "
+            "Use AsyncPostgresSaver instead, and invoke the graph with `await graph.ainvoke(..., durability='exit')`.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__(serde=serde)
         if isinstance(conn, AsyncConnectionPool) and pipe is not None:
             raise ValueError(
@@ -552,8 +575,8 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         """Create a new AsyncShallowPostgresSaver instance from a connection string.
 
         Args:
-            conn_string (str): The Postgres connection info string.
-            pipeline (bool): whether to use AsyncPipeline
+            conn_string: The Postgres connection info string.
+            pipeline: whether to use AsyncPipeline
 
         Returns:
             AsyncShallowPostgresSaver: A new AsyncShallowPostgresSaver instance.
@@ -614,12 +637,16 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         async with self._cursor() as cur:
             await cur.execute(self.SELECT_SQL + where, args, binary=True)
             async for value in cur:
-                checkpoint = await asyncio.to_thread(
-                    self._load_checkpoint,
-                    value["checkpoint"],
-                    value["channel_values"],
-                    value["pending_sends"],
-                )
+                checkpoint: Checkpoint = {
+                    **value["checkpoint"],
+                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "pending_sends": [
+                        self.serde.loads_typed((t.decode(), v))
+                        for t, v in value["pending_sends"]
+                    ]
+                    if value["pending_sends"]
+                    else [],
+                }
                 yield CheckpointTuple(
                     config={
                         "configurable": {
@@ -629,7 +656,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                         }
                     },
                     checkpoint=checkpoint,
-                    metadata=self._load_metadata(value["metadata"]),
+                    metadata=value["metadata"],
                     pending_writes=await asyncio.to_thread(
                         self._load_writes, value["pending_writes"]
                     ),
@@ -642,7 +669,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         provided config (matching the thread ID in the config).
 
         Args:
-            config (RunnableConfig): The config to use for retrieving the checkpoint.
+            config: The config to use for retrieving the checkpoint.
 
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
@@ -660,12 +687,16 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             )
 
             async for value in cur:
-                checkpoint = await asyncio.to_thread(
-                    self._load_checkpoint,
-                    value["checkpoint"],
-                    value["channel_values"],
-                    value["pending_sends"],
-                )
+                checkpoint: Checkpoint = {
+                    **value["checkpoint"],
+                    "channel_values": self._load_blobs(value["channel_values"]),
+                    "pending_sends": [
+                        self.serde.loads_typed((t.decode(), v))
+                        for t, v in value["pending_sends"]
+                    ]
+                    if value["pending_sends"]
+                    else [],
+                }
                 return CheckpointTuple(
                     config={
                         "configurable": {
@@ -675,7 +706,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                         }
                     },
                     checkpoint=checkpoint,
-                    metadata=self._load_metadata(value["metadata"]),
+                    metadata=value["metadata"],
                     pending_writes=await asyncio.to_thread(
                         self._load_writes, value["pending_writes"]
                     ),
@@ -695,10 +726,10 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         checkpoint and overwrites a previous checkpoint, if it exists.
 
         Args:
-            config (RunnableConfig): The config to associate with the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to save.
-            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
-            new_versions (ChannelVersions): New channel versions as of this write.
+            config: The config to associate with the checkpoint.
+            checkpoint: The checkpoint to save.
+            metadata: Additional metadata to save with the checkpoint.
+            new_versions: New channel versions as of this write.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -742,8 +773,8 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                 (
                     thread_id,
                     checkpoint_ns,
-                    Jsonb(self._dump_checkpoint(copy)),
-                    self._dump_metadata(get_checkpoint_metadata(config, metadata)),
+                    Jsonb(copy),
+                    Jsonb(get_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -760,9 +791,9 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         This method saves intermediate writes associated with a checkpoint to the database.
 
         Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
-            writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
-            task_id (str): Identifier for the task creating the writes.
+            config: Configuration of the related checkpoint.
+            writes: List of writes to store, each as (channel, value) pair.
+            task_id: Identifier for the task creating the writes.
         """
         query = (
             self.UPSERT_CHECKPOINT_WRITES_SQL
@@ -788,7 +819,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         """Create a database cursor as a context manager.
 
         Args:
-            pipeline (bool): whether to use pipeline for the DB operations inside the context manager.
+            pipeline: whether to use pipeline for the DB operations inside the context manager.
                 Will be applied regardless of whether the AsyncShallowPostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
@@ -846,7 +877,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         while True:
             try:
                 yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_),  # noqa: F821
+                    anext(aiter_),  # type: ignore[arg-type]  # noqa: F821
                     self.loop,
                 ).result()
             except StopAsyncIteration:
@@ -859,7 +890,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         provided config (matching the thread ID in the config).
 
         Args:
-            config (RunnableConfig): The config to use for retrieving the checkpoint.
+            config: The config to use for retrieving the checkpoint.
 
         Returns:
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
@@ -894,10 +925,10 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         checkpoint and overwrites a previous checkpoint, if it exists.
 
         Args:
-            config (RunnableConfig): The config to associate with the checkpoint.
-            checkpoint (Checkpoint): The checkpoint to save.
-            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
-            new_versions (ChannelVersions): New channel versions as of this write.
+            config: The config to associate with the checkpoint.
+            checkpoint: The checkpoint to save.
+            metadata: Additional metadata to save with the checkpoint.
+            new_versions: New channel versions as of this write.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -918,10 +949,10 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         This method saves intermediate writes associated with a checkpoint to the database.
 
         Args:
-            config (RunnableConfig): Configuration of the related checkpoint.
-            writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
-            task_id (str): Identifier for the task creating the writes.
-            task_path (str): Path of the task creating the writes.
+            config: Configuration of the related checkpoint.
+            writes: List of writes to store, each as (channel, value) pair.
+            task_id: Identifier for the task creating the writes.
+            task_path: Path of the task creating the writes.
         """
         return asyncio.run_coroutine_threadsafe(
             self.aput_writes(config, writes, task_id, task_path), self.loop

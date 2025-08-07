@@ -19,8 +19,7 @@ class TestAsyncSqliteSaver:
         self.config_1: RunnableConfig = {
             "configurable": {
                 "thread_id": "thread-1",
-                # for backwards compatibility testing
-                "thread_ts": "1",
+                "checkpoint_id": "1",
                 "checkpoint_ns": "",
             }
         }
@@ -59,7 +58,7 @@ class TestAsyncSqliteSaver:
 
     async def test_combined_metadata(self) -> None:
         async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
-            config = {
+            config: RunnableConfig = {
                 "configurable": {
                     "thread_id": "thread-2",
                     "checkpoint_ns": "",
@@ -69,9 +68,8 @@ class TestAsyncSqliteSaver:
             }
             await saver.aput(config, self.chkpnt_2, self.metadata_2, {})
             checkpoint = await saver.aget_tuple(config)
-            assert checkpoint.metadata == {
+            assert checkpoint is not None and checkpoint.metadata == {
                 **self.metadata_2,
-                "thread_id": "thread-2",
                 "run_id": "my_run_id",
             }
 
@@ -92,18 +90,11 @@ class TestAsyncSqliteSaver:
 
             search_results_1 = [c async for c in saver.alist(None, filter=query_1)]
             assert len(search_results_1) == 1
-            assert search_results_1[0].metadata == {
-                "thread_id": "thread-1",
-                "thread_ts": "1",
-                **self.metadata_1,
-            }
+            assert search_results_1[0].metadata == self.metadata_1
 
             search_results_2 = [c async for c in saver.alist(None, filter=query_2)]
             assert len(search_results_2) == 1
-            assert search_results_2[0].metadata == {
-                "thread_id": "thread-2",
-                **self.metadata_2,
-            }
+            assert search_results_2[0].metadata == self.metadata_2
 
             search_results_3 = [c async for c in saver.alist(None, filter=query_3)]
             assert len(search_results_3) == 3

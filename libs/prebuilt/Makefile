@@ -1,4 +1,4 @@
-.PHONY: all format lint test test_watch integration_tests spell_check spell_fix benchmark profile
+.PHONY: all format lint test test-fast test_watch integration_tests spell_check spell_fix benchmark profile
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -15,14 +15,17 @@ stop-postgres:
 
 TEST ?= .
 
+test-fast:
+	LANGGRAPH_TEST_FAST=1 uv run pytest $(TEST)
+
 test:
-	make start-postgres && poetry run pytest $(TEST); \
+	make start-postgres && LANGGRAPH_TEST_FAST=0 uv run pytest $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
 
 test_watch:
-	make start-postgres && poetry run ptw $(TEST); \
+	make start-postgres && LANGGRAPH_TEST_FAST=0 uv run ptw $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
@@ -41,21 +44,21 @@ lint_tests: PYTHON_FILES=tests
 lint_tests: MYPY_CACHE=.mypy_cache_test
 
 lint lint_diff lint_package lint_tests:
-	poetry run ruff check .
-	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff format $(PYTHON_FILES) --diff
-	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff check --select I $(PYTHON_FILES)
+	uv run ruff check .
+	[ "$(PYTHON_FILES)" = "" ] || uv run ruff format $(PYTHON_FILES) --diff
+	[ "$(PYTHON_FILES)" = "" ] || uv run ruff check --select I $(PYTHON_FILES)
 	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE)
-	[ "$(PYTHON_FILES)" = "" ] || poetry run mypy langgraph --cache-dir $(MYPY_CACHE)
+	[ "$(PYTHON_FILES)" = "" ] || uv run mypy langgraph --cache-dir $(MYPY_CACHE)
 
 format format_diff:
-	poetry run ruff format $(PYTHON_FILES)
-	poetry run ruff check --select I --fix $(PYTHON_FILES)
+	uv run ruff format $(PYTHON_FILES)
+	uv run ruff check --fix $(PYTHON_FILES)
 
 spell_check:
-	poetry run codespell --toml pyproject.toml
+	uv run codespell --toml pyproject.toml
 
 spell_fix:
-	poetry run codespell --toml pyproject.toml -w
+	uv run codespell --toml pyproject.toml -w
 
 
 ######################
@@ -74,5 +77,6 @@ help:
 	@echo '-- TESTS --'
 	@echo 'coverage                     - run unit tests and generate coverage report'
 	@echo 'test                         - run unit tests'
+	@echo 'test-fast                    - run unit tests with in-memory checkpointer only'
 	@echo 'test TEST_FILE=<test_file>   - run all tests in file'
 	@echo 'test_watch                   - run unit tests in watch mode'

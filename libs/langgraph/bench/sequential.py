@@ -1,7 +1,7 @@
 """Create a sequential no-op graph consisting of a few hundred nodes."""
 
+from langgraph._internal._runnable import RunnableCallable
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.utils.runnable import RunnableCallable
 
 
 def create_sequential(number_nodes: int) -> StateGraph:
@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     import uvloop
 
-    graph = create_sequential(2000).compile()
+    graph = create_sequential(3000).compile()
     input = {"messages": []}  # Empty list of messages
     config = {"recursion_limit": 20000000000}
 

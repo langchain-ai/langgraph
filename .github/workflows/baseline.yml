@@ -7,8 +7,8 @@ on:
     paths:
       - "libs/**"
 
-env:
-  POETRY_VERSION: "1.7.1"
+permissions:
+  contents: read
 
 jobs:
   benchmark:
@@ -19,14 +19,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: SHA=$(git rev-parse HEAD) && echo "SHA=$SHA" >> $GITHUB_ENV
-      - name: Set up Python 3.11 + Poetry ${{ env.POETRY_VERSION }}
-        uses: "./.github/actions/poetry_setup"
+      - name: Set up Python 3.11
+        uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.11"
-          poetry-version: ${{ env.POETRY_VERSION }}
-          cache-key: bench
+          enable-cache: true
+          cache-suffix: "bench"
       - name: Install dependencies
-        run: poetry install --with dev
+        run: uv sync --group dev
       - name: Run benchmarks
         run: OUTPUT=out/benchmark-baseline.json make -s benchmark
       - name: Save outputs

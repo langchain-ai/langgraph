@@ -36,7 +36,7 @@ Each checkpointer should conform to `langgraph.checkpoint.base.BaseCheckpointSav
 
 - `.put` - Store a checkpoint with its configuration and metadata.
 - `.put_writes` - Store intermediate writes linked to a checkpoint (i.e. pending writes).
-- `.get_tuple` - Fetch a checkpoint tuple using for a given configuration (`thread_id` and `thread_ts`).
+- `.get_tuple` - Fetch a checkpoint tuple using for a given configuration (`thread_id` and `checkpoint_id`).
 - `.list` - List checkpoints that match a given configuration and filter criteria.
 
 If the checkpointer will be used with asynchronous graph execution (i.e. executing the graph via `.ainvoke`, `.astream`, `.abatch`), checkpointer must implement asynchronous versions of the above methods (`.aput`, `.aput_writes`, `.aget_tuple`, `.alist`).
@@ -44,14 +44,14 @@ If the checkpointer will be used with asynchronous graph execution (i.e. executi
 ## Usage
 
 ```python
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import InMemorySaver
 
 write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
 read_config = {"configurable": {"thread_id": "1"}}
 
-checkpointer = MemorySaver()
+checkpointer = InMemorySaver()
 checkpoint = {
-    "v": 2,
+    "v": 4,
     "ts": "2024-07-31T20:14:19.804150+00:00",
     "id": "1ef4f797-8335-6428-8001-8a1503f9b875",
     "channel_values": {
@@ -73,7 +73,6 @@ checkpoint = {
         "start:node": 2
       }
     },
-    "pending_sends": [],
 }
 
 # store checkpoint

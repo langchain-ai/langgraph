@@ -1,0 +1,109 @@
+# This file is auto-generated. Do not edit.
+- description: Tenacious tool calling built on LangGraph.
+  language: python
+  monorepo_path: null
+  name: trustcall
+  repo: hinthornw/trustcall
+  weekly_downloads: -12345
+- description: A streamlined research system built inspired on STORM and built on
+    LangGraph.
+  language: python
+  monorepo_path: null
+  name: breeze-agent
+  repo: andrestorres123/breeze-agent
+  weekly_downloads: -12345
+- description: Build supervisor multi-agent systems with LangGraph.
+  language: python
+  monorepo_path: null
+  name: langgraph-supervisor
+  repo: langchain-ai/langgraph-supervisor-py
+  weekly_downloads: -12345
+- description: Build agents that learn and adapt from interactions over time.
+  language: python
+  monorepo_path: null
+  name: langmem
+  repo: langchain-ai/langmem
+  weekly_downloads: -12345
+- description: Make Anthropic Model Context Protocol (MCP) tools compatible with LangGraph
+    agents.
+  language: python
+  monorepo_path: null
+  name: langchain-mcp-adapters
+  repo: langchain-ai/langchain-mcp-adapters
+  weekly_downloads: -12345
+- description: Open source assistant for iterative web research and report writing.
+  language: python
+  monorepo_path: null
+  name: open-deep-research
+  repo: langchain-ai/open_deep_research
+  weekly_downloads: -12345
+- description: Build swarm-style multi-agent systems using LangGraph.
+  language: python
+  monorepo_path: null
+  name: langgraph-swarm
+  repo: langchain-ai/langgraph-swarm-py
+  weekly_downloads: -12345
+- description: A taxonomy generator for unstructured data
+  language: python
+  monorepo_path: null
+  name: delve-taxonomy-generator
+  repo: andrestorres123/delve
+  weekly_downloads: -12345
+- description: Enable researcher to build scientific workflows easily with simplified
+    interface.
+  language: python
+  monorepo_path: null
+  name: nodeology
+  repo: xyin-anl/Nodeology
+  weekly_downloads: -12345
+- description: Build LangGraph agents with large numbers of tools.
+  language: python
+  monorepo_path: null
+  name: langgraph-bigtool
+  repo: langchain-ai/langgraph-bigtool
+  weekly_downloads: -12345
+- description: An AI-powered data science team of agents to help you perform common
+    data science tasks 10X faster.
+  language: python
+  monorepo_path: null
+  name: ai-data-science-team
+  repo: business-science/ai-data-science-team
+  weekly_downloads: -12345
+- description: LangGraph agent that runs a reflection step.
+  language: python
+  monorepo_path: null
+  name: langgraph-reflection
+  repo: langchain-ai/langgraph-reflection
+  weekly_downloads: -12345
+- description: LangGraph implementation of CodeAct agent that generates and executes
+    code instead of tool calling.
+  language: python
+  monorepo_path: null
+  name: langgraph-codeact
+  repo: langchain-ai/langgraph-codeact
+  weekly_downloads: -12345
+- description: Make Anthropic Model Context Protocol (MCP) tools compatible with LangGraph
+    agents.
+  language: js
+  monorepo_path: null
+  name: '@langchain/mcp-adapters'
+  repo: langchain-ai/langchainjs
+  weekly_downloads: -12345
+- description: Build supervisor multi-agent systems with LangGraph
+  language: js
+  monorepo_path: libs/langgraph-supervisor
+  name: '@langchain/langgraph-supervisor'
+  repo: langchain-ai/langgraphjs
+  weekly_downloads: -12345
+- description: Build multi-agent swarms with LangGraph
+  language: js
+  monorepo_path: libs/langgraph-swarm
+  name: '@langchain/langgraph-swarm'
+  repo: langchain-ai/langgraphjs
+  weekly_downloads: -12345
+- description: Build computer use agents with LangGraph
+  language: js
+  monorepo_path: libs/langgraph-cua
+  name: '@langchain/langgraph-cua'
+  repo: langchain-ai/langgraphjs
+  weekly_downloads: -12345

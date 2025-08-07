@@ -1,12 +1,18 @@
-from typing import Any, Generic, Iterator, Optional, Sequence, Type, Union
+from __future__ import annotations
+
+from collections.abc import Iterator, Sequence
+from typing import Any, Generic, Union
 
 from typing_extensions import Self
 
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError
 
+__all__ = ("Topic",)
 
-def flatten(values: Sequence[Union[Value, list[Value]]]) -> Iterator[Value]:
+
+def _flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:
     for value in values:
         if isinstance(value, list):
             yield from value
@@ -16,9 +22,7 @@ def flatten(values: Sequence[Union[Value, list[Value]]]) -> Iterator[Value]:
 
 class Topic(
     Generic[Value],
-    BaseChannel[
-        Sequence[Value], Union[Value, list[Value]], tuple[set[Value], list[Value]]
-    ],
+    BaseChannel[Sequence[Value], Union[Value, list[Value]], list[Value]],
 ):
     """A configurable PubSub Topic.
 
@@ -29,7 +33,7 @@ class Topic(
 
     __slots__ = ("values", "accumulate")
 
-    def __init__(self, typ: Type[Value], accumulate: bool = False) -> None:
+    def __init__(self, typ: type[Value], accumulate: bool = False) -> None:
         super().__init__(typ)
         # attrs
         self.accumulate = accumulate
@@ -49,26 +53,36 @@ class Topic(
         """The type of the update received by the channel."""
         return Union[self.typ, list[self.typ]]  # type: ignore[name-defined]
 
-    def checkpoint(self) -> tuple[set[Value], list[Value]]:
-        return self.values
-
-    def from_checkpoint(self, checkpoint: Optional[list[Value]]) -> Self:
+    def copy(self) -> Self:
+        """Return a copy of the channel."""
         empty = self.__class__(self.typ, self.accumulate)
         empty.key = self.key
-        if checkpoint is not None:
+        empty.values = self.values.copy()
+        return empty
+
+    def checkpoint(self) -> list[Value]:
+        return self.values
+
+    def from_checkpoint(self, checkpoint: list[Value]) -> Self:
+        empty = self.__class__(self.typ, self.accumulate)
+        empty.key = self.key
+        if checkpoint is not MISSING:
             if isinstance(checkpoint, tuple):
+                # backwards compatibility
                 empty.values = checkpoint[1]
             else:
                 empty.values = checkpoint
         return empty
 
-    def update(self, values: Sequence[Union[Value, list[Value]]]) -> None:
-        current = list(self.values)
+    def update(self, values: Sequence[Value | list[Value]]) -> bool:
+        updated = False
         if not self.accumulate:
+            updated = bool(self.values)
             self.values = list[Value]()
-        if flat_values := flatten(values):
+        if flat_values := tuple(_flatten(values)):
+            updated = True
             self.values.extend(flat_values)
-        return self.values != current
+        return updated
 
     def get(self) -> Sequence[Value]:
         if self.values:

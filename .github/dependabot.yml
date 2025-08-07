@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directories:
+      - "libs/checkpoint"
+      - "libs/checkpoint-postgres"
+      - "libs/checkpoint-sqlite"
+      - "libs/cli"
+      - "libs/langgraph"
+      - "libs/prebuilt"
+      - "libs/sdk-py"
+    schedule:
+      interval: "weekly"

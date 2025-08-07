@@ -1,9 +1,10 @@
 # type: ignore
+from __future__ import annotations
 
 import re
 import time
 from contextlib import contextmanager
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -379,7 +380,7 @@ def _create_vector_store(
     vector_type: str,
     distance_type: str,
     fake_embeddings: Embeddings,
-    text_fields: Optional[list[str]] = None,
+    text_fields: list[str] | None = None,
     enable_ttl: bool = True,
 ) -> PostgresStore:
     """Create a store with vector search enabled."""
@@ -401,7 +402,7 @@ def _create_vector_store(
             "vector_type": vector_type,
         },
         "distance_type": distance_type,
-        "text_fields": text_fields,
+        "fields": text_fields,
     }
 
     with Connection.connect(admin_conn_string, autocommit=True) as conn:
