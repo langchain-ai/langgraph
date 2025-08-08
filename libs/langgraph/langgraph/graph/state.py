@@ -607,9 +607,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     def add_conditional_edges(
         self,
         source: str,
-        path: Callable[..., Hashable | list[Hashable]]
-        | Callable[..., Awaitable[Hashable | list[Hashable]]]
-        | Runnable[Any, Hashable | list[Hashable]],
+        path: Callable[..., Hashable | Sequence[Hashable]]
+        | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
+        | Runnable[Any, Hashable | Sequence[Hashable]],
         path_map: dict[Hashable, str] | list[str] | None = None,
     ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
@@ -710,9 +710,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     def set_conditional_entry_point(
         self,
-        path: Callable[..., Hashable | list[Hashable]]
-        | Callable[..., Awaitable[Hashable | list[Hashable]]]
-        | Runnable[Any, Hashable | list[Hashable]],
+        path: Callable[..., Hashable | Sequence[Hashable]]
+        | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
+        | Runnable[Any, Hashable | Sequence[Hashable]],
         path_map: dict[Hashable, str] | list[str] | None = None,
     ) -> Self:
         """Sets a conditional entry point in the graph.

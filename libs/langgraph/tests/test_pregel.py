@@ -16,6 +16,7 @@ from typing import Annotated, Any, Literal, Optional, Union, get_type_hints
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
+from langchain_core.messages import AnyMessage
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -26,7 +27,7 @@ from langsmith import traceable
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph.cache.base import BaseCache
@@ -45,7 +46,7 @@ from langgraph.config import get_stream_writer
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import MessageGraph, MessagesState, add_messages
+from langgraph.graph.message import MessagesState, add_messages
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
     NodeBuilder,
@@ -967,6 +968,7 @@ def test_pending_writes_resume(
                 "branch:to:two": AnyVersion(),
             },
             "channel_values": {"value": 6},
+            "updated_channels": ["value"],
         },
         metadata={
             "parents": {},
@@ -1014,6 +1016,7 @@ def test_pending_writes_resume(
                 "branch:to:one": None,
                 "branch:to:two": None,
             },
+            "updated_channels": ["branch:to:one", "branch:to:two", "value"],
         },
         metadata={
             "parents": {},
@@ -1065,6 +1068,7 @@ def test_pending_writes_resume(
                 "__start__": AnyVersion(),
             },
             "channel_values": {"__start__": {"value": 1}},
+            "updated_channels": ["__start__"],
         },
         metadata={
             "parents": {},
@@ -3907,7 +3911,7 @@ def test_remove_message_via_state_update(
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = MessageGraph()
+    workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -3940,7 +3944,7 @@ def test_remove_message_via_state_update(
 def test_remove_message_from_node():
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
-    workflow = MessageGraph()
+    workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
     workflow.add_node(
         "chatbot",
         lambda state: [
@@ -8262,3 +8266,53 @@ def test_fork_and_update_task_results(sync_checkpointer: BaseCheckpointSaver) ->
             ],
         ],
     ]
+
+
+def test_subgraph_streaming_sync() -> None:
+    """Test subgraph streaming when used as a node in sync version"""
+
+    # Create a fake chat model that returns a simple response
+    model = GenericFakeChatModel(messages=iter(["The weather is sunny today."]))
+
+    # Create a subgraph that uses the fake chat model
+    def call_model_node(state: MessagesState, config: RunnableConfig) -> MessagesState:
+        """Node that calls the model with the last message."""
+        messages = state["messages"]
+        last_message = messages[-1].content if messages else ""
+        response = model.invoke([("user", last_message)], config)
+        return {"messages": [response]}
+
+    # Build the subgraph
+    subgraph = StateGraph(MessagesState)
+    subgraph.add_node("call_model", call_model_node)
+    subgraph.add_edge(START, "call_model")
+    compiled_subgraph = subgraph.compile()
+
+    class SomeCustomState(TypedDict):
+        last_chunk: NotRequired[str]
+        num_chunks: NotRequired[int]
+
+    # Will invoke a subgraph as a function
+    def parent_node(state: SomeCustomState, config: RunnableConfig) -> dict:
+        """Node that runs the subgraph."""
+        msgs = {"messages": [("user", "What is the weather in Tokyo?")]}
+        events = []
+        for event in compiled_subgraph.stream(msgs, config, stream_mode="messages"):
+            events.append(event)
+        ai_msg_chunks = [ai_msg_chunk for ai_msg_chunk, _ in events]
+        return {
+            "last_chunk": ai_msg_chunks[-1],
+            "num_chunks": len(ai_msg_chunks),
+        }
+
+    # Build the main workflow
+    workflow = StateGraph(SomeCustomState)
+    workflow.add_node("subgraph", parent_node)
+    workflow.add_edge(START, "subgraph")
+    compiled_workflow = workflow.compile()
+
+    # Test the basic functionality
+    result = compiled_workflow.invoke({})
+
+    assert result["last_chunk"].content == "today."
+    assert result["num_chunks"] == 9
