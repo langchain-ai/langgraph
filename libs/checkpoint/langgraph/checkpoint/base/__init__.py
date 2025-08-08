@@ -81,6 +81,9 @@ class Checkpoint(TypedDict):
     This keeps track of the versions of the channels that each node has seen.
     Used to determine which nodes to execute next.
     """
+    updated_channels: list[str] | None
+    """The channels that were updated in this checkpoint.
+    """
 
 
 def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
@@ -92,6 +95,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         pending_sends=checkpoint.get("pending_sends", []).copy(),
+        updated_channels=checkpoint.get("updated_channels", None),
     )
 
 
@@ -437,6 +441,7 @@ def empty_checkpoint() -> Checkpoint:
         channel_versions={},
         versions_seen={},
         pending_sends=[],
+        updated_channels=None,
     )
 
 
@@ -470,4 +475,5 @@ def create_checkpoint(
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
         pending_sends=checkpoint.get("pending_sends", []),
+        updated_channels=None,
     )
