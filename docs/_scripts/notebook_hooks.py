@@ -225,7 +225,7 @@ REDIRECT_MAP = {
     "tutorials/get-started/5-customize-state.md": "https://docs.langchain.com/oss/get-started/5-customize-state",
     "tutorials/get-started/6-time-travel.md": "https://docs.langchain.com/oss/get-started/6-time-travel",
     "tutorials/langgraph-platform/local-server.md": "https://docs.langchain.com/oss/local-server",
-    "tutorials/workflows.md": "https://docs.langchain.com/oss/workflows-and-agents",
+    "tutorials/workflows.md": "https://docs.langchain.com/oss/agentic-architectures",
     "concepts/agentic_concepts.md": "https://docs.langchain.com/oss/agentic-architectures",
     "guides/index.md": "https://docs.langchain.com/oss/overview",
     "agents/overview.md": "https://docs.langchain.com/oss/prebuilts",
