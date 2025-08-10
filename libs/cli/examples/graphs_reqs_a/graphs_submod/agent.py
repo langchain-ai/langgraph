@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated, TypedDict, Literal
+from typing import Annotated, Literal, TypedDict
 
 from langchain_anthropic import ChatAnthropic
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -21,8 +21,10 @@ model_oai = model_oai.bind_tools(tools)
 prompt = open(Path(__file__).parent.parent / "prompt.txt").read()
 subprompt = open(Path(__file__).parent / "subprompt.txt").read()
 
+
 class AgentContext(TypedDict):
     model: Literal["anthropic", "openai"]
+
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]

@@ -17,8 +17,10 @@ model_oai = ChatOpenAI(temperature=0)
 model_anth = model_anth.bind_tools(tools)
 model_oai = model_oai.bind_tools(tools)
 
+
 class AgentContext(TypedDict):
     model: Literal["anthropic", "openai"]
+
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
