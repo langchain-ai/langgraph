@@ -58,7 +58,7 @@ tool_node = ToolNode(tools)
 
 
 # Define a new graph
-workflow = StateGraph(AgentState)
+workflow = StateGraph(AgentState, context_schema=AgentContext)
 
 # Define the two nodes we will cycle between
 workflow.add_node("agent", call_model)
