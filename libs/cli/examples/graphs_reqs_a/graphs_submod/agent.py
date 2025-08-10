@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Annotated, TypedDict
+from typing import Annotated, TypedDict, Literal
 
 from langchain_anthropic import ChatAnthropic
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -8,6 +8,7 @@ from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph, add_messages
 from langgraph.prebuilt import ToolNode
+from langgraph.runtime import Runtime
 
 tools = [TavilySearchResults(max_results=1)]
 
@@ -20,6 +21,8 @@ model_oai = model_oai.bind_tools(tools)
 prompt = open(Path(__file__).parent.parent / "prompt.txt").read()
 subprompt = open(Path(__file__).parent / "subprompt.txt").read()
 
+class AgentContext(TypedDict):
+    model: Literal["anthropic", "openai"]
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
@@ -38,8 +41,8 @@ def should_continue(state):
 
 
 # Define the function that calls the model
-def call_model(state, config):
-    if config["configurable"].get("model", "anthropic") == "anthropic":
+def call_model(state, runtime: Runtime[AgentContext]):
+    if runtime.context.get("model", "anthropic") == "anthropic":
         model = model_anth
     else:
         model = model_oai
@@ -52,9 +55,8 @@ def call_model(state, config):
 # Define the function to execute tools
 tool_node = ToolNode(tools)
 
-
 # Define a new graph
-workflow = StateGraph(AgentState)
+workflow = StateGraph(AgentState, context_schema=AgentContext)
 
 # Define the two nodes we will cycle between
 workflow.add_node("agent", call_model)
