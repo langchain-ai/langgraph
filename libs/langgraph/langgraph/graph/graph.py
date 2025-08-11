@@ -207,11 +207,20 @@ class Graph:
             path_map = path_map.copy()
         elif isinstance(path_map, list):
             path_map = {name: name for name in path_map}
-        elif rtn_type := (
-            get_type_hints(path.__call__).get("return")
-            if hasattr(path, "__call__")
-            else None
-        ) or get_type_hints(path).get("return"):
+        else:
+            # Try to get type hints from path.__call__ first (for callable class instances)
+            # then fall back to get_type_hints(path) for regular functions/methods
+            rtn_type = None
+            try:
+                if hasattr(path, "__call__"):
+                    rtn_type = get_type_hints(path.__call__).get("return")
+                if not rtn_type:
+                    rtn_type = get_type_hints(path).get("return")
+            except TypeError:
+                # get_type_hints failed, rtn_type remains None
+                pass
+            
+            if rtn_type:
             if get_origin(rtn_type) is Literal:
                 path_map = {name: name for name in get_args(rtn_type)}
         # find a name for the condition
@@ -496,4 +505,5 @@ class CompiledGraph(Pregel):
                         graph.add_edge(start_nodes[end], end_nodes[branch.then])
 
         return graph
+
 
