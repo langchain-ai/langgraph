@@ -2024,7 +2024,7 @@ def test_post_model_hook_with_structured_output() -> None:
     )
 
     assert "post_model_hook" in agent.nodes
-    assert "generate_structured_response" in agent.nodes
+    assert "respond" in agent.nodes
 
     response = agent.invoke(
         {"messages": [HumanMessage("What's the weather?")], "flag": False}
@@ -2157,3 +2157,4 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
