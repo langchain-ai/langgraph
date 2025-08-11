@@ -868,7 +868,21 @@ def create_react_agent(
                     break
 
             if response_tool_call is None:
-                raise ValueError(f"Expected tool call with name '{response_tool_name}'")
+                # No response schema tool call found, but there are other tool calls
+                # This shouldn't happen in normal flow, fall back to old behavior
+                structured_response_schema = response_format
+                if isinstance(response_format, tuple):
+                    system_prompt, structured_response_schema = response_format
+                    messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+                resolved_model = await _aresolve_model(state, runtime)
+                model_with_structured_output = _get_model(
+                    resolved_model
+                ).with_structured_output(
+                    cast(StructuredResponseSchema, structured_response_schema)
+                )
+                response = await model_with_structured_output.ainvoke(messages, config)
+                return {"structured_response": response}
 
             # Extract the actual schema from tuple if needed
             actual_schema = response_format
@@ -1130,6 +1144,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
