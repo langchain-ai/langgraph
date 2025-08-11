@@ -131,7 +131,7 @@ function createHandoffTool({
 
 !!! tip
 
-    If you want to use tools that return `Command`, you can either use prebuilt @[`createReactAgent`][createReactAgent] / @[`ToolNode`][ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
+    If you want to use tools that return `Command`, you can either use prebuilt @[`create_react_agent`][create_react_agent] / @[`ToolNode`][ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
     
     ```typescript
     const callTools = async (state) => {
@@ -702,7 +702,7 @@ const multiAgentGraph = new StateGraph(MessagesZodState)
 
 ## Multi-turn conversation
 
-Users might want to engage in a *multi-turn conversation* with one or more agents. To build a system that can handle this, you can create a node that uses an [`interrupt`][interrupt] to collect user input and routes back to the **active** agent.
+Users might want to engage in a *multi-turn conversation* with one or more agents. To build a system that can handle this, you can create a node that uses an @[`interrupt`][interrupt] to collect user input and routes back to the **active** agent.
 
 The agents can then be implemented as nodes in a graph that executes agent steps and determines the next action:
 

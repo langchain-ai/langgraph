@@ -38,12 +38,12 @@ Here we show how to define and update [state](../concepts/low_level.md#state) in
 :::
 
 :::js
-[State](../concepts/low_level.md#state) in LangGraph can be defined using Zod schemas. Below we will use Zod. See [this section](#use-pydantic-models-for-graph-state) for detail on using alternative approaches.
+[State](../concepts/low_level.md#state) in LangGraph can be defined using Zod schemas. Below we will use Zod. See [this section](#alternative-state-definitions) for detail on using alternative approaches.
 :::
 
 By default, graphs will have the same input and output schema, and the state determines that schema. See [this section](#define-input-and-output-schemas) for how to define distinct input and output schemas.
 
-Let's consider a simple example using [messages](../concepts/low_level.md#messagesstate). This represents a versatile formulation of state for many LLM applications. See our [concepts page](../concepts/low_level.md#working-with-messages-in-graph-state) for more detail.
+Let's consider a simple example using [messages](../concepts/low_level.md#working-with-messages-in-graph-state). This represents a versatile formulation of state for many LLM applications. See our [concepts page](../concepts/low_level.md#working-with-messages-in-graph-state) for more detail.
 
 :::python
 ```python
@@ -1233,7 +1233,7 @@ In addition, for exceptions from popular http request libraries such as `request
 :::
 
 :::js
-To configure a retry policy, pass the `retryPolicy` parameter to the [addNode](../reference/graphs.md#langgraph.graph.state.StateGraph.addNode). The `retryPolicy` parameter takes in a `RetryPolicy` object. Below we instantiate a `RetryPolicy` object with the default parameters and associate it with a node:
+To configure a retry policy, pass the `retryPolicy` parameter to the [addNode](../reference/graphs.md#langgraph.graph.state.StateGraph.add_node). The `retryPolicy` parameter takes in a `RetryPolicy` object. Below we instantiate a `RetryPolicy` object with the default parameters and associate it with a node:
 
 ```typescript
 import { RetryPolicy } from "@langchain/langgraph";
@@ -1527,7 +1527,7 @@ builder.add_edge("step_2", "step_3")
 :::
 
 :::js
-We will then use [addNode](../concepts/low_level.md#messagesstate) and [addEdge](../concepts/low_level.md#edges) to populate our graph and define its control flow.
+We will then use [addNode](../concepts/low_level.md#nodes) and [addEdge](../concepts/low_level.md#edges) to populate our graph and define its control flow.
 
 ```typescript
 import { START, StateGraph } from "@langchain/langgraph";
