@@ -512,7 +512,6 @@ def create_react_agent(
     response_tool_name = None
     if response_format is not None:
         from langchain_core.tools import StructuredTool
-        from pydantic import BaseModel
         
         # Extract the actual schema from tuple if needed
         actual_schema = response_format
@@ -1110,6 +1109,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
