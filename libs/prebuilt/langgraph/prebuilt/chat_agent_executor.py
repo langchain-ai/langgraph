@@ -508,6 +508,25 @@ def create_react_agent(
         tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
         tool_classes = list(tool_node.tools_by_name.values())
 
+    # Create a tool from response_format schema if provided
+    response_tool_name = None
+    if response_format is not None:
+        # Extract the actual schema from tuple if needed
+        actual_schema = response_format
+        if isinstance(response_format, tuple):
+            _, actual_schema = response_format
+        
+        # Get the schema name for the tool
+        if hasattr(actual_schema, '__name__'):
+            response_tool_name = actual_schema.__name__
+        elif isinstance(actual_schema, dict) and 'title' in actual_schema:
+            response_tool_name = actual_schema['title']
+        else:
+            response_tool_name = "ResponseSchema"
+        
+        # Add the schema as a tool for binding to the model
+        tool_classes.append(actual_schema)
+
     is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
     is_async_dynamic_model = is_dynamic_model and inspect.iscoroutinefunction(model)
 
@@ -949,3 +968,4 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
