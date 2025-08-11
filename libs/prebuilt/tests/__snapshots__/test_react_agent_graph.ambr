@@ -85,8 +85,11 @@
   '''
   graph TD;
   	__start__ --> agent;
-  	agent --> generate_structured_response;
-  	generate_structured_response --> __end__;
+  	agent -.-> __end__;
+  	agent -.-> respond;
+  	agent -.-> tools;
+  	tools --> agent;
+  	respond --> __end__;
   
   '''
 # ---
@@ -94,10 +97,11 @@
   '''
   graph TD;
   	__start__ --> agent;
-  	agent -.-> generate_structured_response;
+  	agent -.-> __end__;
+  	agent -.-> respond;
   	agent -.-> tools;
   	tools --> agent;
-  	generate_structured_response --> __end__;
+  	respond --> __end__;
   
   '''
 # ---
@@ -105,9 +109,12 @@
   '''
   graph TD;
   	__start__ --> pre_model_hook;
-  	agent --> generate_structured_response;
+  	agent -.-> __end__;
+  	agent -.-> respond;
+  	agent -.-> tools;
   	pre_model_hook --> agent;
-  	generate_structured_response --> __end__;
+  	tools --> pre_model_hook;
+  	respond --> __end__;
   
   '''
 # ---
@@ -115,11 +122,12 @@
   '''
   graph TD;
   	__start__ --> pre_model_hook;
-  	agent -.-> generate_structured_response;
+  	agent -.-> __end__;
+  	agent -.-> respond;
   	agent -.-> tools;
   	pre_model_hook --> agent;
   	tools --> pre_model_hook;
-  	generate_structured_response --> __end__;
+  	respond --> __end__;
   
   '''
 # ---
@@ -128,8 +136,12 @@
   graph TD;
   	__start__ --> agent;
   	agent --> post_model_hook;
-  	post_model_hook --> generate_structured_response;
-  	generate_structured_response --> __end__;
+  	post_model_hook -.-> __end__;
+  	post_model_hook -.-> agent;
+  	post_model_hook -.-> respond;
+  	post_model_hook -.-> tools;
+  	tools --> agent;
+  	respond --> __end__;
   
   '''
 # ---
@@ -138,11 +150,12 @@
   graph TD;
   	__start__ --> agent;
   	agent --> post_model_hook;
+  	post_model_hook -.-> __end__;
   	post_model_hook -.-> agent;
-  	post_model_hook -.-> generate_structured_response;
+  	post_model_hook -.-> respond;
   	post_model_hook -.-> tools;
   	tools --> agent;
-  	generate_structured_response --> __end__;
+  	respond --> __end__;
   
   '''
 # ---
@@ -151,9 +164,13 @@
   graph TD;
   	__start__ --> pre_model_hook;
   	agent --> post_model_hook;
-  	post_model_hook --> generate_structured_response;
+  	post_model_hook -.-> __end__;
+  	post_model_hook -.-> pre_model_hook;
+  	post_model_hook -.-> respond;
+  	post_model_hook -.-> tools;
   	pre_model_hook --> agent;
-  	generate_structured_response --> __end__;
+  	tools --> pre_model_hook;
+  	respond --> __end__;
   
   '''
 # ---
@@ -162,12 +179,13 @@
   graph TD;
   	__start__ --> pre_model_hook;
   	agent --> post_model_hook;
-  	post_model_hook -.-> generate_structured_response;
+  	post_model_hook -.-> __end__;
   	post_model_hook -.-> pre_model_hook;
+  	post_model_hook -.-> respond;
   	post_model_hook -.-> tools;
   	pre_model_hook --> agent;
   	tools --> pre_model_hook;
-  	generate_structured_response --> __end__;
+  	respond --> __end__;
   
   '''
 # ---
