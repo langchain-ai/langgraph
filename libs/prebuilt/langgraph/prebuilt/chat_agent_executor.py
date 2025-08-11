@@ -925,6 +925,12 @@ def create_react_agent(
                 return END
         # Otherwise if there is, we continue
         else:
+            # Check if the response schema tool is called
+            if response_format is not None and response_tool_name is not None:
+                for tool_call in last_message.tool_calls:
+                    if tool_call["name"] == response_tool_name:
+                        return "respond"
+            
             if version == "v1":
                 return "tools"
             elif version == "v2":
@@ -1085,6 +1091,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
