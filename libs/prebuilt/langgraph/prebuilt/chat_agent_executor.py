@@ -511,6 +511,9 @@ def create_react_agent(
     # Create a tool from response_format schema if provided
     response_tool_name = None
     if response_format is not None:
+        from langchain_core.tools import StructuredTool
+        from pydantic import BaseModel
+        
         # Extract the actual schema from tuple if needed
         actual_schema = response_format
         if isinstance(response_format, tuple):
@@ -524,8 +527,32 @@ def create_react_agent(
         else:
             response_tool_name = "ResponseSchema"
 
-        # Add the schema as a tool for binding to the model
-        tool_classes.append(actual_schema)  # type: ignore[arg-type]
+        # Create a proper tool from the schema
+        def response_tool_func(**kwargs):
+            """Tool function for structured response generation."""
+            return kwargs
+        
+        # Create a StructuredTool from the schema
+        if isinstance(actual_schema, type) and issubclass(actual_schema, BaseModel):
+            response_tool = StructuredTool.from_function(
+                func=response_tool_func,
+                name=response_tool_name,
+                description=f"Generate a structured response using {response_tool_name}",
+                args_schema=actual_schema,
+            )
+        else:
+            # For dict schemas, create a tool dict representation
+            response_tool = {
+                "type": "function",
+                "function": {
+                    "name": response_tool_name,
+                    "description": f"Generate a structured response using {response_tool_name}",
+                    "parameters": actual_schema if isinstance(actual_schema, dict) else {}
+                }
+            }
+        
+        # Add the tool to the tool classes
+        tool_classes.append(response_tool)
 
     is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
     is_async_dynamic_model = is_dynamic_model and inspect.iscoroutinefunction(model)
@@ -1044,3 +1071,4 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
