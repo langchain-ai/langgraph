@@ -16,6 +16,11 @@ dependencies = [
     "ormsgpack>=1.10.0",
 ]
 
+[project.optional-dependencies]
+redis = [
+    "redis",
+]
+
 [project.urls]
 Repository = "https://www.github.com/langchain-ai/langgraph"
 
@@ -32,7 +37,6 @@ dev = [
   "numpy",
   "pandas",
   "pandas-stubs>=2.2.2.240807",
-  "redis",
 ]
 
 [tool.hatch.build.targets.wheel]
