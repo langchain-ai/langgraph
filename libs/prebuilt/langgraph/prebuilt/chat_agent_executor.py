@@ -767,48 +767,69 @@ def create_react_agent(
     def respond(
         state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
     ) -> StateSchema:
-        """Handle structured response creation when response schema tool is called."""
+        """Handle structured response creation when response schema tool is called or when no tool calls are present."""
         messages = _get_state_value(state, "messages")
         last_message = messages[-1]
 
-        if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            raise ValueError("Expected last message to be AIMessage with tool calls")
+        # Check if this is a tool call scenario or no tool calls scenario
+        if isinstance(last_message, AIMessage) and last_message.tool_calls:
+            # Find the response schema tool call
+            response_tool_call = None
+            for tool_call in last_message.tool_calls:
+                if tool_call["name"] == response_tool_name:
+                    response_tool_call = tool_call
+                    break
 
-        # Find the response schema tool call
-        response_tool_call = None
-        for tool_call in last_message.tool_calls:
-            if tool_call["name"] == response_tool_name:
-                response_tool_call = tool_call
-                break
+            if response_tool_call is None:
+                raise ValueError(f"Expected tool call with name '{response_tool_name}'")
 
-        if response_tool_call is None:
-            raise ValueError(f"Expected tool call with name '{response_tool_name}'")
+            # Extract the actual schema from tuple if needed
+            actual_schema = response_format
+            if isinstance(response_format, tuple):
+                _, actual_schema = response_format
 
-        # Extract the actual schema from tuple if needed
-        actual_schema = response_format
-        if isinstance(response_format, tuple):
-            _, actual_schema = response_format
+            # Coerce tool call arguments into response schema
+            try:
+                if hasattr(actual_schema, "__call__"):
+                    # For BaseModel classes
+                    structured_response = actual_schema(**response_tool_call["args"])  # type: ignore[operator]
+                else:
+                    # For dict schemas, just return the args
+                    structured_response = response_tool_call["args"]
+            except Exception as e:
+                raise ValueError(
+                    f"Failed to coerce tool call args into response schema: {e}"
+                )
 
-        # Coerce tool call arguments into response schema
-        try:
-            if hasattr(actual_schema, "__call__"):
-                # For BaseModel classes
-                structured_response = actual_schema(**response_tool_call["args"])  # type: ignore[operator]
-            else:
-                # For dict schemas, just return the args
-                structured_response = response_tool_call["args"]
-        except Exception as e:
-            raise ValueError(
-                f"Failed to coerce tool call args into response schema: {e}"
+            # Create artificial tool message
+            tool_message = ToolMessage(
+                content="Here is your structured response",
+                tool_call_id=response_tool_call["id"],
             )
 
-        # Create artificial tool message
-        tool_message = ToolMessage(
-            content="Here is your structured response",
-            tool_call_id=response_tool_call["id"],
-        )
+            return {"messages": [tool_message], "structured_response": structured_response}
+        else:
+            # No tool calls - generate structured response using the old approach
+            if is_async_dynamic_model:
+                msg = (
+                    "Async model callable provided but agent invoked synchronously. "
+                    "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
+                )
+                raise RuntimeError(msg)
 
-        return {"messages": [tool_message], "structured_response": structured_response}
+            structured_response_schema = response_format
+            if isinstance(response_format, tuple):
+                system_prompt, structured_response_schema = response_format
+                messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+            resolved_model = _resolve_model(state, runtime)
+            model_with_structured_output = _get_model(
+                resolved_model
+            ).with_structured_output(
+                cast(StructuredResponseSchema, structured_response_schema)
+            )
+            response = model_with_structured_output.invoke(messages, config)
+            return {"structured_response": response}
 
     async def arespond(
         state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
@@ -1075,6 +1096,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
