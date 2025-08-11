@@ -570,15 +570,13 @@ def create_react_agent(
         if is_dynamic_model:
             resolved_model = model(state, runtime)  # type: ignore[operator]
             if (
-                _should_bind_tools(
-                    resolved_model, tool_classes, num_builtin=len(llm_builtin_tools)
-                )  # type: ignore[arg-type]
+                _should_bind_tools(resolved_model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
                 and len(tool_classes + llm_builtin_tools) > 0
             ):
                 resolved_model = cast(BaseChatModel, resolved_model).bind_tools(
                     tool_classes + llm_builtin_tools  # type: ignore[operator]
                 )
-            return _get_prompt_runnable(prompt) | resolved_model
+            return _get_prompt_runnable(prompt) | resolved_model  # type: ignore[operator]
         else:
             return static_model
 
@@ -1044,5 +1042,6 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
