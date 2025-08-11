@@ -916,7 +916,7 @@ def create_react_agent(
             if post_model_hook is not None:
                 return "post_model_hook"
             elif response_format is not None:
-                return "generate_structured_response"
+                return "respond"
             else:
                 return END
         # Otherwise if there is, we continue
@@ -1083,6 +1083,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
