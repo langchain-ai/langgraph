@@ -2035,7 +2035,7 @@ def test_post_model_hook_with_structured_output() -> None:
     events = list(
         agent.stream({"messages": [HumanMessage("What's the weather?")], "flag": False})
     )
-    assert "generate_structured_response" in events[-1]
+    assert "respond" in events[-1]
     assert events == [
         {
             "agent": {
@@ -2157,4 +2157,5 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
 
