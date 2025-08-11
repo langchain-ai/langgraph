@@ -760,7 +760,7 @@ def create_react_agent(
         try:
             if hasattr(actual_schema, "__call__"):
                 # For BaseModel classes
-                structured_response = actual_schema(**response_tool_call["args"])
+                structured_response = actual_schema(**response_tool_call["args"])  # type: ignore[operator]
             else:
                 # For dict schemas, just return the args
                 structured_response = response_tool_call["args"]
@@ -1038,6 +1038,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
