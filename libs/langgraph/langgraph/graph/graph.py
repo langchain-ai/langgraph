@@ -221,8 +221,8 @@ class Graph:
                 pass
             
             if rtn_type:
-            if get_origin(rtn_type) is Literal:
-                path_map = {name: name for name in get_args(rtn_type)}
+                if get_origin(rtn_type) is Literal:
+                    path_map = {name: name for name in get_args(rtn_type)}
         # find a name for the condition
         path = coerce_to_runnable(path, name=None, trace=True)
         name = path.name or "condition"
@@ -505,5 +505,6 @@ class CompiledGraph(Pregel):
                         graph.add_edge(start_nodes[end], end_nodes[branch.then])
 
         return graph
+
 
 
