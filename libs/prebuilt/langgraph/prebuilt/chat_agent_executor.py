@@ -731,48 +731,7 @@ def create_react_agent(
     else:
         input_schema = state_schema
 
-    def generate_structured_response(
-        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-    ) -> StateSchema:
-        if is_async_dynamic_model:
-            msg = (
-                "Async model callable provided but agent invoked synchronously. "
-                "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
-            )
-            raise RuntimeError(msg)
 
-        messages = _get_state_value(state, "messages")
-        structured_response_schema = response_format
-        if isinstance(response_format, tuple):
-            system_prompt, structured_response_schema = response_format
-            messages = [SystemMessage(content=system_prompt)] + list(messages)
-
-        resolved_model = _resolve_model(state, runtime)
-        model_with_structured_output = _get_model(
-            resolved_model
-        ).with_structured_output(
-            cast(StructuredResponseSchema, structured_response_schema)
-        )
-        response = model_with_structured_output.invoke(messages, config)
-        return {"structured_response": response}
-
-    async def agenerate_structured_response(
-        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-    ) -> StateSchema:
-        messages = _get_state_value(state, "messages")
-        structured_response_schema = response_format
-        if isinstance(response_format, tuple):
-            system_prompt, structured_response_schema = response_format
-            messages = [SystemMessage(content=system_prompt)] + list(messages)
-
-        resolved_model = await _aresolve_model(state, runtime)
-        model_with_structured_output = _get_model(
-            resolved_model
-        ).with_structured_output(
-            cast(StructuredResponseSchema, structured_response_schema)
-        )
-        response = await model_with_structured_output.ainvoke(messages, config)
-        return {"structured_response": response}
 
     def respond(
         state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
@@ -1083,6 +1042,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
