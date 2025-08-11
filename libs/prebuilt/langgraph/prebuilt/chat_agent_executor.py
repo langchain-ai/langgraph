@@ -1021,7 +1021,7 @@ def create_react_agent(
             elif isinstance(messages[-1], ToolMessage):
                 return entrypoint
             elif response_format is not None:
-                return "generate_structured_response"
+                return "respond"
             else:
                 return END
 
@@ -1083,6 +1083,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
