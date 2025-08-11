@@ -7023,6 +7023,57 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
     ]
 
 
+def test_callable_in_conditional_edges_with_no_path_map() -> None:
+    class State(TypedDict, total=False):
+        query: str
+
+    def rewrite(data: State) -> State:
+        return {"query": f'query: {data["query"]}'}
+
+    def analyze(data: State) -> State:
+        return {"query": f'analyzed: {data["query"]}'}
+
+    class ChooseAnalyzer:
+        def __call__(self, data: State) -> str:
+            return "analyzer"
+
+    workflow = StateGraph(State)
+    workflow.add_node("rewriter", rewrite)
+    workflow.add_node("analyzer", analyze)
+    workflow.add_conditional_edges("rewriter", ChooseAnalyzer())
+    workflow.set_entry_point("rewriter")
+    app = workflow.compile()
+
+    assert app.invoke({"query": "what is weather in sf"}) == {
+        "query": "analyzed: query: what is weather in sf",
+    }
+
+
+def test_function_in_conditional_edges_with_no_path_map() -> None:
+    class State(TypedDict, total=False):
+        query: str
+
+    def rewrite(data: State) -> State:
+        return {"query": f'query: {data["query"]}'}
+
+    def analyze(data: State) -> State:
+        return {"query": f'analyzed: {data["query"]}'}
+
+    def choose_analyzer(data: State) -> str:
+        return "analyzer"
+
+    workflow = StateGraph(State)
+    workflow.add_node("rewriter", rewrite)
+    workflow.add_node("analyzer", analyze)
+    workflow.add_conditional_edges("rewriter", choose_analyzer)
+    workflow.set_entry_point("rewriter")
+    app = workflow.compile()
+
+    assert app.invoke({"query": "what is weather in sf"}) == {
+        "query": "analyzed: query: what is weather in sf",
+    }
+
+
 def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
