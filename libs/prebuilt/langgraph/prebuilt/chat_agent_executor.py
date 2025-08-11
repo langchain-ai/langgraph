@@ -903,8 +903,6 @@ def create_react_agent(
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
             if post_model_hook is not None:
                 return "post_model_hook"
-            elif response_format is not None:
-                return "respond"
             else:
                 return END
         # Otherwise if there is, we continue
@@ -1075,5 +1073,6 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
