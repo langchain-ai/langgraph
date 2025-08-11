@@ -9,8 +9,8 @@ import weakref
 from collections import defaultdict, deque
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from dataclasses import is_dataclass
-from functools import partial
-from inspect import isclass
+from functools import lru_cache, partial
+from inspect import Parameter, isclass, signature
 from typing import Any, Callable, Generic, Union, cast, get_type_hints
 from uuid import UUID, uuid5
 
@@ -3232,6 +3232,15 @@ def _output(
                 yield payload
 
 
+@lru_cache(maxsize=128)
+def _get_schema_fields(context_schema: type) -> set[str] | None:
+    # Must be dataclass right now.
+    sig = signature(context_schema)
+    if any(p.kind == Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return None
+    return set(get_type_hints(context_schema).keys())
+
+
 def _coerce_context(
     context_schema: type[ContextT] | None, context: Any
 ) -> ContextT | None:
@@ -3253,10 +3262,17 @@ def _coerce_context(
     if context_schema is None:
         return context
 
-    schema_is_class = issubclass(context_schema, BaseModel) or is_dataclass(
-        context_schema
-    )
-    if isinstance(context, dict) and schema_is_class:
-        return context_schema(**context)  # type: ignore[misc]
+    if isinstance(context, dict):
+        if is_typeddict(context_schema):
+            return cast(ContextT, context)
+
+        if is_dataclass(context_schema):
+            fields = _get_schema_fields(context_schema)
+            if fields is None:
+                return context_schema(**context)
+            return context_schema(**{k: v for k, v in context.items() if k in fields})
+
+        if issubclass(context_schema, BaseModel):
+            return context_schema(**context)
 
     return cast(ContextT, context)

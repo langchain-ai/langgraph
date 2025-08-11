@@ -52,6 +52,14 @@ def test_context_runtime() -> None:
         {"message": "hello world"}, context=Context(api_key="sk_123456")
     )
     assert result == {"message": "api key: sk_123456"}
+    result = compiled.invoke(
+        {"message": "hello world"}, context={"api_key": "sk_1234567"}
+    )
+    assert result == {"message": "api key: sk_1234567"}
+    result = compiled.invoke(
+        {"message": "hello world"}, context={"api_key": "sk_1234568", "foo": "bar"}
+    )
+    assert result == {"message": "api key: sk_1234568"}
 
 
 def test_override_runtime() -> None:
@@ -134,7 +142,8 @@ def test_context_coercion_dataclass() -> None:
 
     # Test dict coercion with all fields
     result = compiled.invoke(
-        {"message": "test"}, context={"api_key": "sk_test", "timeout": 60}
+        {"message": "test"},
+        context={"api_key": "sk_test", "timeout": 60, "extra_arg": "extra_value"},
     )
     assert result == {"message": "api_key: sk_test, timeout: 60"}
 
@@ -147,6 +156,53 @@ def test_context_coercion_dataclass() -> None:
         {"message": "test"}, context=Context(api_key="sk_test3", timeout=90)
     )
     assert result == {"message": "api_key: sk_test3, timeout: 90"}
+
+
+def test_context_coercion_dataclass_custom_init() -> None:
+    """Test that dict context is coerced to dataclass."""
+
+    @dataclass(init=False)
+    class Context:
+        api_key: str
+        timeout: int = 30
+
+        def __init__(self, api_key: str, timeout: int = 30, **kwargs: Any):
+            self.api_key = api_key
+            self.timeout = timeout
+            setattr(self, "extra_arg", kwargs.get("extra_arg"))
+
+    class State(TypedDict):
+        message: str
+
+    def node_with_context(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+        return {
+            "message": f"api_key: {runtime.context.api_key}, timeout: {runtime.context.timeout}, extra_arg: {runtime.context.extra_arg}"
+        }
+
+    graph = StateGraph(state_schema=State, context_schema=Context)
+    graph.add_node("node", node_with_context)
+    graph.add_edge(START, "node")
+    graph.add_edge("node", END)
+    compiled = graph.compile()
+
+    # Test dict coercion with all fields
+    result = compiled.invoke(
+        {"message": "test"},
+        context={"api_key": "sk_test", "timeout": 60, "extra_arg": "extra_value"},
+    )
+    assert result == {
+        "message": "api_key: sk_test, timeout: 60, extra_arg: extra_value"
+    }
+
+    # Test dict coercion with default field
+    result = compiled.invoke({"message": "test"}, context={"api_key": "sk_test2"})
+    assert result == {"message": "api_key: sk_test2, timeout: 30, extra_arg: None"}
+
+    # Test with actual dataclass instance (should still work)
+    result = compiled.invoke(
+        {"message": "test"}, context=Context(api_key="sk_test3", timeout=90)
+    )
+    assert result == {"message": "api_key: sk_test3, timeout: 90, extra_arg: None"}
 
 
 def test_context_coercion_pydantic() -> None:
@@ -174,7 +230,12 @@ def test_context_coercion_pydantic() -> None:
     # Test dict coercion with all fields
     result = compiled.invoke(
         {"message": "test"},
-        context={"api_key": "sk_test", "timeout": 60, "tags": ["prod", "v2"]},
+        context={
+            "api_key": "sk_test",
+            "timeout": 60,
+            "tags": ["prod", "v2"],
+            "extra_arg": "extra_value",
+        },
     )
     assert result == {"message": "api_key: sk_test, timeout: 60, tags: ['prod', 'v2']"}
 
@@ -214,7 +275,8 @@ def test_context_coercion_typeddict() -> None:
 
     # Test dict passes through for TypedDict
     result = compiled.invoke(
-        {"message": "test"}, context={"api_key": "sk_test", "timeout": 60}
+        {"message": "test"},
+        context={"api_key": "sk_test", "timeout": 60, "extra_arg": "extra_value"},
     )
     assert result == {"message": "api_key: sk_test, timeout: 60"}
 
@@ -270,12 +332,6 @@ def test_context_coercion_errors() -> None:
     # Test missing required field
     with pytest.raises(TypeError):
         compiled.invoke({"message": "test"}, context={"timeout": 60})
-
-    # Test invalid dict keys
-    with pytest.raises(TypeError):
-        compiled.invoke(
-            {"message": "test"}, context={"api_key": "test", "invalid_field": "value"}
-        )
 
 
 @pytest.mark.anyio
