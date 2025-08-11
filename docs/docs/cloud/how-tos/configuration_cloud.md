@@ -272,7 +272,7 @@ For example, to update your assistant's system prompt:
 
     ```bash
     curl --request PATCH \
-    --url <DEPOLYMENT_URL>/assistants/<ASSISTANT_ID> \
+    --url <DEPLOYMENT_URL>/assistants/<ASSISTANT_ID> \
     --header 'Content-Type: application/json' \
     --data '{
     "config": {"model_name": "openai", "system_prompt": "You are an unhelpful assistant!"}
