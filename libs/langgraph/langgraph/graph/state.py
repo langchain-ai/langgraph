@@ -129,6 +129,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         input_schema: The schema class that defines the input to the graph.
         output_schema: The schema class that defines the output from the graph.
 
+    !!! warning "`config_schema` Deprecated"
+        The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
+        Please use `context_schema` instead to specify the schema for run-scoped context.
+
     Example:
         ```python
         from langchain_core.runnables import RunnableConfig
@@ -603,9 +607,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     def add_conditional_edges(
         self,
         source: str,
-        path: Callable[..., Hashable | list[Hashable]]
-        | Callable[..., Awaitable[Hashable | list[Hashable]]]
-        | Runnable[Any, Hashable | list[Hashable]],
+        path: Callable[..., Hashable | Sequence[Hashable]]
+        | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
+        | Runnable[Any, Hashable | Sequence[Hashable]],
         path_map: dict[Hashable, str] | list[str] | None = None,
     ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
@@ -706,9 +710,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     def set_conditional_entry_point(
         self,
-        path: Callable[..., Hashable | list[Hashable]]
-        | Callable[..., Awaitable[Hashable | list[Hashable]]]
-        | Runnable[Any, Hashable | list[Hashable]],
+        path: Callable[..., Hashable | Sequence[Hashable]]
+        | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
+        | Runnable[Any, Hashable | Sequence[Hashable]],
         path_map: dict[Hashable, str] | list[str] | None = None,
     ) -> Self:
         """Sets a conditional entry point in the graph.
@@ -1385,6 +1389,14 @@ def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | Non
             decoration = get_origin(meta[-1]) or meta[-1]
             if is_managed_value(decoration):
                 return decoration
+
+    # Handle Required, NotRequired, etc wrapped types by extracting the inner type
+    if (
+        get_origin(typ) is not None
+        and (args := get_args(typ))
+        and (inner_type := args[0])
+    ):
+        return _is_field_managed_value(name, inner_type)
 
     return None
 

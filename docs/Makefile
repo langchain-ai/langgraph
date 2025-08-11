@@ -13,10 +13,13 @@ build-prebuilt:
 		uv run python -m _scripts.third_party_page.get_download_stats --fake stats.yml; \
 		set +x; \
 	fi
-	uv run python -m _scripts.third_party_page.create_third_party_page stats.yml docs/agents/prebuilt.md --language python
+	uv run python -m _scripts.third_party_page.create_third_party_page stats.yml docs/agents/prebuilt.md
 
 build-docs: build-prebuilt
-	uv run python -m mkdocs build --clean -f mkdocs.yml --strict
+	TARGET_LANGUAGE=python uv run python -m mkdocs build --clean -f mkdocs.yml --strict
+
+build-docs-js: build-prebuilt
+	TARGET_LANGUAGE=js uv run python -m mkdocs build --clean -f mkdocs.yml --strict
 
 llms-text:
 	uv run python -m _scripts.generate_llms_text docs/llms-full.txt
