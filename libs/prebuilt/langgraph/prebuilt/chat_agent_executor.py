@@ -515,15 +515,15 @@ def create_react_agent(
         actual_schema = response_format
         if isinstance(response_format, tuple):
             _, actual_schema = response_format
-        
+
         # Get the schema name for the tool
-        if hasattr(actual_schema, '__name__'):
+        if hasattr(actual_schema, "__name__"):
             response_tool_name = actual_schema.__name__
-        elif isinstance(actual_schema, dict) and 'title' in actual_schema:
-            response_tool_name = actual_schema['title']
+        elif isinstance(actual_schema, dict) and "title" in actual_schema:
+            response_tool_name = actual_schema["title"]
         else:
             response_tool_name = "ResponseSchema"
-        
+
         # Add the schema as a tool for binding to the model
         tool_classes.append(actual_schema)
 
@@ -570,7 +570,9 @@ def create_react_agent(
         if is_dynamic_model:
             resolved_model = model(state, runtime)  # type: ignore[operator]
             if (
-                _should_bind_tools(resolved_model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
+                _should_bind_tools(
+                    resolved_model, tool_classes, num_builtin=len(llm_builtin_tools)
+                )  # type: ignore[arg-type]
                 and len(tool_classes + llm_builtin_tools) > 0
             ):
                 resolved_model = cast(BaseChatModel, resolved_model).bind_tools(
@@ -587,7 +589,9 @@ def create_react_agent(
         if is_async_dynamic_model:
             resolved_model = await model(state, runtime)  # type: ignore[misc,operator]
             if (
-                _should_bind_tools(resolved_model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
+                _should_bind_tools(
+                    resolved_model, tool_classes, num_builtin=len(llm_builtin_tools)
+                )  # type: ignore[arg-type]
                 and len(tool_classes + llm_builtin_tools) > 0
             ):
                 resolved_model = cast(BaseChatModel, resolved_model).bind_tools(
@@ -597,7 +601,9 @@ def create_react_agent(
         elif is_dynamic_model:
             resolved_model = model(state, runtime)  # type: ignore[operator]
             if (
-                _should_bind_tools(resolved_model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
+                _should_bind_tools(
+                    resolved_model, tool_classes, num_builtin=len(llm_builtin_tools)
+                )  # type: ignore[arg-type]
                 and len(tool_classes + llm_builtin_tools) > 0
             ):
                 resolved_model = cast(BaseChatModel, resolved_model).bind_tools(
@@ -731,54 +737,51 @@ def create_react_agent(
     else:
         input_schema = state_schema
 
-
-
     def respond(
         state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
     ) -> StateSchema:
         """Handle structured response creation when response schema tool is called."""
         messages = _get_state_value(state, "messages")
         last_message = messages[-1]
-        
+
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
             raise ValueError("Expected last message to be AIMessage with tool calls")
-        
+
         # Find the response schema tool call
         response_tool_call = None
         for tool_call in last_message.tool_calls:
             if tool_call["name"] == response_tool_name:
                 response_tool_call = tool_call
                 break
-        
+
         if response_tool_call is None:
             raise ValueError(f"Expected tool call with name '{response_tool_name}'")
-        
+
         # Extract the actual schema from tuple if needed
         actual_schema = response_format
         if isinstance(response_format, tuple):
             _, actual_schema = response_format
-        
+
         # Coerce tool call arguments into response schema
         try:
-            if hasattr(actual_schema, '__call__'):
+            if hasattr(actual_schema, "__call__"):
                 # For BaseModel classes
                 structured_response = actual_schema(**response_tool_call["args"])
             else:
                 # For dict schemas, just return the args
                 structured_response = response_tool_call["args"]
         except Exception as e:
-            raise ValueError(f"Failed to coerce tool call args into response schema: {e}")
-        
+            raise ValueError(
+                f"Failed to coerce tool call args into response schema: {e}"
+            )
+
         # Create artificial tool message
         tool_message = ToolMessage(
             content="Here is your structured response",
-            tool_call_id=response_tool_call["id"]
+            tool_call_id=response_tool_call["id"],
         )
-        
-        return {
-            "messages": [tool_message],
-            "structured_response": structured_response
-        }
+
+        return {"messages": [tool_message], "structured_response": structured_response}
 
     async def arespond(
         state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
@@ -786,46 +789,45 @@ def create_react_agent(
         """Async handle structured response creation when response schema tool is called."""
         messages = _get_state_value(state, "messages")
         last_message = messages[-1]
-        
+
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
             raise ValueError("Expected last message to be AIMessage with tool calls")
-        
+
         # Find the response schema tool call
         response_tool_call = None
         for tool_call in last_message.tool_calls:
             if tool_call["name"] == response_tool_name:
                 response_tool_call = tool_call
                 break
-        
+
         if response_tool_call is None:
             raise ValueError(f"Expected tool call with name '{response_tool_name}'")
-        
+
         # Extract the actual schema from tuple if needed
         actual_schema = response_format
         if isinstance(response_format, tuple):
             _, actual_schema = response_format
-        
+
         # Coerce tool call arguments into response schema
         try:
-            if hasattr(actual_schema, '__call__'):
+            if hasattr(actual_schema, "__call__"):
                 # For BaseModel classes
                 structured_response = actual_schema(**response_tool_call["args"])
             else:
                 # For dict schemas, just return the args
                 structured_response = response_tool_call["args"]
         except Exception as e:
-            raise ValueError(f"Failed to coerce tool call args into response schema: {e}")
-        
+            raise ValueError(
+                f"Failed to coerce tool call args into response schema: {e}"
+            )
+
         # Create artificial tool message
         tool_message = ToolMessage(
             content="Here is your structured response",
-            tool_call_id=response_tool_call["id"]
+            tool_call_id=response_tool_call["id"],
         )
-        
-        return {
-            "messages": [tool_message],
-            "structured_response": structured_response
-        }
+
+        return {"messages": [tool_message], "structured_response": structured_response}
 
     if not tool_calling_enabled:
         # Define a new graph
@@ -885,7 +887,7 @@ def create_react_agent(
                 for tool_call in last_message.tool_calls:
                     if tool_call["name"] == response_tool_name:
                         return "respond"
-            
+
             if version == "v1":
                 return "tools"
             elif version == "v2":
@@ -1042,14 +1044,3 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
-
-
-
-
-
-
-
-
-
-
-
