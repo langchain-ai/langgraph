@@ -972,6 +972,10 @@ def create_react_agent(
                 arespond,
             ),
         )
+        if post_model_hook is not None:
+            post_model_hook_paths.append("respond")
+        else:
+            agent_paths.append("respond")
     else:
         if post_model_hook is not None:
             post_model_hook_paths.append(END)
@@ -1071,4 +1075,5 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
