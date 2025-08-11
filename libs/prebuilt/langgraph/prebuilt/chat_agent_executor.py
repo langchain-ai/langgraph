@@ -520,7 +520,7 @@ def create_react_agent(
         if hasattr(actual_schema, "__name__"):
             response_tool_name = actual_schema.__name__  # type: ignore[union-attr]
         elif isinstance(actual_schema, dict) and "title" in actual_schema:
-            response_tool_name = actual_schema["title"]  # type: ignore[index]
+            response_tool_name = actual_schema["title"]
         else:
             response_tool_name = "ResponseSchema"
 
@@ -1044,4 +1044,5 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
