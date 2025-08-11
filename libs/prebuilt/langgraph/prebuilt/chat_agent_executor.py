@@ -978,16 +978,12 @@ def create_react_agent(
     # Add a structured output node if response_format is provided
     if response_format is not None:
         workflow.add_node(
-            "generate_structured_response",
+            "respond",
             RunnableCallable(
-                generate_structured_response,
-                agenerate_structured_response,
+                respond,
+                arespond,
             ),
         )
-        if post_model_hook is not None:
-            post_model_hook_paths.append("generate_structured_response")
-        else:
-            agent_paths.append("generate_structured_response")
     else:
         if post_model_hook is not None:
             post_model_hook_paths.append(END)
@@ -1087,6 +1083,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
