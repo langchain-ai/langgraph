@@ -586,9 +586,24 @@ def create_react_agent(
         """Async resolve the model to use, handling both static and dynamic models."""
         if is_async_dynamic_model:
             resolved_model = await model(state, runtime)  # type: ignore[misc,operator]
+            if (
+                _should_bind_tools(resolved_model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
+                and len(tool_classes + llm_builtin_tools) > 0
+            ):
+                resolved_model = cast(BaseChatModel, resolved_model).bind_tools(
+                    tool_classes + llm_builtin_tools  # type: ignore[operator]
+                )
             return _get_prompt_runnable(prompt) | resolved_model
         elif is_dynamic_model:
-            return _get_prompt_runnable(prompt) | model(state, runtime)  # type: ignore[operator]
+            resolved_model = model(state, runtime)  # type: ignore[operator]
+            if (
+                _should_bind_tools(resolved_model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
+                and len(tool_classes + llm_builtin_tools) > 0
+            ):
+                resolved_model = cast(BaseChatModel, resolved_model).bind_tools(
+                    tool_classes + llm_builtin_tools  # type: ignore[operator]
+                )
+            return _get_prompt_runnable(prompt) | resolved_model
         else:
             return static_model
 
@@ -976,5 +991,6 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
