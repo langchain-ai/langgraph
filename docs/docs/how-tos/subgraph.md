@@ -22,6 +22,7 @@ npm install @langchain/langgraph
 :::
 
 !!! tip "Set up LangSmith for LangGraph development"
+
     Sign up for [LangSmith](https://smith.langchain.com) to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph — read more about how to get started [here](https://docs.smith.langchain.com).
 
 ## Shared state schemas
@@ -73,12 +74,10 @@ const State = z.object({
 });
 
 // Subgraph
-const subgraphNode1 = (state: z.infer<typeof State>) => {
-  return { foo: "hi! " + state.foo };
-};
-
 const subgraphBuilder = new StateGraph(State)
-  .addNode("subgraphNode1", subgraphNode1)
+  .addNode("subgraphNode1", (state) => {
+    return { foo: "hi! " + state.foo };
+  })
   .addEdge(START, "subgraphNode1");
 
 const subgraph = subgraphBuilder.compile();
@@ -157,19 +156,15 @@ const graph = builder.compile();
       bar: z.string(),  // (2)!
     });
     
-    const subgraphNode1 = (state: z.infer<typeof SubgraphState>) => {
-      return { bar: "bar" };
-    };
-    
-    const subgraphNode2 = (state: z.infer<typeof SubgraphState>) => {
-      // note that this node is using a state key ('bar') that is only available in the subgraph
-      // and is sending update on the shared state key ('foo')
-      return { foo: state.foo + state.bar };
-    };
-    
     const subgraphBuilder = new StateGraph(SubgraphState)
-      .addNode("subgraphNode1", subgraphNode1)
-      .addNode("subgraphNode2", subgraphNode2)
+      .addNode("subgraphNode1", (state) => {
+        return { bar: "bar" };
+      })
+      .addNode("subgraphNode2", (state) => {
+        // note that this node is using a state key ('bar') that is only available in the subgraph
+        // and is sending update on the shared state key ('foo')
+        return { foo: state.foo + state.bar };
+      })
       .addEdge(START, "subgraphNode1")
       .addEdge("subgraphNode1", "subgraphNode2");
     
@@ -180,12 +175,10 @@ const graph = builder.compile();
       foo: z.string(),
     });
     
-    const node1 = (state: z.infer<typeof ParentState>) => {
-      return { foo: "hi! " + state.foo };
-    };
-    
     const builder = new StateGraph(ParentState)
-      .addNode("node1", node1)
+      .addNode("node1", (state) => {
+        return { foo: "hi! " + state.foo };
+      })
       .addNode("node2", subgraph)
       .addEdge(START, "node1")
       .addEdge("node1", "node2");
@@ -197,8 +190,8 @@ const graph = builder.compile();
     }
     ```
 
-    1. This key is shared with the parent graph state
-    2. This key is private to the `SubgraphState` and is not visible to the parent graph
+    3. This key is shared with the parent graph state
+    4. This key is private to the `SubgraphState` and is not visible to the parent graph
     
     ```
     { node1: { foo: 'hi! foo' } }
@@ -259,12 +252,10 @@ const SubgraphState = z.object({
 });
 
 // Subgraph
-const subgraphNode1 = (state: z.infer<typeof SubgraphState>) => {
-  return { bar: "hi! " + state.bar };
-};
-
 const subgraphBuilder = new StateGraph(SubgraphState)
-  .addNode("subgraphNode1", subgraphNode1)
+  .addNode("subgraphNode1", (state) => {
+    return { bar: "hi! " + state.bar };
+  })
   .addEdge(START, "subgraphNode1");
 
 const subgraph = subgraphBuilder.compile();
@@ -274,13 +265,11 @@ const State = z.object({
   foo: z.string(),
 });
 
-const callSubgraph = async (state: z.infer<typeof State>) => {
-  const subgraphOutput = await subgraph.invoke({ bar: state.foo }); // (1)!
-  return { foo: subgraphOutput.bar }; // (2)!
-};
-
 const builder = new StateGraph(State)
-  .addNode("node1", callSubgraph)
+  .addNode("node1", async (state) => {
+    const subgraphOutput = await subgraph.invoke({ bar: state.foo }); // (1)!
+    return { foo: subgraphOutput.bar }; // (2)!
+  })
   .addEdge(START, "node1");
 
 const graph = builder.compile();
@@ -362,17 +351,13 @@ const graph = builder.compile();
       baz: z.string(),
     });
     
-    const subgraphNode1 = (state: z.infer<typeof SubgraphState>) => {
-      return { baz: "baz" };
-    };
-    
-    const subgraphNode2 = (state: z.infer<typeof SubgraphState>) => {
-      return { bar: state.bar + state.baz };
-    };
-    
     const subgraphBuilder = new StateGraph(SubgraphState)
-      .addNode("subgraphNode1", subgraphNode1)
-      .addNode("subgraphNode2", subgraphNode2)
+      .addNode("subgraphNode1", (state) => {
+        return { baz: "baz" };
+      })
+      .addNode("subgraphNode2", (state) => {
+        return { bar: state.bar + state.baz };
+      })
       .addEdge(START, "subgraphNode1")
       .addEdge("subgraphNode1", "subgraphNode2");
     
@@ -383,18 +368,14 @@ const graph = builder.compile();
       foo: z.string(),
     });
     
-    const node1 = (state: z.infer<typeof ParentState>) => {
-      return { foo: "hi! " + state.foo };
-    };
-    
-    const node2 = async (state: z.infer<typeof ParentState>) => {
-      const response = await subgraph.invoke({ bar: state.foo }); // (1)!
-      return { foo: response.bar }; // (2)!
-    };
-    
     const builder = new StateGraph(ParentState)
-      .addNode("node1", node1)
-      .addNode("node2", node2)
+      .addNode("node1", (state) => {
+        return { foo: "hi! " + state.foo };
+      })
+      .addNode("node2", async (state) => {
+        const response = await subgraph.invoke({ bar: state.foo }); // (1)!
+        return { foo: response.bar }; // (2)!
+      })
       .addEdge(START, "node1")
       .addEdge("node1", "node2");
     
@@ -408,8 +389,8 @@ const graph = builder.compile();
     }
     ```
 
-    1. Transform the state to the subgraph state
-    2. Transform response back to the parent state
+    3. Transform the state to the subgraph state
+    4. Transform response back to the parent state
 
     ```
     [[], { node1: { foo: 'hi! foo' } }]
@@ -519,13 +500,11 @@ const graph = builder.compile();
       myGrandchildKey: z.string(),
     });
     
-    const grandchild1 = (state: z.infer<typeof GrandChildState>) => {
-      // NOTE: child or parent keys will not be accessible here
-      return { myGrandchildKey: state.myGrandchildKey + ", how are you" };
-    };
-    
     const grandchild = new StateGraph(GrandChildState)
-      .addNode("grandchild1", grandchild1)
+      .addNode("grandchild1", (state) => {
+        // NOTE: child or parent keys will not be accessible here
+        return { myGrandchildKey: state.myGrandchildKey + ", how are you" };
+      })
       .addEdge(START, "grandchild1")
       .addEdge("grandchild1", END);
     
@@ -536,15 +515,13 @@ const graph = builder.compile();
       myChildKey: z.string(),
     });
     
-    const callGrandchildGraph = async (state: z.infer<typeof ChildState>) => {
-      // NOTE: parent or grandchild keys won't be accessible here
-      const grandchildGraphInput = { myGrandchildKey: state.myChildKey }; // (1)!
-      const grandchildGraphOutput = await grandchildGraph.invoke(grandchildGraphInput);
-      return { myChildKey: grandchildGraphOutput.myGrandchildKey + " today?" }; // (2)!
-    };
-    
     const child = new StateGraph(ChildState)
-      .addNode("child1", callGrandchildGraph) // (3)!
+      .addNode("child1", async (state) => {
+        // NOTE: parent or grandchild keys won't be accessible here
+        const grandchildGraphInput = { myGrandchildKey: state.myChildKey }; // (1)!
+        const grandchildGraphOutput = await grandchildGraph.invoke(grandchildGraphInput);
+        return { myChildKey: grandchildGraphOutput.myGrandchildKey + " today?" }; // (2)!
+      }) // (3)!
       .addEdge(START, "child1")
       .addEdge("child1", END);
     
@@ -555,25 +532,19 @@ const graph = builder.compile();
       myKey: z.string(),
     });
     
-    const parent1 = (state: z.infer<typeof ParentState>) => {
-      // NOTE: child or grandchild keys won't be accessible here
-      return { myKey: "hi " + state.myKey };
-    };
-    
-    const parent2 = (state: z.infer<typeof ParentState>) => {
-      return { myKey: state.myKey + " bye!" };
-    };
-    
-    const callChildGraph = async (state: z.infer<typeof ParentState>) => {
-      const childGraphInput = { myChildKey: state.myKey }; // (4)!
-      const childGraphOutput = await childGraph.invoke(childGraphInput);
-      return { myKey: childGraphOutput.myChildKey }; // (5)!
-    };
-    
     const parent = new StateGraph(ParentState)
-      .addNode("parent1", parent1)
-      .addNode("child", callChildGraph) // (6)!
-      .addNode("parent2", parent2)
+      .addNode("parent1", (state) => {
+        // NOTE: child or grandchild keys won't be accessible here
+        return { myKey: "hi " + state.myKey };
+      })
+      .addNode("child", async (state) => {
+        const childGraphInput = { myChildKey: state.myKey }; // (4)!
+        const childGraphOutput = await childGraph.invoke(childGraphInput);
+        return { myKey: childGraphOutput.myChildKey }; // (5)!
+      }) // (6)!
+      .addNode("parent2", (state) => {
+        return { myKey: state.myKey + " bye!" };
+      })
       .addEdge(START, "parent1")
       .addEdge("parent1", "child")
       .addEdge("child", "parent2")
@@ -589,12 +560,12 @@ const graph = builder.compile();
     }
     ```
 
-    1. We're transforming the state from the child state channels (`myChildKey`) to the grandchild state channels (`myGrandchildKey`)
-    2. We're transforming the state from the grandchild state channels (`myGrandchildKey`) back to the child state channels (`myChildKey`)
-    3. We're passing a function here instead of just compiled graph (`grandchildGraph`)
-    4. We're transforming the state from the parent state channels (`myKey`) to the child state channels (`myChildKey`)
-    5. We're transforming the state from the child state channels (`myChildKey`) back to the parent state channels (`myKey`)
-    6. We're passing a function here instead of just a compiled graph (`childGraph`)
+    7. We're transforming the state from the child state channels (`myChildKey`) to the grandchild state channels (`myGrandchildKey`)
+    8. We're transforming the state from the grandchild state channels (`myGrandchildKey`) back to the child state channels (`myChildKey`)
+    9. We're passing a function here instead of just compiled graph (`grandchildGraph`)
+    10. We're transforming the state from the parent state channels (`myKey`) to the child state channels (`myChildKey`)
+    11. We're transforming the state from the child state channels (`myChildKey`) back to the parent state channels (`myKey`)
+    12. We're passing a function here instead of just a compiled graph (`childGraph`)
 
     ```
     [[], { parent1: { myKey: 'hi Bob' } }]
@@ -649,12 +620,10 @@ const State = z.object({
 });
 
 // Subgraph
-const subgraphNode1 = (state: z.infer<typeof State>) => {
-  return { foo: state.foo + "bar" };
-};
-
 const subgraphBuilder = new StateGraph(State)
-  .addNode("subgraphNode1", subgraphNode1)
+  .addNode("subgraphNode1", (state) => {
+    return { foo: state.foo + "bar" };
+  })
   .addEdge(START, "subgraphNode1");
 
 const subgraph = subgraphBuilder.compile();
@@ -757,13 +726,11 @@ You can inspect the graph state via `graph.getState(config)`. To view the subgra
     });
     
     // Subgraph
-    const subgraphNode1 = (state: z.infer<typeof State>) => {
-      const value = interrupt("Provide value:");
-      return { foo: state.foo + value };
-    };
-    
     const subgraphBuilder = new StateGraph(State)
-      .addNode("subgraphNode1", subgraphNode1)
+      .addNode("subgraphNode1", (state) => {
+        const value = interrupt("Provide value:");
+        return { foo: state.foo + value };
+      })
       .addEdge(START, "subgraphNode1");
     
     const subgraph = subgraphBuilder.compile();
@@ -786,7 +753,7 @@ You can inspect the graph state via `graph.getState(config)`. To view the subgra
     await graph.invoke(new Command({ resume: "bar" }), config);
     ```
     
-    1. This will be available only when the subgraph is interrupted. Once you resume the graph, you won't be able to access the subgraph state.
+    2. This will be available only when the subgraph is interrupted. Once you resume the graph, you won't be able to access the subgraph state.
     :::
 
 ## Stream subgraph outputs
@@ -892,19 +859,15 @@ for await (const chunk of await graph.stream(
       bar: z.string(),
     });
     
-    const subgraphNode1 = (state: z.infer<typeof SubgraphState>) => {
-      return { bar: "bar" };
-    };
-    
-    const subgraphNode2 = (state: z.infer<typeof SubgraphState>) => {
-      // note that this node is using a state key ('bar') that is only available in the subgraph
-      // and is sending update on the shared state key ('foo')
-      return { foo: state.foo + state.bar };
-    };
-    
     const subgraphBuilder = new StateGraph(SubgraphState)
-      .addNode("subgraphNode1", subgraphNode1)
-      .addNode("subgraphNode2", subgraphNode2)
+      .addNode("subgraphNode1", (state) => {
+        return { bar: "bar" };
+      })
+      .addNode("subgraphNode2", (state) => {
+        // note that this node is using a state key ('bar') that is only available in the subgraph
+        // and is sending update on the shared state key ('foo')
+        return { foo: state.foo + state.bar };
+      })
       .addEdge(START, "subgraphNode1")
       .addEdge("subgraphNode1", "subgraphNode2");
     
@@ -915,12 +878,10 @@ for await (const chunk of await graph.stream(
       foo: z.string(),
     });
     
-    const node1 = (state: z.infer<typeof ParentState>) => {
-      return { foo: "hi! " + state.foo };
-    };
-    
     const builder = new StateGraph(ParentState)
-      .addNode("node1", node1)
+      .addNode("node1", (state) => {
+        return { foo: "hi! " + state.foo };
+      })
       .addNode("node2", subgraph)
       .addEdge(START, "node1")
       .addEdge("node1", "node2");
@@ -938,7 +899,7 @@ for await (const chunk of await graph.stream(
     }
     ```
   
-    1. Set `subgraphs: true` to stream outputs from subgraphs.
+    2. Set `subgraphs: true` to stream outputs from subgraphs.
 
     ```
     [[], { node1: { foo: 'hi! foo' } }]

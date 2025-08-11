@@ -393,13 +393,11 @@ const State = z.object({
   extraField: z.number(),
 });
 
-const node = (state: z.infer<typeof State>) => {
-  const newMessage = new AIMessage("Hello!");
-  return { messages: [newMessage], extraField: 10 };
-};
-
 const graph = new StateGraph(State)
-  .addNode("node", node)
+  .addNode("node", (state) => {
+    const newMessage = new AIMessage("Hello!");
+    return { messages: [newMessage], extraField: 10 };
+  })
   .addEdge(START, "node")
   .compile();
 ```
@@ -495,19 +493,16 @@ const OutputState = z.object({
 // Define the overall schema, combining both input and output
 const OverallState = InputState.merge(OutputState);
 
-// Define the node that processes the input and generates an answer
-const answerNode = (state: z.infer<typeof InputState>) => {
-  // Example answer and an extra key
-  return { answer: "bye", question: state.question };
-};
-
 // Build the graph with input and output schemas specified
 const graph = new StateGraph({
   input: InputState,
   output: OutputState,
   state: OverallState,
 })
-  .addNode("answerNode", answerNode)
+  .addNode("answerNode", (state) => {
+    // Example answer and an extra key
+    return { answer: "bye", question: state.question };
+  })
   .addEdge(START, "answerNode")
   .addEdge("answerNode", END)
   .compile();
@@ -958,21 +953,18 @@ const State = z.object({
   myStateValue: z.number(),
 });
 
-// highlight-next-line
-const node = (state: z.infer<typeof State>, config?: RunnableConfig) => {
-  // highlight-next-line
-  if (config?.configurable?.myRuntimeValue === "a") {
-    return { myStateValue: 1 };
-    // highlight-next-line
-  } else if (config?.configurable?.myRuntimeValue === "b") {
-    return { myStateValue: 2 };
-  } else {
-    throw new Error("Unknown values.");
-  }
-};
-
 const graph = new StateGraph(State)
-  .addNode("node", node)
+  .addNode("node", (state, config) => {
+    // highlight-next-line
+    if (config?.configurable?.myRuntimeValue === "a") {
+      return { myStateValue: 1 };
+      // highlight-next-line
+    } else if (config?.configurable?.myRuntimeValue === "b") {
+      return { myStateValue: 2 };
+    } else {
+      throw new Error("Unknown values.");
+    }
+  })
   .addEdge(START, "node")
   .addEdge("node", END)
   .compile();
@@ -1059,18 +1051,13 @@ console.log(await graph.invoke({}, { configurable: { myRuntimeValue: "b" } }));
       openai: new ChatOpenAI({ model: "gpt-4o-mini" }),
     };
 
-    const callModel = async (
-      state: z.infer<typeof MessagesZodState>,
-      config?: RunnableConfig
-    ) => {
-      const modelProvider = config?.configurable?.modelProvider || "anthropic";
-      const model = MODELS[modelProvider as keyof typeof MODELS];
-      const response = await model.invoke(state.messages);
-      return { messages: [response] };
-    };
-
     const graph = new StateGraph(MessagesZodState)
-      .addNode("model", callModel)
+      .addNode("model", async (state, config) => {
+        const modelProvider = config?.configurable?.modelProvider || "anthropic";
+        const model = MODELS[modelProvider as keyof typeof MODELS];
+        const response = await model.invoke(state.messages);
+        return { messages: [response] };
+      })
       .addEdge(START, "model")
       .addEdge("model", END)
       .compile();
@@ -1157,7 +1144,6 @@ console.log(await graph.invoke({}, { configurable: { myRuntimeValue: "b" } }));
     import { ChatAnthropic } from "@langchain/anthropic";
     import { SystemMessage } from "@langchain/core/messages";
     import { MessagesZodState, StateGraph, START, END } from "@langchain/langgraph";
-    import { RunnableConfig } from "@langchain/core/runnables";
     import { z } from "zod";
 
     const ConfigSchema = z.object({
@@ -1170,26 +1156,21 @@ console.log(await graph.invoke({}, { configurable: { myRuntimeValue: "b" } }));
       openai: new ChatOpenAI({ model: "gpt-4o-mini" }),
     };
 
-    const callModel = async (
-      state: z.infer<typeof MessagesZodState>,
-      config?: RunnableConfig
-    ) => {
-      const modelProvider = config?.configurable?.modelProvider || "anthropic";
-      const systemMessage = config?.configurable?.systemMessage;
-      
-      const model = MODELS[modelProvider as keyof typeof MODELS];
-      let messages = state.messages;
-      
-      if (systemMessage) {
-        messages = [new SystemMessage(systemMessage), ...messages];
-      }
-      
-      const response = await model.invoke(messages);
-      return { messages: [response] };
-    };
-
     const graph = new StateGraph(MessagesZodState)
-      .addNode("model", callModel)
+      .addNode("model", async (state, config) => {
+        const modelProvider = config?.configurable?.modelProvider || "anthropic";
+        const systemMessage = config?.configurable?.systemMessage;
+        
+        const model = MODELS[modelProvider as keyof typeof MODELS];
+        let messages = state.messages;
+        
+        if (systemMessage) {
+          messages = [new SystemMessage(systemMessage), ...messages];
+        }
+        
+        const response = await model.invoke(messages);
+        return { messages: [response] };
+      })
       .addEdge(START, "model")
       .addEdge("model", END)
       .compile();
@@ -1586,11 +1567,11 @@ const graph = new StateGraph(State)
 
 Note that:
 
+:::python
 - `.add_edge` takes the names of nodes, which for functions defaults to `node.__name__`.
 - We must specify the entry point of the graph. For this we add an edge with the [START node](../concepts/low_level.md#start-node).
 - The graph halts when there are no more nodes to execute.
 
-:::python
 We next [compile](../concepts/low_level.md#compiling-your-graph) our graph. This provides a few basic checks on the structure of the graph (e.g., identifying orphaned nodes). If we were adding persistence to our application via a [checkpointer](../concepts/persistence.md), it would also be passed in here.
 
 ```python
@@ -1599,6 +1580,10 @@ graph = builder.compile()
 :::
 
 :::js
+- `.addEdge` takes the names of nodes, which for functions defaults to `node.name`.
+- We must specify the entry point of the graph. For this we add an edge with the [START node](../concepts/low_level.md#start-node).
+- The graph halts when there are no more nodes to execute.
+
 We next [compile](../concepts/low_level.md#compiling-your-graph) our graph. This provides a few basic checks on the structure of the graph (e.g., identifying orphaned nodes). If we were adding persistence to our application via a [checkpointer](../concepts/persistence.md), it would also be passed in here.
 :::
 
@@ -2489,7 +2474,7 @@ Recursion Error
 :::
 
 
-    :::python
+:::python
 ??? example "Extended example: return state on hitting recursion limit"
 
     Instead of raising `GraphRecursionError`, we can introduce a new key to the state that keeps track of the number of steps remaining until reaching the recursion limit. We can then use this key to determine if we should end the run.
@@ -2542,10 +2527,9 @@ Recursion Error
     Node A sees ['A', 'B']
     {'aggregate': ['A', 'B', 'A']}
     ```
-    :::
+:::
 
-    :::python
-
+:::python
 ??? example "Extended example: loops with branches"
 
     To better understand how the recursion limit works, let's consider a more complex example. Below we implement a loop, but one step fans out into two nodes:
@@ -2650,13 +2634,14 @@ Recursion Error
     Node A sees ['A', 'B', 'C', 'D']
     Recursion Error
     ```
-    :::
+:::
+
+:::python
 
 ## Async
 
 Using the async programming paradigm can produce significant performance improvements when running [IO-bound](https://en.wikipedia.org/wiki/I/O_bound) code concurrently (e.g., making concurrent API requests to a chat model provider).
 
-:::python
 To convert a `sync` implementation of the graph to an `async` implementation, you will need to:
 
 1. Update `nodes` use `async def` instead of `def`.
@@ -2690,50 +2675,12 @@ result = await graph.ainvoke({"messages": [input_message]}) # (3)!
 1. Declare nodes to be async functions.
 2. Use async invocations when available within the node.
 3. Use async invocations on the graph object itself.
-:::
-
-:::js
-To convert a `sync` implementation of the graph to an `async` implementation, you will need to:
-
-1. Update `nodes` use `async` functions.
-2. Update the code inside to use `await` appropriately.
-3. Invoke the graph with `.invoke` or `.stream` as desired (both are async by default).
-
-Because many LangChain objects implement async methods, it's typically fairly quick to upgrade a sync graph to an async graph.
-
-See example below. To demonstrate async invocations of underlying LLMs, we will include a chat model:
-
-```typescript
-import { ChatOpenAI } from "@langchain/openai";
-import { MessagesZodState, StateGraph } from "@langchain/langgraph";
-
-const llm = new ChatOpenAI({ model: "gpt-4o-mini" });
-
-// highlight-next-line
-const node = async (state: z.infer<typeof MessagesZodState>) => { // (1)!
-  // highlight-next-line
-  const newMessage = await llm.invoke(state.messages); // (2)!
-  return { messages: [newMessage] };
-};
-
-const graph = new StateGraph(MessagesZodState)
-  .addNode("node", node)
-  .addEdge(START, "node")
-  .compile();
-
-const inputMessage = { role: "user", content: "Hello" };
-// highlight-next-line
-const result = await graph.invoke({ messages: [inputMessage] }); // (3)!
-```
-
-1. Declare nodes to be async functions.
-2. Use async invocations when available within the node.
-3. Use async invocations on the graph object itself.
-:::
 
 !!! tip "Async streaming"
 
     See the [streaming guide](./streaming.md) for examples of streaming with async.
+
+:::
 
 ## Combine control flow and state updates with `Command`
 
@@ -3222,26 +3169,20 @@ const State = MessagesZodState.extend({
   value: z.number(),
 });
 
-const node1 = (state: z.infer<typeof State>) => {
-  return { value: state.value + 1 };
-};
-
-const node2 = (state: z.infer<typeof State>) => {
-  return { value: state.value * 2 };
-};
-
-const route = (state: z.infer<typeof State>): "node2" | typeof END => {
-  if (state.value < 10) {
-    return "node2";
-  }
-  return END;
-};
-
 const app = new StateGraph(State)
-  .addNode("node1", node1)
-  .addNode("node2", node2)
+  .addNode("node1", (state) => {
+    return { value: state.value + 1 };
+  })
+  .addNode("node2", (state) => {
+    return { value: state.value * 2 };
+  })
   .addEdge(START, "node1")
-  .addConditionalEdges("node1", route)
+  .addConditionalEdges("node1", (state) => {
+    if (state.value < 10) {
+      return "node2";
+    }
+    return END;
+  })
   .addEdge("node2", "node1")
   .compile();
 ```

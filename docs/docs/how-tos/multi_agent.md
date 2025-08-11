@@ -63,13 +63,23 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
 3. Name of the agent or node to hand off to.
 4. Take the agent's messages and **add** them to the parent's **state** as part of the handoff. The next agent will see the parent state.
 5. Indicate to LangGraph that we need to navigate to agent node in a **parent** multi-agent graph.
+
+!!! tip
+
+    If you want to use tools that return `Command`, you can either use prebuilt @[`create_react_agent`][create_react_agent] / @[`ToolNode`][ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
+    
+    ```python
+    def call_tools(state):
+        ...
+        commands = [tools_by_name[tool_call["name"]].invoke(tool_call) for tool_call in tool_calls]
+        return commands
+    ```
 :::
 
 :::js
 ```typescript
 import { tool } from "@langchain/core/tools";
-import { Command } from "@langchain/langgraph";
-import { MessagesZodState } from "@langchain/langgraph";
+import { Command, MessagesZodState } from "@langchain/langgraph";
 import { z } from "zod";
 
 function createHandoffTool({
@@ -118,23 +128,10 @@ function createHandoffTool({
 3. Name of the agent or node to hand off to.
 4. Take the agent's messages and **add** them to the parent's **state** as part of the handoff. The next agent will see the parent state.
 5. Indicate to LangGraph that we need to navigate to agent node in a **parent** multi-agent graph.
-:::
 
 !!! tip
 
-    :::python
-    If you want to use tools that return `Command`, you can either use prebuilt @[`create_react_agent`][create_react_agent] / @[`ToolNode`][ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
-    
-    ```python
-    def call_tools(state):
-        ...
-        commands = [tools_by_name[tool_call["name"]].invoke(tool_call) for tool_call in tool_calls]
-        return commands
-    ```
-    :::
-
-    :::js
-    If you want to use tools that return `Command`, you can either use prebuilt [`createReactAgent`][createReactAgent] / [`ToolNode`][ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
+    If you want to use tools that return `Command`, you can either use prebuilt @[`createReactAgent`][createReactAgent] / @[`ToolNode`][ToolNode] components, or implement your own tool-executing node that collects `Command` objects returned by the tools and returns a list of them, e.g.:
     
     ```typescript
     const callTools = async (state) => {
@@ -145,7 +142,7 @@ function createHandoffTool({
       return commands;
     };
     ```
-    :::
+:::
 
 !!! Important
 
@@ -220,12 +217,11 @@ def create_task_description_handoff_tool(
 :::
 
 :::js
-You can use the [`Send()`][Send] primitive to directly send data to the worker agents during the handoff. For example, you can request that the calling agent populate a task description for the next agent:
+You can use the @[`Send()`][Send] primitive to directly send data to the worker agents during the handoff. For example, you can request that the calling agent populate a task description for the next agent:
 
 ```typescript
 import { tool } from "@langchain/core/tools";
-import { Command, Send } from "@langchain/langgraph";
-import { MessagesZodState } from "@langchain/langgraph";
+import { Command, Send, MessagesZodState } from "@langchain/langgraph";
 import { z } from "zod";
 
 function createTaskDescriptionHandoffTool({
@@ -276,13 +272,7 @@ function createTaskDescriptionHandoffTool({
 ```
 :::
 
-:::python
 See the multi-agent [supervisor](../tutorials/multi_agent/agent_supervisor.md#4-create-delegation-tasks) example for a full example of using @[`Send()`][Send] in handoffs.
-:::
-
-:::js
-See the multi-agent [supervisor](../tutorials/multi_agent/agent_supervisor.md#4-create-delegation-tasks) example for a full example of using [`Send()`][Send] in handoffs.
-:::
 
 ## Build a multi-agent system
 
@@ -540,8 +530,8 @@ const multiAgentGraph = new StateGraph(MessagesZodState)
     import { createReactAgent } from "@langchain/langgraph/prebuilt";
     import { StateGraph, START, MessagesZodState, Command } from "@langchain/langgraph";
     import { ChatAnthropic } from "@langchain/anthropic";
-    import { z } from "zod";
     import { isBaseMessage } from "@langchain/core/messages";
+    import { z } from "zod";
 
     // We'll use a helper to render the streamed agent outputs nicely
     const prettyPrintMessages = (update: Record<string, any>) => {
@@ -628,7 +618,7 @@ const multiAgentGraph = new StateGraph(MessagesZodState)
 
     // Simple agent tools
     const bookHotel = tool(
-      async ({ hotelName }: { hotelName: string }) => {
+      async ({ hotelName }) => {
         return `Successfully booked a stay at ${hotelName}.`;
       },
       {
@@ -641,13 +631,7 @@ const multiAgentGraph = new StateGraph(MessagesZodState)
     );
 
     const bookFlight = tool(
-      async ({
-        fromAirport,
-        toAirport,
-      }: {
-        fromAirport: string;
-        toAirport: string;
-      }) => {
+      async ({ fromAirport, toAirport }) => {
         return `Successfully booked a flight from ${fromAirport} to ${toAirport}.`;
       },
       {
@@ -669,7 +653,7 @@ const multiAgentGraph = new StateGraph(MessagesZodState)
       llm: model,
       // highlight-next-line
       tools: [bookFlight, transferToHotelAssistant],
-      stateModifier: "You are a flight booking assistant",
+      prompt: "You are a flight booking assistant",
       // highlight-next-line
       name: "flight_assistant",
     });
@@ -678,7 +662,7 @@ const multiAgentGraph = new StateGraph(MessagesZodState)
       llm: model,
       // highlight-next-line
       tools: [bookHotel, transferToFlightAssistant],
-      stateModifier: "You are a hotel booking assistant",
+      prompt: "You are a hotel booking assistant",
       // highlight-next-line
       name: "hotel_assistant",
     });
@@ -1067,7 +1051,7 @@ function agent(state: MessagesState): Command {
     const travelAdvisor = createReactAgent({
       llm: model,
       tools: travelAdvisorTools,
-      stateModifier: [
+      prompt: [
         "You are a general travel expert that can recommend travel destinations (e.g. countries, cities, etc). ",
         "If you need hotel recommendations, ask 'hotel_advisor' for help. ",
         "You MUST include human-readable response before transferring to another agent."
@@ -1103,7 +1087,7 @@ function agent(state: MessagesState): Command {
     const hotelAdvisor = createReactAgent({
       llm: model,
       tools: hotelAdvisorTools,
-      stateModifier: [
+      prompt: [
         "You are a hotel expert that can provide hotel recommendations for a given destination. ",
         "If you need help picking travel destinations, ask 'travel_advisor' for help.",
         "You MUST include human-readable response before transferring to another agent."
@@ -1214,7 +1198,7 @@ function agent(state: MessagesState): Command {
     
     --- Conversation Turn 2 ---
     
-    User: Command(resume='could you recommend a nice hotel in one of the areas and tell me which area it is.')
+    User: Command { resume: 'could you recommend a nice hotel in one of the areas and tell me which area it is.' }
     
     hotel_advisor: Based on the recommendations, I can suggest two excellent options:
     
@@ -1236,7 +1220,7 @@ function agent(state: MessagesState): Command {
     
     --- Conversation Turn 3 ---
     
-    User: Command(resume='i like the first one. could you recommend something to do near the hotel?')
+    User: Command { resume: 'i like the first one. could you recommend something to do near the hotel?' }
     
     travel_advisor: Near the Ritz-Carlton in Palm Beach, here are some highly recommended activities:
     
