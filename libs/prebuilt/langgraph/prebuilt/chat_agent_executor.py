@@ -780,7 +780,28 @@ def create_react_agent(
                     break
 
             if response_tool_call is None:
-                raise ValueError(f"Expected tool call with name '{response_tool_name}'")
+                # No response schema tool call found, but there are other tool calls
+                # This shouldn't happen in normal flow, fall back to old behavior
+                if is_async_dynamic_model:
+                    msg = (
+                        "Async model callable provided but agent invoked synchronously. "
+                        "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
+                    )
+                    raise RuntimeError(msg)
+
+                structured_response_schema = response_format
+                if isinstance(response_format, tuple):
+                    system_prompt, structured_response_schema = response_format
+                    messages = [SystemMessage(content=system_prompt)] + list(messages)
+
+                resolved_model = _resolve_model(state, runtime)
+                model_with_structured_output = _get_model(
+                    resolved_model
+                ).with_structured_output(
+                    cast(StructuredResponseSchema, structured_response_schema)
+                )
+                response = model_with_structured_output.invoke(messages, config)
+                return {"structured_response": response}
 
             # Extract the actual schema from tuple if needed
             actual_schema = response_format
@@ -1109,6 +1130,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
