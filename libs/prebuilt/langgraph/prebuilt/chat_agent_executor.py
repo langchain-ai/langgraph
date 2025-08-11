@@ -891,16 +891,12 @@ def create_react_agent(
 
         if response_format is not None:
             workflow.add_node(
-                "generate_structured_response",
+                "respond",
                 RunnableCallable(
-                    generate_structured_response,
-                    agenerate_structured_response,
+                    respond,
+                    arespond,
                 ),
             )
-            if post_model_hook is not None:
-                workflow.add_edge("post_model_hook", "generate_structured_response")
-            else:
-                workflow.add_edge("agent", "generate_structured_response")
 
         return workflow.compile(
             checkpointer=checkpointer,
@@ -1091,6 +1087,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
