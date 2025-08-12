@@ -1229,7 +1229,9 @@ def create_react_agent(
         RunnableCallable(call_model, acall_model),
         input_schema=input_schema,
     )
-    workflow.add_node("tools", tool_node)
+    # Add individual tool nodes instead of a single tools node
+    for tool in tool_classes:
+        workflow.add_node(tool.name, ToolExecutor(tool))
 
     # Optionally add a pre-model hook node that will be called
     # every time before the "agent" (LLM-calling node)
@@ -1367,6 +1369,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
