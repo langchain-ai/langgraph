@@ -35,7 +35,7 @@ from langchain_core.runnables import (
     RunnableConfig,
     RunnableSequence,
 )
-from langchain_core.tools import BaseTool, InjectedToolArg
+from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as create_tool
 from langchain_core.tools.base import (
     TOOL_MESSAGE_BLOCK_TYPES,
@@ -46,7 +46,7 @@ from typing_extensions import Annotated, NotRequired, TypedDict, get_args, get_o
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
-from langgraph.errors import ErrorCode, create_error_message, GraphBubbleUp
+from langgraph.errors import ErrorCode, GraphBubbleUp, create_error_message
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
@@ -54,7 +54,7 @@ from langgraph.managed import RemainingSteps
 from langgraph.prebuilt.tool_node import InjectedState, InjectedStore
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
-from langgraph.types import Checkpointer, Send, Command
+from langgraph.types import Checkpointer, Command, Send
 from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
@@ -118,7 +118,13 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
     params = list(sig.parameters.values())
     if params:
         # If it's a method, the first argument is typically 'self' or 'cls'
-        first_param = params[0] if params[0].name not in ("self", "cls") else params[1] if len(params) > 1 else None
+        first_param = (
+            params[0]
+            if params[0].name not in ("self", "cls")
+            else params[1]
+            if len(params) > 1
+            else None
+        )
         if first_param and first_param.annotation != inspect.Parameter.empty:
             annotation = first_param.annotation
             # Handle Union types
@@ -128,8 +134,12 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
                 for t in types:
                     if isinstance(t, type) and issubclass(t, Exception):
                         exception_types.append(t)
-                    elif t is not type(None):  # Allow None in Union for optional handling
-                        raise ValueError(f"Handler annotation must be Exception types, got {t}")
+                    elif t is not type(
+                        None
+                    ):  # Allow None in Union for optional handling
+                        raise ValueError(
+                            f"Handler annotation must be Exception types, got {t}"
+                        )
                 return tuple(exception_types) if exception_types else (Exception,)
             # Handle single type
             elif isinstance(annotation, type) and issubclass(annotation, Exception):
@@ -194,7 +204,7 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
 
 class ToolExecutor(RunnableCallable):
     """A wrapper for executing individual tools with state/store injection and error handling.
-    
+
     This class provides the same functionality as ToolNode but for single tool execution,
     enabling individual tool nodes in the graph instead of a single tools node.
     """
@@ -253,10 +263,10 @@ class ToolExecutor(RunnableCallable):
         """Run a single tool call synchronously."""
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
-        
+
         # Inject state and store into the tool call
         injected_call = self._inject_tool_args(call, store)
-        
+
         try:
             call_args = {**injected_call, **{"type": "tool_call"}}
             response = self.tool.invoke(call_args, config)
@@ -288,13 +298,15 @@ class ToolExecutor(RunnableCallable):
         if isinstance(response, Command):
             # For now, we'll convert Command responses to ToolMessage
             # This maintains compatibility with the existing behavior
-            if hasattr(response, 'update') and isinstance(response.update, dict):
+            if hasattr(response, "update") and isinstance(response.update, dict):
                 messages = response.update.get(self.messages_key, [])
                 if messages and isinstance(messages[0], ToolMessage):
                     return messages[0]
             # Fallback to creating a ToolMessage from Command
             return ToolMessage(
-                content=str(response.update) if hasattr(response, 'update') else str(response),
+                content=str(response.update)
+                if hasattr(response, "update")
+                else str(response),
                 name=call["name"],
                 tool_call_id=call["id"],
             )
@@ -319,10 +331,10 @@ class ToolExecutor(RunnableCallable):
         """Run a single tool call asynchronously."""
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
-        
+
         # Inject state and store into the tool call
         injected_call = self._inject_tool_args(call, store)
-        
+
         try:
             call_args = {**injected_call, **{"type": "tool_call"}}
             response = await self.tool.ainvoke(call_args, config)
@@ -354,13 +366,15 @@ class ToolExecutor(RunnableCallable):
         if isinstance(response, Command):
             # For now, we'll convert Command responses to ToolMessage
             # This maintains compatibility with the existing behavior
-            if hasattr(response, 'update') and isinstance(response.update, dict):
+            if hasattr(response, "update") and isinstance(response.update, dict):
                 messages = response.update.get(self.messages_key, [])
                 if messages and isinstance(messages[0], ToolMessage):
                     return messages[0]
             # Fallback to creating a ToolMessage from Command
             return ToolMessage(
-                content=str(response.update) if hasattr(response, 'update') else str(response),
+                content=str(response.update)
+                if hasattr(response, "update")
+                else str(response),
                 name=call["name"],
                 tool_call_id=call["id"],
             )
@@ -399,7 +413,7 @@ class ToolExecutor(RunnableCallable):
         # State injection will need to be handled at the graph level
         # For now, we only handle store injection
         injected_call = deepcopy(tool_call)
-        
+
         # Inject store if needed
         if self.tool_to_store_arg:
             if store is None:
@@ -411,7 +425,7 @@ class ToolExecutor(RunnableCallable):
                 **injected_call["args"],
                 self.tool_to_store_arg: store,
             }
-        
+
         return injected_call
 
     def inject_tool_args(
@@ -425,18 +439,18 @@ class ToolExecutor(RunnableCallable):
         store: Optional[BaseStore],
     ) -> ToolCall:
         """Inject graph state and store into tool call arguments.
-        
+
         This method provides compatibility with ToolNode.inject_tool_args()
         for use in routing logic.
         """
         injected_call = deepcopy(tool_call)
-        
+
         # Inject state arguments
         if self.tool_to_state_args:
             if isinstance(input, list):
                 # Convert list to dict format for state injection
                 input = {self.messages_key: input}
-            
+
             tool_state_args = {}
             for arg_name, state_field in self.tool_to_state_args.items():
                 if state_field is None:
@@ -453,12 +467,12 @@ class ToolExecutor(RunnableCallable):
                             f"Invalid input to ToolExecutor. Tool {tool_call['name']} requires "
                             f"state field '{state_field}' but it was not found in input."
                         )
-            
+
             injected_call["args"] = {
                 **injected_call["args"],
                 **tool_state_args,
             }
-        
+
         # Inject store if needed
         if self.tool_to_store_arg:
             if store is None:
@@ -470,7 +484,7 @@ class ToolExecutor(RunnableCallable):
                 **injected_call["args"],
                 self.tool_to_store_arg: store,
             }
-        
+
         return injected_call
 
 
@@ -1216,7 +1230,7 @@ def create_react_agent(
                     tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
                     for call in last_message.tool_calls
                 ]
-                return [Send(call['name'], call) for call in tool_calls]
+                return [Send(call["name"], call) for call in tool_calls]
 
     # Define a new graph
     workflow = StateGraph(
@@ -1231,7 +1245,10 @@ def create_react_agent(
     )
     # Add individual tool nodes instead of a single tools node
     for tool in tool_classes:
-        workflow.add_node(tool.name, ToolExecutor(tool, handle_tool_errors=True, messages_key="messages"))
+        workflow.add_node(
+            tool.name,
+            ToolExecutor(tool, handle_tool_errors=True, messages_key="messages"),
+        )
 
     # Optionally add a pre-model hook node that will be called
     # every time before the "agent" (LLM-calling node)
@@ -1305,7 +1322,7 @@ def create_react_agent(
                     tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
                     for call in pending_tool_calls
                 ]
-                return [Send(call['name'], call) for call in pending_tool_calls]
+                return [Send(call["name"], call) for call in pending_tool_calls]
             elif isinstance(messages[-1], ToolMessage):
                 return entrypoint
             elif response_format is not None:
@@ -1375,19 +1392,3 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
