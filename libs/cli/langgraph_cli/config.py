@@ -303,6 +303,19 @@ class ConfigurableHeaderConfig(TypedDict):
     """
 
 
+class LoggingHeaders(TypedDict):
+    """Customize which headers to include at runtime but exclude from logging in your runs.
+
+    By default, omits x-api-key, x-tenant-id, and x-service-key.
+
+    Exclusions (if provided) take precedence.
+
+    Each value can be a raw string with an optional wildcard.
+    """
+
+    exclude_from_logging: list[str] | None
+
+
 class HttpConfig(TypedDict, total=False):
     """Configuration for the built-in HTTP server that powers your deployment's routes and endpoints."""
 
@@ -354,6 +367,8 @@ class HttpConfig(TypedDict, total=False):
 
     You can include or exclude headers as configurable values to condition your
     agent's behavior or permissions on a request's headers."""
+    logging_headers: Optional[LoggingHeaders]
+    """Optional. Defines which headers are excluded from logging."""
 
 
 class Config(TypedDict, total=False):
