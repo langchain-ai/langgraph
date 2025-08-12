@@ -367,13 +367,13 @@ To implement handoffs with `createReactAgent`, you need to:
 
 3.  Define a parent graph that contains individual agents as nodes:
 
-        ```typescript
-        import { StateGraph, MessagesZodState } from "@langchain/langgraph";
-        const multiAgentGraph = new StateGraph(MessagesZodState)
-          .addNode("flight_assistant", flightAssistant)
-          .addNode("hotel_assistant", hotelAssistant)
-          // ...
-        ```
+    ```typescript
+    import { StateGraph, MessagesZodState } from "@langchain/langgraph";
+    const multiAgentGraph = new StateGraph(MessagesZodState)
+      .addNode("flight_assistant", flightAssistant)
+      .addNode("hotel_assistant", hotelAssistant)
+      // ...
+    ```
 
     :::
 
@@ -619,7 +619,8 @@ for await (const chunk of multiAgentGraph.stream({
 3. Name of the agent or node to hand off to.
 4. Take the agent's messages and **add** them to the parent's **state** as part of the handoff. The next agent will see the parent state.
 5. Indicate to LangGraph that we need to navigate to agent node in a **parent** multi-agent graph.
-   :::
+
+:::
 
 !!! Note
 
