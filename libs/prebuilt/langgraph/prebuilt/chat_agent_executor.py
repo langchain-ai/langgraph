@@ -843,7 +843,7 @@ def create_react_agent(
         A compiled LangChain runnable that can be used for chat interactions.
 
     The "agent" node calls the language model with the messages list (after applying the prompt).
-    If the resulting AIMessage contains `tool_calls`, the graph will then call the ["tools"][langgraph.prebuilt.tool_node.ToolNode].
+    If the resulting AIMessage contains `tool_calls`, the graph will then call the individual tool nodes.
     The "tools" node executes the tools (1 tool per `tool_call`) and adds the responses to the messages list
     as `ToolMessage` objects. The agent node then calls the language model again.
     The process repeats until no more `tool_calls` are present in the response.
@@ -1367,6 +1367,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
