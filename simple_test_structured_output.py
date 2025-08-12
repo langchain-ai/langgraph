@@ -43,6 +43,11 @@ class SimpleFakeModel(BaseChatModel):
     @property
     def _llm_type(self) -> str:
         return "simple-fake-model"
+    
+    def bind_tools(self, tools, **kwargs):
+        """Bind tools to the model - required for structured output functionality."""
+        # Return self to maintain the same interface
+        return self
 
 def test_structured_output():
     """Test that create_react_agent works correctly with structured output."""
@@ -126,5 +131,6 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
 
 
