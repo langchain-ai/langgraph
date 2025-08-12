@@ -8,6 +8,7 @@ from langchain_core.runnables import (
     RunnableConfig,
 )
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel
 from typing_extensions import Annotated, TypedDict
 
 from langgraph._api.deprecation import deprecated_parameter
@@ -710,3 +711,4 @@ __all__ = [
     "create_tool_calling_executor",
     "AgentState",
 ]
+
