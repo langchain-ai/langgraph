@@ -687,8 +687,35 @@ def create_react_agent(
         # Otherwise if there are tool calls, we continue with tools
         return "tools"
 
-    # Define a new graph
-    workflow = StateGraph(state_schema or AgentState)
+    # Define the function that responds with structured output
+    def respond(state: AgentState) -> AgentState:
+        # Extract the structured response from the last tool call
+        last_message = state["messages"][-1]
+        response_tool_call = last_message.tool_calls[0]
+        
+        # Create the structured response from the tool call arguments
+        structured_response = response_format(**response_tool_call["args"])
+        
+        # Create a tool message to satisfy LLM provider requirements
+        # (AI messages with tool calls need to be followed by tool messages)
+        tool_message = ToolMessage(
+            content="Here is your structured response",
+            tool_call_id=response_tool_call["id"],
+            name=response_format.__name__,
+        )
+        
+        # Return the structured response and tool message
+        result = {"messages": [tool_message]}
+        if hasattr(state, "structured_response") or "structured_response" in state:
+            result["structured_response"] = structured_response
+        
+        return result
+
+    # Define a new graph - use enhanced state if structured output is requested
+    if response_format is not None:
+        workflow = StateGraph(state_schema or AgentStateWithStructuredOutput)
+    else:
+        workflow = StateGraph(state_schema or AgentState)
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableCallable(call_model, acall_model))
@@ -740,6 +767,7 @@ __all__ = [
     "create_tool_calling_executor",
     "AgentState",
 ]
+
 
 
 
