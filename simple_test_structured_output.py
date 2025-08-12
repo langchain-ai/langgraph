@@ -83,6 +83,18 @@ def test_structured_output():
     print(f"Actual result keys: {list(result.keys())}")
     print(f"Actual result: {result}")
     
+    # Debug: Check the last message and its tool calls
+    last_message = result["messages"][-1]
+    print(f"Last message type: {type(last_message)}")
+    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+        print(f"Tool calls: {last_message.tool_calls}")
+        print(f"First tool call name: {last_message.tool_calls[0]['name']}")
+        print(f"WeatherResponse.__name__: {WeatherResponse.__name__}")
+        print(f"Names match: {last_message.tool_calls[0]['name'] == WeatherResponse.__name__}")
+        print(f"Number of tool calls: {len(last_message.tool_calls)}")
+    else:
+        print("No tool calls found")
+    
     # Verify the result contains both messages and structured_response
     assert "messages" in result, "Result should contain 'messages' field"
     assert "structured_response" in result, "Result should contain 'structured_response' field"
@@ -135,6 +147,7 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
 
 
 
