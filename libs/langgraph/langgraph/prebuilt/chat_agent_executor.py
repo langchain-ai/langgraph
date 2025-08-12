@@ -664,8 +664,37 @@ def create_react_agent(
                     )
                 ]
             }
-        # We return a list, because this will get added to the existing list
-        return {"messages": [response]}
+        
+        # Extract structured output if response_format is provided and this is the final response
+        result = {"messages": [response]}
+        if (response_format is not None and 
+            isinstance(response, AIMessage) and 
+            not has_tool_calls):
+            try:
+                # Try to parse the AI message content as JSON and validate with the Pydantic model
+                if response.content:
+                    # First try to parse the content directly as JSON
+                    try:
+                        parsed_content = json.loads(response.content)
+                        structured_response = response_format(**parsed_content)
+                        result["structured_response"] = structured_response
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        # If direct JSON parsing fails, try to extract JSON from the content
+                        import re
+                        json_match = re.search(r'\{.*\}', response.content, re.DOTALL)
+                        if json_match:
+                            try:
+                                parsed_content = json.loads(json_match.group())
+                                structured_response = response_format(**parsed_content)
+                                result["structured_response"] = structured_response
+                            except (json.JSONDecodeError, TypeError, ValueError):
+                                # If parsing still fails, leave structured_response as None
+                                pass
+            except Exception:
+                # If any error occurs during structured output extraction, continue without it
+                pass
+        
+        return result
 
     if not tool_calling_enabled:
         # Define a new graph
@@ -744,6 +773,7 @@ __all__ = [
     "create_tool_calling_executor",
     "AgentState",
 ]
+
 
 
 
