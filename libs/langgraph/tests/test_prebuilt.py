@@ -49,7 +49,6 @@ from langgraph.prebuilt import (
 )
 from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
-    StructuredResponse,
     _validate_chat_history,
 )
 from langgraph.prebuilt.tool_node import (
@@ -2148,4 +2147,5 @@ def test_create_react_agent_with_structured_output() -> None:
     assert isinstance(messages[2], ToolMessage)
     assert messages[2].name == "WeatherResponse"
     assert messages[2].tool_call_id == "weather_response_1"
+
 
