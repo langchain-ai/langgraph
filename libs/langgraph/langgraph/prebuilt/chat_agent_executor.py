@@ -556,9 +556,18 @@ def create_react_agent(
         tool_classes = list(tool_node.tools_by_name.values())
 
     tool_calling_enabled = len(tool_classes) > 0
+    
+    # Handle structured output by adding response format as a tool
+    all_tools = list(tool_classes)
+    if response_format is not None:
+        all_tools.append(response_format)
 
-    if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
-        model = cast(BaseChatModel, model).bind_tools(tool_classes)
+    if _should_bind_tools(model, all_tools) and (tool_calling_enabled or response_format is not None):
+        if response_format is not None:
+            # Force the model to use tools by setting tool_choice to "any" when structured output is requested
+            model = cast(BaseChatModel, model).bind_tools(all_tools, tool_choice="any")
+        else:
+            model = cast(BaseChatModel, model).bind_tools(tool_classes)
 
     # we're passing store here for validation
     preprocessor = _get_model_preprocessing_runnable(
@@ -722,6 +731,7 @@ __all__ = [
     "create_tool_calling_executor",
     "AgentState",
 ]
+
 
 
 
