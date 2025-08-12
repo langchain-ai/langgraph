@@ -44,6 +44,9 @@ class AgentState(TypedDict):
 StateSchema = TypeVar("StateSchema", bound=AgentState)
 StateSchemaType = Type[StateSchema]
 
+# Type alias for structured response compatibility
+StructuredResponse = Any
+
 STATE_MODIFIER_RUNNABLE_NAME = "StateModifier"
 
 MessagesModifier = Union[
@@ -773,6 +776,7 @@ __all__ = [
     "create_tool_calling_executor",
     "AgentState",
 ]
+
 
 
 
