@@ -1303,7 +1303,7 @@ def create_react_agent(
                     tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
                     for call in pending_tool_calls
                 ]
-                return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
+                return [Send(call['name'], call) for call in pending_tool_calls]
             elif isinstance(messages[-1], ToolMessage):
                 return entrypoint
             elif response_format is not None:
@@ -1369,6 +1369,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
