@@ -2088,3 +2088,64 @@ def test_inspect_react() -> None:
     model = FakeToolCallingModel(tool_calls=[])
     agent = create_react_agent(model, [])
     inspect.getclosurevars(agent.nodes["agent"].bound.func)
+
+
+def test_create_react_agent_with_structured_output() -> None:
+    """Test that create_react_agent works correctly with structured output."""
+    
+    # Define the WeatherResponse model matching the documentation example
+    class WeatherResponse(BaseModel):
+        """Respond to the user with weather information"""
+        temperature: float = Field(description="The temperature in fahrenheit")
+        wind_direction: str = Field(description="The direction of the wind in abbreviated form")
+        wind_speed: float = Field(description="The speed of the wind in km/h")
+    
+    # Create a tool call that simulates the response format tool being called
+    weather_tool_call = ToolCall(
+        name="WeatherResponse",
+        args={
+            "temperature": 75.0,
+            "wind_direction": "SE", 
+            "wind_speed": 4.83
+        },
+        id="weather_response_1",
+    )
+    
+    # Create a fake model that will call the WeatherResponse tool
+    model = FakeToolCallingModel(tool_calls=[[weather_tool_call]])
+    
+    # Create the agent with structured output
+    agent = create_react_agent(model, [], response_format=WeatherResponse)
+    
+    # Test the agent
+    result = agent.invoke({"messages": [HumanMessage(content="What's the weather in SF?")]})
+    
+    # Verify the result contains both messages and structured_response
+    assert "messages" in result
+    assert "structured_response" in result
+    
+    # Verify the structured_response is of the correct type and has correct values
+    structured_response = result["structured_response"]
+    assert isinstance(structured_response, WeatherResponse)
+    assert structured_response.temperature == 75.0
+    assert structured_response.wind_direction == "SE"
+    assert structured_response.wind_speed == 4.83
+    
+    # Verify the messages contain the expected structure
+    messages = result["messages"]
+    assert len(messages) == 3  # Human message, AI message with tool call, Tool message
+    
+    # Check the human message
+    assert isinstance(messages[0], HumanMessage)
+    assert messages[0].content == "What's the weather in SF?"
+    
+    # Check the AI message with tool call
+    assert isinstance(messages[1], AIMessage)
+    assert len(messages[1].tool_calls) == 1
+    assert messages[1].tool_calls[0]["name"] == "WeatherResponse"
+    
+    # Check the tool message response
+    assert isinstance(messages[2], ToolMessage)
+    assert messages[2].name == "WeatherResponse"
+    assert messages[2].tool_call_id == "weather_response_1"
+
