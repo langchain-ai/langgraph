@@ -17,10 +17,10 @@ from langgraph.prebuilt import create_react_agent
 class SimpleFakeModel(BaseChatModel):
     """Simple fake model for testing structured output."""
     
-    def __init__(self, tool_calls_to_make=None):
-        super().__init__()
-        self.tool_calls_to_make = tool_calls_to_make or []
-        self.call_count = 0
+    def __init__(self, tool_calls_to_make=None, **kwargs):
+        super().__init__(**kwargs)
+        self._tool_calls_to_make = tool_calls_to_make or []
+        self._call_count = 0
     
     def _generate(
         self,
@@ -126,3 +126,4 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
