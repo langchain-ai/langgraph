@@ -705,10 +705,7 @@ def create_react_agent(
         )
         
         # Return the structured response and tool message
-        result = {"messages": [tool_message]}
-        if hasattr(state, "structured_response") or "structured_response" in state:
-            result["structured_response"] = structured_response
-        
+        result = {"messages": [tool_message], "structured_response": structured_response}
         return result
 
     # Define a new graph - use enhanced state if structured output is requested
@@ -785,6 +782,7 @@ __all__ = [
     "create_tool_calling_executor",
     "AgentState",
 ]
+
 
 
 
