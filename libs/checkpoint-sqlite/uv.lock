@@ -341,6 +341,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
+    { name = "redis" },
     { name = "ruff" },
 ]
 

@@ -49,6 +49,7 @@ dev = [
     "types-requests",
     "pycryptodome",
     "langgraph-cli[inmem]",
+    "redis",
 ]
 
 [tool.uv]
