@@ -74,7 +74,7 @@ pytestmark = pytest.mark.anyio
 
 class FakeToolCallingModel(BaseChatModel):
     tool_calls: Optional[list[list[ToolCall]]] = None
-    structured_response: Optional[StructuredResponse] = None
+    structured_response: Optional[Any] = None
     index: int = 0
     tool_style: Literal["openai", "anthropic"] = "openai"
 
@@ -2147,5 +2147,6 @@ def test_create_react_agent_with_structured_output() -> None:
     assert isinstance(messages[2], ToolMessage)
     assert messages[2].name == "WeatherResponse"
     assert messages[2].tool_call_id == "weather_response_1"
+
 
 
