@@ -62,6 +62,135 @@ StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
 F = TypeVar("F", bound=Callable[..., Any])
 
+# Constants and helper functions for ToolExecutor
+INVALID_TOOL_NAME_ERROR_TEMPLATE = (
+    "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
+)
+TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
+
+
+def _msg_content_output(output: Any) -> Union[str, list[dict]]:
+    """Convert tool output to valid message content format."""
+    if isinstance(output, str):
+        return output
+    elif isinstance(output, list) and all(
+        [
+            isinstance(x, dict) and x.get("type") in TOOL_MESSAGE_BLOCK_TYPES
+            for x in output
+        ]
+    ):
+        return output
+    else:
+        try:
+            return json.dumps(output, ensure_ascii=False)
+        except Exception:
+            return str(output)
+
+
+def _handle_tool_error(
+    e: Exception,
+    *,
+    flag: Union[
+        bool,
+        str,
+        Callable[..., str],
+        tuple[type[Exception], ...],
+    ],
+) -> str:
+    """Generate error message content based on exception handling configuration."""
+    if isinstance(flag, (bool, tuple)):
+        content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
+    elif isinstance(flag, str):
+        content = flag
+    elif callable(flag):
+        content = flag(e)
+    else:
+        raise ValueError(
+            f"Got unexpected type of `handle_tool_error`. Expected bool, str "
+            f"or callable. Received: {flag}"
+        )
+    return content
+
+
+def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], ...]:
+    """Infer exception types handled by a custom error handler function."""
+    sig = inspect.signature(handler)
+    params = list(sig.parameters.values())
+    if params:
+        # If it's a method, the first argument is typically 'self' or 'cls'
+        first_param = params[0] if params[0].name not in ("self", "cls") else params[1] if len(params) > 1 else None
+        if first_param and first_param.annotation != inspect.Parameter.empty:
+            annotation = first_param.annotation
+            # Handle Union types
+            if get_origin(annotation) is Union:
+                types = get_args(annotation)
+                exception_types = []
+                for t in types:
+                    if isinstance(t, type) and issubclass(t, Exception):
+                        exception_types.append(t)
+                    elif t is not type(None):  # Allow None in Union for optional handling
+                        raise ValueError(f"Handler annotation must be Exception types, got {t}")
+                return tuple(exception_types) if exception_types else (Exception,)
+            # Handle single type
+            elif isinstance(annotation, type) and issubclass(annotation, Exception):
+                return (annotation,)
+    return (Exception,)
+
+
+def _is_injection(
+    type_arg: Any, injection_type: Union[Type[InjectedState], Type[InjectedStore]]
+) -> bool:
+    """Check if a type argument represents an injection annotation."""
+    return isinstance(type_arg, injection_type)
+
+
+def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
+    """Extract state injection arguments from tool annotations."""
+    full_schema = tool.get_input_schema()
+    tool_args_to_state_fields: dict = {}
+
+    for name, type_ in get_all_basemodel_annotations(full_schema).items():
+        injections = [
+            type_arg
+            for type_arg in get_args(type_)
+            if _is_injection(type_arg, InjectedState)
+        ]
+        if len(injections) > 1:
+            raise ValueError(
+                "A tool argument should not be annotated with InjectedState more than "
+                f"once. Received arg {name} with annotations {injections}."
+            )
+        elif len(injections) == 1:
+            injection = injections[0]
+            if isinstance(injection, InjectedState) and injection.field:
+                tool_args_to_state_fields[name] = injection.field
+            else:
+                tool_args_to_state_fields[name] = None
+        else:
+            pass
+    return tool_args_to_state_fields
+
+
+def _get_store_arg(tool: BaseTool) -> Optional[str]:
+    """Extract store injection argument from tool annotations."""
+    full_schema = tool.get_input_schema()
+    for name, type_ in get_all_basemodel_annotations(full_schema).items():
+        injections = [
+            type_arg
+            for type_arg in get_args(type_)
+            if _is_injection(type_arg, InjectedStore)
+        ]
+        if len(injections) > 1:
+            raise ValueError(
+                "A tool argument should not be annotated with InjectedStore more than "
+                f"once. Received arg {name} with annotations {injections}."
+            )
+        elif len(injections) == 1:
+            return name
+        else:
+            pass
+    return None
+
 
 # We create the AgentState that we will pass around
 # This simply involves a list of messages
@@ -957,4 +1086,5 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
