@@ -1,4 +1,6 @@
 import inspect
+import json
+from copy import deepcopy
 from typing import (
     Any,
     Awaitable,
@@ -24,6 +26,7 @@ from langchain_core.messages import (
     AnyMessage,
     BaseMessage,
     SystemMessage,
+    ToolCall,
     ToolMessage,
 )
 from langchain_core.runnables import (
@@ -32,21 +35,26 @@ from langchain_core.runnables import (
     RunnableConfig,
     RunnableSequence,
 )
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, InjectedToolArg
+from langchain_core.tools import tool as create_tool
+from langchain_core.tools.base import (
+    TOOL_MESSAGE_BLOCK_TYPES,
+    get_all_basemodel_annotations,
+)
 from pydantic import BaseModel
-from typing_extensions import Annotated, NotRequired, TypedDict
+from typing_extensions import Annotated, NotRequired, TypedDict, get_args, get_origin
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
-from langgraph.errors import ErrorCode, create_error_message
+from langgraph.errors import ErrorCode, create_error_message, GraphBubbleUp
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import RemainingSteps
-from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.prebuilt.tool_node import ToolNode, InjectedState, InjectedStore
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
-from langgraph.types import Checkpointer, Send
+from langgraph.types import Checkpointer, Send, Command
 from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
@@ -949,3 +957,4 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
