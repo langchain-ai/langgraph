@@ -32,7 +32,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.tools import tool as dec_tool
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
 from typing_extensions import TypedDict
@@ -47,7 +47,11 @@ from langgraph.prebuilt import (
     create_react_agent,
     tools_condition,
 )
-from langgraph.prebuilt.chat_agent_executor import AgentState, _validate_chat_history
+from langgraph.prebuilt.chat_agent_executor import (
+    AgentState,
+    StructuredResponse,
+    _validate_chat_history,
+)
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     InjectedState,
@@ -71,6 +75,7 @@ pytestmark = pytest.mark.anyio
 
 class FakeToolCallingModel(BaseChatModel):
     tool_calls: Optional[list[list[ToolCall]]] = None
+    structured_response: Optional[StructuredResponse] = None
     index: int = 0
     tool_style: Literal["openai", "anthropic"] = "openai"
 
@@ -97,6 +102,14 @@ class FakeToolCallingModel(BaseChatModel):
     @property
     def _llm_type(self) -> str:
         return "fake-tool-call-model"
+
+    def with_structured_output(
+        self, schema: Type[BaseModel]
+    ) -> Runnable[LanguageModelInput, StructuredResponse]:
+        if self.structured_response is None:
+            raise ValueError("Structured response is not set")
+
+        return RunnableLambda(lambda x: self.structured_response)
 
     def bind_tools(
         self,
@@ -509,6 +522,34 @@ def test__infer_handled_types() -> None:
             return ""
 
         _infer_handled_types(handler)
+
+
+@pytest.mark.skipif(
+    not IS_LANGCHAIN_CORE_030_OR_GREATER,
+    reason="Pydantic v1 is required for this test to pass in langchain-core < 0.3",
+)
+def test_react_agent_with_structured_response() -> None:
+    class WeatherResponse(BaseModel):
+        temperature: float = Field(description="The temperature in fahrenheit")
+
+    tool_calls = [[{"args": {}, "id": "1", "name": "get_weather"}], []]
+
+    def get_weather():
+        """Get the weather"""
+        return "The weather is sunny and 75°F."
+
+    expected_structured_response = WeatherResponse(temperature=75)
+    model = FakeToolCallingModel(
+        tool_calls=tool_calls, structured_response=expected_structured_response
+    )
+    for response_format in (WeatherResponse, ("Meow", WeatherResponse)):
+        agent = create_react_agent(
+            model, [get_weather], response_format=response_format
+        )
+        response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
+        assert response["structured_response"] == expected_structured_response
+        assert len(response["messages"]) == 4
+        assert response["messages"][-2].content == "The weather is sunny and 75°F."
 
 
 # tools for testing Too
