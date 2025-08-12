@@ -562,7 +562,7 @@ def create_react_agent(
     if response_format is not None:
         all_tools.append(response_format)
 
-    if _should_bind_tools(model, all_tools) and (tool_calling_enabled or response_format is not None):
+    if tool_calling_enabled or response_format is not None:
         if response_format is not None:
             # Force the model to use tools by setting tool_choice to "any" when structured output is requested
             model = cast(BaseChatModel, model).bind_tools(all_tools, tool_choice="any")
@@ -790,6 +790,7 @@ __all__ = [
     "create_tool_calling_executor",
     "AgentState",
 ]
+
 
 
 
