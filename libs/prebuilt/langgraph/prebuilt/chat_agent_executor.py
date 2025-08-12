@@ -1284,7 +1284,7 @@ def create_react_agent(
             """Route to the next node after post_model_hook.
 
             Routes to one of:
-            * "tools": if there are pending tool calls without a corresponding message.
+            * Individual tool nodes: if there are pending tool calls without a corresponding message.
             * "generate_structured_response": if no pending tool calls exist and response_format is specified.
             * END: if no pending tool calls exist and no response_format is specified.
             """
@@ -1375,6 +1375,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
