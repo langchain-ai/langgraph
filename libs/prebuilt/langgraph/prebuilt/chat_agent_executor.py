@@ -678,7 +678,7 @@ def create_react_agent(
             Awaitable[Runnable[LanguageModelInput, BaseMessage]],
         ],
     ],
-    tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
+    tools: Sequence[Union[BaseTool, Callable, dict[str, Any]]],
     *,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
@@ -1368,6 +1368,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
