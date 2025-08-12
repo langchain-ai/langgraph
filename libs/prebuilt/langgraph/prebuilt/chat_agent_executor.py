@@ -1257,7 +1257,7 @@ def create_react_agent(
         agent_paths.append("post_model_hook")
         workflow.add_edge("agent", "post_model_hook")
     else:
-        agent_paths.append("tools")
+        agent_paths.extend(tool_names)
 
     # Add a structured output node if response_format is provided
     if response_format is not None:
@@ -1371,6 +1371,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
