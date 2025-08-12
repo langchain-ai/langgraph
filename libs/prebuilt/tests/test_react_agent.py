@@ -184,7 +184,7 @@ def test_runnable_prompt():
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_prompt_with_store(version: str):
+def test_prompt_with_store(version: Literal["v1", "v2"]):
     def add(a: int, b: int):
         """Adds a and b"""
         return a + b

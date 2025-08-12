@@ -49,4 +49,14 @@ def test_react_agent_graph_structure(
         post_model_hook=post_model_hook,
         response_format=response_format,
     )
-    assert agent.get_graph().draw_mermaid(with_styles=False) == snapshot
+    try:
+        assert agent.get_graph().draw_mermaid(with_styles=False) == snapshot
+    except Exception as e:
+        raise ValueError(
+            "The graph structure has changed. Please update the snapshot."
+            "Configuration used:\n"
+            f"tools: {tools}, "
+            f"pre_model_hook: {pre_model_hook}, "
+            f"post_model_hook: {post_model_hook}, "
+            f"response_format: {response_format}"
+        ) from e
