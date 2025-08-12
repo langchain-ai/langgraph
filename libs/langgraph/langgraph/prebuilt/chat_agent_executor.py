@@ -668,24 +668,32 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: AgentState) -> Literal["tools", "respond", "__end__"]:
-        messages = state["messages"]
-        last_message = messages[-1]
-        # If there is no function call, then we finish
-        if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            return "__end__"
-        
-        # Check if structured output is requested and the response format tool was called
-        if response_format is not None:
+    if response_format is not None:
+        def should_continue(state: AgentState) -> Literal["tools", "respond", "__end__"]:
+            messages = state["messages"]
+            last_message = messages[-1]
+            # If there is no function call, then we finish
+            if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+                return "__end__"
+            
             # If there is only one tool call and it is the response format tool, respond to the user
             if (
                 len(last_message.tool_calls) == 1
                 and last_message.tool_calls[0]["name"] == response_format.__name__
             ):
                 return "respond"
-        
-        # Otherwise if there are tool calls, we continue with tools
-        return "tools"
+            
+            # Otherwise if there are tool calls, we continue with tools
+            return "tools"
+    else:
+        def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+            messages = state["messages"]
+            last_message = messages[-1]
+            # If there is no function call, then we finish
+            if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+                return "__end__"
+            # Otherwise, we continue
+            return "tools"
 
     # Define the function that responds with structured output
     def respond(state: AgentState) -> AgentState:
@@ -782,6 +790,7 @@ __all__ = [
     "create_tool_calling_executor",
     "AgentState",
 ]
+
 
 
 
