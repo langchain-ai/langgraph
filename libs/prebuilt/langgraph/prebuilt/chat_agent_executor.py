@@ -1216,7 +1216,7 @@ def create_react_agent(
                     tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
                     for call in last_message.tool_calls
                 ]
-                return [Send("tools", [tool_call]) for tool_call in tool_calls]
+                return [Send(call['name'], call) for call in tool_calls]
 
     # Define a new graph
     workflow = StateGraph(
@@ -1369,6 +1369,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
