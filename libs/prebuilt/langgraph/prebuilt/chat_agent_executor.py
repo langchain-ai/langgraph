@@ -1341,11 +1341,15 @@ def create_react_agent(
         return entrypoint
 
     if should_return_direct:
-        workflow.add_conditional_edges(
-            "tools", route_tool_responses, path_map=[entrypoint, END]
-        )
+        # Add conditional edges for each individual tool node
+        for tool in tool_classes:
+            workflow.add_conditional_edges(
+                tool.name, route_tool_responses, path_map=[entrypoint, END]
+            )
     else:
-        workflow.add_edge("tools", entrypoint)
+        # Add edges from each individual tool node back to entrypoint
+        for tool in tool_classes:
+            workflow.add_edge(tool.name, entrypoint)
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
@@ -1371,6 +1375,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
