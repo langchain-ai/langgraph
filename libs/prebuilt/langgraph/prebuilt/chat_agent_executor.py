@@ -1320,8 +1320,10 @@ def create_react_agent(
             ]
 
             if pending_tool_calls:
+                # Create a temporary ToolExecutor to inject tool arguments
+                temp_executor = ToolExecutor(tool_classes[0]) if tool_classes else None
                 pending_tool_calls = [
-                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    temp_executor.inject_tool_args(call, state, store) if temp_executor else call  # type: ignore[arg-type]
                     for call in pending_tool_calls
                 ]
                 return [Send(call["name"], call) for call in pending_tool_calls]
@@ -1394,4 +1396,5 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
