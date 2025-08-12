@@ -202,6 +202,7 @@ def create_react_agent(
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
     state_modifier: Optional[StateModifier] = None,
+    response_format: Optional[Type[BaseModel]] = None,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
@@ -711,4 +712,5 @@ __all__ = [
     "create_tool_calling_executor",
     "AgentState",
 ]
+
 
