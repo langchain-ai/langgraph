@@ -30,14 +30,14 @@ class SimpleFakeModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         """Generate a response with tool calls."""
-        content = f"Response {self.call_count}"
-        tool_calls = self.tool_calls_to_make if self.call_count == 0 else []
+        content = f"Response {self._call_count}"
+        tool_calls = self._tool_calls_to_make if self._call_count == 0 else []
         
         message = AIMessage(
             content=content,
             tool_calls=tool_calls
         )
-        self.call_count += 1
+        self._call_count += 1
         return ChatResult(generations=[ChatGeneration(message=message)])
     
     @property
@@ -126,4 +126,5 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
 
