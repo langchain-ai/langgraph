@@ -918,14 +918,13 @@ def create_react_agent(
             else AgentState
         )
 
-    llm_builtin_tools: list[dict] = []
-    if isinstance(tools, ToolNode):
-        tool_classes = list(tools.tools_by_name.values())
-        tool_node = tools
-    else:
-        llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
-        tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
-        tool_classes = list(tool_node.tools_by_name.values())
+    llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
+    tool_classes = []
+    for tool_ in tools:
+        if not isinstance(tool_, dict):
+            if not isinstance(tool_, BaseTool):
+                tool_ = create_tool(tool_)
+            tool_classes.append(tool_)
 
     is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
     is_async_dynamic_model = is_dynamic_model and inspect.iscoroutinefunction(model)
@@ -1368,6 +1367,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
