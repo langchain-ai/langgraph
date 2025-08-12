@@ -12,6 +12,7 @@ from typing import (
     cast,
     get_type_hints,
 )
+from operator import add
 from warnings import warn
 
 from langchain_core.language_models import (
@@ -65,6 +66,8 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
     remaining_steps: NotRequired[RemainingSteps]
+
+    model_calls: Annotated[NotRequired[int], add]
 
 
 class AgentStatePydantic(BaseModel):
@@ -222,6 +225,10 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
+class StepCountIs(BaseModel):
+    count: int
+
+
 def create_react_agent(
     model: Union[
         str,
@@ -253,6 +260,7 @@ def create_react_agent(
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
+    stop_when: Optional[Callable[[StateSchema], bool]] | StepCountIs = None,
     **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
@@ -522,6 +530,7 @@ def create_react_agent(
             model = cast(BaseChatModel, model).bind_tools(
                 tool_classes + llm_builtin_tools + structured_output_tools,  # type: ignore[operator],
                 tool_choice="any",
+                parallel_tool_calls=False,
             )
 
         static_model: Optional[Runnable] = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
@@ -601,7 +610,7 @@ def create_react_agent(
     # Define the function that calls the model
     def call_model(
         state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-    ) -> dict[str, list[AIMessage]]:
+    ) -> dict[str, list[AIMessage]] | Command:
         if is_async_dynamic_model:
             msg = (
                 "Async model callable provided but agent invoked synchronously. "
@@ -612,11 +621,25 @@ def create_react_agent(
 
         model_input = _get_model_input_state(state)
 
+        if stop_when is not None:
+            post_model_node = "post_model_hook" if post_model_hook is not None else END
+            if isinstance(stop_when, StepCountIs):
+
+                if (model_calls := _get_state_value(state, "model_calls", 0)) == (stop_when.count - 1):
+                    # set tool_choice to structured output tool if response_format is provided
+                    # though we don't currently expose support for that binding here.
+                    ...
+                elif model_calls == stop_when.count:
+                    return Command(goto=post_model_node)
+            else:
+                if stop_when(state):
+                    return Command(goto=post_model_node)
+
         if is_dynamic_model:
             # Resolve dynamic model at runtime and apply prompt
             dynamic_model = _resolve_model(state, runtime)
             response = cast(AIMessage, dynamic_model.invoke(model_input, config))  # type: ignore[arg-type]
-        else:
+        else:                
             response = cast(AIMessage, static_model.invoke(model_input, config))  # type: ignore[union-attr]
 
         # add agent name to the AIMessage
@@ -632,7 +655,7 @@ def create_react_agent(
                 ]
             }
 
-        return {"messages": [response]}
+        return {"messages": [response], "model_calls": 1}
 
     async def acall_model(
         state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
@@ -714,14 +737,14 @@ def create_react_agent(
 
     # Define the function that determines whether to continue or not
     def should_continue(state: StateSchema) -> Union[str, list[Send]]:
+
+        post_model_node = "post_model_hook" if post_model_hook is not None else END
+                
         messages = _get_state_value(state, "messages")
         last_message = messages[-1]
         # If there is no function call, then we finish
         if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            if post_model_hook is not None:
-                return "post_model_hook"
-            else:
-                return END
+            return post_model_node
         # Otherwise if there is, we continue
         else:
             if version == "v1":
