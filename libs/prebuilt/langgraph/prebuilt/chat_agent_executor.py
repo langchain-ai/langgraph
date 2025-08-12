@@ -1247,7 +1247,9 @@ def create_react_agent(
     workflow.set_entry_point(entrypoint)
 
     agent_paths = []
-    post_model_hook_paths = [entrypoint, "tools"]
+    # Include all individual tool names instead of just 'tools'
+    tool_names = [tool.name for tool in tool_classes]
+    post_model_hook_paths = [entrypoint] + tool_names
 
     # Add a post model hook node if post_model_hook is provided
     if post_model_hook is not None:
@@ -1369,6 +1371,7 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
 
 
 
