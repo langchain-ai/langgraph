@@ -717,22 +717,36 @@ def create_react_agent(
     else:
         workflow = StateGraph(state_schema or AgentState)
 
-    # Define the two nodes we will cycle between
+    # Define the nodes we will cycle between
     workflow.add_node("agent", RunnableCallable(call_model, acall_model))
     workflow.add_node("tools", tool_node)
+    
+    # Add respond node if structured output is requested
+    if response_format is not None:
+        workflow.add_node("respond", respond)
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
     workflow.set_entry_point("agent")
 
     # We now add a conditional edge
-    workflow.add_conditional_edges(
-        # First, we define the start node. We use `agent`.
-        # This means these are the edges taken after the `agent` node is called.
-        "agent",
-        # Next, we pass in the function that will determine which node is called next.
-        should_continue,
-    )
+    if response_format is not None:
+        # With structured output, we have three possible routes: tools, respond, or end
+        workflow.add_conditional_edges(
+            "agent",
+            should_continue,
+            {
+                "tools": "tools",
+                "respond": "respond",
+                "__end__": "__end__",
+            },
+        )
+    else:
+        # Without structured output, we have two possible routes: tools or end
+        workflow.add_conditional_edges(
+            "agent",
+            should_continue,
+        )
 
     def route_tool_responses(state: AgentState) -> Literal["agent", "__end__"]:
         for m in reversed(state["messages"]):
@@ -767,6 +781,7 @@ __all__ = [
     "create_tool_calling_executor",
     "AgentState",
 ]
+
 
 
 
