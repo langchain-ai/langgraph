@@ -69,7 +69,7 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
-def _msg_content_output(output: Any) -> Union[str, list[dict]]:
+def _msg_content_output(output: Any) -> Union[str, list[Union[str, dict[str, Any]]]]:
     """Convert tool output to valid message content format."""
     if isinstance(output, str):
         return output
@@ -1400,3 +1400,4 @@ __all__ = [
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
 ]
+
