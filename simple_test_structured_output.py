@@ -79,6 +79,10 @@ def test_structured_output():
     # Test the agent
     result = agent.invoke({"messages": [HumanMessage(content="What's the weather in SF?")]})
     
+    # Debug: Print the actual result to see what we get
+    print(f"Actual result keys: {list(result.keys())}")
+    print(f"Actual result: {result}")
+    
     # Verify the result contains both messages and structured_response
     assert "messages" in result, "Result should contain 'messages' field"
     assert "structured_response" in result, "Result should contain 'structured_response' field"
@@ -131,6 +135,7 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
 
 
 
