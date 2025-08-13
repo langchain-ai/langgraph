@@ -318,7 +318,10 @@ class _AgentBuilder:
             self._tool_classes = list(self._tool_node.tools_by_name.values())
 
         self._should_return_direct = {
-            t.name for t in self._tool_classes if t.return_direct
+            t.name
+            for t in self._tool_classes
+            if t.return_direct
+            if isinstance(t, BaseTool)
         }
         self._tool_calling_enabled = len(self._tool_classes) > 0
 
