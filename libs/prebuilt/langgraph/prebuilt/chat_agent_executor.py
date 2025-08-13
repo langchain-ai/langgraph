@@ -277,6 +277,7 @@ class _AgentBuilder:
         version: Literal["v1", "v2"] = "v2",
         name: Optional[str] = None,
         store: Optional[BaseStore] = None,
+        use_individual_tool_nodes: bool = False,
     ):
         self.model = model
         self.tools = tools
@@ -289,6 +290,7 @@ class _AgentBuilder:
         self.version = version
         self.name = name
         self.store = store
+        self._use_individual_tool_nodes = use_individual_tool_nodes
 
         self._setup_tools()
         self._setup_state_schema()
@@ -591,11 +593,23 @@ class _AgentBuilder:
                 elif self.version == "v2":
                     if self.post_model_hook is not None:
                         return "post_model_hook"
-                    tool_calls = [
-                        self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
-                        for call in last_message.tool_calls
-                    ]
-                    return [Send("tools", [tool_call]) for tool_call in tool_calls]
+
+                    if self._use_individual_tool_nodes:
+                        # Route to individual tool nodes
+                        tool_calls = [
+                            self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
+                            for call in last_message.tool_calls
+                        ]
+                        return [
+                            Send(tool_call["name"], [state]) for tool_call in tool_calls
+                        ]
+                    else:
+                        # Use the original combined tools node
+                        tool_calls = [
+                            self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
+                            for call in last_message.tool_calls
+                        ]
+                        return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
         return should_continue
 
@@ -621,7 +635,18 @@ class _AgentBuilder:
                     self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
                     for call in pending_tool_calls
                 ]
-                return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
+
+                if self._use_individual_tool_nodes:
+                    return [
+                        # TODO: Add validation for tool name being a valid node name
+                        # and one that matches a tool.
+                        Send(tool_call["name"], [tool_call])
+                        for tool_call in pending_tool_calls
+                    ]
+                else:
+                    return [
+                        Send("tools", [tool_call]) for tool_call in pending_tool_calls
+                    ]
             elif isinstance(messages[-1], ToolMessage):
                 return self._get_entry_point()
             elif self.response_format is not None:
@@ -654,6 +679,21 @@ class _AgentBuilder:
 
         return route_tool_responses
 
+    def add_tool_node(self, tool: BaseTool) -> RunnableCallable:
+        """Create a node that executes a specific tool.
+
+        This method creates a node that wraps a single tool in a ToolNode
+        and executes it, returning the result as {"messages": [message]}.
+
+        Args:
+            tool: The tool to wrap in a node.
+
+        Returns:
+            A RunnableCallable node that can be added to the graph.
+        """
+        tool_node = ToolNode([tool])
+        return tool_node
+
     def _get_entry_point(self) -> str:
         """Get the workflow entry point."""
         return "pre_model_hook" if self.pre_model_hook else "agent"
@@ -662,7 +702,10 @@ class _AgentBuilder:
         """Get possible edge destinations from model node."""
         paths = []
         if self._tool_calling_enabled:
-            paths.append("tools")
+            if self._use_individual_tool_nodes:
+                paths.extend([tool.name for tool in self._tool_classes])
+            else:
+                paths.append("tools")
         if self.response_format:
             paths.append("generate_structured_response")
         else:
@@ -674,7 +717,12 @@ class _AgentBuilder:
         """Get possible edge destinations from post_model_hook node."""
         paths = []
         if self._tool_calling_enabled:
-            paths = [self._get_entry_point(), "tools"]
+            if self._use_individual_tool_nodes:
+                paths = [self._get_entry_point()] + [
+                    "tool.name" for tool in self._tool_classes
+                ]
+            else:
+                paths = [self._get_entry_point(), "tools"]
         if self.response_format is not None:
             paths.append("generate_structured_response")
         else:
@@ -682,7 +730,7 @@ class _AgentBuilder:
         return paths
 
     def build(self) -> StateGraph:
-        """Build the agent workflow graph (uncompiled)."""
+        """Build the agent workflow graph."""
         workflow = StateGraph(
             state_schema=self._final_state_schema,
             context_schema=self.context_schema,
@@ -697,7 +745,14 @@ class _AgentBuilder:
         )
 
         if self._tool_calling_enabled:
-            workflow.add_node("tools", self._tool_node)
+            if self._use_individual_tool_nodes:
+                # Add individual tool nodes
+                for tool in self._tool_classes:
+                    tool_node = self.add_tool_node(tool)
+                    workflow.add_node(tool.name, tool_node)
+            else:
+                # Add the combined tools node
+                workflow.add_node("tools", self._tool_node)
 
         if self.pre_model_hook:
             workflow.add_node("pre_model_hook", self.pre_model_hook)  # type: ignore[arg-type]
@@ -738,18 +793,32 @@ class _AgentBuilder:
                 )
 
         if self._tool_calling_enabled:
-            # In some cases, tools can return directly. In these cases
-            # we add a conditional edge from the tools node to the END node
-            # instead of going to the entry point.
-            tools_router = self.create_tools_router()
-            if tools_router:
-                workflow.add_conditional_edges(
-                    "tools",
-                    tools_router,
-                    path_map=[self._get_entry_point(), END],
-                )
+            if self._use_individual_tool_nodes:
+                # Add edges for individual tool nodes
+                tools_router = self.create_tools_router()
+                for tool in self._tool_classes:
+                    tool_node_name = tool.name
+                    if tools_router:
+                        workflow.add_conditional_edges(
+                            tool_node_name,
+                            tools_router,
+                            path_map=[self._get_entry_point(), END],
+                        )
+                    else:
+                        workflow.add_edge(tool_node_name, self._get_entry_point())
             else:
-                workflow.add_edge("tools", self._get_entry_point())
+                # In some cases, tools can return directly. In these cases
+                # we add a conditional edge from the tools node to the END node
+                # instead of going to the entry point.
+                tools_router = self.create_tools_router()
+                if tools_router:
+                    workflow.add_conditional_edges(
+                        "tools",
+                        tools_router,
+                        path_map=[self._get_entry_point(), END],
+                    )
+                else:
+                    workflow.add_edge("tools", self._get_entry_point())
 
         return workflow
 
