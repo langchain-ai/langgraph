@@ -854,6 +854,7 @@ def create_react_agent(
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
+    use_individual_tool_nodes: bool = False,
     **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
@@ -992,6 +993,10 @@ def create_react_agent(
         name: An optional name for the CompiledStateGraph.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
+        use_individual_tool_nodes: A flag indicating whether to use individual tool nodes for each tool.
+            If set to `True`, each tool will have its own node in the graph.
+            This has been added for the beta period. The default behavior will change
+            in v1.0.0 to use individual tool nodes.
 
     !!! warning "`config_schema` Deprecated"
         The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
@@ -1074,6 +1079,7 @@ def create_react_agent(
         version=version,
         name=name,
         store=store,
+        use_individual_tool_nodes=use_individual_tool_nodes,
     )
 
     # Build and compile the workflow
