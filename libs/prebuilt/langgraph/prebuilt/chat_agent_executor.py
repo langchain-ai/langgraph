@@ -738,7 +738,7 @@ class _AgentBuilder:
 
         return route_tool_responses
 
-    def add_tool_node(self, tool: BaseTool) -> RunnableCallable:
+    def create_tool_node(self, tool: BaseTool) -> RunnableCallable:
         """Create a node that executes a specific tool.
 
         This method creates a node that wraps a single tool in a ToolNode
@@ -750,8 +750,7 @@ class _AgentBuilder:
         Returns:
             A RunnableCallable node that can be added to the graph.
         """
-        tool_node = ToolNode([tool])
-        return tool_node
+        return ToolNode([tool])
 
     def _get_entry_point(self) -> str:
         """Get the workflow entry point."""
@@ -807,7 +806,7 @@ class _AgentBuilder:
             if self._use_individual_tool_nodes:
                 # Add individual tool nodes
                 for tool in self._tool_classes:
-                    tool_node = self.add_tool_node(tool)
+                    tool_node = self.create_tool_node(tool)
                     workflow.add_node(tool.name, tool_node)
             else:
                 # Add the combined tools node
