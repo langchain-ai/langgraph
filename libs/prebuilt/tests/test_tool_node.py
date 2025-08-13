@@ -1,25 +1,49 @@
+import dataclasses
+import json
+from functools import partial
 from typing import (
     Annotated,
     Any,
+    List,
+    Type,
+    TypeVar,
     Union,
 )
 
 import pytest
 from langchain_core.messages import (
     AIMessage,
+    AnyMessage,
+    HumanMessage,
     RemoveMessage,
+    ToolCall,
     ToolMessage,
 )
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel, ValidationError
+from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
+from typing_extensions import TypedDict
 
+from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
-from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from langgraph.prebuilt import ToolNode
-from langgraph.prebuilt.tool_node import TOOL_CALL_ERROR_TEMPLATE
+from langgraph.graph import START, MessagesState, StateGraph
+from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
+from langgraph.prebuilt import (
+    ToolNode,
+)
+from langgraph.prebuilt.tool_node import (
+    TOOL_CALL_ERROR_TEMPLATE,
+    InjectedState,
+    InjectedStore,
+    tools_condition,
+)
+from langgraph.store.base import BaseStore
+from langgraph.store.memory import InMemoryStore
 from langgraph.types import Command, Send
+from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
+from tests.model import FakeToolCallingModel
 
 pytestmark = pytest.mark.anyio
 
@@ -1156,3 +1180,304 @@ async def test_tool_node_command_remove_all_messages():
     command = result[0]
     assert isinstance(command, Command)
     assert command.update == {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]}
+
+
+class _InjectStateSchema(TypedDict):
+    messages: list
+    foo: str
+
+
+class _InjectedStatePydanticSchema(BaseModelV1):
+    messages: list
+    foo: str
+
+
+class _InjectedStatePydanticV2Schema(BaseModel):
+    messages: list
+    foo: str
+
+
+@dataclasses.dataclass
+class _InjectedStateDataclassSchema:
+    messages: list
+    foo: str
+
+
+T = TypeVar("T")
+
+
+@pytest.mark.parametrize(
+    "schema_",
+    [
+        _InjectStateSchema,
+        _InjectedStatePydanticSchema,
+        _InjectedStatePydanticV2Schema,
+        _InjectedStateDataclassSchema,
+    ],
+)
+def test_tool_node_inject_state(schema_: Type[T]) -> None:
+    def tool1(some_val: int, state: Annotated[T, InjectedState]) -> str:
+        """Tool 1 docstring."""
+        if isinstance(state, dict):
+            return state["foo"]
+        else:
+            return getattr(state, "foo")
+
+    def tool2(some_val: int, state: Annotated[T, InjectedState()]) -> str:
+        """Tool 2 docstring."""
+        if isinstance(state, dict):
+            return state["foo"]
+        else:
+            return getattr(state, "foo")
+
+    def tool3(
+        some_val: int,
+        foo: Annotated[str, InjectedState("foo")],
+        msgs: Annotated[List[AnyMessage], InjectedState("messages")],
+    ) -> str:
+        """Tool 1 docstring."""
+        return foo
+
+    def tool4(
+        some_val: int, msgs: Annotated[List[AnyMessage], InjectedState("messages")]
+    ) -> str:
+        """Tool 1 docstring."""
+        return msgs[0].content
+
+    node = ToolNode([tool1, tool2, tool3, tool4])
+    for tool_name in ("tool1", "tool2", "tool3"):
+        tool_call = {
+            "name": tool_name,
+            "args": {"some_val": 1},
+            "id": "some 0",
+            "type": "tool_call",
+        }
+        msg = AIMessage("hi?", tool_calls=[tool_call])
+        result = node.invoke(schema_(**{"messages": [msg], "foo": "bar"}))
+        tool_message = result["messages"][-1]
+        assert tool_message.content == "bar", f"Failed for tool={tool_name}"
+
+        if tool_name == "tool3":
+            failure_input = None
+            try:
+                failure_input = schema_(**{"messages": [msg], "notfoo": "bar"})
+            except Exception:
+                pass
+            if failure_input is not None:
+                with pytest.raises(KeyError):
+                    node.invoke(failure_input)
+
+                with pytest.raises(ValueError):
+                    node.invoke([msg])
+        else:
+            failure_input = None
+            try:
+                failure_input = schema_(**{"messages": [msg], "notfoo": "bar"})
+            except Exception:
+                # We'd get a validation error from pydantic state and wouldn't make it to the node
+                # anyway
+                pass
+            if failure_input is not None:
+                messages_ = node.invoke(failure_input)
+                tool_message = messages_["messages"][-1]
+                assert "KeyError" in tool_message.content
+                tool_message = node.invoke([msg])[-1]
+                assert "KeyError" in tool_message.content
+
+    tool_call = {
+        "name": "tool4",
+        "args": {"some_val": 1},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+    result = node.invoke(schema_(**{"messages": [msg], "foo": ""}))
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "hi?"
+
+    result = node.invoke([msg])
+    tool_message = result[-1]
+    assert tool_message.content == "hi?"
+
+
+def test_tool_node_inject_store() -> None:
+    store = InMemoryStore()
+    namespace = ("test",)
+
+    def tool1(some_val: int, store: Annotated[BaseStore, InjectedStore()]) -> str:
+        """Tool 1 docstring."""
+        store_val = store.get(namespace, "test_key").value["foo"]
+        return f"Some val: {some_val}, store val: {store_val}"
+
+    def tool2(some_val: int, store: Annotated[BaseStore, InjectedStore()]) -> str:
+        """Tool 2 docstring."""
+        store_val = store.get(namespace, "test_key").value["foo"]
+        return f"Some val: {some_val}, store val: {store_val}"
+
+    def tool3(
+        some_val: int,
+        bar: Annotated[str, InjectedState("bar")],
+        store: Annotated[BaseStore, InjectedStore()],
+    ) -> str:
+        """Tool 3 docstring."""
+        store_val = store.get(namespace, "test_key").value["foo"]
+        return f"Some val: {some_val}, store val: {store_val}, state val: {bar}"
+
+    node = ToolNode([tool1, tool2, tool3], handle_tool_errors=True)
+    store.put(namespace, "test_key", {"foo": "bar"})
+
+    class State(MessagesState):
+        bar: str
+
+    builder = StateGraph(State)
+    builder.add_node("tools", node)
+    builder.add_edge(START, "tools")
+    graph = builder.compile(store=store)
+
+    for tool_name in ("tool1", "tool2"):
+        tool_call = {
+            "name": tool_name,
+            "args": {"some_val": 1},
+            "id": "some 0",
+            "type": "tool_call",
+        }
+        msg = AIMessage("hi?", tool_calls=[tool_call])
+        node_result = node.invoke({"messages": [msg]}, store=store)
+        graph_result = graph.invoke({"messages": [msg]})
+        for result in (node_result, graph_result):
+            result["messages"][-1]
+            tool_message = result["messages"][-1]
+            assert tool_message.content == "Some val: 1, store val: bar", (
+                f"Failed for tool={tool_name}"
+            )
+
+    tool_call = {
+        "name": "tool3",
+        "args": {"some_val": 1},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+    node_result = node.invoke({"messages": [msg], "bar": "baz"}, store=store)
+    graph_result = graph.invoke({"messages": [msg], "bar": "baz"})
+    for result in (node_result, graph_result):
+        result["messages"][-1]
+        tool_message = result["messages"][-1]
+        assert tool_message.content == "Some val: 1, store val: bar, state val: baz", (
+            f"Failed for tool={tool_name}"
+        )
+
+    # test injected store without passing store to compiled graph
+    failing_graph = builder.compile()
+    with pytest.raises(ValueError):
+        failing_graph.invoke({"messages": [msg], "bar": "baz"})
+
+
+def test_tool_node_ensure_utf8() -> None:
+    @dec_tool
+    def get_day_list(days: list[str]) -> list[str]:
+        """choose days"""
+        return days
+
+    data = ["星期一", "水曜日", "목요일", "Friday"]
+    tools = [get_day_list]
+    tool_calls = [ToolCall(name=get_day_list.name, args={"days": data}, id="test_id")]
+    outputs: list[ToolMessage] = ToolNode(tools).invoke(
+        [AIMessage(content="", tool_calls=tool_calls)]
+    )
+    assert outputs[0].content == json.dumps(data, ensure_ascii=False)
+
+
+def test_tool_node_messages_key() -> None:
+    @dec_tool
+    def add(a: int, b: int):
+        """Adds a and b."""
+        return a + b
+
+    model = FakeToolCallingModel(
+        tool_calls=[[ToolCall(name=add.name, args={"a": 1, "b": 2}, id="test_id")]]
+    )
+
+    class State(TypedDict):
+        subgraph_messages: Annotated[list[AnyMessage], add_messages]
+
+    def call_model(state: State):
+        response = model.invoke(state["subgraph_messages"])
+        model.tool_calls = []
+        return {"subgraph_messages": response}
+
+    builder = StateGraph(State)
+    builder.add_node("agent", call_model)
+    builder.add_node("tools", ToolNode([add], messages_key="subgraph_messages"))
+    builder.add_conditional_edges(
+        "agent", partial(tools_condition, messages_key="subgraph_messages")
+    )
+    builder.add_edge(START, "agent")
+    builder.add_edge("tools", "agent")
+
+    graph = builder.compile()
+    result = graph.invoke({"subgraph_messages": [HumanMessage(content="hi")]})
+    assert result["subgraph_messages"] == [
+        _AnyIdHumanMessage(content="hi"),
+        AIMessage(
+            content="hi",
+            id="0",
+            tool_calls=[ToolCall(name=add.name, args={"a": 1, "b": 2}, id="test_id")],
+        ),
+        _AnyIdToolMessage(content="3", name=add.name, tool_call_id="test_id"),
+        AIMessage(content="hi-hi-3", id="1"),
+    ]
+
+
+def test_tool_node_stream_writer() -> None:
+    @dec_tool
+    def streaming_tool(x: int) -> str:
+        """Do something with writer."""
+        my_writer = get_stream_writer()
+        for value in ["foo", "bar", "baz"]:
+            my_writer({"custom_tool_value": value})
+
+        return x
+
+    tool_node = ToolNode([streaming_tool])
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("tools", tool_node)
+        .add_edge(START, "tools")
+        .compile()
+    )
+
+    tool_call = {
+        "name": "streaming_tool",
+        "args": {"x": 1},
+        "id": "1",
+        "type": "tool_call",
+    }
+    inputs = {
+        "messages": [AIMessage("", tool_calls=[tool_call])],
+    }
+
+    assert list(graph.stream(inputs, stream_mode="custom")) == [
+        {"custom_tool_value": "foo"},
+        {"custom_tool_value": "bar"},
+        {"custom_tool_value": "baz"},
+    ]
+    assert list(graph.stream(inputs, stream_mode=["custom", "updates"])) == [
+        ("custom", {"custom_tool_value": "foo"}),
+        ("custom", {"custom_tool_value": "bar"}),
+        ("custom", {"custom_tool_value": "baz"}),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        _AnyIdToolMessage(
+                            content="1",
+                            name="streaming_tool",
+                            tool_call_id="1",
+                        ),
+                    ],
+                },
+            },
+        ),
+    ]
