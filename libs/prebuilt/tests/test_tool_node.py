@@ -86,7 +86,8 @@ def tool5(some_val: int):
 tool5.handle_tool_error = "foo"
 
 
-async def test_tool_node():
+async def test_tool_node() -> None:
+    """Test tool node."""
     result = ToolNode([tool1]).invoke(
         {
             "messages": [
@@ -178,7 +179,7 @@ async def test_tool_node():
     assert tool_message.tool_call_id == "some 3"
 
 
-async def test_tool_node_tool_call_input():
+async def test_tool_node_tool_call_input() -> None:
     # Single tool call
     tool_call_1 = {
         "name": "tool1",
@@ -219,7 +220,7 @@ async def test_tool_node_tool_call_input():
     ]
 
 
-async def test_tool_node_error_handling():
+async def test_tool_node_error_handling() -> None:
     def handle_all(e: Union[ValueError, ToolException, ValidationError]):
         return TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
 
@@ -281,7 +282,7 @@ async def test_tool_node_error_handling():
         assert result_error["messages"][2].tool_call_id == "another id"
 
 
-async def test_tool_node_error_handling_callable():
+async def test_tool_node_error_handling_callable() -> None:
     def handle_value_error(e: ValueError):
         return "Value error"
 
@@ -1481,3 +1482,94 @@ def test_tool_node_stream_writer() -> None:
             },
         ),
     ]
+
+
+def test_structured_output_tools_sync() -> None:
+    """Test that ToolNode handles Pydantic model classes as structured output tools."""
+
+    class OutputSchema(BaseModel):
+        name: str
+        age: int
+        location: str
+
+    tool_node = ToolNode([OutputSchema])
+
+    # Test that the structured output tool is registered correctly
+    assert "OutputSchema" in tool_node.structured_output_tools
+
+    # Create a tool call that matches the schema
+    tool_call = {
+        "name": "OutputSchema",
+        "args": {"name": "Alice", "age": 30, "location": "NYC"},
+        "id": "call_123",
+        "type": "tool_call",
+    }
+
+    # Test sync execution
+    result = tool_node.invoke(
+        {"messages": [AIMessage(content="", tool_calls=[tool_call])]}
+    )
+
+    # Should return a Command with structured response
+    assert isinstance(result, list)
+    assert len(result) == 1
+    command = result[0]
+    assert isinstance(command, Command)
+
+    # Check the update structure
+    assert "messages" in command.update
+    assert "structured_response" in command.update
+
+    # Check the tool message
+    tool_message = command.update["messages"][0]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.name == "OutputSchema"
+    assert tool_message.tool_call_id == "call_123"
+
+    # Check the structured response
+    structured_response = command.update["structured_response"]
+    assert isinstance(structured_response, OutputSchema)
+    assert structured_response.name == "Alice"
+    assert structured_response.age == 30
+    assert structured_response.location == "NYC"
+
+
+async def test_structured_output_tools_async() -> None:
+    """Test that ToolNode handles Pydantic model classes as structured output tools."""
+
+    class OutputSchema(BaseModel):
+        name: str
+        age: int
+        location: str
+
+    tool_node = ToolNode([OutputSchema])
+
+    # Test that the structured output tool is registered correctly
+    assert "OutputSchema" not in tool_node.tools_by_name
+    assert "OutputSchema" in tool_node.structured_output_tools
+
+    # Create a tool call that matches the schema
+    tool_call = {
+        "name": "OutputSchema",
+        "args": {"name": "Alice", "age": 30, "location": "NYC"},
+        "id": "call_123",
+        "type": "tool_call",
+    }
+
+    # Test async execution
+    result_async = await tool_node.ainvoke(
+        {"messages": [AIMessage(content="", tool_calls=[tool_call])]}
+    )
+
+    # Should produce the same result
+    assert isinstance(result_async, list)
+    assert len(result_async) == 1
+    command_async = result_async[0]
+    assert isinstance(command_async, Command)
+    assert "structured_response" in command_async.update
+
+    structured_response_async = command_async.update["structured_response"]
+    assert isinstance(structured_response_async, OutputSchema)
+    assert structured_response_async.name == "Alice"
+    assert structured_response_async.age == 30
+    assert structured_response_async.location == "NYC"
