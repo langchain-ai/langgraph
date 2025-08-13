@@ -31,6 +31,8 @@ Typical Usage:
     ```
 """
 
+from __future__ import annotations
+
 import asyncio
 import inspect
 import json
@@ -237,17 +239,53 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
 
 
 class ToolNode(RunnableCallable):
-    """A node that runs the tools called in the last AIMessage.
+    """A node for executing tools in LangGraph workflows.
 
-    It can be used either in StateGraph with a "messages" state key (or a custom key passed via ToolNode's 'messages_key').
-    If multiple tool calls are requested, they will be run in parallel. The output will be
-    a list of ToolMessages, one for each tool call.
+    Handles tool execution patterns including function calls, state injection,
+    persistent storage, and control flow. Manages parallel execution,
+    error handling, and integration with LangGraph's messaging system.
 
-    Tool calls can also be passed directly as a list of `ToolCall` dicts.
+    Input Formats:
+        1. **StateGraph Dictionary**: ``{"messages": [AIMessage(..., tool_calls=[...])]}``
+           - Format for StateGraph workflows
+           - Supports custom messages key via ``messages_key`` parameter
+           - Can include additional state fields for injection
+
+        2. **Message List**: ``[AIMessage(..., tool_calls=[...])]``
+           - List of messages with tool calls in the last AIMessage
+           - For workflows without state management
+
+        3. **Direct Tool Calls**: ``[{"name": "tool", "args": {...}, "id": "1", "type": "tool_call"}]``
+           - Bypasses message parsing for direct tool execution
+           - For programmatic tool invocation and testing
+
+    Tool Types:
+        1. **Regular Tools**: Functions or BaseTool instances that return simple values
+        2. **Command Tools**: Tools that return Command objects for control flow
+        3. **Structured Output Tools**: Pydantic model classes for schema-validated responses
+        4. **State-Injected Tools**: Tools with InjectedState annotations for graph context access
+        5. **Store-Injected Tools**: Tools with InjectedStore annotations for persistent storage
+
+    Output Formats:
+        Output format depends on input type and tool behavior:
+
+        **For Regular Tools**:
+        - Dict input → ``{"messages": [ToolMessage(...)]}``
+        - List input → ``[ToolMessage(...)]``
+
+        **For Command Tools**:
+        - Returns ``[Command(...)]`` or mixed list with regular tool outputs
+        - Commands can update state, trigger navigation, or send messages
+
+        **For Structured Output Tools**:
+        - Returns ``[Command(update={"messages": [...], "structured_response": schema_instance})]``
+        - Includes both message and structured data in the graph state
 
     Args:
-        tools: A sequence of tools that can be invoked by this node. Tools can be
-            BaseTool instances or plain functions that will be converted to tools.
+        tools: A sequence of tools that can be invoked by this node. Supports:
+            - **BaseTool instances**: Tools with schemas and metadata
+            - **Plain functions**: Automatically converted to tools with inferred schemas
+            - **Pydantic model classes**: Treated as structured output tools
         name: The name identifier for this node in the graph. Used for debugging
             and visualization. Defaults to "tools".
         tags: Optional metadata tags to associate with the node for filtering
@@ -255,21 +293,22 @@ class ToolNode(RunnableCallable):
         handle_tool_errors: Configuration for error handling during tool execution.
             Defaults to True. Supports multiple strategies:
 
-            - True: Catch all errors and return a ToolMessage with the default
+            - **True**: Catch all errors and return a ToolMessage with the default
               error template containing the exception details.
-            - str: Catch all errors and return a ToolMessage with this custom
+            - **str**: Catch all errors and return a ToolMessage with this custom
               error message string.
-            - tuple[type[Exception], ...]: Only catch exceptions of the specified
+            - **tuple[type[Exception], ...]**: Only catch exceptions of the specified
               types and return default error messages for them.
-            - Callable[..., str]: Catch exceptions matching the callable's signature
+            - **Callable[..., str]**: Catch exceptions matching the callable's signature
               and return the string result of calling it with the exception.
-            - False: Disable error handling entirely, allowing exceptions to propagate.
+            - **False**: Disable error handling entirely, allowing exceptions to propagate.
 
         messages_key: The key in the state dictionary that contains the message list.
             This same key will be used for the output ToolMessages. Defaults to "messages".
+            Allows custom state schemas with different message field names.
 
-    Example:
-        Basic usage with simple tools:
+    Examples:
+        **Basic Tool Execution**:
 
         ```python
         from langgraph.prebuilt import ToolNode
@@ -281,44 +320,202 @@ class ToolNode(RunnableCallable):
             return a + b
 
         tool_node = ToolNode([calculator])
+
+        # StateGraph usage
+        result = tool_node.invoke({
+            "messages": [AIMessage("", tool_calls=[
+                {"name": "calculator", "args": {"a": 5, "b": 3}, "id": "1"}
+            ])]
+        })
+        # → {"messages": [ToolMessage(content="8", tool_call_id="1", name="calculator")]}
         ```
 
-        Custom error handling:
+        **Direct Tool Call Execution**:
 
         ```python
-        def handle_math_errors(e: ZeroDivisionError) -> str:
-            return "Cannot divide by zero!"
-
-        tool_node = ToolNode([calculator], handle_tool_errors=handle_math_errors)
-        ```
-
-        Direct tool call execution:
-
-        ```python
-        tool_calls = [{"name": "calculator", "args": {"a": 5, "b": 3}, "id": "1", "type": "tool_call"}]
+        # Bypass message parsing for direct invocation
+        tool_calls = [{
+            "name": "calculator",
+            "args": {"a": 5, "b": 3},
+            "id": "call_123",
+            "type": "tool_call"
+        }]
         result = tool_node.invoke(tool_calls)
+        # → {"messages": [ToolMessage(content="8", ...)]}
         ```
+
+        **State Injection for Context-Aware Tools**:
+
+        ```python
+        from typing_extensions import Annotated
+        from langgraph.prebuilt import InjectedState
+
+        @tool
+        def context_aware_tool(
+            query: str,
+            state: Annotated[dict, InjectedState]
+        ) -> str:
+            \"\"\"Tool that accesses current conversation state.\"\"\"
+            msg_count = len(state["messages"])
+            return f"Query '{query}' (context: {msg_count} messages)"
+
+        @tool  
+        def get_user_pref(
+            key: str,
+            user_data: Annotated[str, InjectedState("user_preferences")]
+        ) -> str:
+            \"\"\"Tool that accesses specific state field.\"\"\"
+            return user_data.get(key, "not found")
+
+        tool_node = ToolNode([context_aware_tool, get_user_pref])
+        ```
+
+        **Persistent Storage with Store Injection**:
+
+        ```python
+        from langgraph.prebuilt import InjectedStore
+        from langgraph.store.memory import InMemoryStore
+
+        @tool
+        def save_preference(
+            key: str,
+            value: str, 
+            store: Annotated[BaseStore, InjectedStore()]
+        ) -> str:
+            \"\"\"Save user preference to persistent storage.\"\"\"
+            store.put(("preferences",), key, value)
+            return f"Saved {key} = {value}"
+
+        store = InMemoryStore()
+        tool_node = ToolNode([save_preference])
+        graph = graph_builder.compile(store=store)  # Store injected automatically
+        ```
+
+        **Command Tools for Control Flow**:
+
+        ```python
+        from langgraph.types import Command
+
+        @tool
+        def transfer_to_specialist(
+            topic: str,
+            tool_call_id: Annotated[str, InjectedToolCallId]
+        ) -> Command:
+            \"\"\"Transfer conversation to a specialist agent.\"\"\"
+            return Command(
+                update={
+                    "messages": [
+                        ToolMessage(f"Transferred to {topic} specialist", 
+                                  tool_call_id=tool_call_id)
+                    ]
+                },
+                goto="specialist_agent",
+                graph=Command.PARENT
+            )
+
+        # Returns [Command(...)] for graph navigation
+        ```
+
+        **Structured Output Tools**:
+
+        ```python
+        from pydantic import BaseModel
+
+        class UserProfile(BaseModel):
+            name: str
+            age: int
+            preferences: list[str]
+
+        tool_node = ToolNode([UserProfile])  # Pydantic model as tool
+
+        # Returns Command with both message and structured data:
+        # [Command(update={
+        #     "messages": [ToolMessage(...)], 
+        #     "structured_response": UserProfile(...)
+        # })]
+        ```
+
+        **Advanced Error Handling**:
+
+        ```python
+        def handle_api_errors(e: Union[ConnectionError, TimeoutError]) -> str:
+            if isinstance(e, ConnectionError):
+                return "Service temporarily unavailable. Please try again."
+            return "Request timed out. Please try again."
+
+        tool_node = ToolNode([api_tool], handle_tool_errors=handle_api_errors)
+
+        # Or handle only specific exceptions
+        tool_node = ToolNode([api_tool], handle_tool_errors=(ConnectionError, TimeoutError))
+
+        # Or disable error handling entirely  
+        tool_node = ToolNode([api_tool], handle_tool_errors=False)
+        ```
+
+        **Custom Messages Key for StateGraph Integration**:
+
+        ```python
+        class CustomState(TypedDict):
+            conversation_history: Annotated[list[AnyMessage], add_messages]
+            user_context: dict
+
+        def agent_with_custom_state(state):
+            return {"conversation_history": model.invoke(state["conversation_history"])}
+
+        graph = StateGraph(CustomState)
+        graph.add_node("agent", agent_with_custom_state)
+        graph.add_node("tools", ToolNode([my_tool], messages_key="conversation_history"))
+        ```
+
+    Integration Patterns:
+        **ReAct Agent Pattern**:
+
+        ```python
+        from langgraph.prebuilt import tools_condition
+
+        graph.add_conditional_edges(
+            "agent",
+            tools_condition,  # Route to "tools" if tool calls present
+            {"tools": "tools", "__end__": "__end__"}
+        )
+        graph.add_edge("tools", "agent")  # Return to agent after tool execution
+        ```
+
+        **Multi-Agent with Tool Routing**:
+
+        ```python
+        # Tools can return Commands to route between different agents
+        @tool
+        def escalate_to_human() -> Command:
+            return Command(goto="human_agent", graph=Command.PARENT)
+
+        tool_node = ToolNode([escalate_to_human, regular_tool])
+        # Returns mix of ToolMessages and Commands for control flow
+        ```
+
+    Performance & Concurrency:
+        - **Parallel Execution**: Multiple tool calls in a single AIMessage are executed concurrently
+        - **Async Support**: async/await support with ``ainvoke()`` method
+        - **State Optimization**: State injection without redundant copying
+        - **Error Isolation**: Tool errors don't affect execution of other parallel tools
 
     Note:
-        The ToolNode expects input in one of three formats:
-        1. A dictionary with a messages key containing a list of messages
-        2. A list of messages directly
-        3. A list of tool call dictionaries
+        **GraphInterrupt Handling**: GraphBubbleUp exceptions (from ``interrupt()``) always
+        propagate regardless of error handling settings, allowing workflow interruption
+        in multi-agent architectures.
 
-        When using message formats, the last message must be an AIMessage with
-        tool_calls populated. The node automatically extracts and processes these
-        tool calls concurrently.
+        **Validation**: Command tools are validated to ensure proper ToolMessage responses
+        matching tool call IDs, maintaining message history integrity.
 
-        For advanced use cases involving state injection or store access, tools
-        can be annotated with InjectedState or InjectedStore to receive graph
-        context automatically.
+        **Content Formats**: Tool outputs are formatted for LangChain message
+        compatibility, supporting both string content and structured content blocks.
     """
 
-    name: str = "ToolNode"
+    name: str = "tools"
 
     def __init__(
         self,
-        tools: Sequence[Union[BaseTool, Callable]],
+        tools: Sequence[Union[BaseTool, BaseModel, Callable]],
         *,
         name: str = "tools",
         tags: Optional[list[str]] = None,
