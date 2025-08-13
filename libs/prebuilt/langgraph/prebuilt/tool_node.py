@@ -315,6 +315,7 @@ class ToolNode(RunnableCallable):
 
         @tool
         def calculator(a: int, b: int) -> int:
+            \"\"\"Add two numbers.\"\"\"
             return a + b
 
         tool_node = ToolNode([calculator])
@@ -328,6 +329,7 @@ class ToolNode(RunnableCallable):
 
         @tool
         def context_tool(query: str, state: Annotated[dict, InjectedState]) -> str:
+            \"\"\"Some tool that uses state.\"\"\"
             return f"Query: {query}, Messages: {len(state['messages'])}"
 
         tool_node = ToolNode([context_tool])
