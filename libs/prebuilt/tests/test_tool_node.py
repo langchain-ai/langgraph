@@ -1495,7 +1495,6 @@ def test_structured_output_tools_sync() -> None:
     tool_node = ToolNode([OutputSchema])
 
     # Test that the structured output tool is registered correctly
-    # assert "OutputSchema" in tool_node.tools_by_name
     assert "OutputSchema" in tool_node.structured_output_tools
 
     # Create a tool call that matches the schema
@@ -1546,7 +1545,7 @@ async def test_structured_output_tools_async() -> None:
     tool_node = ToolNode([OutputSchema])
 
     # Test that the structured output tool is registered correctly
-    # assert "OutputSchema" in tool_node.tools_by_name
+    assert "OutputSchema" not in tool_node.tools_by_name
     assert "OutputSchema" in tool_node.structured_output_tools
 
     # Create a tool call that matches the schema
