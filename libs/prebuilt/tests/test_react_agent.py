@@ -784,8 +784,15 @@ class AgentStateExtraKeyPydantic(AgentStatePydantic):
 @pytest.mark.parametrize(
     "state_schema", [AgentStateExtraKey, AgentStateExtraKeyPydantic]
 )
+@pytest.mark.parametrize(
+    "use_individual_tool_nodes",
+    [False, True],
+    ids=["single_tool_node", "node_per_tool"],
+)
 def test_create_react_agent_inject_vars(
-    version: Literal["v1", "v2"], state_schema: StateSchemaType
+    version: Literal["v1", "v2"],
+    state_schema: StateSchemaType,
+    use_individual_tool_nodes: bool,
 ) -> None:
     """Test that the agent can inject state and store into tool functions."""
     store = InMemoryStore()
@@ -826,6 +833,7 @@ def test_create_react_agent_inject_vars(
         state_schema=state_schema,
         store=store,
         version=version,
+        use_individual_tool_nodes=use_individual_tool_nodes,
     )
     result = agent.invoke({"messages": [{"role": "user", "content": "hi"}], "foo": 2})
     assert result["messages"] == [
@@ -967,7 +975,14 @@ def test_tool_node_messages_key() -> None:
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-async def test_return_direct(version: str) -> None:
+@pytest.mark.parametrize(
+    "use_individual_tool_nodes",
+    [False, True],
+    ids=["single_tool_node", "node_per_tool"],
+)
+async def test_return_direct(
+    version: Literal["v1", "v2"], use_individual_tool_nodes: bool
+) -> None:
     @dec_tool(return_direct=True)
     def tool_return_direct(input: str) -> str:
         """A tool that returns directly."""
@@ -995,6 +1010,7 @@ async def test_return_direct(version: str) -> None:
         model,
         [tool_return_direct, tool_normal],
         version=version,
+        use_individual_tool_nodes=use_individual_tool_nodes,
     )
 
     # Test direct return for tool_return_direct
@@ -1088,14 +1104,22 @@ def test__get_state_args() -> None:
 
 
 def test_inspect_react() -> None:
+    """Test that we can inspect the agent and its nodes."""
     model = FakeToolCallingModel(tool_calls=[])
     agent = create_react_agent(model, [])
     inspect.getclosurevars(agent.nodes["agent"].bound.func)
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+@pytest.mark.parametrize(
+    "use_individual_tool_nodes",
+    [False, True],
+    ids=["single_tool_node", "node_per_tool"],
+)
 def test_react_with_subgraph_tools(
-    sync_checkpointer: BaseCheckpointSaver, version: Literal["v1", "v2"]
+    sync_checkpointer: BaseCheckpointSaver,
+    version: Literal["v1", "v2"],
+    use_individual_tool_nodes: bool,
 ) -> None:
     class State(TypedDict):
         a: int
@@ -1152,6 +1176,7 @@ def test_react_with_subgraph_tools(
         tool_node,
         checkpointer=sync_checkpointer,
         version=version,
+        use_individual_tool_nodes=use_individual_tool_nodes,
     )
     result = agent.invoke(
         {"messages": [HumanMessage(content="What's 2 + 3 and 2 * 3?")]},
