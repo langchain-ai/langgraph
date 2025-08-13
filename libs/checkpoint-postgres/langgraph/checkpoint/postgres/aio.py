@@ -409,7 +409,10 @@ class AsyncPostgresSaver(BasePostgresSaver):
             {
                 **value["checkpoint"],
                 "channel_values": {
-                    **value["checkpoint"].get("channel_values"),
+                    # '**' dictionary unpack requires a default dict '{}' to be available 
+                        # if "channel_values" does not exist (resulting to None). 
+                        ## Required for older checkpoints compatibility
+                    **value["checkpoint"].get("channel_values",{}),
                     **self._load_blobs(value["channel_values"]),
                 },
             },
