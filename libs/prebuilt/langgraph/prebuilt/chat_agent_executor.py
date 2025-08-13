@@ -346,8 +346,8 @@ class _AgentBuilder:
             model = self.model
             if isinstance(model, str):
                 try:
-                    from langchain.chat_models import (
-                        init_chat_model,  # type: ignore[import-not-found]
+                    from langchain.chat_models import (  # type: ignore[import-not-found]
+                        init_chat_model,
                     )
                 except ImportError:
                     raise ImportError(
