@@ -55,12 +55,6 @@ StructuredResponseSchema = Union[dict, type[BaseModel]]
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-class StepCountIs(BaseModel):
-    """Stop condition that specifies when to halt agent execution based on step count."""
-
-    count: int
-
-
 # We create the AgentState that we will pass around
 # This simply involves a list of messages
 # We want steps to return messages to append to the list
@@ -72,8 +66,6 @@ class AgentState(TypedDict):
 
     remaining_steps: NotRequired[RemainingSteps]
 
-    model_calls: NotRequired[int]
-
 
 class AgentStatePydantic(BaseModel):
     """The state of the agent."""
@@ -81,8 +73,6 @@ class AgentStatePydantic(BaseModel):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
     remaining_steps: RemainingSteps = 25
-
-    model_calls: int = 0
 
 
 class AgentStateWithStructuredResponse(AgentState):
@@ -280,7 +270,6 @@ class _AgentBuilder:
         response_format: Optional[
             Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
         ] = None,
-        stop_when: Optional[Union[StepCountIs, Callable[[StateSchema], bool]]] = None,
         pre_model_hook: Optional[RunnableLike] = None,
         post_model_hook: Optional[RunnableLike] = None,
         state_schema: Optional[StateSchemaType] = None,
@@ -302,7 +291,6 @@ class _AgentBuilder:
         self.tools = tools
         self.prompt = prompt
         self.response_format = response_format
-        self.stop_when = stop_when
         self.pre_model_hook = pre_model_hook
         self.post_model_hook = post_model_hook
         self.state_schema = state_schema
@@ -340,8 +328,6 @@ class _AgentBuilder:
             required_keys = {"messages", "remaining_steps"}
             if self.response_format is not None:
                 required_keys.add("structured_response")
-            if self.stop_when is not None:
-                required_keys.add("model_calls")
 
             schema_keys = set(get_type_hints(self.state_schema))
             if missing_keys := required_keys - schema_keys:
@@ -473,19 +459,6 @@ class _AgentBuilder:
                     return True
             return False
 
-        def _should_stop_execution(state: StateSchema) -> bool:
-            """Check if execution should stop based on stop_when condition."""
-            if self.stop_when is None:
-                return False
-
-            if isinstance(self.stop_when, StepCountIs):
-                model_calls = _get_state_value(state, "model_calls", 0)
-                return model_calls >= self.stop_when.count
-            elif callable(self.stop_when):
-                return self.stop_when(state)
-
-            return False
-
         def call_model(
             state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
         ) -> StateSchema:
@@ -495,40 +468,25 @@ class _AgentBuilder:
                     "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
                 )
 
-            # Check if we should stop before making the model call
-            if _should_stop_execution(state):
-                return {}
-
             model_input = _get_model_input_state(state)
             model = self._resolve_model(state, runtime)
             response = cast(AIMessage, model.invoke(model_input, config))  # type: ignore[arg-type]
             response.name = self.name
 
-            # Track model calls
-            result = {"messages": [response]}
-            if self.stop_when is not None:
-                current_calls = _get_state_value(state, "model_calls", 0)
-                result["model_calls"] = current_calls + 1
-
             if _are_more_steps_needed(state, response):
                 return {
-                    **result,
                     "messages": [
                         AIMessage(
                             id=response.id,
                             content="Sorry, need more steps to process this request.",
                         )
-                    ],
+                    ]
                 }
-            return result
+            return {"messages": [response]}
 
         async def acall_model(
             state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
         ) -> StateSchema:
-            # Check if we should stop before making the model call
-            if _should_stop_execution(state):
-                return {}
-
             model_input = _get_model_input_state(state)
 
             model = await self._aresolve_model(state, runtime)
@@ -537,24 +495,16 @@ class _AgentBuilder:
                 await model.ainvoke(model_input, config),  # type: ignore[arg-type]
             )
             response.name = self.name
-
-            # Track model calls
-            result = {"messages": [response]}
-            if self.stop_when is not None:
-                current_calls = _get_state_value(state, "model_calls", 0)
-                result["model_calls"] = current_calls + 1
-
             if _are_more_steps_needed(state, response):
                 return {
-                    **result,
                     "messages": [
                         AIMessage(
                             id=response.id,
                             content="Sorry, need more steps to process this request.",
                         )
-                    ],
+                    ]
                 }
-            return result
+            return {"messages": [response]}
 
         return RunnableCallable(call_model, acall_model)
 
@@ -738,7 +688,7 @@ class _AgentBuilder:
 
         return route_tool_responses
 
-    def create_tool_node(self, tool: BaseTool) -> RunnableCallable:
+    def add_tool_node(self, tool: BaseTool) -> RunnableCallable:
         """Create a node that executes a specific tool.
 
         This method creates a node that wraps a single tool in a ToolNode
@@ -750,7 +700,8 @@ class _AgentBuilder:
         Returns:
             A RunnableCallable node that can be added to the graph.
         """
-        return ToolNode([tool])
+        tool_node = ToolNode([tool])
+        return tool_node
 
     def _get_entry_point(self) -> str:
         """Get the workflow entry point."""
@@ -806,7 +757,7 @@ class _AgentBuilder:
             if self._use_individual_tool_nodes:
                 # Add individual tool nodes
                 for tool in self._tool_classes:
-                    tool_node = self.create_tool_node(tool)
+                    tool_node = self.add_tool_node(tool)
                     workflow.add_node(tool.name, tool_node)
             else:
                 # Add the combined tools node
@@ -901,7 +852,6 @@ def create_react_agent(
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
-    stop_when: Optional[Union[StepCountIs, Callable[[StateSchema], bool]]] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
@@ -989,16 +939,6 @@ def create_react_agent(
             !!! Note
                 The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
                 This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
-
-        stop_when: An optional condition to stop agent execution.
-
-            Can be passed in as:
-
-                - `StepCountIs(count=N)`: Stop execution after exactly N model calls
-                - A callable with signature `(state) -> bool`: Custom stop condition that returns True when execution should stop
-
-            When a stop condition is met, the agent will halt further execution and return the current state.
-            If using `StepCountIs`, the state will include a `model_calls` field tracking the number of model invocations.
 
         pre_model_hook: An optional node to add before the `agent` node (i.e., the node that calls the LLM).
             Useful for managing long message histories (e.g., message trimming, summarization, etc.).
@@ -1141,7 +1081,6 @@ def create_react_agent(
         tools=tools,
         prompt=prompt,
         response_format=response_format,
-        stop_when=stop_when,
         pre_model_hook=pre_model_hook,
         post_model_hook=post_model_hook,
         state_schema=state_schema,
@@ -1174,5 +1113,4 @@ __all__ = [
     "AgentStatePydantic",
     "AgentStateWithStructuredResponse",
     "AgentStateWithStructuredResponsePydantic",
-    "StepCountIs",
 ]
