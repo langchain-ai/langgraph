@@ -780,7 +780,7 @@ class AgentStateExtraKeyPydantic(AgentStatePydantic):
     foo: int
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+@pytest.mark.parametrize("version", ["v1", "v2"])
 @pytest.mark.parametrize(
     "state_schema", [AgentStateExtraKey, AgentStateExtraKeyPydantic]
 )
@@ -795,6 +795,9 @@ def test_create_react_agent_inject_vars(
     use_individual_tool_nodes: bool,
 ) -> None:
     """Test that the agent can inject state and store into tool functions."""
+    if version == "v1" and use_individual_tool_nodes:
+        pytest.skip("v1 does not support individual tool nodes")
+
     store = InMemoryStore()
     namespace = ("test",)
     store.put(namespace, "test_key", {"bar": 3})
@@ -983,6 +986,9 @@ def test_tool_node_messages_key() -> None:
 async def test_return_direct(
     version: Literal["v1", "v2"], use_individual_tool_nodes: bool
 ) -> None:
+    if version == "v1" and use_individual_tool_nodes:
+        pytest.skip("v1 does not support individual tool nodes")
+
     @dec_tool(return_direct=True)
     def tool_return_direct(input: str) -> str:
         """A tool that returns directly."""
@@ -1121,6 +1127,10 @@ def test_react_with_subgraph_tools(
     version: Literal["v1", "v2"],
     use_individual_tool_nodes: bool,
 ) -> None:
+    """Test React agent with subgraph tools."""
+    if version == "v1" and use_individual_tool_nodes:
+        pytest.skip("v1 does not support individual tool nodes")
+
     class State(TypedDict):
         a: int
         b: int
@@ -1262,8 +1272,17 @@ def test_tool_node_stream_writer() -> None:
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_react_agent_subgraph_streaming_sync(version: Literal["v1", "v2"]) -> None:
+@pytest.mark.parametrize(
+    "use_individual_tool_nodes",
+    [False, True],
+    ids=["single_tool_node", "node_per_tool"],
+)
+def test_react_agent_subgraph_streaming_sync(
+    version: Literal["v1", "v2"], use_individual_tool_nodes: bool
+) -> None:
     """Test React agent streaming when used as a subgraph node sync version"""
+    if version == "v1" and use_individual_tool_nodes:
+        pytest.skip("v1 does not support individual tool nodes")
 
     @dec_tool
     def get_weather(city: str) -> str:
@@ -1283,6 +1302,7 @@ def test_react_agent_subgraph_streaming_sync(version: Literal["v1", "v2"]) -> No
         tools=[get_weather],
         prompt="You are a helpful travel assistant.",
         version=version,
+        use_individual_tool_nodes=use_individual_tool_nodes,
     )
 
     # Create a subgraph that uses the React agent as a node

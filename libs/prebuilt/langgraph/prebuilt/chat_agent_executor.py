@@ -278,7 +278,15 @@ class _AgentBuilder:
         name: Optional[str] = None,
         store: Optional[BaseStore] = None,
         use_individual_tool_nodes: bool = False,
-    ):
+    ) -> None:
+        """Initialize the agent builder."""
+        if version == "v1" and use_individual_tool_nodes:
+            # This edge case is ill-defined. "v1" refers specifically to a single
+            # tools node that handles all tool calls.
+            raise AssertionError(
+                "The 'use_individual_tool_nodes' option is only supported "
+                "in version 'v2' agents."
+            )
         self.model = model
         self.tools = tools
         self.prompt = prompt
@@ -601,7 +609,8 @@ class _AgentBuilder:
                             for call in last_message.tool_calls
                         ]
                         return [
-                            Send(tool_call["name"], [state]) for tool_call in tool_calls
+                            Send(tool_call["name"], [tool_call])
+                            for tool_call in tool_calls
                         ]
                     else:
                         # Use the original combined tools node
