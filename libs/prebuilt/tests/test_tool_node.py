@@ -1483,7 +1483,6 @@ def test_tool_node_stream_writer() -> None:
     ]
 
 
-
 async def test_structured_output_tools():
     """Test that ToolNode handles Pydantic model classes as structured output tools."""
 
