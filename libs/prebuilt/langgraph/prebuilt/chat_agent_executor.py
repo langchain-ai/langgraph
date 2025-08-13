@@ -719,7 +719,7 @@ class _AgentBuilder:
         if self._tool_calling_enabled:
             if self._use_individual_tool_nodes:
                 paths = [self._get_entry_point()] + [
-                    "tool.name" for tool in self._tool_classes
+                    tool.name for tool in self._tool_classes
                 ]
             else:
                 paths = [self._get_entry_point(), "tools"]
