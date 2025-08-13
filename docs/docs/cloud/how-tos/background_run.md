@@ -2,7 +2,7 @@
  
 
 This guide covers how to kick off background runs for your agent.
-This can be useful for long running jobs.
+This can be useful for long-running jobs.
 
 ## Setup
 
