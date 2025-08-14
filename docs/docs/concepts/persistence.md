@@ -17,7 +17,7 @@ LangGraph has a built-in persistence layer, implemented through checkpointers. W
 
 A thread is a unique ID or thread identifier assigned to each checkpoint saved by a checkpointer. It contains the accumulated state of a sequence of [runs](./assistants.md#execution). When a run is executed, the [state](../concepts/low_level.md#state) of the underlying graph of the assistant will be persisted to the thread.
 
-When invoking a graph with a checkpointer, you **must** specify a `thread_id` as part of the `configurable` portion of the config:
+When invoking a graph with a checkpointer, you **must** specify a `thread_id` as part of the `configurable` portion of the config. The config parameter should be of type `RunnableConfig`:
 
 :::python
 
@@ -60,6 +60,7 @@ Let's see what checkpoints are saved when a simple graph is invoked as follows:
 ```python
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
+from langchain_core.runnables import RunnableConfig
 from typing import Annotated
 from typing_extensions import TypedDict
 from operator import add
@@ -85,7 +86,7 @@ workflow.add_edge("node_b", END)
 checkpointer = InMemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
 
-config = {"configurable": {"thread_id": "1"}}
+config: RunnableConfig = {"configurable": {"thread_id": "1"}}
 graph.invoke({"foo": ""}, config)
 ```
 
