@@ -238,7 +238,7 @@ class ToolOutput(Generic[TModel]):
 
     schemas: Sequence[SchemaType]
     """The schema of the structured output the model may return."""
-    tool_choice: bool = True
+    tool_choice: Literal["required", "auto"] = "required"
     """Whether to use the tools strategy for structured output."""
 
 
