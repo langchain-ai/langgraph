@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import inspect
-from dataclasses import dataclass
 from typing import (
     Any,
     Awaitable,
     Callable,
-    Generic,
     Literal,
     Optional,
     Sequence,
@@ -38,9 +36,6 @@ from langchain_core.runnables import (
 )
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as create_tool
-from pydantic import BaseModel
-from typing_extensions import Annotated, NotRequired, TypedDict
-
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
 from langgraph.errors import ErrorCode, create_error_message
@@ -48,16 +43,20 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import RemainingSteps
+from langgraph.runtime import Runtime
+from langgraph.store.base import BaseStore
+from langgraph.types import Checkpointer, Command, Send
+from langgraph.warnings import LangGraphDeprecatedSinceV10
+from pydantic import BaseModel
+from typing_extensions import Annotated, NotRequired, TypedDict
+
 from langgraph.prebuilt._internal._typing import (
     ContextT,
     PreConfiguredChatModel,
     SyncOrAsync,
 )
+from langgraph.prebuilt.responses import UsingToolStrategy
 from langgraph.prebuilt.tool_node import ToolNode
-from langgraph.runtime import Runtime
-from langgraph.store.base import BaseStore
-from langgraph.types import Checkpointer, Command, Send
-from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 BASE_MODEL_DOC = BaseModel.__doc__
 
@@ -227,21 +226,6 @@ class _StructuredToolInfo(TypedDict):
     """LangChain tool instance created from the schema for model binding."""
 
 
-TModel = TypeVar("TModel", bound=BaseModel)
-# Keep dict as an option too
-SchemaType = Union[dict, Type[TModel]]
-
-
-@dataclass(frozen=True)
-class ToolOutput(Generic[TModel]):
-    """Structured output format for model responses."""
-
-    schemas: Sequence[SchemaType]
-    """The schema of the structured output the model may return."""
-    tool_choice: Literal["required", "auto"] = "required"
-    """Whether to use the tools strategy for structured output."""
-
-
 class _AgentBuilder:
     """Internal builder class for constructing and agent."""
 
@@ -260,7 +244,7 @@ class _AgentBuilder:
         tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
         *,
         prompt: Optional[Prompt] = None,
-        response_format: Optional[ToolOutput] = None,
+        response_format: Optional[..] = None,
         pre_model_hook: Optional[RunnableLike] = None,
         post_model_hook: Optional[RunnableLike] = None,
         state_schema: Optional[StateSchemaType] = None,
@@ -352,7 +336,7 @@ class _AgentBuilder:
             response_format = self.response_format
 
             # Handle ToolOutput wrapper
-            if isinstance(response_format, ToolOutput):
+            if isinstance(response_format, UsingToolStrategy):
                 # Use tools strategy - process each schema in the ToolOutput
                 for schema in response_format.schemas:
                     kwargs = {}
@@ -938,7 +922,7 @@ def create_react_agent(
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
-    response_format: Optional[ToolOutput] = None,
+    response_format: Optional[UsingToolStrategy] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
