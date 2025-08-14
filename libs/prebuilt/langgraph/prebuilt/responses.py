@@ -13,9 +13,6 @@ from pydantic import BaseModel
 SchemaT = TypeVar("SchemaT", bound=type[BaseModel])
 Schema = TypeVar("Schema", bound=BaseModel)
 
-# Used to detect default BaseModel docstring
-BASE_MODEL_DOC = BaseModel.__doc__
-
 ToolChoice = Literal["required", "auto"]
 """Required: model must call a tool; auto: model may respond with free text."""
 
