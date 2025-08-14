@@ -686,57 +686,6 @@ class _AgentBuilder:
         else:
             return self._final_state_schema
 
-    def create_structured_response_node(self) -> Optional[RunnableCallable]:
-        """Create the 'generate_structured_response' node if configured."""
-        if self.response_format is None:
-            return None
-
-        def generate_structured_response(
-            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-        ) -> StateSchema:
-            if self._is_async_dynamic_model:
-                raise RuntimeError(
-                    "Async model callable provided but agent invoked synchronously. "
-                    "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
-                )
-
-            messages = _get_state_value(state, "messages")
-            structured_response_schema = self.response_format
-            if isinstance(self.response_format, tuple):
-                system_prompt, structured_response_schema = self.response_format
-                messages = [SystemMessage(content=system_prompt)] + list(messages)
-
-            resolved_model = self._resolve_model(state, runtime)
-            model_with_structured_output = _get_model(
-                resolved_model
-            ).with_structured_output(
-                cast(StructuredResponseSchema, structured_response_schema)
-            )
-            response = model_with_structured_output.invoke(messages, config)
-            return {"structured_response": response}
-
-        async def agenerate_structured_response(
-            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-        ) -> StateSchema:
-            messages = _get_state_value(state, "messages")
-            structured_response_schema = self.response_format
-            if isinstance(self.response_format, tuple):
-                system_prompt, structured_response_schema = self.response_format
-                messages = [SystemMessage(content=system_prompt)] + list(messages)
-
-            resolved_model = await self._aresolve_model(state, runtime)
-            model_with_structured_output = _get_model(
-                resolved_model
-            ).with_structured_output(
-                cast(StructuredResponseSchema, structured_response_schema)
-            )
-            response = await model_with_structured_output.ainvoke(messages, config)
-            return {"structured_response": response}
-
-        return RunnableCallable(
-            generate_structured_response, agenerate_structured_response
-        )
-
     def create_model_router(self) -> Callable[[StateSchema], Union[str, list[Send]]]:
         """Create routing function for model node conditional edges."""
 
@@ -1058,25 +1007,21 @@ def create_react_agent(
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
 
-        response_format: An optional schema for the final agent output.
+        response_format: An optional ToolOutput configuration for structured responses.
 
-            If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
+            If provided, the agent will handle structured output via tool calls during the normal conversation flow.
+            When the model calls a structured output tool, the response will be captured and returned in the 'structured_response' state key.
             If not provided, `structured_response` will not be present in the output state.
-            Can be passed in as:
 
-                - an OpenAI function/tool schema,
-                - a JSON Schema,
-                - a TypedDict class,
-                - or a Pydantic class.
-                - a tuple (prompt, schema), where schema is one of the above.
-                    The prompt will be used together with the model that is being used to generate the structured response.
+            The ToolOutput should contain:
+                - schemas: A sequence of Pydantic models or dict schemas that define the structured output format
+                - tool_choice: Whether to force the model to use one of the structured output tools (default: True)
 
             !!! Important
-                `response_format` requires the model to support `.with_structured_output`
+                `response_format` requires the model to support tool calling
 
             !!! Note
-                The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
-                This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
+                Structured responses are now handled directly in the model call node via tool calls, eliminating the need for separate structured response nodes.
 
         pre_model_hook: An optional node to add before the `agent` node (i.e., the node that calls the LLM).
             Useful for managing long message histories (e.g., message trimming, summarization, etc.).
