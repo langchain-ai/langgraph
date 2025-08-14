@@ -377,9 +377,8 @@ class _AgentBuilder:
                     self._tool_classes + self._llm_builtin_tools  # type: ignore[operator]
                 )
 
-            self._static_model: Optional[Runnable] = (
-                _get_prompt_runnable(self.prompt) | model  # type: ignore[operator]
-            )
+            # Extract just the model part for direct invocation
+            self._static_model: Optional[Runnable] = model  # type: ignore[assignment]
         else:
             self._static_model = None
 
@@ -388,7 +387,7 @@ class _AgentBuilder:
     ) -> LanguageModelLike:
         """Resolve the model to use, handling both static and dynamic models."""
         if self._is_dynamic_model:
-            return _get_prompt_runnable(self.prompt) | self.model(state, runtime)  # type: ignore[arg-type, operator]
+            return self.model(state, runtime)  # type: ignore[operator, arg-type]
         else:
             return self._static_model
 
@@ -402,9 +401,9 @@ class _AgentBuilder:
                 self.model,
             )
             resolved_model = await dynamic_model(state, runtime)
-            return _get_prompt_runnable(self.prompt) | resolved_model
+            return resolved_model
         elif self._is_dynamic_model:
-            return _get_prompt_runnable(self.prompt) | self.model(state, runtime)  # type: ignore[arg-type,operator]
+            return self.model(state, runtime)  # type: ignore[arg-type, operator]
         else:
             return self._static_model
 
@@ -470,7 +469,13 @@ class _AgentBuilder:
 
             model_input = _get_model_input_state(state)
             model = self._resolve_model(state, runtime)
-            response = cast(AIMessage, model.invoke(model_input, config))  # type: ignore[arg-type]
+
+            # Get prompt runnable and invoke it first to prepare messages
+            prompt_runnable = _get_prompt_runnable(self.prompt)
+            prepared_messages = prompt_runnable.invoke(model_input, config)
+
+            # Then invoke the model with the prepared messages
+            response = cast(AIMessage, model.invoke(prepared_messages, config))
             response.name = self.name
 
             if _are_more_steps_needed(state, response):
@@ -490,9 +495,15 @@ class _AgentBuilder:
             model_input = _get_model_input_state(state)
 
             model = await self._aresolve_model(state, runtime)
+
+            # Get prompt runnable and invoke it first to prepare messages
+            prompt_runnable = _get_prompt_runnable(self.prompt)
+            prepared_messages = await prompt_runnable.ainvoke(model_input, config)
+
+            # Then invoke the model with the prepared messages
             response = cast(
                 AIMessage,
-                await model.ainvoke(model_input, config),  # type: ignore[arg-type]
+                await model.ainvoke(prepared_messages, config),
             )
             response.name = self.name
             if _are_more_steps_needed(state, response):
