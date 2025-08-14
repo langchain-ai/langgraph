@@ -109,10 +109,6 @@ class OutputToolBinding(Generic[Schema]):
         kwargs = {}
         schema_kind: Literal["pydantic"]
 
-        # Use custom name if provided, otherwise use schema name
-        if schema_spec.name:
-            kwargs["name"] = schema_spec.name
-
         # Use custom description if provided
         if schema_spec.description:
             kwargs["description"] = schema_spec.description
@@ -127,7 +123,7 @@ class OutputToolBinding(Generic[Schema]):
             )
 
         if schema_spec.name is not None:
-            tool_creator = create_tool(schema.name)
+            tool_creator = create_tool(schema_spec.name)
         else:
             tool_creator = create_tool
         tool = tool_creator(schema, **kwargs)
