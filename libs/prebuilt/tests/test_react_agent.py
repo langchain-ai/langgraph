@@ -1837,3 +1837,40 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_response_format_using_tool_choice(version: Literal["v1", "v2"]) -> None:
+    """Test response format using tool choice."""
+
+    class WeatherResponse(BaseModel):
+        temperature: float = Field(description="The temperature in fahrenheit")
+
+    tool_calls: list[list[ToolCall]] = [
+        [{"args": {}, "id": "1", "name": "get_weather"}],
+        [{"args": {"temperature": "75"}, "id": "2", "name": "WeatherResponse"}],
+    ]
+
+    def get_weather() -> str:
+        """Get the weather"""
+        return "The weather is sunny and 75°F."
+
+    expected_structured_response = WeatherResponse(temperature=75)
+    model = FakeToolCallingModel(tool_calls=tool_calls)
+    agent = create_react_agent(
+        model,
+        [get_weather],
+        response_format=WeatherResponse,
+        version=version,
+    )
+    response = agent.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What's the weather?",
+                }
+            ]
+        }
+    )
+    assert response.get("structured_response") == expected_structured_response

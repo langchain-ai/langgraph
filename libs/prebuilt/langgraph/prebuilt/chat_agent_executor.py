@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import dataclass
 from typing import (
     Any,
     Awaitable,
     Callable,
+    Generic,
     Literal,
     Optional,
     Sequence,
@@ -35,6 +37,7 @@ from langchain_core.runnables import (
     RunnableSequence,
 )
 from langchain_core.tools import BaseTool
+from langchain_core.tools import tool as create_tool
 from pydantic import BaseModel
 from typing_extensions import Annotated, NotRequired, TypedDict
 
@@ -53,11 +56,14 @@ from langgraph.prebuilt._internal._typing import (
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
-from langgraph.types import Checkpointer, Send
+from langgraph.types import Checkpointer, Command, Send
 from langgraph.warnings import LangGraphDeprecatedSinceV10
+
+BASE_MODEL_DOC = BaseModel.__doc__
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
+
 F = TypeVar("F", bound=Callable[..., Any])
 
 
@@ -95,6 +101,7 @@ class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
 
 StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
 StateSchemaType = Type[StateSchema]
+
 
 PROMPT_RUNNABLE_NAME = "Prompt"
 
@@ -204,8 +211,39 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
+class _StructuredToolInfo(TypedDict):
+    """Internal type for tracking structured output tool metadata.
+
+    This contains all necessary information to handle structured responses
+    generated via tool calls, including the original schema, its type classification,
+    and the corresponding tool implementation used by the tools strategy.
+    """
+
+    schema: StructuredResponseSchema
+    """The original schema provided for structured output (Pydantic model or dict schema)."""
+    kind: Literal["pydantic", "dict"]
+    """Classification of the schema type for proper response construction."""
+    tool: BaseTool
+    """LangChain tool instance created from the schema for model binding."""
+
+
+TModel = TypeVar("TModel", bound=BaseModel)
+# Keep dict as an option too
+SchemaType = Union[dict, Type[TModel]]
+
+
+@dataclass(frozen=True)
+class ToolOutput(Generic[TModel]):
+    """Structured output format for model responses."""
+
+    schemas: Sequence[SchemaType]
+    """The schema of the structured output the model may return."""
+    tool_choice: bool = True
+    """Whether to use the tools strategy for structured output."""
+
+
 class _AgentBuilder:
-    """Internal builder class for constructing React agents with intuitive method-to-node mapping."""
+    """Internal builder class for constructing and agent."""
 
     def __init__(
         self,
@@ -222,9 +260,7 @@ class _AgentBuilder:
         tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
         *,
         prompt: Optional[Prompt] = None,
-        response_format: Optional[
-            Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
-        ] = None,
+        response_format: Optional[ToolOutput] = None,
         pre_model_hook: Optional[RunnableLike] = None,
         post_model_hook: Optional[RunnableLike] = None,
         state_schema: Optional[StateSchemaType] = None,
@@ -279,6 +315,7 @@ class _AgentBuilder:
 
         self._setup_tools()
         self._setup_state_schema()
+        self._setup_structured_output_tools()
         self._setup_model()
 
     def _setup_tools(self) -> None:
@@ -298,6 +335,65 @@ class _AgentBuilder:
             t.name for t in self._tool_classes if t.return_direct
         }
         self._tool_calling_enabled = len(self._tool_classes) > 0
+
+    def _setup_structured_output_tools(self) -> None:
+        """Set up structured output tools tracking for the tools strategy.
+
+        This method implements the "tools" strategy for structured output by:
+        1. Converting response format schemas to LangChain tools
+        2. Creating metadata for proper response reconstruction
+        3. Handling both Pydantic models and dict schemas
+
+        Future strategies (json_mode, guided) will have separate setup methods.
+        """
+        self.structured_output_tools: dict[str, _StructuredToolInfo] = {}
+        if self.response_format is not None:
+            response_format = self.response_format
+
+            # Handle ToolOutput wrapper
+            if isinstance(response_format, ToolOutput):
+                # Use tools strategy - process each schema in the ToolOutput
+                for schema in response_format.schemas:
+                    kwargs = {}
+                    if isinstance(schema, type) and issubclass(schema, BaseModel):
+                        # Patch for behavior in langchain-core for vanilla BaseModel
+                        description = (
+                            "" if schema.__doc__ == BASE_MODEL_DOC else schema.__doc__
+                        )
+                        kwargs = {"description": description}
+                        kind: Literal["pydantic", "dict"] = "pydantic"
+                    else:
+                        kind = "dict"
+
+                    tool = create_tool(schema, **kwargs)
+                    self.structured_output_tools[tool.name] = _StructuredToolInfo(
+                        schema=schema,
+                        kind=kind,
+                        tool=tool,
+                    )
+            else:
+                # Handle legacy format (direct schema or tuple)
+                if isinstance(response_format, tuple):
+                    _, schema = response_format
+                else:
+                    schema = response_format
+                kwargs = {}
+                if isinstance(schema, type) and issubclass(schema, BaseModel):
+                    # Patch for behavior in langchain-core for vanilla BaseModel
+                    description = (
+                        "" if schema.__doc__ == BASE_MODEL_DOC else schema.__doc__
+                    )
+                    kwargs = {"description": description}
+                    kind: Literal["pydantic", "dict"] = "pydantic"
+                else:
+                    kind = "dict"
+
+                tool = create_tool(schema, **kwargs)
+                self.structured_output_tools[tool.name] = _StructuredToolInfo(
+                    schema=schema,
+                    kind=kind,
+                    tool=tool,
+                )
 
     def _setup_state_schema(self) -> None:
         """Setup state schema with validation."""
@@ -319,6 +415,69 @@ class _AgentBuilder:
                 if self.response_format is not None
                 else AgentState
             )
+
+    def _handle_structured_response_tool_calls(
+        self, response: AIMessage
+    ) -> Optional[Command]:
+        """Handle tool calls that match structured output tools using the tools strategy.
+
+        Args:
+            response: The AI message containing potential tool calls
+
+        Returns:
+            Command with structured response update if found, None otherwise
+
+        Raises:
+            AssertionError: If multiple structured responses are returned
+        """
+        if not response.tool_calls:
+            return None
+
+        structured_tool_calls = [
+            tool_call
+            for tool_call in response.tool_calls
+            if tool_call["name"] in self.structured_output_tools
+        ]
+
+        if len(structured_tool_calls) > 1:
+            raise AssertionError(
+                "Model incorrectly returned multiple structured responses. "
+                "Behavior has not yet been defined in this case."
+            )
+
+        if len(structured_tool_calls) == 1:
+            tool_call = structured_tool_calls[0]
+            messages = [
+                response,
+                ToolMessage(
+                    content="ok!",
+                    tool_call_id=tool_call["id"],
+                    name=tool_call["name"],
+                ),
+            ]
+            structured_tool_info = self.structured_output_tools[tool_call["name"]]
+            args = tool_call["args"]
+
+            if structured_tool_info["kind"] == "pydantic":
+                schema = structured_tool_info["schema"]
+                structured_response = schema(**args)
+            elif structured_tool_info["kind"] == "dict":
+                structured_response = tool_call["args"]
+            else:
+                msg = (
+                    f"Internal error: Unsupported structured "
+                    f"response kind: {structured_tool_info['kind']}"
+                )
+                raise AssertionError(msg)
+
+            return Command(
+                update={
+                    "messages": messages,
+                    "structured_response": structured_response,
+                }
+            )
+
+        return None
 
     def _setup_model(self) -> None:
         """Setup model-related attributes."""
@@ -346,7 +505,6 @@ class _AgentBuilder:
                 model = cast(BaseChatModel, model).bind_tools(
                     self._tool_classes + self._llm_builtin_tools  # type: ignore[operator]
                 )
-
             # Extract just the model part for direct invocation
             self._static_model: Optional[Runnable] = model  # type: ignore[assignment]
         else:
@@ -404,7 +562,8 @@ class _AgentBuilder:
             if isinstance(self._final_state_schema, type) and issubclass(
                 self._final_state_schema, BaseModel
             ):
-                # we're passing messages under `messages` key, as this is expected by the prompt
+                # we're passing messages under `messages` key, as this
+                # is expected by the prompt
                 state.messages = messages  # type: ignore
             else:
                 state["messages"] = messages  # type: ignore
@@ -430,7 +589,8 @@ class _AgentBuilder:
 
         def call_model(
             state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-        ) -> StateSchema:
+        ) -> dict[str, Any] | Command:
+            """Call the model with the current state and return the response."""
             if self._is_async_dynamic_model:
                 raise RuntimeError(
                     "Async model callable provided but agent invoked synchronously. "
@@ -457,11 +617,18 @@ class _AgentBuilder:
                         )
                     ]
                 }
+
+            # Check if any tool calls match structured output tools
+            structured_command = self._handle_structured_response_tool_calls(response)
+            if structured_command:
+                return structured_command
+
             return {"messages": [response]}
 
         async def acall_model(
             state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-        ) -> StateSchema:
+        ) -> dict[str, Any] | Command:
+            """Call the model with the current state and return the response."""
             model_input = _get_model_input_state(state)
 
             model = await self._aresolve_model(state, runtime)
@@ -485,6 +652,12 @@ class _AgentBuilder:
                         )
                     ]
                 }
+
+            # Check if any tool calls match structured output tools
+            structured_command = self._handle_structured_response_tool_calls(response)
+            if structured_command:
+                return structured_command
+
             return {"messages": [response]}
 
         return RunnableCallable(call_model, acall_model)
@@ -572,8 +745,6 @@ class _AgentBuilder:
             if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
                 if self.post_model_hook is not None:
                     return "post_model_hook"
-                elif self.response_format is not None:
-                    return "generate_structured_response"
                 else:
                     return END
             else:
@@ -606,7 +777,7 @@ class _AgentBuilder:
     def create_post_model_hook_router(
         self,
     ) -> Callable[[StateSchema], Union[str, list[Send]]]:
-        """Create routing function for post_model_hook node conditional edges."""
+        """Create a routing function for post_model_hook node conditional edges."""
 
         def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
             messages = _get_state_value(state, "messages")
@@ -639,15 +810,13 @@ class _AgentBuilder:
                     ]
             elif isinstance(messages[-1], ToolMessage):
                 return self._get_entry_point()
-            elif self.response_format is not None:
-                return "generate_structured_response"
             else:
                 return END
 
         return post_model_hook_router
 
     def create_tools_router(self) -> Optional[Callable[[StateSchema], str]]:
-        """Create routing function for tools node conditional edges."""
+        """Create a routing function for tools node conditional edges."""
         if not self._should_return_direct:
             return None
 
@@ -696,11 +865,7 @@ class _AgentBuilder:
                 paths.extend([tool.name for tool in self._tool_classes])
             else:
                 paths.append("tools")
-        if self.response_format:
-            paths.append("generate_structured_response")
-        else:
-            paths.append(END)
-
+        paths.append(END)
         return paths
 
     def _get_post_model_hook_paths(self) -> list[str]:
@@ -713,10 +878,7 @@ class _AgentBuilder:
                 ]
             else:
                 paths = [self._get_entry_point(), "tools"]
-        if self.response_format is not None:
-            paths.append("generate_structured_response")
-        else:
-            paths.append(END)
+        paths.append(END)
         return paths
 
     def build(
@@ -751,10 +913,6 @@ class _AgentBuilder:
 
         if self.post_model_hook:
             workflow.add_node("post_model_hook", self.post_model_hook)  # type: ignore[arg-type]
-
-        structured_node = self.create_structured_response_node()
-        if structured_node:
-            workflow.add_node("generate_structured_response", structured_node)
 
         # Add edges
         if self.pre_model_hook:
