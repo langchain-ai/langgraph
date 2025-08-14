@@ -4,7 +4,6 @@ import pytest
 from pydantic import BaseModel
 
 from langgraph.prebuilt.responses import (
-    BASE_MODEL_DOC,
     OutputToolBinding,
     ResponseFormat,
     SchemaSpec,
