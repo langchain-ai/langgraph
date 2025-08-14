@@ -35,7 +35,9 @@ from langchain_core.runnables import (
     RunnableSequence,
 )
 from langchain_core.tools import BaseTool
-from langchain_core.tools import tool as create_tool
+from pydantic import BaseModel
+from typing_extensions import Annotated, NotRequired, TypedDict
+
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
 from langgraph.errors import ErrorCode, create_error_message
@@ -43,22 +45,23 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import RemainingSteps
-from langgraph.runtime import Runtime
-from langgraph.store.base import BaseStore
-from langgraph.types import Checkpointer, Command, Send
-from langgraph.warnings import LangGraphDeprecatedSinceV10
-from pydantic import BaseModel
-from typing_extensions import Annotated, NotRequired, TypedDict
-
 from langgraph.prebuilt._internal._typing import (
     ContextT,
     PreConfiguredChatModel,
     SyncOrAsync,
 )
-from langgraph.prebuilt.responses import UsingToolStrategy
+from langgraph.prebuilt.responses import (
+    ResponseFormat,
+    ResponseSchema,
+    StructuredToolInfo,
+    UsingToolStrategy,
+)
 from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.runtime import Runtime
+from langgraph.store.base import BaseStore
+from langgraph.types import Checkpointer, Command, Send
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
-BASE_MODEL_DOC = BaseModel.__doc__
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
@@ -210,22 +213,6 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-class _StructuredToolInfo(TypedDict):
-    """Internal type for tracking structured output tool metadata.
-
-    This contains all necessary information to handle structured responses
-    generated via tool calls, including the original schema, its type classification,
-    and the corresponding tool implementation used by the tools strategy.
-    """
-
-    schema: StructuredResponseSchema
-    """The original schema provided for structured output (Pydantic model or dict schema)."""
-    kind: Literal["pydantic"]
-    """Classification of the schema type for proper response construction."""
-    tool: BaseTool
-    """LangChain tool instance created from the schema for model binding."""
-
-
 class _AgentBuilder:
     """Internal builder class for constructing and agent."""
 
@@ -244,7 +231,7 @@ class _AgentBuilder:
         tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
         *,
         prompt: Optional[Prompt] = None,
-        response_format: Optional[..] = None,
+        response_format: Optional[ResponseFormat] = None,
         pre_model_hook: Optional[RunnableLike] = None,
         post_model_hook: Optional[RunnableLike] = None,
         state_schema: Optional[StateSchemaType] = None,
@@ -330,55 +317,22 @@ class _AgentBuilder:
 
         Future strategies (json_mode, guided) will have separate setup methods.
         """
-        self.structured_output_tools: dict[str, _StructuredToolInfo] = {}
-        kind: Literal["pydantic", "dict"]
+        self.structured_output_tools: dict[str, StructuredToolInfo] = {}
         if self.response_format is not None:
             response_format = self.response_format
 
-            # Handle ToolOutput wrapper
+            # Handle UsingToolStrategy wrapper
             if isinstance(response_format, UsingToolStrategy):
-                # Use tools strategy - process each schema in the ToolOutput
-                for schema in response_format.schemas:
-                    kwargs = {}
-                    if isinstance(schema, type) and issubclass(schema, BaseModel):
-                        # Patch for behavior in langchain-core for vanilla BaseModel
-                        description = (
-                            "" if schema.__doc__ == BASE_MODEL_DOC else schema.__doc__
-                        )
-                        kwargs = {"description": description}
-                        kind = "pydantic"
-                    else:
-                        kind = "dict"
-
-                    tool = create_tool(schema, **kwargs)
-                    self.structured_output_tools[tool.name] = _StructuredToolInfo(
-                        schema=schema,
-                        kind=kind,
-                        tool=tool,
-                    )
+                # Use tools strategy - process each ResponseSchema in the UsingToolStrategy
+                for response_schema in response_format.schemas:
+                    # Use the factory method to create StructuredToolInfo
+                    structured_tool_info = StructuredToolInfo.from_response_schema(response_schema)
+                    self.structured_output_tools[structured_tool_info.tool.name] = structured_tool_info
             else:
-                # TODO(Eugene): Do we break this code path or can we support it well?
-                # Handle legacy format (direct schema or tuple)
-                if isinstance(response_format, tuple):
-                    _, schema = response_format
-                else:
-                    schema = response_format
-                kwargs = {}
-                if isinstance(schema, type) and issubclass(schema, BaseModel):
-                    # Patch for behavior in langchain-core for vanilla BaseModel
-                    description = (
-                        "" if schema.__doc__ == BASE_MODEL_DOC else schema.__doc__
-                    )
-                    kwargs = {"description": description}
-                    kind = "pydantic"
-                else:
-                    kind = "dict"
-
-                tool = create_tool(schema, **kwargs)
-                self.structured_output_tools[tool.name] = _StructuredToolInfo(
-                    schema=schema,
-                    kind=kind,
-                    tool=tool,
+                # This shouldn't happen with the new ResponseFormat type, but keeping for safety
+                raise ValueError(
+                    f"Unsupported response_format type: {type(response_format)}. "
+                    f"Expected UsingToolStrategy."
                 )
 
     def _setup_state_schema(self) -> None:
@@ -444,17 +398,14 @@ class _AgentBuilder:
             structured_tool_info = self.structured_output_tools[tool_call["name"]]
             args = tool_call["args"]
 
-            if structured_tool_info["kind"] == "pydantic":
-                schema = structured_tool_info["schema"]
-                structured_response = schema(**args)  # type: ignore[operator]
-            elif structured_tool_info["kind"] == "dict":
-                structured_response = tool_call["args"]
-            else:
-                msg = (
-                    f"Internal error: Unsupported structured "
-                    f"response kind: {structured_tool_info['kind']}"
-                )
-                raise AssertionError(msg)
+            # Use the coercion logic from the StructuredToolInfo dataclass
+            try:
+                structured_response = structured_tool_info.coerce_response(args)
+            except ValueError as e:
+                # Convert ValueError to AssertionError to maintain existing error handling
+                raise AssertionError(
+                    f"Failed to coerce structured response: {e}"
+                ) from e
 
             return Command(
                 update={
@@ -487,10 +438,30 @@ class _AgentBuilder:
                     )
                 model = init_chat_model(model)
 
-            if len(self._tool_classes + self._llm_builtin_tools) > 0:
-                model = cast(BaseChatModel, model).bind_tools(
-                    self._tool_classes + self._llm_builtin_tools  # type: ignore[operator]
-                )
+            # Collect all tools: regular tools + structured output tools
+            structured_output_tools = list(self.structured_output_tools.values())
+            all_tools = (
+                self._tool_classes
+                + self._llm_builtin_tools
+                + [info.tool for info in structured_output_tools]
+            )
+
+            if len(all_tools) > 0:
+                # Check if we need to force tool use for structured output
+                tool_choice = None
+                if (
+                    self.response_format is not None
+                    and isinstance(self.response_format, UsingToolStrategy)
+                    and self.response_format.tool_choice == "required"
+                ):
+                    tool_choice = "any"
+
+                if tool_choice:
+                    model = cast(BaseChatModel, model).bind_tools(
+                        all_tools, tool_choice=tool_choice
+                    )
+                else:
+                    model = cast(BaseChatModel, model).bind_tools(all_tools)
             # Extract just the model part for direct invocation
             self._static_model: Optional[Runnable] = model  # type: ignore[assignment]
         else:
@@ -991,21 +962,27 @@ def create_react_agent(
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
 
-        response_format: An optional ToolOutput configuration for structured responses.
+        response_format: An optional UsingToolStrategy configuration for structured responses.
 
             If provided, the agent will handle structured output via tool calls during the normal conversation flow.
             When the model calls a structured output tool, the response will be captured and returned in the 'structured_response' state key.
             If not provided, `structured_response` will not be present in the output state.
 
-            The ToolOutput should contain:
-                - schemas: A sequence of Pydantic models or dict schemas that define the structured output format
-                - tool_choice: Whether to force the model to use one of the structured output tools (default: True)
+            The UsingToolStrategy should contain:
+                - schemas: A sequence of ResponseSchema objects that define the structured output format
+                - tool_choice: Either "required" or "auto" to control when structured output is used
+
+            Each ResponseSchema contains:
+                - schema: A Pydantic model that defines the structure
+                - name: Optional custom name for the tool (defaults to model name)
+                - description: Optional custom description (defaults to model docstring)
+                - strict: Whether to enforce strict validation
 
             !!! Important
                 `response_format` requires the model to support tool calling
 
             !!! Note
-                Structured responses are now handled directly in the model call node via tool calls, eliminating the need for separate structured response nodes.
+                Structured responses are handled directly in the model call node via tool calls, eliminating the need for separate structured response nodes.
 
         pre_model_hook: An optional node to add before the `agent` node (i.e., the node that calls the LLM).
             Useful for managing long message histories (e.g., message trimming, summarization, etc.).
