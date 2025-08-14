@@ -3,7 +3,6 @@ from typing import (
     Any,
     Awaitable,
     Callable,
-    Generic,
     Literal,
     Optional,
     Sequence,
@@ -203,7 +202,7 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-class _AgentBuilder(Generic[ContextT]):
+class _AgentBuilder:
     """Internal builder class for constructing React agents with intuitive method-to-node mapping."""
 
     def __init__(
