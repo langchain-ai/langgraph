@@ -3,6 +3,7 @@ from typing import (
     Any,
     Awaitable,
     Callable,
+    Generic,
     Literal,
     Optional,
     Sequence,
@@ -43,11 +44,15 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import RemainingSteps
+from langgraph.prebuilt._internal._typing import (
+    ContextT,
+    PreConfiguredChatModel,
+    SyncOrAsync,
+)
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
-from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 StructuredResponse = Union[dict, BaseModel]
@@ -144,53 +149,6 @@ def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
     return prompt_runnable
 
 
-def _should_bind_tools(
-    model: LanguageModelLike, tools: Sequence[BaseTool], num_builtin: int = 0
-) -> bool:
-    if isinstance(model, RunnableSequence):
-        model = next(
-            (
-                step
-                for step in model.steps
-                if isinstance(step, (RunnableBinding, BaseChatModel))
-            ),
-            model,
-        )
-
-    if not isinstance(model, RunnableBinding):
-        return True
-
-    if "tools" not in model.kwargs:
-        return True
-
-    bound_tools = model.kwargs["tools"]
-    if len(tools) != len(bound_tools) - num_builtin:
-        raise ValueError(
-            "Number of tools in the model.bind_tools() and tools passed to create_react_agent must match"
-            f" Got {len(tools)} tools, expected {len(bound_tools) - num_builtin}"
-        )
-
-    tool_names = set(tool.name for tool in tools)
-    bound_tool_names = set()
-    for bound_tool in bound_tools:
-        # OpenAI-style tool
-        if bound_tool.get("type") == "function":
-            bound_tool_name = bound_tool["function"]["name"]
-        # Anthropic-style tool
-        elif bound_tool.get("name"):
-            bound_tool_name = bound_tool["name"]
-        else:
-            # unknown tool type so we'll ignore it
-            continue
-
-        bound_tool_names.add(bound_tool_name)
-
-    if missing_tools := tool_names - bound_tool_names:
-        raise ValueError(f"Missing tools '{missing_tools}' in the model.bind_tools()")
-
-    return False
-
-
 def _get_model(model: LanguageModelLike) -> BaseChatModel:
     """Get the underlying model from a RunnableBinding or return the model itself."""
     if isinstance(model, RunnableSequence):
@@ -245,23 +203,19 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-class _AgentBuilder:
+class _AgentBuilder(Generic[ContextT]):
     """Internal builder class for constructing React agents with intuitive method-to-node mapping."""
 
     def __init__(
         self,
         model: Union[
             str,
-            LanguageModelLike,
-            Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
-            Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
-            Callable[
+            BaseChatModel,
+            PreConfiguredChatModel,
+            SyncOrAsync[[StateSchema, Runtime[ContextT]], BaseModel],
+            SyncOrAsync[
                 [StateSchema, Runtime[ContextT]],
-                Runnable[LanguageModelInput, BaseMessage],
-            ],
-            Callable[
-                [StateSchema, Runtime[ContextT]],
-                Awaitable[Runnable[LanguageModelInput, BaseMessage]],
+                Awaitable[PreConfiguredChatModel],
             ],
         ],
         tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
@@ -287,6 +241,28 @@ class _AgentBuilder:
                 "The 'use_individual_tool_nodes' option is only supported "
                 "in version 'v2' agents."
             )
+
+        if isinstance(model, Runnable) and not isinstance(model, BaseChatModel):
+            # Then we allow for a preconfigured model at least for now.
+            if not hasattr(model, "bound") or not isinstance(
+                model.bound, BaseChatModel
+            ):
+                raise TypeError(
+                    "Expected `model` to be a BaseChatModel or a chat model that "
+                    f"was pre-configured using `.bind()`. Instead got {type(model)}"
+                )
+
+            # Then it's a runnable binding. We don't want any pre-bound tools.
+            if (kwargs := getattr(model, "kwargs", {})) and "tools" in kwargs:
+                raise ValueError(
+                    "The `model` parameter should not have pre-bound tools. "
+                    "You are getting this error because the chat model you are using"
+                    "was pre-bound with tools somewhere. The code that binds tools "
+                    "looks like this: `model.bind_tools(...)`. "
+                    "Remove the `bind_tools` call and pass the unbound model "
+                    "and the `tools` parameter separately."
+                )
+
         self.model = model
         self.tools = tools
         self.prompt = prompt
@@ -365,14 +341,7 @@ class _AgentBuilder:
                     )
                 model = init_chat_model(model)
 
-            if (
-                _should_bind_tools(
-                    model,  # type: ignore[arg-type]
-                    self._tool_classes,
-                    num_builtin=len(self._llm_builtin_tools),
-                )
-                and len(self._tool_classes + self._llm_builtin_tools) > 0
-            ):
+            if len(self._tool_classes + self._llm_builtin_tools) > 0:
                 model = cast(BaseChatModel, model).bind_tools(
                     self._tool_classes + self._llm_builtin_tools  # type: ignore[operator]
                 )
@@ -749,7 +718,9 @@ class _AgentBuilder:
             paths.append(END)
         return paths
 
-    def build(self) -> StateGraph:
+    def build(
+        self,
+    ) -> StateGraph:
         """Build the agent workflow graph."""
         workflow = StateGraph(
             state_schema=self._final_state_schema,
@@ -846,15 +817,12 @@ class _AgentBuilder:
 def create_react_agent(
     model: Union[
         str,
-        LanguageModelLike,
-        Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
-        Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
-        Callable[
-            [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]
-        ],
-        Callable[
+        BaseChatModel,
+        PreConfiguredChatModel,
+        SyncOrAsync[[StateSchema, Runtime[ContextT]], BaseModel],
+        SyncOrAsync[
             [StateSchema, Runtime[ContextT]],
-            Awaitable[Runnable[LanguageModelInput, BaseMessage]],
+            Awaitable[PreConfiguredChatModel],
         ],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],

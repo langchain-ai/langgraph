@@ -36,7 +36,6 @@ from langgraph.prebuilt.chat_agent_executor import (
     AgentStatePydantic,
     StateSchemaType,
     _get_model,
-    _should_bind_tools,
     _validate_chat_history,
 )
 from langgraph.prebuilt.tool_node import (
@@ -266,7 +265,7 @@ async def test_prompt_with_store_async():
 @pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 @pytest.mark.parametrize("include_builtin", [True, False])
-def test_model_with_tools(tool_style: str, version: str, include_builtin: bool):
+def test_model_with_tools(tool_style: str, version: str, include_builtin: bool) -> None:
     model = FakeToolCallingModel(tool_style=tool_style)
 
     @dec_tool
@@ -329,13 +328,24 @@ def test_model_with_tools(tool_style: str, version: str, include_builtin: bool):
         assert tool_message.content in {"Tool 1: 2", "Tool 2: 2"}
         assert tool_message.tool_call_id in {"some 1", "some 2"}
 
-    # test mismatching tool lengths
-    with pytest.raises(ValueError):
-        create_react_agent(model.bind_tools([tool1]), [tool1, tool2])
 
-    # test missing bound tools
-    with pytest.raises(ValueError):
-        create_react_agent(model.bind_tools([tool1]), [tool2])
+def test_support_preconfigured_models_but_not_for_tools() -> None:
+    """Support (at least temporarily) some model pre-configuration.
+
+    This is a temporary workaround to support pre-configured models
+    for things like temperature or api keys (done via .bind).
+
+    We do not want users to pre-bind tools to the models.
+    """
+    model = FakeToolCallingModel()
+
+    @dec_tool
+    def tool1(some_val: int) -> str:
+        """Tool 1 docstring."""
+        return f"Tool 1: {some_val}"
+
+    with pytest.raises(TypeError):
+        create_react_agent(model.bind_tools([tool1]), [tool1])
 
 
 def test__validate_messages():
@@ -1224,45 +1234,6 @@ def test_tool_node_node_interrupt(
             id=AnyStr(),
         ),
     )
-
-
-@pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
-def test_should_bind_tools(tool_style: str) -> None:
-    @dec_tool
-    def some_tool(some_val: int) -> str:
-        """Tool docstring."""
-        return "meow"
-
-    @dec_tool
-    def some_other_tool(some_val: int) -> str:
-        """Tool docstring."""
-        return "meow"
-
-    model = FakeToolCallingModel(tool_style=tool_style)
-    # should bind when a regular model
-    assert _should_bind_tools(model, [])
-    assert _should_bind_tools(model, [some_tool])
-
-    # should bind when a seq
-    seq = model | RunnableLambda(lambda message: message)
-    assert _should_bind_tools(seq, [])
-    assert _should_bind_tools(seq, [some_tool])
-
-    # should not bind when a model with tools
-    assert not _should_bind_tools(model.bind_tools([some_tool]), [some_tool])
-    # should not bind when a seq with tools
-    seq_with_tools = model.bind_tools([some_tool]) | RunnableLambda(
-        lambda message: message
-    )
-    assert not _should_bind_tools(seq_with_tools, [some_tool])
-
-    # should raise on invalid inputs
-    with pytest.raises(ValueError):
-        _should_bind_tools(model.bind_tools([some_tool]), [])
-    with pytest.raises(ValueError):
-        _should_bind_tools(model.bind_tools([some_tool]), [some_other_tool])
-    with pytest.raises(ValueError):
-        _should_bind_tools(model.bind_tools([some_tool]), [some_tool, some_other_tool])
 
 
 def test_get_model() -> None:
