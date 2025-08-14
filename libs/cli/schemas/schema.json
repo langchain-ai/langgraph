@@ -552,6 +552,17 @@
         "disable_threads": {
           "type": "boolean",
           "description": "Optional. If True, /threads routes are removed.\n\nDefault is False.\n"
+        },
+        "logging_headers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfigurableHeaderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines which headers are excluded from logging."
         }
       },
       "required": []
