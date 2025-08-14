@@ -11,7 +11,7 @@ my-app/
 ├── src # all project code lies within here
 │   ├── utils # optional utilities for your graph
 │   │   ├── tools.ts # tools for your graph
-│   │   ├── nodes.ts # node functions for you graph
+│   │   ├── nodes.ts # node functions for your graph
 │   │   └── state.ts # state definition of your graph
 │   └── agent.ts # code for constructing your graph
 ├── package.json # package dependencies
@@ -162,7 +162,7 @@ my-app/
 ├── src # all project code lies within here
 │   ├── utils # optional utilities for your graph
 │   │   ├── tools.ts # tools for your graph
-│   │   ├── nodes.ts # node functions for you graph
+│   │   ├── nodes.ts # node functions for your graph
 │   │   └── state.ts # state definition of your graph
 │   └── agent.ts # code for constructing your graph
 ├── package.json # package dependencies
