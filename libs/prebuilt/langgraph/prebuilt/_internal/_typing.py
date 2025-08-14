@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Awaitable, Callable, TypeVar, Union
 
 from langgraph._internal._typing import StateLike
