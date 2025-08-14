@@ -167,5 +167,5 @@ class OutputToolBinding(Generic[Schema]):
             raise ValueError(f"Unsupported schema kind: {self.schema_kind}")
 
 
-# TODO: Add support for native structured responses
+# TODO: Add support for built-in structured responses (e.g., openai, grok)
 ResponseFormat = ToolOutput

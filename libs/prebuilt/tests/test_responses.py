@@ -209,7 +209,7 @@ class TestResponseFormat:
 class TestEdgeCases:
     """Test edge cases and error conditions."""
 
-    def test_empty_schemas_list(self):
+    def test_empty_schemas_list(self) -> None:
         """Test UsingToolStrategy with empty schemas list."""
         strategy = ToolOutput([SchemaSpec(EmptyDocModel)])
         assert len(strategy.schemas) == 1
@@ -217,7 +217,7 @@ class TestEdgeCases:
     @pytest.mark.skip(
         reason="Need to fix bug in langchain-core for inheritance of doc-strings."
     )
-    def test_base_model_doc_constant(self):
+    def test_base_model_doc_constant(self) -> None:
         """Test that BASE_MODEL_DOC constant is set correctly."""
         binding = OutputToolBinding.from_schema_spec(SchemaSpec(EmptyDocModel))
         assert binding.tool.name == "EmptyDocModel"
