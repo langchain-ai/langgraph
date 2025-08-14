@@ -387,7 +387,7 @@ class _AgentBuilder:
     ) -> LanguageModelLike:
         """Resolve the model to use, handling both static and dynamic models."""
         if self._is_dynamic_model:
-            return self.model(state, runtime)  # type: ignore[arg-type]
+            return self.model(state, runtime)  # type: ignore[operator, arg-type]
         else:
             return self._static_model
 
@@ -403,7 +403,7 @@ class _AgentBuilder:
             resolved_model = await dynamic_model(state, runtime)
             return resolved_model
         elif self._is_dynamic_model:
-            return self.model(state, runtime)  # type: ignore[arg-type]
+            return self.model(state, runtime)  # type: ignore[arg-type, operator]
         else:
             return self._static_model
 
@@ -475,7 +475,7 @@ class _AgentBuilder:
             prepared_messages = prompt_runnable.invoke(model_input, config)
 
             # Then invoke the model with the prepared messages
-            response = cast(AIMessage, model.invoke(prepared_messages, config))  # type: ignore[arg-type]
+            response = cast(AIMessage, model.invoke(prepared_messages, config))
             response.name = self.name
 
             if _are_more_steps_needed(state, response):
@@ -503,7 +503,7 @@ class _AgentBuilder:
             # Then invoke the model with the prepared messages
             response = cast(
                 AIMessage,
-                await model.ainvoke(prepared_messages, config),  # type: ignore[arg-type]
+                await model.ainvoke(prepared_messages, config),
             )
             response.name = self.name
             if _are_more_steps_needed(state, response):
