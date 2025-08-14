@@ -1425,12 +1425,12 @@ const builder = new StateGraph(State)
 LangGraph makes it easy to add an underlying persistence layer to your application.
 This allows state to be checkpointed in between the execution of nodes, so your LangGraph nodes govern:
 
-    - How state updates are [checkpointed](../concepts/persistence.md)
-    - How interruptions are resumed in [human-in-the-loop](../concepts/human_in_the_loop.md) workflows
-    - How we can "rewind" and branch-off executions using LangGraph's [time travel](../concepts/time-travel.md) features
+- How state updates are [checkpointed](../concepts/persistence.md)
+- How interruptions are resumed in [human-in-the-loop](../concepts/human_in_the_loop.md) workflows
+- How we can "rewind" and branch-off executions using LangGraph's [time travel](../concepts/time-travel.md) features
 
-    They also determine how execution steps are [streamed](../concepts/streaming.md), and how your application is visualized
-    and debugged using [LangGraph Studio](../concepts/langgraph_studio.md).
+They also determine how execution steps are [streamed](../concepts/streaming.md), and how your application is visualized
+and debugged using [LangGraph Studio](../concepts/langgraph_studio.md).
 
 Let's demonstrate an end-to-end example. We will create a sequence of three steps:
 
