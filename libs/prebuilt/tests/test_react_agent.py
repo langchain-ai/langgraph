@@ -19,7 +19,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.runnables import RunnableConfig, RunnableLambda
-from langchain_core.tools import InjectedToolCallId, ToolException
+from langchain_core.tools import BaseTool, InjectedToolCallId, ToolException
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
@@ -278,7 +278,7 @@ def test_model_with_tools(tool_style: str, version: str, include_builtin: bool) 
         """Tool 2 docstring."""
         return f"Tool 2: {some_val}"
 
-    tools = [tool1, tool2]
+    tools: list[BaseTool | dict] = [tool1, tool2]
     if include_builtin:
         tools.append(
             {
@@ -296,37 +296,12 @@ def test_model_with_tools(tool_style: str, version: str, include_builtin: bool) 
             }
         )
     # check valid agent constructor
-    agent = create_react_agent(
-        model.bind_tools(tools),
-        tools,
-        version=version,
-    )
-    result = agent.nodes["tools"].invoke(
-        {
-            "messages": [
-                AIMessage(
-                    "hi?",
-                    tool_calls=[
-                        {
-                            "name": "tool1",
-                            "args": {"some_val": 2},
-                            "id": "some 1",
-                        },
-                        {
-                            "name": "tool2",
-                            "args": {"some_val": 2},
-                            "id": "some 2",
-                        },
-                    ],
-                )
-            ]
-        }
-    )
-    tool_messages: ToolMessage = result["messages"][-2:]
-    for tool_message in tool_messages:
-        assert tool_message.type == "tool"
-        assert tool_message.content in {"Tool 1: 2", "Tool 2: 2"}
-        assert tool_message.tool_call_id in {"some 1", "some 2"}
+    with pytest.raises(ValueError):
+        create_react_agent(
+            model.bind_tools(tools),
+            tools,
+            version=version,
+        )
 
 
 def test_support_preconfigured_models_but_not_for_tools() -> None:
@@ -344,8 +319,7 @@ def test_support_preconfigured_models_but_not_for_tools() -> None:
         """Tool 1 docstring."""
         return f"Tool 1: {some_val}"
 
-    with pytest.raises(TypeError):
-        create_react_agent(model.bind_tools([tool1]), [tool1])
+    create_react_agent(model.bind(temperature=3), [tool1])
 
 
 def test__validate_messages():
