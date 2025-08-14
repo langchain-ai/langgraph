@@ -221,7 +221,7 @@ class _StructuredToolInfo(TypedDict):
 
     schema: StructuredResponseSchema
     """The original schema provided for structured output (Pydantic model or dict schema)."""
-    kind: Literal["pydantic", "dict"]
+    kind: Literal["pydantic"]
     """Classification of the schema type for proper response construction."""
     tool: BaseTool
     """LangChain tool instance created from the schema for model binding."""
@@ -347,6 +347,7 @@ class _AgentBuilder:
         Future strategies (json_mode, guided) will have separate setup methods.
         """
         self.structured_output_tools: dict[str, _StructuredToolInfo] = {}
+        kind: Literal["pydantic", "dict"]
         if self.response_format is not None:
             response_format = self.response_format
 
@@ -361,7 +362,7 @@ class _AgentBuilder:
                             "" if schema.__doc__ == BASE_MODEL_DOC else schema.__doc__
                         )
                         kwargs = {"description": description}
-                        kind: Literal["pydantic", "dict"] = "pydantic"
+                        kind = "pydantic"
                     else:
                         kind = "dict"
 
@@ -372,6 +373,7 @@ class _AgentBuilder:
                         tool=tool,
                     )
             else:
+                # TODO(Eugene): Do we break this code path or can we support it well?
                 # Handle legacy format (direct schema or tuple)
                 if isinstance(response_format, tuple):
                     _, schema = response_format
@@ -384,7 +386,7 @@ class _AgentBuilder:
                         "" if schema.__doc__ == BASE_MODEL_DOC else schema.__doc__
                     )
                     kwargs = {"description": description}
-                    kind: Literal["pydantic", "dict"] = "pydantic"
+                    kind = "pydantic"
                 else:
                     kind = "dict"
 
@@ -460,7 +462,7 @@ class _AgentBuilder:
 
             if structured_tool_info["kind"] == "pydantic":
                 schema = structured_tool_info["schema"]
-                structured_response = schema(**args)
+                structured_response = schema(**args)  # type: ignore[operator]
             elif structured_tool_info["kind"] == "dict":
                 structured_response = tool_call["args"]
             else:
@@ -987,9 +989,7 @@ def create_react_agent(
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
-    response_format: Optional[
-        Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
-    ] = None,
+    response_format: Optional[ToolOutput] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
