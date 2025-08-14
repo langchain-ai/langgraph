@@ -20,7 +20,7 @@ T = TypeVar("T")
 MaybeAwaitable = Union[T, Awaitable[T]]
 SyncOrAsync = Callable[P, MaybeAwaitable[R]]
 
-# PreConfiguredChatModel is used to support chat models that have beeen pre-configured
+# PreConfiguredChatModel is used to support chat models that have been pre-configured
 # using .bind().
 # For example, chat_model.bind(api_key="...") will return a PreConfiguredChatModel
 PreConfiguredChatModel = Runnable[LanguageModelInput, BaseMessage]
