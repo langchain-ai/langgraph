@@ -294,9 +294,9 @@ Now that you have a LangGraph app running locally, take your journey further by 
 :::python
 
 - [Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref.md): Explore the Python SDK API Reference.
-  :::
+:::
 
 :::js
 
 - [JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md): Explore the JS/TS SDK API Reference.
-  :::
+:::
