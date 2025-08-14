@@ -257,12 +257,6 @@ class ToolNode(RunnableCallable):
            - Bypasses message parsing for direct tool execution
            - For programmatic tool invocation and testing
 
-    Tool Types:
-        1. **Regular tools**: Functions or BaseTool instances that return values or
-            Commands.
-        2. **Structured output tools**: Pydantic model classes for schema-validated
-           responses
-
     Output Formats:
         Output format depends on input type and tool behavior:
 
@@ -274,15 +268,10 @@ class ToolNode(RunnableCallable):
         - Returns ``[Command(...)]`` or mixed list with regular tool outputs
         - Commands can update state, trigger navigation, or send messages
 
-        **For Structured output tools**:
-        - Returns ``[Command(update={"messages": [...], "structured_response": schema_instance})]``
-        - Includes both message and structured data in the graph state
-
     Args:
         tools: A sequence of tools that can be invoked by this node. Supports:
             - **BaseTool instances**: Tools with schemas and metadata
             - **Plain functions**: Automatically converted to tools with inferred schemas
-            - **Pydantic model classes**: Treated as structured output tools
         name: The name identifier for this node in the graph. Used for debugging
             and visualization. Defaults to "tools".
         tags: Optional metadata tags to associate with the node for filtering
@@ -349,7 +338,7 @@ class ToolNode(RunnableCallable):
 
     def __init__(
         self,
-        tools: Sequence[Union[BaseTool, BaseModel, Callable]],
+        tools: Sequence[Union[BaseTool, Callable]],
         *,
         name: str = "tools",
         tags: Optional[list[str]] = None,
@@ -369,35 +358,23 @@ class ToolNode(RunnableCallable):
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self._tools_by_name: dict[str, BaseTool] = {}
-        self._structured_output_tools_by_name: dict[str, type[BaseModel]] = {}
         self._tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
         self._tool_to_store_arg: dict[str, Optional[str]] = {}
         self._handle_tool_errors = handle_tool_errors
         self._messages_key = messages_key
         for tool in tools:
-            if inspect.isclass(tool) and issubclass(tool, BaseModel):
-                # Handle Pydantic model classes as structured output tools
-                self._structured_output_tools_by_name[tool.__name__] = tool
-                self._tool_to_state_args[tool.__name__] = {}
-                self._tool_to_store_arg[tool.__name__] = None
+            if not isinstance(tool, BaseTool):
+                tool_ = create_tool(cast(Type[BaseTool], tool))
             else:
-                if not isinstance(tool, BaseTool):
-                    tool_ = create_tool(cast(Type[BaseTool], tool))
-                else:
-                    tool_ = tool
-                self._tools_by_name[tool_.name] = tool_
-                self._tool_to_state_args[tool_.name] = _get_state_args(tool_)
-                self._tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
+                tool_ = tool
+            self._tools_by_name[tool_.name] = tool_
+            self._tool_to_state_args[tool_.name] = _get_state_args(tool_)
+            self._tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
 
     @property
     def tools_by_name(self) -> dict[str, BaseTool]:
         """Mapping from tool name to BaseTool instance."""
         return self._tools_by_name
-
-    @property
-    def structured_output_tools(self) -> dict[str, type[BaseModel]]:
-        """Mapping from structured output tool name to Pydantic model class."""
-        return self._structured_output_tools_by_name
 
     def _func(
         self,
@@ -492,22 +469,6 @@ class ToolNode(RunnableCallable):
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
 
-        # Handle structured output tools
-        if call["name"] in self.structured_output_tools:
-            response_schema = self._structured_output_tools_by_name[call["name"]]
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            content="ok!",
-                            name=call["name"],
-                            tool_call_id=call["id"],
-                        )
-                    ],
-                    "structured_response": response_schema(**call["args"]),
-                }
-            )
-
         try:
             call_args = {**call, **{"type": "tool_call"}}
             tool = self.tools_by_name[call["name"]]
@@ -565,22 +526,6 @@ class ToolNode(RunnableCallable):
         """Run a single tool call asynchronously."""
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
-
-        # Handle structured output tools
-        if call["name"] in self.structured_output_tools:
-            response_schema = self._structured_output_tools_by_name[call["name"]]
-            return Command(
-                update={
-                    "messages": [
-                        ToolMessage(
-                            content="ok!",
-                            name=call["name"],
-                            tool_call_id=call["id"],
-                        )
-                    ],
-                    "structured_response": response_schema(**call["args"]),
-                }
-            )
 
         try:
             call_args = {**call, **{"type": "tool_call"}}
@@ -673,13 +618,8 @@ class ToolNode(RunnableCallable):
 
     def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
         requested_tool = call["name"]
-        if (
-            requested_tool not in self.tools_by_name
-            and requested_tool not in self._structured_output_tools_by_name
-        ):
-            all_tool_names = list(self.tools_by_name.keys()) + list(
-                self._structured_output_tools_by_name.keys()
-            )
+        if requested_tool not in self.tools_by_name:
+            all_tool_names = list(self.tools_by_name.keys())
             content = INVALID_TOOL_NAME_ERROR_TEMPLATE.format(
                 requested_tool=requested_tool,
                 available_tools=", ".join(all_tool_names),
@@ -797,10 +737,7 @@ class ToolNode(RunnableCallable):
             The injection is performed on a copy of the tool call to avoid mutating
             the original.
         """
-        if (
-            tool_call["name"] not in self.tools_by_name
-            and tool_call["name"] not in self._structured_output_tools_by_name
-        ):
+        if tool_call["name"] not in self.tools_by_name:
             return tool_call
 
         tool_call_copy: ToolCall = copy(tool_call)
