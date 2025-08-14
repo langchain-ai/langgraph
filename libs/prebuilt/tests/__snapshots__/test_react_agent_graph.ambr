@@ -1,5 +1,5 @@
 # serializer version: 1
-# name: test_react_agent_graph_structure[None-None-None-tools0]
+# name: test_react_agent_graph_structure[None-None-tools0]
   '''
   graph TD;
   	__start__ --> agent;
@@ -7,7 +7,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure[None-None-None-tools1]
+# name: test_react_agent_graph_structure[None-None-tools1]
   '''
   graph TD;
   	__start__ --> agent;
@@ -17,7 +17,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure[None-None-pre_model_hook-tools0]
+# name: test_react_agent_graph_structure[None-pre_model_hook-tools0]
   '''
   graph TD;
   	__start__ --> pre_model_hook;
@@ -26,7 +26,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure[None-None-pre_model_hook-tools1]
+# name: test_react_agent_graph_structure[None-pre_model_hook-tools1]
   '''
   graph TD;
   	__start__ --> pre_model_hook;
@@ -37,7 +37,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure[None-post_model_hook-None-tools0]
+# name: test_react_agent_graph_structure[post_model_hook-None-tools0]
   '''
   graph TD;
   	__start__ --> agent;
@@ -46,7 +46,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure[None-post_model_hook-None-tools1]
+# name: test_react_agent_graph_structure[post_model_hook-None-tools1]
   '''
   graph TD;
   	__start__ --> agent;
@@ -58,7 +58,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure[None-post_model_hook-pre_model_hook-tools0]
+# name: test_react_agent_graph_structure[post_model_hook-pre_model_hook-tools0]
   '''
   graph TD;
   	__start__ --> pre_model_hook;
@@ -68,7 +68,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure[None-post_model_hook-pre_model_hook-tools1]
+# name: test_react_agent_graph_structure[post_model_hook-pre_model_hook-tools1]
   '''
   graph TD;
   	__start__ --> pre_model_hook;
@@ -81,97 +81,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure[ResponseFormat-None-None-tools0]
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	agent --> generate_structured_response;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure[ResponseFormat-None-None-tools1]
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	agent -.-> generate_structured_response;
-  	agent -.-> tools;
-  	tools --> agent;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure[ResponseFormat-None-pre_model_hook-tools0]
-  '''
-  graph TD;
-  	__start__ --> pre_model_hook;
-  	agent --> generate_structured_response;
-  	pre_model_hook --> agent;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure[ResponseFormat-None-pre_model_hook-tools1]
-  '''
-  graph TD;
-  	__start__ --> pre_model_hook;
-  	agent -.-> generate_structured_response;
-  	agent -.-> tools;
-  	pre_model_hook --> agent;
-  	tools --> pre_model_hook;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure[ResponseFormat-post_model_hook-None-tools0]
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	agent --> post_model_hook;
-  	post_model_hook --> generate_structured_response;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure[ResponseFormat-post_model_hook-None-tools1]
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	agent --> post_model_hook;
-  	post_model_hook -.-> agent;
-  	post_model_hook -.-> generate_structured_response;
-  	post_model_hook -.-> tools;
-  	tools --> agent;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure[ResponseFormat-post_model_hook-pre_model_hook-tools0]
-  '''
-  graph TD;
-  	__start__ --> pre_model_hook;
-  	agent --> post_model_hook;
-  	post_model_hook --> generate_structured_response;
-  	pre_model_hook --> agent;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure[ResponseFormat-post_model_hook-pre_model_hook-tools1]
-  '''
-  graph TD;
-  	__start__ --> pre_model_hook;
-  	agent --> post_model_hook;
-  	post_model_hook -.-> generate_structured_response;
-  	post_model_hook -.-> pre_model_hook;
-  	post_model_hook -.-> tools;
-  	pre_model_hook --> agent;
-  	tools --> pre_model_hook;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure_with_individual_nodes[no_response_format-no_post_hook-no_pre_hook-no_tools]
+# name: test_react_agent_graph_structure_with_individual_nodes[no_post_hook-no_pre_hook-no_tools]
   '''
   graph TD;
   	__start__ --> agent;
@@ -179,7 +89,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure_with_individual_nodes[no_response_format-no_post_hook-no_pre_hook-two_tools]
+# name: test_react_agent_graph_structure_with_individual_nodes[no_post_hook-no_pre_hook-two_tools]
   '''
   graph TD;
   	__start__ --> agent;
@@ -191,7 +101,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure_with_individual_nodes[no_response_format-no_post_hook-with_pre_hook-no_tools]
+# name: test_react_agent_graph_structure_with_individual_nodes[no_post_hook-with_pre_hook-no_tools]
   '''
   graph TD;
   	__start__ --> pre_model_hook;
@@ -200,7 +110,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure_with_individual_nodes[no_response_format-no_post_hook-with_pre_hook-two_tools]
+# name: test_react_agent_graph_structure_with_individual_nodes[no_post_hook-with_pre_hook-two_tools]
   '''
   graph TD;
   	__start__ --> pre_model_hook;
@@ -213,7 +123,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure_with_individual_nodes[no_response_format-with_post_hook-no_pre_hook-no_tools]
+# name: test_react_agent_graph_structure_with_individual_nodes[with_post_hook-no_pre_hook-no_tools]
   '''
   graph TD;
   	__start__ --> agent;
@@ -222,7 +132,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure_with_individual_nodes[no_response_format-with_post_hook-no_pre_hook-two_tools]
+# name: test_react_agent_graph_structure_with_individual_nodes[with_post_hook-no_pre_hook-two_tools]
   '''
   graph TD;
   	__start__ --> agent;
@@ -236,7 +146,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure_with_individual_nodes[no_response_format-with_post_hook-with_pre_hook-no_tools]
+# name: test_react_agent_graph_structure_with_individual_nodes[with_post_hook-with_pre_hook-no_tools]
   '''
   graph TD;
   	__start__ --> pre_model_hook;
@@ -246,7 +156,7 @@
   
   '''
 # ---
-# name: test_react_agent_graph_structure_with_individual_nodes[no_response_format-with_post_hook-with_pre_hook-two_tools]
+# name: test_react_agent_graph_structure_with_individual_nodes[with_post_hook-with_pre_hook-two_tools]
   '''
   graph TD;
   	__start__ --> pre_model_hook;
@@ -258,104 +168,6 @@
   	pre_model_hook --> agent;
   	tool --> pre_model_hook;
   	tool2 --> pre_model_hook;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure_with_individual_nodes[with_response_format-no_post_hook-no_pre_hook-no_tools]
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	agent --> generate_structured_response;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure_with_individual_nodes[with_response_format-no_post_hook-no_pre_hook-two_tools]
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	agent -.-> generate_structured_response;
-  	agent -.-> tool;
-  	agent -.-> tool2;
-  	tool --> agent;
-  	tool2 --> agent;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure_with_individual_nodes[with_response_format-no_post_hook-with_pre_hook-no_tools]
-  '''
-  graph TD;
-  	__start__ --> pre_model_hook;
-  	agent --> generate_structured_response;
-  	pre_model_hook --> agent;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure_with_individual_nodes[with_response_format-no_post_hook-with_pre_hook-two_tools]
-  '''
-  graph TD;
-  	__start__ --> pre_model_hook;
-  	agent -.-> generate_structured_response;
-  	agent -.-> tool;
-  	agent -.-> tool2;
-  	pre_model_hook --> agent;
-  	tool --> pre_model_hook;
-  	tool2 --> pre_model_hook;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure_with_individual_nodes[with_response_format-with_post_hook-no_pre_hook-no_tools]
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	agent --> post_model_hook;
-  	post_model_hook --> generate_structured_response;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure_with_individual_nodes[with_response_format-with_post_hook-no_pre_hook-two_tools]
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	agent --> post_model_hook;
-  	post_model_hook -.-> agent;
-  	post_model_hook -.-> generate_structured_response;
-  	post_model_hook -.-> tool;
-  	post_model_hook -.-> tool2;
-  	tool --> agent;
-  	tool2 --> agent;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure_with_individual_nodes[with_response_format-with_post_hook-with_pre_hook-no_tools]
-  '''
-  graph TD;
-  	__start__ --> pre_model_hook;
-  	agent --> post_model_hook;
-  	post_model_hook --> generate_structured_response;
-  	pre_model_hook --> agent;
-  	generate_structured_response --> __end__;
-  
-  '''
-# ---
-# name: test_react_agent_graph_structure_with_individual_nodes[with_response_format-with_post_hook-with_pre_hook-two_tools]
-  '''
-  graph TD;
-  	__start__ --> pre_model_hook;
-  	agent --> post_model_hook;
-  	post_model_hook -.-> generate_structured_response;
-  	post_model_hook -.-> pre_model_hook;
-  	post_model_hook -.-> tool;
-  	post_model_hook -.-> tool2;
-  	pre_model_hook --> agent;
-  	tool --> pre_model_hook;
-  	tool2 --> pre_model_hook;
-  	generate_structured_response --> __end__;
   
   '''
 # ---
