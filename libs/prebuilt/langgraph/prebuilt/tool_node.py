@@ -340,11 +340,19 @@ class ToolNode(RunnableCallable):
         self.tools_by_name: dict[str, BaseTool] = {}
         self.tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
         self.tool_to_store_arg: dict[str, Optional[str]] = {}
+        self.structured_output_tools: list[str] = []
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
         for tool_ in tools:
-            if not isinstance(tool_, BaseTool):
+            if issubclass(tool_, BaseModel):
+                self.tools_by_name[tool_.__name__] = tool_
+                self.tool_to_state_args[tool_.__name__] = {}
+                self.tool_to_store_arg[tool_.__name__] = None
+                self.structured_output_tools.append(tool_.__name__)
+                continue
+            elif not isinstance(tool_, BaseTool):
                 tool_ = create_tool(tool_)
+
             self.tools_by_name[tool_.name] = tool_
             self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
             self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
@@ -437,11 +445,26 @@ class ToolNode(RunnableCallable):
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
-    ) -> ToolMessage:
+    ) -> ToolMessage | Command:
         """Run a single tool call synchronously."""
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
         try:
+            if call["name"] in self.structured_output_tools:
+                response_schema = self.tools_by_name[call["name"]]
+                return Command(
+                    update={
+                        "messages": [
+                            ToolMessage(
+                                content="structured output generated",
+                                name="structured_output",
+                                tool_call_id=call["id"],
+                                status="success",
+                            ),
+                        ],
+                        "structured_response": response_schema(**call["args"]),
+                    }
+                )
             call_args = {**call, **{"type": "tool_call"}}
             response = self.tools_by_name[call["name"]].invoke(call_args, config)
 
