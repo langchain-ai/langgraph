@@ -51,17 +51,15 @@ from langgraph.prebuilt._internal._typing import (
     SyncOrAsync,
 )
 from langgraph.prebuilt.responses import (
+    OutputToolBinding,
     ResponseFormat,
-    ResponseSchema,
-    StructuredToolInfo,
-    UsingToolStrategy,
+    ToolOutput,
 )
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Command, Send
 from langgraph.warnings import LangGraphDeprecatedSinceV10
-
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
@@ -317,17 +315,21 @@ class _AgentBuilder:
 
         Future strategies (json_mode, guided) will have separate setup methods.
         """
-        self.structured_output_tools: dict[str, StructuredToolInfo] = {}
+        self.structured_output_tools: dict[str, OutputToolBinding] = {}
         if self.response_format is not None:
             response_format = self.response_format
 
             # Handle UsingToolStrategy wrapper
-            if isinstance(response_format, UsingToolStrategy):
+            if isinstance(response_format, ToolOutput):
                 # Use tools strategy - process each ResponseSchema in the UsingToolStrategy
                 for response_schema in response_format.schemas:
-                    # Use the factory method to create StructuredToolInfo
-                    structured_tool_info = StructuredToolInfo.from_response_schema(response_schema)
-                    self.structured_output_tools[structured_tool_info.tool.name] = structured_tool_info
+                    # Use the factory method to create OutputToolBinding
+                    structured_tool_info = OutputToolBinding.from_schema_spec(
+                        response_schema
+                    )
+                    self.structured_output_tools[structured_tool_info.tool.name] = (
+                        structured_tool_info
+                    )
             else:
                 # This shouldn't happen with the new ResponseFormat type, but keeping for safety
                 raise ValueError(
@@ -398,14 +400,12 @@ class _AgentBuilder:
             structured_tool_info = self.structured_output_tools[tool_call["name"]]
             args = tool_call["args"]
 
-            # Use the coercion logic from the StructuredToolInfo dataclass
+            # Use the parsing logic from the OutputToolBinding dataclass
             try:
-                structured_response = structured_tool_info.coerce_response(args)
+                structured_response = structured_tool_info.parse_payload(args)
             except ValueError as e:
                 # Convert ValueError to AssertionError to maintain existing error handling
-                raise AssertionError(
-                    f"Failed to coerce structured response: {e}"
-                ) from e
+                raise AssertionError(f"Failed to parse structured response: {e}") from e
 
             return Command(
                 update={
@@ -451,7 +451,7 @@ class _AgentBuilder:
                 tool_choice = None
                 if (
                     self.response_format is not None
-                    and isinstance(self.response_format, UsingToolStrategy)
+                    and isinstance(self.response_format, ToolOutput)
                     and self.response_format.tool_choice == "required"
                 ):
                     tool_choice = "any"
@@ -893,7 +893,7 @@ def create_react_agent(
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
-    response_format: Optional[UsingToolStrategy] = None,
+    response_format: Optional[ToolOutput] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
