@@ -1145,6 +1145,14 @@ def create_react_agent(
             schemas=[SchemaSpec(response_format)],
             tool_choice="required",
         )
+    elif isinstance(response_format, tuple):
+        if len(response_format) == 2:
+            raise ValueError(
+                "Passing a 2-tuple as response_format is no longer supported. "
+            )
+    else:
+        # Can only be a ToolOutput or None at this point.
+        response_format = cast(Optional[ToolOutput], response_format)
 
     # Create and configure the agent builder
     builder = _AgentBuilder(
