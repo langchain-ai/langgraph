@@ -274,6 +274,7 @@ class HttpClient:
         path: str,
         *,
         json: dict | None,
+        params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
@@ -285,7 +286,9 @@ class HttpClient:
         # Merge headers, with runtime headers taking precedence
         if headers:
             request_headers.update(headers)
-        r = await self.client.post(path, headers=request_headers, content=content)
+        r = await self.client.post(
+            path, headers=request_headers, content=content, params=params
+        )
         if on_response:
             on_response(r)
         try:
@@ -304,6 +307,7 @@ class HttpClient:
         path: str,
         *,
         json: dict,
+        params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
@@ -311,7 +315,9 @@ class HttpClient:
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
-        r = await self.client.put(path, headers=request_headers, content=content)
+        r = await self.client.put(
+            path, headers=request_headers, content=content, params=params
+        )
         if on_response:
             on_response(r)
         try:
@@ -330,6 +336,7 @@ class HttpClient:
         path: str,
         *,
         json: dict,
+        params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
@@ -337,7 +344,9 @@ class HttpClient:
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
-        r = await self.client.patch(path, headers=request_headers, content=content)
+        r = await self.client.patch(
+            path, headers=request_headers, content=content, params=params
+        )
         if on_response:
             on_response(r)
         try:
@@ -356,11 +365,14 @@ class HttpClient:
         path: str,
         *,
         json: Any | None = None,
+        params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a DELETE request."""
-        r = await self.client.request("DELETE", path, json=json, headers=headers)
+        r = await self.client.request(
+            "DELETE", path, json=json, params=params, headers=headers
+        )
         if on_response:
             on_response(r)
         try:
@@ -421,7 +433,7 @@ class HttpClient:
                     yield sse
 
 
-async def _aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
+async def _aencode_json(json: Any) -> tuple[dict[str, str], bytes | None]:
     if json is None:
         return {}, None
     body = await asyncio.get_running_loop().run_in_executor(
@@ -464,13 +476,18 @@ class AssistantsClient:
         self.http = http
 
     async def get(
-        self, assistant_id: str, *, headers: dict[str, str] | None = None
+        self,
+        assistant_id: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Get an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Assistant: Assistant Object.
@@ -499,7 +516,9 @@ class AssistantsClient:
             }
             ```
         """  # noqa: E501
-        return await self.http.get(f"/assistants/{assistant_id}", headers=headers)
+        return await self.http.get(
+            f"/assistants/{assistant_id}", headers=headers, params=params
+        )
 
     async def get_graph(
         self,
@@ -554,13 +573,18 @@ class AssistantsClient:
         )
 
     async def get_schemas(
-        self, assistant_id: str, *, headers: dict[str, str] | None = None
+        self,
+        assistant_id: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> GraphSchema:
         """Get the schemas of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the schema of.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             GraphSchema: The graph schema for the assistant.
@@ -666,7 +690,7 @@ class AssistantsClient:
 
         """  # noqa: E501
         return await self.http.get(
-            f"/assistants/{assistant_id}/schemas", headers=headers
+            f"/assistants/{assistant_id}/schemas", headers=headers, params=params
         )
 
     async def get_subgraphs(
@@ -676,6 +700,7 @@ class AssistantsClient:
         recurse: bool = False,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Subgraphs:
         """Get the schemas of an assistant by ID.
 
@@ -684,21 +709,25 @@ class AssistantsClient:
             namespace: Optional namespace to filter by.
             recurse: Whether to recursively get subgraphs.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Subgraphs: The graph schema for the assistant.
 
         """  # noqa: E501
+        get_params = {"recurse": recurse}
+        if params:
+            get_params = {**get_params, **params}
         if namespace is not None:
             return await self.http.get(
                 f"/assistants/{assistant_id}/subgraphs/{namespace}",
-                params={"recurse": recurse},
+                params=get_params,
                 headers=headers,
             )
         else:
             return await self.http.get(
                 f"/assistants/{assistant_id}/subgraphs",
-                params={"recurse": recurse},
+                params=get_params,
                 headers=headers,
             )
 
@@ -714,6 +743,7 @@ class AssistantsClient:
         name: str | None = None,
         headers: dict[str, str] | None = None,
         description: str | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -732,6 +762,7 @@ class AssistantsClient:
             headers: Optional custom headers to include with the request.
             description: Optional description of the assistant.
                 The description field is available for langgraph-api server version>=0.0.45
+            params: Optional query parameters to include with the request.
 
         Returns:
             Assistant: The created assistant.
@@ -767,7 +798,9 @@ class AssistantsClient:
             payload["name"] = name
         if description:
             payload["description"] = description
-        return await self.http.post("/assistants", json=payload, headers=headers)
+        return await self.http.post(
+            "/assistants", json=payload, headers=headers, params=params
+        )
 
     async def update(
         self,
@@ -780,6 +813,7 @@ class AssistantsClient:
         name: str | None = None,
         headers: dict[str, str] | None = None,
         description: str | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -797,6 +831,7 @@ class AssistantsClient:
             headers: Optional custom headers to include with the request.
             description: Optional description of the assistant.
                 The description field is available for langgraph-api server version>=0.0.45
+            params: Optional query parameters to include with the request.
 
         Returns:
             Assistant: The updated assistant.
@@ -831,6 +866,7 @@ class AssistantsClient:
             f"/assistants/{assistant_id}",
             json=payload,
             headers=headers,
+            params=params,
         )
 
     async def delete(
@@ -838,12 +874,14 @@ class AssistantsClient:
         assistant_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete an assistant.
 
         Args:
             assistant_id: The assistant ID to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -858,7 +896,9 @@ class AssistantsClient:
             ```
 
         """  # noqa: E501
-        await self.http.delete(f"/assistants/{assistant_id}", headers=headers)
+        await self.http.delete(
+            f"/assistants/{assistant_id}", headers=headers, params=params
+        )
 
     async def search(
         self,
@@ -870,6 +910,7 @@ class AssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[Assistant]:
         """Search for assistants.
 
@@ -882,6 +923,7 @@ class AssistantsClient:
             sort_by: The field to sort by.
             sort_order: The order to sort by.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             list[Assistant]: A list of assistants.
@@ -914,6 +956,7 @@ class AssistantsClient:
             "/assistants/search",
             json=payload,
             headers=headers,
+            params=params,
         )
 
     async def get_versions(
@@ -924,6 +967,7 @@ class AssistantsClient:
         offset: int = 0,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[AssistantVersion]:
         """List all versions of an assistant.
 
@@ -933,6 +977,7 @@ class AssistantsClient:
             limit: The maximum number of versions to return.
             offset: The number of versions to skip.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             list[AssistantVersion]: A list of assistant versions.
@@ -954,7 +999,10 @@ class AssistantsClient:
         if metadata:
             payload["metadata"] = metadata
         return await self.http.post(
-            f"/assistants/{assistant_id}/versions", json=payload, headers=headers
+            f"/assistants/{assistant_id}/versions",
+            json=payload,
+            headers=headers,
+            params=params,
         )
 
     async def set_latest(
@@ -963,6 +1011,7 @@ class AssistantsClient:
         version: int,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Change the version of an assistant.
 
@@ -970,6 +1019,7 @@ class AssistantsClient:
             assistant_id: The assistant ID to delete.
             version: The version to change to.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Assistant: Assistant Object.
@@ -989,7 +1039,10 @@ class AssistantsClient:
         payload: dict[str, Any] = {"version": version}
 
         return await self.http.post(
-            f"/assistants/{assistant_id}/latest", json=payload, headers=headers
+            f"/assistants/{assistant_id}/latest",
+            json=payload,
+            headers=headers,
+            params=params,
         )
 
 
@@ -1012,13 +1065,18 @@ class ThreadsClient:
         self.http = http
 
     async def get(
-        self, thread_id: str, *, headers: dict[str, str] | None = None
+        self,
+        thread_id: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Thread:
         """Get a thread by ID.
 
         Args:
             thread_id: The ID of the thread to get.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Thread: Thread object.
@@ -1046,7 +1104,9 @@ class ThreadsClient:
 
         """  # noqa: E501
 
-        return await self.http.get(f"/threads/{thread_id}", headers=headers)
+        return await self.http.get(
+            f"/threads/{thread_id}", headers=headers, params=params
+        )
 
     async def create(
         self,
@@ -1057,6 +1117,7 @@ class ThreadsClient:
         supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
         graph_id: str | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Thread:
         """Create a new thread.
 
@@ -1070,6 +1131,7 @@ class ThreadsClient:
                 Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
             graph_id: Optional graph ID to associate with the thread.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Thread: The created thread.
@@ -1110,7 +1172,9 @@ class ThreadsClient:
                 for s in supersteps
             ]
 
-        return await self.http.post("/threads", json=payload, headers=headers)
+        return await self.http.post(
+            "/threads", json=payload, headers=headers, params=params
+        )
 
     async def update(
         self,
@@ -1118,6 +1182,7 @@ class ThreadsClient:
         *,
         metadata: dict[str, Any],
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Thread:
         """Update a thread.
 
@@ -1125,6 +1190,7 @@ class ThreadsClient:
             thread_id: ID of thread to update.
             metadata: Metadata to merge with existing thread metadata.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Thread: The created thread.
@@ -1140,17 +1206,25 @@ class ThreadsClient:
             ```
         """  # noqa: E501
         return await self.http.patch(
-            f"/threads/{thread_id}", json={"metadata": metadata}, headers=headers
+            f"/threads/{thread_id}",
+            json={"metadata": metadata},
+            headers=headers,
+            params=params,
         )
 
     async def delete(
-        self, thread_id: str, *, headers: dict[str, str] | None = None
+        self,
+        thread_id: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a thread.
 
         Args:
             thread_id: The ID of the thread to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -1165,7 +1239,7 @@ class ThreadsClient:
             ```
 
         """  # noqa: E501
-        await self.http.delete(f"/threads/{thread_id}", headers=headers)
+        await self.http.delete(f"/threads/{thread_id}", headers=headers, params=params)
 
     async def search(
         self,
@@ -1178,6 +1252,7 @@ class ThreadsClient:
         sort_by: ThreadSortBy | None = None,
         sort_order: SortOrder | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[Thread]:
         """Search for threads.
 
@@ -1191,6 +1266,7 @@ class ThreadsClient:
             sort_by: Sort by field.
             sort_order: Sort order.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             list[Thread]: List of the threads matching the search parameters.
@@ -1226,6 +1302,7 @@ class ThreadsClient:
             "/threads/search",
             json=payload,
             headers=headers,
+            params=params,
         )
 
     async def copy(
@@ -1262,6 +1339,7 @@ class ThreadsClient:
         *,
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> ThreadState:
         """Get the state of a thread.
 
@@ -1271,6 +1349,7 @@ class ThreadsClient:
             checkpoint_id: (deprecated) The checkpoint ID to get the state of.
             subgraphs: Include subgraphs states.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             ThreadState: the thread of the state.
@@ -1367,17 +1446,24 @@ class ThreadsClient:
                 f"/threads/{thread_id}/state/checkpoint",
                 json={"checkpoint": checkpoint, "subgraphs": subgraphs},
                 headers=headers,
+                params=params,
             )
         elif checkpoint_id:
+            get_params = {"subgraphs": subgraphs}
+            if params:
+                get_params = {**get_params, **params}
             return await self.http.get(
                 f"/threads/{thread_id}/state/{checkpoint_id}",
-                params={"subgraphs": subgraphs},
+                params=get_params,
                 headers=headers,
             )
         else:
+            get_params = {"subgraphs": subgraphs}
+            if params:
+                get_params = {**get_params, **params}
             return await self.http.get(
                 f"/threads/{thread_id}/state",
-                params={"subgraphs": subgraphs},
+                params=get_params,
                 headers=headers,
             )
 
@@ -1390,6 +1476,7 @@ class ThreadsClient:
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,  # deprecated
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
 
@@ -1400,6 +1487,7 @@ class ThreadsClient:
             checkpoint: The checkpoint to update the state of.
             checkpoint_id: (deprecated) The checkpoint ID to update the state of.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             ThreadUpdateStateResponse: Response after updating a thread's state.
@@ -1439,7 +1527,7 @@ class ThreadsClient:
         if as_node:
             payload["as_node"] = as_node
         return await self.http.post(
-            f"/threads/{thread_id}/state", json=payload, headers=headers
+            f"/threads/{thread_id}/state", json=payload, headers=headers, params=params
         )
 
     async def get_history(
@@ -1451,6 +1539,7 @@ class ThreadsClient:
         metadata: dict | None = None,
         checkpoint: Checkpoint | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[ThreadState]:
         """Get the state history of a thread.
 
@@ -1461,6 +1550,7 @@ class ThreadsClient:
             before: Return states before this checkpoint.
             metadata: Filter states by metadata key-value pairs.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             list[ThreadState]: the state history of the thread.
@@ -1486,7 +1576,10 @@ class ThreadsClient:
         if checkpoint:
             payload["checkpoint"] = checkpoint
         return await self.http.post(
-            f"/threads/{thread_id}/history", json=payload, headers=headers
+            f"/threads/{thread_id}/history",
+            json=payload,
+            headers=headers,
+            params=params,
         )
 
 
@@ -1533,6 +1626,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> AsyncIterator[StreamPart]: ...
 
@@ -1559,6 +1653,7 @@ class RunsClient:
         webhook: str | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> AsyncIterator[StreamPart]: ...
 
@@ -1588,6 +1683,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
@@ -1623,6 +1719,8 @@ class RunsClient:
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
             on_run_created: Callback when a run is created.
 
         Returns:
@@ -1699,6 +1797,7 @@ class RunsClient:
             endpoint,
             "POST",
             json={k: v for k, v in payload.items() if v is not None},
+            params=params,
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
@@ -1725,6 +1824,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
 
@@ -1752,6 +1852,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
 
@@ -1779,6 +1880,7 @@ class RunsClient:
         on_completion: OnCompletionBehavior | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run:
         """Create a background run.
@@ -1921,6 +2023,7 @@ class RunsClient:
         return await self.http.post(
             f"/threads/{thread_id}/runs" if thread_id else "/runs",
             json=payload,
+            params=params,
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
@@ -1957,6 +2060,7 @@ class RunsClient:
         after_seconds: int | None = None,
         raise_error: bool = True,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]: ...
 
@@ -1981,6 +2085,7 @@ class RunsClient:
         after_seconds: int | None = None,
         raise_error: bool = True,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]: ...
 
@@ -2007,6 +2112,7 @@ class RunsClient:
         after_seconds: int | None = None,
         raise_error: bool = True,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
@@ -2125,6 +2231,7 @@ class RunsClient:
         response = await self.http.post(
             endpoint,
             json={k: v for k, v in payload.items() if v is not None},
+            params=params,
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
@@ -2334,7 +2441,12 @@ class RunsClient:
         )
 
     async def delete(
-        self, thread_id: str, run_id: str, *, headers: dict[str, str] | None = None
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a run.
 
@@ -2342,6 +2454,7 @@ class RunsClient:
             thread_id: The thread ID to delete.
             run_id: The run ID to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -2357,7 +2470,9 @@ class RunsClient:
             ```
 
         """  # noqa: E501
-        await self.http.delete(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
+        await self.http.delete(
+            f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
+        )
 
 
 class CronClient:
@@ -2403,6 +2518,7 @@ class CronClient:
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Run:
         """Create a cron job for a thread.
 
@@ -2425,6 +2541,7 @@ class CronClient:
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Run: The cron run.
@@ -2463,7 +2580,10 @@ class CronClient:
             payload["multitask_strategy"] = multitask_strategy
         payload = {k: v for k, v in payload.items() if v is not None}
         return await self.http.post(
-            f"/threads/{thread_id}/runs/crons", json=payload, headers=headers
+            f"/threads/{thread_id}/runs/crons",
+            json=payload,
+            headers=headers,
+            params=params,
         )
 
     async def create(
@@ -2481,6 +2601,7 @@ class CronClient:
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Run:
         """Create a cron run.
 
@@ -2500,6 +2621,7 @@ class CronClient:
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Run: The cron run.
@@ -2537,18 +2659,22 @@ class CronClient:
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
         payload = {k: v for k, v in payload.items() if v is not None}
-        return await self.http.post("/runs/crons", json=payload, headers=headers)
+        return await self.http.post(
+            "/runs/crons", json=payload, headers=headers, params=params
+        )
 
     async def delete(
         self,
         cron_id: str,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a cron.
 
         Args:
             cron_id: The cron ID to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -2563,7 +2689,7 @@ class CronClient:
             ```
 
         """  # noqa: E501
-        await self.http.delete(f"/runs/crons/{cron_id}", headers=headers)
+        await self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
 
     async def search(
         self,
@@ -2575,6 +2701,7 @@ class CronClient:
         sort_by: CronSortBy | None = None,
         sort_order: SortOrder | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
 
@@ -2584,6 +2711,7 @@ class CronClient:
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             list[Cron]: The list of cron jobs returned by the search,
@@ -2637,7 +2765,9 @@ class CronClient:
         if sort_order:
             payload["sort_order"] = sort_order
         payload = {k: v for k, v in payload.items() if v is not None}
-        return await self.http.post("/runs/crons/search", json=payload, headers=headers)
+        return await self.http.post(
+            "/runs/crons/search", json=payload, headers=headers, params=params
+        )
 
 
 class StoreClient:
@@ -2666,6 +2796,7 @@ class StoreClient:
         index: Literal[False] | list[str] | None = None,
         ttl: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Store or update an item.
 
@@ -2676,6 +2807,7 @@ class StoreClient:
             index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
             ttl: Optional time-to-live in minutes for the item, or None for no expiration.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -2704,7 +2836,7 @@ class StoreClient:
             "ttl": ttl,
         }
         await self.http.put(
-            "/store/items", json=_provided_vals(payload), headers=headers
+            "/store/items", json=_provided_vals(payload), headers=headers, params=params
         )
 
     async def get_item(
@@ -2715,6 +2847,7 @@ class StoreClient:
         *,
         refresh_ttl: bool | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Item:
         """Retrieve a single item.
 
@@ -2726,6 +2859,7 @@ class StoreClient:
         Returns:
             Item: The retrieved item.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         ???+ example "Example Usage"
 
@@ -2755,10 +2889,12 @@ class StoreClient:
                 raise ValueError(
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
-        params = {"namespace": ".".join(namespace), "key": key}
+        get_params = {"namespace": ".".join(namespace), "key": key}
         if refresh_ttl is not None:
-            params["refresh_ttl"] = refresh_ttl
-        return await self.http.get("/store/items", params=params, headers=headers)
+            get_params["refresh_ttl"] = refresh_ttl
+        if params:
+            get_params = {**get_params, **params}
+        return await self.http.get("/store/items", params=get_params, headers=headers)
 
     async def delete_item(
         self,
@@ -2766,6 +2902,7 @@ class StoreClient:
         /,
         key: str,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete an item.
 
@@ -2773,6 +2910,7 @@ class StoreClient:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -2791,6 +2929,7 @@ class StoreClient:
             "/store/items",
             json={"namespace": namespace, "key": key},
             headers=headers,
+            params=params,
         )
 
     async def search_items(
@@ -2803,6 +2942,7 @@ class StoreClient:
         query: str | None = None,
         refresh_ttl: bool | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -2814,6 +2954,7 @@ class StoreClient:
             query: Optional query for natural language search.
             refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             list[Item]: A list of items matching the search criteria.
@@ -2864,6 +3005,7 @@ class StoreClient:
             "/store/items/search",
             json=_provided_vals(payload),
             headers=headers,
+            params=params,
         )
 
     async def list_namespaces(
@@ -2874,6 +3016,7 @@ class StoreClient:
         limit: int = 100,
         offset: int = 0,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> ListNamespaceResponse:
         """List namespaces with optional match conditions.
 
@@ -2884,6 +3027,7 @@ class StoreClient:
             limit: Maximum number of namespaces to return (default is 100).
             offset: Number of namespaces to skip before returning results (default is 0).
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             list[list[str]]: A list of namespaces matching the criteria.
@@ -2920,6 +3064,7 @@ class StoreClient:
             "/store/namespaces",
             json=_provided_vals(payload),
             headers=headers,
+            params=params,
         )
 
 
@@ -3044,6 +3189,7 @@ class SyncHttpClient:
         path: str,
         *,
         json: dict | None,
+        params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
@@ -3054,7 +3200,9 @@ class SyncHttpClient:
             request_headers, content = {}, b""
         if headers:
             request_headers.update(headers)
-        r = self.client.post(path, headers=request_headers, content=content)
+        r = self.client.post(
+            path, headers=request_headers, content=content, params=params
+        )
         if on_response:
             on_response(r)
         try:
@@ -3073,6 +3221,7 @@ class SyncHttpClient:
         path: str,
         *,
         json: dict,
+        params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
@@ -3081,7 +3230,9 @@ class SyncHttpClient:
         if headers:
             request_headers.update(headers)
 
-        r = self.client.put(path, headers=request_headers, content=content)
+        r = self.client.put(
+            path, headers=request_headers, content=content, params=params
+        )
         if on_response:
             on_response(r)
         try:
@@ -3100,6 +3251,7 @@ class SyncHttpClient:
         path: str,
         *,
         json: dict,
+        params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
@@ -3107,7 +3259,9 @@ class SyncHttpClient:
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
-        r = self.client.patch(path, headers=request_headers, content=content)
+        r = self.client.patch(
+            path, headers=request_headers, content=content, params=params
+        )
         if on_response:
             on_response(r)
         try:
@@ -3126,11 +3280,14 @@ class SyncHttpClient:
         path: str,
         *,
         json: Any | None = None,
+        params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a DELETE request."""
-        r = self.client.request("DELETE", path, json=json, headers=headers)
+        r = self.client.request(
+            "DELETE", path, json=json, params=params, headers=headers
+        )
         if on_response:
             on_response(r)
         try:
@@ -3227,12 +3384,14 @@ class SyncAssistantsClient:
         assistant_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Get an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get OR the name of the graph (to use the default assistant).
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Assistant: Assistant Object.
@@ -3261,7 +3420,9 @@ class SyncAssistantsClient:
             ```
 
         """  # noqa: E501
-        return self.http.get(f"/assistants/{assistant_id}", headers=headers)
+        return self.http.get(
+            f"/assistants/{assistant_id}", headers=headers, params=params
+        )
 
     def get_graph(
         self,
@@ -3316,12 +3477,14 @@ class SyncAssistantsClient:
         assistant_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> GraphSchema:
         """Get the schemas of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the schema of.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             GraphSchema: The graph schema for the assistant.
@@ -3438,7 +3601,9 @@ class SyncAssistantsClient:
             ```
 
         """  # noqa: E501
-        return self.http.get(f"/assistants/{assistant_id}/schemas", headers=headers)
+        return self.http.get(
+            f"/assistants/{assistant_id}/schemas", headers=headers, params=params
+        )
 
     def get_subgraphs(
         self,
@@ -3447,27 +3612,32 @@ class SyncAssistantsClient:
         recurse: bool = False,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Subgraphs:
         """Get the schemas of an assistant by ID.
 
         Args:
             assistant_id: The ID of the assistant to get the schema of.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Subgraphs: The graph schema for the assistant.
 
         """  # noqa: E501
+        get_params = {"recurse": recurse}
+        if params:
+            get_params = {**get_params, **params}
         if namespace is not None:
             return self.http.get(
                 f"/assistants/{assistant_id}/subgraphs/{namespace}",
-                params={"recurse": recurse},
+                params=get_params,
                 headers=headers,
             )
         else:
             return self.http.get(
                 f"/assistants/{assistant_id}/subgraphs",
-                params={"recurse": recurse},
+                params=get_params,
                 headers=headers,
             )
 
@@ -3483,6 +3653,7 @@ class SyncAssistantsClient:
         name: str | None = None,
         headers: dict[str, str] | None = None,
         description: str | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Create a new assistant.
 
@@ -3501,6 +3672,7 @@ class SyncAssistantsClient:
             headers: Optional custom headers to include with the request.
             description: Optional description of the assistant.
                 The description field is available for langgraph-api server version>=0.0.45
+            params: Optional query parameters to include with the request.
 
         Returns:
             Assistant: The created assistant.
@@ -3536,7 +3708,9 @@ class SyncAssistantsClient:
             payload["name"] = name
         if description:
             payload["description"] = description
-        return self.http.post("/assistants", json=payload, headers=headers)
+        return self.http.post(
+            "/assistants", json=payload, headers=headers, params=params
+        )
 
     def update(
         self,
@@ -3606,12 +3780,14 @@ class SyncAssistantsClient:
         assistant_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete an assistant.
 
         Args:
             assistant_id: The assistant ID to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -3626,7 +3802,7 @@ class SyncAssistantsClient:
             ```
 
         """  # noqa: E501
-        self.http.delete(f"/assistants/{assistant_id}", headers=headers)
+        self.http.delete(f"/assistants/{assistant_id}", headers=headers, params=params)
 
     def search(
         self,
@@ -3917,12 +4093,14 @@ class SyncThreadsClient:
         thread_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a thread.
 
         Args:
             thread_id: The ID of the thread to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -3936,7 +4114,7 @@ class SyncThreadsClient:
             ```
 
         """  # noqa: E501
-        self.http.delete(f"/threads/{thread_id}", headers=headers)
+        self.http.delete(f"/threads/{thread_id}", headers=headers, params=params)
 
     def search(
         self,
@@ -4297,6 +4475,7 @@ class SyncRunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Iterator[StreamPart]: ...
 
@@ -4324,6 +4503,7 @@ class SyncRunsClient:
         webhook: str | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Iterator[StreamPart]: ...
 
@@ -4353,6 +4533,7 @@ class SyncRunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Iterator[StreamPart]:
         """Create a run and stream the results.
@@ -4462,6 +4643,7 @@ class SyncRunsClient:
             endpoint,
             "POST",
             json={k: v for k, v in payload.items() if v is not None},
+            params=params,
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
@@ -4488,6 +4670,7 @@ class SyncRunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
 
@@ -4515,6 +4698,7 @@ class SyncRunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
 
@@ -4542,6 +4726,7 @@ class SyncRunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run:
         """Create a background run.
@@ -4684,6 +4869,7 @@ class SyncRunsClient:
         return self.http.post(
             f"/threads/{thread_id}/runs" if thread_id else "/runs",
             json=payload,
+            params=params,
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
@@ -4721,6 +4907,7 @@ class SyncRunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]: ...
 
@@ -4744,6 +4931,7 @@ class SyncRunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]: ...
 
@@ -4769,6 +4957,7 @@ class SyncRunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
@@ -4888,6 +5077,7 @@ class SyncRunsClient:
         return self.http.post(
             endpoint,
             json={k: v for k, v in payload.items() if v is not None},
+            params=params,
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
@@ -5088,6 +5278,7 @@ class SyncRunsClient:
         run_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a run.
 
@@ -5095,6 +5286,7 @@ class SyncRunsClient:
             thread_id: The thread ID to delete.
             run_id: The run ID to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -5110,7 +5302,9 @@ class SyncRunsClient:
             ```
 
         """  # noqa: E501
-        self.http.delete(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
+        self.http.delete(
+            f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
+        )
 
 
 class SyncCronClient:
@@ -5288,12 +5482,14 @@ class SyncCronClient:
         cron_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a cron.
 
         Args:
             cron_id: The cron ID to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -5308,7 +5504,7 @@ class SyncCronClient:
             ```
 
         """  # noqa: E501
-        self.http.delete(f"/runs/crons/{cron_id}", headers=headers)
+        self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
 
     def search(
         self,
@@ -5676,7 +5872,7 @@ def configure_loopback_transports(app: Any) -> None:
 @functools.lru_cache(maxsize=1)
 def get_asgi_transport() -> type[httpx.ASGITransport]:
     try:
-        from langgraph_api import asgi_transport
+        from langgraph_api import asgi_transport  # type: ignore[unresolved-import]
 
         return asgi_transport.ASGITransport
     except ImportError:
