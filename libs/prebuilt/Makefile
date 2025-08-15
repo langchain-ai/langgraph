@@ -30,6 +30,9 @@ test_watch:
 	make stop-services; \
 	exit $$EXIT_CODE
 
+snapshot_upate:
+	LANGGRAPH_TEST_FAST=1 uv run pytest --snapshot-update $(TEST)
+
 ######################
 # LINTING AND FORMATTING
 ######################

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 from typing import (
     Any,
@@ -43,15 +45,26 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import RemainingSteps
+from langgraph.prebuilt._internal._typing import (
+    ContextT,
+    PreConfiguredChatModel,
+    SyncOrAsync,
+)
+from langgraph.prebuilt.responses import (
+    OutputToolBinding,
+    ResponseFormat,
+    SchemaSpec,
+    ToolOutput,
+)
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
-from langgraph.types import Checkpointer, Send
-from langgraph.typing import ContextT
+from langgraph.types import Checkpointer, Command, Send
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
+
 F = TypeVar("F", bound=Callable[..., Any])
 
 
@@ -89,6 +102,7 @@ class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
 
 StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
 StateSchemaType = Type[StateSchema]
+
 
 PROMPT_RUNNABLE_NAME = "Prompt"
 
@@ -142,53 +156,6 @@ def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
         raise ValueError(f"Got unexpected type for `prompt`: {type(prompt)}")
 
     return prompt_runnable
-
-
-def _should_bind_tools(
-    model: LanguageModelLike, tools: Sequence[BaseTool], num_builtin: int = 0
-) -> bool:
-    if isinstance(model, RunnableSequence):
-        model = next(
-            (
-                step
-                for step in model.steps
-                if isinstance(step, (RunnableBinding, BaseChatModel))
-            ),
-            model,
-        )
-
-    if not isinstance(model, RunnableBinding):
-        return True
-
-    if "tools" not in model.kwargs:
-        return True
-
-    bound_tools = model.kwargs["tools"]
-    if len(tools) != len(bound_tools) - num_builtin:
-        raise ValueError(
-            "Number of tools in the model.bind_tools() and tools passed to create_react_agent must match"
-            f" Got {len(tools)} tools, expected {len(bound_tools) - num_builtin}"
-        )
-
-    tool_names = set(tool.name for tool in tools)
-    bound_tool_names = set()
-    for bound_tool in bound_tools:
-        # OpenAI-style tool
-        if bound_tool.get("type") == "function":
-            bound_tool_name = bound_tool["function"]["name"]
-        # Anthropic-style tool
-        elif bound_tool.get("name"):
-            bound_tool_name = bound_tool["name"]
-        else:
-            # unknown tool type so we'll ignore it
-            continue
-
-        bound_tool_names.add(bound_tool_name)
-
-    if missing_tools := tool_names - bound_tool_names:
-        raise ValueError(f"Missing tools '{missing_tools}' in the model.bind_tools()")
-
-    return False
 
 
 def _get_model(model: LanguageModelLike) -> BaseChatModel:
@@ -245,26 +212,707 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
+class _AgentBuilder:
+    """Internal builder class for constructing and agent."""
+
+    def __init__(
+        self,
+        model: Union[
+            str,
+            BaseChatModel,
+            PreConfiguredChatModel,
+            SyncOrAsync[[StateSchema, Runtime[ContextT]], BaseModel],
+            SyncOrAsync[
+                [StateSchema, Runtime[ContextT]],
+                Awaitable[PreConfiguredChatModel],
+            ],
+        ],
+        tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
+        *,
+        prompt: Optional[Prompt] = None,
+        response_format: Optional[ResponseFormat] = None,
+        pre_model_hook: Optional[RunnableLike] = None,
+        post_model_hook: Optional[RunnableLike] = None,
+        state_schema: Optional[StateSchemaType] = None,
+        context_schema: Optional[Type[Any]] = None,
+        version: Literal["v1", "v2"] = "v2",
+        name: Optional[str] = None,
+        store: Optional[BaseStore] = None,
+        use_individual_tool_nodes: bool = False,
+    ) -> None:
+        """Initialize the agent builder."""
+        if version == "v1" and use_individual_tool_nodes:
+            # This edge case is ill-defined. "v1" refers specifically to a single
+            # tools node that handles all tool calls.
+            raise AssertionError(
+                "The 'use_individual_tool_nodes' option is only supported "
+                "in version 'v2' agents."
+            )
+
+        if isinstance(model, Runnable) and not isinstance(model, BaseChatModel):
+            # Then we allow for a preconfigured model at least for now.
+            if not hasattr(model, "bound") or not isinstance(
+                model.bound, BaseChatModel
+            ):
+                raise TypeError(
+                    "Expected `model` to be a BaseChatModel or a chat model that "
+                    f"was pre-configured using `.bind()`. Instead got {type(model)}"
+                )
+
+            # Then it's a runnable binding. We don't want any pre-bound tools.
+            if (kwargs := getattr(model, "kwargs", {})) and "tools" in kwargs:
+                raise ValueError(
+                    "The `model` parameter should not have pre-bound tools. "
+                    "You are getting this error because the chat model you are using"
+                    "was pre-bound with tools somewhere. The code that binds tools "
+                    "looks like this: `model.bind_tools(...)`. "
+                    "Remove the `bind_tools` call and pass the unbound model "
+                    "and the `tools` parameter separately."
+                )
+
+        self.model = model
+        self.tools = tools
+        self.prompt = prompt
+        self.response_format = response_format
+        self.pre_model_hook = pre_model_hook
+        self.post_model_hook = post_model_hook
+        self.state_schema = state_schema
+        self.context_schema = context_schema
+        self.version = version
+        self.name = name
+        self.store = store
+        self._use_individual_tool_nodes = use_individual_tool_nodes
+
+        self._setup_tools()
+        self._setup_state_schema()
+        self._setup_structured_output_tools()
+        self._setup_model()
+
+    def _setup_tools(self) -> None:
+        """Setup tool-related attributes."""
+        if isinstance(self.tools, ToolNode):
+            self._tool_classes = list(self.tools.tools_by_name.values())
+            self._tool_node = self.tools
+            self._llm_builtin_tools = []
+        else:
+            self._llm_builtin_tools = [t for t in self.tools if isinstance(t, dict)]
+            self._tool_node = ToolNode(
+                [t for t in self.tools if not isinstance(t, dict)]
+            )
+            self._tool_classes = list(self._tool_node.tools_by_name.values())
+
+        self._should_return_direct = {
+            t.name for t in self._tool_classes if t.return_direct
+        }
+        self._tool_calling_enabled = len(self._tool_classes) > 0
+
+    def _setup_structured_output_tools(self) -> None:
+        """Set up structured output tools tracking for the tools strategy.
+
+        This method implements the "tools" strategy for structured output by:
+        1. Converting response format schemas to LangChain tools
+        2. Creating metadata for proper response reconstruction
+        3. Handling both Pydantic models and dict schemas
+
+        Future strategies (json_mode, guided) will have separate setup methods.
+        """
+        self.structured_output_tools: dict[str, OutputToolBinding] = {}
+        if self.response_format is not None:
+            response_format = self.response_format
+
+            # Handle UsingToolStrategy wrapper
+            if isinstance(response_format, ToolOutput):
+                # Use tools strategy - process each ResponseSchema in the UsingToolStrategy
+                for response_schema in response_format.schemas:
+                    # Use the factory method to create OutputToolBinding
+                    structured_tool_info = OutputToolBinding.from_schema_spec(
+                        response_schema
+                    )
+                    self.structured_output_tools[structured_tool_info.tool.name] = (
+                        structured_tool_info
+                    )
+            else:
+                # This shouldn't happen with the new ResponseFormat type, but keeping for safety
+                raise ValueError(
+                    f"Unsupported response_format type: {type(response_format)}. "
+                    f"Expected UsingToolStrategy."
+                )
+
+    def _setup_state_schema(self) -> None:
+        """Setup state schema with validation."""
+        if self.state_schema is not None:
+            required_keys = {"messages", "remaining_steps"}
+            if self.response_format is not None:
+                required_keys.add("structured_response")
+
+            schema_keys = set(get_type_hints(self.state_schema))
+            if missing_keys := required_keys - schema_keys:
+                raise ValueError(
+                    f"Missing required key(s) {missing_keys} in state_schema"
+                )
+
+            self._final_state_schema = self.state_schema
+        else:
+            self._final_state_schema = (
+                AgentStateWithStructuredResponse
+                if self.response_format is not None
+                else AgentState
+            )
+
+    def _handle_structured_response_tool_calls(
+        self, response: AIMessage
+    ) -> Optional[Command]:
+        """Handle tool calls that match structured output tools using the tools strategy.
+
+        Args:
+            response: The AI message containing potential tool calls
+
+        Returns:
+            Command with structured response update if found, None otherwise
+
+        Raises:
+            AssertionError: If multiple structured responses are returned
+        """
+        if not response.tool_calls:
+            return None
+
+        structured_tool_calls = [
+            tool_call
+            for tool_call in response.tool_calls
+            if tool_call["name"] in self.structured_output_tools
+        ]
+
+        if len(structured_tool_calls) > 1:
+            raise AssertionError(
+                "Model incorrectly returned multiple structured responses. "
+                "Behavior has not yet been defined in this case."
+            )
+
+        if len(structured_tool_calls) == 1:
+            tool_call = structured_tool_calls[0]
+            messages = [
+                response,
+                ToolMessage(
+                    content="ok!",
+                    tool_call_id=tool_call["id"],
+                    name=tool_call["name"],
+                ),
+            ]
+            structured_tool_binding = self.structured_output_tools[tool_call["name"]]
+            structured_response = structured_tool_binding.parse(tool_call["args"])
+
+            return Command(
+                update={
+                    "messages": messages,
+                    "structured_response": structured_response,
+                }
+            )
+
+        return None
+
+    def _setup_model(self) -> None:
+        """Setup model-related attributes."""
+        self._is_dynamic_model = not isinstance(
+            self.model, (str, Runnable)
+        ) and callable(self.model)
+        self._is_async_dynamic_model = (
+            self._is_dynamic_model and inspect.iscoroutinefunction(self.model)
+        )
+
+        if not self._is_dynamic_model:
+            model = self.model
+            if isinstance(model, str):
+                try:
+                    from langchain.chat_models import (  # type: ignore[import-not-found]
+                        init_chat_model,
+                    )
+                except ImportError:
+                    raise ImportError(
+                        "Please install langchain (`pip install langchain`) to use '<provider>:<model>' string syntax for `model` parameter."
+                    )
+                model = init_chat_model(model)
+
+            # Collect all tools: regular tools + structured output tools
+            structured_output_tools = list(self.structured_output_tools.values())
+            all_tools = (
+                self._tool_classes
+                + self._llm_builtin_tools
+                + [info.tool for info in structured_output_tools]
+            )
+
+            if len(all_tools) > 0:
+                # Check if we need to force tool use for structured output
+                tool_choice = None
+                if (
+                    self.response_format is not None
+                    and isinstance(self.response_format, ToolOutput)
+                    and self.response_format.tool_choice == "required"
+                ):
+                    tool_choice = "any"
+
+                if tool_choice:
+                    model = cast(BaseChatModel, model).bind_tools(
+                        all_tools, tool_choice=tool_choice
+                    )
+                else:
+                    model = cast(BaseChatModel, model).bind_tools(all_tools)
+            # Extract just the model part for direct invocation
+            self._static_model: Optional[Runnable] = model  # type: ignore[assignment]
+        else:
+            self._static_model = None
+
+    def _resolve_model(
+        self, state: StateSchema, runtime: Runtime[ContextT]
+    ) -> LanguageModelLike:
+        """Resolve the model to use, handling both static and dynamic models."""
+        if self._is_dynamic_model:
+            return self.model(state, runtime)  # type: ignore[operator, arg-type]
+        else:
+            return self._static_model
+
+    async def _aresolve_model(
+        self, state: StateSchema, runtime: Runtime[ContextT]
+    ) -> LanguageModelLike:
+        """Async resolve the model to use, handling both static and dynamic models."""
+        if self._is_async_dynamic_model:
+            dynamic_model = cast(
+                Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
+                self.model,
+            )
+            resolved_model = await dynamic_model(state, runtime)
+            return resolved_model
+        elif self._is_dynamic_model:
+            return self.model(state, runtime)  # type: ignore[arg-type, operator]
+        else:
+            return self._static_model
+
+    def create_model_node(self) -> RunnableCallable:
+        """Create the 'agent' node that calls the LLM."""
+
+        def _get_model_input_state(state: StateSchema) -> StateSchema:
+            if self.pre_model_hook is not None:
+                messages = _get_state_value(
+                    state, "llm_input_messages"
+                ) or _get_state_value(state, "messages")
+                error_msg = (
+                    f"Expected input to call_model to have 'llm_input_messages' "
+                    f"or 'messages' key, but got {state}"
+                )
+            else:
+                messages = _get_state_value(state, "messages")
+                error_msg = (
+                    f"Expected input to call_model to "
+                    f"have 'messages' key, but got {state}"
+                )
+
+            if messages is None:
+                raise ValueError(error_msg)
+
+            _validate_chat_history(messages)
+
+            if isinstance(self._final_state_schema, type) and issubclass(
+                self._final_state_schema, BaseModel
+            ):
+                # we're passing messages under `messages` key, as this
+                # is expected by the prompt
+                state.messages = messages  # type: ignore
+            else:
+                state["messages"] = messages  # type: ignore
+            return state
+
+        def _are_more_steps_needed(state: StateSchema, response: BaseMessage) -> bool:
+            has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
+            all_tools_return_direct = (
+                all(
+                    call["name"] in self._should_return_direct
+                    for call in response.tool_calls
+                )
+                if isinstance(response, AIMessage)
+                else False
+            )
+            remaining_steps = _get_state_value(state, "remaining_steps", None)
+            if remaining_steps is not None:
+                if remaining_steps < 1 and all_tools_return_direct:
+                    return True
+                elif remaining_steps < 2 and has_tool_calls:
+                    return True
+            return False
+
+        def call_model(
+            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+        ) -> dict[str, Any] | Command:
+            """Call the model with the current state and return the response."""
+            if self._is_async_dynamic_model:
+                raise RuntimeError(
+                    "Async model callable provided but agent invoked synchronously. "
+                    "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
+                )
+
+            model_input = _get_model_input_state(state)
+            model = self._resolve_model(state, runtime)
+
+            # Get prompt runnable and invoke it first to prepare messages
+            prompt_runnable = _get_prompt_runnable(self.prompt)
+            prepared_messages = prompt_runnable.invoke(model_input, config)
+
+            # Then invoke the model with the prepared messages
+            response = cast(AIMessage, model.invoke(prepared_messages, config))
+            response.name = self.name
+
+            if _are_more_steps_needed(state, response):
+                return {
+                    "messages": [
+                        AIMessage(
+                            id=response.id,
+                            content="Sorry, need more steps to process this request.",
+                        )
+                    ]
+                }
+
+            # Check if any tool calls match structured output tools
+            structured_command = self._handle_structured_response_tool_calls(response)
+            if structured_command:
+                return structured_command
+
+            return {"messages": [response]}
+
+        async def acall_model(
+            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+        ) -> dict[str, Any] | Command:
+            """Call the model with the current state and return the response."""
+            model_input = _get_model_input_state(state)
+
+            model = await self._aresolve_model(state, runtime)
+
+            # Get prompt runnable and invoke it first to prepare messages
+            prompt_runnable = _get_prompt_runnable(self.prompt)
+            prepared_messages = await prompt_runnable.ainvoke(model_input, config)
+
+            # Then invoke the model with the prepared messages
+            response = cast(
+                AIMessage,
+                await model.ainvoke(prepared_messages, config),
+            )
+            response.name = self.name
+            if _are_more_steps_needed(state, response):
+                return {
+                    "messages": [
+                        AIMessage(
+                            id=response.id,
+                            content="Sorry, need more steps to process this request.",
+                        )
+                    ]
+                }
+
+            # Check if any tool calls match structured output tools
+            structured_command = self._handle_structured_response_tool_calls(response)
+            if structured_command:
+                return structured_command
+
+            return {"messages": [response]}
+
+        return RunnableCallable(call_model, acall_model)
+
+    def _get_input_schema(self) -> StateSchemaType:
+        """Get input schema for model node."""
+        if self.pre_model_hook is not None:
+            if isinstance(self._final_state_schema, type) and issubclass(
+                self._final_state_schema, BaseModel
+            ):
+                from pydantic import create_model
+
+                return create_model(
+                    "CallModelInputSchema",
+                    llm_input_messages=(list[AnyMessage], ...),
+                    __base__=self._final_state_schema,
+                )
+            else:
+
+                class CallModelInputSchema(self._final_state_schema):  # type: ignore
+                    llm_input_messages: list[AnyMessage]
+
+                return CallModelInputSchema
+        else:
+            return self._final_state_schema
+
+    def create_model_router(self) -> Callable[[StateSchema], Union[str, list[Send]]]:
+        """Create routing function for model node conditional edges."""
+
+        def should_continue(state: StateSchema) -> Union[str, list[Send]]:
+            messages = _get_state_value(state, "messages")
+            last_message = messages[-1]
+
+            # Check if the last message is a ToolMessage from a structured tool.
+            # This condition exists to support structured output via tools.
+            # Once a tool has been called for structured output, we skip
+            # tool execution and go to END (if there is no post_model_hook).
+            if (
+                isinstance(last_message, ToolMessage)
+                and last_message.name in self.structured_output_tools
+            ):
+                return END
+
+            if isinstance(last_message, ToolMessage):
+                return END
+
+            if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+                if self.post_model_hook is not None:
+                    return "post_model_hook"
+                else:
+                    return END
+            else:
+                if self.version == "v1":
+                    return "tools"
+                elif self.version == "v2":
+                    if self.post_model_hook is not None:
+                        return "post_model_hook"
+
+                    if self._use_individual_tool_nodes:
+                        # Route to individual tool nodes
+                        tool_calls = [
+                            self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
+                            for call in last_message.tool_calls
+                        ]
+                        return [
+                            Send(tool_call["name"], [tool_call])
+                            for tool_call in tool_calls
+                        ]
+                    else:
+                        # Use the original combined tools node
+                        tool_calls = [
+                            self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
+                            for call in last_message.tool_calls
+                        ]
+                        return [Send("tools", [tool_call]) for tool_call in tool_calls]
+
+        return should_continue
+
+    def create_post_model_hook_router(
+        self,
+    ) -> Callable[[StateSchema], Union[str, list[Send]]]:
+        """Create a routing function for post_model_hook node conditional edges."""
+
+        def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
+            messages = _get_state_value(state, "messages")
+
+            # Check if the last message is a ToolMessage from a structured tool.
+            # This condition exists to support structured output via tools.
+            # Once a tool has been called for structured output, we skip
+            # tool execution and go to END (if there is no post_model_hook).
+            last_message = messages[-1]
+            if (
+                isinstance(last_message, ToolMessage)
+                and last_message.name in self.structured_output_tools
+            ):
+                return END
+
+            tool_messages = [
+                m.tool_call_id for m in messages if isinstance(m, ToolMessage)
+            ]
+            last_ai_message = next(
+                m for m in reversed(messages) if isinstance(m, AIMessage)
+            )
+            pending_tool_calls = [
+                c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
+            ]
+
+            if pending_tool_calls:
+                pending_tool_calls = [
+                    self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
+                    for call in pending_tool_calls
+                ]
+
+                if self._use_individual_tool_nodes:
+                    return [
+                        # TODO: Add validation for tool name being a valid node name
+                        # and one that matches a tool.
+                        Send(tool_call["name"], [tool_call])
+                        for tool_call in pending_tool_calls
+                    ]
+                else:
+                    return [
+                        Send("tools", [tool_call]) for tool_call in pending_tool_calls
+                    ]
+            elif isinstance(messages[-1], ToolMessage):
+                return self._get_entry_point()
+            else:
+                return END
+
+        return post_model_hook_router
+
+    def create_tools_router(self) -> Optional[Callable[[StateSchema], str]]:
+        """Create a routing function for tools node conditional edges."""
+        if not self._should_return_direct:
+            return None
+
+        def route_tool_responses(state: StateSchema) -> str:
+            messages = _get_state_value(state, "messages")
+            for m in reversed(messages):
+                if not isinstance(m, ToolMessage):
+                    break
+                if m.name in self._should_return_direct:
+                    return END
+
+            if isinstance(m, AIMessage) and m.tool_calls:
+                if any(
+                    call["name"] in self._should_return_direct for call in m.tool_calls
+                ):
+                    return END
+
+            return self._get_entry_point()
+
+        return route_tool_responses
+
+    def add_tool_node(self, tool: BaseTool) -> RunnableCallable:
+        """Create a node that executes a specific tool.
+
+        This method creates a node that wraps a single tool in a ToolNode
+        and executes it, returning the result as {"messages": [message]}.
+
+        Args:
+            tool: The tool to wrap in a node.
+
+        Returns:
+            A RunnableCallable node that can be added to the graph.
+        """
+        tool_node = ToolNode([tool])
+        return tool_node
+
+    def _get_entry_point(self) -> str:
+        """Get the workflow entry point."""
+        return "pre_model_hook" if self.pre_model_hook else "agent"
+
+    def _get_model_paths(self) -> list[str]:
+        """Get possible edge destinations from model node."""
+        paths = []
+        if self._tool_calling_enabled:
+            if self._use_individual_tool_nodes:
+                paths.extend([tool.name for tool in self._tool_classes])
+            else:
+                paths.append("tools")
+        paths.append(END)
+        return paths
+
+    def _get_post_model_hook_paths(self) -> list[str]:
+        """Get possible edge destinations from post_model_hook node."""
+        paths = []
+        if self._tool_calling_enabled:
+            if self._use_individual_tool_nodes:
+                paths = [self._get_entry_point()] + [
+                    tool.name for tool in self._tool_classes
+                ]
+            else:
+                paths = [self._get_entry_point(), "tools"]
+        paths.append(END)
+        return paths
+
+    def build(
+        self,
+    ) -> StateGraph:
+        """Build the agent workflow graph."""
+        workflow = StateGraph(
+            state_schema=self._final_state_schema,
+            context_schema=self.context_schema,
+        )
+
+        # Set entry point
+        workflow.set_entry_point(self._get_entry_point())
+
+        # Add nodes
+        workflow.add_node(
+            "agent", self.create_model_node(), input_schema=self._get_input_schema()
+        )
+
+        if self._tool_calling_enabled:
+            if self._use_individual_tool_nodes:
+                # Add individual tool nodes
+                for tool in self._tool_classes:
+                    tool_node = self.add_tool_node(tool)
+                    workflow.add_node(tool.name, tool_node)
+            else:
+                # Add the combined tools node
+                workflow.add_node("tools", self._tool_node)
+
+        if self.pre_model_hook:
+            workflow.add_node("pre_model_hook", self.pre_model_hook)  # type: ignore[arg-type]
+
+        if self.post_model_hook:
+            workflow.add_node("post_model_hook", self.post_model_hook)  # type: ignore[arg-type]
+
+        # Add edges
+        if self.pre_model_hook:
+            workflow.add_edge("pre_model_hook", "agent")
+
+        if self.post_model_hook:
+            workflow.add_edge("agent", "post_model_hook")
+            post_hook_paths = self._get_post_model_hook_paths()
+            if len(post_hook_paths) == 1:
+                # No need for a conditional edge if there's only one path
+                workflow.add_edge("post_model_hook", post_hook_paths[0])
+            else:
+                workflow.add_conditional_edges(
+                    "post_model_hook",
+                    self.create_post_model_hook_router(),
+                    path_map=post_hook_paths,
+                )
+        else:
+            model_paths = self._get_model_paths()
+            if len(model_paths) == 1:
+                # No need for a conditional edge if there's only one path
+                workflow.add_edge("agent", model_paths[0])
+            else:
+                workflow.add_conditional_edges(
+                    "agent",
+                    self.create_model_router(),
+                    path_map=model_paths,
+                )
+
+        if self._tool_calling_enabled:
+            if self._use_individual_tool_nodes:
+                # Add edges for individual tool nodes
+                tools_router = self.create_tools_router()
+                for tool in self._tool_classes:
+                    tool_node_name = tool.name
+                    if tools_router:
+                        workflow.add_conditional_edges(
+                            tool_node_name,
+                            tools_router,
+                            path_map=[self._get_entry_point(), END],
+                        )
+                    else:
+                        workflow.add_edge(tool_node_name, self._get_entry_point())
+            else:
+                # In some cases, tools can return directly. In these cases
+                # we add a conditional edge from the tools node to the END node
+                # instead of going to the entry point.
+                tools_router = self.create_tools_router()
+                if tools_router:
+                    workflow.add_conditional_edges(
+                        "tools",
+                        tools_router,
+                        path_map=[self._get_entry_point(), END],
+                    )
+                else:
+                    workflow.add_edge("tools", self._get_entry_point())
+
+        return workflow
+
+
 def create_react_agent(
     model: Union[
         str,
-        LanguageModelLike,
-        Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
-        Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
-        Callable[
-            [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]
-        ],
-        Callable[
+        BaseChatModel,
+        PreConfiguredChatModel,
+        SyncOrAsync[[StateSchema, Runtime[ContextT]], BaseModel],
+        SyncOrAsync[
             [StateSchema, Runtime[ContextT]],
-            Awaitable[Runnable[LanguageModelInput, BaseMessage]],
+            Awaitable[PreConfiguredChatModel],
         ],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
-    response_format: Optional[
-        Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
-    ] = None,
+    response_format: Optional[Union[ToolOutput, StructuredResponseSchema]] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
@@ -276,6 +924,7 @@ def create_react_agent(
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
+    use_individual_tool_nodes: bool = False,
     **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
@@ -332,25 +981,27 @@ def create_react_agent(
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
 
-        response_format: An optional schema for the final agent output.
+        response_format: An optional UsingToolStrategy configuration for structured responses.
 
-            If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
+            If provided, the agent will handle structured output via tool calls during the normal conversation flow.
+            When the model calls a structured output tool, the response will be captured and returned in the 'structured_response' state key.
             If not provided, `structured_response` will not be present in the output state.
-            Can be passed in as:
 
-                - an OpenAI function/tool schema,
-                - a JSON Schema,
-                - a TypedDict class,
-                - or a Pydantic class.
-                - a tuple (prompt, schema), where schema is one of the above.
-                    The prompt will be used together with the model that is being used to generate the structured response.
+            The UsingToolStrategy should contain:
+                - schemas: A sequence of ResponseSchema objects that define the structured output format
+                - tool_choice: Either "required" or "auto" to control when structured output is used
+
+            Each ResponseSchema contains:
+                - schema: A Pydantic model that defines the structure
+                - name: Optional custom name for the tool (defaults to model name)
+                - description: Optional custom description (defaults to model docstring)
+                - strict: Whether to enforce strict validation
 
             !!! Important
-                `response_format` requires the model to support `.with_structured_output`
+                `response_format` requires the model to support tool calling
 
             !!! Note
-                The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
-                This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
+                Structured responses are handled directly in the model call node via tool calls, eliminating the need for separate structured response nodes.
 
         pre_model_hook: An optional node to add before the `agent` node (i.e., the node that calls the LLM).
             Useful for managing long message histories (e.g., message trimming, summarization, etc.).
@@ -414,6 +1065,10 @@ def create_react_agent(
         name: An optional name for the CompiledStateGraph.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
+        use_individual_tool_nodes: A flag indicating whether to use individual tool nodes for each tool.
+            If set to `True`, each tool will have its own node in the graph.
+            This has been added for the beta period. The default behavior will change
+            in v1.0.0 to use individual tool nodes.
 
     !!! warning "`config_schema` Deprecated"
         The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
@@ -462,6 +1117,7 @@ def create_react_agent(
             print(chunk)
         ```
     """
+    # Handle deprecated config_schema parameter
     if (
         config_schema := deprecated_kwargs.pop("config_schema", MISSING)
     ) is not MISSING:
@@ -469,7 +1125,6 @@ def create_react_agent(
             "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
             category=LangGraphDeprecatedSinceV10,
         )
-
         if context_schema is None:
             context_schema = config_schema
 
@@ -483,451 +1138,40 @@ def create_react_agent(
             f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
         )
 
-    if state_schema is not None:
-        required_keys = {"messages", "remaining_steps"}
-        if response_format is not None:
-            required_keys.add("structured_response")
-
-        schema_keys = set(get_type_hints(state_schema))
-        if missing_keys := required_keys - set(schema_keys):
-            raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
-
-    if state_schema is None:
-        state_schema = (
-            AgentStateWithStructuredResponse
-            if response_format is not None
-            else AgentState
+    if response_format and not isinstance(response_format, ToolOutput):
+        # Then it's a pydantic model or JSONSchema. We'll automatically convert
+        # it to the tool output strategy as it is widely supported.
+        response_format = ToolOutput(
+            schemas=[SchemaSpec(response_format)],
+            tool_choice="required",
         )
-
-    llm_builtin_tools: list[dict] = []
-    if isinstance(tools, ToolNode):
-        tool_classes = list(tools.tools_by_name.values())
-        tool_node = tools
+    elif isinstance(response_format, tuple):
+        if len(response_format) == 2:
+            raise ValueError(
+                "Passing a 2-tuple as response_format is no longer supported. "
+            )
     else:
-        llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
-        tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
-        tool_classes = list(tool_node.tools_by_name.values())
+        # Can only be a ToolOutput or None at this point.
+        response_format = cast(Optional[ToolOutput], response_format)
 
-    is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
-    is_async_dynamic_model = is_dynamic_model and inspect.iscoroutinefunction(model)
-
-    tool_calling_enabled = len(tool_classes) > 0
-
-    if not is_dynamic_model:
-        if isinstance(model, str):
-            try:
-                from langchain.chat_models import (  # type: ignore[import-not-found]
-                    init_chat_model,
-                )
-            except ImportError:
-                raise ImportError(
-                    "Please install langchain (`pip install langchain`) to "
-                    "use '<provider>:<model>' string syntax for `model` parameter."
-                )
-
-            model = cast(BaseChatModel, init_chat_model(model))
-
-        if (
-            _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
-            and len(tool_classes + llm_builtin_tools) > 0
-        ):
-            model = cast(BaseChatModel, model).bind_tools(
-                tool_classes + llm_builtin_tools  # type: ignore[operator]
-            )
-
-        static_model: Optional[Runnable] = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
-    else:
-        # For dynamic models, we'll create the runnable at runtime
-        static_model = None
-
-    # If any of the tools are configured to return_directly after running,
-    # our graph needs to check if these were called
-    should_return_direct = {t.name for t in tool_classes if t.return_direct}
-
-    def _resolve_model(
-        state: StateSchema, runtime: Runtime[ContextT]
-    ) -> LanguageModelLike:
-        """Resolve the model to use, handling both static and dynamic models."""
-        if is_dynamic_model:
-            return _get_prompt_runnable(prompt) | model(state, runtime)  # type: ignore[operator]
-        else:
-            return static_model
-
-    async def _aresolve_model(
-        state: StateSchema, runtime: Runtime[ContextT]
-    ) -> LanguageModelLike:
-        """Async resolve the model to use, handling both static and dynamic models."""
-        if is_async_dynamic_model:
-            resolved_model = await model(state, runtime)  # type: ignore[misc,operator]
-            return _get_prompt_runnable(prompt) | resolved_model
-        elif is_dynamic_model:
-            return _get_prompt_runnable(prompt) | model(state, runtime)  # type: ignore[operator]
-        else:
-            return static_model
-
-    def _are_more_steps_needed(state: StateSchema, response: BaseMessage) -> bool:
-        has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
-        all_tools_return_direct = (
-            all(call["name"] in should_return_direct for call in response.tool_calls)
-            if isinstance(response, AIMessage)
-            else False
-        )
-        remaining_steps = _get_state_value(state, "remaining_steps", None)
-        if remaining_steps is not None:
-            if remaining_steps < 1 and all_tools_return_direct:
-                return True
-            elif remaining_steps < 2 and has_tool_calls:
-                return True
-
-        return False
-
-    def _get_model_input_state(state: StateSchema) -> StateSchema:
-        if pre_model_hook is not None:
-            messages = (
-                _get_state_value(state, "llm_input_messages")
-            ) or _get_state_value(state, "messages")
-            error_msg = f"Expected input to call_model to have 'llm_input_messages' or 'messages' key, but got {state}"
-        else:
-            messages = _get_state_value(state, "messages")
-            error_msg = (
-                f"Expected input to call_model to have 'messages' key, but got {state}"
-            )
-
-        if messages is None:
-            raise ValueError(error_msg)
-
-        _validate_chat_history(messages)
-        # we're passing messages under `messages` key, as this is expected by the prompt
-        if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
-            state.messages = messages  # type: ignore
-        else:
-            state["messages"] = messages  # type: ignore
-
-        return state
-
-    # Define the function that calls the model
-    def call_model(
-        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-    ) -> StateSchema:
-        if is_async_dynamic_model:
-            msg = (
-                "Async model callable provided but agent invoked synchronously. "
-                "Use agent.ainvoke() or agent.astream(), or "
-                "provide a sync model callable."
-            )
-            raise RuntimeError(msg)
-
-        model_input = _get_model_input_state(state)
-
-        if is_dynamic_model:
-            # Resolve dynamic model at runtime and apply prompt
-            dynamic_model = _resolve_model(state, runtime)
-            response = cast(AIMessage, dynamic_model.invoke(model_input, config))  # type: ignore[arg-type]
-        else:
-            response = cast(AIMessage, static_model.invoke(model_input, config))  # type: ignore[union-attr]
-
-        # add agent name to the AIMessage
-        response.name = name
-
-        if _are_more_steps_needed(state, response):
-            return {
-                "messages": [
-                    AIMessage(
-                        id=response.id,
-                        content="Sorry, need more steps to process this request.",
-                    )
-                ]
-            }
-        # We return a list, because this will get added to the existing list
-        return {"messages": [response]}
-
-    async def acall_model(
-        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-    ) -> StateSchema:
-        model_input = _get_model_input_state(state)
-
-        if is_dynamic_model:
-            # Resolve dynamic model at runtime and apply prompt
-            # (supports both sync and async)
-            dynamic_model = await _aresolve_model(state, runtime)
-            response = cast(AIMessage, await dynamic_model.ainvoke(model_input, config))  # type: ignore[arg-type]
-        else:
-            response = cast(AIMessage, await static_model.ainvoke(model_input, config))  # type: ignore[union-attr]
-
-        # add agent name to the AIMessage
-        response.name = name
-        if _are_more_steps_needed(state, response):
-            return {
-                "messages": [
-                    AIMessage(
-                        id=response.id,
-                        content="Sorry, need more steps to process this request.",
-                    )
-                ]
-            }
-        # We return a list, because this will get added to the existing list
-        return {"messages": [response]}
-
-    input_schema: StateSchemaType
-    if pre_model_hook is not None:
-        # Dynamically create a schema that inherits from state_schema and adds 'llm_input_messages'
-        if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
-            # For Pydantic schemas
-            from pydantic import create_model
-
-            input_schema = create_model(
-                "CallModelInputSchema",
-                llm_input_messages=(list[AnyMessage], ...),
-                __base__=state_schema,
-            )
-        else:
-            # For TypedDict schemas
-            class CallModelInputSchema(state_schema):  # type: ignore
-                llm_input_messages: list[AnyMessage]
-
-            input_schema = CallModelInputSchema
-    else:
-        input_schema = state_schema
-
-    def generate_structured_response(
-        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-    ) -> StateSchema:
-        if is_async_dynamic_model:
-            msg = (
-                "Async model callable provided but agent invoked synchronously. "
-                "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
-            )
-            raise RuntimeError(msg)
-
-        messages = _get_state_value(state, "messages")
-        structured_response_schema = response_format
-        if isinstance(response_format, tuple):
-            system_prompt, structured_response_schema = response_format
-            messages = [SystemMessage(content=system_prompt)] + list(messages)
-
-        resolved_model = _resolve_model(state, runtime)
-        model_with_structured_output = _get_model(
-            resolved_model
-        ).with_structured_output(
-            cast(StructuredResponseSchema, structured_response_schema)
-        )
-        response = model_with_structured_output.invoke(messages, config)
-        return {"structured_response": response}
-
-    async def agenerate_structured_response(
-        state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-    ) -> StateSchema:
-        messages = _get_state_value(state, "messages")
-        structured_response_schema = response_format
-        if isinstance(response_format, tuple):
-            system_prompt, structured_response_schema = response_format
-            messages = [SystemMessage(content=system_prompt)] + list(messages)
-
-        resolved_model = await _aresolve_model(state, runtime)
-        model_with_structured_output = _get_model(
-            resolved_model
-        ).with_structured_output(
-            cast(StructuredResponseSchema, structured_response_schema)
-        )
-        response = await model_with_structured_output.ainvoke(messages, config)
-        return {"structured_response": response}
-
-    if not tool_calling_enabled:
-        # Define a new graph
-        workflow = StateGraph(state_schema=state_schema, context_schema=context_schema)
-        workflow.add_node(
-            "agent",
-            RunnableCallable(call_model, acall_model),
-            input_schema=input_schema,
-        )
-        if pre_model_hook is not None:
-            workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
-            workflow.add_edge("pre_model_hook", "agent")
-            entrypoint = "pre_model_hook"
-        else:
-            entrypoint = "agent"
-
-        workflow.set_entry_point(entrypoint)
-
-        if post_model_hook is not None:
-            workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
-            workflow.add_edge("agent", "post_model_hook")
-
-        if response_format is not None:
-            workflow.add_node(
-                "generate_structured_response",
-                RunnableCallable(
-                    generate_structured_response,
-                    agenerate_structured_response,
-                ),
-            )
-            if post_model_hook is not None:
-                workflow.add_edge("post_model_hook", "generate_structured_response")
-            else:
-                workflow.add_edge("agent", "generate_structured_response")
-
-        return workflow.compile(
-            checkpointer=checkpointer,
-            store=store,
-            interrupt_before=interrupt_before,
-            interrupt_after=interrupt_after,
-            debug=debug,
-            name=name,
-        )
-
-    # Define the function that determines whether to continue or not
-    def should_continue(state: StateSchema) -> Union[str, list[Send]]:
-        messages = _get_state_value(state, "messages")
-        last_message = messages[-1]
-        # If there is no function call, then we finish
-        if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            if post_model_hook is not None:
-                return "post_model_hook"
-            elif response_format is not None:
-                return "generate_structured_response"
-            else:
-                return END
-        # Otherwise if there is, we continue
-        else:
-            if version == "v1":
-                return "tools"
-            elif version == "v2":
-                if post_model_hook is not None:
-                    return "post_model_hook"
-                tool_calls = [
-                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
-                    for call in last_message.tool_calls
-                ]
-                return [Send("tools", [tool_call]) for tool_call in tool_calls]
-
-    # Define a new graph
-    workflow = StateGraph(
-        state_schema=state_schema or AgentState, context_schema=context_schema
+    # Create and configure the agent builder
+    builder = _AgentBuilder(
+        model=model,
+        tools=tools,
+        prompt=prompt,
+        response_format=response_format,
+        pre_model_hook=pre_model_hook,
+        post_model_hook=post_model_hook,
+        state_schema=state_schema,
+        context_schema=context_schema,
+        version=version,
+        name=name,
+        store=store,
+        use_individual_tool_nodes=use_individual_tool_nodes,
     )
 
-    # Define the two nodes we will cycle between
-    workflow.add_node(
-        "agent",
-        RunnableCallable(call_model, acall_model),
-        input_schema=input_schema,
-    )
-    workflow.add_node("tools", tool_node)
-
-    # Optionally add a pre-model hook node that will be called
-    # every time before the "agent" (LLM-calling node)
-    if pre_model_hook is not None:
-        workflow.add_node("pre_model_hook", pre_model_hook)  # type: ignore[arg-type]
-        workflow.add_edge("pre_model_hook", "agent")
-        entrypoint = "pre_model_hook"
-    else:
-        entrypoint = "agent"
-
-    # Set the entrypoint as `agent`
-    # This means that this node is the first one called
-    workflow.set_entry_point(entrypoint)
-
-    agent_paths = []
-    post_model_hook_paths = [entrypoint, "tools"]
-
-    # Add a post model hook node if post_model_hook is provided
-    if post_model_hook is not None:
-        workflow.add_node("post_model_hook", post_model_hook)  # type: ignore[arg-type]
-        agent_paths.append("post_model_hook")
-        workflow.add_edge("agent", "post_model_hook")
-    else:
-        agent_paths.append("tools")
-
-    # Add a structured output node if response_format is provided
-    if response_format is not None:
-        workflow.add_node(
-            "generate_structured_response",
-            RunnableCallable(
-                generate_structured_response,
-                agenerate_structured_response,
-            ),
-        )
-        if post_model_hook is not None:
-            post_model_hook_paths.append("generate_structured_response")
-        else:
-            agent_paths.append("generate_structured_response")
-    else:
-        if post_model_hook is not None:
-            post_model_hook_paths.append(END)
-        else:
-            agent_paths.append(END)
-
-    if post_model_hook is not None:
-
-        def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
-            """Route to the next node after post_model_hook.
-
-            Routes to one of:
-            * "tools": if there are pending tool calls without a corresponding message.
-            * "generate_structured_response": if no pending tool calls exist and response_format is specified.
-            * END: if no pending tool calls exist and no response_format is specified.
-            """
-
-            messages = _get_state_value(state, "messages")
-            tool_messages = [
-                m.tool_call_id for m in messages if isinstance(m, ToolMessage)
-            ]
-            last_ai_message = next(
-                m for m in reversed(messages) if isinstance(m, AIMessage)
-            )
-            pending_tool_calls = [
-                c for c in last_ai_message.tool_calls if c["id"] not in tool_messages
-            ]
-
-            if pending_tool_calls:
-                pending_tool_calls = [
-                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
-                    for call in pending_tool_calls
-                ]
-                return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
-            elif isinstance(messages[-1], ToolMessage):
-                return entrypoint
-            elif response_format is not None:
-                return "generate_structured_response"
-            else:
-                return END
-
-        workflow.add_conditional_edges(
-            "post_model_hook",
-            post_model_hook_router,
-            path_map=post_model_hook_paths,
-        )
-
-    workflow.add_conditional_edges(
-        "agent",
-        should_continue,
-        path_map=agent_paths,
-    )
-
-    def route_tool_responses(state: StateSchema) -> str:
-        for m in reversed(_get_state_value(state, "messages")):
-            if not isinstance(m, ToolMessage):
-                break
-            if m.name in should_return_direct:
-                return END
-
-        # handle a case of parallel tool calls where
-        # the tool w/ `return_direct` was executed in a different `Send`
-        if isinstance(m, AIMessage) and m.tool_calls:
-            if any(call["name"] in should_return_direct for call in m.tool_calls):
-                return END
-
-        return entrypoint
-
-    if should_return_direct:
-        workflow.add_conditional_edges(
-            "tools", route_tool_responses, path_map=[entrypoint, END]
-        )
-    else:
-        workflow.add_edge("tools", entrypoint)
-
-    # Finally, we compile it!
-    # This compiles it into a LangChain Runnable,
-    # meaning you can use it as you would any other runnable
+    # Build and compile the workflow
+    workflow = builder.build()
     return workflow.compile(
         checkpointer=checkpointer,
         store=store,
