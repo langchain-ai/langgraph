@@ -50,14 +50,21 @@ from langgraph.prebuilt._internal._typing import (
     PreConfiguredChatModel,
     SyncOrAsync,
 )
+from langgraph.prebuilt.responses import (
+    OutputToolBinding,
+    ResponseFormat,
+    SchemaSpec,
+    ToolOutput,
+)
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
-from langgraph.types import Checkpointer, Send
+from langgraph.types import Checkpointer, Command, Send
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
+
 F = TypeVar("F", bound=Callable[..., Any])
 
 
@@ -95,6 +102,7 @@ class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
 
 StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
 StateSchemaType = Type[StateSchema]
+
 
 PROMPT_RUNNABLE_NAME = "Prompt"
 
@@ -205,7 +213,7 @@ def _validate_chat_history(
 
 
 class _AgentBuilder:
-    """Internal builder class for constructing React agents with intuitive method-to-node mapping."""
+    """Internal builder class for constructing and agent."""
 
     def __init__(
         self,
@@ -222,9 +230,7 @@ class _AgentBuilder:
         tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
         *,
         prompt: Optional[Prompt] = None,
-        response_format: Optional[
-            Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
-        ] = None,
+        response_format: Optional[ResponseFormat] = None,
         pre_model_hook: Optional[RunnableLike] = None,
         post_model_hook: Optional[RunnableLike] = None,
         state_schema: Optional[StateSchemaType] = None,
@@ -279,6 +285,7 @@ class _AgentBuilder:
 
         self._setup_tools()
         self._setup_state_schema()
+        self._setup_structured_output_tools()
         self._setup_model()
 
     def _setup_tools(self) -> None:
@@ -298,6 +305,38 @@ class _AgentBuilder:
             t.name for t in self._tool_classes if t.return_direct
         }
         self._tool_calling_enabled = len(self._tool_classes) > 0
+
+    def _setup_structured_output_tools(self) -> None:
+        """Set up structured output tools tracking for the tools strategy.
+
+        This method implements the "tools" strategy for structured output by:
+        1. Converting response format schemas to LangChain tools
+        2. Creating metadata for proper response reconstruction
+        3. Handling both Pydantic models and dict schemas
+
+        Future strategies (json_mode, guided) will have separate setup methods.
+        """
+        self.structured_output_tools: dict[str, OutputToolBinding] = {}
+        if self.response_format is not None:
+            response_format = self.response_format
+
+            # Handle UsingToolStrategy wrapper
+            if isinstance(response_format, ToolOutput):
+                # Use tools strategy - process each ResponseSchema in the UsingToolStrategy
+                for response_schema in response_format.schemas:
+                    # Use the factory method to create OutputToolBinding
+                    structured_tool_info = OutputToolBinding.from_schema_spec(
+                        response_schema
+                    )
+                    self.structured_output_tools[structured_tool_info.tool.name] = (
+                        structured_tool_info
+                    )
+            else:
+                # This shouldn't happen with the new ResponseFormat type, but keeping for safety
+                raise ValueError(
+                    f"Unsupported response_format type: {type(response_format)}. "
+                    f"Expected UsingToolStrategy."
+                )
 
     def _setup_state_schema(self) -> None:
         """Setup state schema with validation."""
@@ -319,6 +358,57 @@ class _AgentBuilder:
                 if self.response_format is not None
                 else AgentState
             )
+
+    def _handle_structured_response_tool_calls(
+        self, response: AIMessage
+    ) -> Optional[Command]:
+        """Handle tool calls that match structured output tools using the tools strategy.
+
+        Args:
+            response: The AI message containing potential tool calls
+
+        Returns:
+            Command with structured response update if found, None otherwise
+
+        Raises:
+            AssertionError: If multiple structured responses are returned
+        """
+        if not response.tool_calls:
+            return None
+
+        structured_tool_calls = [
+            tool_call
+            for tool_call in response.tool_calls
+            if tool_call["name"] in self.structured_output_tools
+        ]
+
+        if len(structured_tool_calls) > 1:
+            raise AssertionError(
+                "Model incorrectly returned multiple structured responses. "
+                "Behavior has not yet been defined in this case."
+            )
+
+        if len(structured_tool_calls) == 1:
+            tool_call = structured_tool_calls[0]
+            messages = [
+                response,
+                ToolMessage(
+                    content="ok!",
+                    tool_call_id=tool_call["id"],
+                    name=tool_call["name"],
+                ),
+            ]
+            structured_tool_binding = self.structured_output_tools[tool_call["name"]]
+            structured_response = structured_tool_binding.parse(tool_call["args"])
+
+            return Command(
+                update={
+                    "messages": messages,
+                    "structured_response": structured_response,
+                }
+            )
+
+        return None
 
     def _setup_model(self) -> None:
         """Setup model-related attributes."""
@@ -342,11 +432,30 @@ class _AgentBuilder:
                     )
                 model = init_chat_model(model)
 
-            if len(self._tool_classes + self._llm_builtin_tools) > 0:
-                model = cast(BaseChatModel, model).bind_tools(
-                    self._tool_classes + self._llm_builtin_tools  # type: ignore[operator]
-                )
+            # Collect all tools: regular tools + structured output tools
+            structured_output_tools = list(self.structured_output_tools.values())
+            all_tools = (
+                self._tool_classes
+                + self._llm_builtin_tools
+                + [info.tool for info in structured_output_tools]
+            )
 
+            if len(all_tools) > 0:
+                # Check if we need to force tool use for structured output
+                tool_choice = None
+                if (
+                    self.response_format is not None
+                    and isinstance(self.response_format, ToolOutput)
+                    and self.response_format.tool_choice == "required"
+                ):
+                    tool_choice = "any"
+
+                if tool_choice:
+                    model = cast(BaseChatModel, model).bind_tools(
+                        all_tools, tool_choice=tool_choice
+                    )
+                else:
+                    model = cast(BaseChatModel, model).bind_tools(all_tools)
             # Extract just the model part for direct invocation
             self._static_model: Optional[Runnable] = model  # type: ignore[assignment]
         else:
@@ -404,7 +513,8 @@ class _AgentBuilder:
             if isinstance(self._final_state_schema, type) and issubclass(
                 self._final_state_schema, BaseModel
             ):
-                # we're passing messages under `messages` key, as this is expected by the prompt
+                # we're passing messages under `messages` key, as this
+                # is expected by the prompt
                 state.messages = messages  # type: ignore
             else:
                 state["messages"] = messages  # type: ignore
@@ -430,7 +540,8 @@ class _AgentBuilder:
 
         def call_model(
             state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-        ) -> StateSchema:
+        ) -> dict[str, Any] | Command:
+            """Call the model with the current state and return the response."""
             if self._is_async_dynamic_model:
                 raise RuntimeError(
                     "Async model callable provided but agent invoked synchronously. "
@@ -457,11 +568,18 @@ class _AgentBuilder:
                         )
                     ]
                 }
+
+            # Check if any tool calls match structured output tools
+            structured_command = self._handle_structured_response_tool_calls(response)
+            if structured_command:
+                return structured_command
+
             return {"messages": [response]}
 
         async def acall_model(
             state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-        ) -> StateSchema:
+        ) -> dict[str, Any] | Command:
+            """Call the model with the current state and return the response."""
             model_input = _get_model_input_state(state)
 
             model = await self._aresolve_model(state, runtime)
@@ -485,6 +603,12 @@ class _AgentBuilder:
                         )
                     ]
                 }
+
+            # Check if any tool calls match structured output tools
+            structured_command = self._handle_structured_response_tool_calls(response)
+            if structured_command:
+                return structured_command
+
             return {"messages": [response]}
 
         return RunnableCallable(call_model, acall_model)
@@ -511,57 +635,6 @@ class _AgentBuilder:
         else:
             return self._final_state_schema
 
-    def create_structured_response_node(self) -> Optional[RunnableCallable]:
-        """Create the 'generate_structured_response' node if configured."""
-        if self.response_format is None:
-            return None
-
-        def generate_structured_response(
-            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-        ) -> StateSchema:
-            if self._is_async_dynamic_model:
-                raise RuntimeError(
-                    "Async model callable provided but agent invoked synchronously. "
-                    "Use agent.ainvoke() or agent.astream(), or provide a sync model callable."
-                )
-
-            messages = _get_state_value(state, "messages")
-            structured_response_schema = self.response_format
-            if isinstance(self.response_format, tuple):
-                system_prompt, structured_response_schema = self.response_format
-                messages = [SystemMessage(content=system_prompt)] + list(messages)
-
-            resolved_model = self._resolve_model(state, runtime)
-            model_with_structured_output = _get_model(
-                resolved_model
-            ).with_structured_output(
-                cast(StructuredResponseSchema, structured_response_schema)
-            )
-            response = model_with_structured_output.invoke(messages, config)
-            return {"structured_response": response}
-
-        async def agenerate_structured_response(
-            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
-        ) -> StateSchema:
-            messages = _get_state_value(state, "messages")
-            structured_response_schema = self.response_format
-            if isinstance(self.response_format, tuple):
-                system_prompt, structured_response_schema = self.response_format
-                messages = [SystemMessage(content=system_prompt)] + list(messages)
-
-            resolved_model = await self._aresolve_model(state, runtime)
-            model_with_structured_output = _get_model(
-                resolved_model
-            ).with_structured_output(
-                cast(StructuredResponseSchema, structured_response_schema)
-            )
-            response = await model_with_structured_output.ainvoke(messages, config)
-            return {"structured_response": response}
-
-        return RunnableCallable(
-            generate_structured_response, agenerate_structured_response
-        )
-
     def create_model_router(self) -> Callable[[StateSchema], Union[str, list[Send]]]:
         """Create routing function for model node conditional edges."""
 
@@ -569,11 +642,22 @@ class _AgentBuilder:
             messages = _get_state_value(state, "messages")
             last_message = messages[-1]
 
+            # Check if the last message is a ToolMessage from a structured tool.
+            # This condition exists to support structured output via tools.
+            # Once a tool has been called for structured output, we skip
+            # tool execution and go to END (if there is no post_model_hook).
+            if (
+                isinstance(last_message, ToolMessage)
+                and last_message.name in self.structured_output_tools
+            ):
+                return END
+
+            if isinstance(last_message, ToolMessage):
+                return END
+
             if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
                 if self.post_model_hook is not None:
                     return "post_model_hook"
-                elif self.response_format is not None:
-                    return "generate_structured_response"
                 else:
                     return END
             else:
@@ -606,10 +690,22 @@ class _AgentBuilder:
     def create_post_model_hook_router(
         self,
     ) -> Callable[[StateSchema], Union[str, list[Send]]]:
-        """Create routing function for post_model_hook node conditional edges."""
+        """Create a routing function for post_model_hook node conditional edges."""
 
         def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
             messages = _get_state_value(state, "messages")
+
+            # Check if the last message is a ToolMessage from a structured tool.
+            # This condition exists to support structured output via tools.
+            # Once a tool has been called for structured output, we skip
+            # tool execution and go to END (if there is no post_model_hook).
+            last_message = messages[-1]
+            if (
+                isinstance(last_message, ToolMessage)
+                and last_message.name in self.structured_output_tools
+            ):
+                return END
+
             tool_messages = [
                 m.tool_call_id for m in messages if isinstance(m, ToolMessage)
             ]
@@ -639,15 +735,13 @@ class _AgentBuilder:
                     ]
             elif isinstance(messages[-1], ToolMessage):
                 return self._get_entry_point()
-            elif self.response_format is not None:
-                return "generate_structured_response"
             else:
                 return END
 
         return post_model_hook_router
 
     def create_tools_router(self) -> Optional[Callable[[StateSchema], str]]:
-        """Create routing function for tools node conditional edges."""
+        """Create a routing function for tools node conditional edges."""
         if not self._should_return_direct:
             return None
 
@@ -696,11 +790,7 @@ class _AgentBuilder:
                 paths.extend([tool.name for tool in self._tool_classes])
             else:
                 paths.append("tools")
-        if self.response_format:
-            paths.append("generate_structured_response")
-        else:
-            paths.append(END)
-
+        paths.append(END)
         return paths
 
     def _get_post_model_hook_paths(self) -> list[str]:
@@ -713,10 +803,7 @@ class _AgentBuilder:
                 ]
             else:
                 paths = [self._get_entry_point(), "tools"]
-        if self.response_format is not None:
-            paths.append("generate_structured_response")
-        else:
-            paths.append(END)
+        paths.append(END)
         return paths
 
     def build(
@@ -751,10 +838,6 @@ class _AgentBuilder:
 
         if self.post_model_hook:
             workflow.add_node("post_model_hook", self.post_model_hook)  # type: ignore[arg-type]
-
-        structured_node = self.create_structured_response_node()
-        if structured_node:
-            workflow.add_node("generate_structured_response", structured_node)
 
         # Add edges
         if self.pre_model_hook:
@@ -829,9 +912,7 @@ def create_react_agent(
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
-    response_format: Optional[
-        Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
-    ] = None,
+    response_format: Optional[Union[ToolOutput, StructuredResponseSchema]] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
@@ -900,25 +981,27 @@ def create_react_agent(
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
 
-        response_format: An optional schema for the final agent output.
+        response_format: An optional UsingToolStrategy configuration for structured responses.
 
-            If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
+            If provided, the agent will handle structured output via tool calls during the normal conversation flow.
+            When the model calls a structured output tool, the response will be captured and returned in the 'structured_response' state key.
             If not provided, `structured_response` will not be present in the output state.
-            Can be passed in as:
 
-                - an OpenAI function/tool schema,
-                - a JSON Schema,
-                - a TypedDict class,
-                - or a Pydantic class.
-                - a tuple (prompt, schema), where schema is one of the above.
-                    The prompt will be used together with the model that is being used to generate the structured response.
+            The UsingToolStrategy should contain:
+                - schemas: A sequence of ResponseSchema objects that define the structured output format
+                - tool_choice: Either "required" or "auto" to control when structured output is used
+
+            Each ResponseSchema contains:
+                - schema: A Pydantic model that defines the structure
+                - name: Optional custom name for the tool (defaults to model name)
+                - description: Optional custom description (defaults to model docstring)
+                - strict: Whether to enforce strict validation
 
             !!! Important
-                `response_format` requires the model to support `.with_structured_output`
+                `response_format` requires the model to support tool calling
 
             !!! Note
-                The graph will make a separate call to the LLM to generate the structured response after the agent loop is finished.
-                This is not the only strategy to get structured responses, see more options in [this guide](https://langchain-ai.github.io/langgraph/how-tos/react-agent-structured-output/).
+                Structured responses are handled directly in the model call node via tool calls, eliminating the need for separate structured response nodes.
 
         pre_model_hook: An optional node to add before the `agent` node (i.e., the node that calls the LLM).
             Useful for managing long message histories (e.g., message trimming, summarization, etc.).
@@ -1054,6 +1137,22 @@ def create_react_agent(
         raise ValueError(
             f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
         )
+
+    if response_format and not isinstance(response_format, ToolOutput):
+        # Then it's a pydantic model or JSONSchema. We'll automatically convert
+        # it to the tool output strategy as it is widely supported.
+        response_format = ToolOutput(
+            schemas=[SchemaSpec(response_format)],
+            tool_choice="required",
+        )
+    elif isinstance(response_format, tuple):
+        if len(response_format) == 2:
+            raise ValueError(
+                "Passing a 2-tuple as response_format is no longer supported. "
+            )
+    else:
+        # Can only be a ToolOutput or None at this point.
+        response_format = cast(Optional[ToolOutput], response_format)
 
     # Create and configure the agent builder
     builder = _AgentBuilder(
