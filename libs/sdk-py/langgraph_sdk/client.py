@@ -365,11 +365,14 @@ class HttpClient:
         path: str,
         *,
         json: Any | None = None,
+        params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a DELETE request."""
-        r = await self.client.request("DELETE", path, json=json, headers=headers)
+        r = await self.client.request(
+            "DELETE", path, json=json, params=params, headers=headers
+        )
         if on_response:
             on_response(r)
         try:
@@ -430,7 +433,7 @@ class HttpClient:
                     yield sse
 
 
-async def _aencode_json(json: Any) -> tuple[dict[str, str], bytes]:
+async def _aencode_json(json: Any) -> tuple[dict[str, str], bytes | None]:
     if json is None:
         return {}, None
     body = await asyncio.get_running_loop().run_in_executor(
@@ -697,6 +700,7 @@ class AssistantsClient:
         recurse: bool = False,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Subgraphs:
         """Get the schemas of an assistant by ID.
 
@@ -705,21 +709,25 @@ class AssistantsClient:
             namespace: Optional namespace to filter by.
             recurse: Whether to recursively get subgraphs.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Subgraphs: The graph schema for the assistant.
 
         """  # noqa: E501
+        get_params = {"recurse": recurse}
+        if params:
+            get_params = {**get_params, **params}
         if namespace is not None:
             return await self.http.get(
                 f"/assistants/{assistant_id}/subgraphs/{namespace}",
-                params={"recurse": recurse},
+                params=get_params,
                 headers=headers,
             )
         else:
             return await self.http.get(
                 f"/assistants/{assistant_id}/subgraphs",
-                params={"recurse": recurse},
+                params=get_params,
                 headers=headers,
             )
 
@@ -1443,7 +1451,7 @@ class ThreadsClient:
         elif checkpoint_id:
             get_params = {"subgraphs": subgraphs}
             if params:
-                get_params.update(params)
+                get_params = {**get_params, **params}
             return await self.http.get(
                 f"/threads/{thread_id}/state/{checkpoint_id}",
                 params=get_params,
@@ -1452,7 +1460,7 @@ class ThreadsClient:
         else:
             get_params = {"subgraphs": subgraphs}
             if params:
-                get_params.update(params)
+                get_params = {**get_params, **params}
             return await self.http.get(
                 f"/threads/{thread_id}/state",
                 params=get_params,
@@ -2433,7 +2441,12 @@ class RunsClient:
         )
 
     async def delete(
-        self, thread_id: str, run_id: str, *, headers: dict[str, str] | None = None
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a run.
 
@@ -2441,6 +2454,7 @@ class RunsClient:
             thread_id: The thread ID to delete.
             run_id: The run ID to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -2456,7 +2470,9 @@ class RunsClient:
             ```
 
         """  # noqa: E501
-        await self.http.delete(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
+        await self.http.delete(
+            f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
+        )
 
 
 class CronClient:
@@ -2877,7 +2893,7 @@ class StoreClient:
         if refresh_ttl is not None:
             get_params["refresh_ttl"] = refresh_ttl
         if params:
-            get_params.update(params)
+            get_params = {**get_params, **params}
         return await self.http.get("/store/items", params=get_params, headers=headers)
 
     async def delete_item(
@@ -3264,11 +3280,14 @@ class SyncHttpClient:
         path: str,
         *,
         json: Any | None = None,
+        params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a DELETE request."""
-        r = self.client.request("DELETE", path, json=json, headers=headers)
+        r = self.client.request(
+            "DELETE", path, json=json, params=params, headers=headers
+        )
         if on_response:
             on_response(r)
         try:
@@ -3608,7 +3627,7 @@ class SyncAssistantsClient:
         """  # noqa: E501
         get_params = {"recurse": recurse}
         if params:
-            get_params.update(params)
+            get_params = {**get_params, **params}
         if namespace is not None:
             return self.http.get(
                 f"/assistants/{assistant_id}/subgraphs/{namespace}",
@@ -3761,12 +3780,14 @@ class SyncAssistantsClient:
         assistant_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete an assistant.
 
         Args:
             assistant_id: The assistant ID to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -3781,7 +3802,7 @@ class SyncAssistantsClient:
             ```
 
         """  # noqa: E501
-        self.http.delete(f"/assistants/{assistant_id}", headers=headers)
+        self.http.delete(f"/assistants/{assistant_id}", headers=headers, params=params)
 
     def search(
         self,
@@ -4072,12 +4093,14 @@ class SyncThreadsClient:
         thread_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a thread.
 
         Args:
             thread_id: The ID of the thread to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -4091,7 +4114,7 @@ class SyncThreadsClient:
             ```
 
         """  # noqa: E501
-        self.http.delete(f"/threads/{thread_id}", headers=headers)
+        self.http.delete(f"/threads/{thread_id}", headers=headers, params=params)
 
     def search(
         self,
@@ -5255,6 +5278,7 @@ class SyncRunsClient:
         run_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a run.
 
@@ -5262,6 +5286,7 @@ class SyncRunsClient:
             thread_id: The thread ID to delete.
             run_id: The run ID to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -5277,7 +5302,9 @@ class SyncRunsClient:
             ```
 
         """  # noqa: E501
-        self.http.delete(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
+        self.http.delete(
+            f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
+        )
 
 
 class SyncCronClient:
@@ -5455,12 +5482,14 @@ class SyncCronClient:
         cron_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a cron.
 
         Args:
             cron_id: The cron ID to delete.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -5475,7 +5504,7 @@ class SyncCronClient:
             ```
 
         """  # noqa: E501
-        self.http.delete(f"/runs/crons/{cron_id}", headers=headers)
+        self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
 
     def search(
         self,
@@ -5843,7 +5872,7 @@ def configure_loopback_transports(app: Any) -> None:
 @functools.lru_cache(maxsize=1)
 def get_asgi_transport() -> type[httpx.ASGITransport]:
     try:
-        from langgraph_api import asgi_transport
+        from langgraph_api import asgi_transport  # type: ignore[unresolved-import]
 
         return asgi_transport.ASGITransport
     except ImportError:
