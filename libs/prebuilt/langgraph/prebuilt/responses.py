@@ -92,7 +92,9 @@ class OutputToolBinding(Generic[Schema]):
     """LangChain tool instance created from the schema for model binding."""
 
     @classmethod
-    def from_schema_spec(cls, schema_spec: SchemaSpec) -> "OutputToolBinding":
+    def from_schema_spec(
+        cls, schema_spec: SchemaSpec[Type[Schema]]
+    ) -> "OutputToolBinding":
         """Create an OutputToolBinding instance from a SchemaSpec.
 
         Args:
