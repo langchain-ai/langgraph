@@ -122,7 +122,8 @@ class OutputToolBinding(Generic[Schema]):
         if schema_spec.name is not None:
             tool_creator = create_tool(schema_spec.name)
         else:
-            tool_creator = create_tool
+            tool_creator = create_tool  # type: ignore[assignment]
+
         tool = tool_creator(schema, **kwargs)
 
         return cls(
@@ -131,7 +132,7 @@ class OutputToolBinding(Generic[Schema]):
             tool=tool,
         )
 
-    def parse_payload(self, tool_args: dict[str, Any]) -> Schema:
+    def parse(self, tool_args: dict[str, Any]) -> Schema:
         """Parse tool arguments according to the schema.
 
         Args:

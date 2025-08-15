@@ -139,7 +139,7 @@ class TestOutputToolBinding:
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
 
         tool_args = {"name": "John", "age": 30}
-        result = tool_binding.parse_payload(tool_args)
+        result = tool_binding.parse(tool_args)
 
         assert isinstance(result, TestModel)
         assert result.name == "John"
@@ -155,7 +155,7 @@ class TestOutputToolBinding:
         tool_args = {"age": 30}
 
         with pytest.raises(ValueError, match="Failed to parse tool args to TestModel"):
-            tool_binding.parse_payload(tool_args)
+            tool_binding.parse(tool_args)
 
     def test_parse_payload_invalid_kind(self):
         """Test parsing with invalid kind."""
@@ -170,7 +170,7 @@ class TestOutputToolBinding:
         )
 
         with pytest.raises(ValueError, match="Unsupported schema kind: invalid_kind"):
-            tool_binding.parse_payload({"name": "test", "age": 25})
+            tool_binding.parse({"name": "test", "age": 25})
 
     def test_parse_payload_invalid_pydantic_schema(self):
         """Test parsing with invalid schema for pydantic kind."""
@@ -186,7 +186,7 @@ class TestOutputToolBinding:
         with pytest.raises(
             ValueError, match="Expected Pydantic model class for 'pydantic' kind"
         ):
-            tool_binding.parse_payload({"name": "test", "age": 25})
+            tool_binding.parse({"name": "test", "age": 25})
 
 
 class TestResponseFormat:

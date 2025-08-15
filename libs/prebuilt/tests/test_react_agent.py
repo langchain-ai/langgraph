@@ -453,7 +453,10 @@ def test_react_agent_with_structured_response(version: str) -> None:
     class WeatherResponse(BaseModel):
         temperature: float = Field(description="The temperature in fahrenheit")
 
-    tool_calls = [[{"args": {}, "id": "1", "name": "get_weather"}], []]
+    tool_calls = [
+        [{"args": {}, "id": "1", "name": "get_weather"}],
+        [{"name": "WeatherResponse", "id": "2", "args": {"temperature": 75}}],
+    ]
 
     def get_weather():
         """Get the weather"""
@@ -463,17 +466,33 @@ def test_react_agent_with_structured_response(version: str) -> None:
     model = FakeToolCallingModel(
         tool_calls=tool_calls, structured_response=expected_structured_response
     )
-    for response_format in (WeatherResponse, ("Meow", WeatherResponse)):
-        agent = create_react_agent(
-            model,
-            [get_weather],
-            response_format=response_format,
-            version=version,
-        )
-        response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
-        assert response["structured_response"] == expected_structured_response
-        assert len(response["messages"]) == 4
-        assert response["messages"][-2].content == "The weather is sunny and 75°F."
+    agent = create_react_agent(
+        model,
+        [get_weather],
+        response_format=WeatherResponse,
+        version=version,
+    )
+    response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
+    assert response["structured_response"] == expected_structured_response
+    assert len(response["messages"]) == 5
+
+    # Check message types in message history
+    msg_types = [m.type for m in response["messages"]]
+    assert msg_types == [
+        "human",  # "What's the weather?"
+        "ai",  # "What's the weather?"
+        "tool",  # "The weather is sunny and 75°F."
+        "ai",  # structured response
+        "tool",  # ok!
+    ]
+
+    assert [m.content for m in response["messages"]] == [
+        "What's the weather?",
+        "What's the weather?",
+        "The weather is sunny and 75°F.",
+        "What's the weather?-What's the weather?-The weather is sunny and 75°F.",
+        "ok!",
+    ]
 
 
 class CustomState(AgentState):
@@ -1410,9 +1429,17 @@ def test_dynamic_model_with_structured_response(version: str) -> None:
         confidence: float
 
     def dynamic_model(state, runtime: Runtime):
-        expected_response = TestResponse(message="dynamic response", confidence=0.9)
         return FakeToolCallingModel(
-            tool_calls=[], structured_response=expected_response
+            tool_calls=[
+                [
+                    ToolCall(
+                        name="TestResponse",
+                        args={"message": "dynamic response", "confidence": 0.9},
+                        id="1",
+                        type="tool_call",
+                    )
+                ]
+            ],
         )
 
     agent = create_react_agent(
@@ -1677,16 +1704,16 @@ def test_post_model_hook_with_structured_output() -> None:
     class WeatherResponse(BaseModel):
         temperature: float = Field(description="The temperature in fahrenheit")
 
-    tool_calls = [[{"args": {}, "id": "1", "name": "get_weather"}]]
+    tool_calls: list[list[ToolCall]] = [
+        [{"args": {}, "id": "1", "name": "get_weather"}],
+        [{"args": {"temperature": 75}, "id": "2", "name": "WeatherResponse"}],
+    ]
 
     def get_weather():
         """Get the weather"""
         return "The weather is sunny and 75°F."
 
     expected_structured_response = WeatherResponse(temperature=75)
-    model = FakeToolCallingModel(
-        tool_calls=tool_calls, structured_response=expected_structured_response
-    )
 
     class State(AgentState):
         flag: bool
@@ -1695,6 +1722,7 @@ def test_post_model_hook_with_structured_output() -> None:
     def post_model_hook(state: State) -> Union[dict[str, bool], Command]:
         return {"flag": True}
 
+    model = FakeToolCallingModel(tool_calls=tool_calls)
     agent = create_react_agent(
         model,
         [get_weather],
@@ -1704,7 +1732,6 @@ def test_post_model_hook_with_structured_output() -> None:
     )
 
     assert "post_model_hook" in agent.nodes
-    assert "generate_structured_response" in agent.nodes
 
     response = agent.invoke(
         {"messages": [HumanMessage("What's the weather?")], "flag": False}
@@ -1712,10 +1739,19 @@ def test_post_model_hook_with_structured_output() -> None:
     assert response["flag"] is True
     assert response["structured_response"] == expected_structured_response
 
+    # Reset the state of the model
+    model = FakeToolCallingModel(tool_calls=tool_calls)
+    agent = create_react_agent(
+        model,
+        [get_weather],
+        response_format=WeatherResponse,
+        post_model_hook=post_model_hook,
+        state_schema=State,
+    )
+
     events = list(
         agent.stream({"messages": [HumanMessage("What's the weather?")], "flag": False})
     )
-    assert "generate_structured_response" in events[-1]
     assert events == [
         {
             "agent": {
@@ -1724,7 +1760,7 @@ def test_post_model_hook_with_structured_output() -> None:
                         content="What's the weather?",
                         additional_kwargs={},
                         response_metadata={},
-                        id="2",
+                        id="0",
                         tool_calls=[
                             {
                                 "name": "get_weather",
@@ -1745,7 +1781,7 @@ def test_post_model_hook_with_structured_output() -> None:
                         content="The weather is sunny and 75°F.",
                         name="get_weather",
                         tool_call_id="1",
-                    ),
+                    )
                 ]
             }
         },
@@ -1756,25 +1792,26 @@ def test_post_model_hook_with_structured_output() -> None:
                         content="What's the weather?-What's the weather?-The weather is sunny and 75°F.",
                         additional_kwargs={},
                         response_metadata={},
-                        id="3",
+                        id="1",
                         tool_calls=[
                             {
-                                "name": "get_weather",
-                                "args": {},
-                                "id": "1",
+                                "name": "WeatherResponse",
+                                "args": {"temperature": 75},
+                                "id": "2",
                                 "type": "tool_call",
                             }
                         ],
-                    )
-                ]
+                    ),
+                    _AnyIdToolMessage(
+                        content="ok!",
+                        name="WeatherResponse",
+                        tool_call_id="2",
+                    ),
+                ],
+                "structured_response": WeatherResponse(temperature=75.0),
             }
         },
         {"post_model_hook": {"flag": True}},
-        {
-            "generate_structured_response": {
-                "structured_response": WeatherResponse(temperature=75.0)
-            }
-        },
     ]
 
 

@@ -53,6 +53,7 @@ from langgraph.prebuilt._internal._typing import (
 from langgraph.prebuilt.responses import (
     OutputToolBinding,
     ResponseFormat,
+    SchemaSpec,
     ToolOutput,
 )
 from langgraph.prebuilt.tool_node import ToolNode
@@ -397,15 +398,8 @@ class _AgentBuilder:
                     name=tool_call["name"],
                 ),
             ]
-            structured_tool_info = self.structured_output_tools[tool_call["name"]]
-            args = tool_call["args"]
-
-            # Use the parsing logic from the OutputToolBinding dataclass
-            try:
-                structured_response = structured_tool_info.parse_payload(args)
-            except ValueError as e:
-                # Convert ValueError to AssertionError to maintain existing error handling
-                raise AssertionError(f"Failed to parse structured response: {e}") from e
+            structured_tool_binding = self.structured_output_tools[tool_call["name"]]
+            structured_response = structured_tool_binding.parse(tool_call["args"])
 
             return Command(
                 update={
@@ -648,6 +642,19 @@ class _AgentBuilder:
             messages = _get_state_value(state, "messages")
             last_message = messages[-1]
 
+            # Check if the last message is a ToolMessage from a structured tool.
+            # This condition exists to support structured output via tools.
+            # Once a tool has been called for structured output, we skip
+            # tool execution and go to END (if there is no post_model_hook).
+            if (
+                isinstance(last_message, ToolMessage)
+                and last_message.name in self.structured_output_tools
+            ):
+                return END
+
+            if isinstance(last_message, ToolMessage):
+                return END
+
             if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
                 if self.post_model_hook is not None:
                     return "post_model_hook"
@@ -687,6 +694,18 @@ class _AgentBuilder:
 
         def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
             messages = _get_state_value(state, "messages")
+
+            # Check if the last message is a ToolMessage from a structured tool.
+            # This condition exists to support structured output via tools.
+            # Once a tool has been called for structured output, we skip
+            # tool execution and go to END (if there is no post_model_hook).
+            last_message = messages[-1]
+            if (
+                isinstance(last_message, ToolMessage)
+                and last_message.name in self.structured_output_tools
+            ):
+                return END
+
             tool_messages = [
                 m.tool_call_id for m in messages if isinstance(m, ToolMessage)
             ]
@@ -893,7 +912,7 @@ def create_react_agent(
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
-    response_format: Optional[ToolOutput] = None,
+    response_format: Optional[Union[ToolOutput, StructuredResponseSchema]] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
@@ -1117,6 +1136,14 @@ def create_react_agent(
     if version not in ("v1", "v2"):
         raise ValueError(
             f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
+        )
+
+    if response_format and not isinstance(response_format, ToolOutput):
+        # Then it's a pydantic model or JSONSchema. We'll automatically convert
+        # it to the tool output strategy as it is widely supported.
+        response_format = ToolOutput(
+            schemas=[SchemaSpec(response_format)],
+            tool_choice="required",
         )
 
     # Create and configure the agent builder
