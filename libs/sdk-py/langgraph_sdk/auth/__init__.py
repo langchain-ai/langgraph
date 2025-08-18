@@ -385,6 +385,8 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
                 _register_handler(self.auth, self.resource, "*", handler),
             )
 
+        # Accept keyword-only parameters for future filtering behavior; referenced to satisfy linters.
+        _ = resources, actions
         return decorator
 
 
