@@ -15,7 +15,7 @@ import logging
 import os
 import re
 import sys
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from types import TracebackType
 from typing import (
     Any,
@@ -96,7 +96,7 @@ def _get_api_key(api_key: str | None = None) -> str | None:
 
 
 def _get_headers(
-    api_key: str | None, custom_headers: dict[str, str] | None
+    api_key: str | None, custom_headers: Mapping[str, str] | None
 ) -> dict[str, str]:
     """Combine api_key and custom user-provided headers."""
     custom_headers = custom_headers or {}
@@ -151,7 +151,7 @@ def get_client(
     *,
     url: str | None = None,
     api_key: str | None = None,
-    headers: dict[str, str] | None = None,
+    headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
 ) -> LangGraphClient:
     """Get a LangGraphClient instance.
@@ -274,7 +274,7 @@ class HttpClient:
         path: str,
         *,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a GET request."""
@@ -296,9 +296,9 @@ class HttpClient:
         self,
         path: str,
         *,
-        json: dict | list | None,
+        json: dict[str, Any] | list | None,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a POST request."""
@@ -331,7 +331,7 @@ class HttpClient:
         *,
         json: dict,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a PUT request."""
@@ -360,7 +360,7 @@ class HttpClient:
         *,
         json: dict,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a PATCH request."""
@@ -389,7 +389,7 @@ class HttpClient:
         *,
         json: Any | None = None,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a DELETE request."""
@@ -413,9 +413,9 @@ class HttpClient:
         path: str,
         method: str,
         *,
-        json: dict | None = None,
+        json: dict[str, Any] | None = None,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream results using SSE."""
@@ -502,7 +502,7 @@ class AssistantsClient:
         self,
         assistant_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Get an assistant by ID.
@@ -548,7 +548,7 @@ class AssistantsClient:
         assistant_id: str,
         *,
         xray: int | bool = False,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
@@ -605,7 +605,7 @@ class AssistantsClient:
         self,
         assistant_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> GraphSchema:
         """Get the schemas of an assistant by ID.
@@ -728,7 +728,7 @@ class AssistantsClient:
         namespace: str | None = None,
         recurse: bool = False,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Subgraphs:
         """Get the schemas of an assistant by ID.
@@ -770,7 +770,7 @@ class AssistantsClient:
         assistant_id: str | None = None,
         if_exists: OnConflictBehavior | None = None,
         name: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         description: str | None = None,
         params: QueryParamTypes | None = None,
     ) -> Assistant:
@@ -840,7 +840,7 @@ class AssistantsClient:
         context: Context | None = None,
         metadata: Json = None,
         name: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         description: str | None = None,
         params: QueryParamTypes | None = None,
     ) -> Assistant:
@@ -902,7 +902,7 @@ class AssistantsClient:
         self,
         assistant_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Delete an assistant.
@@ -939,7 +939,7 @@ class AssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Assistant]:
         """Search for assistants.
@@ -998,7 +998,7 @@ class AssistantsClient:
         limit: int = 10,
         offset: int = 0,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[AssistantVersion]:
         """List all versions of an assistant.
@@ -1042,7 +1042,7 @@ class AssistantsClient:
         assistant_id: str,
         version: int,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Change the version of an assistant.
@@ -1100,7 +1100,7 @@ class ThreadsClient:
         self,
         thread_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
         """Get a thread by ID.
@@ -1148,7 +1148,7 @@ class ThreadsClient:
         if_exists: OnConflictBehavior | None = None,
         supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
         graph_id: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
         """Create a new thread.
@@ -1212,8 +1212,8 @@ class ThreadsClient:
         self,
         thread_id: str,
         *,
-        metadata: dict[str, Any],
-        headers: dict[str, str] | None = None,
+        metadata: Mapping[str, Any],
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
         """Update a thread.
@@ -1248,7 +1248,7 @@ class ThreadsClient:
         self,
         thread_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a thread.
@@ -1284,7 +1284,7 @@ class ThreadsClient:
         sort_by: ThreadSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[ThreadSelectField] | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Thread]:
         """Search for threads.
@@ -1344,7 +1344,7 @@ class ThreadsClient:
         self,
         thread_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Copy a thread.
@@ -1378,7 +1378,7 @@ class ThreadsClient:
         checkpoint_id: str | None = None,  # deprecated
         *,
         subgraphs: bool = False,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> ThreadState:
         """Get the state of a thread.
@@ -1510,12 +1510,12 @@ class ThreadsClient:
     async def update_state(
         self,
         thread_id: str,
-        values: dict | Sequence[dict] | None,
+        values: dict[str, Any] | Sequence[dict] | None,
         *,
         as_node: str | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,  # deprecated
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
@@ -1576,9 +1576,9 @@ class ThreadsClient:
         *,
         limit: int = 10,
         before: str | Checkpoint | None = None,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         checkpoint: Checkpoint | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[ThreadState]:
         """Get the state history of a thread.
@@ -1646,12 +1646,12 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
@@ -1665,7 +1665,7 @@ class RunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> AsyncIterator[StreamPart]: ...
@@ -1676,12 +1676,12 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -1692,7 +1692,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         webhook: str | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> AsyncIterator[StreamPart]: ...
@@ -1702,12 +1702,12 @@ class RunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
@@ -1722,7 +1722,7 @@ class RunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> AsyncIterator[StreamPart]:
@@ -1848,12 +1848,12 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         checkpoint_during: bool | None = None,
         config: Config | None = None,
         context: Context | None = None,
@@ -1863,7 +1863,7 @@ class RunsClient:
         on_completion: OnCompletionBehavior | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
@@ -1874,12 +1874,12 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
@@ -1891,7 +1891,7 @@ class RunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
@@ -1901,12 +1901,12 @@ class RunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
@@ -1919,7 +1919,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         on_completion: OnCompletionBehavior | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run:
@@ -2072,7 +2072,7 @@ class RunsClient:
         self,
         payloads: list[RunCreate],
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Run]:
         """Create a batch of stateless background runs."""
@@ -2091,9 +2091,9 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
@@ -2107,7 +2107,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         raise_error: bool = True,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]: ...
@@ -2118,9 +2118,9 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
@@ -2132,7 +2132,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         raise_error: bool = True,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]: ...
@@ -2142,9 +2142,9 @@ class RunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
@@ -2159,7 +2159,7 @@ class RunsClient:
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
         raise_error: bool = True,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]:
@@ -2302,7 +2302,7 @@ class RunsClient:
         offset: int = 0,
         status: RunStatus | None = None,
         select: list[RunSelectField] | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Run]:
         """List runs.
@@ -2349,7 +2349,7 @@ class RunsClient:
         thread_id: str,
         run_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
         """Get a run.
@@ -2386,7 +2386,7 @@ class RunsClient:
         *,
         wait: bool = False,
         action: CancelAction = "interrupt",
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Get a run.
@@ -2434,7 +2434,7 @@ class RunsClient:
         thread_id: str,
         run_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> dict:
         """Block until a run is done. Returns the final state of the thread.
@@ -2470,7 +2470,7 @@ class RunsClient:
         *,
         cancel_on_disconnect: bool = False,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         last_event_id: str | None = None,
     ) -> AsyncIterator[StreamPart]:
@@ -2527,7 +2527,7 @@ class RunsClient:
         thread_id: str,
         run_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a run.
@@ -2590,8 +2590,8 @@ class CronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: dict | None = None,
-        metadata: dict | None = None,
+        input: Mapping[str, Any] | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
@@ -2599,7 +2599,7 @@ class CronClient:
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
         """Create a cron job for a thread.
@@ -2673,8 +2673,8 @@ class CronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: dict | None = None,
-        metadata: dict | None = None,
+        input: Mapping[str, Any] | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
@@ -2682,7 +2682,7 @@ class CronClient:
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
         """Create a cron run.
@@ -2748,7 +2748,8 @@ class CronClient:
     async def delete(
         self,
         cron_id: str,
-        headers: dict[str, str] | None = None,
+        *,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a cron.
@@ -2783,7 +2784,7 @@ class CronClient:
         sort_by: CronSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[CronSelectField] | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
@@ -2877,10 +2878,10 @@ class StoreClient:
         namespace: Sequence[str],
         /,
         key: str,
-        value: dict[str, Any],
+        value: Mapping[str, Any],
         index: Literal[False] | list[str] | None = None,
         ttl: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Store or update an item.
@@ -2931,7 +2932,7 @@ class StoreClient:
         key: str,
         *,
         refresh_ttl: bool | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Item:
         """Retrieve a single item.
@@ -2986,7 +2987,7 @@ class StoreClient:
         namespace: Sequence[str],
         /,
         key: str,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Delete an item.
@@ -3021,12 +3022,12 @@ class StoreClient:
         self,
         namespace_prefix: Sequence[str],
         /,
-        filter: dict[str, Any] | None = None,
+        filter: Mapping[str, Any] | None = None,
         limit: int = 10,
         offset: int = 0,
         query: str | None = None,
         refresh_ttl: bool | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
@@ -3100,7 +3101,7 @@ class StoreClient:
         max_depth: int | None = None,
         limit: int = 100,
         offset: int = 0,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> ListNamespaceResponse:
         """List namespaces with optional match conditions.
@@ -3157,7 +3158,7 @@ def get_sync_client(
     *,
     url: str | None = None,
     api_key: str | None = None,
-    headers: dict[str, str] | None = None,
+    headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
 ) -> SyncLangGraphClient:
     """Get a synchronous LangGraphClient instance.
@@ -3269,7 +3270,7 @@ class SyncHttpClient:
         path: str,
         *,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a GET request."""
@@ -3291,9 +3292,9 @@ class SyncHttpClient:
         self,
         path: str,
         *,
-        json: dict | list | None,
+        json: dict[str, Any] | list | None,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a POST request."""
@@ -3325,7 +3326,7 @@ class SyncHttpClient:
         *,
         json: dict,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a PUT request."""
@@ -3355,7 +3356,7 @@ class SyncHttpClient:
         *,
         json: dict,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a PATCH request."""
@@ -3384,7 +3385,7 @@ class SyncHttpClient:
         *,
         json: Any | None = None,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a DELETE request."""
@@ -3408,9 +3409,9 @@ class SyncHttpClient:
         path: str,
         method: str,
         *,
-        json: dict | None = None,
+        json: dict[str, Any] | None = None,
         params: QueryParamTypes | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
@@ -3486,7 +3487,7 @@ class SyncAssistantsClient:
         self,
         assistant_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Get an assistant by ID.
@@ -3532,7 +3533,7 @@ class SyncAssistantsClient:
         assistant_id: str,
         *,
         xray: int | bool = False,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
@@ -3584,7 +3585,7 @@ class SyncAssistantsClient:
         self,
         assistant_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> GraphSchema:
         """Get the schemas of an assistant by ID.
@@ -3719,7 +3720,7 @@ class SyncAssistantsClient:
         namespace: str | None = None,
         recurse: bool = False,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Subgraphs:
         """Get the schemas of an assistant by ID.
@@ -3759,7 +3760,7 @@ class SyncAssistantsClient:
         assistant_id: str | None = None,
         if_exists: OnConflictBehavior | None = None,
         name: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         description: str | None = None,
         params: QueryParamTypes | None = None,
     ) -> Assistant:
@@ -3829,7 +3830,7 @@ class SyncAssistantsClient:
         context: Context | None = None,
         metadata: Json = None,
         name: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         description: str | None = None,
         params: QueryParamTypes | None = None,
     ) -> Assistant:
@@ -3889,7 +3890,7 @@ class SyncAssistantsClient:
         self,
         assistant_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Delete an assistant.
@@ -3924,7 +3925,7 @@ class SyncAssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Assistant]:
         """Search for assistants.
@@ -3980,7 +3981,7 @@ class SyncAssistantsClient:
         limit: int = 10,
         offset: int = 0,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[AssistantVersion]:
         """List all versions of an assistant.
@@ -4024,7 +4025,7 @@ class SyncAssistantsClient:
         assistant_id: str,
         version: int,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Change the version of an assistant.
@@ -4080,7 +4081,7 @@ class SyncThreadsClient:
         self,
         thread_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
         """Get a thread by ID.
@@ -4124,7 +4125,7 @@ class SyncThreadsClient:
         if_exists: OnConflictBehavior | None = None,
         supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
         graph_id: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
         """Create a new thread.
@@ -4186,8 +4187,8 @@ class SyncThreadsClient:
         self,
         thread_id: str,
         *,
-        metadata: dict[str, Any],
-        headers: dict[str, str] | None = None,
+        metadata: Mapping[str, Any],
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
         """Update a thread.
@@ -4221,7 +4222,7 @@ class SyncThreadsClient:
         self,
         thread_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a thread.
@@ -4256,7 +4257,7 @@ class SyncThreadsClient:
         sort_by: ThreadSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[ThreadSelectField] | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Thread]:
         """Search for threads.
@@ -4309,7 +4310,7 @@ class SyncThreadsClient:
         self,
         thread_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Copy a thread.
@@ -4343,7 +4344,7 @@ class SyncThreadsClient:
         checkpoint_id: str | None = None,  # deprecated
         *,
         subgraphs: bool = False,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> ThreadState:
         """Get the state of a thread.
@@ -4474,12 +4475,12 @@ class SyncThreadsClient:
     def update_state(
         self,
         thread_id: str,
-        values: dict | Sequence[dict] | None,
+        values: dict[str, Any] | Sequence[dict] | None,
         *,
         as_node: str | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,  # deprecated
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
@@ -4537,9 +4538,9 @@ class SyncThreadsClient:
         *,
         limit: int = 10,
         before: str | Checkpoint | None = None,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         checkpoint: Checkpoint | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[ThreadState]:
         """Get the state history of a thread.
@@ -4608,11 +4609,11 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
@@ -4626,7 +4627,7 @@ class SyncRunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Iterator[StreamPart]: ...
@@ -4637,12 +4638,12 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
@@ -4654,7 +4655,7 @@ class SyncRunsClient:
         if_not_exists: IfNotExists | None = None,
         webhook: str | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Iterator[StreamPart]: ...
@@ -4664,12 +4665,12 @@ class SyncRunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
@@ -4684,7 +4685,7 @@ class SyncRunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Iterator[StreamPart]:
@@ -4806,12 +4807,12 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
@@ -4821,7 +4822,7 @@ class SyncRunsClient:
         on_completion: OnCompletionBehavior | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
@@ -4832,12 +4833,12 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
@@ -4849,7 +4850,7 @@ class SyncRunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run: ...
@@ -4859,12 +4860,12 @@ class SyncRunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
         stream_resumable: bool = False,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
@@ -4874,10 +4875,10 @@ class SyncRunsClient:
         interrupt_after: All | Sequence[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: MultitaskStrategy | None = None,
-        on_completion: OnCompletionBehavior | None = None,
         if_not_exists: IfNotExists | None = None,
+        on_completion: OnCompletionBehavior | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> Run:
@@ -5030,7 +5031,7 @@ class SyncRunsClient:
         self,
         payloads: list[RunCreate],
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Run]:
         """Create a batch of stateless background runs."""
@@ -5049,9 +5050,9 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
@@ -5064,7 +5065,8 @@ class SyncRunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        raise_error: bool = True,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]: ...
@@ -5075,9 +5077,9 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
@@ -5088,7 +5090,8 @@ class SyncRunsClient:
         on_completion: OnCompletionBehavior | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        raise_error: bool = True,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]: ...
@@ -5098,9 +5101,9 @@ class SyncRunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: dict | None = None,
+        input: Mapping[str, Any] | None = None,
         command: Command | None = None,
-        metadata: dict | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
@@ -5114,7 +5117,8 @@ class SyncRunsClient:
         multitask_strategy: MultitaskStrategy | None = None,
         if_not_exists: IfNotExists | None = None,
         after_seconds: int | None = None,
-        headers: dict[str, str] | None = None,
+        raise_error: bool = True,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
     ) -> list[dict] | dict[str, Any]:
@@ -5146,6 +5150,7 @@ class SyncRunsClient:
                 Must be either 'reject' (raise error if missing), or 'create' (create new thread).
             after_seconds: The number of seconds to wait before starting the run.
                 Use to schedule future runs.
+            raise_error: Whether to raise an error if the run fails.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
 
@@ -5222,6 +5227,7 @@ class SyncRunsClient:
             "checkpoint_during": checkpoint_during,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "raise_error": raise_error,
         }
 
         def on_response(res: httpx.Response):
@@ -5248,7 +5254,7 @@ class SyncRunsClient:
         offset: int = 0,
         status: RunStatus | None = None,
         select: list[RunSelectField] | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Run]:
         """List runs.
@@ -5291,7 +5297,7 @@ class SyncRunsClient:
         thread_id: str,
         run_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
         """Get a run.
@@ -5326,7 +5332,7 @@ class SyncRunsClient:
         *,
         wait: bool = False,
         action: CancelAction = "interrupt",
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Get a run.
@@ -5368,7 +5374,7 @@ class SyncRunsClient:
         thread_id: str,
         run_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> dict:
         """Block until a run is done. Returns the final state of the thread.
@@ -5402,9 +5408,9 @@ class SyncRunsClient:
         thread_id: str,
         run_id: str,
         *,
-        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         cancel_on_disconnect: bool = False,
-        headers: dict[str, str] | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         last_event_id: str | None = None,
     ) -> Iterator[StreamPart]:
@@ -5460,7 +5466,7 @@ class SyncRunsClient:
         thread_id: str,
         run_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a run.
@@ -5517,16 +5523,16 @@ class SyncCronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: dict | None = None,
-        metadata: dict | None = None,
-        checkpoint_during: bool | None = None,
+        input: Mapping[str, Any] | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
+        checkpoint_during: bool | None = None,
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
         """Create a cron job for a thread.
@@ -5596,8 +5602,8 @@ class SyncCronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: dict | None = None,
-        metadata: dict | None = None,
+        input: Mapping[str, Any] | None = None,
+        metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
@@ -5605,7 +5611,7 @@ class SyncCronClient:
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
         """Create a cron run.
@@ -5671,7 +5677,7 @@ class SyncCronClient:
         self,
         cron_id: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Delete a cron.
@@ -5706,7 +5712,7 @@ class SyncCronClient:
         sort_by: CronSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[CronSelectField] | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
@@ -5798,10 +5804,10 @@ class SyncStoreClient:
         namespace: Sequence[str],
         /,
         key: str,
-        value: dict[str, Any],
+        value: Mapping[str, Any],
         index: Literal[False] | list[str] | None = None,
         ttl: int | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Store or update an item.
@@ -5841,7 +5847,9 @@ class SyncStoreClient:
             "index": index,
             "ttl": ttl,
         }
-        self.http.put("/store/items", json=_provided_vals(payload), headers=headers)
+        self.http.put(
+            "/store/items", json=_provided_vals(payload), headers=headers, params=params
+        )
 
     def get_item(
         self,
@@ -5850,7 +5858,7 @@ class SyncStoreClient:
         key: str,
         *,
         refresh_ttl: bool | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Item:
         """Retrieve a single item.
@@ -5905,7 +5913,7 @@ class SyncStoreClient:
         namespace: Sequence[str],
         /,
         key: str,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
         """Delete an item.
@@ -5930,19 +5938,22 @@ class SyncStoreClient:
             ```
         """
         self.http.delete(
-            "/store/items", json={"key": key, "namespace": namespace}, headers=headers
+            "/store/items",
+            json={"key": key, "namespace": namespace},
+            headers=headers,
+            params=params,
         )
 
     def search_items(
         self,
         namespace_prefix: Sequence[str],
         /,
-        filter: dict[str, Any] | None = None,
+        filter: Mapping[str, Any] | None = None,
         limit: int = 10,
         offset: int = 0,
         query: str | None = None,
         refresh_ttl: bool | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
@@ -6015,7 +6026,7 @@ class SyncStoreClient:
         limit: int = 100,
         offset: int = 0,
         *,
-        headers: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> ListNamespaceResponse:
         """List namespaces with optional match conditions.
@@ -6069,7 +6080,7 @@ class SyncStoreClient:
         )
 
 
-def _provided_vals(d: dict):
+def _provided_vals(d: Mapping[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
 
 

@@ -50,5 +50,6 @@ lint.select = [
   "UP", # pyupgrade
   "B",  # flake8-bugbear
   "I",  # isort
+  "ARG", # flake8-unused-arguments
 ]
 lint.ignore = ["E501", "B008"]
