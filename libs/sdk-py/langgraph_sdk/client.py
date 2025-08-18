@@ -530,6 +530,7 @@ class AssistantsClient:
         *,
         xray: int | bool = False,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
@@ -537,6 +538,7 @@ class AssistantsClient:
             assistant_id: The ID of the assistant to get the graph of.
             xray: Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Graph: The graph information for the assistant in JSON format.
@@ -572,8 +574,12 @@ class AssistantsClient:
 
 
         """  # noqa: E501
+        combined_params = {"xray": xray}
+        if params:
+            combined_params = {**params, **combined_params}
+
         return await self.http.get(
-            f"/assistants/{assistant_id}/graph", params={"xray": xray}, headers=headers
+            f"/assistants/{assistant_id}/graph", params=combined_params, headers=headers
         )
 
     async def get_schemas(
@@ -3446,6 +3452,7 @@ class SyncAssistantsClient:
         *,
         xray: int | bool = False,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
@@ -3453,6 +3460,7 @@ class SyncAssistantsClient:
             assistant_id: The ID of the assistant to get the graph of.
             xray: Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Graph: The graph information for the assistant in JSON format.
@@ -3484,8 +3492,11 @@ class SyncAssistantsClient:
             ```
 
         """  # noqa: E501
+        combined_params = {"xray": xray}
+        if params:
+            combined_params = {**params, **combined_params}
         return self.http.get(
-            f"/assistants/{assistant_id}/graph", params={"xray": xray}, headers=headers
+            f"/assistants/{assistant_id}/graph", params=combined_params, headers=headers
         )
 
     def get_schemas(
