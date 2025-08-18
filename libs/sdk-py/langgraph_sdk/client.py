@@ -3020,6 +3020,24 @@ class SyncLangGraphClient:
         self.crons = SyncCronClient(self.http)
         self.store = SyncStoreClient(self.http)
 
+    def __enter__(self) -> SyncLangGraphClient:
+        """Enter the sync context manager."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Exit the sync context manager."""
+        self.close()
+
+    def close(self) -> None:
+        """Close the underlying HTTP client."""
+        if hasattr(self, "http"):
+            self.http.client.close()
+
 
 class SyncHttpClient:
     """Handle synchronous requests to the LangGraph API.
