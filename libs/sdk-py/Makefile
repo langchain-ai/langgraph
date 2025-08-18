@@ -1,7 +1,7 @@
-.PHONY: lint format
+.PHONY: lint format test
 
 test:
-	echo "No tests to run"
+	uv run pytest tests
 
 ######################
 # LINTING AND FORMATTING
