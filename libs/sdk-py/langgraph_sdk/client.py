@@ -574,12 +574,12 @@ class AssistantsClient:
 
 
         """  # noqa: E501
-        combined_params = {"xray": xray}
+        query_params = {"xray": xray}
         if params:
-            combined_params = {**params, **combined_params}
+            query_params.update(params)
 
         return await self.http.get(
-            f"/assistants/{assistant_id}/graph", params=combined_params, headers=headers
+            f"/assistants/{assistant_id}/graph", params=query_params, headers=headers
         )
 
     async def get_schemas(
@@ -3536,11 +3536,11 @@ class SyncAssistantsClient:
             ```
 
         """  # noqa: E501
-        combined_params = {"xray": xray}
+        query_params = {"xray": xray}
         if params:
-            combined_params = {**params, **combined_params}
+            query_params.update(params)
         return self.http.get(
-            f"/assistants/{assistant_id}/graph", params=combined_params, headers=headers
+            f"/assistants/{assistant_id}/graph", params=query_params, headers=headers
         )
 
     def get_schemas(
