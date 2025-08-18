@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import (
     Any,
@@ -10,6 +10,7 @@ from typing import (
     NamedTuple,
     Optional,
     TypedDict,
+    Union,
 )
 
 from typing_extensions import TypeAlias
@@ -401,6 +402,16 @@ CronSelectField = Literal[
     "next_run_date",
     "metadata",
     "now",
+]
+
+PrimitiveData = Optional[Union[str, int, float, bool]]
+
+QueryParamTypes = Union[
+    Mapping[str, Union[PrimitiveData, Sequence[PrimitiveData]]],
+    list[tuple[str, PrimitiveData]],
+    tuple[tuple[str, PrimitiveData], ...],
+    str,
+    bytes,
 ]
 
 

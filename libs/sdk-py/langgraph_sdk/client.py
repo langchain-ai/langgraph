@@ -27,7 +27,6 @@ from typing import (
 
 import httpx
 import orjson
-from httpx._types import QueryParamTypes
 
 import langgraph_sdk
 from langgraph_sdk.schema import (
@@ -53,6 +52,7 @@ from langgraph_sdk.schema import (
     MultitaskStrategy,
     OnCompletionBehavior,
     OnConflictBehavior,
+    QueryParamTypes,
     Run,
     RunCreate,
     RunCreateMetadata,
@@ -277,7 +277,7 @@ class HttpClient:
         self,
         path: str,
         *,
-        json: dict | None,
+        json: dict | list | None,
         params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
@@ -530,6 +530,7 @@ class AssistantsClient:
         *,
         xray: int | bool = False,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
@@ -537,6 +538,7 @@ class AssistantsClient:
             assistant_id: The ID of the assistant to get the graph of.
             xray: Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Graph: The graph information for the assistant in JSON format.
@@ -572,8 +574,12 @@ class AssistantsClient:
 
 
         """  # noqa: E501
+        query_params = {"xray": xray}
+        if params:
+            query_params.update(params)
+
         return await self.http.get(
-            f"/assistants/{assistant_id}/graph", params={"xray": xray}, headers=headers
+            f"/assistants/{assistant_id}/graph", params=query_params, headers=headers
         )
 
     async def get_schemas(
@@ -1316,13 +1322,18 @@ class ThreadsClient:
         )
 
     async def copy(
-        self, thread_id: str, *, headers: dict[str, str] | None = None
+        self,
+        thread_id: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Copy a thread.
 
         Args:
             thread_id: The ID of the thread to copy.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -1338,7 +1349,7 @@ class ThreadsClient:
 
         """  # noqa: E501
         return await self.http.post(
-            f"/threads/{thread_id}/copy", json=None, headers=headers
+            f"/threads/{thread_id}/copy", json=None, headers=headers, params=params
         )
 
     async def get_state(
@@ -2038,14 +2049,22 @@ class RunsClient:
             on_response=on_response if on_run_created else None,
         )
 
-    async def create_batch(self, payloads: list[RunCreate]) -> list[Run]:
+    async def create_batch(
+        self,
+        payloads: list[RunCreate],
+        *,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> list[Run]:
         """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
             return {k: v for k, v in payload.items() if v is not None}
 
-        payloads = [filter_payload(payload) for payload in payloads]
-        return await self.http.post("/runs/batch", json=payloads)
+        filtered = [filter_payload(payload) for payload in payloads]
+        return await self.http.post(
+            "/runs/batch", json=filtered, headers=headers, params=params
+        )
 
     @overload
     async def wait(
@@ -2265,6 +2284,7 @@ class RunsClient:
         status: RunStatus | None = None,
         select: list[RunSelectField] | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[Run]:
         """List runs.
 
@@ -2274,6 +2294,7 @@ class RunsClient:
             offset: The number of results to skip.
             status: The status of the run to filter by.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             list[Run]: The runs for the thread.
@@ -2290,20 +2311,27 @@ class RunsClient:
             ```
 
         """  # noqa: E501
-        params = {
+        query_params: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
         if status is not None:
-            params["status"] = status
+            query_params["status"] = status
         if select:
-            params["select"] = select
+            query_params["select"] = select
+        if params:
+            query_params.update(params)
         return await self.http.get(
-            f"/threads/{thread_id}/runs", params=params, headers=headers
+            f"/threads/{thread_id}/runs", params=query_params, headers=headers
         )
 
     async def get(
-        self, thread_id: str, run_id: str, *, headers: dict[str, str] | None = None
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Run:
         """Get a run.
 
@@ -2311,6 +2339,7 @@ class RunsClient:
             thread_id: The thread ID to get.
             run_id: The run ID to get.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Run: Run object.
@@ -2328,7 +2357,7 @@ class RunsClient:
         """  # noqa: E501
 
         return await self.http.get(
-            f"/threads/{thread_id}/runs/{run_id}", headers=headers
+            f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
         )
 
     async def cancel(
@@ -2339,6 +2368,7 @@ class RunsClient:
         wait: bool = False,
         action: CancelAction = "interrupt",
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Get a run.
 
@@ -2349,6 +2379,7 @@ class RunsClient:
             action: Action to take when cancelling the run. Possible values
                 are `interrupt` or `rollback`. Default is `interrupt`.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -2366,14 +2397,26 @@ class RunsClient:
             ```
 
         """  # noqa: E501
+        query_params = {
+            "wait": 1 if wait else 0,
+            "action": action,
+        }
+        if params:
+            query_params.update(params)
         return await self.http.post(
-            f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}&action={action}",
+            f"/threads/{thread_id}/runs/{run_id}/cancel",
             json=None,
+            params=query_params,
             headers=headers,
         )
 
     async def join(
-        self, thread_id: str, run_id: str, *, headers: dict[str, str] | None = None
+        self,
+        thread_id: str,
+        run_id: str,
+        *,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> dict:
         """Block until a run is done. Returns the final state of the thread.
 
@@ -2381,6 +2424,7 @@ class RunsClient:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -2397,7 +2441,7 @@ class RunsClient:
 
         """  # noqa: E501
         return await self.http.get(
-            f"/threads/{thread_id}/runs/{run_id}/join", headers=headers
+            f"/threads/{thread_id}/runs/{run_id}/join", headers=headers, params=params
         )
 
     def join_stream(
@@ -2408,6 +2452,7 @@ class RunsClient:
         cancel_on_disconnect: bool = False,
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         last_event_id: str | None = None,
     ) -> AsyncIterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
@@ -2422,9 +2467,11 @@ class RunsClient:
                 when creating the run. Background runs default to having the union of all
                 stream modes.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+            last_event_id: The last event ID to use for the stream.
 
         Returns:
-            None
+            AsyncIterator[StreamPart]: The stream of parts.
 
         ???+ example "Example Usage"
 
@@ -2439,13 +2486,16 @@ class RunsClient:
             ```
 
         """  # noqa: E501
+        query_params = {
+            "cancel_on_disconnect": cancel_on_disconnect,
+            "stream_mode": stream_mode,
+        }
+        if params:
+            query_params.update(params)
         return self.http.stream(
             f"/threads/{thread_id}/runs/{run_id}/stream",
             "GET",
-            params={
-                "cancel_on_disconnect": cancel_on_disconnect,
-                "stream_mode": stream_mode,
-            },
+            params=query_params,
             headers={
                 **({"Last-Event-ID": last_event_id} if last_event_id else {}),
                 **(headers or {}),
@@ -3204,7 +3254,7 @@ class SyncHttpClient:
         self,
         path: str,
         *,
-        json: dict | None,
+        json: dict | list | None,
         params: QueryParamTypes | None = None,
         headers: dict[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
@@ -3446,6 +3496,7 @@ class SyncAssistantsClient:
         *,
         xray: int | bool = False,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
@@ -3453,6 +3504,7 @@ class SyncAssistantsClient:
             assistant_id: The ID of the assistant to get the graph of.
             xray: Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Graph: The graph information for the assistant in JSON format.
@@ -3484,8 +3536,11 @@ class SyncAssistantsClient:
             ```
 
         """  # noqa: E501
+        query_params = {"xray": xray}
+        if params:
+            query_params.update(params)
         return self.http.get(
-            f"/assistants/{assistant_id}/graph", params={"xray": xray}, headers=headers
+            f"/assistants/{assistant_id}/graph", params=query_params, headers=headers
         )
 
     def get_schemas(
@@ -3921,7 +3976,10 @@ class SyncAssistantsClient:
         if metadata:
             payload["metadata"] = metadata
         return self.http.post(
-            f"/assistants/{assistant_id}/versions", json=payload, headers=headers
+            f"/assistants/{assistant_id}/versions",
+            json=payload,
+            headers=headers,
+            params=params,
         )
 
     def set_latest(
@@ -4215,12 +4273,14 @@ class SyncThreadsClient:
         thread_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Copy a thread.
 
         Args:
             thread_id: The ID of the thread to copy.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -4235,7 +4295,9 @@ class SyncThreadsClient:
             ```
 
         """  # noqa: E501
-        return self.http.post(f"/threads/{thread_id}/copy", json=None, headers=headers)
+        return self.http.post(
+            f"/threads/{thread_id}/copy", json=None, headers=headers, params=params
+        )
 
     def get_state(
         self,
@@ -4928,15 +4990,21 @@ class SyncRunsClient:
         )
 
     def create_batch(
-        self, payloads: list[RunCreate], *, headers: dict[str, str] | None = None
+        self,
+        payloads: list[RunCreate],
+        *,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[Run]:
         """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
             return {k: v for k, v in payload.items() if v is not None}
 
-        payloads = [filter_payload(payload) for payload in payloads]
-        return self.http.post("/runs/batch", json=payloads, headers=headers)
+        filtered = [filter_payload(payload) for payload in payloads]
+        return self.http.post(
+            "/runs/batch", json=filtered, headers=headers, params=params
+        )
 
     @overload
     def wait(
@@ -5144,6 +5212,7 @@ class SyncRunsClient:
         status: RunStatus | None = None,
         select: list[RunSelectField] | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[Run]:
         """List runs.
 
@@ -5152,6 +5221,7 @@ class SyncRunsClient:
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             list[Run]: The runs for the thread.
@@ -5168,13 +5238,15 @@ class SyncRunsClient:
             ```
 
         """  # noqa: E501
-        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        query_params: dict[str, Any] = {"limit": limit, "offset": offset}
         if status is not None:
-            params["status"] = status
+            query_params["status"] = status
         if select:
-            params["select"] = select
+            query_params["select"] = select
+        if params:
+            query_params.update(params)
         return self.http.get(
-            f"/threads/{thread_id}/runs", params=params, headers=headers
+            f"/threads/{thread_id}/runs", params=query_params, headers=headers
         )
 
     def get(
@@ -5218,6 +5290,7 @@ class SyncRunsClient:
         wait: bool = False,
         action: CancelAction = "interrupt",
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Get a run.
 
@@ -5228,6 +5301,7 @@ class SyncRunsClient:
             action: Action to take when cancelling the run. Possible values
                 are `interrupt` or `rollback`. Default is `interrupt`.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -5249,6 +5323,7 @@ class SyncRunsClient:
             f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}&action={action}",
             json=None,
             headers=headers,
+            params=params,
         )
 
     def join(
@@ -5257,6 +5332,7 @@ class SyncRunsClient:
         run_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> dict:
         """Block until a run is done. Returns the final state of the thread.
 
@@ -5264,6 +5340,7 @@ class SyncRunsClient:
             thread_id: The thread ID to join.
             run_id: The run ID to join.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -5280,7 +5357,7 @@ class SyncRunsClient:
 
         """  # noqa: E501
         return self.http.get(
-            f"/threads/{thread_id}/runs/{run_id}/join", headers=headers
+            f"/threads/{thread_id}/runs/{run_id}/join", headers=headers, params=params
         )
 
     def join_stream(
@@ -5291,6 +5368,7 @@ class SyncRunsClient:
         stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         cancel_on_disconnect: bool = False,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
         last_event_id: str | None = None,
     ) -> Iterator[StreamPart]:
         """Stream output from a run in real-time, until the run is done.
@@ -5305,6 +5383,8 @@ class SyncRunsClient:
                 stream modes.
             cancel_on_disconnect: Whether to cancel the run when the stream is disconnected.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+            last_event_id: The last event ID to use for the stream.
 
         Returns:
             None
@@ -5321,13 +5401,16 @@ class SyncRunsClient:
             ```
 
         """  # noqa: E501
+        query_params = {
+            "stream_mode": stream_mode,
+            "cancel_on_disconnect": cancel_on_disconnect,
+        }
+        if params:
+            query_params.update(params)
         return self.http.stream(
             f"/threads/{thread_id}/runs/{run_id}/stream",
             "GET",
-            params={
-                "stream_mode": stream_mode,
-                "cancel_on_disconnect": cancel_on_disconnect,
-            },
+            params=query_params,
             headers={
                 **({"Last-Event-ID": last_event_id} if last_event_id else {}),
                 **(headers or {}),
@@ -5682,6 +5765,7 @@ class SyncStoreClient:
         index: Literal[False] | list[str] | None = None,
         ttl: int | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Store or update an item.
 
@@ -5692,6 +5776,7 @@ class SyncStoreClient:
             index: Controls search indexing - None (use defaults), False (disable), or list of field paths to index.
             ttl: Optional time-to-live in minutes for the item, or None for no expiration.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -5729,6 +5814,7 @@ class SyncStoreClient:
         *,
         refresh_ttl: bool | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Item:
         """Retrieve a single item.
 
@@ -5770,10 +5856,12 @@ class SyncStoreClient:
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
 
-        params = {"key": key, "namespace": ".".join(namespace)}
+        query_params = {"key": key, "namespace": ".".join(namespace)}
         if refresh_ttl is not None:
-            params["refresh_ttl"] = refresh_ttl
-        return self.http.get("/store/items", params=params, headers=headers)
+            query_params["refresh_ttl"] = refresh_ttl
+        if params:
+            query_params.update(params)
+        return self.http.get("/store/items", params=query_params, headers=headers)
 
     def delete_item(
         self,
@@ -5781,6 +5869,7 @@ class SyncStoreClient:
         /,
         key: str,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> None:
         """Delete an item.
 
@@ -5788,6 +5877,7 @@ class SyncStoreClient:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             None
@@ -5828,6 +5918,7 @@ class SyncStoreClient:
             query: Optional query for natural language search.
             refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             list[Item]: A list of items matching the search criteria.
@@ -5886,6 +5977,7 @@ class SyncStoreClient:
         max_depth: int | None = None,
         limit: int = 100,
         offset: int = 0,
+        *,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> ListNamespaceResponse:
