@@ -27,7 +27,6 @@ from typing import (
 
 import httpx
 import orjson
-from httpx._types import QueryParamTypes
 
 import langgraph_sdk
 from langgraph_sdk.schema import (
@@ -53,6 +52,7 @@ from langgraph_sdk.schema import (
     MultitaskStrategy,
     OnCompletionBehavior,
     OnConflictBehavior,
+    QueryParamTypes,
     Run,
     RunCreate,
     RunCreateMetadata,
