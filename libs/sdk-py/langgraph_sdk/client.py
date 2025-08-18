@@ -3739,6 +3739,7 @@ class SyncAssistantsClient:
         name: str | None = None,
         headers: dict[str, str] | None = None,
         description: str | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -3789,6 +3790,7 @@ class SyncAssistantsClient:
             f"/assistants/{assistant_id}",
             json=payload,
             headers=headers,
+            params=params,
         )
 
     def delete(
@@ -3831,6 +3833,7 @@ class SyncAssistantsClient:
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[Assistant]:
         """Search for assistants.
 
@@ -3875,6 +3878,7 @@ class SyncAssistantsClient:
             "/assistants/search",
             json=payload,
             headers=headers,
+            params=params,
         )
 
     def get_versions(
@@ -3885,6 +3889,7 @@ class SyncAssistantsClient:
         offset: int = 0,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[AssistantVersion]:
         """List all versions of an assistant.
 
@@ -3925,6 +3930,7 @@ class SyncAssistantsClient:
         version: int,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Assistant:
         """Change the version of an assistant.
 
@@ -3951,7 +3957,10 @@ class SyncAssistantsClient:
         payload: dict[str, Any] = {"version": version}
 
         return self.http.post(
-            f"/assistants/{assistant_id}/latest", json=payload, headers=headers
+            f"/assistants/{assistant_id}/latest",
+            json=payload,
+            headers=headers,
+            params=params,
         )
 
 
@@ -3977,6 +3986,7 @@ class SyncThreadsClient:
         thread_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Thread:
         """Get a thread by ID.
 
@@ -4009,7 +4019,7 @@ class SyncThreadsClient:
 
         """  # noqa: E501
 
-        return self.http.get(f"/threads/{thread_id}", headers=headers)
+        return self.http.get(f"/threads/{thread_id}", headers=headers, params=params)
 
     def create(
         self,
@@ -4020,6 +4030,7 @@ class SyncThreadsClient:
         supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
         graph_id: str | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Thread:
         """Create a new thread.
 
@@ -4074,7 +4085,7 @@ class SyncThreadsClient:
                 for s in supersteps
             ]
 
-        return self.http.post("/threads", json=payload, headers=headers)
+        return self.http.post("/threads", json=payload, headers=headers, params=params)
 
     def update(
         self,
@@ -4082,6 +4093,7 @@ class SyncThreadsClient:
         *,
         metadata: dict[str, Any],
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Thread:
         """Update a thread.
 
@@ -4104,7 +4116,10 @@ class SyncThreadsClient:
             ```
         """  # noqa: E501
         return self.http.patch(
-            f"/threads/{thread_id}", json={"metadata": metadata}, headers=headers
+            f"/threads/{thread_id}",
+            json={"metadata": metadata},
+            headers=headers,
+            params=params,
         )
 
     def delete(
@@ -4147,6 +4162,7 @@ class SyncThreadsClient:
         sort_order: SortOrder | None = None,
         select: list[ThreadSelectField] | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[Thread]:
         """Search for threads.
 
@@ -4190,7 +4206,9 @@ class SyncThreadsClient:
             payload["sort_order"] = sort_order
         if select:
             payload["select"] = select
-        return self.http.post("/threads/search", json=payload, headers=headers)
+        return self.http.post(
+            "/threads/search", json=payload, headers=headers, params=params
+        )
 
     def copy(
         self,
@@ -4227,6 +4245,7 @@ class SyncThreadsClient:
         *,
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> ThreadState:
         """Get the state of a thread.
 
@@ -4332,17 +4351,24 @@ class SyncThreadsClient:
                 f"/threads/{thread_id}/state/checkpoint",
                 json={"checkpoint": checkpoint, "subgraphs": subgraphs},
                 headers=headers,
+                params=params,
             )
         elif checkpoint_id:
+            get_params = {"subgraphs": subgraphs}
+            if params:
+                get_params = {**get_params, **params}
             return self.http.get(
                 f"/threads/{thread_id}/state/{checkpoint_id}",
-                params={"subgraphs": subgraphs},
+                params=get_params,
                 headers=headers,
             )
         else:
+            get_params = {"subgraphs": subgraphs}
+            if params:
+                get_params = {**get_params, **params}
             return self.http.get(
                 f"/threads/{thread_id}/state",
-                params={"subgraphs": subgraphs},
+                params=get_params,
                 headers=headers,
             )
 
@@ -4355,6 +4381,7 @@ class SyncThreadsClient:
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,  # deprecated
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> ThreadUpdateStateResponse:
         """Update the state of a thread.
 
@@ -4402,7 +4429,7 @@ class SyncThreadsClient:
         if as_node:
             payload["as_node"] = as_node
         return self.http.post(
-            f"/threads/{thread_id}/state", json=payload, headers=headers
+            f"/threads/{thread_id}/state", json=payload, headers=headers, params=params
         )
 
     def get_history(
@@ -4414,6 +4441,7 @@ class SyncThreadsClient:
         metadata: dict | None = None,
         checkpoint: Checkpoint | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[ThreadState]:
         """Get the state history of a thread.
 
@@ -4451,7 +4479,10 @@ class SyncThreadsClient:
         if checkpoint:
             payload["checkpoint"] = checkpoint
         return self.http.post(
-            f"/threads/{thread_id}/history", json=payload, headers=headers
+            f"/threads/{thread_id}/history",
+            json=payload,
+            headers=headers,
+            params=params,
         )
 
 
@@ -5152,6 +5183,7 @@ class SyncRunsClient:
         run_id: str,
         *,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Run:
         """Get a run.
 
@@ -5174,7 +5206,9 @@ class SyncRunsClient:
             ```
         """  # noqa: E501
 
-        return self.http.get(f"/threads/{thread_id}/runs/{run_id}", headers=headers)
+        return self.http.get(
+            f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
+        )
 
     def cancel(
         self,
@@ -5373,6 +5407,7 @@ class SyncCronClient:
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Run:
         """Create a cron job for a thread.
 
@@ -5430,7 +5465,10 @@ class SyncCronClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(
-            f"/threads/{thread_id}/runs/crons", json=payload, headers=headers
+            f"/threads/{thread_id}/runs/crons",
+            json=payload,
+            headers=headers,
+            params=params,
         )
 
     def create(
@@ -5448,6 +5486,7 @@ class SyncCronClient:
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> Run:
         """Create a cron run.
 
@@ -5504,7 +5543,9 @@ class SyncCronClient:
             "multitask_strategy": multitask_strategy,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
-        return self.http.post("/runs/crons", json=payload, headers=headers)
+        return self.http.post(
+            "/runs/crons", json=payload, headers=headers, params=params
+        )
 
     def delete(
         self,
@@ -5546,6 +5587,7 @@ class SyncCronClient:
         sort_order: SortOrder | None = None,
         select: list[CronSelectField] | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
 
@@ -5609,7 +5651,9 @@ class SyncCronClient:
         if select:
             payload["select"] = select
         payload = {k: v for k, v in payload.items() if v is not None}
-        return self.http.post("/runs/crons/search", json=payload, headers=headers)
+        return self.http.post(
+            "/runs/crons/search", json=payload, headers=headers, params=params
+        )
 
 
 class SyncStoreClient:
@@ -5772,6 +5816,7 @@ class SyncStoreClient:
         query: str | None = None,
         refresh_ttl: bool | None = None,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> SearchItemsResponse:
         """Search for items within a namespace prefix.
 
@@ -5828,7 +5873,10 @@ class SyncStoreClient:
             "refresh_ttl": refresh_ttl,
         }
         return self.http.post(
-            "/store/items/search", json=_provided_vals(payload), headers=headers
+            "/store/items/search",
+            json=_provided_vals(payload),
+            headers=headers,
+            params=params,
         )
 
     def list_namespaces(
@@ -5839,6 +5887,7 @@ class SyncStoreClient:
         limit: int = 100,
         offset: int = 0,
         headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> ListNamespaceResponse:
         """List namespaces with optional match conditions.
 
@@ -5884,7 +5933,10 @@ class SyncStoreClient:
             "offset": offset,
         }
         return self.http.post(
-            "/store/namespaces", json=_provided_vals(payload), headers=headers
+            "/store/namespaces",
+            json=_provided_vals(payload),
+            headers=headers,
+            params=params,
         )
 
 
