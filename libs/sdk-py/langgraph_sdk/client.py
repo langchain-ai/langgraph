@@ -16,6 +16,7 @@ import os
 import re
 import sys
 from collections.abc import AsyncIterator, Iterator, Sequence
+from types import TracebackType
 from typing import (
     Any,
     Callable,
@@ -231,6 +232,24 @@ class LangGraphClient:
         self.runs = RunsClient(self.http)
         self.crons = CronClient(self.http)
         self.store = StoreClient(self.http)
+
+    async def __aenter__(self) -> LangGraphClient:
+        """Enter the async context manager."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Exit the async context manager."""
+        await self.aclose()
+
+    async def aclose(self) -> None:
+        """Close the underlying HTTP client."""
+        if hasattr(self, "http"):
+            await self.http.client.aclose()
 
 
 class HttpClient:
