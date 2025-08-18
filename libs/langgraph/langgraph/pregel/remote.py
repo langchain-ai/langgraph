@@ -26,7 +26,16 @@ from langgraph_sdk.client import (
     get_sync_client,
 )
 from langgraph_sdk.schema import (
-    Checkpoint, ThreadState, Command as CommandSDK, StreamMode as StreamModeSDK, QueryParamTypes)
+    Checkpoint,
+    QueryParamTypes,
+    ThreadState,
+)
+from langgraph_sdk.schema import (
+    Command as CommandSDK,
+)
+from langgraph_sdk.schema import (
+    StreamMode as StreamModeSDK,
+)
 from typing_extensions import Self
 
 from langgraph._internal._config import merge_configs
@@ -383,7 +392,12 @@ class RemoteGraph(PregelProtocol):
         return sanitized
 
     def get_state(
-        self, config: RunnableConfig, *, subgraphs: bool = False, headers: dict[str, str] | None = None, params: QueryParamTypes | None = None
+        self,
+        config: RunnableConfig,
+        *,
+        subgraphs: bool = False,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> StateSnapshot:
         """Get the state of a thread.
 
@@ -414,7 +428,12 @@ class RemoteGraph(PregelProtocol):
         return self._create_state_snapshot(state)
 
     async def aget_state(
-        self, config: RunnableConfig, *, subgraphs: bool = False, headers: dict[str, str] | None = None, params: QueryParamTypes | None = None
+        self,
+        config: RunnableConfig,
+        *,
+        subgraphs: bool = False,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
     ) -> StateSnapshot:
         """Get the state of a thread.
 
