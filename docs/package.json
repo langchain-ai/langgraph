@@ -8,6 +8,7 @@
   "dependencies": {
     "@langchain/core": "^0.3.38",
     "@langchain/openai": "^0.4.2",
+    "he": "^1.2.0",
     "msgpack-lite": "^0.1.26",
     "nock": "^14.0.1"
   },

@@ -1,29 +1,29 @@
 name: "\U0001F41B Bug Report"
-description: Report a bug in LangGraph. To report a security issue, please instead use the security option below. For questions, please use the GitHub Discussions.
-labels: ["02 Bug Report"]
+description: Report a bug in LangGraph. To report a security issue, please instead use the security option below. For questions, please use the LangChain Forum at forum.langchain.com.
+labels: [pending,bug]
 body:
   - type: markdown
     attributes:
-      value: >
+      value: |
         Thank you for taking the time to file a bug report. 
         
-        Use this to report BUGS in LangGraph. For usage questions, feature requests and general design questions, please use [GitHub Discussions](https://github.com/langchain-ai/langgraph/discussions).
+        Use this to report BUGS in LangGraph. For usage questions, feature requests and general design questions, please use the [LangChain Forum](https://forum.langchain.com/).
         
         Relevant links to check before filing a bug report to see if your issue has already been reported, fixed or
         if there's another way to solve your problem:
         
-        [LangGraph Github Discussions](https://github.com/langchain-ai/langgraph/discussions),
-        [LangGraph Github Issues](https://github.com/langchain-ai/langgraph/issues),
-        [LangGraph how-to guides](https://langchain-ai.github.io/langgraph/how-tos/).
-        [LangChain documentation with the integrated search](https://python.langchain.com/docs/get_started/introduction),
-        [GitHub search](https://github.com/langchain-ai/langgraph),
+        * [LangChain Forum](https://forum.langchain.com/),
+        * [LangGraph Github Issues](https://github.com/langchain-ai/langgraph/issues),
+        * [LangGraph how-to guides](https://langchain-ai.github.io/langgraph/how-tos/).
+        * [LangChain documentation with the integrated search](https://python.langchain.com/docs/get_started/introduction),
+        * [GitHub search](https://github.com/langchain-ai/langgraph),
   - type: checkboxes
     id: checks
     attributes:
       label: Checked other resources
       description: Before submitting this issue, please confirm that you have completed all the steps below by checking each option. These steps help ensure your issue is well-defined, relevant, and actionable.
       options:
-        - label: This is a bug, not a usage question. For questions, please use GitHub Discussions.
+        - label: This is a bug, not a usage question. For questions, please use the LangChain Forum (https://forum.langchain.com/).
           required: true
         - label: I added a clear and detailed title that summarizes the issue.
           required: true
@@ -38,7 +38,7 @@ body:
     attributes:
       label: Example Code
       description: |
-        Please add a self-contained, [minimal, reproducible, example](https://stackoverflow.com/help/minimal-reproducible-example) with your use case.
+        Please add a self-contained, [minimal, reproducible, example](https://stackoverflow.com/help/minimal-reproducible-example) with your use case. Replace this code with your own!
       placeholder: |
         from langgraph.graph import StateGraph
 
@@ -78,7 +78,7 @@ body:
     attributes:
       label: System Info
       description: |
-        python -m langchain_core.sys_info
+        Run on your machine: `python -m langchain_core.sys_info`
       placeholder: |
         python -m langchain_core.sys_info
     validations:

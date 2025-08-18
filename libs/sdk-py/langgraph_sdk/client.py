@@ -33,13 +33,17 @@ import langgraph_sdk
 from langgraph_sdk.schema import (
     All,
     Assistant,
+    AssistantSelectField,
     AssistantSortBy,
     AssistantVersion,
     CancelAction,
     Checkpoint,
     Command,
     Config,
+    Context,
     Cron,
+    CronSelectField,
+    CronSortBy,
     DisconnectMode,
     GraphSchema,
     IfNotExists,
@@ -52,6 +56,7 @@ from langgraph_sdk.schema import (
     Run,
     RunCreate,
     RunCreateMetadata,
+    RunSelectField,
     RunStatus,
     SearchItemsResponse,
     SortOrder,
@@ -59,6 +64,7 @@ from langgraph_sdk.schema import (
     StreamPart,
     Subgraphs,
     Thread,
+    ThreadSelectField,
     ThreadSortBy,
     ThreadState,
     ThreadStatus,
@@ -645,9 +651,9 @@ class AssistantsClient:
                                     }
                             }
                     },
-                'config_schema':
+                'context_schema':
                     {
-                        'title': 'Configurable',
+                        'title': 'Context',
                         'type': 'object',
                         'properties':
                             {
@@ -705,6 +711,7 @@ class AssistantsClient:
         graph_id: str | None,
         config: Config | None = None,
         *,
+        context: Context | None = None,
         metadata: Json = None,
         assistant_id: str | None = None,
         if_exists: OnConflictBehavior | None = None,
@@ -720,6 +727,8 @@ class AssistantsClient:
             graph_id: The ID of the graph the assistant should use. The graph ID is normally set in your langgraph.json configuration.
             config: Configuration to use for the graph.
             metadata: Metadata to add to assistant.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             assistant_id: Assistant ID to use, will default to a random UUID if not provided.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).
@@ -737,7 +746,7 @@ class AssistantsClient:
             client = get_client(url="http://localhost:2024")
             assistant = await client.assistants.create(
                 graph_id="agent",
-                config={"configurable": {"model_name": "openai"}},
+                context={"model_name": "openai"},
                 metadata={"number":1},
                 assistant_id="my-assistant-id",
                 if_exists="do_nothing",
@@ -750,6 +759,8 @@ class AssistantsClient:
         }
         if config:
             payload["config"] = config
+        if context:
+            payload["context"] = context
         if metadata:
             payload["metadata"] = metadata
         if assistant_id:
@@ -768,6 +779,7 @@ class AssistantsClient:
         *,
         graph_id: str | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         metadata: Json = None,
         name: str | None = None,
         headers: dict[str, str] | None = None,
@@ -782,6 +794,8 @@ class AssistantsClient:
             graph_id: The ID of the graph the assistant should use.
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
             headers: Optional custom headers to include with the request.
@@ -798,7 +812,7 @@ class AssistantsClient:
             assistant = await client.assistants.update(
                 assistant_id='e280dad7-8618-443f-87f1-8e41841c180f',
                 graph_id="other-graph",
-                config={"configurable": {"model_name": "anthropic"}},
+                context={"model_name": "anthropic"},
                 metadata={"number":2}
             )
             ```
@@ -809,6 +823,8 @@ class AssistantsClient:
             payload["graph_id"] = graph_id
         if config:
             payload["config"] = config
+        if context:
+            payload["context"] = context
         if metadata:
             payload["metadata"] = metadata
         if name:
@@ -857,6 +873,7 @@ class AssistantsClient:
         offset: int = 0,
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Assistant]:
         """Search for assistants.
@@ -898,6 +915,8 @@ class AssistantsClient:
             payload["sort_by"] = sort_by
         if sort_order:
             payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         return await self.http.post(
             "/assistants/search",
             json=payload,
@@ -1165,6 +1184,7 @@ class ThreadsClient:
         offset: int = 0,
         sort_by: ThreadSortBy | None = None,
         sort_order: SortOrder | None = None,
+        select: list[ThreadSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Thread]:
         """Search for threads.
@@ -1210,6 +1230,8 @@ class ThreadsClient:
             payload["sort_by"] = sort_by
         if sort_order:
             payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         return await self.http.post(
             "/threads/search",
             json=payload,
@@ -1481,7 +1503,7 @@ class ThreadsClient:
 class RunsClient:
     """Client for managing runs in LangGraph.
 
-    A run is a single assistant invocation with optional input, config, and metadata.
+    A run is a single assistant invocation with optional input, config, context, and metadata.
     This client manages runs, which can be stateful (on threads) or stateless.
 
     ???+ example "Example"
@@ -1508,6 +1530,7 @@ class RunsClient:
         stream_resumable: bool = False,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         checkpoint_during: bool | None = None,
@@ -1561,6 +1584,7 @@ class RunsClient:
         stream_resumable: bool = False,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         checkpoint_during: bool | None = None,
@@ -1591,6 +1615,8 @@ class RunsClient:
                 If true, the stream can be resumed and replayed in its entirety even after disconnection.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -1622,7 +1648,7 @@ class RunsClient:
                 input={"messages": [{"role": "user", "content": "how are you?"}]},
                 stream_mode=["values","debug"],
                 metadata={"name":"my_run"},
-                config={"configurable": {"model_name": "anthropic"}},
+                context={"model_name": "anthropic"},
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 feedback_keys=["my_feedback_key_1","my_feedback_key_2"],
@@ -1649,6 +1675,7 @@ class RunsClient:
                 {k: v for k, v in command.items() if v is not None} if command else None
             ),
             "config": config,
+            "context": context,
             "metadata": metadata,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
@@ -1700,6 +1727,7 @@ class RunsClient:
         metadata: dict | None = None,
         checkpoint_during: bool | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         webhook: str | None = None,
@@ -1723,6 +1751,7 @@ class RunsClient:
         stream_resumable: bool = False,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         checkpoint_during: bool | None = None,
@@ -1748,6 +1777,7 @@ class RunsClient:
         stream_resumable: bool = False,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         checkpoint_during: bool | None = None,
@@ -1776,6 +1806,8 @@ class RunsClient:
                 If true, the stream can be resumed and replayed in its entirety even after disconnection.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -1804,7 +1836,7 @@ class RunsClient:
                 assistant_id="my_assistant_id",
                 input={"messages": [{"role": "user", "content": "hello!"}]},
                 metadata={"name":"my_run"},
-                config={"configurable": {"model_name": "openai"}},
+                context={"model_name": "openai"},
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -1848,10 +1880,13 @@ class RunsClient:
                                         'graph_id': 'agent',
                                         'thread_id': 'my_thread_id',
                                         'checkpoint_id': None,
-                                        'model_name': "openai",
                                         'assistant_id': 'my_assistant_id'
-                                    }
+                                    },
                             },
+                        'context':
+                            {
+                                'model_name': 'openai'
+                            }
                         'webhook': "https://my.fake.webhook.com",
                         'temporary': False,
                         'stream_mode': ['values'],
@@ -1872,6 +1907,7 @@ class RunsClient:
             "stream_subgraphs": stream_subgraphs,
             "stream_resumable": stream_resumable,
             "config": config,
+            "context": context,
             "metadata": metadata,
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
@@ -1918,6 +1954,7 @@ class RunsClient:
         command: Command | None = None,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         checkpoint_during: bool | None = None,
@@ -1943,6 +1980,7 @@ class RunsClient:
         command: Command | None = None,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -1965,6 +2003,7 @@ class RunsClient:
         command: Command | None = None,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         checkpoint_during: bool | None = None,
@@ -1991,6 +2030,8 @@ class RunsClient:
             command: A command to execute. Cannot be combined with input.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -2021,7 +2062,7 @@ class RunsClient:
                 assistant_id="agent",
                 input={"messages": [{"role": "user", "content": "how are you?"}]},
                 metadata={"name":"my_run"},
-                config={"configurable": {"model_name": "anthropic"}},
+                context={"model_name": "anthropic"},
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -2067,6 +2108,7 @@ class RunsClient:
                 {k: v for k, v in command.items() if v is not None} if command else None
             ),
             "config": config,
+            "context": context,
             "metadata": metadata,
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
@@ -2114,6 +2156,7 @@ class RunsClient:
         limit: int = 10,
         offset: int = 0,
         status: RunStatus | None = None,
+        select: list[RunSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Run]:
         """List runs.
@@ -2146,6 +2189,8 @@ class RunsClient:
         }
         if status is not None:
             params["status"] = status
+        if select:
+            params["select"] = select
         return await self.http.get(
             f"/threads/{thread_id}/runs", params=params, headers=headers
         )
@@ -2331,7 +2376,7 @@ class RunsClient:
 class CronClient:
     """Client for managing recurrent runs (cron jobs) in LangGraph.
 
-    A run is a single invocation of an assistant with optional input and config.
+    A run is a single invocation of an assistant with optional input, config, and context.
     This client allows scheduling recurring runs to occur automatically.
 
     ???+ example "Example Usage"
@@ -2364,6 +2409,7 @@ class CronClient:
         input: dict | None = None,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
@@ -2381,6 +2427,8 @@ class CronClient:
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
 
@@ -2404,7 +2452,7 @@ class CronClient:
                 schedule="27 15 * * *",
                 input={"messages": [{"role": "user", "content": "hello!"}]},
                 metadata={"name":"my_run"},
-                config={"configurable": {"model_name": "openai"}},
+                context={"model_name": "openai"},
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -2417,6 +2465,7 @@ class CronClient:
             "input": input,
             "config": config,
             "metadata": metadata,
+            "context": context,
             "assistant_id": assistant_id,
             "checkpoint_during": checkpoint_during,
             "interrupt_before": interrupt_before,
@@ -2438,6 +2487,7 @@ class CronClient:
         input: dict | None = None,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
@@ -2454,6 +2504,8 @@ class CronClient:
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
@@ -2474,7 +2526,7 @@ class CronClient:
                 schedule="27 15 * * *",
                 input={"messages": [{"role": "user", "content": "hello!"}]},
                 metadata={"name":"my_run"},
-                config={"configurable": {"model_name": "openai"}},
+                context={"model_name": "openai"},
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -2488,6 +2540,7 @@ class CronClient:
             "input": input,
             "config": config,
             "metadata": metadata,
+            "context": context,
             "assistant_id": assistant_id,
             "checkpoint_during": checkpoint_during,
             "interrupt_before": interrupt_before,
@@ -2532,6 +2585,9 @@ class CronClient:
         thread_id: str | None = None,
         limit: int = 10,
         offset: int = 0,
+        sort_by: CronSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[CronSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
@@ -2590,6 +2646,12 @@ class CronClient:
             "limit": limit,
             "offset": offset,
         }
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if sort_order:
+            payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         payload = {k: v for k, v in payload.items() if v is not None}
         return await self.http.post("/runs/crons/search", json=payload, headers=headers)
 
@@ -3209,6 +3271,7 @@ class SyncAssistantsClient:
                 'created_at': '2024-06-25T17:10:33.109781+00:00',
                 'updated_at': '2024-06-25T17:10:33.109781+00:00',
                 'config': {},
+                'context': {},
                 'metadata': {'created_by': 'system'}
             }
             ```
@@ -3372,6 +3435,20 @@ class SyncAssistantsClient:
                                         'type': 'string'
                                     }
                             }
+                    },
+                'context_schema':
+                    {
+                        'title': 'Context',
+                        'type': 'object',
+                        'properties':
+                            {
+                                'model_name':
+                                    {
+                                        'title': 'Model Name',
+                                        'enum': ['anthropic', 'openai'],
+                                        'type': 'string'
+                                    }
+                            }
                     }
             }
             ```
@@ -3415,6 +3492,7 @@ class SyncAssistantsClient:
         graph_id: str | None,
         config: Config | None = None,
         *,
+        context: Context | None = None,
         metadata: Json = None,
         assistant_id: str | None = None,
         if_exists: OnConflictBehavior | None = None,
@@ -3429,6 +3507,8 @@ class SyncAssistantsClient:
         Args:
             graph_id: The ID of the graph the assistant should use. The graph ID is normally set in your langgraph.json configuration.
             config: Configuration to use for the graph.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             metadata: Metadata to add to assistant.
             assistant_id: Assistant ID to use, will default to a random UUID if not provided.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
@@ -3447,7 +3527,7 @@ class SyncAssistantsClient:
             client = get_sync_client(url="http://localhost:2024")
             assistant = client.assistants.create(
                 graph_id="agent",
-                config={"configurable": {"model_name": "openai"}},
+                context={"model_name": "openai"},
                 metadata={"number":1},
                 assistant_id="my-assistant-id",
                 if_exists="do_nothing",
@@ -3460,6 +3540,8 @@ class SyncAssistantsClient:
         }
         if config:
             payload["config"] = config
+        if context:
+            payload["context"] = context
         if metadata:
             payload["metadata"] = metadata
         if assistant_id:
@@ -3478,6 +3560,7 @@ class SyncAssistantsClient:
         *,
         graph_id: str | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         metadata: Json = None,
         name: str | None = None,
         headers: dict[str, str] | None = None,
@@ -3492,6 +3575,8 @@ class SyncAssistantsClient:
             graph_id: The ID of the graph the assistant should use.
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
             headers: Optional custom headers to include with the request.
@@ -3508,7 +3593,7 @@ class SyncAssistantsClient:
             assistant = client.assistants.update(
                 assistant_id='e280dad7-8618-443f-87f1-8e41841c180f',
                 graph_id="other-graph",
-                config={"configurable": {"model_name": "anthropic"}},
+                context={"model_name": "anthropic"},
                 metadata={"number":2}
             )
             ```
@@ -3518,6 +3603,8 @@ class SyncAssistantsClient:
             payload["graph_id"] = graph_id
         if config:
             payload["config"] = config
+        if context:
+            payload["context"] = context
         if metadata:
             payload["metadata"] = metadata
         if name:
@@ -3564,6 +3651,9 @@ class SyncAssistantsClient:
         graph_id: str | None = None,
         limit: int = 10,
         offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Assistant]:
         """Search for assistants.
@@ -3599,6 +3689,12 @@ class SyncAssistantsClient:
             payload["metadata"] = metadata
         if graph_id:
             payload["graph_id"] = graph_id
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if sort_order:
+            payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         return self.http.post(
             "/assistants/search",
             json=payload,
@@ -3869,6 +3965,9 @@ class SyncThreadsClient:
         status: ThreadStatus | None = None,
         limit: int = 10,
         offset: int = 0,
+        sort_by: ThreadSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[ThreadSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Thread]:
         """Search for threads.
@@ -3907,6 +4006,12 @@ class SyncThreadsClient:
             payload["values"] = values
         if status:
             payload["status"] = status
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if sort_order:
+            payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         return self.http.post("/threads/search", json=payload, headers=headers)
 
     def copy(
@@ -4201,6 +4306,7 @@ class SyncRunsClient:
         stream_subgraphs: bool = False,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         checkpoint_during: bool | None = None,
@@ -4229,6 +4335,7 @@ class SyncRunsClient:
         stream_resumable: bool = False,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -4254,6 +4361,7 @@ class SyncRunsClient:
         stream_resumable: bool = False,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         checkpoint_during: bool | None = None,
@@ -4284,6 +4392,8 @@ class SyncRunsClient:
                 If true, the stream can be resumed and replayed in its entirety even after disconnection.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -4316,7 +4426,7 @@ class SyncRunsClient:
                 input={"messages": [{"role": "user", "content": "how are you?"}]},
                 stream_mode=["values","debug"],
                 metadata={"name":"my_run"},
-                config={"configurable": {"model_name": "anthropic"}},
+                context={"model_name": "anthropic"},
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 feedback_keys=["my_feedback_key_1","my_feedback_key_2"],
@@ -4340,6 +4450,7 @@ class SyncRunsClient:
                 {k: v for k, v in command.items() if v is not None} if command else None
             ),
             "config": config,
+            "context": context,
             "metadata": metadata,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
@@ -4390,6 +4501,7 @@ class SyncRunsClient:
         stream_resumable: bool = False,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -4414,6 +4526,7 @@ class SyncRunsClient:
         stream_resumable: bool = False,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         checkpoint_during: bool | None = None,
@@ -4439,6 +4552,7 @@ class SyncRunsClient:
         stream_resumable: bool = False,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         checkpoint_during: bool | None = None,
@@ -4467,6 +4581,8 @@ class SyncRunsClient:
                 If true, the stream can be resumed and replayed in its entirety even after disconnection.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -4495,7 +4611,7 @@ class SyncRunsClient:
                 assistant_id="my_assistant_id",
                 input={"messages": [{"role": "user", "content": "hello!"}]},
                 metadata={"name":"my_run"},
-                config={"configurable": {"model_name": "openai"}},
+                context={"model_name": "openai"},
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -4539,9 +4655,12 @@ class SyncRunsClient:
                                         'graph_id': 'agent',
                                         'thread_id': 'my_thread_id',
                                         'checkpoint_id': None,
-                                        'model_name': "openai",
                                         'assistant_id': 'my_assistant_id'
                                     }
+                            },
+                        'context':
+                            {
+                                'model_name': 'openai'
                             },
                         'webhook': "https://my.fake.webhook.com",
                         'temporary': False,
@@ -4563,6 +4682,7 @@ class SyncRunsClient:
             "stream_subgraphs": stream_subgraphs,
             "stream_resumable": stream_resumable,
             "config": config,
+            "context": context,
             "metadata": metadata,
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
@@ -4611,6 +4731,7 @@ class SyncRunsClient:
         command: Command | None = None,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         checkpoint_during: bool | None = None,
@@ -4635,6 +4756,7 @@ class SyncRunsClient:
         command: Command | None = None,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -4656,6 +4778,7 @@ class SyncRunsClient:
         command: Command | None = None,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
@@ -4681,6 +4804,8 @@ class SyncRunsClient:
             command: The command to execute.
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -4711,7 +4836,7 @@ class SyncRunsClient:
                 assistant_id="agent",
                 input={"messages": [{"role": "user", "content": "how are you?"}]},
                 metadata={"name":"my_run"},
-                config={"configurable": {"model_name": "anthropic"}},
+                context={"model_name": "anthropic"},
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -4758,6 +4883,7 @@ class SyncRunsClient:
                 {k: v for k, v in command.items() if v is not None} if command else None
             ),
             "config": config,
+            "context": context,
             "metadata": metadata,
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
@@ -4794,6 +4920,8 @@ class SyncRunsClient:
         *,
         limit: int = 10,
         offset: int = 0,
+        status: RunStatus | None = None,
+        select: list[RunSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Run]:
         """List runs.
@@ -4819,8 +4947,13 @@ class SyncRunsClient:
             ```
 
         """  # noqa: E501
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if status is not None:
+            params["status"] = status
+        if select:
+            params["select"] = select
         return self.http.get(
-            f"/threads/{thread_id}/runs?limit={limit}&offset={offset}", headers=headers
+            f"/threads/{thread_id}/runs", params=params, headers=headers
         )
 
     def get(
@@ -5040,6 +5173,7 @@ class SyncCronClient:
         metadata: dict | None = None,
         checkpoint_during: bool | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
@@ -5056,6 +5190,8 @@ class SyncCronClient:
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
@@ -5077,7 +5213,7 @@ class SyncCronClient:
                 schedule="27 15 * * *",
                 input={"messages": [{"role": "user", "content": "hello!"}]},
                 metadata={"name":"my_run"},
-                config={"configurable": {"model_name": "openai"}},
+                context={"model_name": "openai"},
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
@@ -5090,6 +5226,7 @@ class SyncCronClient:
             "input": input,
             "config": config,
             "metadata": metadata,
+            "context": context,
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
@@ -5110,6 +5247,7 @@ class SyncCronClient:
         input: dict | None = None,
         metadata: dict | None = None,
         config: Config | None = None,
+        context: Context | None = None,
         checkpoint_during: bool | None = None,
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
@@ -5126,6 +5264,8 @@ class SyncCronClient:
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
+            context: Static context to add to the assistant.
+                !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
@@ -5146,7 +5286,7 @@ class SyncCronClient:
                 schedule="27 15 * * *",
                 input={"messages": [{"role": "user", "content": "hello!"}]},
                 metadata={"name":"my_run"},
-                config={"configurable": {"model_name": "openai"}},
+                context={"model_name": "openai"},
                 checkpoint_during=True,
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
@@ -5161,6 +5301,7 @@ class SyncCronClient:
             "input": input,
             "config": config,
             "metadata": metadata,
+            "context": context,
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
@@ -5205,6 +5346,9 @@ class SyncCronClient:
         thread_id: str | None = None,
         limit: int = 10,
         offset: int = 0,
+        sort_by: CronSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[CronSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
@@ -5262,6 +5406,12 @@ class SyncCronClient:
             "limit": limit,
             "offset": offset,
         }
+        if sort_by:
+            payload["sort_by"] = sort_by
+        if sort_order:
+            payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post("/runs/crons/search", json=payload, headers=headers)
 

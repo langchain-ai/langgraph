@@ -12,6 +12,8 @@ from typing import (
     TypedDict,
 )
 
+from typing_extensions import TypeAlias
+
 Json = Optional[dict[str, Any]]
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
 
@@ -36,7 +38,15 @@ Represents the status of a thread:
 """
 
 StreamMode = Literal[
-    "values", "messages", "updates", "events", "debug", "custom", "messages-tuple"
+    "values",
+    "messages",
+    "updates",
+    "events",
+    "tasks",
+    "checkpoints",
+    "debug",
+    "custom",
+    "messages-tuple",
 ]
 """
 Defines the mode of streaming:
@@ -44,6 +54,8 @@ Defines the mode of streaming:
 - "messages": Stream complete messages.
 - "updates": Stream updates to the state.
 - "events": Stream events occurring during execution.
+- "checkpoints": Stream checkpoints as they are created.
+- "tasks": Stream task start and finish events.
 - "debug": Stream detailed debug information.
 - "custom": Stream custom events.
 """
@@ -107,10 +119,19 @@ ThreadSortBy = Literal["thread_id", "status", "created_at", "updated_at"]
 The field to sort by.
 """
 
+CronSortBy = Literal[
+    "cron_id", "assistant_id", "thread_id", "created_at", "updated_at", "next_run_date"
+]
+"""
+The field to sort by.
+"""
+
 SortOrder = Literal["asc", "desc"]
 """
 The order to sort by.
 """
+
+Context: TypeAlias = dict[str, Any]
 
 
 class Config(TypedDict, total=False):
@@ -166,6 +187,9 @@ class GraphSchema(TypedDict):
     config_schema: dict | None
     """The schema for the graph config.
     Missing if unable to generate JSON schema from graph."""
+    context_schema: dict | None
+    """The schema for the graph context.
+    Missing if unable to generate JSON schema from graph."""
 
 
 Subgraphs = dict[str, GraphSchema]
@@ -180,6 +204,8 @@ class AssistantBase(TypedDict):
     """The ID of the graph."""
     config: Config
     """The assistant config."""
+    context: Context
+    """The static context of the assistant."""
     created_at: datetime
     """The time the assistant was created."""
     metadata: Json
@@ -205,17 +231,13 @@ class Assistant(AssistantBase):
     """The last time the assistant was updated."""
 
 
-class Interrupt(TypedDict, total=False):
+class Interrupt(TypedDict):
     """Represents an interruption in the execution flow."""
 
     value: Any
     """The value associated with the interrupt."""
-    when: Literal["during"]
-    """When the interrupt occurred."""
-    resumable: bool
-    """Whether the interrupt can be resumed."""
-    ns: list[str] | None
-    """Optional namespace for the interrupt."""
+    id: str
+    """The ID of the interrupt. Can be used to resume the interrupt."""
 
 
 class Thread(TypedDict):
@@ -234,7 +256,7 @@ class Thread(TypedDict):
     values: Json
     """The current state of the thread."""
     interrupts: dict[str, list[Interrupt]]
-    """Interrupts which were thrown in this thread"""
+    """Mapping of task ids to interrupts that were raised in that task."""
 
 
 class ThreadTask(TypedDict):
@@ -267,6 +289,8 @@ class ThreadState(TypedDict):
     """The ID of the parent checkpoint. If missing, this is the root checkpoint."""
     tasks: Sequence[ThreadTask]
     """Tasks to execute in this step. If already attempted, may contain an error."""
+    interrupts: list[Interrupt]
+    """Interrupts which were thrown in this thread."""
 
 
 class ThreadUpdateStateResponse(TypedDict):
@@ -302,6 +326,8 @@ class Cron(TypedDict):
 
     cron_id: str
     """The ID of the cron."""
+    assistant_id: str
+    """The ID of the assistant."""
     thread_id: str | None
     """The ID of the thread."""
     end_time: datetime | None
@@ -314,6 +340,68 @@ class Cron(TypedDict):
     """The last time the cron was updated."""
     payload: dict
     """The run payload to use for creating new run."""
+    user_id: str | None
+    """The user ID of the cron."""
+    next_run_date: datetime | None
+    """The next run date of the cron."""
+    metadata: dict
+    """The metadata of the cron."""
+
+
+# Select field aliases for client-side typing of `select` parameters.
+# These mirror the server's allowed field sets.
+
+AssistantSelectField = Literal[
+    "assistant_id",
+    "graph_id",
+    "name",
+    "description",
+    "config",
+    "context",
+    "created_at",
+    "updated_at",
+    "metadata",
+    "version",
+]
+
+ThreadSelectField = Literal[
+    "thread_id",
+    "created_at",
+    "updated_at",
+    "metadata",
+    "config",
+    "context",
+    "status",
+    "values",
+    "interrupts",
+]
+
+RunSelectField = Literal[
+    "run_id",
+    "thread_id",
+    "assistant_id",
+    "created_at",
+    "updated_at",
+    "status",
+    "metadata",
+    "kwargs",
+    "multitask_strategy",
+]
+
+CronSelectField = Literal[
+    "cron_id",
+    "assistant_id",
+    "thread_id",
+    "end_time",
+    "schedule",
+    "created_at",
+    "updated_at",
+    "user_id",
+    "payload",
+    "next_run_date",
+    "metadata",
+    "now",
+]
 
 
 class RunCreate(TypedDict):
@@ -329,6 +417,8 @@ class RunCreate(TypedDict):
     """Additional metadata to associate with the run."""
     config: Config | None
     """Configuration options for the run."""
+    context: Context | None
+    """The static context of the run."""
     checkpoint_id: str | None
     """The identifier of a checkpoint to resume from."""
     interrupt_before: list[str] | None

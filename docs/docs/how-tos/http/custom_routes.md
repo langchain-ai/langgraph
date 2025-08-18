@@ -10,7 +10,7 @@ Below is an example using FastAPI.
 
 ## Create app
 
-Starting from an **existing** LangGraph Platform application, add the following custom route code to your `webapp.py` file. If you are starting from scratch, you can create a new app from a template using the CLI.
+Starting from an **existing** LangGraph Platform application, add the following custom route code to your webapp file. If you are starting from scratch, you can create a new app from a template using the CLI.
 
 ```bash
 langgraph new --template=new-langgraph-project-python my_new_project
@@ -34,7 +34,7 @@ def read_root():
 
 ## Configure `langgraph.json`
 
-Add the following to your `langgraph.json` configuration file. Make sure the path points to the `app.py` file you created above.
+Add the following to your `langgraph.json` configuration file. Make sure the path points to the FastAPI application instance `app` in the `webapp.py` file you created above.
 
 ```json
 {
@@ -60,7 +60,6 @@ langgraph dev --no-browser
 
 If you navigate to `localhost:2024/hello` in your browser (`2024` is the default development port), you should see the `/hello` endpoint returning `{"Hello": "World"}`.
 
-
 !!! note "Shadowing default endpoints"
 
     The routes you create in the app are given priority over the system defaults, meaning you can shadow and redefine the behavior of any default endpoint.
@@ -71,4 +70,4 @@ You can deploy this app as-is to LangGraph Platform or to your self-hosted platf
 
 ## Next steps
 
-Now that you've added a custom route to your deployment, you can use this same technique to further customize how your server behaves, such as defining custom [custom middleware](./custom_middleware.md) and [custom lifespan events](./custom_lifespan.md). 
+Now that you've added a custom route to your deployment, you can use this same technique to further customize how your server behaves, such as defining custom [custom middleware](./custom_middleware.md) and [custom lifespan events](./custom_lifespan.md).

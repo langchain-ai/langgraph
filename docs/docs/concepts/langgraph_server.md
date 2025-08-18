@@ -7,26 +7,11 @@ search:
 
 **LangGraph Server** offers an API for creating and managing agent-based applications. It is built on the concept of [assistants](assistants.md), which are agents configured for specific tasks, and includes built-in [persistence](persistence.md#memory-store) and a **task queue**. This versatile API supports a wide range of agentic application use cases, from background processing to real-time interactions.
 
-Use LangGraph Server to create and manage [assistants](assistants.md), [threads](../cloud/concepts/threads.md), [runs](../cloud/concepts/runs.md), [cron jobs](../cloud/concepts/cron_jobs.md), [webhooks](../cloud/concepts/webhooks.md), and more.
+Use LangGraph Server to create and manage [assistants](assistants.md), [threads](./persistence.md#threads), [runs](./assistants.md#execution), [cron jobs](../cloud/concepts/cron_jobs.md), [webhooks](../cloud/concepts/webhooks.md), and more.
 
 !!! tip "API reference"
   
     For detailed information on the API endpoints and data models, see [LangGraph Platform API reference docs](../cloud/reference/api/api_ref.html).
-
-## Server versions
-
-There are two versions of LangGraph Server:
-
-- `Lite` is a limited version of the LangGraph Server that you can run locally or in a self-hosted manner (up to 1 million nodes executed per year).
-- `Enterprise` is the full version of the LangGraph Server. To use the `Enterprise` version, you must acquire a license key that you will need to specify when running the Docker image. To acquire a license key, please email sales@langchain.dev.
-
-Feature Differences:
-
-|       | Lite       | Enterprise |
-|-------|------------|------------|
-| [Cron Jobs](../cloud/concepts/cron_jobs.md) |❌|✅|
-| [Custom Authentication](../concepts/auth.md) |❌|✅|
-| [Deployment options](../concepts/deployment_options.md) | Standalone container | Cloud SaaS, Self-Hosted Data Plane, Self-Hosted Control Plane, Standalone container
 
 ## Application structure
 

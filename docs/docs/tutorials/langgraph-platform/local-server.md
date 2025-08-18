@@ -1,4 +1,4 @@
-# LangGraph Platform quickstart
+# Run a local server
 
 This guide shows you how to run a LangGraph application locally.
 
@@ -10,57 +10,69 @@ Before you begin, ensure you have the following:
 
 ## 1. Install the LangGraph CLI
 
-=== "Python server"
+:::python
 
-    ```shell
-    # Python >= 3.11 is required.
+```shell
+# Python >= 3.11 is required.
 
-    pip install --upgrade "langgraph-cli[inmem]"
-    ```
+pip install --upgrade "langgraph-cli[inmem]"
+```
 
-=== "Node server"
+:::
 
-    ```shell
-    npx @langchain/langgraph-cli
-    ```
+:::js
+
+```shell
+npx @langchain/langgraph-cli
+```
+
+:::
 
 ## 2. Create a LangGraph app 🌱
 
-Create a new app from the [`new-langgraph-project-python` template](https://github.com/langchain-ai/new-langgraph-project) or [`new-langgraph-project-js` template](https://github.com/langchain-ai/new-langgraphjs-project). This template demonstrates a single-node application you can extend with your own logic.
+:::python
+Create a new app from the [`new-langgraph-project-python` template](https://github.com/langchain-ai/new-langgraph-project). This template demonstrates a single-node application you can extend with your own logic.
 
-=== "Python server"
-
-    ```shell
-    langgraph new path/to/your/app --template new-langgraph-project-python
-    ```
-
-=== "Node server"
-
-    ```shell
-    langgraph new path/to/your/app --template new-langgraph-project-js
-    ```
+```shell
+langgraph new path/to/your/app --template new-langgraph-project-python
+```
 
 !!! tip "Additional templates"
 
     If you use `langgraph new` without specifying a template, you will be presented with an interactive menu that will allow you to choose from a list of available templates.
 
+:::
+
+:::js
+Create a new app from the [`new-langgraph-project-js` template](https://github.com/langchain-ai/new-langgraphjs-project). This template demonstrates a single-node application you can extend with your own logic.
+
+```shell
+npm create langgraph
+```
+
+:::
+
 ## 3. Install dependencies
 
 In the root of your new LangGraph app, install the dependencies in `edit` mode so your local changes are used by the server:
 
-=== "Python server"
+:::python
 
-    ```shell
-    cd path/to/your/app
-    pip install -e .
-    ```
+```shell
+cd path/to/your/app
+pip install -e .
+```
 
-=== "Node server"
+:::
 
-    ```shell
-    cd path/to/your/app
-    yarn install
-    ```
+:::js
+
+```shell
+cd path/to/your/app
+npm install
+```
+
+:::
 
 ## 4. Create a `.env` file
 
@@ -74,17 +86,21 @@ LANGSMITH_API_KEY=lsv2...
 
 Start the LangGraph API server locally:
 
-=== "Python server"
+:::python
 
-    ```shell
-    langgraph dev
-    ```
+```shell
+langgraph dev
+```
 
-=== "Node server"
+:::
 
-    ```shell
-    npx @langchain/langgraph-cli dev
-    ```
+:::js
+
+```shell
+npx @langchain/langgraph-cli dev
+```
+
+:::
 
 Sample output:
 
@@ -120,6 +136,7 @@ For a LangGraph Server running on a custom host/port, update the baseURL paramet
 
 ## 7. Test the API
 
+:::python
 === "Python SDK (async)"
 
     1. Install the LangGraph Python SDK:
@@ -185,7 +202,29 @@ For a LangGraph Server running on a custom host/port, update the baseURL paramet
             print("\n\n")
         ```
 
+=== "Rest API"
 
+    ```bash
+    curl -s --request POST \
+        --url "http://localhost:2024/runs/stream" \
+        --header 'Content-Type: application/json' \
+        --data "{
+            \"assistant_id\": \"agent\",
+            \"input\": {
+                \"messages\": [
+                    {
+                        \"role\": \"human\",
+                        \"content\": \"What is LangGraph?\"
+                    }
+                ]
+            },
+            \"stream_mode\": \"messages-tuple\"
+        }"
+    ```
+
+:::
+
+:::js
 === "Javascript SDK"
 
     1. Install the LangGraph JS SDK:
@@ -242,6 +281,8 @@ For a LangGraph Server running on a custom host/port, update the baseURL paramet
         }"
     ```
 
+:::
+
 ## Next steps
 
 Now that you have a LangGraph app running locally, take your journey further by exploring deployment and advanced features:
@@ -249,5 +290,13 @@ Now that you have a LangGraph app running locally, take your journey further by 
 - [Deployment quickstart](../../cloud/quick_start.md): Deploy your LangGraph app using LangGraph Platform.
 - [LangGraph Platform overview](../../concepts/langgraph_platform.md): Learn about foundational LangGraph Platform concepts.
 - [LangGraph Server API Reference](../../cloud/reference/api/api_ref.html): Explore the LangGraph Server API documentation.
+
+:::python
+
 - [Python SDK Reference](../../cloud/reference/sdk/python_sdk_ref.md): Explore the Python SDK API Reference.
+  :::
+
+:::js
+
 - [JS/TS SDK Reference](../../cloud/reference/sdk/js_ts_sdk_ref.md): Explore the JS/TS SDK API Reference.
+  :::

@@ -1,38 +1,8 @@
-# Human-in-the-loop
+# Human-in-the-loop using Server API
 
-LangGraph supports robust **human-in-the-loop (HIL)** workflows, enabling human intervention at any point in an automated process. This is especially useful in large language model (LLM)-driven applications where model output may require validation, correction, or additional context.
+To review, edit, and approve tool calls in an agent or workflow, use LangGraph's [human-in-the-loop](../../concepts/human_in_the_loop.md) features.
 
-Please see [the overview of LangGraph human-in-the-loop](../../concepts/human_in_the_loop.md) features for more information.
-
-## `interrupt`
-
-The [`interrupt` function][langgraph.types.interrupt] in LangGraph enables human-in-the-loop workflows by pausing the graph at a specific node, presenting information to a human, and resuming the graph with their input. It's useful for tasks like approvals, edits, or gathering additional context.
-
-The graph is resumed using a [`Command`][langgraph.types.Command] object that provides the human's response.
-
-**Graph node with `interrupt`:**
-
-```python
-# highlight-next-line
-from langgraph.types import interrupt, Command
-
-def human_node(state: State):
-    # highlight-next-line
-    value = interrupt( # (1)!
-        {
-            "text_to_revise": state["some_text"] # (2)!
-        }
-    )
-    return {
-        "some_text": value # (3)!
-    }
-```
-
-1. `interrupt(...)` pauses execution at `human_node`, surfacing the given payload to a human.
-2. Any JSON serializable value can be passed to the `interrupt` function. Here, a dict containing the text to revise.
-3. Once resumed, the return value of `interrupt(...)` is the human-provided input, which is used to update the state.
-
-**LangGraph API invoke & resume:**
+## Dynamic interrupts
 
 === "Python"
 
@@ -60,9 +30,7 @@ def human_node(state: State):
     # > [
     # >     {
     # >         'value': {'text_to_revise': 'original text'},
-    # >         'resumable': True,
-    # >         'ns': ['human_node:fc722478-2f21-0578-c572-d9fc4dd07c3b'],
-    # >         'when': 'during'
+    # >         'id': '...',
     # >     }
     # > ]
 
@@ -233,9 +201,7 @@ def human_node(state: State):
         # > [
         # >     {
         # >         'value': {'text_to_revise': 'original text'},
-        # >         'resumable': True,
-        # >         'ns': ['human_node:fc722478-2f21-0578-c572-d9fc4dd07c3b'],
-        # >         'when': 'during'
+        # >         'id': '...',
         # >     }
         # > ]
 
@@ -335,8 +301,186 @@ def human_node(state: State):
         }"
         ```
 
+## Static interrupts
+
+Static interrupts (also known as static breakpoints) are triggered either before or after a node executes. 
+
+!!! warning
+
+    Static interrupts are **not** recommended for human-in-the-loop workflows. They are best used for debugging and testing.
+
+You can set static interrupts by specifying `interrupt_before` and `interrupt_after` at compile time:
+
+```python
+# highlight-next-line
+graph = graph_builder.compile( # (1)!
+    # highlight-next-line
+    interrupt_before=["node_a"], # (2)!
+    # highlight-next-line
+    interrupt_after=["node_b", "node_c"], # (3)!
+)
+```
+
+1. The breakpoints are set during `compile` time.
+2. `interrupt_before` specifies the nodes where execution should pause before the node is executed.
+3. `interrupt_after` specifies the nodes where execution should pause after the node is executed.
+
+Alternatively, you can set static interrupts at run time:
+
+=== "Python"
+
+    ```python
+    # highlight-next-line
+    await client.runs.wait( # (1)!
+        thread_id,
+        assistant_id,
+        inputs=inputs,
+        # highlight-next-line
+        interrupt_before=["node_a"], # (2)!
+        # highlight-next-line
+        interrupt_after=["node_b", "node_c"] # (3)!
+    )
+    ```
+
+    1. `client.runs.wait` is called with the `interrupt_before` and `interrupt_after` parameters. This is a run-time configuration and can be changed for every invocation.
+    2. `interrupt_before` specifies the nodes where execution should pause before the node is executed.
+    3. `interrupt_after` specifies the nodes where execution should pause after the node is executed.
+
+=== "JavaScript"
+
+    ```js
+    // highlight-next-line
+    await client.runs.wait( // (1)!
+        threadID,
+        assistantID,
+        {
+        input: input,
+        // highlight-next-line
+        interruptBefore: ["node_a"], // (2)!
+        // highlight-next-line
+        interruptAfter: ["node_b", "node_c"] // (3)!
+        }
+    )
+    ```
+
+    1. `client.runs.wait` is called with the `interruptBefore` and `interruptAfter` parameters. This is a run-time configuration and can be changed for every invocation.
+    2. `interruptBefore` specifies the nodes where execution should pause before the node is executed.
+    3. `interruptAfter` specifies the nodes where execution should pause after the node is executed.
+
+=== "cURL"
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/wait \
+    --header 'Content-Type: application/json' \
+    --data "{
+        \"assistant_id\": \"agent\",
+        \"interrupt_before\": [\"node_a\"],
+        \"interrupt_after\": [\"node_b\", \"node_c\"],
+        \"input\": <INPUT>
+    }"
+    ```
+
+The following example shows how to add static interrupts:
+
+=== "Python"
+
+    ```python
+    from langgraph_sdk import get_client
+    client = get_client(url=<DEPLOYMENT_URL>)
+
+    # Using the graph deployed with the name "agent"
+    assistant_id = "agent"
+
+    # create a thread
+    thread = await client.threads.create()
+    thread_id = thread["thread_id"]
+
+    # Run the graph until the breakpoint
+    result = await client.runs.wait(
+        thread_id,
+        assistant_id,
+        input=inputs   # (1)!
+    )
+
+    # Resume the graph
+    await client.runs.wait(
+        thread_id,
+        assistant_id,
+        input=None   # (2)!
+    )
+    ```
+
+    1. The graph is run until the first breakpoint is hit.
+    2. The graph is resumed by passing in `None` for the input. This will run the graph until the next breakpoint is hit.
+
+=== "JavaScript"
+
+    ```js
+    import { Client } from "@langchain/langgraph-sdk";
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+
+    // Using the graph deployed with the name "agent"
+    const assistantID = "agent";
+
+    // create a thread
+    const thread = await client.threads.create();
+    const threadID = thread["thread_id"];
+
+    // Run the graph until the breakpoint
+    const result = await client.runs.wait(
+      threadID,
+      assistantID,
+      { input: input }   // (1)!
+    );
+
+    // Resume the graph
+    await client.runs.wait(
+      threadID,
+      assistantID,
+      { input: null }   // (2)!
+    );
+    ```
+
+    1. The graph is run until the first breakpoint is hit.
+    2. The graph is resumed by passing in `null` for the input. This will run the graph until the next breakpoint is hit.
+
+=== "cURL"
+
+    Create a thread:
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/threads \
+    --header 'Content-Type: application/json' \
+    --data '{}'
+    ```
+
+    Run the graph until the breakpoint:
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/wait \
+    --header 'Content-Type: application/json' \
+    --data "{
+      \"assistant_id\": \"agent\",
+      \"input\": <INPUT>
+    }"
+    ```
+
+    Resume the graph:
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/wait \
+    --header 'Content-Type: application/json' \
+    --data "{
+      \"assistant_id\": \"agent\"
+    }"
+    ```
+
+
 ## Learn more
 
-- [**LangGraph human-in-the-loop overview**](../../concepts/human_in_the_loop.md): learn more about LangGraph human-in-the-loop features. 
-- [**Design patterns**](../../how-tos/human_in_the_loop/add-human-in-the-loop.md#design-patterns): learn how to implement patterns like approving/rejecting actions, requesting user input, and more.
-- [**How to review tool calls**](./human_in_the_loop_review_tool_calls.md): detailed examples of how to review and approve/edit tool calls or provide feedback to the tool-calling LLM.
+- [Human-in-the-loop conceptual guide](../../concepts/human_in_the_loop.md): learn more about LangGraph human-in-the-loop features. 
+- [Common patterns](../../how-tos/human_in_the_loop/add-human-in-the-loop.md#common-patterns): learn how to implement patterns like approving/rejecting actions, requesting user input, tool call review, and validating human input.

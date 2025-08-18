@@ -1,6 +1,9 @@
 {
   "openapi": "3.1.0",
-  "info": { "title": "LangGraph Platform", "version": "0.1.0" },
+  "info": {
+    "title": "LangGraph Platform",
+    "version": "0.1.0"
+  },
   "tags": [
     {
       "name": "Assistants",
@@ -25,6 +28,14 @@
     {
       "name": "Store",
       "description": "Store is an API for managing persistent key-value store (long-term memory) that is available from any thread."
+    },
+    {
+      "name": "MCP",
+      "description": "Model Context Protocol related endpoints for exposing an agent as an MCP server."
+    },
+    {
+      "name": "System",
+      "description": "System endpoints for health checks, metrics, and server information."
     }
   ],
   "paths": {
@@ -37,7 +48,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/AssistantCreate" }
+              "schema": {
+                "$ref": "#/components/schemas/AssistantCreate"
+              }
             }
           },
           "required": true
@@ -47,7 +60,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Assistant" }
+                "schema": {
+                  "$ref": "#/components/schemas/Assistant"
+                }
               }
             }
           },
@@ -55,7 +70,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -63,7 +80,9 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -71,7 +90,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -100,7 +121,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": { "$ref": "#/components/schemas/Assistant" },
+                  "items": {
+                    "$ref": "#/components/schemas/Assistant"
+                  },
                   "type": "array",
                   "title": "Response Search Assistants Assistants Search Post"
                 }
@@ -111,7 +134,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -119,7 +144,60 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assistants/count": {
+      "post": {
+        "tags": ["Assistants"],
+        "summary": "Count Assistants",
+        "description": "Get the count of assistants matching the specified criteria.",
+        "operationId": "count_assistants_assistants_count_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantCountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "title": "Count"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -151,7 +229,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Assistant" }
+                "schema": {
+                  "$ref": "#/components/schemas/Assistant"
+                }
               }
             }
           },
@@ -159,7 +239,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -187,13 +269,19 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -201,7 +289,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -229,7 +319,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/AssistantPatch" }
+              "schema": {
+                "$ref": "#/components/schemas/AssistantPatch"
+              }
             }
           },
           "required": true
@@ -239,7 +331,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Assistant" }
+                "schema": {
+                  "$ref": "#/components/schemas/Assistant"
+                }
               }
             }
           },
@@ -247,7 +341,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -255,7 +351,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -294,7 +392,14 @@
             "description": "Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included.",
             "required": false,
             "schema": {
-              "oneOf": [{ "type": "boolean" }, { "type": "integer" }],
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
               "title": "Xray",
               "default": false,
               "description": "Include graph representation of subgraphs. If an integer value is provided, only subgraphs with a depth less than or equal to the value will be included."
@@ -310,7 +415,9 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": {
-                    "items": { "type": "object" },
+                    "items": {
+                      "type": "object"
+                    },
                     "type": "array"
                   },
                   "type": "object",
@@ -323,7 +430,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -331,7 +440,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -373,7 +484,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Subgraphs" }
+                "schema": {
+                  "$ref": "#/components/schemas/Subgraphs"
+                }
               }
             }
           },
@@ -381,7 +494,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -389,7 +504,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -417,7 +534,10 @@
           {
             "description": "Namespace of the subgraph to filter by.",
             "required": true,
-            "schema": { "type": "string", "title": "Namespace" },
+            "schema": {
+              "type": "string",
+              "title": "Namespace"
+            },
             "name": "namespace",
             "in": "path"
           },
@@ -438,7 +558,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Subgraphs" }
+                "schema": {
+                  "$ref": "#/components/schemas/Subgraphs"
+                }
               }
             }
           },
@@ -446,7 +568,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -478,7 +602,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/GraphSchema" }
+                "schema": {
+                  "$ref": "#/components/schemas/GraphSchema"
+                }
               }
             }
           },
@@ -486,7 +612,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -494,7 +622,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -527,7 +657,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": { "$ref": "#/components/schemas/Assistant" },
+                  "items": {
+                    "$ref": "#/components/schemas/Assistant"
+                  },
                   "type": "array",
                   "title": "Response Search Assistants Assistants Search Post"
                 }
@@ -538,7 +670,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -581,7 +715,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Assistant" }
+                "schema": {
+                  "$ref": "#/components/schemas/Assistant"
+                }
               }
             }
           },
@@ -589,7 +725,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -597,7 +735,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -613,7 +753,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ThreadCreate" }
+              "schema": {
+                "$ref": "#/components/schemas/ThreadCreate"
+              }
             }
           },
           "required": true
@@ -623,7 +765,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Thread" }
+                "schema": {
+                  "$ref": "#/components/schemas/Thread"
+                }
               }
             }
           },
@@ -631,7 +775,9 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -639,7 +785,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -668,7 +816,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": { "$ref": "#/components/schemas/Thread" },
+                  "items": {
+                    "$ref": "#/components/schemas/Thread"
+                  },
                   "type": "array",
                   "title": "Response Search Threads Threads Search Post"
                 }
@@ -679,7 +829,60 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/threads/count": {
+      "post": {
+        "tags": ["Threads"],
+        "summary": "Count Threads",
+        "description": "Get the count of threads matching the specified criteria.",
+        "operationId": "count_threads_threads_count_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadCountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "title": "Count"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -722,7 +925,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ThreadState" }
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadState"
+                }
               }
             }
           },
@@ -730,7 +935,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -758,7 +965,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ThreadStateUpdate" }
+              "schema": {
+                "$ref": "#/components/schemas/ThreadStateUpdate"
+              }
             }
           },
           "required": true
@@ -778,7 +987,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -833,7 +1044,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ThreadState" }
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadState"
+                }
               }
             }
           },
@@ -841,7 +1054,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -893,7 +1108,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ThreadState" }
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadState"
+                }
               }
             }
           },
@@ -901,7 +1118,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -929,13 +1148,20 @@
           },
           {
             "required": false,
-            "schema": { "type": "integer", "title": "Limit", "default": 10 },
+            "schema": {
+              "type": "integer",
+              "title": "Limit",
+              "default": 10
+            },
             "name": "limit",
             "in": "query"
           },
           {
             "required": false,
-            "schema": { "type": "string", "title": "Before" },
+            "schema": {
+              "type": "string",
+              "title": "Before"
+            },
             "name": "before",
             "in": "query"
           }
@@ -959,7 +1185,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -987,7 +1215,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ThreadStateSearch" }
+              "schema": {
+                "$ref": "#/components/schemas/ThreadStateSearch"
+              }
             }
           },
           "required": true
@@ -1011,7 +1241,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1043,7 +1275,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Thread" }
+                "schema": {
+                  "$ref": "#/components/schemas/Thread"
+                }
               }
             }
           },
@@ -1051,7 +1285,9 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1059,7 +1295,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1091,7 +1329,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Thread" }
+                "schema": {
+                  "$ref": "#/components/schemas/Thread"
+                }
               }
             }
           },
@@ -1099,7 +1339,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1107,7 +1349,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1135,13 +1379,19 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1149,7 +1399,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1177,7 +1429,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ThreadPatch" }
+              "schema": {
+                "$ref": "#/components/schemas/ThreadPatch"
+              }
             }
           },
           "required": true
@@ -1187,7 +1441,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Thread" }
+                "schema": {
+                  "$ref": "#/components/schemas/Thread"
+                }
               }
             }
           },
@@ -1195,7 +1451,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1203,7 +1461,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1231,13 +1491,21 @@
           },
           {
             "required": false,
-            "schema": { "type": "integer", "title": "Limit", "default": 10 },
+            "schema": {
+              "type": "integer",
+              "title": "Limit",
+              "default": 10
+            },
             "name": "limit",
             "in": "query"
           },
           {
             "required": false,
-            "schema": { "type": "integer", "title": "Offset", "default": 0 },
+            "schema": {
+              "type": "integer",
+              "title": "Offset",
+              "default": 0
+            },
             "name": "offset",
             "in": "query"
           },
@@ -1249,6 +1517,30 @@
             },
             "name": "status",
             "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "run_id",
+                  "thread_id",
+                  "assistant_id",
+                  "created_at",
+                  "updated_at",
+                  "status",
+                  "metadata",
+                  "kwargs",
+                  "multitask_strategy"
+                ]
+              },
+              "title": "Select",
+              "description": "Specify which fields to return. If not provided, all fields are returned."
+            },
+            "name": "select",
+            "in": "query"
           }
         ],
         "responses": {
@@ -1257,7 +1549,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": { "$ref": "#/components/schemas/Run" },
+                  "items": {
+                    "$ref": "#/components/schemas/Run"
+                  },
                   "type": "array"
                 }
               }
@@ -1267,7 +1561,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1275,7 +1571,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1303,7 +1601,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/RunCreateStateful" }
+              "schema": {
+                "$ref": "#/components/schemas/RunCreateStateful"
+              }
             }
           },
           "required": true
@@ -1313,7 +1613,17 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Run" }
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
+              }
+            },
+            "headers": {
+              "Content-Location": {
+                "description": "The URL of the run that was created. Can be used to later join the stream.",
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -1321,7 +1631,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1329,7 +1641,9 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1337,7 +1651,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1367,7 +1683,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CronCreate" }
+              "schema": {
+                "$ref": "#/components/schemas/CronCreate"
+              }
             }
           },
           "required": true
@@ -1377,7 +1695,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Cron" }
+                "schema": {
+                  "$ref": "#/components/schemas/Cron"
+                }
               }
             }
           },
@@ -1385,7 +1705,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1393,7 +1715,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1423,7 +1747,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/RunCreateStateful" }
+              "schema": {
+                "$ref": "#/components/schemas/RunCreateStateful"
+              }
             }
           },
           "required": true
@@ -1438,13 +1764,23 @@
                   "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
                 }
               }
+            },
+            "headers": {
+              "Content-Location": {
+                "description": "The URL of the run that was created. Can be used to later join the stream.",
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1452,7 +1788,9 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1460,7 +1798,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1490,7 +1830,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/RunCreateStateful" }
+              "schema": {
+                "$ref": "#/components/schemas/RunCreateStateful"
+              }
             }
           },
           "required": true
@@ -1498,13 +1840,27 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "headers": {
+              "Content-Location": {
+                "description": "The URL of the run that was created. Can be used to later join the stream.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1512,7 +1868,9 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1520,7 +1878,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1564,7 +1924,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Run" }
+                "schema": {
+                  "$ref": "#/components/schemas/Run"
+                }
               }
             }
           },
@@ -1572,7 +1934,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1580,7 +1944,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1620,13 +1986,19 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1634,7 +2006,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1687,13 +2061,19 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1701,7 +2081,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1712,7 +2094,7 @@
       "get": {
         "tags": ["Thread Runs"],
         "summary": "Join Run Stream",
-        "description": "Join a run stream. This endpoint streams output in real-time from a run similar to the /threads/__THREAD_ID__/runs/stream endpoint. Only output produced after this endpoint is called will be streamed.",
+        "description": "Join a run stream. This endpoint streams output in real-time from a run similar to the /threads/__THREAD_ID__/runs/stream endpoint. If the run has been created with `stream_resumable=true`, the stream can be resumed from the last seen event ID.",
         "operationId": "stream_run_http_threads__thread_id__runs__run_id__join_get",
         "parameters": [
           {
@@ -1738,6 +2120,37 @@
             },
             "name": "run_id",
             "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Last Event ID",
+              "description": "The ID of the last event received. Set to -1 if you want to stream all events. Requires `stream_resumable=true` to be set when creating the run."
+            },
+            "name": "Last-Event-ID",
+            "in": "header"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Stream Mode",
+              "description": "The mode to stream the run in. If not provided, the default mode will be used."
+            },
+            "name": "stream_mode",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "title": "Cancel On Disconnect",
+              "description": "If true, the run will be cancelled if the client disconnects.",
+              "default": false
+            },
+            "name": "cancel_on_disconnect",
+            "in": "query"
           }
         ],
         "responses": {
@@ -1756,7 +2169,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1764,7 +2179,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1827,13 +2244,19 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1841,7 +2264,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1857,7 +2282,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CronCreate" }
+              "schema": {
+                "$ref": "#/components/schemas/CronCreate"
+              }
             }
           },
           "required": true
@@ -1867,7 +2294,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Cron" }
+                "schema": {
+                  "$ref": "#/components/schemas/Cron"
+                }
               }
             }
           },
@@ -1875,7 +2304,9 @@
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1883,7 +2314,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1899,7 +2332,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CronSearch" }
+              "schema": {
+                "$ref": "#/components/schemas/CronSearch"
+              }
             }
           },
           "required": true
@@ -1910,7 +2345,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": { "$ref": "#/components/schemas/Cron" },
+                  "items": {
+                    "$ref": "#/components/schemas/Cron"
+                  },
                   "type": "array",
                   "title": "Response Search Crons Search Post"
                 }
@@ -1921,7 +2358,60 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/crons/count": {
+      "post": {
+        "tags": ["Crons (Plus tier)"],
+        "summary": "Count Crons",
+        "description": "Get the count of crons matching the specified criteria.",
+        "operationId": "count_crons_runs_crons_count_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CronCountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "title": "Count"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -1954,13 +2444,23 @@
                   "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
                 }
               }
+            },
+            "headers": {
+              "Content-Location": {
+                "description": "The URL of the run that was created. Can be used to later join the stream.",
+                "schema": {
+                  "type": "string"
+                }
+              }
             }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1968,7 +2468,9 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -1976,7 +2478,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2006,18 +2510,24 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/RunsCancel" }
+              "schema": {
+                "$ref": "#/components/schemas/RunsCancel"
+              }
             }
           },
           "required": true
         },
         "responses": {
-          "204": { "description": "Success - Runs cancelled" },
+          "204": {
+            "description": "Success - Runs cancelled"
+          },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -2025,7 +2535,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2051,13 +2563,27 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "headers": {
+              "Content-Location": {
+                "description": "The URL of the run that was created. Can be used to later join the stream.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -2065,7 +2591,9 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -2073,7 +2601,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2099,13 +2629,27 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "headers": {
+              "Content-Location": {
+                "description": "The URL of the run that was created. Can be used to later join the stream.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -2113,7 +2657,9 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -2121,7 +2667,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2137,7 +2685,9 @@
         "requestBody": {
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/RunBatchCreate" }
+              "schema": {
+                "$ref": "#/components/schemas/RunBatchCreate"
+              }
             }
           },
           "required": true
@@ -2145,13 +2695,19 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -2159,7 +2715,9 @@
             "description": "Conflict",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -2167,7 +2725,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2195,13 +2755,19 @@
         "responses": {
           "200": {
             "description": "Success",
-            "content": { "application/json": { "schema": {} } }
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "404": {
             "description": "Not Found",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -2209,7 +2775,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2225,17 +2793,23 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/StorePutRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/StorePutRequest"
+              }
             }
           }
         },
         "responses": {
-          "204": { "description": "Success" },
+          "204": {
+            "description": "Success"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2256,12 +2830,16 @@
           }
         },
         "responses": {
-          "204": { "description": "Success" },
+          "204": {
+            "description": "Success"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2276,13 +2854,20 @@
             "name": "key",
             "in": "query",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "namespace",
             "in": "query",
             "required": false,
-            "schema": { "type": "array", "items": { "type": "string" } }
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         ],
         "responses": {
@@ -2290,7 +2875,9 @@
             "description": "Success",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/Item" }
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
               }
             }
           },
@@ -2298,7 +2885,9 @@
             "description": "Bad Request",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           },
@@ -2306,7 +2895,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2343,7 +2934,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2380,7 +2973,9 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
               }
             }
           }
@@ -2388,17 +2983,6 @@
       }
     },
     "/mcp/": {
-      "get": {
-        "operationId": "get_mcp",
-        "summary": "MCP Get",
-        "description": "Implemented according to the Streamable HTTP Transport specification.",
-        "responses": {
-          "405": {
-            "description": "GET method not allowed; streaming not supported."
-          }
-        },
-        "tags": ["MCP"]
-      },
       "post": {
         "operationId": "post_mcp",
         "summary": "MCP Post",
@@ -2419,7 +3003,9 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "type": "object" },
+              "schema": {
+                "type": "object"
+              },
               "description": "A JSON-RPC 2.0 request, notification, or response object.",
               "example": {
                 "jsonrpc": "2.0",
@@ -2441,7 +3027,11 @@
           "200": {
             "description": "Successful JSON-RPC response.",
             "content": {
-              "application/json": { "schema": { "type": "object" } }
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
             }
           },
           "202": {
@@ -2450,9 +3040,22 @@
           "400": {
             "description": "Bad request: invalid JSON or message format, or unacceptable Accept header."
           },
-          "405": { "description": "HTTP method not allowed." },
+          "405": {
+            "description": "HTTP method not allowed."
+          },
           "500": {
             "description": "Internal server error or unexpected failure."
+          }
+        },
+        "tags": ["MCP"]
+      },
+      "get": {
+        "operationId": "get_mcp",
+        "summary": "MCP Get",
+        "description": "Implemented according to the Streamable HTTP Transport specification.",
+        "responses": {
+          "405": {
+            "description": "GET method not allowed; streaming not supported."
           }
         },
         "tags": ["MCP"]
@@ -2461,8 +3064,156 @@
         "operationId": "delete_mcp",
         "summary": "Terminate Session",
         "description": "Implemented according to the Streamable HTTP Transport specification.\nTerminate an MCP session. The server implementation is stateless, so this is a no-op.\n\n",
-        "responses": { "404": {} },
+        "responses": {
+          "404": {}
+        },
         "tags": ["MCP"]
+      }
+    },
+    "/info": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Server Information",
+        "description": "Get server version information, feature flags, and metadata.",
+        "operationId": "server_info_info_get",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string",
+                      "title": "Version",
+                      "description": "LangGraph API version"
+                    },
+                    "langgraph_py_version": {
+                      "type": "string",
+                      "title": "LangGraph Python Version",
+                      "description": "LangGraph Python library version"
+                    },
+                    "flags": {
+                      "type": "object",
+                      "title": "Feature Flags",
+                      "description": "Enabled features and capabilities"
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "title": "Metadata",
+                      "description": "Server deployment metadata"
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "langgraph_py_version",
+                    "flags",
+                    "metadata"
+                  ],
+                  "title": "ServerInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": ["System"],
+        "summary": "System Metrics",
+        "description": "Get system metrics in Prometheus or JSON format for monitoring and observability.",
+        "operationId": "system_metrics_metrics_get",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["prometheus", "json"],
+              "default": "prometheus",
+              "title": "Output Format",
+              "description": "Response format: prometheus (default) or json"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "title": "Prometheus Metrics",
+                  "description": "Metrics in Prometheus exposition format"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "JSON Metrics",
+                  "description": "Metrics in JSON format including queue stats, worker stats, and HTTP metrics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ok": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Health Check",
+        "description": "Check the health status of the server. Optionally check database connectivity.",
+        "operationId": "health_check_ok_get",
+        "parameters": [
+          {
+            "name": "check_db",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "enum": [0, 1],
+              "default": 0,
+              "title": "Check Database",
+              "description": "Whether to check database connectivity (0=false, 1=true)"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true,
+                      "title": "OK",
+                      "description": "Indicates the server is healthy"
+                    }
+                  },
+                  "required": ["ok"],
+                  "title": "HealthResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -2484,7 +3235,9 @@
           "config": {
             "properties": {
               "tags": {
-                "items": { "type": "string" },
+                "items": {
+                  "type": "string"
+                },
                 "type": "array",
                 "title": "Tags"
               },
@@ -2492,11 +3245,19 @@
                 "type": "integer",
                 "title": "Recursion Limit"
               },
-              "configurable": { "type": "object", "title": "Configurable" }
+              "configurable": {
+                "type": "object",
+                "title": "Configurable"
+              }
             },
             "type": "object",
             "title": "Config",
             "description": "The assistant config."
+          },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
           },
           "created_at": {
             "type": "string",
@@ -2560,6 +3321,11 @@
             "title": "Config",
             "description": "Configuration to use for the graph. Useful when graph is configurable and you want to create different assistants based on different configurations."
           },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
+          },
           "metadata": {
             "type": "object",
             "title": "Metadata",
@@ -2600,6 +3366,11 @@
             "title": "Config",
             "description": "Configuration to use for the graph. Useful when graph is configurable and you want to update the assistant's configuration."
           },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
+          },
           "metadata": {
             "type": "object",
             "title": "Metadata",
@@ -2635,12 +3406,20 @@
       "Config": {
         "properties": {
           "tags": {
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "type": "array",
             "title": "Tags"
           },
-          "recursion_limit": { "type": "integer", "title": "Recursion Limit" },
-          "configurable": { "type": "object", "title": "Configurable" }
+          "recursion_limit": {
+            "type": "integer",
+            "title": "Recursion Limit"
+          },
+          "configurable": {
+            "type": "object",
+            "title": "Configurable"
+          }
         },
         "type": "object",
         "title": "Config"
@@ -2652,6 +3431,12 @@
             "format": "uuid",
             "title": "Cron Id",
             "description": "The ID of the cron."
+          },
+          "assistant_id": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "title": "Assistant Id",
+            "description": "The ID of the assistant."
           },
           "thread_id": {
             "type": "string",
@@ -2682,10 +3467,26 @@
             "title": "Updated At",
             "description": "The last time the cron was updated."
           },
+          "user_id": {
+            "type": ["string", "null"],
+            "title": "User Id",
+            "description": "The ID of the user."
+          },
           "payload": {
             "type": "object",
             "title": "Payload",
             "description": "The run payload to use for creating new run."
+          },
+          "next_run_date": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "title": "Next Run Date",
+            "description": "The next run date of the cron."
+          },
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "The cron metadata."
           }
         },
         "type": "object",
@@ -2708,6 +3509,12 @@
             "title": "Schedule",
             "description": "The cron schedule to execute this job on."
           },
+          "end_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End Time",
+            "description": "The end date to stop running the cron."
+          },
           "assistant_id": {
             "anyOf": [
               {
@@ -2715,14 +3522,24 @@
                 "format": "uuid",
                 "title": "Assistant Id"
               },
-              { "type": "string", "title": "Graph Id" }
+              {
+                "type": "string",
+                "title": "Graph Id"
+              }
             ],
             "description": "The assistant ID or graph name to run. If using graph name, will default to the assistant automatically created from that graph by the server."
           },
           "input": {
             "anyOf": [
-              { "items": { "type": "object" }, "type": "array" },
-              { "type": "object" }
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "object"
+              }
             ],
             "title": "Input",
             "description": "The input to the graph."
@@ -2735,7 +3552,9 @@
           "config": {
             "properties": {
               "tags": {
-                "items": { "type": "string" },
+                "items": {
+                  "type": "string"
+                },
                 "type": "array",
                 "title": "Tags"
               },
@@ -2743,11 +3562,19 @@
                 "type": "integer",
                 "title": "Recursion Limit"
               },
-              "configurable": { "type": "object", "title": "Configurable" }
+              "configurable": {
+                "type": "object",
+                "title": "Configurable"
+              }
             },
             "type": "object",
             "title": "Config",
             "description": "The configuration for the assistant."
+          },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
           },
           "webhook": {
             "type": "string",
@@ -2759,16 +3586,32 @@
           },
           "interrupt_before": {
             "anyOf": [
-              { "type": "string", "enum": ["*"] },
-              { "items": { "type": "string" }, "type": "array" }
+              {
+                "type": "string",
+                "enum": ["*"]
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
             ],
             "title": "Interrupt Before",
             "description": "Nodes to interrupt immediately before they get executed."
           },
           "interrupt_after": {
             "anyOf": [
-              { "type": "string", "enum": ["*"] },
-              { "items": { "type": "string" }, "type": "array" }
+              {
+                "type": "string",
+                "enum": ["*"]
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
             ],
             "title": "Interrupt After",
             "description": "Nodes to interrupt immediately after they get executed."
@@ -2778,7 +3621,7 @@
             "enum": ["reject", "rollback", "interrupt", "enqueue"],
             "title": "Multitask Strategy",
             "description": "Multitask strategy to use. Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.",
-            "default": "reject"
+            "default": "enqueue"
           }
         },
         "type": "object",
@@ -2792,7 +3635,7 @@
             "type": "string",
             "format": "uuid",
             "title": "Assistant Id",
-            "description": "The assistant ID or graph name to search for."
+            "description": "The assistant ID or graph name to filter by using exact match."
           },
           "thread_id": {
             "type": "string",
@@ -2814,12 +3657,75 @@
             "description": "The number of results to skip.",
             "default": 0,
             "minimum": 0
+          },
+          "sort_by": {
+            "type": "string",
+            "title": "Sort By",
+            "description": "The field to sort by.",
+            "default": "created_at",
+            "enum": [
+              "cron_id",
+              "assistant_id",
+              "thread_id",
+              "next_run_date",
+              "end_time",
+              "created_at",
+              "updated_at"
+            ]
+          },
+          "sort_order": {
+            "type": "string",
+            "title": "Sort Order",
+            "description": "The order to sort by.",
+            "default": "desc",
+            "enum": ["asc", "desc"]
+          },
+          "select": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cron_id",
+                "assistant_id",
+                "thread_id",
+                "end_time",
+                "schedule",
+                "created_at",
+                "updated_at",
+                "user_id",
+                "payload",
+                "next_run_date",
+                "metadata",
+                "now"
+              ]
+            },
+            "title": "Select",
+            "description": "Specify which fields to return. If not provided, all fields are returned."
           }
         },
         "type": "object",
         "required": [],
         "title": "CronSearch",
         "description": "Payload for listing crons"
+      },
+      "CronCountRequest": {
+        "properties": {
+          "assistant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Assistant Id",
+            "description": "The assistant ID or graph name to search for."
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Thread Id",
+            "description": "The thread ID to search for."
+          }
+        },
+        "type": "object",
+        "title": "CronCountRequest",
+        "description": "Payload for counting crons"
       },
       "GraphSchema": {
         "properties": {
@@ -2847,10 +3753,15 @@
             "type": "object",
             "title": "Config Schema",
             "description": "The schema for the graph config. Missing if unable to generate JSON schema from graph."
+          },
+          "context_schema": {
+            "type": "object",
+            "title": "Context Schema",
+            "description": "The schema for the graph context. Missing if unable to generate JSON schema from graph."
           }
         },
         "type": "object",
-        "required": ["graph_id", "state_schema", "config_schema"],
+        "required": ["graph_id", "state_schema"],
         "title": "GraphSchema",
         "description": "Defines the structure and properties of a graph."
       },
@@ -2875,15 +3786,15 @@
             "type": "object",
             "title": "Config Schema",
             "description": "The schema for the graph config. Missing if unable to generate JSON schema from graph."
+          },
+          "context_schema": {
+            "type": "object",
+            "title": "Context Schema",
+            "description": "The schema for the graph context. Missing if unable to generate JSON schema from graph."
           }
         },
         "type": "object",
-        "required": [
-          "input_schema",
-          "output_schema",
-          "state_schema",
-          "config_schema"
-        ],
+        "required": ["input_schema", "output_schema", "state_schema"],
         "title": "GraphSchemaNoId",
         "description": "Defines the structure and properties of a graph without an ID."
       },
@@ -2893,7 +3804,7 @@
           "$ref": "#/components/schemas/GraphSchemaNoId"
         },
         "title": "Subgraphs",
-        "description": "Map of graph name to graph schema metadata (`input_schema`, `output_schema`, `state_schema`, `config_schema`)."
+        "description": "Map of graph name to graph schema metadata (`input_schema`, `output_schema`, `state_schema`, `config_schema`, `context_schema`)."
       },
       "Run": {
         "properties": {
@@ -2929,16 +3840,26 @@
           },
           "status": {
             "type": "string",
-            "enum": ["pending", "error", "success", "timeout", "interrupted"],
+            "enum": [
+              "pending",
+              "running",
+              "error",
+              "success",
+              "timeout",
+              "interrupted"
+            ],
             "title": "Status",
-            "description": "The status of the run. One of 'pending', 'error', 'success', 'timeout', 'interrupted'."
+            "description": "The status of the run. One of 'pending', 'running', 'error', 'success', 'timeout', 'interrupted'."
           },
           "metadata": {
             "type": "object",
             "title": "Metadata",
             "description": "The run metadata."
           },
-          "kwargs": { "type": "object", "title": "Kwargs" },
+          "kwargs": {
+            "type": "object",
+            "title": "Kwargs"
+          },
           "multitask_strategy": {
             "type": "string",
             "enum": ["reject", "rollback", "interrupt", "enqueue"],
@@ -2995,14 +3916,27 @@
           },
           "goto": {
             "anyOf": [
-              { "$ref": "#/components/schemas/Send" },
+              {
+                "$ref": "#/components/schemas/Send"
+              },
               {
                 "type": "array",
-                "items": { "$ref": "#/components/schemas/Send" }
+                "items": {
+                  "$ref": "#/components/schemas/Send"
+                }
               },
-              { "type": "string" },
-              { "type": "array", "items": { "type": "string" } },
-              { "type": "null" }
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Goto",
             "description": "Name of the node(s) to navigate to next or node(s) to be executed with a provided input."
@@ -3018,7 +3952,10 @@
                 "format": "uuid",
                 "title": "Assistant Id"
               },
-              { "type": "string", "title": "Graph Id" }
+              {
+                "type": "string",
+                "title": "Graph Id"
+              }
             ],
             "description": "The assistant ID or graph name to run. If using graph name, will default to first assistant created from that graph."
           },
@@ -3030,20 +3967,36 @@
           },
           "input": {
             "anyOf": [
-              { "type": "object" },
-              { "type": "array" },
-              { "type": "string" },
-              { "type": "number" },
-              { "type": "boolean" },
-              { "type": "null" }
+              {
+                "type": "object"
+              },
+              {
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Input",
             "description": "The input to the graph."
           },
           "command": {
             "anyOf": [
-              { "$ref": "#/components/schemas/Command" },
-              { "type": "null" }
+              {
+                "$ref": "#/components/schemas/Command"
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Input",
             "description": "The input to the graph."
@@ -3056,7 +4009,9 @@
           "config": {
             "properties": {
               "tags": {
-                "items": { "type": "string" },
+                "items": {
+                  "type": "string"
+                },
                 "type": "array",
                 "title": "Tags"
               },
@@ -3064,11 +4019,19 @@
                 "type": "integer",
                 "title": "Recursion Limit"
               },
-              "configurable": { "type": "object", "title": "Configurable" }
+              "configurable": {
+                "type": "object",
+                "title": "Configurable"
+              }
             },
             "type": "object",
             "title": "Config",
             "description": "The configuration for the assistant."
+          },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
           },
           "webhook": {
             "type": "string",
@@ -3080,16 +4043,32 @@
           },
           "interrupt_before": {
             "anyOf": [
-              { "type": "string", "enum": ["*"] },
-              { "items": { "type": "string" }, "type": "array" }
+              {
+                "type": "string",
+                "enum": ["*"]
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
             ],
             "title": "Interrupt Before",
             "description": "Nodes to interrupt immediately before they get executed."
           },
           "interrupt_after": {
             "anyOf": [
-              { "type": "string", "enum": ["*"] },
-              { "items": { "type": "string" }, "type": "array" }
+              {
+                "type": "string",
+                "enum": ["*"]
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
             ],
             "title": "Interrupt After",
             "description": "Nodes to interrupt immediately after they get executed."
@@ -3103,6 +4082,8 @@
                     "values",
                     "messages",
                     "messages-tuple",
+                    "tasks",
+                    "checkpoints",
                     "updates",
                     "events",
                     "debug",
@@ -3117,6 +4098,8 @@
                   "values",
                   "messages",
                   "messages-tuple",
+                  "tasks",
+                  "checkpoints",
                   "updates",
                   "events",
                   "debug",
@@ -3134,6 +4117,12 @@
             "description": "Whether to stream output from subgraphs.",
             "default": false
           },
+          "stream_resumable": {
+            "type": "boolean",
+            "title": "Stream Resumable",
+            "description": "Whether to persist the stream chunks in order to resume the stream later.",
+            "default": false
+          },
           "on_disconnect": {
             "type": "string",
             "enum": ["cancel", "continue"],
@@ -3142,7 +4131,9 @@
             "default": "cancel"
           },
           "feedback_keys": {
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "type": "array",
             "title": "Feedback Keys",
             "description": "Feedback keys to assign to run."
@@ -3152,7 +4143,7 @@
             "enum": ["reject", "rollback", "interrupt", "enqueue"],
             "title": "Multitask Strategy",
             "description": "Multitask strategy to use. Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.",
-            "default": "reject"
+            "default": "enqueue"
           },
           "if_not_exists": {
             "type": "string",
@@ -3162,7 +4153,7 @@
             "default": "reject"
           },
           "after_seconds": {
-            "type": "integer",
+            "type": "number",
             "title": "After Seconds",
             "description": "The number of seconds to wait before starting the run. Use to schedule future runs."
           },
@@ -3180,7 +4171,9 @@
       },
       "RunBatchCreate": {
         "type": "array",
-        "items": { "$ref": "#/components/schemas/RunCreateStateless" },
+        "items": {
+          "$ref": "#/components/schemas/RunCreateStateless"
+        },
         "minItems": 1,
         "title": "RunBatchCreate",
         "description": "Payload for creating a batch of runs."
@@ -3194,26 +4187,45 @@
                 "format": "uuid",
                 "title": "Assistant Id"
               },
-              { "type": "string", "title": "Graph Id" }
+              {
+                "type": "string",
+                "title": "Graph Id"
+              }
             ],
             "description": "The assistant ID or graph name to run. If using graph name, will default to first assistant created from that graph."
           },
           "input": {
             "anyOf": [
-              { "type": "object" },
-              { "type": "array" },
-              { "type": "string" },
-              { "type": "number" },
-              { "type": "boolean" },
-              { "type": "null" }
+              {
+                "type": "object"
+              },
+              {
+                "type": "array"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Input",
             "description": "The input to the graph."
           },
           "command": {
             "anyOf": [
-              { "$ref": "#/components/schemas/Command" },
-              { "type": "null" }
+              {
+                "$ref": "#/components/schemas/Command"
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Input",
             "description": "The input to the graph."
@@ -3226,7 +4238,9 @@
           "config": {
             "properties": {
               "tags": {
-                "items": { "type": "string" },
+                "items": {
+                  "type": "string"
+                },
                 "type": "array",
                 "title": "Tags"
               },
@@ -3234,11 +4248,19 @@
                 "type": "integer",
                 "title": "Recursion Limit"
               },
-              "configurable": { "type": "object", "title": "Configurable" }
+              "configurable": {
+                "type": "object",
+                "title": "Configurable"
+              }
             },
             "type": "object",
             "title": "Config",
             "description": "The configuration for the assistant."
+          },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
           },
           "webhook": {
             "type": "string",
@@ -3250,16 +4272,32 @@
           },
           "interrupt_before": {
             "anyOf": [
-              { "type": "string", "enum": ["*"] },
-              { "items": { "type": "string" }, "type": "array" }
+              {
+                "type": "string",
+                "enum": ["*"]
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
             ],
             "title": "Interrupt Before",
             "description": "Nodes to interrupt immediately before they get executed."
           },
           "interrupt_after": {
             "anyOf": [
-              { "type": "string", "enum": ["*"] },
-              { "items": { "type": "string" }, "type": "array" }
+              {
+                "type": "string",
+                "enum": ["*"]
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
             ],
             "title": "Interrupt After",
             "description": "Nodes to interrupt immediately after they get executed."
@@ -3273,6 +4311,8 @@
                     "values",
                     "messages",
                     "messages-tuple",
+                    "tasks",
+                    "checkpoints",
                     "updates",
                     "events",
                     "debug",
@@ -3287,6 +4327,8 @@
                   "values",
                   "messages",
                   "messages-tuple",
+                  "tasks",
+                  "checkpoints",
                   "updates",
                   "events",
                   "debug",
@@ -3299,7 +4341,9 @@
             "default": ["values"]
           },
           "feedback_keys": {
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "type": "array",
             "title": "Feedback Keys",
             "description": "Feedback keys to assign to run."
@@ -3308,6 +4352,12 @@
             "type": "boolean",
             "title": "Stream Subgraphs",
             "description": "Whether to stream output from subgraphs.",
+            "default": false
+          },
+          "stream_resumable": {
+            "type": "boolean",
+            "title": "Stream Resumable",
+            "description": "Whether to persist the stream chunks in order to resume the stream later.",
             "default": false
           },
           "on_completion": {
@@ -3325,7 +4375,7 @@
             "default": "cancel"
           },
           "after_seconds": {
-            "type": "integer",
+            "type": "number",
             "title": "After Seconds",
             "description": "The number of seconds to wait before starting the run. Use to schedule future runs."
           },
@@ -3385,11 +4435,48 @@
             "enum": ["asc", "desc"],
             "title": "Sort Order",
             "description": "The order to sort by."
+          },
+          "select": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "assistant_id",
+                "graph_id",
+                "name",
+                "description",
+                "config",
+                "context",
+                "created_at",
+                "updated_at",
+                "metadata",
+                "version"
+              ]
+            },
+            "title": "Select",
+            "description": "Specify which fields to return. If not provided, all fields are returned."
           }
         },
         "type": "object",
         "title": "AssistantSearchRequest",
         "description": "Payload for listing assistants."
+      },
+      "AssistantCountRequest": {
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "Metadata to filter by. Exact match filter for each KV pair."
+          },
+          "graph_id": {
+            "type": "string",
+            "title": "Graph Id",
+            "description": "The ID of the graph to filter by. The graph ID is normally set in your langgraph.json configuration."
+          }
+        },
+        "type": "object",
+        "title": "AssistantCountRequest",
+        "description": "Payload for counting assistants."
       },
       "AssistantVersionsSearchRequest": {
         "properties": {
@@ -3462,11 +4549,53 @@
             "enum": ["asc", "desc"],
             "title": "Sort Order",
             "description": "Sort order."
+          },
+          "select": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "thread_id",
+                "created_at",
+                "updated_at",
+                "metadata",
+                "config",
+                "context",
+                "status",
+                "values",
+                "interrupts"
+              ]
+            },
+            "title": "Select",
+            "description": "Specify which fields to return. If not provided, all fields are returned."
           }
         },
         "type": "object",
         "title": "ThreadSearchRequest",
         "description": "Payload for listing threads."
+      },
+      "ThreadCountRequest": {
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "Thread metadata to filter on."
+          },
+          "values": {
+            "type": "object",
+            "title": "Values",
+            "description": "State values to filter on."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["idle", "busy", "interrupted", "error"],
+            "title": "Status",
+            "description": "Thread status to filter on."
+          }
+        },
+        "type": "object",
+        "title": "ThreadCountRequest",
+        "description": "Payload for counting threads."
       },
       "Thread": {
         "properties": {
@@ -3493,6 +4622,11 @@
             "title": "Metadata",
             "description": "The thread metadata."
           },
+          "config": {
+            "type": "object",
+            "title": "Config",
+            "description": "The thread config."
+          },
           "status": {
             "type": "string",
             "enum": ["idle", "busy", "interrupted", "error"],
@@ -3503,6 +4637,11 @@
             "type": "object",
             "title": "Values",
             "description": "The current state of the thread."
+          },
+          "interrupts": {
+            "type": "object",
+            "title": "Interrupts",
+            "description": "The current interrupts of the thread."
           }
         },
         "type": "object",
@@ -3606,13 +4745,22 @@
         "properties": {
           "values": {
             "anyOf": [
-              { "items": { "type": "object" }, "type": "array" },
-              { "type": "object" }
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "object"
+              }
             ],
             "title": "Values"
           },
           "next": {
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "type": "array",
             "title": "Next"
           },
@@ -3620,15 +4768,31 @@
             "items": {
               "type": "object",
               "properties": {
-                "id": { "type": "string", "title": "Task Id" },
-                "name": { "type": "string", "title": "Node Name" },
-                "error": { "type": "string", "title": "Error" },
-                "interrupts": { "type": "array", "items": {} },
+                "id": {
+                  "type": "string",
+                  "title": "Task Id"
+                },
+                "name": {
+                  "type": "string",
+                  "title": "Node Name"
+                },
+                "error": {
+                  "type": "string",
+                  "title": "Error"
+                },
+                "interrupts": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Interrupt"
+                  }
+                },
                 "checkpoint": {
                   "$ref": "#/components/schemas/CheckpointConfig",
                   "title": "Checkpoint"
                 },
-                "state": { "$ref": "#/components/schemas/ThreadState" }
+                "state": {
+                  "$ref": "#/components/schemas/ThreadState"
+                }
               },
               "required": ["id", "name"]
             },
@@ -3639,11 +4803,23 @@
             "$ref": "#/components/schemas/CheckpointConfig",
             "title": "Checkpoint"
           },
-          "metadata": { "type": "object", "title": "Metadata" },
-          "created_at": { "type": "string", "title": "Created At" },
+          "metadata": {
+            "type": "object",
+            "title": "Metadata"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
           "parent_checkpoint": {
             "type": "object",
             "title": "Parent Checkpoint"
+          },
+          "interrupts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Interrupt"
+            }
           }
         },
         "type": "object",
@@ -3656,7 +4832,7 @@
             "type": "integer",
             "title": "Limit",
             "description": "The maximum number of states to return.",
-            "default": 10,
+            "default": 1,
             "maximum": 1000,
             "minimum": 1
           },
@@ -3683,9 +4859,16 @@
         "properties": {
           "values": {
             "anyOf": [
-              { "items": { "type": "object" }, "type": "array" },
-              { "type": "object" },
-              { "type": "null" }
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
             ],
             "title": "Values",
             "description": "The values to update the state with."
@@ -3709,15 +4892,28 @@
         "properties": {
           "values": {
             "anyOf": [
-              { "type": "array", "items": { "type": "object" } },
-              { "type": "object" },
-              { "type": "null" }
+              {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "command": {
             "anyOf": [
-              { "$ref": "#/components/schemas/Command" },
-              { "type": "null" }
+              {
+                "$ref": "#/components/schemas/Command"
+              },
+              {
+                "type": "null"
+              }
             ],
             "description": "The command associated with the update."
           },
@@ -3731,7 +4927,10 @@
       },
       "ThreadStateUpdateResponse": {
         "properties": {
-          "checkpoint": { "type": "object", "title": "Checkpoint" }
+          "checkpoint": {
+            "type": "object",
+            "title": "Checkpoint"
+          }
         },
         "type": "object",
         "title": "ThreadStateUpdateResponse",
@@ -3766,7 +4965,9 @@
         "properties": {
           "namespace": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "title": "Namespace",
             "description": "A list of strings representing the namespace path."
           },
@@ -3790,7 +4991,9 @@
         "properties": {
           "namespace": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "title": "Namespace",
             "description": "A list of strings representing the namespace path."
           },
@@ -3808,7 +5011,9 @@
         "properties": {
           "namespace_prefix": {
             "type": ["array", "null"],
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "title": "Namespace Prefix",
             "description": "List of strings representing the namespace prefix."
           },
@@ -3829,6 +5034,11 @@
             "default": 0,
             "title": "Offset",
             "description": "Number of items to skip before returning results (default is 0)."
+          },
+          "query": {
+            "type": ["string", "null"],
+            "title": "Query",
+            "description": "Query string for semantic/vector search."
           }
         },
         "title": "StoreSearchRequest",
@@ -3839,13 +5049,17 @@
         "properties": {
           "prefix": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "title": "Prefix",
             "description": "Optional list of strings representing the prefix to filter namespaces."
           },
           "suffix": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "title": "Suffix",
             "description": "Optional list of strings representing the suffix to filter namespaces."
           },
@@ -3874,7 +5088,9 @@
         "properties": {
           "namespace": {
             "type": "array",
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "description": "The namespace of the item. A namespace is analogous to a document's directory."
           },
           "key": {
@@ -3917,14 +5133,21 @@
           },
           "run_ids": {
             "type": "array",
-            "items": { "type": "string", "format": "uuid" },
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
             "title": "Run Ids",
             "description": "List of run IDs to cancel."
           }
         },
         "oneOf": [
-          { "required": ["status"] },
-          { "required": ["thread_id", "run_ids"] }
+          {
+            "required": ["status"]
+          },
+          {
+            "required": ["thread_id", "run_ids"]
+          }
         ]
       },
       "SearchItemsResponse": {
@@ -3933,13 +5156,20 @@
         "properties": {
           "items": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/Item" }
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            }
           }
         }
       },
       "ListNamespaceResponse": {
         "type": "array",
-        "items": { "type": "array", "items": { "type": "string" } }
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       },
       "ErrorResponse": {
         "type": "string",
@@ -3952,7 +5182,9 @@
         "description": "Successful retrieval of an item.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/Item" }
+            "schema": {
+              "$ref": "#/components/schemas/Item"
+            }
           }
         }
       },
@@ -3968,7 +5200,9 @@
         "description": "Successful search operation.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/SearchItemsResponse" }
+            "schema": {
+              "$ref": "#/components/schemas/SearchItemsResponse"
+            }
           }
         }
       },
@@ -3976,7 +5210,9 @@
         "description": "Successful retrieval of namespaces.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ListNamespaceResponse" }
+            "schema": {
+              "$ref": "#/components/schemas/ListNamespaceResponse"
+            }
           }
         }
       },
@@ -3984,9 +5220,24 @@
         "description": "An error occurred.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
           }
         }
+      },
+      "Interrupt": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": ["string", "null"]
+          },
+          "value": {
+            "type": "object"
+          }
+        },
+        "title": "Interrupt",
+        "required": ["value"]
       }
     }
   }

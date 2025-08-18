@@ -3,7 +3,7 @@
 Before deploying, review the [conceptual guide for the Self-Hosted Control Plane](../../concepts/langgraph_self_hosted_control_plane.md) deployment option.
 
 !!! info "Important"
-    The Self-Hosted Control Plane deployment option is currently in beta stage and requires an [Enterprise](../../concepts/plans.md) plan.
+    The Self-Hosted Control Plane deployment option requires an [Enterprise](../../concepts/plans.md) plan.
 
 ## Prerequisites
 
@@ -23,6 +23,8 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
 
         kubectl get storageclass
 
+1. Egress to `https://beacon.langchain.com` from your network. This is required for license verification and usage reporting if not running in air-gapped mode. See the [Egress documentation](../../cloud/deployment/egress.md) for more details.
+
 ## Setup
 
 1. As part of configuring your Self-Hosted LangSmith instance, you enable the `langgraphPlatform` option. This will provision a few key resources.
@@ -30,18 +32,16 @@ Before deploying, review the [conceptual guide for the Self-Hosted Control Plane
     1. `LangGraphPlatform CRD`: A CRD for LangGraph Platform deployments. This contains the spec for managing an instance of a LangGraph platform deployment.
     1. `operator`: This operator handles changes to your LangGraph Platform CRDs.
     1. `host-backend`: This is the [control plane](../../concepts/langgraph_control_plane.md).
-1. Two additional images will be used by the chart.
+1. Two additional images will be used by the chart. Use the images that are specified in the latest release.
 
         hostBackendImage:
           repository: "docker.io/langchain/hosted-langserve-backend"
           pullPolicy: IfNotPresent
-          tag: "0.9.80"
         operatorImage:
           repository: "docker.io/langchain/langgraph-operator"
           pullPolicy: IfNotPresent
-          tag: "aa9dff4"
 
-1. In your `langsmith_config.yaml` file, enable the `langgraphPlatform` option. Note that you must also have a valid ingress setup:
+1. In your config file for langsmith (usually `langsmith_config.yaml`, enable the `langgraphPlatform` option. Note that you must also have a valid ingress setup:
 
         config:
           langgraphPlatform:

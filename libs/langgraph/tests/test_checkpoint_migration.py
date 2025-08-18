@@ -7,14 +7,11 @@ from typing import Annotated, Literal, Optional, Union
 import pytest
 from typing_extensions import TypedDict
 
-from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
-    CheckpointTuple,
-    copy_checkpoint,
-)
+from langgraph._internal._config import patch_configurable
+from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointTuple
 from langgraph.graph.state import StateGraph
+from langgraph.pregel._checkpoint import copy_checkpoint
 from langgraph.types import Command, Interrupt, PregelTask, StateSnapshot, interrupt
-from langgraph.utils.config import patch_configurable
 from tests.any_int import AnyInt
 from tests.any_str import AnyDict, AnyObject, AnyStr
 
@@ -46,7 +43,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "loop",
                 "step": 4,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -76,7 +72,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "loop",
                 "step": 3,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -97,8 +92,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                     else (
                         Interrupt(
                             value="",
-                            resumable=True,
-                            ns=[AnyStr("qa:")],
+                            id=AnyStr(),
                         ),
                     ),
                     state=None,
@@ -112,8 +106,7 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
             else (
                 Interrupt(
                     value="",
-                    resumable=True,
-                    ns=[AnyStr("qa:")],
+                    id=AnyStr(),
                 ),
             ),
         ),
@@ -134,7 +127,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "loop",
                 "step": 2,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -171,7 +163,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "loop",
                 "step": 1,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -221,7 +212,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "loop",
                 "step": 0,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config={
@@ -260,7 +250,6 @@ def get_expected_history(*, exc_task_results: int = 0) -> list[StateSnapshot]:
                 "source": "input",
                 "step": -1,
                 "parents": {},
-                "thread_id": "1",
             },
             created_at=AnyStr(),
             parent_config=None,
@@ -341,12 +330,12 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "answer": "doc1,doc2,doc3,doc4",
                 },
+                "updated_channels": None,
             },
             metadata={
                 "source": "loop",
                 "step": 4,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -402,12 +391,12 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "branch:to:qa": None,
                 },
+                "updated_channels": None,
             },
             metadata={
                 "source": "loop",
                 "step": 3,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -423,8 +412,8 @@ SAVED_CHECKPOINTS = {
                     [
                         Interrupt(
                             value="",
-                            resumable=True,
-                            ns=["qa:2430f303-da9f-2e3e-738c-2e8ea28e8973"],
+                            resumable=True,  # type: ignore[arg-type]
+                            ns=["qa:2430f303-da9f-2e3e-738c-2e8ea28e8973"],  # type: ignore[arg-type]
                         )
                     ],
                 ),
@@ -478,12 +467,12 @@ SAVED_CHECKPOINTS = {
                     "branch:to:retriever_one": None,
                     "docs": ["doc3", "doc4"],
                 },
+                "updated_channels": None,
             },
             metadata={
                 "source": "loop",
                 "step": 2,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -530,12 +519,12 @@ SAVED_CHECKPOINTS = {
                     "branch:to:analyzer_one": None,
                     "branch:to:retriever_two": None,
                 },
+                "updated_channels": None,
             },
             metadata={
                 "source": "loop",
                 "step": 1,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -585,12 +574,12 @@ SAVED_CHECKPOINTS = {
                     "query": "what is weather in sf",
                     "branch:to:rewrite_query": None,
                 },
+                "updated_channels": None,
             },
             metadata={
                 "source": "loop",
                 "step": 0,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config={
                 "configurable": {
@@ -634,12 +623,12 @@ SAVED_CHECKPOINTS = {
                 },
                 "versions_seen": {"__input__": {}},
                 "channel_values": {"__start__": {"query": "what is weather in sf"}},
+                "updated_channels": None,
             },
             metadata={
                 "source": "input",
                 "step": -1,
                 "parents": {},
-                "thread_id": "1",
             },
             parent_config=None,
             pending_writes=[
@@ -723,7 +712,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 4,
                 "parents": {},
             },
@@ -785,7 +773,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 3,
                 "parents": {},
             },
@@ -803,8 +790,8 @@ SAVED_CHECKPOINTS = {
                     [
                         Interrupt(
                             value="",
-                            resumable=True,
-                            ns=["qa:4ee8637e-0a95-285e-75bc-4da721c0beab"],
+                            resumable=True,  # type: ignore[arg-type]
+                            ns=["qa:4ee8637e-0a95-285e-75bc-4da721c0beab"],  # type: ignore[arg-type]
                         )
                     ],
                 ),
@@ -864,7 +851,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 2,
                 "parents": {},
             },
@@ -920,7 +906,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 1,
                 "parents": {},
             },
@@ -980,7 +965,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 0,
                 "parents": {},
             },
@@ -1029,7 +1013,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "input",
-                "thread_id": "1",
                 "step": -1,
                 "parents": {},
             },
@@ -1115,7 +1098,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 4,
                 "parents": {},
             },
@@ -1177,7 +1159,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 3,
                 "parents": {},
             },
@@ -1196,7 +1177,7 @@ SAVED_CHECKPOINTS = {
                         Interrupt(
                             value="",
                             resumable=True,
-                            ns=["qa:369e94b1-77d1-d67a-ab59-23d1ba20ee73"],
+                            ns=["qa:369e94b1-77d1-d67a-ab59-23d1ba20ee73"],  # type: ignore[arg-type]
                         )
                     ],
                 ),
@@ -1256,7 +1237,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 2,
                 "parents": {},
             },
@@ -1312,7 +1292,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 1,
                 "parents": {},
             },
@@ -1372,7 +1351,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "loop",
-                "thread_id": "1",
                 "step": 0,
                 "parents": {},
             },
@@ -1421,7 +1399,6 @@ SAVED_CHECKPOINTS = {
             },
             metadata={
                 "source": "input",
-                "thread_id": "1",
                 "step": -1,
                 "parents": {},
             },
@@ -1542,7 +1519,7 @@ def test_latest_checkpoint_state_graph(
     config = {"configurable": {"thread_id": "1"}}
 
     assert [
-        *app.stream({"query": "what is weather in sf"}, config, checkpoint_during=True)
+        *app.stream({"query": "what is weather in sf"}, config, durability="async")
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
@@ -1552,14 +1529,13 @@ def test_latest_checkpoint_state_graph(
             "__interrupt__": (
                 Interrupt(
                     value="",
-                    resumable=True,
-                    ns=[AnyStr("qa:")],
+                    id=AnyStr(),
                 ),
             )
         },
     ]
 
-    assert [*app.stream(Command(resume=""), config, checkpoint_during=True)] == [
+    assert [*app.stream(Command(resume=""), config, durability="async")] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
 
@@ -1586,7 +1562,7 @@ async def test_latest_checkpoint_state_graph_async(
     assert [
         c
         async for c in app.astream(
-            {"query": "what is weather in sf"}, config, checkpoint_during=True
+            {"query": "what is weather in sf"}, config, durability="async"
         )
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
@@ -1597,15 +1573,14 @@ async def test_latest_checkpoint_state_graph_async(
             "__interrupt__": (
                 Interrupt(
                     value="",
-                    resumable=True,
-                    ns=[AnyStr("qa:")],
+                    id=AnyStr(),
                 ),
             )
         },
     ]
 
     assert [
-        c async for c in app.astream(Command(resume=""), config, checkpoint_during=True)
+        c async for c in app.astream(Command(resume=""), config, durability="async")
     ] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]

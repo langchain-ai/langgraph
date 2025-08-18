@@ -8,6 +8,9 @@ on:
         type: string
         default: "libs/langgraph"
 
+permissions:
+  contents: read
+
 env:
   PYTHON_VERSION: "3.11"
 
@@ -134,7 +137,9 @@ jobs:
     needs:
       - build
       - release-notes
-    permissions: write-all
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/_test_release.yml
     with:
       working-directory: ${{ inputs.working-directory }}

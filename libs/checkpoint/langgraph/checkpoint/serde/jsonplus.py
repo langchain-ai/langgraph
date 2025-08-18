@@ -7,6 +7,7 @@ import json
 import pathlib
 import pickle
 import re
+import sys
 from collections import deque
 from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta, timezone
@@ -251,6 +252,7 @@ EXT_CONSTRUCTOR_KW_ARGS = 2
 EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
+EXT_NUMPY_ARRAY = 6
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -318,13 +320,6 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
                 (obj.__class__.__module__, obj.__class__.__name__, obj.hex),
-            ),
-        )
-    elif isinstance(obj, bytearray):
-        return ormsgpack.Ext(
-            EXT_CONSTRUCTOR_SINGLE_ARG,
-            _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, bytes(obj)),
             ),
         )
     elif isinstance(obj, decimal.Decimal):
@@ -465,6 +460,22 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 ),
             ),
         )
+    elif (np_mod := sys.modules.get("numpy")) is not None and isinstance(
+        obj, np_mod.ndarray
+    ):
+        order = "F" if obj.flags.f_contiguous and not obj.flags.c_contiguous else "C"
+        if obj.flags.c_contiguous:
+            mv = memoryview(obj)
+            try:
+                meta = (obj.dtype.str, obj.shape, order, mv)
+                return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
+            finally:
+                mv.release()
+        else:
+            buf = obj.tobytes(order="A")
+            meta = (obj.dtype.str, obj.shape, order, buf)
+            return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
+
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:
@@ -546,6 +557,17 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
                 return tup[2]
             except NameError:
                 return
+    elif code == EXT_NUMPY_ARRAY:
+        try:
+            import numpy as _np
+
+            dtype_str, shape, order, buf = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+            arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
+            return arr.reshape(shape, order=order)
+        except Exception:
+            return
 
 
 def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
@@ -624,6 +646,19 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             # module, name, kwargs, method
             return tup[2]
+        except Exception:
+            return
+    elif code == EXT_NUMPY_ARRAY:
+        try:
+            import numpy as _np
+
+            dtype_str, shape, order, buf = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
+            return arr.reshape(shape, order=order).tolist()
         except Exception:
             return
 

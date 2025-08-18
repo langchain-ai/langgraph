@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from typing import (  # noqa: UP035
     Any,
     Generic,
@@ -13,6 +13,7 @@ from typing import (  # noqa: UP035
 
 from langchain_core.runnables import RunnableConfig
 
+from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
@@ -20,6 +21,7 @@ from langgraph.checkpoint.serde.types import (
     INTERRUPT,
     RESUME,
     SCHEDULED,
+    ChannelProtocol,
 )
 
 V = TypeVar("V", int, float, str)
@@ -79,6 +81,9 @@ class Checkpoint(TypedDict):
     This keeps track of the versions of the channels that each node has seen.
     Used to determine which nodes to execute next.
     """
+    updated_channels: list[str] | None
+    """The channels that were updated in this checkpoint.
+    """
 
 
 def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
@@ -89,6 +94,8 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         channel_values=checkpoint["channel_values"].copy(),
         channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
+        pending_sends=checkpoint.get("pending_sends", []).copy(),
+        updated_channels=checkpoint.get("updated_channels", None),
     )
 
 
@@ -124,6 +131,15 @@ class BaseCheckpointSaver(Generic[V]):
         serde: SerializerProtocol | None = None,
     ) -> None:
         self.serde = maybe_add_typed_methods(serde or self.serde)
+
+    @property
+    def config_specs(self) -> list:
+        """Define the configuration options for the checkpoint saver.
+
+        Returns:
+            list: List of configuration field specs.
+        """
+        return []
 
     def get(self, config: RunnableConfig) -> Checkpoint | None:
         """Fetch a checkpoint using the given configuration.
@@ -334,7 +350,7 @@ class BaseCheckpointSaver(Generic[V]):
         """
         raise NotImplementedError
 
-    def get_next_version(self, current: V | None) -> V:
+    def get_next_version(self, current: V | None, channel: None) -> V:
         """Generate the next version ID for a channel.
 
         Default is to use integer versions, incrementing by 1. If you override, you can use str/int/float versions,
@@ -342,6 +358,7 @@ class BaseCheckpointSaver(Generic[V]):
 
         Args:
             current: The current version identifier (int, float, or str).
+            channel: Deprecated argument, kept for backwards compatibility.
 
         Returns:
             V: The next version identifier, which must be increasing.
@@ -362,10 +379,8 @@ class EmptyChannelError(Exception):
 
 
 def get_checkpoint_id(config: RunnableConfig) -> str | None:
-    """Get checkpoint ID in a backwards-compatible manner (fallback on thread_ts)."""
-    return config["configurable"].get(
-        "checkpoint_id", config["configurable"].get("thread_ts")
-    )
+    """Get checkpoint ID."""
+    return config["configurable"].get("checkpoint_id")
 
 
 def get_checkpoint_metadata(
@@ -379,11 +394,10 @@ def get_checkpoint_metadata(
     for obj in (config.get("metadata"), config.get("configurable")):
         if not obj:
             continue
-        for key in obj:
+        for key, v in obj.items():
             if key in metadata or key in EXCLUDED_METADATA_KEYS or key.startswith("__"):
                 continue
-            v = obj[key]
-            if isinstance(v, str):
+            elif isinstance(v, str):
                 metadata[key] = v.replace("\u0000", "")
             elif isinstance(v, (int, bool, float)):
                 metadata[key] = v
@@ -400,7 +414,66 @@ Each Checkpointer implementation should use this mapping in put_writes.
 WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3, RESUME: -4}
 
 EXCLUDED_METADATA_KEYS = {
+    "thread_id",
     "checkpoint_id",
     "checkpoint_ns",
     "checkpoint_map",
+    "langgraph_step",
+    "langgraph_node",
+    "langgraph_triggers",
+    "langgraph_path",
+    "langgraph_checkpoint_ns",
 }
+
+# --- below are deprecated utilities used by past versions of LangGraph ---
+
+LATEST_VERSION = 2
+
+
+def empty_checkpoint() -> Checkpoint:
+    from datetime import datetime, timezone
+
+    return Checkpoint(
+        v=LATEST_VERSION,
+        id=str(uuid6(clock_seq=-2)),
+        ts=datetime.now(timezone.utc).isoformat(),
+        channel_values={},
+        channel_versions={},
+        versions_seen={},
+        pending_sends=[],
+        updated_channels=None,
+    )
+
+
+def create_checkpoint(
+    checkpoint: Checkpoint,
+    channels: Mapping[str, ChannelProtocol] | None,
+    step: int,
+    *,
+    id: str | None = None,
+) -> Checkpoint:
+    """Create a checkpoint for the given channels."""
+    from datetime import datetime, timezone
+
+    ts = datetime.now(timezone.utc).isoformat()
+    if channels is None:
+        values = checkpoint["channel_values"]
+    else:
+        values = {}
+        for k, v in channels.items():
+            if k not in checkpoint["channel_versions"]:
+                continue
+            try:
+                values[k] = v.checkpoint()
+            except EmptyChannelError:
+                pass
+    return Checkpoint(
+        v=LATEST_VERSION,
+        ts=ts,
+        id=id or str(uuid6(clock_seq=step)),
+        channel_values=values,
+        channel_versions=checkpoint["channel_versions"],
+        versions_seen=checkpoint["versions_seen"],
+        pending_sends=checkpoint.get("pending_sends", []),
+        updated_channels=None,
+    )

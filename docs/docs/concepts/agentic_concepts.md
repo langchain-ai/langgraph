@@ -58,10 +58,10 @@ Tools are useful whenever you want an agent to interact with external systems. E
 
 ### Memory
 
-[Memory](./memory.md) is crucial for agents, enabling them to retain and utilize information across multiple steps of problem-solving. It operates on different scales:
+[Memory](../how-tos/memory/add-memory.md) is crucial for agents, enabling them to retain and utilize information across multiple steps of problem-solving. It operates on different scales:
 
-1. [Short-term memory](./memory.md#short-term-memory): Allows the agent to access information acquired during earlier steps in a sequence.
-2. [Long-term memory](./memory.md#long-term-memory): Enables the agent to recall information from previous interactions, such as past messages in a conversation.
+1. [Short-term memory](../how-tos/memory/add-memory.md#add-short-term-memory): Allows the agent to access information acquired during earlier steps in a sequence.
+2. [Long-term memory](../how-tos/memory/add-memory.md#add-long-term-memory): Enables the agent to recall information from previous interactions, such as past messages in a conversation.
 
 LangGraph provides full control over memory implementation:
 
@@ -69,9 +69,7 @@ LangGraph provides full control over memory implementation:
 - [`Checkpointer`](./persistence.md#checkpoints): Mechanism to store state at every step across different interactions within a session.
 - [`Store`](./persistence.md#memory-store): Mechanism to store user-specific or application-level data across sessions.
 
-This flexible approach allows you to tailor the memory system to your specific agent architecture needs. For a practical guide on adding memory to your graph, see [this tutorial](../how-tos/persistence.ipynb).
-
-Effective [memory management](../how-tos/memory.ipynb) enhances an agent's ability to maintain context, learn from past experiences, and make more informed decisions over time.
+This flexible approach allows you to tailor the memory system to your specific agent architecture needs. Effective memory management enhances an agent's ability to maintain context, learn from past experiences, and make more informed decisions over time. For a practical guide on adding and managing memory, see [Memory](../how-tos/memory/add-memory.md).
 
 ### Planning
 
@@ -99,7 +97,7 @@ Parallel processing is vital for efficient multi-agent systems and complex tasks
 - Implementation of map-reduce-like operations
 - Efficient handling of independent subtasks
 
-For practical implementation, see our [map-reduce tutorial](../how-tos/graph-api.ipynb#map-reduce-and-the-send-api)
+For practical implementation, see our [map-reduce tutorial](../how-tos/graph-api.md#map-reduce-and-the-send-api)
 
 ### Subgraphs
 
@@ -109,7 +107,7 @@ For practical implementation, see our [map-reduce tutorial](../how-tos/graph-api
 - Hierarchical organization of agent teams
 - Controlled communication between agents and the main system
 
-Subgraphs communicate with the parent graph through overlapping keys in the state schema. This enables flexible, modular agent design. For implementation details, refer to our [subgraph how-to guide](../how-tos/subgraph.ipynb).
+Subgraphs communicate with the parent graph through overlapping keys in the state schema. This enables flexible, modular agent design. For implementation details, refer to our [subgraph how-to guide](../how-tos/subgraph.md).
 
 ### Reflection
 

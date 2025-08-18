@@ -3,7 +3,7 @@
 !!!info  "Prerequisites"
     - [Running agents](../../agents/run_agents.md#running-agents)
 
-This guide shows how to submit a [run](../concepts/runs.md) to your application.
+This guide shows how to submit a [run](../../concepts/assistants.md#execution) to your application.
 
 ## Graph mode
 
@@ -29,11 +29,11 @@ Click the dropdown next to "Submit" and click the toggle to enable/disable strea
 To run your graph with breakpoints, click the "Interrupt" button. Select a node and whether to pause before and/or after that node has executed. Click "Continue" in the thread log to resume execution.
 
 
-For more information on breakpoints see [here](../../concepts/breakpoints.md).
+For more information on breakpoints see [here](../../concepts/human_in_the_loop.md).
 
 ### Submit run
 
-To submit the run with the specified input and run settings, click the "Submit" button. This will add a [run](../concepts/runs.md) to the existing selected [thread](../concepts/threads.md). If no thread is currently selected, a new one will be created.
+To submit the run with the specified input and run settings, click the "Submit" button. This will add a [run](../../concepts/assistants.md#execution) to the existing selected [thread](../../concepts/persistence.md#threads). If no thread is currently selected, a new one will be created.
 
 To cancel the ongoing run, click the "Cancel" button.
 

@@ -1,234 +1,225 @@
----
-search:
-  boost: 2
-tags:
-  - anthropic
-  - openai
-  - agent
-hide:
-  - tags
----
-
 # Models
 
-This page describes how to configure the chat model used by an agent.
+LangGraph provides built-in support for [LLMs (language models)](https://python.langchain.com/docs/concepts/chat_models/) via the LangChain library. This makes it easy to integrate various LLMs into your agents and workflows.
 
-## Tool calling support
+## Initialize a model
 
-To enable tool-calling agents, the underlying LLM must support [tool calling](https://python.langchain.com/docs/concepts/tool_calling/).
+:::python
+Use [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/) to initialize models:
 
-Compatible models can be found in the [LangChain integrations directory](https://python.langchain.com/docs/integrations/chat/).
+{% include-markdown "../../snippets/chat_model_tabs.md" %}
+:::
 
-## Specifying a model by name
-
-You can configure an agent with a model name string:
+:::js
+Use model provider classes to initialize models:
 
 === "OpenAI"
 
-    ```python
-    import os
-    from langgraph.prebuilt import create_react_agent
+    ```typescript
+    import { ChatOpenAI } from "@langchain/openai";
 
-    os.environ["OPENAI_API_KEY"] = "sk-..."
-
-    agent = create_react_agent(
-        # highlight-next-line
-        model="openai:gpt-4.1",
-        # other parameters
-    )
+    const model = new ChatOpenAI({
+      model: "gpt-4o",
+      temperature: 0,
+    });
     ```
 
 === "Anthropic"
 
-    ```python
-    import os
-    from langgraph.prebuilt import create_react_agent
+    ```typescript
+    import { ChatAnthropic } from "@langchain/anthropic";
 
-    os.environ["ANTHROPIC_API_KEY"] = "sk-..."
-
-    agent = create_react_agent(
-        # highlight-next-line
-        model="anthropic:claude-3-7-sonnet-latest",
-        # other parameters
-    )
+    const model = new ChatAnthropic({
+      model: "claude-3-5-sonnet-20240620",
+      temperature: 0,
+      maxTokens: 2048,
+    });
     ```
 
-=== "Azure"
+=== "Google"
 
-    ```python
-    import os
-    from langgraph.prebuilt import create_react_agent
+    ```typescript
+    import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 
-    os.environ["AZURE_OPENAI_API_KEY"] = "..."
-    os.environ["AZURE_OPENAI_ENDPOINT"] = "..."
-    os.environ["OPENAI_API_VERSION"] = "2025-03-01-preview"
-
-    agent = create_react_agent(
-        # highlight-next-line
-        model="azure_openai:gpt-4.1",
-        # other parameters
-    )
+    const model = new ChatGoogleGenerativeAI({
+      model: "gemini-1.5-pro",
+      temperature: 0,
+    });
     ```
 
-=== "Google Gemini"
+=== "Groq"
 
-    ```python
-    import os
-    from langgraph.prebuilt import create_react_agent
+    ```typescript
+    import { ChatGroq } from "@langchain/groq";
 
-    os.environ["GOOGLE_API_KEY"] = "..."
-
-    agent = create_react_agent(
-        # highlight-next-line
-        model="google_genai:gemini-2.0-flash",
-        # other parameters
-    )
+    const model = new ChatGroq({
+      model: "llama-3.1-70b-versatile",
+      temperature: 0,
+    });
     ```
 
-=== "AWS Bedrock"
+:::
 
-    ```python
-    from langgraph.prebuilt import create_react_agent
+:::python
 
-    # Follow the steps here to configure your credentials:
-    # https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started.html
-
-    agent = create_react_agent(
-        # highlight-next-line
-        model="bedrock_converse:anthropic.claude-3-5-sonnet-20240620-v1:0",
-        # other parameters
-    )
-    ```
-
-
-## Using `init_chat_model`
-
-The [`init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/) utility simplifies model initialization with configurable parameters:
-
-=== "OpenAI"
-
-    ```
-    pip install -U "langchain[openai]"
-    ```
-    ```python
-    import os
-    from langchain.chat_models import init_chat_model
-
-    os.environ["OPENAI_API_KEY"] = "sk-..."
-
-    model = init_chat_model(
-        "openai:gpt-4.1",
-        temperature=0,
-        # other parameters
-    )
-    ```
-
-=== "Anthropic"
-
-    ```
-    pip install -U "langchain[anthropic]"
-    ```
-    ```python
-    import os
-    from langchain.chat_models import init_chat_model
-
-    os.environ["ANTHROPIC_API_KEY"] = "sk-..."
-
-    model = init_chat_model(
-        "anthropic:claude-3-5-sonnet-latest",
-        temperature=0,
-        # other parameters
-    )
-    ```
-
-=== "Azure"
-
-    ```
-    pip install -U "langchain[openai]"
-    ```
-    ```python
-    import os
-    from langchain.chat_models import init_chat_model
-
-    os.environ["AZURE_OPENAI_API_KEY"] = "..."
-    os.environ["AZURE_OPENAI_ENDPOINT"] = "..."
-    os.environ["OPENAI_API_VERSION"] = "2025-03-01-preview"
-
-    model = init_chat_model(
-        "azure_openai:gpt-4.1",
-        azure_deployment=os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
-        temperature=0,
-        # other parameters
-    )
-    ```
-
-=== "Google Gemini"
-
-    ```
-    pip install -U "langchain[google-genai]"
-    ```
-    ```python
-    import os
-    from langchain.chat_models import init_chat_model
-
-    os.environ["GOOGLE_API_KEY"] = "..."
-
-    model = init_chat_model(
-        "google_genai:gemini-2.0-flash",
-        temperature=0,
-        # other parameters
-    )
-    ```
-
-=== "AWS Bedrock"
-
-    ```
-    pip install -U "langchain[aws]"
-    ```
-    ```python
-    from langchain.chat_models import init_chat_model
-
-    # Follow the steps here to configure your credentials:
-    # https://docs.aws.amazon.com/bedrock/latest/userguide/getting-started.html
-
-    model = init_chat_model(
-        "anthropic.claude-3-5-sonnet-20240620-v1:0",
-        model_provider="bedrock_converse",
-        temperature=0,
-        # other parameters
-    )
-    ```
-
-
-Refer to the [API reference](https://python.langchain.com/api_reference/langchain/chat_models/langchain.chat_models.base.init_chat_model.html) for advanced options.
-
-## Using provider-specific LLMs 
+### Instantiate a model directly
 
 If a model provider is not available via `init_chat_model`, you can instantiate the provider's model class directly. The model must implement the [BaseChatModel interface](https://python.langchain.com/api_reference/core/language_models/langchain_core.language_models.chat_models.BaseChatModel.html) and support tool calling:
 
 ```python
+# Anthropic is already supported by `init_chat_model`,
+# but you can also instantiate it directly.
 from langchain_anthropic import ChatAnthropic
-from langgraph.prebuilt import create_react_agent
 
 model = ChatAnthropic(
-    model="claude-3-7-sonnet-latest",
-    temperature=0,
-    max_tokens=2048
-)
-
-agent = create_react_agent(
-    # highlight-next-line
-    model=model,
-    # other parameters
+  model="claude-3-7-sonnet-latest",
+  temperature=0,
+  max_tokens=2048
 )
 ```
 
-!!! note "Illustrative example" 
+:::
 
-    The example above uses `ChatAnthropic`, which is already supported by `init_chat_model`. This pattern is shown to illustrate how to manually instantiate a model not available through init_chat_model.
+!!! important "Tool calling support"
 
-## Disable streaming
+    If you are building an agent or workflow that requires the model to call external tools, ensure that the underlying
+    language model supports [tool calling](../concepts/tools.md). Compatible models can be found in the [LangChain integrations directory](https://python.langchain.com/docs/integrations/chat/).
 
+## Use in an agent
+
+:::python
+When using `create_react_agent` you can specify the model by its name string, which is a shorthand for initializing the model using `init_chat_model`. This allows you to use the model without needing to import or instantiate it directly.
+
+=== "model name"
+
+      ```python
+      from langgraph.prebuilt import create_react_agent
+
+      create_react_agent(
+         # highlight-next-line
+         model="anthropic:claude-3-7-sonnet-latest",
+         # other parameters
+      )
+      ```
+
+=== "model instance"
+
+      ```python
+      from langchain_anthropic import ChatAnthropic
+      from langgraph.prebuilt import create_react_agent
+
+      model = ChatAnthropic(
+          model="claude-3-7-sonnet-latest",
+          temperature=0,
+          max_tokens=2048
+      )
+      # Alternatively
+      # model = init_chat_model("anthropic:claude-3-7-sonnet-latest")
+
+      agent = create_react_agent(
+        # highlight-next-line
+        model=model,
+        # other parameters
+      )
+      ```
+
+:::
+
+:::js
+When using `createReactAgent` you can pass the model instance directly:
+
+```typescript
+import { ChatOpenAI } from "@langchain/openai";
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
+
+const model = new ChatOpenAI({
+  model: "gpt-4o",
+  temperature: 0,
+});
+
+const agent = createReactAgent({
+  llm: model,
+  tools: tools,
+});
+```
+
+:::
+
+:::python
+
+### Dynamic model selection
+
+Pass a callable function to `create_react_agent` to dynamically select the model at runtime. This is useful for scenarios where you want to choose a model based on user input, configuration settings, or other runtime conditions.
+
+The selector function must return a chat model. If you're using tools, you must bind the tools to the model within the selector function.
+
+  ```python
+from dataclasses import dataclass
+from typing import Literal
+from langchain.chat_models import init_chat_model
+from langchain_core.language_models import BaseChatModel
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt.chat_agent_executor import AgentState
+from langgraph.runtime import Runtime
+
+@tool
+def weather() -> str:
+    """Returns the current weather conditions."""
+    return "It's nice and sunny."
+
+
+# Define the runtime context
+@dataclass
+class CustomContext:
+    provider: Literal["anthropic", "openai"]
+
+# Initialize models
+openai_model = init_chat_model("openai:gpt-4o")
+anthropic_model = init_chat_model("anthropic:claude-sonnet-4-20250514")
+
+
+# Selector function for model choice
+def select_model(state: AgentState, runtime: Runtime[CustomContext]) -> BaseChatModel:
+    if runtime.context.provider == "anthropic":
+        model = anthropic_model
+    elif runtime.context.provider == "openai":
+        model = openai_model
+    else:
+        raise ValueError(f"Unsupported provider: {runtime.context.provider}")
+
+    # With dynamic model selection, you must bind tools explicitly
+    return model.bind_tools([weather])
+
+
+# Create agent with dynamic model selection
+agent = create_react_agent(select_model, tools=[weather])
+
+# Invoke with context to select model
+output = agent.invoke(
+    {
+        "messages": [
+            {
+                "role": "user",
+                "content": "Which model is handling this?",
+            }
+        ]
+    },
+    context=CustomContext(provider="openai"),
+)
+
+print(output["messages"][-1].text())
+```
+
+!!! version-added "New in LangGraph v0.6"
+
+:::
+
+## Advanced model configuration
+
+### Disable streaming
+
+:::python
 To disable streaming of the individual LLM tokens, set `disable_streaming=True` when initializing the model:
 
 === "`init_chat_model`"
@@ -256,9 +247,25 @@ To disable streaming of the individual LLM tokens, set `disable_streaming=True` 
     ```
 
 Refer to the [API reference](https://python.langchain.com/api_reference/core/language_models/langchain_core.language_models.chat_models.BaseChatModel.html#langchain_core.language_models.chat_models.BaseChatModel.disable_streaming) for more information on `disable_streaming`
+:::
 
-## Adding model fallbacks
+:::js
+To disable streaming of the individual LLM tokens, set `streaming: false` when initializing the model:
 
+```typescript
+import { ChatOpenAI } from "@langchain/openai";
+
+const model = new ChatOpenAI({
+  model: "gpt-4o",
+  streaming: false,
+});
+```
+
+:::
+
+### Add model fallbacks
+
+:::python
 You can add a fallback to a different model or a different LLM provider using `model.with_fallbacks([...])`:
 
 === "`init_chat_model`"
@@ -291,8 +298,87 @@ You can add a fallback to a different model or a different LLM provider using `m
     ```
 
 See this [guide](https://python.langchain.com/docs/how_to/fallbacks/#fallback-to-better-model) for more information on model fallbacks.
+:::
+
+:::js
+You can add a fallback to a different model or a different LLM provider using `model.withFallbacks([...])`:
+
+```typescript
+import { ChatOpenAI } from "@langchain/openai";
+import { ChatAnthropic } from "@langchain/anthropic";
+
+const modelWithFallbacks = new ChatOpenAI({
+  model: "gpt-4o",
+}).withFallbacks([
+  new ChatAnthropic({
+    model: "claude-3-5-sonnet-20240620",
+  }),
+]);
+```
+
+See this [guide](https://js.langchain.com/docs/how_to/fallbacks/#fallback-to-better-model) for more information on model fallbacks.
+:::
+
+:::python
+
+### Use the built-in rate limiter
+
+Langchain includes a built-in in-memory rate limiter. This rate limiter is thread safe and can be shared by multiple threads in the same process.
+
+```python
+from langchain_core.rate_limiters import InMemoryRateLimiter
+from langchain_anthropic import ChatAnthropic
+
+rate_limiter = InMemoryRateLimiter(
+    requests_per_second=0.1,  # <-- Super slow! We can only make a request once every 10 seconds!!
+    check_every_n_seconds=0.1,  # Wake up every 100 ms to check whether allowed to make a request,
+    max_bucket_size=10,  # Controls the maximum burst size.
+)
+
+model = ChatAnthropic(
+   model_name="claude-3-opus-20240229",
+   rate_limiter=rate_limiter
+)
+```
+
+See the LangChain docs for more information on how to [handle rate limiting](https://python.langchain.com/docs/how_to/chat_model_rate_limiting/).
+:::
+
+## Bring your own model
+
+If your desired LLM isn't officially supported by LangChain, consider these options:
+
+:::python
+
+1. **Implement a custom LangChain chat model**: Create a model conforming to the [LangChain chat model interface](https://python.langchain.com/docs/how_to/custom_chat_model/). This enables full compatibility with LangGraph's agents and workflows but requires understanding of the LangChain framework.
+   :::
+
+:::js
+
+1. **Implement a custom LangChain chat model**: Create a model conforming to the [LangChain chat model interface](https://js.langchain.com/docs/how_to/custom_chat/). This enables full compatibility with LangGraph's agents and workflows but requires understanding of the LangChain framework.
+   :::
+
+2. **Direct invocation with custom streaming**: Use your model directly by [adding custom streaming logic](../how-tos/streaming.md#use-with-any-llm) with `StreamWriter`.
+   Refer to the [custom streaming documentation](../how-tos/streaming.md#use-with-any-llm) for guidance. This approach suits custom workflows where prebuilt agent integration is not necessary.
 
 ## Additional resources
 
+:::python
+
+- [Multimodal inputs](https://python.langchain.com/docs/how_to/multimodal_inputs/)
+- [Structured outputs](https://python.langchain.com/docs/how_to/structured_output/)
 - [Model integration directory](https://python.langchain.com/docs/integrations/chat/)
-- [Universal initialization with `init_chat_model`](https://python.langchain.com/docs/how_to/chat_models_universal_init/)
+- [Force model to call a specific tool](https://python.langchain.com/docs/how_to/tool_choice/)
+- [All chat model how-to guides](https://python.langchain.com/docs/how_to/#chat-models)
+- [Chat model integrations](https://python.langchain.com/docs/integrations/chat/)
+  :::
+
+:::js
+
+- [Multimodal inputs](https://js.langchain.com/docs/how_to/multimodal_inputs/)
+- [Structured outputs](https://js.langchain.com/docs/how_to/structured_output/)
+- [Model integration directory](https://js.langchain.com/docs/integrations/chat/)
+- [Force model to call a specific tool](https://js.langchain.com/docs/how_to/tool_choice/)
+- [All chat model how-to guides](https://js.langchain.com/docs/how_to/#chat-models)
+- [Chat model integrations](https://js.langchain.com/docs/integrations/chat/)
+  :::

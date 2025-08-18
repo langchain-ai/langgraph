@@ -1,10 +1,4 @@
-.PHONY: lint-docs format-docs build-docs serve-docs serve-clean-docs clean-docs codespell build-typedoc llms-text build-prebuilt tests
-
-build-typedoc:
-	cd ../libs/sdk-js && yarn install --include-dev && yarn typedoc
-	cd ../libs/sdk-js && yarn --silent concat-md --decrease-title-levels --ignore=js_ts_sdk_ref.md --start-title-level-at 2 docs > ../../docs/docs/cloud/reference/sdk/js_ts_sdk_ref.md 2>/dev/null
-	#  Add links to the monorepo
-	sed -e '1,10s|@langchain/langgraph-sdk|[@langchain/langgraph-sdk](https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-js)|g' docs/cloud/reference/sdk/js_ts_sdk_ref.md > temp_file && mv temp_file docs/cloud/reference/sdk/js_ts_sdk_ref.md
+.PHONY: lint-docs format-docs build-docs serve-docs serve-clean-docs clean-docs codespell llms-text build-prebuilt tests
 
 build-prebuilt:
 	# Use to create an update to date prebuilt page.
@@ -19,10 +13,13 @@ build-prebuilt:
 		uv run python -m _scripts.third_party_page.get_download_stats --fake stats.yml; \
 		set +x; \
 	fi
-	uv run python -m _scripts.third_party_page.create_third_party_page stats.yml docs/agents/prebuilt.md --language python
+	uv run python -m _scripts.third_party_page.create_third_party_page stats.yml docs/agents/prebuilt.md
 
-build-docs: build-typedoc build-prebuilt
-	uv run python -m mkdocs build --clean -f mkdocs.yml --strict
+build-docs: build-prebuilt
+	TARGET_LANGUAGE=python uv run python -m mkdocs build --clean -f mkdocs.yml --strict
+
+build-docs-js: build-prebuilt
+	TARGET_LANGUAGE=js uv run python -m mkdocs build --clean -f mkdocs.yml --strict
 
 llms-text:
 	uv run python -m _scripts.generate_llms_text docs/llms-full.txt
@@ -45,7 +42,7 @@ vercel-build-docs: install-vercel-deps
 serve-clean-docs: clean-docs
 	uv run python -m mkdocs serve -c -f mkdocs.yml --strict -w ../libs/langgraph
 
-serve-docs: build-typedoc
+serve-docs:
 	uv run python -m mkdocs serve -f mkdocs.yml -w ../libs/langgraph  -w ../libs/checkpoint -w ../libs/sdk-py --dirty
 
 clean-docs:

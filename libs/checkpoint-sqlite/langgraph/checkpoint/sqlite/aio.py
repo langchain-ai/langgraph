@@ -203,7 +203,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         while True:
             try:
                 yield asyncio.run_coroutine_threadsafe(
-                    anext(aiter_),  # noqa: F821
+                    anext(aiter_),  # type: ignore[arg-type]  # noqa: F821
                     self.loop,
                 ).result()
             except StopAsyncIteration:
@@ -591,7 +591,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
             )
             await self.conn.commit()
 
-    def get_next_version(self, current: str | None) -> str:
+    def get_next_version(self, current: str | None, channel: None) -> str:
         """Generate the next version ID for a channel.
 
         This method creates a new version identifier for a channel based on its current version.

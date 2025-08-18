@@ -2,21 +2,20 @@
 
 In this guide we will show how to create, configure, and manage an [assistant](../../concepts/assistants.md).
 
-First, as a brief refresher on the concept of configurations, consider the following simple `call_model` node and configuration schema. Observe that this node tries to read and use the `model_name` as defined by the `config` object's `configurable`.
+First, as a brief refresher on the concept of runtime context, consider the following simple `call_model` node and context schema. Observe that this node tries to read and use the `model_provider` as defined by the `Runtime` object's `context` property.
 
 === "Python"
 
     ```python
+    @dataclass
+    class ContextSchema:
+        llm_provider: str = "anthropic"
 
-    class ConfigSchema(TypedDict):
-        model_name: str
+    builder = StateGraph(AgentState, context_schema=ContextSchema)
 
-    builder = StateGraph(AgentState, config_schema=ConfigSchema)
-
-    def call_model(state, config):
+    def call_model(state, runtime: Runtime[ContextSchema]):
         messages = state["messages"]
-        model_name = config.get('configurable', {}).get("model_name", "anthropic")
-        model = _get_model(model_name)
+        model = _get_model(runtime.context.llm_provider)
         response = model.invoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
@@ -44,7 +43,9 @@ First, as a brief refresher on the concept of configurations, consider the follo
     }
     ```
 
-For more information on configurations, [see here](../../concepts/low_level.md#configuration).
+:::python
+For more information on runtime context, [see here](../../concepts/low_level.md#runtime-context).
+:::
 
 ## Create an assistant
 
@@ -212,6 +213,7 @@ We have now created an assistant called "Open AI Assistant" that has `model_name
 
 Output:
 
+    ```
     Receiving event of type: metadata
     {'run_id': '1ef6746e-5893-67b1-978a-0f1cd4060e16'}
 
@@ -219,6 +221,7 @@ Output:
 
     Receiving event of type: updates
     {'agent': {'messages': [{'content': 'I was created by OpenAI, a research organization focused on developing and advancing artificial intelligence technology.', 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_157b3831f5'}, 'type': 'ai', 'name': None, 'id': 'run-e1a6b25c-8416-41f2-9981-f9cfe043f414', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
+    ```
 
 ### LangGraph Platform UI
 
@@ -231,9 +234,11 @@ Inside your deployment, select the "Assistants" tab. For the assistant you would
 To edit the assistant, use the `update` method. This will create a new version of the assistant with the provided edits. See the [Python](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/#langgraph_sdk.client.AssistantsClient.update) and [JS](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/#update) SDK reference docs for more information.
 
 !!! note "Note"
-You must pass in the ENTIRE config (and metadata if you are using it). The update endpoint creates new versions completely from scratch and does not rely on previous versions.
+
+    You must pass in the ENTIRE config (and metadata if you are using it). The update endpoint creates new versions completely from scratch and does not rely on previous versions.
 
 For example, to update your assistant's system prompt:
+
 === "Python"
 
     ```python
@@ -324,4 +329,4 @@ If you now run your graph and pass in this assistant id, it will use the first v
 If using LangGraph Studio, to set the active version of your assistant, click the "Manage Assistants" button and locate the assistant you would like to use. Select the assistant and the version, and then click the "Active" toggle. This will update the assistant to make the selected version active.
 
 !!! warning "Deleting Assistants"
-    Deleting as assistant will delete ALL of its versions. There is currently no way to delete a single version, but by pointing your assistant to the correct version you can skip any versions that you don't wish to use.
+Deleting as assistant will delete ALL of its versions. There is currently no way to delete a single version, but by pointing your assistant to the correct version you can skip any versions that you don't wish to use.

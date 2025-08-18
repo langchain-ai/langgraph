@@ -22,10 +22,10 @@ from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
-fast_llm = ChatOpenAI(model="gpt-3.5-turbo")
+fast_llm = ChatOpenAI(model="gpt-4o-mini")
 # Uncomment for a Fireworks model
 # fast_llm = ChatFireworks(model="accounts/fireworks/models/firefunction-v1", max_tokens=32_000)
-long_context_llm = ChatOpenAI(model="gpt-4-turbo-preview")
+long_context_llm = ChatOpenAI(model="gpt-4o")
 
 
 direct_gen_outline_prompt = ChatPromptTemplate.from_messages(
@@ -144,7 +144,7 @@ gen_perspectives_prompt = ChatPromptTemplate.from_messages(
 )
 
 gen_perspectives_chain = gen_perspectives_prompt | ChatOpenAI(
-    model="gpt-3.5-turbo"
+    model="gpt-4o-mini"
 ).with_structured_output(Perspectives)
 
 
@@ -270,7 +270,7 @@ gen_queries_prompt = ChatPromptTemplate.from_messages(
     ]
 )
 gen_queries_chain = gen_queries_prompt | ChatOpenAI(
-    model="gpt-3.5-turbo"
+    model="gpt-4o-mini"
 ).with_structured_output(Queries, include_raw=True)
 
 
@@ -285,7 +285,7 @@ class AnswerWithCitations(BaseModel):
     @property
     def as_str(self) -> str:
         return f"{self.answer}\n\nCitations:\n\n" + "\n".join(
-            f"[{i+1}]: {url}" for i, url in enumerate(self.cited_urls)
+            f"[{i + 1}]: {url}" for i, url in enumerate(self.cited_urls)
         )
 
 
@@ -553,7 +553,7 @@ async def conduct_interviews(state: ResearchState):
 def format_conversation(interview_state):
     messages = interview_state["messages"]
     convo = "\n".join(f"{m.name}: {m.content}" for m in messages)
-    return f'Conversation with {interview_state["editor"].name}\n\n' + convo
+    return f"Conversation with {interview_state['editor'].name}\n\n" + convo
 
 
 async def refine_outline(state: ResearchState):

@@ -7,7 +7,7 @@ name = "langgraph-docs"
 version = "0.0.1"
 description = "LangGraph docs"
 authors = []
-requires-python = "~=3.10"
+requires-python = "~=3.11"
 readme = "README.md"
 license = "MIT"
 dependencies = [
@@ -30,7 +30,6 @@ docs = [
     "langchain-mcp-adapters",
     "langchain-ollama",
     "mkdocs",
-    "mkdocs-autorefs",
     "mkdocstrings",
     "mkdocstrings-python",
     "mkdocs-minify-plugin",
@@ -40,6 +39,7 @@ docs = [
     "markdown-callouts",
     "markdown-include",
     "mkdocs-exclude",
+    "mkdocs-exclude-search",
     "psycopg[binary]",
     "psycopg-pool",
     "pygments-ansi-color",
@@ -48,6 +48,7 @@ docs = [
     "ruff",
     "jupyter",
     "langchain-cohere",
+    "mkdocs-include-markdown-plugin>=7.1.6",
 ]
 test = [
     "langchain",
@@ -111,4 +112,6 @@ extend-include = ["*.ipynb"]
 [tool.codespell]
 # https://mypy.readthedocs.io/en/stable/config_file.html
 # comma-separated list
-ignore-words-list = "infor"
+ignore-words-list = "infor,thead,stdio,nd,jupyter,lets,lite,uis,deque"
+# Exclude generated files and directories
+skip = "*.ambr,*.lock,*.ipynb,*.yaml,*.zlib,*.css.map,*.js.map"

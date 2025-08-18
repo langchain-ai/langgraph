@@ -4,11 +4,9 @@ on:
   push:
     branches:
       - main
-      - v0
   pull_request:
     branches:
       - main
-      - v0
   workflow_dispatch:
 
 permissions:
@@ -37,16 +35,7 @@ jobs:
         with:
           filter: "docs/docs/**"
 
-  # TODO: Uncomment this to run on PRs
-  # run-changed-notebooks:
-  #   needs: get-changed-files
-  #   uses: ./.github/workflows/run_notebooks.yml
-  #   secrets: inherit
-  #   with:
-  #     changed-files: ${{ needs.get-changed-files.outputs.changed-files }}
-
   deploy:
-    # needs: run-changed-notebooks
     runs-on: ubuntu-latest
     timeout-minutes: 10 # Job will be cancelled if it runs for more than 10 minutes
     env:
@@ -84,9 +73,9 @@ jobs:
         run: make llms-text
       - name: Build site
         run: |
-          # If this is v0 branch, then we want to download stats. we do this 
+          # If this is main branch, then we want to download stats. we do this 
           # with the env variable DOWNLOAD_STATS=true
-          if [ "${{ github.ref }}" == "refs/heads/v0" ]; then
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
             DOWNLOAD_STATS=true make build-docs
           else
             make build-docs
@@ -146,7 +135,7 @@ jobs:
           fi
 
       - name: Configure GitHub Pages
-        if: github.ref == 'refs/heads/v0'
+        if: github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
 
       - name: Upload Pages Artifact
@@ -156,6 +145,6 @@ jobs:
           path: ./docs/site/
 
       - name: Deploy to GitHub Pages
-        if: github.ref == 'refs/heads/v0'
+        if: github.ref == 'refs/heads/main'
         id: deployment
         uses: actions/deploy-pages@v4

@@ -29,7 +29,7 @@ _AIO_ERROR_MSG = (
     "from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver\n"
     "Note: AsyncSqliteSaver requires the aiosqlite package to use.\n"
     "Install with:\n`pip install aiosqlite`\n"
-    "See https://langchain-ai.github.io/langgraph/reference/checkpoints/asyncsqlitesaver"
+    "See https://langchain-ai.github.io/langgraph/reference/checkpoints/#langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver"
     "for more information."
 )
 
@@ -536,7 +536,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
-    def get_next_version(self, current: str | None) -> str:
+    def get_next_version(self, current: str | None, channel: None) -> str:
         """Generate the next version ID for a channel.
 
         This method creates a new version identifier for a channel based on its current version.

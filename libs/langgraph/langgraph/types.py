@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import dataclasses
 import sys
 from collections import deque
 from collections.abc import Hashable, Sequence
+from dataclasses import asdict, dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -14,16 +14,20 @@ from typing import (
     NamedTuple,
     TypeVar,
     Union,
-    cast,
+    final,
 )
+from warnings import warn
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from typing_extensions import Self
+from typing_extensions import Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
+from langgraph._internal._cache import default_cache_key
+from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
+from langgraph._internal._retry import default_retry_on
+from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from langgraph.utils.cache import default_cache_key
-from langgraph.utils.fields import get_cached_annotated_keys, get_update_as_tuples
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -37,6 +41,30 @@ except ImportError:
         pass
 
 
+__all__ = (
+    "All",
+    "Checkpointer",
+    "StreamMode",
+    "StreamWriter",
+    "RetryPolicy",
+    "CachePolicy",
+    "Interrupt",
+    "StateUpdate",
+    "PregelTask",
+    "PregelExecutableTask",
+    "StateSnapshot",
+    "Send",
+    "Command",
+    "Durability",
+    "interrupt",
+)
+
+Durability = Literal["sync", "async", "exit"]
+"""Durability mode for the graph execution.
+- `"sync"`: Changes are persisted synchronously before the next step starts.
+- `"async"`: Changes are persisted asynchronously while the next step executes.
+- `"exit"`: Changes are persisted only when the graph exits."""
+
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
@@ -46,7 +74,9 @@ Checkpointer = Union[None, bool, BaseCheckpointSaver]
 - False disables checkpointing, even if the parent graph has a checkpointer.
 - None inherits checkpointer from the parent graph."""
 
-StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
+StreamMode = Literal[
+    "values", "updates", "checkpoints", "tasks", "debug", "messages", "custom"
+]
 """How the stream method should emit outputs.
 
 - `"values"`: Emit all values in the state after each step, including interrupts.
@@ -55,7 +85,9 @@ StreamMode = Literal["values", "updates", "debug", "messages", "custom"]
     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
 - `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
-- `"debug"`: Emit debug events with as much information as possible for each step.
+- `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by get_state().
+- `"tasks"`: Emit events when tasks start and finish, including their results and errors.
+- `"debug"`: Emit "checkpoints" and "tasks" events, for debugging purposes.
 """
 
 StreamWriter = Callable[[Any], None]
@@ -64,40 +96,11 @@ Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using stream_mode="custom"."""
 
 if sys.version_info >= (3, 10):
+    _DC_SLOTS = {"slots": True}
     _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 else:
+    _DC_SLOTS = {}
     _DC_KWARGS = {"frozen": True}
-
-
-def default_retry_on(exc: Exception) -> bool:
-    import httpx
-    import requests
-
-    if isinstance(exc, ConnectionError):
-        return True
-    if isinstance(exc, httpx.HTTPStatusError):
-        return 500 <= exc.response.status_code < 600
-    if isinstance(exc, requests.HTTPError):
-        return 500 <= exc.response.status_code < 600 if exc.response else True
-    if isinstance(
-        exc,
-        (
-            ValueError,
-            TypeError,
-            ArithmeticError,
-            ImportError,
-            LookupError,
-            NameError,
-            SyntaxError,
-            RuntimeError,
-            ReferenceError,
-            StopIteration,
-            StopAsyncIteration,
-            OSError,
-        ),
-    ):
-        return False
-    return True
 
 
 class RetryPolicy(NamedTuple):
@@ -125,7 +128,7 @@ class RetryPolicy(NamedTuple):
 KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., Union[str, bytes]])
 
 
-@dataclasses.dataclass(**_DC_KWARGS)
+@dataclass(**_DC_KWARGS)
 class CachePolicy(Generic[KeyFuncT]):
     """Configuration for caching nodes."""
 
@@ -137,29 +140,71 @@ class CachePolicy(Generic[KeyFuncT]):
     """Time to live for the cache entry in seconds. If None, the entry never expires."""
 
 
-@dataclasses.dataclass(**_DC_KWARGS)
+_DEFAULT_INTERRUPT_ID = "placeholder-id"
+
+
+@final
+@dataclass(init=False, **_DC_SLOTS)
 class Interrupt:
     """Information about an interrupt that occurred in a node.
 
     !!! version-added "Added in version 0.2.24."
+
+    !!! version-changed "Changed in version v0.4.0"
+        * `interrupt_id` was introduced as a property
+
+    !!! version-changed "Changed in version v0.6.0"
+
+        The following attributes have been removed:
+
+        * `ns`
+        * `when`
+        * `resumable`
+        * `interrupt_id`, deprecated in favor of `id`
     """
 
     value: Any
-    resumable: bool = False
-    ns: Sequence[str] | None = None
-    when: Literal["during"] = dataclasses.field(default="during", repr=False)
+    """The value associated with the interrupt."""
+
+    id: str
+    """The ID of the interrupt. Can be used to resume the interrupt directly."""
+
+    def __init__(
+        self,
+        value: Any,
+        id: str = _DEFAULT_INTERRUPT_ID,
+        **deprecated_kwargs: Unpack[DeprecatedKwargs],
+    ) -> None:
+        self.value = value
+
+        if (
+            (ns := deprecated_kwargs.get("ns", MISSING)) is not MISSING
+            and (id == _DEFAULT_INTERRUPT_ID)
+            and (isinstance(ns, Sequence))
+        ):
+            self.id = xxh3_128_hexdigest("|".join(ns).encode())
+        else:
+            self.id = id
+
+    @classmethod
+    def from_ns(cls, value: Any, ns: str) -> Interrupt:
+        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()))
 
     @property
+    @deprecated("`interrupt_id` is deprecated. Use `id` instead.", category=None)
     def interrupt_id(self) -> str:
-        """Generate a unique ID for the interrupt based on its namespace."""
-        if self.ns is None:
-            return "placeholder-id"
-        return xxh3_128_hexdigest("|".join(self.ns).encode())
+        warn(
+            "`interrupt_id` is deprecated. Use `id` instead.",
+            LangGraphDeprecatedSinceV10,
+            stacklevel=2,
+        )
+        return self.id
 
 
 class StateUpdate(NamedTuple):
     values: dict[str, Any] | None
     as_node: str | None = None
+    task_id: str | None = None
 
 
 class PregelTask(NamedTuple):
@@ -191,7 +236,7 @@ class CacheKey(NamedTuple):
     """Time to live for the cache entry in seconds."""
 
 
-@dataclasses.dataclass(**_T_DC_KWARGS)
+@dataclass(**_T_DC_KWARGS)
 class PregelExecutableTask:
     name: str
     input: Any
@@ -203,7 +248,6 @@ class PregelExecutableTask:
     cache_key: CacheKey | None
     id: str
     path: tuple[str | int | tuple, ...]
-    scheduled: bool = False
     writers: Sequence[Runnable] = ()
     subgraphs: Sequence[PregelProtocol] = ()
 
@@ -303,7 +347,7 @@ class Send:
 N = TypeVar("N", bound=Hashable)
 
 
-@dataclasses.dataclass(**_DC_KWARGS)
+@dataclass(**_DC_KWARGS)
 class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
@@ -336,9 +380,7 @@ class Command(Generic[N], ToolOutputMixin):
     def __repr__(self) -> str:
         # get all non-None values
         contents = ", ".join(
-            f"{key}={value!r}"
-            for key, value in dataclasses.asdict(self).items()
-            if value
+            f"{key}={value!r}" for key, value in asdict(self).items() if value
         )
         return f"Command({contents})"
 
@@ -358,39 +400,6 @@ class Command(Generic[N], ToolOutputMixin):
             return []
 
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
-
-
-StreamChunk = tuple[tuple[str, ...], str, Any]
-
-
-class StreamProtocol:
-    __slots__ = ("modes", "__call__")
-
-    modes: set[StreamMode]
-
-    __call__: Callable[[Self, StreamChunk], None]
-
-    def __init__(
-        self,
-        __call__: Callable[[StreamChunk], None],
-        modes: set[StreamMode],
-    ) -> None:
-        self.__call__ = cast(Callable[[Self, StreamChunk], None], __call__)
-        self.modes = modes
-
-
-@dataclasses.dataclass(**_DC_KWARGS)
-class PregelScratchpad:
-    step: int
-    stop: int
-    # call
-    call_counter: Callable[[], int]
-    # interrupt
-    interrupt_counter: Callable[[], int]
-    get_null_resume: Callable[[bool], Any]
-    resume: list[Any]
-    # subgraph
-    subgraph_counter: Callable[[], int]
 
 
 def interrupt(value: Any) -> Any:
@@ -421,10 +430,10 @@ def interrupt(value: Any) -> Any:
         from typing import Optional
         from typing_extensions import TypedDict
 
-        from langgraph.checkpoint.memory import MemorySaver
+        from langgraph.checkpoint.memory import InMemorySaver
         from langgraph.constants import START
         from langgraph.graph import StateGraph
-        from langgraph.types import interrupt
+        from langgraph.types import interrupt, Command
 
 
         class State(TypedDict):
@@ -450,7 +459,7 @@ def interrupt(value: Any) -> Any:
         builder.add_edge(START, \"node\")
 
         # A checkpointer must be enabled for interrupts to work!
-        checkpointer = MemorySaver()
+        checkpointer = InMemorySaver()
         graph = builder.compile(checkpointer=checkpointer)
 
         config = {
@@ -461,22 +470,16 @@ def interrupt(value: Any) -> Any:
 
         for chunk in graph.stream({\"foo\": \"abc\"}, config):
             print(chunk)
-        ```
 
-        ```pycon
-        {'__interrupt__': (Interrupt(value='what is your age?', resumable=True, ns=['node:62e598fa-8653-9d6d-2046-a70203020e37'], when='during'),)}
-        ```
+        # > {'__interrupt__': (Interrupt(value='what is your age?', id='45fda8478b2ef754419799e10992af06'),)}
 
-        ```python
         command = Command(resume=\"some input from a human!!!\")
 
         for chunk in graph.stream(Command(resume=\"some input from a human!!!\"), config):
             print(chunk)
-        ```
 
-        ```pycon
-        Received an input from the interrupt: some input from a human!!!
-        {'node': {'human_value': 'some input from a human!!!'}}
+        # > Received an input from the interrupt: some input from a human!!!
+        # > {'node': {'human_value': 'some input from a human!!!'}}
         ```
 
     Args:
@@ -488,23 +491,23 @@ def interrupt(value: Any) -> Any:
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
     """
-    from langgraph.config import get_config
-    from langgraph.constants import (
+    from langgraph._internal._constants import (
         CONFIG_KEY_CHECKPOINT_NS,
         CONFIG_KEY_SCRATCHPAD,
         CONFIG_KEY_SEND,
-        NS_SEP,
         RESUME,
     )
+    from langgraph.config import get_config
     from langgraph.errors import GraphInterrupt
 
     conf = get_config()["configurable"]
     # track interrupt index
-    scratchpad: PregelScratchpad = conf[CONFIG_KEY_SCRATCHPAD]
+    scratchpad = conf[CONFIG_KEY_SCRATCHPAD]
     idx = scratchpad.interrupt_counter()
     # find previous resume values
     if scratchpad.resume:
         if idx < len(scratchpad.resume):
+            conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
             return scratchpad.resume[idx]
     # find current resume value
     v = scratchpad.get_null_resume(True)
@@ -516,10 +519,9 @@ def interrupt(value: Any) -> Any:
     # no resume value found
     raise GraphInterrupt(
         (
-            Interrupt(
+            Interrupt.from_ns(
                 value=value,
-                resumable=True,
-                ns=cast(str, conf[CONFIG_KEY_CHECKPOINT_NS]).split(NS_SEP),
+                ns=conf[CONFIG_KEY_CHECKPOINT_NS],
             ),
         )
     )

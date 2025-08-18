@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint"
-version = "2.0.26"
+version = "2.1.1"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
 requires-python = ">=3.9"
@@ -13,7 +13,7 @@ license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
     "langchain-core>=0.2.38",
-    "ormsgpack>=1.8.0",
+    "ormsgpack>=1.10.0",
 ]
 
 [project.urls]
@@ -29,6 +29,10 @@ dev = [
   "pytest-watcher",
   "mypy",
   "dataclasses-json",
+  "numpy",
+  "pandas",
+  "pandas-stubs>=2.2.2.240807",
+  "redis",
 ]
 
 [tool.hatch.build.targets.wheel]

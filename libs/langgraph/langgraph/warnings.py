@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+__all__ = (
+    "LangGraphDeprecationWarning",
+    "LangGraphDeprecatedSinceV05",
+    "LangGraphDeprecatedSinceV10",
+)
+
 
 class LangGraphDeprecationWarning(DeprecationWarning):
     """A LangGraph specific deprecation warning.
@@ -39,6 +45,13 @@ class LangGraphDeprecationWarning(DeprecationWarning):
             f" to be removed in V{self.expected_removal[0]}.{self.expected_removal[1]}."
         )
         return message
+
+
+class LangGraphDeprecatedSinceV05(LangGraphDeprecationWarning):
+    """A specific `LangGraphDeprecationWarning` subclass defining functionality deprecated since LangGraph v0.5.0"""
+
+    def __init__(self, message: str, *args: object) -> None:
+        super().__init__(message, *args, since=(0, 5), expected_removal=(2, 0))
 
 
 class LangGraphDeprecatedSinceV10(LangGraphDeprecationWarning):
