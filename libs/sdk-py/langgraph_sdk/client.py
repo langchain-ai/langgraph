@@ -33,6 +33,7 @@ import langgraph_sdk
 from langgraph_sdk.schema import (
     All,
     Assistant,
+    AssistantSelectField,
     AssistantSortBy,
     AssistantVersion,
     CancelAction,
@@ -41,6 +42,7 @@ from langgraph_sdk.schema import (
     Config,
     Context,
     Cron,
+    CronSelectField,
     CronSortBy,
     DisconnectMode,
     GraphSchema,
@@ -54,6 +56,7 @@ from langgraph_sdk.schema import (
     Run,
     RunCreate,
     RunCreateMetadata,
+    RunSelectField,
     RunStatus,
     SearchItemsResponse,
     SortOrder,
@@ -61,6 +64,7 @@ from langgraph_sdk.schema import (
     StreamPart,
     Subgraphs,
     Thread,
+    ThreadSelectField,
     ThreadSortBy,
     ThreadState,
     ThreadStatus,
@@ -909,6 +913,7 @@ class AssistantsClient:
         offset: int = 0,
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Assistant]:
@@ -952,6 +957,8 @@ class AssistantsClient:
             payload["sort_by"] = sort_by
         if sort_order:
             payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         return await self.http.post(
             "/assistants/search",
             json=payload,
@@ -1251,6 +1258,7 @@ class ThreadsClient:
         offset: int = 0,
         sort_by: ThreadSortBy | None = None,
         sort_order: SortOrder | None = None,
+        select: list[ThreadSelectField] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Thread]:
@@ -1298,6 +1306,8 @@ class ThreadsClient:
             payload["sort_by"] = sort_by
         if sort_order:
             payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         return await self.http.post(
             "/threads/search",
             json=payload,
@@ -2253,6 +2263,7 @@ class RunsClient:
         limit: int = 10,
         offset: int = 0,
         status: RunStatus | None = None,
+        select: list[RunSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Run]:
         """List runs.
@@ -2285,6 +2296,8 @@ class RunsClient:
         }
         if status is not None:
             params["status"] = status
+        if select:
+            params["select"] = select
         return await self.http.get(
             f"/threads/{thread_id}/runs", params=params, headers=headers
         )
@@ -2700,6 +2713,7 @@ class CronClient:
         offset: int = 0,
         sort_by: CronSortBy | None = None,
         sort_order: SortOrder | None = None,
+        select: list[CronSelectField] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Cron]:
@@ -2764,6 +2778,8 @@ class CronClient:
             payload["sort_by"] = sort_by
         if sort_order:
             payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         payload = {k: v for k, v in payload.items() if v is not None}
         return await self.http.post(
             "/runs/crons/search", json=payload, headers=headers, params=params
@@ -3813,6 +3829,7 @@ class SyncAssistantsClient:
         offset: int = 0,
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Assistant]:
         """Search for assistants.
@@ -3852,6 +3869,8 @@ class SyncAssistantsClient:
             payload["sort_by"] = sort_by
         if sort_order:
             payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         return self.http.post(
             "/assistants/search",
             json=payload,
@@ -4126,6 +4145,7 @@ class SyncThreadsClient:
         offset: int = 0,
         sort_by: ThreadSortBy | None = None,
         sort_order: SortOrder | None = None,
+        select: list[ThreadSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Thread]:
         """Search for threads.
@@ -4168,6 +4188,8 @@ class SyncThreadsClient:
             payload["sort_by"] = sort_by
         if sort_order:
             payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         return self.http.post("/threads/search", json=payload, headers=headers)
 
     def copy(
@@ -5088,6 +5110,8 @@ class SyncRunsClient:
         *,
         limit: int = 10,
         offset: int = 0,
+        status: RunStatus | None = None,
+        select: list[RunSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Run]:
         """List runs.
@@ -5113,8 +5137,13 @@ class SyncRunsClient:
             ```
 
         """  # noqa: E501
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        if status is not None:
+            params["status"] = status
+        if select:
+            params["select"] = select
         return self.http.get(
-            f"/threads/{thread_id}/runs?limit={limit}&offset={offset}", headers=headers
+            f"/threads/{thread_id}/runs", params=params, headers=headers
         )
 
     def get(
@@ -5515,6 +5544,7 @@ class SyncCronClient:
         offset: int = 0,
         sort_by: CronSortBy | None = None,
         sort_order: SortOrder | None = None,
+        select: list[CronSelectField] | None = None,
         headers: dict[str, str] | None = None,
     ) -> list[Cron]:
         """Get a list of cron jobs.
@@ -5576,6 +5606,8 @@ class SyncCronClient:
             payload["sort_by"] = sort_by
         if sort_order:
             payload["sort_order"] = sort_order
+        if select:
+            payload["select"] = select
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post("/runs/crons/search", json=payload, headers=headers)
 
