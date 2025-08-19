@@ -5,7 +5,6 @@ from typing import (
     Any,
     Awaitable,
     Callable,
-    Literal,
     Optional,
     Sequence,
     Type,
@@ -204,7 +203,6 @@ class _AgentBuilder:
         post_model_hook: Optional[RunnableLike] = None,
         state_schema: Optional[StateSchemaType] = None,
         context_schema: Optional[Type[Any]] = None,
-        version: Literal["v1", "v2"] = "v2",
         name: Optional[str] = None,
         store: Optional[BaseStore] = None,
     ):
@@ -216,7 +214,6 @@ class _AgentBuilder:
         self.post_model_hook = post_model_hook
         self.state_schema = state_schema
         self.context_schema = context_schema
-        self.version = version
         self.name = name
         self.store = store
 
@@ -604,11 +601,8 @@ class _AgentBuilder:
                 else:
                     return END
             else:
-                if self.version == "v1":
-                    return "tools"
-                elif self.version == "v2":
-                    if self.post_model_hook is not None:
-                        return "post_model_hook"
+                if self.post_model_hook is not None:
+                    return "post_model_hook"
                     tool_calls = [
                         self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
                         for call in last_message.tool_calls
@@ -794,7 +788,6 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
     **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
@@ -906,9 +899,6 @@ def create_react_agent(
         post_model_hook: An optional node to add after the `agent` node (i.e., the node that calls the LLM).
             Useful for implementing human-in-the-loop, guardrails, validation, or other post-processing.
             Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
-
-            !!! Note
-                Only available with `version="v2"`.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -924,15 +914,6 @@ def create_react_agent(
             Should be one of the following: "agent", "tools".
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
-        version: Determines the version of the graph to create.
-            Can be one of:
-
-            - `"v1"`: The tool node processes a single message. All tool
-                calls in the message are executed in parallel within the tool node.
-            - `"v2"`: The tool node processes a tool call.
-                Tool calls are distributed across multiple instances of the tool
-                node using the [Send](https://langchain-ai.github.io/langgraph/concepts/low_level/#send)
-                API.
         name: An optional name for the CompiledStateGraph.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
@@ -1000,11 +981,6 @@ def create_react_agent(
             f"create_react_agent() got unexpected keyword arguments: {deprecated_kwargs}"
         )
 
-    if version not in ("v1", "v2"):
-        raise ValueError(
-            f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
-        )
-
     if response_format and not isinstance(response_format, ToolOutput):
         # Then it's a pydantic model or JSONSchema. We'll automatically convert
         # it to the tool output strategy as it is widely supported.
@@ -1031,7 +1007,6 @@ def create_react_agent(
         post_model_hook=post_model_hook,
         state_schema=state_schema,
         context_schema=context_schema,
-        version=version,
         name=name,
         store=store,
     )
