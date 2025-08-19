@@ -32,6 +32,7 @@ from langchain_core.runnables import (
     RunnableConfig,
     RunnableSequence,
 )
+from langchain_core.runnables.configurable import DynamicRunnable
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 from typing_extensions import Annotated, NotRequired, TypedDict
@@ -193,6 +194,9 @@ def _should_bind_tools(
 
 def _get_model(model: LanguageModelLike) -> BaseChatModel:
     """Get the underlying model from a RunnableBinding or return the model itself."""
+    if isinstance(model, DynamicRunnable):
+        model, _ = model.prepare()
+
     if isinstance(model, RunnableSequence):
         model = next(
             (
