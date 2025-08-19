@@ -77,6 +77,53 @@ class ToolOutput(Generic[SchemaT]):
             self.schema_specs = [_SchemaSpec(schema)]
 
 
+@dataclass(init=False)
+class NativeOutput(Generic[SchemaT]):
+    """Use the model provider's native structured output method."""
+
+    schema: SchemaSpec[SchemaT]
+    """Exactly one schema for native mode."""
+    provider: Literal["openai", "grok"] = "openai"
+    """Provider hint. Grok uses OpenAI-compatible payload, but other providers 
+    may use a different format when native structured output is more widely supported.
+    """
+
+    def __init__(
+        self,
+        schema: SchemaT | SchemaSpec[SchemaT],
+        *,
+        provider: Literal["openai", "grok"] = "openai",
+    ) -> None:
+        if isinstance(schema, SchemaSpec):
+            self.schema = schema
+        else:
+            self.schema = SchemaSpec(schema)
+        self.provider = provider
+
+    def to_model_kwargs(self) -> dict[str, Any]:
+        model_cls = self.schema.schema
+        if not (isinstance(model_cls, type) and issubclass(model_cls, BaseModel)):
+            raise ValueError(
+                f"Unsupported schema type: {type(model_cls)}. Only Pydantic models are supported."
+            )
+            # TODO: add typed dict and dataclass support
+
+        name = self.schema.name or model_cls.__name__
+        json_schema = model_cls.model_json_schema()
+
+        # OpenAI: 
+        # - see https://platform.openai.com/docs/guides/structured-outputs
+        # - response_format is converted to text_format in payload: https://github.com/keenborder786/langchain/blob/69ab335f9559911dc2f38908c39106fe8ba24f06/libs/partners/openai/langchain_openai/chat_models/base.py#L3567
+        response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": name,
+                "schema": json_schema,
+            },
+        }
+        return {"response_format": response_format}
+
+
 @dataclass
 class OutputToolBinding(Generic[SchemaT]):
     """Information for tracking structured output tool metadata.
@@ -166,4 +213,4 @@ class OutputToolBinding(Generic[SchemaT]):
 
 
 # TODO: Add support for built-in structured responses (e.g., openai, grok)
-ResponseFormat = ToolOutput[SchemaT]
+ResponseFormat = Union[ToolOutput[SchemaT], NativeOutput[SchemaT]]
