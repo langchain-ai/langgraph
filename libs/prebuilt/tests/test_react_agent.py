@@ -35,7 +35,6 @@ from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
     AgentStatePydantic,
     StateSchemaType,
-    _get_model,
     _validate_chat_history,
 )
 from langgraph.prebuilt.tool_node import (
@@ -1227,30 +1226,6 @@ def test_tool_node_node_interrupt(
             id=AnyStr(),
         ),
     )
-
-
-def test_get_model() -> None:
-    model = FakeToolCallingModel(tool_calls=[])
-    assert _get_model(model) == model
-
-    @dec_tool
-    def some_tool(some_val: int) -> str:
-        """Tool docstring."""
-        return "meow"
-
-    model_with_tools = model.bind_tools([some_tool])
-    assert _get_model(model_with_tools) == model
-
-    seq = model | RunnableLambda(lambda message: message)
-    assert _get_model(seq) == model
-
-    seq_with_tools = model.bind_tools([some_tool]) | RunnableLambda(
-        lambda message: message
-    )
-    assert _get_model(seq_with_tools) == model
-
-    with pytest.raises(TypeError):
-        _get_model(RunnableLambda(lambda message: message))
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
