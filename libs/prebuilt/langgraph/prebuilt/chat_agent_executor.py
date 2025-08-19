@@ -603,11 +603,11 @@ class _AgentBuilder:
             else:
                 if self.post_model_hook is not None:
                     return "post_model_hook"
-                    tool_calls = [
-                        self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
-                        for call in last_message.tool_calls
-                    ]
-                    return [Send("tools", [tool_call]) for tool_call in tool_calls]
+                tool_calls = [
+                    self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
+                    for call in last_message.tool_calls
+                ]
+                return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
         return should_continue
 

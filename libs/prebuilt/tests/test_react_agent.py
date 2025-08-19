@@ -2,7 +2,6 @@ import dataclasses
 import inspect
 from typing import (
     Annotated,
-    Literal,
     Optional,
     Union,
 )
@@ -53,18 +52,14 @@ from tests.model import FakeToolCallingModel
 
 pytestmark = pytest.mark.anyio
 
-REACT_TOOL_CALL_VERSIONS = ["v1", "v2"]
 
-
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_no_prompt(sync_checkpointer: BaseCheckpointSaver, version: str) -> None:
+def test_no_prompt(sync_checkpointer: BaseCheckpointSaver) -> None:
     model = FakeToolCallingModel()
 
     agent = create_react_agent(
         model,
         [],
         checkpointer=sync_checkpointer,
-        version=version,
     )
     inputs = [HumanMessage("hi?")]
     thread = {"configurable": {"thread_id": "123"}}
@@ -172,8 +167,7 @@ def test_runnable_prompt():
     assert response == expected_response
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_prompt_with_store(version: Literal["v1", "v2"]):
+def test_prompt_with_store():
     def add(a: int, b: int):
         """Adds a and b"""
         return a + b
@@ -198,7 +192,6 @@ def test_prompt_with_store(version: Literal["v1", "v2"]):
         [add],
         prompt=prompt,
         store=in_memory_store,
-        version=version,
     )
     response = agent.invoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "1"}}
@@ -211,7 +204,6 @@ def test_prompt_with_store(version: Literal["v1", "v2"]):
         [add],
         prompt=prompt_no_store,
         store=in_memory_store,
-        version=version,
     )
     response = agent.invoke(
         {"messages": [("user", "hi")]}, {"configurable": {"user_id": "2"}}
@@ -262,9 +254,8 @@ async def test_prompt_with_store_async():
 
 
 @pytest.mark.parametrize("tool_style", ["openai", "anthropic"])
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 @pytest.mark.parametrize("include_builtin", [True, False])
-def test_model_with_tools(tool_style: str, version: str, include_builtin: bool) -> None:
+def test_model_with_tools(tool_style: str, include_builtin: bool) -> None:
     model = FakeToolCallingModel(tool_style=tool_style)
 
     @dec_tool
@@ -299,7 +290,6 @@ def test_model_with_tools(tool_style: str, version: str, include_builtin: bool) 
         create_react_agent(
             model.bind_tools(tools),
             tools,
-            version=version,
         )
 
 
@@ -429,8 +419,7 @@ def test__infer_handled_types() -> None:
         _infer_handled_types(handler)
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_react_agent_with_structured_response(version: str) -> None:
+def test_react_agent_with_structured_response() -> None:
     class WeatherResponse(BaseModel):
         temperature: float = Field(description="The temperature in fahrenheit")
 
@@ -451,7 +440,6 @@ def test_react_agent_with_structured_response(version: str) -> None:
         model,
         [get_weather],
         response_format=WeatherResponse,
-        version=version,
     )
     response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
     assert response["structured_response"] == expected_structured_response
@@ -484,11 +472,9 @@ class CustomStatePydantic(AgentStatePydantic):
     user_name: Optional[str] = None
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 @pytest.mark.parametrize("state_schema", [CustomState, CustomStatePydantic])
 def test_react_agent_update_state(
     sync_checkpointer: BaseCheckpointSaver,
-    version: Literal["v1", "v2"],
     state_schema: StateSchemaType,
 ) -> None:
     @dec_tool
@@ -533,7 +519,6 @@ def test_react_agent_update_state(
         state_schema=state_schema,
         prompt=prompt,
         checkpointer=sync_checkpointer,
-        version=version,
     )
     config = {"configurable": {"thread_id": "1"}}
     # Run until interrupted
@@ -549,9 +534,8 @@ def test_react_agent_update_state(
     assert tool_message.name == "get_user_name"
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_react_agent_parallel_tool_calls(
-    sync_checkpointer: BaseCheckpointSaver, version: str
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     human_assistance_execution_count = 0
 
@@ -584,7 +568,6 @@ def test_react_agent_parallel_tool_calls(
         model,
         [human_assistance, get_weather],
         checkpointer=sync_checkpointer,
-        version=version,
     )
     config = {"configurable": {"thread_id": "1"}}
     query = "Get user assistance and also check the weather"
@@ -595,17 +578,11 @@ def test_react_agent_parallel_tool_calls(
         if messages := event.get("messages"):
             message_types.append([m.type for m in messages])
 
-    if version == "v1":
-        assert message_types == [
-            ["human"],
-            ["human", "ai"],
-        ]
-    elif version == "v2":
-        assert message_types == [
-            ["human"],
-            ["human", "ai"],
-            ["human", "ai", "tool"],
-        ]
+    assert message_types == [
+        ["human"],
+        ["human", "ai"],
+        ["human", "ai", "tool"],
+    ]
 
     # Resume
     message_types = []
@@ -621,12 +598,8 @@ def test_react_agent_parallel_tool_calls(
         ["human", "ai", "tool", "tool", "ai"],
     ]
 
-    if version == "v1":
-        assert human_assistance_execution_count == 1
-        assert get_weather_execution_count == 2
-    elif version == "v2":
-        assert human_assistance_execution_count == 1
-        assert get_weather_execution_count == 1
+    assert human_assistance_execution_count == 1
+    assert get_weather_execution_count == 1
 
 
 class AgentStateExtraKey(AgentState):
@@ -637,13 +610,10 @@ class AgentStateExtraKeyPydantic(AgentStatePydantic):
     foo: int
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 @pytest.mark.parametrize(
     "state_schema", [AgentStateExtraKey, AgentStateExtraKeyPydantic]
 )
-def test_create_react_agent_inject_vars(
-    version: Literal["v1", "v2"], state_schema: StateSchemaType
-) -> None:
+def test_create_react_agent_inject_vars(state_schema: StateSchemaType) -> None:
     """Test that the agent can inject state and store into tool functions."""
     store = InMemoryStore()
     namespace = ("test",)
@@ -682,7 +652,6 @@ def test_create_react_agent_inject_vars(
         ToolNode([tool1], handle_tool_errors=False),
         state_schema=state_schema,
         store=store,
-        version=version,
     )
     result = agent.invoke({"messages": [{"role": "user", "content": "hi"}], "foo": 2})
     assert result["messages"] == [
@@ -694,8 +663,7 @@ def test_create_react_agent_inject_vars(
     assert result["foo"] == 2
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-async def test_return_direct(version: str) -> None:
+async def test_return_direct() -> None:
     @dec_tool(return_direct=True)
     def tool_return_direct(input: str) -> str:
         """A tool that returns directly."""
@@ -722,7 +690,6 @@ async def test_return_direct(version: str) -> None:
     agent = create_react_agent(
         model,
         [tool_return_direct, tool_normal],
-        version=version,
     )
 
     # Test direct return for tool_return_direct
@@ -747,9 +714,7 @@ async def test_return_direct(version: str) -> None:
         ),
     ]
     model = FakeToolCallingModel(tool_calls=[second_tool_call, []])
-    agent = create_react_agent(
-        model, [tool_return_direct, tool_normal], version=version
-    )
+    agent = create_react_agent(model, [tool_return_direct, tool_normal])
     result = agent.invoke(
         {"messages": [HumanMessage(content="Test normal", id="hum1")]}
     )
@@ -778,9 +743,7 @@ async def test_return_direct(version: str) -> None:
         ),
     ]
     model = FakeToolCallingModel(tool_calls=[both_tool_calls, []])
-    agent = create_react_agent(
-        model, [tool_return_direct, tool_normal], version=version
-    )
+    agent = create_react_agent(model, [tool_return_direct, tool_normal])
     result = agent.invoke({"messages": [HumanMessage(content="Test both", id="hum2")]})
     assert result["messages"] == [
         HumanMessage(content="Test both", id="hum2"),
@@ -821,9 +784,8 @@ def test_inspect_react() -> None:
     inspect.getclosurevars(agent.nodes["agent"].bound.func)
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_react_with_subgraph_tools(
-    sync_checkpointer: BaseCheckpointSaver, version: Literal["v1", "v2"]
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     class State(TypedDict):
         a: int
@@ -879,7 +841,6 @@ def test_react_with_subgraph_tools(
         model,
         tool_node,
         checkpointer=sync_checkpointer,
-        version=version,
     )
     result = agent.invoke(
         {"messages": [HumanMessage(content="What's 2 + 3 and 2 * 3?")]},
@@ -910,8 +871,7 @@ def test_react_with_subgraph_tools(
     ]
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_react_agent_subgraph_streaming_sync(version: Literal["v1", "v2"]) -> None:
+def test_react_agent_subgraph_streaming_sync() -> None:
     """Test React agent streaming when used as a subgraph node sync version"""
 
     @dec_tool
@@ -931,7 +891,6 @@ def test_react_agent_subgraph_streaming_sync(version: Literal["v1", "v2"]) -> No
         model,
         tools=[get_weather],
         prompt="You are a helpful travel assistant.",
-        version=version,
     )
 
     # Create a subgraph that uses the React agent as a node
@@ -1001,8 +960,7 @@ def test_react_agent_subgraph_streaming_sync(version: Literal["v1", "v2"]) -> No
     assert msg.content.startswith("The weather of Tokyo is sunny.")
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-async def test_react_agent_subgraph_streaming(version: Literal["v1", "v2"]) -> None:
+async def test_react_agent_subgraph_streaming() -> None:
     """Test React agent streaming when used as a subgraph node."""
 
     @dec_tool
@@ -1022,7 +980,6 @@ async def test_react_agent_subgraph_streaming(version: Literal["v1", "v2"]) -> N
         model,
         tools=[get_weather],
         prompt="You are a helpful travel assistant.",
-        version=version,
     )
 
     # Create a subgraph that uses the React agent as a node
@@ -1094,9 +1051,8 @@ async def test_react_agent_subgraph_streaming(version: Literal["v1", "v2"]) -> N
     assert msg.content.startswith("The weather of Tokyo is sunny.")
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_tool_node_node_interrupt(
-    sync_checkpointer: BaseCheckpointSaver, version: str
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
     def tool_normal(some_val: int) -> str:
         """Tool docstring."""
@@ -1122,7 +1078,6 @@ def test_tool_node_node_interrupt(
         model,
         [tool_interrupt, tool_normal],
         checkpointer=sync_checkpointer,
-        version=version,
     )
     result = agent.invoke({"messages": [HumanMessage("hi?")]}, config)
     expected_messages = [
@@ -1147,11 +1102,7 @@ def test_tool_node_node_interrupt(
         ),
         _AnyIdToolMessage(content="normal", name="tool_normal", tool_call_id="2"),
     ]
-    if version == "v1":
-        # Interrupt blocks second tool result
-        assert result["messages"] == expected_messages[:-1]
-    elif version == "v2":
-        assert result["messages"] == expected_messages
+    assert result["messages"] == expected_messages
 
     state = agent.get_state(config)
     assert state.next == ("tools",)
@@ -1165,8 +1116,7 @@ def test_tool_node_node_interrupt(
     )
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_dynamic_model_basic(version: str) -> None:
+def test_dynamic_model_basic() -> None:
     """Test basic dynamic model functionality."""
 
     def dynamic_model(state, runtime: Runtime):
@@ -1176,7 +1126,7 @@ def test_dynamic_model_basic(version: str) -> None:
         else:
             return FakeToolCallingModel(tool_calls=[])
 
-    agent = create_react_agent(dynamic_model, [], version=version)
+    agent = create_react_agent(dynamic_model, [])
 
     result = agent.invoke({"messages": [HumanMessage("hello")]})
     assert len(result["messages"]) == 2
@@ -1187,8 +1137,7 @@ def test_dynamic_model_basic(version: str) -> None:
     assert result["messages"][-1].content == "urgent help"
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_dynamic_model_with_tools(version: Literal["v1", "v2"]) -> None:
+def test_dynamic_model_with_tools() -> None:
     """Test dynamic model with tool calling."""
 
     @dec_tool
@@ -1215,9 +1164,7 @@ def test_dynamic_model_with_tools(version: Literal["v1", "v2"]) -> None:
                 tool_calls=[[{"args": {"x": 1}, "id": "1", "name": "basic_tool"}], []]
             )
 
-    agent = create_react_agent(
-        dynamic_model, [basic_tool, advanced_tool], version=version
-    )
+    agent = create_react_agent(dynamic_model, [basic_tool, advanced_tool])
 
     # Test basic tool usage
     result = agent.invoke({"messages": [HumanMessage("basic request")]})
@@ -1239,8 +1186,7 @@ class Context:
     user_id: str
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_dynamic_model_with_context(version: str) -> None:
+def test_dynamic_model_with_context() -> None:
     """Test dynamic model using config parameters."""
 
     def dynamic_model(state, runtime: Runtime[Context]):
@@ -1251,9 +1197,7 @@ def test_dynamic_model_with_context(version: str) -> None:
         else:
             return FakeToolCallingModel(tool_calls=[])
 
-    agent = create_react_agent(
-        dynamic_model, [], context_schema=Context, version=version
-    )
+    agent = create_react_agent(dynamic_model, [], context_schema=Context)
 
     # Test with basic user
     result = agent.invoke(
@@ -1270,8 +1214,7 @@ def test_dynamic_model_with_context(version: str) -> None:
     assert len(result["messages"]) == 2
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_dynamic_model_with_state_schema(version: Literal["v1", "v2"]) -> None:
+def test_dynamic_model_with_state_schema() -> None:
     """Test dynamic model with custom state schema."""
 
     class CustomDynamicState(AgentState):
@@ -1284,9 +1227,7 @@ def test_dynamic_model_with_state_schema(version: Literal["v1", "v2"]) -> None:
         else:
             return FakeToolCallingModel(tool_calls=[])
 
-    agent = create_react_agent(
-        dynamic_model, [], state_schema=CustomDynamicState, version=version
-    )
+    agent = create_react_agent(dynamic_model, [], state_schema=CustomDynamicState)
 
     result = agent.invoke(
         {"messages": [HumanMessage("hello")], "model_preference": "advanced"}
@@ -1295,15 +1236,14 @@ def test_dynamic_model_with_state_schema(version: Literal["v1", "v2"]) -> None:
     assert result["model_preference"] == "advanced"
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_dynamic_model_with_prompt(version: Literal["v1", "v2"]) -> None:
+def test_dynamic_model_with_prompt() -> None:
     """Test dynamic model with different prompt types."""
 
     def dynamic_model(state: AgentState, runtime: Runtime) -> BaseChatModel:
         return FakeToolCallingModel(tool_calls=[])
 
     # Test with string prompt
-    agent = create_react_agent(dynamic_model, [], prompt="system_msg", version=version)
+    agent = create_react_agent(dynamic_model, [], prompt="system_msg")
     result = agent.invoke({"messages": [HumanMessage("human_msg")]})
     assert result["messages"][-1].content == "system_msg-human_msg"
 
@@ -1312,9 +1252,7 @@ def test_dynamic_model_with_prompt(version: Literal["v1", "v2"]) -> None:
         """Generate a dynamic system message based on state."""
         return [{"role": "system", "content": "system_msg"}] + list(state["messages"])
 
-    agent = create_react_agent(
-        dynamic_model, [], prompt=dynamic_prompt, version=version
-    )
+    agent = create_react_agent(dynamic_model, [], prompt=dynamic_prompt)
     result = agent.invoke({"messages": [HumanMessage("human_msg")]})
     assert result["messages"][-1].content == "system_msg-human_msg"
 
@@ -1332,8 +1270,7 @@ async def test_dynamic_model_async() -> None:
     assert result["messages"][-1].content == "hello async"
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_dynamic_model_with_structured_response(version: str) -> None:
+def test_dynamic_model_with_structured_response() -> None:
     """Test dynamic model with structured response format."""
 
     class TestResponse(BaseModel):
@@ -1354,9 +1291,7 @@ def test_dynamic_model_with_structured_response(version: str) -> None:
             ],
         )
 
-    agent = create_react_agent(
-        dynamic_model, [], response_format=TestResponse, version=version
-    )
+    agent = create_react_agent(dynamic_model, [], response_format=TestResponse)
 
     result = agent.invoke({"messages": [HumanMessage("hello")]})
     assert "structured_response" in result
@@ -1395,8 +1330,7 @@ def test_dynamic_model_with_checkpointer(sync_checkpointer):
     assert call_count >= 2
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_dynamic_model_state_dependent_tools(version: Literal["v1", "v2"]) -> None:
+def test_dynamic_model_state_dependent_tools() -> None:
     """Test dynamic model that changes available tools based on state."""
 
     @dec_tool
@@ -1420,7 +1354,7 @@ def test_dynamic_model_state_dependent_tools(version: Literal["v1", "v2"]) -> No
                 tool_calls=[[{"args": {"x": 1}, "id": "1", "name": "tool_a"}], []]
             )
 
-    agent = create_react_agent(dynamic_model, [tool_a, tool_b], version=version)
+    agent = create_react_agent(dynamic_model, [tool_a, tool_b])
 
     # Ask to use tool B
     result = agent.invoke({"messages": [HumanMessage("use_b please")]})
@@ -1435,8 +1369,7 @@ def test_dynamic_model_state_dependent_tools(version: Literal["v1", "v2"]) -> No
     assert last_message.content == "A: 1"
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_dynamic_model_error_handling(version: Literal["v1", "v2"]) -> None:
+def test_dynamic_model_error_handling() -> None:
     """Test error handling in dynamic model."""
 
     def failing_dynamic_model(state, runtime: Runtime):
@@ -1444,7 +1377,7 @@ def test_dynamic_model_error_handling(version: Literal["v1", "v2"]) -> None:
             raise ValueError("Dynamic model failed")
         return FakeToolCallingModel(tool_calls=[])
 
-    agent = create_react_agent(failing_dynamic_model, [], version=version)
+    agent = create_react_agent(failing_dynamic_model, [])
 
     # Normal operation should work
     result = agent.invoke({"messages": [HumanMessage("hello")]})
@@ -1788,8 +1721,7 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
     assert result["foo"] == 2
 
 
-@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_response_format_using_tool_choice(version: Literal["v1", "v2"]) -> None:
+def test_response_format_using_tool_choice() -> None:
     """Test response format using tool choice."""
 
     class WeatherResponse(BaseModel):
@@ -1810,7 +1742,6 @@ def test_response_format_using_tool_choice(version: Literal["v1", "v2"]) -> None
         model,
         [get_weather],
         response_format=WeatherResponse,
-        version=version,
     )
     response = agent.invoke(
         {
