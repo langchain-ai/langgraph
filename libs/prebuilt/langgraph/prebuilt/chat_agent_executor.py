@@ -691,8 +691,8 @@ class _AgentBuilder:
         paths = []
         if self._tool_calling_enabled:
             paths.append("tools")
-        if self.response_format:
-            paths.append("generate_structured_response")
+        if self.post_model_hook:
+            paths.append("post_model_hook")
         else:
             paths.append(END)
 
@@ -703,10 +703,7 @@ class _AgentBuilder:
         paths = []
         if self._tool_calling_enabled:
             paths = [self._get_entry_point(), "tools"]
-        if self.response_format is not None:
-            paths.append("generate_structured_response")
-        else:
-            paths.append(END)
+        paths.append(END)
         return paths
 
     def build(self) -> StateGraph:
