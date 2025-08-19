@@ -3,32 +3,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Generic, Literal, Optional, Sequence, Type, TypeVar
+from types import UnionType
+from typing import Any, Generic, Literal, TypeVar, get_args, get_origin
 
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as create_tool
 from pydantic import BaseModel
+from typing_extensions import Self
 
 # For now, we support only Pydantic models as schemas.
-SchemaT = TypeVar("SchemaT", bound=type[BaseModel])
-Schema = TypeVar("Schema", bound=BaseModel)
-
-ToolChoice = Literal["required", "auto"]
-"""Required: model must call a tool; auto: model may respond with free text."""
+SchemaT = TypeVar("SchemaT")
 
 
 @dataclass(init=False)
-class SchemaSpec(Generic[SchemaT]):
+class _SchemaSpec(Generic[SchemaT]):
     """Describes a structured output schema."""
 
-    schema: SchemaT
+    schema: type[SchemaT]
     """The schema for the response, can be a dict or a Pydantic model."""
-    name: Optional[str] = None
-    """Name of the schema, used for tool calling. 
+
+    name: str | None = None
+    """Name of the schema, used for tool calling.
     
     If not provided, the name will be the model name.
     """
-    description: Optional[str] = None
+
+    description: str | None = None
     """Custom description of the schema. 
     
     If not provided, provided will use the model's docstring.
@@ -38,10 +38,10 @@ class SchemaSpec(Generic[SchemaT]):
 
     def __init__(
         self,
-        schema: SchemaT,
+        schema: type[SchemaT],
         *,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
+        name: str | None = None,
+        description: str | None = None,
         strict: bool = False,
     ) -> None:
         """Initialize SchemaSpec with schema and optional parameters."""
@@ -52,31 +52,33 @@ class SchemaSpec(Generic[SchemaT]):
 
 
 @dataclass(init=False)
-class ToolOutput:
+class ToolOutput(Generic[SchemaT]):
     """Use a tool calling strategy for model responses."""
 
-    schemas: Sequence[SchemaSpec]
-    """Schemas for the tool calls."""
-    tool_choice: ToolChoice
-    """Whether to require tool calling or allow the model to choose.
-    
-    - "required": The model must use tool calling.
-    - "auto": The model can choose whether to use tool calling.
-    
-    Use `auto` if you want the agent to be able to respond with a non structured
-    response to ask clarifying questions.
-    """
+    schema: type[SchemaT]
+    """Schema for the tool calls."""
+
+    tool_message_content: str
+    """The content of the tool message to be returned when the model calls an artificial structured output tool."""
+
+    schema_specs: list[_SchemaSpec[SchemaT]]
+    """Schema specs for the tool calls."""
 
     def __init__(
-        self, schemas: Sequence[SchemaSpec], *, tool_choice: ToolChoice = "required"
+        self, schema: type[SchemaT], tool_message_content: str = "ok!"
     ) -> None:
-        """Initialize ToolOutput with schemas and tool choice."""
-        self.schemas = schemas
-        self.tool_choice = tool_choice
+        """Initialize ToolOutput with schemas and tool message content."""
+        self.schema = schema
+        self.tool_message_content = tool_message_content
+
+        if get_origin(schema) is UnionType:
+            self.schema_specs = [_SchemaSpec(schema) for schema in get_args(schema)]
+        else:
+            self.schema_specs = [_SchemaSpec(schema)]
 
 
 @dataclass
-class OutputToolBinding(Generic[Schema]):
+class OutputToolBinding(Generic[SchemaT]):
     """Information for tracking structured output tool metadata.
 
     This contains all necessary information to handle structured responses
@@ -84,17 +86,17 @@ class OutputToolBinding(Generic[Schema]):
     and the corresponding tool implementation used by the tools strategy.
     """
 
-    schema: Type[Schema]
+    schema: type[SchemaT]
     """The original schema provided for structured output (Pydantic model or dict schema)."""
+
     schema_kind: Literal["pydantic"]
     """Classification of the schema type for proper response construction."""
+
     tool: BaseTool
     """LangChain tool instance created from the schema for model binding."""
 
     @classmethod
-    def from_schema_spec(
-        cls, schema_spec: SchemaSpec[Type[Schema]]
-    ) -> "OutputToolBinding":
+    def from_schema_spec(cls, schema_spec: _SchemaSpec[SchemaT]) -> Self:
         """Create an OutputToolBinding instance from a SchemaSpec.
 
         Args:
@@ -129,12 +131,12 @@ class OutputToolBinding(Generic[Schema]):
         tool = tool_creator(schema, **kwargs)
 
         return cls(
-            schema=schema,
+            schema=schema,  # type: ignore[arg-type]
             schema_kind=schema_kind,
             tool=tool,
         )
 
-    def parse(self, tool_args: dict[str, Any]) -> Schema:
+    def parse(self, tool_args: dict[str, Any]) -> SchemaT:
         """Parse tool arguments according to the schema.
 
         Args:
@@ -164,4 +166,4 @@ class OutputToolBinding(Generic[Schema]):
 
 
 # TODO: Add support for built-in structured responses (e.g., openai, grok)
-ResponseFormat = ToolOutput
+ResponseFormat = ToolOutput[SchemaT]

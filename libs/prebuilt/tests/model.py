@@ -22,12 +22,12 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 
-from langgraph.prebuilt.chat_agent_executor import StructuredResponse
+from langgraph.prebuilt.chat_agent_executor import StructuredResponseT
 
 
 class FakeToolCallingModel(BaseChatModel):
     tool_calls: Optional[list[list[ToolCall]]] = None
-    structured_response: Optional[StructuredResponse] = None
+    structured_response: Optional[StructuredResponseT] = None
     index: int = 0
     tool_style: Literal["openai", "anthropic"] = "openai"
 
@@ -57,7 +57,7 @@ class FakeToolCallingModel(BaseChatModel):
 
     def with_structured_output(
         self, schema: Type[BaseModel]
-    ) -> Runnable[LanguageModelInput, StructuredResponse]:
+    ) -> Runnable[LanguageModelInput, StructuredResponseT]:
         if self.structured_response is None:
             raise ValueError("Structured response is not set")
 
