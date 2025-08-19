@@ -399,11 +399,11 @@ class _AgentBuilder:
                     tool_choice = "any"
 
                 if tool_choice:
-                    model = cast(BaseChatModel, model).bind_tools(
+                    model = cast(BaseChatModel, model).bind_tools(  # type: ignore[assignment]
                         all_tools, tool_choice=tool_choice
                     )
                 else:
-                    model = cast(BaseChatModel, model).bind_tools(all_tools)
+                    model = cast(BaseChatModel, model).bind_tools(all_tools)  # type: ignore[assignment]
             # Extract just the model part for direct invocation
             self._static_model: Optional[Runnable] = model  # type: ignore[assignment]
         else:
