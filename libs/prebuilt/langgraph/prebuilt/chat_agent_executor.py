@@ -231,6 +231,12 @@ class _AgentBuilder:
         self.store = store
         self._use_individual_tool_nodes = use_individual_tool_nodes
 
+        if isinstance(model, Runnable) and not isinstance(model, BaseChatModel):
+            raise ValueError(
+                "Expected `model` to be a BaseChatModel or a string, got {type(model)}."
+                "The `model` parameter should not have pre-bound tools, simply pass the model and tools separately."
+            )
+
         self._setup_tools()
         self._setup_state_schema()
         self._setup_structured_output_tools()
