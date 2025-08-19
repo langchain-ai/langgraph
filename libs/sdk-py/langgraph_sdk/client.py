@@ -28,6 +28,7 @@ from typing import (
 
 import httpx
 import orjson
+from langgraph.types import Durability
 
 import langgraph_sdk
 from langgraph_sdk.schema import (
@@ -1725,6 +1726,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -1821,6 +1823,7 @@ class RunsClient:
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -1922,6 +1925,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Run:
         """Create a background run.
 
@@ -2052,6 +2056,7 @@ class RunsClient:
             "if_not_exists": if_not_exists,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
 
@@ -2162,6 +2167,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -2266,6 +2272,7 @@ class RunsClient:
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
