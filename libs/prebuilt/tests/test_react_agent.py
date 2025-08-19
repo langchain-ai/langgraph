@@ -1567,6 +1567,11 @@ def test_get_model() -> None:
     assert _get_model(configurable_with_seq) == model
     assert _get_model(configurable_with_seq_with_tools) == model
 
+    configurable_with_seq_with_tools_with_seq = (
+        configurable_with_seq_with_tools | RunnableLambda(lambda message: message)
+    )
+    assert _get_model(configurable_with_seq_with_tools_with_seq) == model
+
     with pytest.raises(TypeError):
         _get_model(RunnableLambda(lambda message: message))
 
