@@ -238,7 +238,7 @@ def get_text_at_path(obj: Any, path: str | list[str]) -> list[str]:
         - Nested paths in multi-field: "{field1,nested.field2}"
     """
     if not path or path == "$":
-        return [json.dumps(obj, sort_keys=True)]
+        return [json.dumps(obj, sort_keys=True, ensure_ascii=False)]
 
     tokens = tokenize_path(path) if isinstance(path, str) else path
 
@@ -249,7 +249,7 @@ def get_text_at_path(obj: Any, path: str | list[str]) -> list[str]:
             elif obj is None:
                 return []
             elif isinstance(obj, (list, dict)):
-                return [json.dumps(obj, sort_keys=True)]
+                return [json.dumps(obj, sort_keys=True, ensure_ascii=False)]
             return []
 
         token = tokens[pos]
@@ -295,7 +295,7 @@ def get_text_at_path(obj: Any, path: str | list[str]) -> list[str]:
                         if isinstance(current_obj, (str, int, float, bool)):
                             results.append(str(current_obj))
                         elif isinstance(current_obj, (list, dict)):
-                            results.append(json.dumps(current_obj, sort_keys=True))
+                            results.append(json.dumps(current_obj, sort_keys=True, ensure_ascii=False))
 
         # Handle wildcard
         elif token == "*":

@@ -137,6 +137,34 @@ def test_get_text_at_path() -> None:
     assert get_text_at_path(nested_data, "{unclosed") == []
     assert get_text_at_path(nested_data, "nested[{invalid}]") == []
 
+def test_Non_ASCII_semantic_search():
+    from langgraph.store.memory import InMemoryStore
+    from langchain_openai import OpenAIEmbeddings
+    import os
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=os.getenv("OPENAI_API_KEY"),
+        model='text-embedding-3-small',
+    )
+    store = InMemoryStore(
+        index={
+            "embed": embeddings,
+            "dims": 1536,
+        }
+    )
+    store.put(("user_123", "memories"), "1", {"text": "This is English"})
+    store.put(("user_123", "memories"), "2", {"text": "这是中文"})
+    store.put(("user_123", "memories"), "3", {"text": "これは日本語です"})
+
+    items1 = store.search(("user_123", "memories"), query='{"text": "This is English"}')
+    assert items1[0].score > 0.999
+    items2 = store.search(("user_123", "memories"), query='{"text": "这是中文"}')
+    assert items2[0].score > 0.999
+    items3 = store.search(("user_123", "memories"), query='{"text": "これは日本語です"}')
+    assert items3[0].score > 0.999
 
 async def test_async_batch_store(mocker: MockerFixture) -> None:
     abatch = mocker.stub()
