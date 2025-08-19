@@ -303,24 +303,6 @@ def test_model_with_tools(tool_style: str, version: str, include_builtin: bool) 
         )
 
 
-def test_support_preconfigured_models_but_not_for_tools() -> None:
-    """Support (at least temporarily) some model pre-configuration.
-
-    This is a temporary workaround to support pre-configured models
-    for things like temperature or api keys (done via .bind).
-
-    We do not want users to pre-bind tools to the models.
-    """
-    model = FakeToolCallingModel()
-
-    @dec_tool
-    def tool1(some_val: int) -> str:
-        """Tool 1 docstring."""
-        return f"Tool 1: {some_val}"
-
-    create_react_agent(model.bind(temperature=3), [tool1])
-
-
 def test__validate_messages():
     # empty input
     _validate_chat_history([])
