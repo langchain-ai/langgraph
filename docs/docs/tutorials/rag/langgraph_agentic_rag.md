@@ -149,7 +149,7 @@ Note that the components will operate on the `MessagesZodState` — graph state 
 
     **Output:**
     ```
-    ================================== Ai Message ==================================
+    ================================== AI Message ==================================
 
     Hello! How can I help you today?
     ```
@@ -170,7 +170,7 @@ Note that the components will operate on the `MessagesZodState` — graph state 
 
     **Output:**
     ```
-    ================================== Ai Message ==================================
+    ================================== AI Message ==================================
     Tool Calls:
     retrieve_blog_posts (call_tYQxgfIlnQUDMdtAhdbXNwIM)
     Call ID: call_tYQxgfIlnQUDMdtAhdbXNwIM
@@ -411,7 +411,7 @@ Note that the components will operate on the `MessagesZodState` — graph state 
 
     **Output:**
     ```
-    ================================== Ai Message ==================================
+    ================================== AI Message ==================================
 
     Lilian Weng categorizes reward hacking into two types: environment or goal misspecification, and reward tampering. She considers reward hacking as a broad concept that includes both of these categories. Reward hacking occurs when an agent exploits flaws or ambiguities in the reward function to achieve high rewards without performing the intended behaviors.
     ```
@@ -498,7 +498,7 @@ for chunk in graph.stream(
 **Output:**
 ```
 Update from node generate_query_or_respond
-================================== Ai Message ==================================
+================================== AI Message ==================================
 Tool Calls:
   retrieve_blog_posts (call_NYu2vq4km9nNNEFqJwefWKu1)
  Call ID: call_NYu2vq4km9nNNEFqJwefWKu1
@@ -524,7 +524,7 @@ Reward shaping in RL is challenging. Reward hacking occurs when an RL agent expl
 
 
 Update from node generate_answer
-================================== Ai Message ==================================
+================================== AI Message ==================================
 
 Lilian Weng categorizes reward hacking into two types: environment or goal misspecification, and reward tampering. She considers reward hacking as a broad concept that includes both of these categories. Reward hacking occurs when an agent exploits flaws or ambiguities in the reward function to achieve high rewards without performing the intended behaviors.
 ``` 
