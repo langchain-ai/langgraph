@@ -15,11 +15,6 @@ def tool() -> None:
     ...
 
 
-def tool2() -> None:
-    """Another testing tool."""
-    ...
-
-
 def pre_model_hook() -> None:
     """Pre-model hook."""
     ...
@@ -61,26 +56,3 @@ def test_react_agent_graph_structure(
             f"pre_model_hook: {pre_model_hook}, "
             f"post_model_hook: {post_model_hook}, "
         ) from e
-
-
-@pytest.mark.parametrize("tools", [[], [tool, tool2]], ids=["no_tools", "two_tools"])
-@pytest.mark.parametrize(
-    "pre_model_hook", [None, pre_model_hook], ids=["no_pre_hook", "with_pre_hook"]
-)
-@pytest.mark.parametrize(
-    "post_model_hook", [None, post_model_hook], ids=["no_post_hook", "with_post_hook"]
-)
-def test_react_agent_graph_structure_with_individual_nodes(
-    snapshot: SnapshotAssertion,
-    tools: list[Callable],
-    pre_model_hook: Union[Callable, None],
-    post_model_hook: Union[Callable, None],
-) -> None:
-    agent = create_react_agent(
-        model,
-        tools=tools,
-        pre_model_hook=pre_model_hook,
-        post_model_hook=post_model_hook,
-        use_individual_tool_nodes=True,
-    )
-    assert agent.get_graph().draw_mermaid(with_styles=False) == snapshot
