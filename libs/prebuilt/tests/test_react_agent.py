@@ -24,7 +24,7 @@ from langchain_core.messages import (
     ToolCall,
     ToolMessage,
 )
-from langchain_core.runnables import RunnableConfig, RunnableLambda
+from langchain_core.runnables import ConfigurableField, RunnableConfig, RunnableLambda
 from langchain_core.tools import InjectedToolCallId, ToolException
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel, Field
@@ -1549,6 +1549,23 @@ def test_get_model() -> None:
         lambda message: message
     )
     assert _get_model(seq_with_tools) == model
+
+    configurable_alternatives = model.configurable_alternatives(
+        ConfigurableField(id="config_key"),
+        default_key="no_seq",
+        seq=seq,
+        seq_with_tools=seq_with_tools,
+    )
+    configurable_with_seq = configurable_alternatives.with_config(
+        configurable={"config_key": "seq"}
+    )
+    configurable_with_seq_with_tools = configurable_alternatives.with_config(
+        configurable={"config_key": "seq_with_tools"}
+    )
+
+    assert _get_model(configurable_alternatives) == model
+    assert _get_model(configurable_with_seq) == model
+    assert _get_model(configurable_with_seq_with_tools) == model
 
     with pytest.raises(TypeError):
         _get_model(RunnableLambda(lambda message: message))
