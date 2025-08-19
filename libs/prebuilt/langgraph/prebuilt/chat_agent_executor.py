@@ -30,9 +30,7 @@ from langchain_core.messages import (
 )
 from langchain_core.runnables import (
     Runnable,
-    RunnableBinding,
     RunnableConfig,
-    RunnableSequence,
 )
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
@@ -46,8 +44,6 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import RemainingSteps
 from langgraph.prebuilt._internal._typing import (
-    ContextT,
-    PreConfiguredChatModel,
     SyncOrAsync,
 )
 from langgraph.prebuilt.responses import (
@@ -60,6 +56,7 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Command, Send
+from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 StructuredResponse = Union[dict, BaseModel]
@@ -158,29 +155,6 @@ def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
     return prompt_runnable
 
 
-def _get_model(model: LanguageModelLike) -> BaseChatModel:
-    """Get the underlying model from a RunnableBinding or return the model itself."""
-    if isinstance(model, RunnableSequence):
-        model = next(
-            (
-                step
-                for step in model.steps
-                if isinstance(step, (RunnableBinding, BaseChatModel))
-            ),
-            model,
-        )
-
-    if isinstance(model, RunnableBinding):
-        model = model.bound
-
-    if not isinstance(model, BaseChatModel):
-        raise TypeError(
-            f"Expected `model` to be a ChatModel or RunnableBinding (e.g. model.bind_tools(...)), got {type(model)}"
-        )
-
-    return model
-
-
 def _validate_chat_history(
     messages: Sequence[BaseMessage],
 ) -> None:
@@ -220,12 +194,7 @@ class _AgentBuilder:
         model: Union[
             str,
             BaseChatModel,
-            PreConfiguredChatModel,
             SyncOrAsync[[StateSchema, Runtime[ContextT]], BaseModel],
-            SyncOrAsync[
-                [StateSchema, Runtime[ContextT]],
-                Awaitable[PreConfiguredChatModel],
-            ],
         ],
         tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
         *,
@@ -249,27 +218,6 @@ class _AgentBuilder:
                 "in version 'v2' agents."
             )
 
-        if isinstance(model, Runnable) and not isinstance(model, BaseChatModel):
-            # Then we allow for a preconfigured model at least for now.
-            if not hasattr(model, "bound") or not isinstance(
-                model.bound, BaseChatModel
-            ):
-                raise TypeError(
-                    "Expected `model` to be a BaseChatModel or a chat model that "
-                    f"was pre-configured using `.bind()`. Instead got {type(model)}"
-                )
-
-            # Then it's a runnable binding. We don't want any pre-bound tools.
-            if (kwargs := getattr(model, "kwargs", {})) and "tools" in kwargs:
-                raise ValueError(
-                    "The `model` parameter should not have pre-bound tools. "
-                    "You are getting this error because the chat model you are using"
-                    "was pre-bound with tools somewhere. The code that binds tools "
-                    "looks like this: `model.bind_tools(...)`. "
-                    "Remove the `bind_tools` call and pass the unbound model "
-                    "and the `tools` parameter separately."
-                )
-
         self.model = model
         self.tools = tools
         self.prompt = prompt
@@ -282,6 +230,12 @@ class _AgentBuilder:
         self.name = name
         self.store = store
         self._use_individual_tool_nodes = use_individual_tool_nodes
+
+        if isinstance(model, Runnable) and not isinstance(model, BaseChatModel):
+            raise ValueError(
+                "Expected `model` to be a BaseChatModel or a string, got {type(model)}."
+                "The `model` parameter should not have pre-bound tools, simply pass the model and tools separately."
+            )
 
         self._setup_tools()
         self._setup_state_schema()
@@ -451,11 +405,11 @@ class _AgentBuilder:
                     tool_choice = "any"
 
                 if tool_choice:
-                    model = cast(BaseChatModel, model).bind_tools(
+                    model = cast(BaseChatModel, model).bind_tools(  # type: ignore[assignment]
                         all_tools, tool_choice=tool_choice
                     )
                 else:
-                    model = cast(BaseChatModel, model).bind_tools(all_tools)
+                    model = cast(BaseChatModel, model).bind_tools(all_tools)  # type: ignore[assignment]
             # Extract just the model part for direct invocation
             self._static_model: Optional[Runnable] = model  # type: ignore[assignment]
         else:
@@ -902,12 +856,7 @@ def create_react_agent(
     model: Union[
         str,
         BaseChatModel,
-        PreConfiguredChatModel,
         SyncOrAsync[[StateSchema, Runtime[ContextT]], BaseModel],
-        SyncOrAsync[
-            [StateSchema, Runtime[ContextT]],
-            Awaitable[PreConfiguredChatModel],
-        ],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
