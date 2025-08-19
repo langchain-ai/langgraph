@@ -337,7 +337,6 @@ class _AgentBuilder(Generic[StructuredResponseT]):
 
         if len(structured_tool_calls) == 1:
             tool_call = structured_tool_calls[0]
-            structured_tool_binding = self.structured_output_tools[tool_call["name"]]
             messages = [
                 response,
                 ToolMessage(

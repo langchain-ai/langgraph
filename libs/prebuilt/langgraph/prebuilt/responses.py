@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import UnionType
-from typing import Any, Generic, Literal, TypeVar, get_args, get_origin
+from typing import Any, Generic, Literal, TypeVar, Union, get_args, get_origin
 
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as create_tool
@@ -71,7 +71,7 @@ class ToolOutput(Generic[SchemaT]):
         self.schema = schema
         self.tool_message_content = tool_message_content
 
-        if get_origin(schema) is UnionType:
+        if get_origin(schema) in (UnionType, Union):
             self.schema_specs = [_SchemaSpec(schema) for schema in get_args(schema)]
         else:
             self.schema_specs = [_SchemaSpec(schema)]

@@ -12,7 +12,7 @@ from langgraph.prebuilt.responses import (
 )
 
 
-class TestModel(BaseModel):
+class _TestModel(BaseModel):
     """A test model for structured output."""
 
     name: str
@@ -37,22 +37,22 @@ class TestUsingToolStrategy:
 
     def test_basic_creation(self):
         """Test basic UsingToolStrategy creation."""
-        strategy = ToolOutput(schema=TestModel)
-        assert strategy.schema == TestModel
+        strategy = ToolOutput(schema=_TestModel)
+        assert strategy.schema == _TestModel
         assert strategy.tool_message_content == "ok!"
-        assert len(strategy.schema_specs) == 11
+        assert len(strategy.schema_specs) == 1
 
     def test_multiple_schemas(self):
         """Test UsingToolStrategy with multiple schemas."""
-        strategy = ToolOutput(schema=Union[TestModel, CustomModel])
+        strategy = ToolOutput(schema=Union[_TestModel, CustomModel])
         assert len(strategy.schema_specs) == 2
-        assert strategy.schema_specs[0].schema == TestModel
+        assert strategy.schema_specs[0].schema == _TestModel
         assert strategy.schema_specs[1].schema == CustomModel
 
     def test_schema_with_tool_message_content(self):
         """Test UsingToolStrategy with tool message content."""
-        strategy = ToolOutput(schema=TestModel, tool_message_content="custom message")
-        assert strategy.schema == TestModel
+        strategy = ToolOutput(schema=_TestModel, tool_message_content="custom message")
+        assert strategy.schema == _TestModel
         assert strategy.tool_message_content == "custom message"
         assert len(strategy.schema_specs) == 1
 
@@ -62,24 +62,24 @@ class TestOutputToolBinding:
 
     def test_from_schema_spec_basic(self):
         """Test basic OutputToolBinding creation from SchemaSpec."""
-        schema_spec = _SchemaSpec(schema=TestModel)
+        schema_spec = _SchemaSpec(schema=_TestModel)
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
 
-        assert tool_binding.schema == TestModel
+        assert tool_binding.schema == _TestModel
         assert tool_binding.schema_kind == "pydantic"
         assert tool_binding.tool is not None
-        assert tool_binding.tool.name == "TestModel"
+        assert tool_binding.tool.name == "_TestModel"
 
     def test_from_schema_spec_with_custom_name(self):
         """Test OutputToolBinding creation with custom name."""
-        schema_spec = _SchemaSpec(schema=TestModel, name="custom_tool_name")
+        schema_spec = _SchemaSpec(schema=_TestModel, name="custom_tool_name")
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
         assert tool_binding.tool.name == "custom_tool_name"
 
     def test_from_schema_spec_with_custom_description(self):
         """Test OutputToolBinding creation with custom description."""
         schema_spec = _SchemaSpec(
-            schema=TestModel, description="Custom tool description"
+            schema=_TestModel, description="Custom tool description"
         )
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
 
@@ -111,26 +111,26 @@ class TestOutputToolBinding:
 
     def test_parse_payload_pydantic_success(self):
         """Test successful parsing for Pydantic model."""
-        schema_spec = _SchemaSpec(schema=TestModel)
+        schema_spec = _SchemaSpec(schema=_TestModel)
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
 
         tool_args = {"name": "John", "age": 30}
         result = tool_binding.parse(tool_args)
 
-        assert isinstance(result, TestModel)
+        assert isinstance(result, _TestModel)
         assert result.name == "John"
         assert result.age == 30
         assert result.email == "default@example.com"  # default value
 
     def test_parse_payload_pydantic_validation_error(self):
         """Test parsing failure for invalid Pydantic data."""
-        schema_spec = _SchemaSpec(schema=TestModel)
+        schema_spec = _SchemaSpec(schema=_TestModel)
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
 
         # Missing required field 'name'
         tool_args = {"age": 30}
 
-        with pytest.raises(ValueError, match="Failed to parse tool args to TestModel"):
+        with pytest.raises(ValueError, match="Failed to parse tool args to _TestModel"):
             tool_binding.parse(tool_args)
 
     def test_parse_payload_invalid_kind(self):
@@ -140,7 +140,7 @@ class TestOutputToolBinding:
         mock_tool = Mock()
 
         tool_binding = OutputToolBinding(
-            schema=TestModel,
+            schema=_TestModel,
             schema_kind="invalid_kind",  # type: ignore
             tool=mock_tool,
         )
