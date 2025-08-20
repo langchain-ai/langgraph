@@ -40,7 +40,7 @@ def _parse_version(version: str) -> Version:
         patch = "0"
     else:
         major, minor, patch = parts
-    return Version(int(major.lstrip("v")), int(minor), int(patch.split("-")[0]))
+    return Version(int(major.lstrip("v")), int(minor), int(patch.split("-")[0].split("+")[0]))
 
 
 def check_capabilities(runner) -> DockerCapabilities:
@@ -269,3 +269,4 @@ def compose(
     )
     compose_str = dict_to_yaml(compose_content)
     return compose_str
+
