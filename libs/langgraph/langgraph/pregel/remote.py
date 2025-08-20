@@ -733,9 +733,9 @@ class RemoteGraph(PregelProtocol):
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
-            headers=_merge_tracing_headers(headers)
-            if self.distributed_tracing
-            else headers,
+            headers=(
+                _merge_tracing_headers(headers) if self.distributed_tracing else headers
+            ),
             params=params,
             **kwargs,
         ):
@@ -842,9 +842,9 @@ class RemoteGraph(PregelProtocol):
             interrupt_after=interrupt_after,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
-            headers=_merge_tracing_headers(headers)
-            if self.distributed_tracing
-            else headers,
+            headers=(
+                _merge_tracing_headers(headers) if self.distributed_tracing else headers
+            ),
             params=params,
             **kwargs,
         ):
@@ -996,11 +996,11 @@ class RemoteGraph(PregelProtocol):
 def _merge_tracing_headers(headers: dict[str, str] | None) -> dict[str, str] | None:
     if rt := ls.get_current_run_tree():
         tracing_headers = rt.to_headers()
-        baggage = tracing_headers.pop("baggage")
         if headers:
             if "baggage" in headers:
-                baggage = headers["baggage"] + "," + baggage
-            tracing_headers["baggage"] = baggage
+                tracing_headers["baggage"] = (
+                    f"{headers['baggage']},{tracing_headers['baggage']}"
+                )
             headers.update(tracing_headers)
         else:
             headers = tracing_headers
