@@ -1,17 +1,18 @@
 """Unit tests for langgraph.prebuilt.responses module."""
 
+from typing import Union
+
 import pytest
 from pydantic import BaseModel
 
 from langgraph.prebuilt.responses import (
     OutputToolBinding,
-    ResponseFormat,
-    SchemaSpec,
     ToolOutput,
+    _SchemaSpec,
 )
 
 
-class TestModel(BaseModel):
+class _TestModel(BaseModel):
     """A test model for structured output."""
 
     name: str
@@ -31,54 +32,29 @@ class EmptyDocModel(BaseModel):
     data: str
 
 
-class TestSchemaSpec:
-    """Test SchemaSpec dataclass."""
-
-    def test_basic_creation(self):
-        """Test basic SchemaSpec creation."""
-        schema = SchemaSpec(schema=TestModel)
-        assert schema.schema == TestModel
-        assert schema.name is None
-        assert schema.description is None
-        assert schema.strict is False
-
-    def test_creation_with_all_fields(self):
-        """Test SchemaSpec creation with all fields."""
-        schema = SchemaSpec(
-            schema=TestModel,
-            name="custom_test_model",
-            description="A custom description",
-            strict=True,
-        )
-        assert schema.schema == TestModel
-        assert schema.name == "custom_test_model"
-        assert schema.description == "A custom description"
-        assert schema.strict is True
-
-
 class TestUsingToolStrategy:
     """Test UsingToolStrategy dataclass."""
 
     def test_basic_creation(self):
         """Test basic UsingToolStrategy creation."""
-        schema = SchemaSpec(schema=TestModel)
-        strategy = ToolOutput(schemas=[schema])
-        assert len(strategy.schemas) == 1
-        assert strategy.schemas[0] == schema
-        assert strategy.tool_choice == "required"  # default
-
-    def test_creation_with_auto_tool_choice(self):
-        """Test UsingToolStrategy creation with auto tool choice."""
-        schema = SchemaSpec(schema=TestModel)
-        strategy = ToolOutput(schemas=[schema], tool_choice="auto")
-        assert strategy.tool_choice == "auto"
+        strategy = ToolOutput(schema=_TestModel)
+        assert strategy.schema == _TestModel
+        assert strategy.tool_message_content == "ok!"
+        assert len(strategy.schema_specs) == 1
 
     def test_multiple_schemas(self):
         """Test UsingToolStrategy with multiple schemas."""
-        schema1 = SchemaSpec(schema=TestModel)
-        schema2 = SchemaSpec(schema=CustomModel)
-        strategy = ToolOutput(schemas=[schema1, schema2])
-        assert len(strategy.schemas) == 2
+        strategy = ToolOutput(schema=Union[_TestModel, CustomModel])
+        assert len(strategy.schema_specs) == 2
+        assert strategy.schema_specs[0].schema == _TestModel
+        assert strategy.schema_specs[1].schema == CustomModel
+
+    def test_schema_with_tool_message_content(self):
+        """Test UsingToolStrategy with tool message content."""
+        strategy = ToolOutput(schema=_TestModel, tool_message_content="custom message")
+        assert strategy.schema == _TestModel
+        assert strategy.tool_message_content == "custom message"
+        assert len(strategy.schema_specs) == 1
 
 
 class TestOutputToolBinding:
@@ -86,24 +62,24 @@ class TestOutputToolBinding:
 
     def test_from_schema_spec_basic(self):
         """Test basic OutputToolBinding creation from SchemaSpec."""
-        schema_spec = SchemaSpec(schema=TestModel)
+        schema_spec = _SchemaSpec(schema=_TestModel)
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
 
-        assert tool_binding.schema == TestModel
+        assert tool_binding.schema == _TestModel
         assert tool_binding.schema_kind == "pydantic"
         assert tool_binding.tool is not None
-        assert tool_binding.tool.name == "TestModel"
+        assert tool_binding.tool.name == "_TestModel"
 
     def test_from_schema_spec_with_custom_name(self):
         """Test OutputToolBinding creation with custom name."""
-        schema_spec = SchemaSpec(schema=TestModel, name="custom_tool_name")
+        schema_spec = _SchemaSpec(schema=_TestModel, name="custom_tool_name")
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
         assert tool_binding.tool.name == "custom_tool_name"
 
     def test_from_schema_spec_with_custom_description(self):
         """Test OutputToolBinding creation with custom description."""
-        schema_spec = SchemaSpec(
-            schema=TestModel, description="Custom tool description"
+        schema_spec = _SchemaSpec(
+            schema=_TestModel, description="Custom tool description"
         )
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
 
@@ -111,7 +87,7 @@ class TestOutputToolBinding:
 
     def test_from_schema_spec_with_model_docstring(self):
         """Test OutputToolBinding creation using model docstring as description."""
-        schema_spec = SchemaSpec(schema=CustomModel)
+        schema_spec = _SchemaSpec(schema=CustomModel)
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
 
         assert tool_binding.tool.description == "Custom model with a custom docstring."
@@ -127,7 +103,7 @@ class TestOutputToolBinding:
             # This should have the same docstring as BaseModel
             pass
 
-        schema_spec = SchemaSpec(schema=DefaultDocModel)
+        schema_spec = _SchemaSpec(schema=DefaultDocModel)
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
 
         # Should use empty description when model has default BaseModel docstring
@@ -135,26 +111,26 @@ class TestOutputToolBinding:
 
     def test_parse_payload_pydantic_success(self):
         """Test successful parsing for Pydantic model."""
-        schema_spec = SchemaSpec(schema=TestModel)
+        schema_spec = _SchemaSpec(schema=_TestModel)
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
 
         tool_args = {"name": "John", "age": 30}
         result = tool_binding.parse(tool_args)
 
-        assert isinstance(result, TestModel)
+        assert isinstance(result, _TestModel)
         assert result.name == "John"
         assert result.age == 30
         assert result.email == "default@example.com"  # default value
 
     def test_parse_payload_pydantic_validation_error(self):
         """Test parsing failure for invalid Pydantic data."""
-        schema_spec = SchemaSpec(schema=TestModel)
+        schema_spec = _SchemaSpec(schema=_TestModel)
         tool_binding = OutputToolBinding.from_schema_spec(schema_spec)
 
         # Missing required field 'name'
         tool_args = {"age": 30}
 
-        with pytest.raises(ValueError, match="Failed to parse tool args to TestModel"):
+        with pytest.raises(ValueError, match="Failed to parse tool args to _TestModel"):
             tool_binding.parse(tool_args)
 
     def test_parse_payload_invalid_kind(self):
@@ -164,7 +140,7 @@ class TestOutputToolBinding:
         mock_tool = Mock()
 
         tool_binding = OutputToolBinding(
-            schema=TestModel,
+            schema=_TestModel,
             schema_kind="invalid_kind",  # type: ignore
             tool=mock_tool,
         )
@@ -189,36 +165,20 @@ class TestOutputToolBinding:
             tool_binding.parse({"name": "test", "age": 25})
 
 
-class TestResponseFormat:
-    """Test ResponseFormat type alias."""
-
-    def test_response_format_is_using_tool_strategy(self):
-        """Test that ResponseFormat is aliased to UsingToolStrategy."""
-        assert ResponseFormat is ToolOutput
-
-    def test_can_create_response_format(self):
-        """Test that we can create ResponseFormat instances."""
-        schema = SchemaSpec(schema=TestModel)
-        response_format = ResponseFormat(schemas=[schema])
-
-        assert isinstance(response_format, ToolOutput)
-        assert len(response_format.schemas) == 1
-
-
 class TestEdgeCases:
     """Test edge cases and error conditions."""
 
     def test_empty_schemas_list(self) -> None:
         """Test UsingToolStrategy with empty schemas list."""
-        strategy = ToolOutput([SchemaSpec(EmptyDocModel)])
-        assert len(strategy.schemas) == 1
+        strategy = ToolOutput(EmptyDocModel)
+        assert len(strategy.schema_specs) == 1
 
     @pytest.mark.skip(
         reason="Need to fix bug in langchain-core for inheritance of doc-strings."
     )
     def test_base_model_doc_constant(self) -> None:
         """Test that BASE_MODEL_DOC constant is set correctly."""
-        binding = OutputToolBinding.from_schema_spec(SchemaSpec(EmptyDocModel))
+        binding = OutputToolBinding.from_schema_spec(_SchemaSpec(EmptyDocModel))
         assert binding.tool.name == "EmptyDocModel"
         assert (
             binding.tool.description[:5] == ""

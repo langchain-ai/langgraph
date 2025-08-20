@@ -5,10 +5,10 @@ from typing import (
     Any,
     Awaitable,
     Callable,
+    Generic,
     Optional,
     Sequence,
     Type,
-    TypeVar,
     Union,
     cast,
     get_type_hints,
@@ -33,7 +33,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
-from typing_extensions import Annotated, NotRequired, TypedDict
+from typing_extensions import Annotated, NotRequired, TypedDict, TypeVar
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
@@ -48,7 +48,6 @@ from langgraph.prebuilt._internal._typing import (
 from langgraph.prebuilt.responses import (
     OutputToolBinding,
     ResponseFormat,
-    SchemaSpec,
     ToolOutput,
 )
 from langgraph.prebuilt.tool_node import ToolNode
@@ -58,10 +57,11 @@ from langgraph.types import Checkpointer, Command, Send
 from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
-StructuredResponse = Union[dict, BaseModel]
-StructuredResponseSchema = Union[dict, type[BaseModel]]
-
 F = TypeVar("F", bound=Callable[..., Any])
+
+StructuredResponseT = TypeVar(
+    "StructuredResponseT", bound=Union[dict, BaseModel, None], default=None
+)
 
 
 # We create the AgentState that we will pass around
@@ -84,16 +84,18 @@ class AgentStatePydantic(BaseModel):
     remaining_steps: RemainingSteps = 25
 
 
-class AgentStateWithStructuredResponse(AgentState):
+class AgentStateWithStructuredResponse(AgentState, Generic[StructuredResponseT]):
     """The state of the agent with a structured response."""
 
-    structured_response: StructuredResponse
+    structured_response: StructuredResponseT
 
 
-class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
+class AgentStateWithStructuredResponsePydantic(
+    AgentStatePydantic, Generic[StructuredResponseT]
+):
     """The state of the agent with a structured response."""
 
-    structured_response: StructuredResponse
+    structured_response: StructuredResponseT
 
 
 StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
@@ -185,7 +187,7 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-class _AgentBuilder:
+class _AgentBuilder(Generic[StructuredResponseT]):
     """Internal builder class for constructing and agent."""
 
     def __init__(
@@ -198,7 +200,7 @@ class _AgentBuilder:
         tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
         *,
         prompt: Optional[Prompt] = None,
-        response_format: Optional[ResponseFormat] = None,
+        response_format: Optional[ResponseFormat[StructuredResponseT]] = None,
         pre_model_hook: Optional[RunnableLike] = None,
         post_model_hook: Optional[RunnableLike] = None,
         state_schema: Optional[StateSchemaType] = None,
@@ -256,15 +258,15 @@ class _AgentBuilder:
 
         Future strategies (json_mode, guided) will have separate setup methods.
         """
-        self.structured_output_tools: dict[str, OutputToolBinding] = {}
+        self.structured_output_tools: dict[
+            str, OutputToolBinding[StructuredResponseT]
+        ] = {}
         if self.response_format is not None:
             response_format = self.response_format
 
-            # Handle UsingToolStrategy wrapper
             if isinstance(response_format, ToolOutput):
-                # Use tools strategy - process each ResponseSchema in the UsingToolStrategy
-                for response_schema in response_format.schemas:
-                    # Use the factory method to create OutputToolBinding
+                # check if response_format.schema is a union
+                for response_schema in response_format.schema_specs:
                     structured_tool_info = OutputToolBinding.from_schema_spec(
                         response_schema
                     )
@@ -275,7 +277,7 @@ class _AgentBuilder:
                 # This shouldn't happen with the new ResponseFormat type, but keeping for safety
                 raise ValueError(
                     f"Unsupported response_format type: {type(response_format)}. "
-                    f"Expected UsingToolStrategy."
+                    f"Expected ToolOutput."
                 )
 
     def _setup_state_schema(self) -> None:
@@ -328,12 +330,17 @@ class _AgentBuilder:
                 "Behavior has not yet been defined in this case."
             )
 
+        if isinstance(self.response_format, ToolOutput):
+            tool_message_content = self.response_format.tool_message_content
+        else:
+            tool_message_content = "ok!"
+
         if len(structured_tool_calls) == 1:
             tool_call = structured_tool_calls[0]
             messages = [
                 response,
                 ToolMessage(
-                    content="ok!",
+                    content=tool_message_content,
                     tool_call_id=tool_call["id"],
                     name=tool_call["name"],
                 ),
@@ -383,10 +390,8 @@ class _AgentBuilder:
             if len(all_tools) > 0:
                 # Check if we need to force tool use for structured output
                 tool_choice = None
-                if (
-                    self.response_format is not None
-                    and isinstance(self.response_format, ToolOutput)
-                    and self.response_format.tool_choice == "required"
+                if self.response_format is not None and isinstance(
+                    self.response_format, ToolOutput
                 ):
                     tool_choice = "any"
 
@@ -778,7 +783,7 @@ def create_react_agent(
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
     prompt: Optional[Prompt] = None,
-    response_format: Optional[Union[ToolOutput, StructuredResponseSchema]] = None,
+    response_format: Optional[Union[ToolOutput, type[StructuredResponseT]]] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
@@ -985,9 +990,9 @@ def create_react_agent(
         # Then it's a pydantic model or JSONSchema. We'll automatically convert
         # it to the tool output strategy as it is widely supported.
         response_format = ToolOutput(
-            schemas=[SchemaSpec(response_format)],
-            tool_choice="required",
+            schema=response_format,
         )
+
     elif isinstance(response_format, tuple):
         if len(response_format) == 2:
             raise ValueError(

@@ -433,7 +433,7 @@ def test_react_agent_with_structured_response() -> None:
         return "The weather is sunny and 75°F."
 
     expected_structured_response = WeatherResponse(temperature=75)
-    model = FakeToolCallingModel(
+    model = FakeToolCallingModel[WeatherResponse](
         tool_calls=tool_calls, structured_response=expected_structured_response
     )
     agent = create_react_agent(
