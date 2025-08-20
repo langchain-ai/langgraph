@@ -2,6 +2,7 @@ from langgraph_cli.docker import (
     DEFAULT_POSTGRES_URI,
     DockerCapabilities,
     Version,
+    _parse_version,
     compose,
 )
 from langgraph_cli.util import clean_empty_lines
@@ -363,3 +364,4 @@ services:
             REDIS_URI: redis://langgraph-redis:6379
             POSTGRES_URI: {DEFAULT_POSTGRES_URI}"""
     assert clean_empty_lines(actual_compose_str) == expected_compose_str
+
