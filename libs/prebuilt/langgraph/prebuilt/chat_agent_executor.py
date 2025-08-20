@@ -991,7 +991,6 @@ def create_react_agent(
         # it to the tool output strategy as it is widely supported.
         response_format = ToolOutput(
             schema=response_format,
-            tool_message_content="",
         )
 
     elif isinstance(response_format, tuple):

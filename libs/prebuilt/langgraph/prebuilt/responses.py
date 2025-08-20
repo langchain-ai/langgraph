@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import UnionType
-from typing import Any, Generic, Literal, TypeVar, Union, get_args, get_origin
+from typing import Any, Generic, Literal, TypeVar, Union, cast, get_args, get_origin
 
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as create_tool
@@ -72,7 +72,7 @@ class ToolOutput(Generic[SchemaT]):
         self.tool_message_content = tool_message_content
 
         if get_origin(schema) in (UnionType, Union):
-            self.schema_specs = [_SchemaSpec(schema) for schema in get_args(schema)]
+            self.schema_specs = [_SchemaSpec(s) for s in get_args(schema)]
         else:
             self.schema_specs = [_SchemaSpec(schema)]
 
@@ -131,7 +131,7 @@ class OutputToolBinding(Generic[SchemaT]):
         tool = tool_creator(schema, **kwargs)
 
         return cls(
-            schema=schema,  # type: ignore[arg-type]
+            schema=cast(type[SchemaT], schema),
             schema_kind=schema_kind,
             tool=tool,
         )
