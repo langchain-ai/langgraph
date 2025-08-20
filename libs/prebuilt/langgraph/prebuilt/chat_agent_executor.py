@@ -296,7 +296,8 @@ class _AgentBuilder(Generic[StructuredResponseT]):
             self._final_state_schema = self.state_schema
         else:
             self._final_state_schema = (
-                AgentStateWithStructuredResponse[StructuredResponseT]
+                # AgentStateWithStructuredResponse[StructuredResponseT]
+                AgentStateWithStructuredResponse
                 if self.response_format is not None
                 else AgentState
             )
