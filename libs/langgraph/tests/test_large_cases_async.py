@@ -23,7 +23,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import END, START
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import StateGraph
-from langgraph.prebuilt.chat_agent_executor import create_react_agent
+from langgraph.prebuilt.chat_agent_executor import create_agent
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import PregelTask, Send, StateSnapshot, StreamWriter
@@ -1059,7 +1059,7 @@ async def test_prebuilt_tool_chat() -> None:
 
     tools = [search_api]
 
-    app = create_react_agent(model, tools)
+    app = create_agent(model, tools)
 
     assert await app.ainvoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
