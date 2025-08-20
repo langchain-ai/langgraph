@@ -262,6 +262,8 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                     f"Expected ToolOutput."
                 )
 
+            print(self.structured_output_tools)
+
     def _setup_state_schema(self) -> None:
         """Setup state schema with validation."""
         if self.state_schema is not None:
@@ -512,6 +514,8 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             # Then invoke the model with the prepared messages
             response = cast(AIMessage, model.invoke(prepared_messages, config))
             response.name = self.name
+
+            print(response)
 
             if _are_more_steps_needed(state, response):
                 return {
@@ -779,7 +783,11 @@ def create_agent(
     *,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
-        Union[ToolOutput[StructuredResponseT], NativeOutput[StructuredResponseT], type[StructuredResponseT]]
+        Union[
+            ToolOutput[StructuredResponseT],
+            NativeOutput[StructuredResponseT],
+            type[StructuredResponseT],
+        ]
     ] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
