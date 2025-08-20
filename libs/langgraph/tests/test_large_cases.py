@@ -1390,11 +1390,11 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             ),
             {
                 "langgraph_step": 1,
-                "langgraph_node": "agent",
-                "langgraph_triggers": ("branch:to:agent",),
-                "langgraph_path": (PULL, "agent"),
-                "langgraph_checkpoint_ns": AnyStr("agent:"),
-                "checkpoint_ns": AnyStr("agent:"),
+                "langgraph_node": "model",
+                "langgraph_triggers": ("branch:to:model",),
+                "langgraph_path": (PULL, "model"),
+                "langgraph_checkpoint_ns": AnyStr("model:"),
+                "checkpoint_ns": AnyStr("model:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
             },
@@ -1449,11 +1449,11 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             ),
             {
                 "langgraph_step": 3,
-                "langgraph_node": "agent",
-                "langgraph_triggers": ("branch:to:agent",),
-                "langgraph_path": (PULL, "agent"),
-                "langgraph_checkpoint_ns": AnyStr("agent:"),
-                "checkpoint_ns": AnyStr("agent:"),
+                "langgraph_node": "model",
+                "langgraph_triggers": ("branch:to:model",),
+                "langgraph_path": (PULL, "model"),
+                "langgraph_checkpoint_ns": AnyStr("model:"),
+                "checkpoint_ns": AnyStr("model:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
             },
@@ -1497,11 +1497,11 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             ),
             {
                 "langgraph_step": 5,
-                "langgraph_node": "agent",
-                "langgraph_triggers": ("branch:to:agent",),
-                "langgraph_path": (PULL, "agent"),
-                "langgraph_checkpoint_ns": AnyStr("agent:"),
-                "checkpoint_ns": AnyStr("agent:"),
+                "langgraph_node": "model",
+                "langgraph_triggers": ("branch:to:model",),
+                "langgraph_path": (PULL, "model"),
+                "langgraph_checkpoint_ns": AnyStr("model:"),
+                "checkpoint_ns": AnyStr("model:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
             },
@@ -1533,7 +1533,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     for output in (invoke_updates_events, stream_updates_events):
         assert output[:3] == [
             {
-                "agent": {
+                "model": {
                     "messages": [
                         _AnyIdAIMessage(
                             content="",
@@ -1560,7 +1560,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 }
             },
             {
-                "agent": {
+                "model": {
                     "messages": [
                         _AnyIdAIMessage(
                             content="",
@@ -1606,7 +1606,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             },
         )
         assert output[5:] == [
-            {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}}
+            {"model": {"messages": [_AnyIdAIMessage(content="answer")]}}
         ]
 
 
@@ -1775,7 +1775,7 @@ def test_state_graph_packets(
         )
     ] == [
         {
-            "agent": {
+            "model": {
                 "messages": AIMessage(
                     id="ai1",
                     content="",
@@ -1799,7 +1799,7 @@ def test_state_graph_packets(
             }
         },
         {
-            "agent": {
+            "model": {
                 "messages": AIMessage(
                     id="ai2",
                     content="",
@@ -1836,14 +1836,14 @@ def test_state_graph_packets(
                 ),
             },
         },
-        {"agent": {"messages": AIMessage(content="answer", id="ai3")}},
+        {"model": {"messages": AIMessage(content="answer", id="ai3")}},
     ]
 
     # interrupt after agent
 
     app_w_interrupt = workflow.compile(
         checkpointer=sync_checkpointer,
-        interrupt_after=["agent"],
+        interrupt_after=["model"],
     )
     config = {"configurable": {"thread_id": "1"}}
 
@@ -1856,7 +1856,7 @@ def test_state_graph_packets(
         )
     ] == [
         {
-            "agent": {
+            "model": {
                 "messages": AIMessage(
                     id="ai1",
                     content="",
@@ -1966,7 +1966,7 @@ def test_state_graph_packets(
             }
         },
         {
-            "agent": {
+            "model": {
                 "messages": AIMessage(
                     id="ai2",
                     content="",
@@ -2121,7 +2121,7 @@ def test_state_graph_packets(
         )
     ] == [
         {
-            "agent": {
+            "model": {
                 "messages": AIMessage(
                     id="ai1",
                     content="",
@@ -2225,7 +2225,7 @@ def test_state_graph_packets(
             }
         },
         {
-            "agent": {
+            "model": {
                 "messages": AIMessage(
                     id="ai2",
                     content="",
