@@ -19,7 +19,7 @@ from langchain_core.messages import (
     ToolCall,
 )
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 
@@ -55,14 +55,6 @@ class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
     @property
     def _llm_type(self) -> str:
         return "fake-tool-call-model"
-
-    def with_structured_output(
-        self, schema: Type[BaseModel]
-    ) -> Runnable[LanguageModelInput, StructuredResponseT]:
-        if self.structured_response is None:
-            raise ValueError("Structured response is not set")
-
-        return RunnableLambda(lambda x: self.structured_response)
 
     def bind_tools(
         self,

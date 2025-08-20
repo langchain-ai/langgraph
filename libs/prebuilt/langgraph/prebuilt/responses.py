@@ -234,9 +234,7 @@ class NativeOutputBinding(Generic[SchemaT]):
     """Classification of the schema type for proper response construction."""
 
     @classmethod
-    def from_schema_spec(
-        cls, schema_spec: _SchemaSpec[SchemaT]
-    ) -> Self:
+    def from_schema_spec(cls, schema_spec: _SchemaSpec[SchemaT]) -> Self:
         """Create a NativeOutputBinding instance from a SchemaSpec.
 
         Args:
@@ -282,11 +280,12 @@ class NativeOutputBinding(Generic[SchemaT]):
                 raise ValueError(
                     f"Expected Pydantic model class for 'pydantic' kind, got {type(self.schema)}"
                 )
-            
+
             # Extract text content from AIMessage
             raw_text = self._extract_text_content_from_message(response)
-            
+
             import json
+
             try:
                 data = json.loads(raw_text)
             except Exception as e:
@@ -305,10 +304,10 @@ class NativeOutputBinding(Generic[SchemaT]):
 
     def _extract_text_content_from_message(self, message: AIMessage) -> str:
         """Extract text content from an AIMessage.
-        
+
         Args:
             message: The AI message to extract text from
-            
+
         Returns:
             The extracted text content
         """

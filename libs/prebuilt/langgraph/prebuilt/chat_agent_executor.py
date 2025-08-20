@@ -65,7 +65,7 @@ class AgentState(TypedDict, Generic[StructuredResponseT]):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
     remaining_steps: NotRequired[RemainingSteps]
-      
+
     structured_response: NotRequired[StructuredResponseT]
 
 
@@ -235,8 +235,10 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         self.structured_output_tools: dict[
             str, OutputToolBinding[StructuredResponseT]
         ] = {}
-        self.native_output_binding: NativeOutputBinding[StructuredResponseT] | None = None
-        
+        self.native_output_binding: NativeOutputBinding[StructuredResponseT] | None = (
+            None
+        )
+
         if self.response_format is not None:
             response_format = self.response_format
 
@@ -404,12 +406,9 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                     )
                 else:
                     # If native output is configured, bind tools with strict=True. Required for OpenAI.
-                    if (
-                        isinstance(self.response_format, NativeOutput)
-                        and (
-                            self.response_format.provider == "openai"
-                            or self.response_format.provider == "grok"
-                        )
+                    if isinstance(self.response_format, NativeOutput) and (
+                        self.response_format.provider == "openai"
+                        or self.response_format.provider == "grok"
                     ):
                         model = cast(BaseChatModel, model).bind_tools(
                             all_tools, strict=True
