@@ -262,8 +262,6 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                     f"Expected ToolOutput."
                 )
 
-            print(self.structured_output_tools)
-
     def _setup_state_schema(self) -> None:
         """Setup state schema with validation."""
         if self.state_schema is not None:
@@ -514,8 +512,6 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             # Then invoke the model with the prepared messages
             response = cast(AIMessage, model.invoke(prepared_messages, config))
             response.name = self.name
-
-            print(response)
 
             if _are_more_steps_needed(state, response):
                 return {
@@ -973,9 +969,6 @@ def create_agent(
             raise ValueError(
                 "Passing a 2-tuple as response_format is no longer supported. "
             )
-    else:
-        # Can only be a ToolOutput or None at this point.
-        response_format = cast(Optional[ToolOutput], response_format)
 
     # Create and configure the agent builder
     builder = _AgentBuilder[StateT, ContextT, StructuredResponseT](

@@ -13,17 +13,23 @@ from tests.model import FakeToolCallingModel
 
 # Test data models
 class WeatherBaseModel(BaseModel):
+    """Weather response."""
+
     temperature: float = Field(description="The temperature in fahrenheit")
     condition: str = Field(description="Weather condition")
 
 
 @dataclass
 class WeatherDataclass:
+    """Weather response."""
+
     temperature: float
     condition: str
 
 
 class WeatherTypedDict(TypedDict):
+    """Weather response."""
+
     temperature: float
     condition: str
 
@@ -34,6 +40,7 @@ weather_json_schema = {
         "temperature": {"type": "number", "description": "Temperature in fahrenheit"},
         "condition": {"type": "string", "description": "Weather condition"},
     },
+    "title": "weather_schema",
     "required": ["temperature", "condition"],
 }
 
@@ -45,11 +52,13 @@ class LocationResponse(BaseModel):
 
 def get_weather() -> str:
     """Get the weather."""
+
     return "The weather is sunny and 75°F."
 
 
 def get_location() -> str:
     """Get the current location."""
+
     return "You are in New York, USA."
 
 
@@ -325,13 +334,6 @@ class TestResponseFormatAsNativeOutput:
         """Test response_format as NativeOutput with Pydantic model."""
         tool_calls = [
             [{"args": {}, "id": "1", "name": "get_weather"}],
-            [
-                {
-                    "name": "WeatherBaseModel",
-                    "id": "2",
-                    "args": WEATHER_DATA,
-                }
-            ],
         ]
 
         model = FakeToolCallingModel[WeatherBaseModel](
@@ -350,13 +352,6 @@ class TestResponseFormatAsNativeOutput:
         """Test response_format as NativeOutput with dataclass."""
         tool_calls = [
             [{"args": {}, "id": "1", "name": "get_weather"}],
-            [
-                {
-                    "name": "WeatherDataclass",
-                    "id": "2",
-                    "args": WEATHER_DATA,
-                }
-            ],
         ]
 
         model = FakeToolCallingModel[WeatherDataclass](
@@ -366,7 +361,9 @@ class TestResponseFormatAsNativeOutput:
         agent = create_agent(
             model, [get_weather], response_format=NativeOutput(WeatherDataclass)
         )
-        response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
+        response = agent.invoke(
+            {"messages": [HumanMessage("What's the weather?")]}, {"recursion_limit": 6}
+        )
 
         assert response["structured_response"] == EXPECTED_WEATHER_DATACLASS
         assert len(response["messages"]) == 5
@@ -375,13 +372,6 @@ class TestResponseFormatAsNativeOutput:
         """Test response_format as NativeOutput with TypedDict."""
         tool_calls = [
             [{"args": {}, "id": "1", "name": "get_weather"}],
-            [
-                {
-                    "name": "WeatherTypedDict",
-                    "id": "2",
-                    "args": WEATHER_DATA,
-                }
-            ],
         ]
 
         model = FakeToolCallingModel[WeatherTypedDict](
@@ -400,13 +390,6 @@ class TestResponseFormatAsNativeOutput:
         """Test response_format as NativeOutput with JSON schema."""
         tool_calls = [
             [{"args": {}, "id": "1", "name": "get_weather"}],
-            [
-                {
-                    "name": "weather_schema",
-                    "id": "2",
-                    "args": WEATHER_DATA,
-                }
-            ],
         ]
 
         model = FakeToolCallingModel[dict](
