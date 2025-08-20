@@ -14,6 +14,19 @@ jobs:
         python-version:
           - "3.10"
           - "3.11"
+        example:
+          - name: A
+            workdir: libs/cli/examples
+            tag: langgraph-test-a
+          - name: B
+            workdir: libs/cli/examples/graphs
+            tag: langgraph-test-b
+          - name: C
+            workdir: libs/cli/examples/graphs_reqs_a
+            tag: langgraph-test-c
+          - name: D
+            workdir: libs/cli/examples/graphs_reqs_b
+            tag: langgraph-test-d
     name: "CLI integration test"
     defaults:
       run:
@@ -33,54 +46,24 @@ jobs:
           enable-cache: true
           cache-suffix: "cli-integration-test"
           ignore-nothing-to-cache: true
-      - name: Setup env
-        if: steps.changed-files.outputs.all
-        working-directory: libs/cli/examples
-        run: cat .env.example > .env
       - name: Install cli globally
         if: steps.changed-files.outputs.all
         run: pip install -e .
-      - name: Build and test service A
+      - name: Build and test service ${{ matrix.example.name }}
         if: steps.changed-files.outputs.all
-        working-directory: libs/cli/examples
+        working-directory: ${{ matrix.example.workdir }}
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
-          # The build-arg isn't used; just testing that we accept other args
-          langgraph build -t langgraph-test-a
-          cp .env.example .env
+          # Build the image for this example
+          langgraph build -t ${{ matrix.example.tag }}
+          # Prepare environment file from local or parent example directory
+          if [ -f .env.example ]; then cp .env.example .env; elif [ -f ../.env.example ]; then cp ../.env.example .env; fi
           if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
-          timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -c langgraph.json -t langgraph-test-a
-      - name: Build and test service B
-        if: steps.changed-files.outputs.all
-        working-directory: libs/cli/examples/graphs
-        env:
-          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-        run: |
-          langgraph build -t langgraph-test-b
-          cp ../.env.example .env
-          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
-          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-b
-      - name: Build and test service C
-        if: steps.changed-files.outputs.all
-        working-directory: libs/cli/examples/graphs_reqs_a
-        env:
-          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-        run: |
-          langgraph build -t langgraph-test-c
-          cp ../.env.example .env
-          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
-          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-c
-      - name: Build and test service D
-        if: steps.changed-files.outputs.all
-        working-directory: libs/cli/examples/graphs_reqs_b
-        env:
-          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-        run: |
-          langgraph build -t langgraph-test-d
-          cp ../.env.example .env
-          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
-          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-d
+          # Run the integration test using the built tag
+          # Compute repo root to reference the shared script robustly
+          REPO_ROOT=$(git rev-parse --show-toplevel)
+          timeout 60 python "$REPO_ROOT/.github/scripts/run_langgraph_cli_test.py" -t ${{ matrix.example.tag }}
 
       - name: Build JS service
         if: steps.changed-files.outputs.all
