@@ -1,105 +1,145 @@
-import asyncio
 import pathlib
 import sys
-import langgraph_cli
-import langgraph_cli.docker
-import langgraph_cli.config
+import time
+from urllib import request, error
 
+import langgraph_cli
+import langgraph_cli.config
+import langgraph_cli.docker
+from langgraph_cli.cli import prepare_args_and_stdin
+from langgraph_cli.constants import DEFAULT_PORT
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
-from langgraph_cli.constants import DEFAULT_PORT
 
 
-def test(
-    config: pathlib.Path,
-    port: int,
-    tag: str,
-    verbose: bool,
-):
+def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
+    """Spin up API with Postgres/Redis via docker compose and wait until ready."""
     with Runner() as runner, Progress(message="Pulling...") as set:
-        # check docker available
+        # Detect docker/compose capabilities
         capabilities = langgraph_cli.docker.check_capabilities(runner)
-        # open config
+
+        # Validate config and prepare compose stdin/args using built image
         config_json = langgraph_cli.config.validate_config_file(config)
+        args, stdin = prepare_args_and_stdin(
+            capabilities=capabilities,
+            config_path=config,
+            config=config_json,
+            docker_compose=None,
+            port=port,
+            watch=False,
+            debugger_port=None,
+            debugger_base_url=f"http://127.0.0.1:{port}",
+            postgres_uri=None,
+            api_version=None,
+            image=tag,
+            base_image=None,
+        )
 
-        set("Running...")
-        args = [
-            "run",
-            "--rm",
-            "-p",
-            f"{port}:8000",
-        ]
-        if isinstance(config_json["env"], str):
-            args.extend(
-                [
-                    "--env-file",
-                    str(config.parent / config_json["env"]),
-                ]
-            )
-        else:
-            for k, v in config_json["env"].items():
-                args.extend(
-                    [
-                        "-e",
-                        f"{k}={v}",
-                    ]
-                )
-        if capabilities.healthcheck_start_interval:
-            args.extend(
-                [
-                    "--health-interval",
-                    "5s",
-                    "--health-retries",
-                    "1",
-                    "--health-start-period",
-                    "10s",
-                    "--health-start-interval",
-                    "1s",
-                ]
-            )
-        else:
-            args.extend(
-                [
-                    "--health-interval",
-                    "5s",
-                    "--health-retries",
-                    "2",
-                ]
-            )
+        # Compose up with wait (implies detach), similar to `langgraph up --wait`
+        args_up = [*args, "up", "--remove-orphans", "--wait"]
 
-        _task = None
+        compose_cmd = ["docker", "compose"]
+        if capabilities.compose_type == "standalone":
+            compose_cmd = ["docker-compose"]
 
-        def on_stdout(line: str):
-            nonlocal _task
-            if "GET /ok" in line or "Uvicorn running on" in line:
-                set("")
-                sys.stdout.write(
-                    f"""Ready!
-- API: http://localhost:{port}
-"""
-                )
-                sys.stdout.flush()
-                _task.cancel()
-                return True
-            return False
-
-        async def subp_exec_task(*args, **kwargs):
-            nonlocal _task
-            _task = asyncio.create_task(subp_exec(*args, **kwargs))
-            await _task
-
+        set("Starting...")
         try:
             runner.run(
-                subp_exec_task(
-                    "docker",
-                    *args,
-                    tag,
+                subp_exec(
+                    *compose_cmd,
+                    *args_up,
+                    input=stdin,
                     verbose=verbose,
-                    on_stdout=on_stdout,
                 )
             )
-        except asyncio.CancelledError:
-            pass
+        except Exception as e:  # noqa: BLE001
+            # On failure, show diagnostics then ensure clean teardown
+            sys.stderr.write(f"docker compose up failed: {e}\n")
+            try:
+                sys.stderr.write("\n== docker compose ps ==\n")
+                runner.run(subp_exec(*compose_cmd, *args, "ps", input=stdin, verbose=False))
+            except Exception:
+                pass
+            try:
+                sys.stderr.write("\n== docker compose logs (api) ==\n")
+                runner.run(
+                    subp_exec(
+                        *compose_cmd,
+                        *args,
+                        "logs",
+                        "langgraph-api",
+                        input=stdin,
+                        verbose=False,
+                    )
+                )
+            except Exception:
+                pass
+            finally:
+                try:
+                    runner.run(
+                        subp_exec(
+                            *compose_cmd,
+                            *args,
+                            "down",
+                            "-v",
+                            "--remove-orphans",
+                            input=stdin,
+                            verbose=False,
+                        )
+                    )
+                finally:
+                    raise
+
+        set("")
+        base_url = f"http://localhost:{port}"
+        ok_url = f"{base_url}/ok"
+        print(f"Waiting for {ok_url} to respond with 200...")
+        deadline = time.time() + 30
+        last_err: Exception | None = None
+        while time.time() < deadline:
+            try:
+                with request.urlopen(ok_url, timeout=2) as resp:
+                    if resp.status == 200:
+                        sys.stdout.write(
+                            f"""Ready!\n- API: {base_url}\n- /ok: 200 OK\n"""
+                        )
+                        sys.stdout.flush()
+                        break
+                    else:
+                        last_err = RuntimeError(f"Unexpected status: {resp.status}")
+                        print(f"Unexpected status: {resp.status}")
+            except error.URLError as e:
+                last_err = e
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+            time.sleep(0.5)
+        else:
+            # Bring stack down before raising
+            args_down = [*args, "down", "-v", "--remove-orphans"]
+            try:
+                runner.run(
+                    subp_exec(
+                        *compose_cmd,
+                        *args_down,
+                        input=stdin,
+                        verbose=verbose,
+                    )
+                )
+            finally:
+                raise SystemExit(
+                    f"/ok did not return 202 within timeout. Last error: {last_err}"
+                )
+
+        # Clean up: bring compose stack down to free ports for next test
+        args_down = [*args, "down", "-v", "--remove-orphans"]
+        runner.run(
+            subp_exec(
+                *compose_cmd,
+                *args_down,
+                input=stdin,
+                verbose=verbose,
+            )
+        )
 
 
 if __name__ == "__main__":
@@ -108,6 +148,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--tag", type=str)
     parser.add_argument("-c", "--config", type=str, default="./langgraph.json")
-    parser.add_argument("-p", "--port", default=DEFAULT_PORT)
+    parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args()
     test(pathlib.Path(args.config), args.port, args.tag, verbose=True)

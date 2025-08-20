@@ -49,7 +49,7 @@ jobs:
           # The build-arg isn't used; just testing that we accept other args
           langgraph build -t langgraph-test-a
           cp .env.example .env
-          echo $LANGSMITH_API_KEY >> .env
+          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
           timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -c langgraph.json -t langgraph-test-a
       - name: Build and test service B
         if: steps.changed-files.outputs.all
@@ -59,7 +59,7 @@ jobs:
         run: |
           langgraph build -t langgraph-test-b
           cp .env.example .env
-          echo $LANGSMITH_API_KEY >> .env
+          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-b
       - name: Build and test service C
         if: steps.changed-files.outputs.all
@@ -69,7 +69,7 @@ jobs:
         run: |
           langgraph build -t langgraph-test-c
           cp .env.example .env
-          echo $LANGSMITH_API_KEY >> .env
+          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-c
       - name: Build and test service D
         if: steps.changed-files.outputs.all
@@ -79,7 +79,7 @@ jobs:
         run: |
           langgraph build -t langgraph-test-d
           cp .env.example .env
-          echo $LANGSMITH_API_KEY >> .env
+          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-d
 
       - name: Build JS service
