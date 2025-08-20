@@ -779,7 +779,7 @@ def test__get_state_args() -> None:
 def test_inspect_react() -> None:
     model = FakeToolCallingModel(tool_calls=[])
     agent = create_agent(model, [])
-    inspect.getclosurevars(agent.nodes["agent"].bound.func)
+    inspect.getclosurevars(agent.nodes["model"].bound.func)
 
 
 def test_react_with_subgraph_tools(
@@ -1528,7 +1528,7 @@ def test_post_model_hook() -> None:
     events = list(pmh_agent.stream({"messages": [HumanMessage("hi?")], "flag": False}))
     assert events == [
         {
-            "agent": {
+            "model": {
                 "messages": [
                     AIMessage(
                         content="hi?",
@@ -1597,7 +1597,7 @@ def test_post_model_hook_with_structured_output() -> None:
     )
     assert events == [
         {
-            "agent": {
+            "model": {
                 "messages": [
                     AIMessage(
                         content="What's the weather?",
@@ -1629,7 +1629,7 @@ def test_post_model_hook_with_structured_output() -> None:
             }
         },
         {
-            "agent": {
+            "model": {
                 "messages": [
                     AIMessage(
                         content="What's the weather?-What's the weather?-The weather is sunny and 75°F.",

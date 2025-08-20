@@ -680,7 +680,7 @@ class _AgentBuilder(Generic[StructuredResponseT]):
 
     def _get_entry_point(self) -> str:
         """Get the workflow entry point."""
-        return "pre_model_hook" if self.pre_model_hook else "agent"
+        return "pre_model_hook" if self.pre_model_hook else "model"
 
     def _get_model_paths(self) -> list[str]:
         """Get possible edge destinations from model node."""
@@ -714,7 +714,7 @@ class _AgentBuilder(Generic[StructuredResponseT]):
 
         # Add nodes
         workflow.add_node(
-            "agent", self.create_model_node(), input_schema=self._get_input_schema()
+            "model", self.create_model_node(), input_schema=self._get_input_schema()
         )
 
         if self._tool_calling_enabled:
@@ -728,10 +728,10 @@ class _AgentBuilder(Generic[StructuredResponseT]):
 
         # Add edges
         if self.pre_model_hook:
-            workflow.add_edge("pre_model_hook", "agent")
+            workflow.add_edge("pre_model_hook", "model")
 
         if self.post_model_hook:
-            workflow.add_edge("agent", "post_model_hook")
+            workflow.add_edge("model", "post_model_hook")
             post_hook_paths = self._get_post_model_hook_paths()
             if len(post_hook_paths) == 1:
                 # No need for a conditional edge if there's only one path
@@ -746,10 +746,10 @@ class _AgentBuilder(Generic[StructuredResponseT]):
             model_paths = self._get_model_paths()
             if len(model_paths) == 1:
                 # No need for a conditional edge if there's only one path
-                workflow.add_edge("agent", model_paths[0])
+                workflow.add_edge("model", model_paths[0])
             else:
                 workflow.add_conditional_edges(
-                    "agent",
+                    "model",
                     self.create_model_router(),
                     path_map=model_paths,
                 )
@@ -911,10 +911,10 @@ def create_agent(
         store: An optional store object. This is used for persisting data
             across multiple threads (e.g., multiple conversations / users).
         interrupt_before: An optional list of node names to interrupt before.
-            Should be one of the following: "agent", "tools".
+            Should be one of the following: "model", "tools".
             This is useful if you want to add a user confirmation or other interrupt before taking an action.
         interrupt_after: An optional list of node names to interrupt after.
-            Should be one of the following: "agent", "tools".
+            Should be one of the following: "model", "tools".
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
         name: An optional name for the CompiledStateGraph.
@@ -924,7 +924,7 @@ def create_agent(
     Returns:
         A CompiledStateGraph that can be used for chat interactions.
 
-    The "agent" node calls the language model with the messages list (after applying the prompt).
+    The "model" node calls the language model with the messages list (after applying the prompt).
     If the resulting AIMessage contains `tool_calls`, the graph will then call the ["tools"][langgraph.prebuilt.tool_node.ToolNode].
     The "tools" node executes the tools (1 tool per `tool_call`) and adds the responses to the messages list
     as `ToolMessage` objects. The agent node then calls the language model again.
