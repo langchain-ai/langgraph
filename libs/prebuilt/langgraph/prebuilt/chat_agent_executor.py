@@ -771,7 +771,7 @@ class _AgentBuilder(Generic[StructuredResponseT]):
         return workflow
 
 
-def create_react_agent(
+def create_agent(
     model: Union[
         str,
         BaseChatModel,
@@ -796,7 +796,7 @@ def create_react_agent(
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
 
-    For more details on using `create_react_agent`, visit [Agents](https://langchain-ai.github.io/langgraph/agents/overview/) documentation.
+    For more details on using `create_agent`, visit [Agents](https://langchain-ai.github.io/langgraph/agents/overview/) documentation.
 
     Args:
         model: The language model for the agent. Supports static and dynamic
@@ -947,13 +947,13 @@ def create_react_agent(
 
     Example:
         ```python
-        from langgraph.prebuilt import create_react_agent
+        from langgraph.prebuilt import create_agent
 
         def check_weather(location: str) -> str:
             '''Return the weather forecast for the specified location.'''
             return f"It's always sunny in {location}"
 
-        graph = create_react_agent(
+        graph = create_agent(
             "anthropic:claude-3-7-sonnet-latest",
             tools=[check_weather],
             prompt="You are a helpful assistant",
@@ -1005,12 +1005,8 @@ def create_react_agent(
     )
 
 
-# Keep for backwards compatibility
-create_tool_calling_executor = create_react_agent
-
 __all__ = [
-    "create_react_agent",
-    "create_tool_calling_executor",
+    "create_agent",
     "AgentState",
     "AgentStatePydantic",
     "AgentStateWithStructuredResponse",
