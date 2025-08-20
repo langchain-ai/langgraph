@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass, is_dataclass
-from typing import Any, Generic, Literal, TypeVar, Union, cast, get_args, get_origin
+from typing import Any, Generic, Literal, TypeVar, Union, get_args, get_origin
 
 from langchain_core.messages import AIMessage
-from langchain_core.tools import BaseTool
-from langchain_core.tools import tool as create_tool
+from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, TypeAdapter
-from typing_extensions import Self, TypedDict, is_typeddict
+from typing_extensions import Self, is_typeddict
 
 # Supported schema types: Pydantic models, dataclasses, TypedDict, JSON schema dicts
 SchemaT = TypeVar("SchemaT")
@@ -21,179 +20,34 @@ if sys.version_info >= (3, 10):
 else:
     UnionType = Union
 
-
-def _validate_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Validate and normalize a JSON schema dict.
-    
-    Args:
-        schema: The JSON schema dict to validate
-        
-    Returns:
-        The validated and normalized JSON schema
-        
-    Raises:
-        ValueError: If the schema is invalid
-    """
-    validated_schema = schema.copy()
-    if "type" not in validated_schema and "$ref" not in validated_schema:
-        # If no type is specified, assume object type
-        if "properties" in validated_schema:
-            validated_schema["type"] = "object"
-        else:
-            raise ValueError(
-                "JSON schema must have 'type' field or be a reference ($ref)"
-            )
-    if "title" not in validated_schema:
-        validated_schema["title"] = "Schema"
-    
-    return validated_schema
+SchemaKind = Literal["pydantic", "dataclass", "typeddict", "json_schema"]
 
 
-def _parse_with_json_schema(schema: dict[str, Any], data: dict[str, Any]) -> dict[str, Any]:
-    """Parse data using a JSON schema for validation.
-    
-    Args:
-        schema: The JSON schema dict
-        data: The data to parse
-        
-    Returns:
-        The validated data
-        
-    Raises:
-        ValueError: If validation fails
-    """
-    try:
-        # Check required fields
-        if "required" in schema and isinstance(schema["required"], list):
-            missing_fields = set(schema["required"]) - set(data.keys())
-            if missing_fields:
-                raise ValueError(f"Missing required fields: {missing_fields}")
-        # Filter data to only include valid properties
-        if "properties" in schema and isinstance(schema["properties"], dict):
-            valid_keys = set(schema["properties"].keys())
-            filtered_data = {k: v for k, v in data.items() if k in valid_keys}
-            return filtered_data
-        return data
-        
-    except Exception as e:
-        schema_title = schema.get("title", "Schema")
-        raise ValueError(
-            f"Failed to validate data against JSON schema '{schema_title}': {e}"
-        ) from e
-
-
-def _is_json_schema(obj: Any) -> bool:
-    """Check if an object is a valid JSON schema dict.
-    
-    Args:
-        obj: The object to check
-        
-    Returns:
-        True if the object appears to be a JSON schema
-    """
-    if not isinstance(obj, dict):
-        return False
-    if "type" in obj or "$ref" in obj:
-        return True
-    json_schema_keywords = {
-        "properties", "items", "additionalProperties", "required", 
-        "enum", "const", "allOf", "anyOf", "oneOf", "not",
-        "title", "description", "default", "examples"
-    }
-    
-    return bool(json_schema_keywords.intersection(obj.keys()))
-
-
-def _detect_schema_kind(schema: Union[type, dict]) -> Literal["pydantic", "dataclass", "typeddict", "json_schema"]:
-    """Detect the kind of schema type.
-    
-    Args:
-        schema: The schema type or dict to detect
-        
-    Returns:
-        The schema kind
-        
-    Raises:
-        ValueError: If schema type is not supported
-    """
-    if isinstance(schema, dict):
-        if _is_json_schema(schema):
-            return "json_schema"
-        else:
-            raise ValueError(
-                f"Dict provided but does not appear to be a valid JSON schema. "
-                f"Expected JSON schema with 'type' field or other JSON schema keywords."
-            )
-    elif isinstance(schema, type) and issubclass(schema, BaseModel):
-        return "pydantic"
-    elif is_dataclass(schema):
-        return "dataclass"
-    elif is_typeddict(schema):
-        return "typeddict"
-    else:
-        raise ValueError(
-            f"Unsupported schema type: {type(schema)}. "
-            f"Supported types: Pydantic models, dataclasses, TypedDict, and JSON schema dicts."
-        )
-
-
-def _parse_with_schema(schema: Union[type, dict], data: dict[str, Any]) -> Any:
+def _parse_with_schema(
+    schema: Union[type[SchemaT], dict], schema_kind: SchemaKind, data: dict[str, Any]
+) -> Any:
     """Parse data using for any supported schema type.
-    
+
     Args:
         schema: The schema type (Pydantic model, dataclass, or TypedDict)
         data: The data to parse
-        
+
     Returns:
         The parsed instance according to the schema type
-        
+
     Raises:
         ValueError: If parsing fails
     """
-    schema_kind = _detect_schema_kind(schema)
-    
     if schema_kind == "json_schema":
-        return _parse_with_json_schema(schema, data)
+        # TODO: do we want to validate json schema here? we should use a third party library for this if so
+        return data
     else:
         try:
-            adapter = TypeAdapter(schema)
+            adapter: TypeAdapter[SchemaT] = TypeAdapter(schema)
             return adapter.validate_python(data)
         except Exception as e:
-            schema_name = getattr(schema, '__name__', str(schema))
-            raise ValueError(
-                f"Failed to parse data to {schema_name}: {e}"
-            ) from e
-
-
-def _create_json_schema(schema: Union[type, dict]) -> dict[str, Any]:
-    """Create a JSON schema using Pydantic's TypeAdapter.
-    
-    Args:
-        schema: The schema type
-        
-    Returns:
-        JSON schema dictionary
-    """
-    schema_kind = _detect_schema_kind(schema)
-    
-    if schema_kind == "json_schema":
-        # If it's already a JSON schema, return it as-is (with validation)
-        return _validate_json_schema(schema)
-    else:
-        # For other types, use TypeAdapter to generate JSON schema
-        try:
-            adapter = TypeAdapter(schema)
-            json_schema = adapter.json_schema()
-            # Ensure the schema has a title
-            if "title" not in json_schema:
-                schema_name = getattr(schema, '__name__', 'Schema')
-                json_schema["title"] = schema_name
-            return json_schema
-        except Exception as e:
-            schema_name = getattr(schema, '__name__', str(schema))
-            raise ValueError(
-                f"Failed to generate JSON schema for {schema_name}: {e}"
-            ) from e
+            schema_name = getattr(schema, "__name__", str(schema))
+            raise ValueError(f"Failed to parse data to {schema_name}: {e}") from e
 
 
 @dataclass(init=False)
@@ -203,17 +57,24 @@ class _SchemaSpec(Generic[SchemaT]):
     schema: Union[type[SchemaT], dict[str, Any]]
     """The schema for the response, can be a Pydantic model, dataclass, TypedDict, or JSON schema dict."""
 
-    name: str | None = None
+    name: str
     """Name of the schema, used for tool calling.
     
-    If not provided, the name will be the model name.
+    If not provided, the name will be the model name or "structured_output" if it's a JSON schema.
     """
 
-    description: str | None = None
+    description: str
     """Custom description of the schema. 
     
     If not provided, provided will use the model's docstring.
     """
+
+    schema_kind: SchemaKind
+    """The kind of schema."""
+
+    json_schema: dict[str, Any]
+    """JSON schema associated with the schema."""
+
     strict: bool = False
     """Whether to enforce strict validation of the schema."""
 
@@ -227,9 +88,42 @@ class _SchemaSpec(Generic[SchemaT]):
     ) -> None:
         """Initialize SchemaSpec with schema and optional parameters."""
         self.schema = schema
-        self.name = name
-        self.description = description
+
+        self.name = name or (
+            schema.get("title", "structured_output")
+            if isinstance(schema, dict)
+            else getattr(schema, "__name__", "structured_output")
+        )
+
+        self.description = description or (
+            schema.get("description", "")
+            if isinstance(schema, dict)
+            # TODO: do we want to enforce docstrings / descriptions?
+            else getattr(schema, "__doc__", None) or ""
+        )
+
         self.strict = strict
+
+        # TODO: do we need to add title to json schema?
+
+        if isinstance(schema, dict):
+            # TODO: we could validate json schema here
+            self.schema_kind = "json_schema"
+            self.json_schema = schema
+        elif isinstance(schema, type) and issubclass(schema, BaseModel):
+            self.schema_kind = "pydantic"
+            self.json_schema = schema.model_json_schema()
+        elif is_dataclass(schema):
+            self.schema_kind = "dataclass"
+            self.json_schema = TypeAdapter(schema).json_schema()
+        elif is_typeddict(schema):
+            self.schema_kind = "typeddict"
+            self.json_schema = TypeAdapter(schema).json_schema()
+        else:
+            raise ValueError(
+                f"Unsupported schema type: {type(schema)}. "
+                f"Supported types: Pydantic models, dataclasses, TypedDicts, and JSON schema dicts."
+            )
 
 
 @dataclass(init=False)
@@ -246,7 +140,9 @@ class ToolOutput(Generic[SchemaT]):
     """Schema specs for the tool calls."""
 
     def __init__(
-        self, schema: Union[type[SchemaT], dict[str, Any]], tool_message_content: str = "ok!"
+        self,
+        schema: Union[type[SchemaT], dict[str, Any]],
+        tool_message_content: str = "ok!",
     ) -> None:
         """Initialize ToolOutput with schemas and tool message content."""
         self.schema = schema
@@ -264,13 +160,14 @@ class NativeOutput(Generic[SchemaT]):
 
     schema: Union[type[SchemaT], dict[str, Any]]
     """Schema for native mode."""
+
+    schema_spec: _SchemaSpec[SchemaT]
+    """Schema spec for native mode."""
+
     provider: Literal["openai", "grok"] = "openai"
     """Provider hint. Grok uses OpenAI-compatible payload, but other providers 
     may use a different format when native structured output is more widely supported.
     """
-
-    schema_spec: _SchemaSpec[SchemaT]
-    """Schema spec for native mode."""
 
     def __init__(
         self,
@@ -283,19 +180,13 @@ class NativeOutput(Generic[SchemaT]):
         self.schema_spec = _SchemaSpec(schema)
 
     def to_model_kwargs(self) -> dict[str, Any]:
-        model_cls = self.schema
-        schema_kind = _detect_schema_kind(model_cls)
-        
-        name = self.schema_spec.name or getattr(model_cls, '__name__', 'Schema')
-        json_schema = _create_json_schema(model_cls)
-
         # OpenAI:
         # - see https://platform.openai.com/docs/guides/structured-outputs
         response_format = {
             "type": "json_schema",
             "json_schema": {
-                "name": name,
-                "schema": json_schema,
+                "name": self.schema_spec.name,
+                "schema": self.schema_spec.json_schema,
             },
         }
         return {"response_format": response_format}
@@ -313,7 +204,7 @@ class OutputToolBinding(Generic[SchemaT]):
     schema: Union[type[SchemaT], dict[str, Any]]
     """The original schema provided for structured output (Pydantic model, dataclass, TypedDict, or JSON schema dict)."""
 
-    schema_kind: Literal["pydantic", "dataclass", "typeddict", "json_schema"]
+    schema_kind: SchemaKind
     """Classification of the schema type for proper response construction."""
 
     tool: BaseTool
@@ -329,38 +220,14 @@ class OutputToolBinding(Generic[SchemaT]):
         Returns:
             An OutputToolBinding instance with the appropriate tool created
         """
-        # Extract the actual schema from SchemaSpec
-        schema = schema_spec.schema
-        kwargs = {}
-
-        # Use custom description if provided
-        if schema_spec.description:
-            kwargs["description"] = schema_spec.description
-
-        # Determine schema kind
-        schema_kind = _detect_schema_kind(schema)
-
-        if schema_spec.name is not None:
-            tool_creator = create_tool(schema_spec.name)
-        else:
-            tool_creator = create_tool  # type: ignore[assignment]
-
-        if schema_kind == "pydantic":
-            # For Pydantic models, pass the model directly
-            tool = tool_creator(schema, **kwargs)
-        else:
-            # For other types, create a dummy function and pass JSON schema as args_schema
-            def dummy_func(**args: Any) -> str:
-                """Structured output tool."""
-                return "ok!"
-            
-            json_schema = _create_json_schema(schema)
-            tool = tool_creator(dummy_func, args_schema=json_schema, **kwargs)
-
         return cls(
-            schema=cast(Union[type[SchemaT], dict[str, Any]], schema),
-            schema_kind=schema_kind,
-            tool=tool,
+            schema=schema_spec.schema,
+            schema_kind=schema_spec.schema_kind,
+            tool=StructuredTool(
+                args_schema=schema_spec.json_schema,
+                name=schema_spec.name,
+                description=schema_spec.description,
+            ),
         )
 
     def parse(self, tool_args: dict[str, Any]) -> SchemaT:
@@ -375,7 +242,7 @@ class OutputToolBinding(Generic[SchemaT]):
         Raises:
             ValueError: If parsing fails
         """
-        return _parse_with_schema(self.schema, tool_args)
+        return _parse_with_schema(self.schema, self.schema_kind, tool_args)
 
 
 @dataclass
@@ -389,13 +256,12 @@ class NativeOutputBinding(Generic[SchemaT]):
 
     schema: Union[type[SchemaT], dict[str, Any]]
     """The original schema provided for structured output (Pydantic model, dataclass, TypedDict, or JSON schema dict)."""
-    schema_kind: Literal["pydantic", "dataclass", "typeddict", "json_schema"]
+
+    schema_kind: SchemaKind
     """Classification of the schema type for proper response construction."""
 
     @classmethod
-    def from_schema_spec(
-        cls, schema_spec: _SchemaSpec[SchemaT]
-    ) -> Self:
+    def from_schema_spec(cls, schema_spec: _SchemaSpec[SchemaT]) -> Self:
         """Create a NativeOutputBinding instance from a SchemaSpec.
 
         Args:
@@ -404,15 +270,9 @@ class NativeOutputBinding(Generic[SchemaT]):
         Returns:
             A NativeOutputBinding instance for parsing native structured output
         """
-        # Extract the actual schema from SchemaSpec
-        schema = schema_spec.schema
-
-        # Determine schema kind
-        schema_kind = _detect_schema_kind(schema)
-
         return cls(
-            schema=schema,  # type: ignore[arg-type]
-            schema_kind=schema_kind,
+            schema=schema_spec.schema,
+            schema_kind=schema_spec.schema_kind,
         )
 
     def parse(self, response: AIMessage) -> SchemaT:
@@ -429,25 +289,26 @@ class NativeOutputBinding(Generic[SchemaT]):
         """
         # Extract text content from AIMessage and parse as JSON
         raw_text = self._extract_text_content_from_message(response)
-        
+
         import json
+
         try:
             data = json.loads(raw_text)
         except Exception as e:
-            schema_name = getattr(self.schema, '__name__', 'Schema')
+            schema_name = getattr(self.schema, "__name__", "structured_output")
             raise ValueError(
                 f"Native structured output expected valid JSON for {schema_name}, but parsing failed: {e}."
             ) from e
 
         # Parse according to schema
-        return _parse_with_schema(self.schema, data)
+        return _parse_with_schema(self.schema, self.schema_kind, data)
 
     def _extract_text_content_from_message(self, message: AIMessage) -> str:
         """Extract text content from an AIMessage.
-        
+
         Args:
             message: The AI message to extract text from
-            
+
         Returns:
             The extracted text content
         """

@@ -55,7 +55,8 @@ from langgraph.types import Checkpointer, Command, Send
 from langgraph.typing import ContextT, StateT
 
 StructuredResponseT = TypeVar(
-    "StructuredResponseT", bound=Union[dict, BaseModel, None], default=None
+    "StructuredResponseT",
+    default=None,
 )
 
 
@@ -65,7 +66,7 @@ class AgentState(TypedDict, Generic[StructuredResponseT]):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
     remaining_steps: NotRequired[RemainingSteps]
-      
+
     structured_response: NotRequired[StructuredResponseT]
 
 
@@ -233,8 +234,10 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         self.structured_output_tools: dict[
             str, OutputToolBinding[StructuredResponseT]
         ] = {}
-        self.native_output_binding: NativeOutputBinding[StructuredResponseT] | None = None
-        
+        self.native_output_binding: NativeOutputBinding[StructuredResponseT] | None = (
+            None
+        )
+
         if self.response_format is not None:
             response_format = self.response_format
 
@@ -402,24 +405,21 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                     )
                 else:
                     # If native output is configured, bind tools with strict=True. Required for OpenAI.
-                    if (
-                        isinstance(self.response_format, NativeOutput)
-                        and (
-                            self.response_format.provider == "openai"
-                            or self.response_format.provider == "grok"
-                        )
+                    if isinstance(self.response_format, NativeOutput) and (
+                        self.response_format.provider == "openai"
+                        or self.response_format.provider == "grok"
                     ):
-                        model = cast(BaseChatModel, model).bind_tools(
+                        model = cast(BaseChatModel, model).bind_tools(  # type: ignore[assignment]
                             all_tools, strict=True
                         )
                     else:
-                        model = cast(BaseChatModel, model).bind_tools(all_tools)
+                        model = cast(BaseChatModel, model).bind_tools(all_tools)  # type: ignore[assignment]
 
             # bind native structured-output kwargs
-            model = self._apply_native_output_binding(model)
+            model = self._apply_native_output_binding(model)  # type: ignore[arg-type]
 
             # Extract just the model part for direct invocation
-            self._static_model: Optional[Runnable] = model  # type: ignore[assignment]
+            self._static_model: Optional[Runnable] = model
         else:
             self._static_model = None
 
@@ -429,7 +429,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         """Resolve the model to use, handling both static and dynamic models."""
         if self._is_dynamic_model:
             dynamic_model = self.model(state, runtime)  # type: ignore[operator, arg-type]
-            return self._apply_native_output_binding(dynamic_model)
+            return self._apply_native_output_binding(dynamic_model)  # type: ignore[arg-type]
         else:
             return self._static_model
 
@@ -445,8 +445,8 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             resolved_model = await dynamic_model(state, runtime)
             return resolved_model
         elif self._is_dynamic_model:
-            dynamic_model = self.model(state, runtime)  # type: ignore[arg-type, operator]
-            return self._apply_native_output_binding(dynamic_model)
+            dynamic_model = self.model(state, runtime)  # type: ignore[arg-type, assignment, operator]
+            return self._apply_native_output_binding(dynamic_model)  # type: ignore[arg-type]
         else:
             return self._static_model
 
@@ -779,7 +779,11 @@ def create_agent(
     *,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
-        Union[ToolOutput[StructuredResponseT], NativeOutput[StructuredResponseT], type[StructuredResponseT]]
+        Union[
+            ToolOutput[StructuredResponseT],
+            NativeOutput[StructuredResponseT],
+            type[StructuredResponseT],
+        ]
     ] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
@@ -965,16 +969,15 @@ def create_agent(
             raise ValueError(
                 "Passing a 2-tuple as response_format is no longer supported. "
             )
-    else:
-        # Can only be a ToolOutput or None at this point.
-        response_format = cast(Optional[ToolOutput], response_format)
 
     # Create and configure the agent builder
     builder = _AgentBuilder[StateT, ContextT, StructuredResponseT](
         model=model,
         tools=tools,
         prompt=prompt,
-        response_format=response_format,
+        response_format=cast(
+            Union[ResponseFormat[StructuredResponseT], None], response_format
+        ),
         pre_model_hook=pre_model_hook,
         post_model_hook=post_model_hook,
         state_schema=state_schema,
