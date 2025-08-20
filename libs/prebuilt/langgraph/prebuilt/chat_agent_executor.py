@@ -211,7 +211,7 @@ def _get_model_rec(
             model,
         )
     elif isinstance(model, RunnableBinding):
-        return model.bound
+        return _get_model_rec(model.bound)
     else:
         return model
 
