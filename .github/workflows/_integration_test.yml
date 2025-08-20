@@ -58,7 +58,7 @@ jobs:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
           langgraph build -t langgraph-test-b
-          cp .env.example .env
+          cp ../.env.example .env
           if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-b
       - name: Build and test service C
@@ -68,7 +68,7 @@ jobs:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
           langgraph build -t langgraph-test-c
-          cp .env.example .env
+          cp ../.env.example .env
           if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-c
       - name: Build and test service D
@@ -78,7 +78,7 @@ jobs:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
           langgraph build -t langgraph-test-d
-          cp .env.example .env
+          cp ../.env.example .env
           if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-d
 
