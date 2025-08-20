@@ -286,7 +286,7 @@ class NativeOutput(Generic[SchemaT]):
         model_cls = self.schema
         schema_kind = _detect_schema_kind(model_cls)
         
-        name = self.schema_spec.name or model_cls.__name__
+        name = self.schema_spec.name or getattr(model_cls, '__name__', 'Schema')
         json_schema = _create_json_schema(model_cls)
 
         # OpenAI:
@@ -338,20 +338,24 @@ class OutputToolBinding(Generic[SchemaT]):
             kwargs["description"] = schema_spec.description
 
         # Determine schema kind
-        if isinstance(schema, type) and issubclass(schema, BaseModel):
-            schema_kind = "pydantic"
-        else:
-            raise ValueError(
-                f"Unsupported schema type: {type(schema)}. "
-                f"Only Pydantic models are supported."
-            )
+        schema_kind = _detect_schema_kind(schema)
 
         if schema_spec.name is not None:
             tool_creator = create_tool(schema_spec.name)
         else:
             tool_creator = create_tool  # type: ignore[assignment]
 
-        tool = tool_creator(schema, **kwargs)
+        if schema_kind == "pydantic":
+            # For Pydantic models, pass the model directly
+            tool = tool_creator(schema, **kwargs)
+        else:
+            # For other types, create a dummy function and pass JSON schema as args_schema
+            def dummy_func(**args: Any) -> str:
+                """Structured output tool."""
+                return "ok!"
+            
+            json_schema = _create_json_schema(schema)
+            tool = tool_creator(dummy_func, args_schema=json_schema, **kwargs)
 
         return cls(
             schema=cast(Union[type[SchemaT], dict[str, Any]], schema),
@@ -402,13 +406,7 @@ class NativeOutputBinding(Generic[SchemaT]):
         schema = schema_spec.schema
 
         # Determine schema kind
-        if isinstance(schema, type) and issubclass(schema, BaseModel):
-            schema_kind = "pydantic"
-        else:
-            raise ValueError(
-                f"Unsupported schema type: {type(schema)}. "
-                f"Only Pydantic models are supported."
-            )
+        schema_kind = _detect_schema_kind(schema)
 
         return cls(
             schema=schema,  # type: ignore[arg-type]
@@ -434,8 +432,9 @@ class NativeOutputBinding(Generic[SchemaT]):
         try:
             data = json.loads(raw_text)
         except Exception as e:
+            schema_name = getattr(self.schema, '__name__', 'Schema')
             raise ValueError(
-                f"Native structured output expected valid JSON for {self.schema.__name__}, but parsing failed: {e}."
+                f"Native structured output expected valid JSON for {schema_name}, but parsing failed: {e}."
             ) from e
 
         # Parse according to schema
