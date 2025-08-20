@@ -60,7 +60,7 @@ LOCATION_DATA = {"city": "New York", "country": "USA"}
 # Standardized expected responses
 EXPECTED_WEATHER_PYDANTIC = WeatherBaseModel(**WEATHER_DATA)
 EXPECTED_WEATHER_DATACLASS = WeatherDataclass(**WEATHER_DATA)
-EXPECTED_WEATHER_DICT = WEATHER_DATA
+EXPECTED_WEATHER_DICT: WeatherTypedDict = {"temperature": 75.0, "condition": "sunny"}
 EXPECTED_LOCATION = LocationResponse(**LOCATION_DATA)
 
 
@@ -124,7 +124,7 @@ class TestResponseFormatAsModel:
             ],
         ]
 
-        model = FakeToolCallingModel[dict](
+        model = FakeToolCallingModel[WeatherTypedDict](
             tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DICT
         )
 
@@ -222,7 +222,7 @@ class TestResponseFormatAsToolOutput:
             ],
         ]
 
-        model = FakeToolCallingModel[dict](
+        model = FakeToolCallingModel[WeatherTypedDict](
             tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DICT
         )
 
@@ -384,7 +384,7 @@ class TestResponseFormatAsNativeOutput:
             ],
         ]
 
-        model = FakeToolCallingModel[dict](
+        model = FakeToolCallingModel[WeatherTypedDict](
             tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DICT
         )
 

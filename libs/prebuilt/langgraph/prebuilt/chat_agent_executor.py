@@ -421,7 +421,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             model = self._apply_native_output_binding(model)
 
             # Extract just the model part for direct invocation
-            self._static_model: Optional[Runnable] = model  # type: ignore[assignment]
+            self._static_model: Optional[Runnable] = model
         else:
             self._static_model = None
 

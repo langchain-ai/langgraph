@@ -27,7 +27,7 @@ from langgraph.prebuilt.chat_agent_executor import StructuredResponseT
 
 
 class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
-    tool_calls: Optional[list[list[ToolCall]]] = None
+    tool_calls: Optional[Union[list[list[ToolCall]], list[list[dict]]]] = None
     structured_response: Optional[StructuredResponseT] = None
     index: int = 0
     tool_style: Literal["openai", "anthropic"] = "openai"
