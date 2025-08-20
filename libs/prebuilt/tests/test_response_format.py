@@ -1,10 +1,11 @@
 """Test suite for create_react_agent with structured output response_format permutations."""
 
 from dataclasses import dataclass
-from typing import TypedDict, Union
+from typing import Union
 
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
 
 from langgraph.prebuilt import create_agent
 from langgraph.prebuilt.responses import NativeOutput, ToolOutput
@@ -405,7 +406,7 @@ class TestResponseFormatAsNativeOutput:
         assert len(response["messages"]) == 5
 
 
-def test_union_of_types(self) -> None:
+def test_union_of_types() -> None:
     """Test response_format as NativeOutput with Union (if supported)."""
     tool_calls = [
         [{"args": {}, "id": "1", "name": "get_weather"}],
@@ -425,7 +426,7 @@ def test_union_of_types(self) -> None:
     agent = create_agent(
         model,
         [get_weather, get_location],
-        response_format=NativeOutput(Union[WeatherBaseModel, LocationResponse]),
+        response_format=ToolOutput(Union[WeatherBaseModel, LocationResponse]),
     )
     response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
