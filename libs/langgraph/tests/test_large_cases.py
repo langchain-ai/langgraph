@@ -1775,7 +1775,7 @@ def test_state_graph_packets(
         )
     ] == [
         {
-            "model": {
+            "agent": {
                 "messages": AIMessage(
                     id="ai1",
                     content="",
@@ -1799,7 +1799,7 @@ def test_state_graph_packets(
             }
         },
         {
-            "model": {
+            "agent": {
                 "messages": AIMessage(
                     id="ai2",
                     content="",
@@ -1836,14 +1836,14 @@ def test_state_graph_packets(
                 ),
             },
         },
-        {"model": {"messages": AIMessage(content="answer", id="ai3")}},
+        {"agent": {"messages": AIMessage(content="answer", id="ai3")}},
     ]
 
     # interrupt after agent
 
     app_w_interrupt = workflow.compile(
         checkpointer=sync_checkpointer,
-        interrupt_after=["model"],
+        interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
 
@@ -1856,7 +1856,7 @@ def test_state_graph_packets(
         )
     ] == [
         {
-            "model": {
+            "agent": {
                 "messages": AIMessage(
                     id="ai1",
                     content="",
@@ -1966,7 +1966,7 @@ def test_state_graph_packets(
             }
         },
         {
-            "model": {
+            "agent": {
                 "messages": AIMessage(
                     id="ai2",
                     content="",
@@ -2121,7 +2121,7 @@ def test_state_graph_packets(
         )
     ] == [
         {
-            "model": {
+            "agent": {
                 "messages": AIMessage(
                     id="ai1",
                     content="",
@@ -2225,7 +2225,7 @@ def test_state_graph_packets(
             }
         },
         {
-            "model": {
+            "agent": {
                 "messages": AIMessage(
                     id="ai2",
                     content="",
