@@ -365,3 +365,55 @@ services:
             POSTGRES_URI: {DEFAULT_POSTGRES_URI}"""
     assert clean_empty_lines(actual_compose_str) == expected_compose_str
 
+def test_parse_version_normal_versions():
+    """Test _parse_version with normal semantic versions."""
+    assert _parse_version("1.2.3") == Version(1, 2, 3)
+    assert _parse_version("28.1.1") == Version(28, 1, 1)
+    assert _parse_version("0.0.1") == Version(0, 0, 1)
+
+
+def test_parse_version_with_v_prefix():
+    """Test _parse_version with 'v' prefix versions."""
+    assert _parse_version("v1.2.3") == Version(1, 2, 3)
+    assert _parse_version("v28.1.1") == Version(28, 1, 1)
+    assert _parse_version("v0.0.1") == Version(0, 0, 1)
+
+
+def test_parse_version_prerelease():
+    """Test _parse_version with prerelease versions."""
+    assert _parse_version("1.2.3-alpha") == Version(1, 2, 3)
+    assert _parse_version("1.2.3-beta.1") == Version(1, 2, 3)
+    assert _parse_version("1.2.3-rc.1") == Version(1, 2, 3)
+    assert _parse_version("28.1.1-alpha") == Version(28, 1, 1)
+
+
+def test_parse_version_build_metadata():
+    """Test _parse_version with build metadata versions."""
+    assert _parse_version("1.2.3+1") == Version(1, 2, 3)
+    assert _parse_version("1.2.3+build.1") == Version(1, 2, 3)
+    assert _parse_version("28.1.1+1") == Version(28, 1, 1)  # This was the failing case
+    assert _parse_version("1.2.3+20230101") == Version(1, 2, 3)
+
+
+def test_parse_version_combined_prerelease_and_build():
+    """Test _parse_version with combined prerelease and build metadata."""
+    assert _parse_version("1.2.3-alpha+1") == Version(1, 2, 3)
+    assert _parse_version("1.2.3-beta.1+build.1") == Version(1, 2, 3)
+    assert _parse_version("28.1.1-rc+build") == Version(28, 1, 1)
+    assert _parse_version("1.2.3-alpha.1+beta") == Version(1, 2, 3)
+
+
+def test_parse_version_edge_cases():
+    """Test _parse_version with edge cases and missing components."""
+    # Missing patch version
+    assert _parse_version("1.2") == Version(1, 2, 0)
+    assert _parse_version("28.1") == Version(28, 1, 0)
+    
+    # Missing minor and patch versions
+    assert _parse_version("1") == Version(1, 0, 0)
+    assert _parse_version("28") == Version(28, 0, 0)
+    
+    # With 'v' prefix and missing components
+    assert _parse_version("v1.2") == Version(1, 2, 0)
+    assert _parse_version("v1") == Version(1, 0, 0)
+
