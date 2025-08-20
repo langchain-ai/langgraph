@@ -1,6 +1,6 @@
 import re
 import sys
-from typing import Annotated, Union
+from typing import Annotated, Optional, Union
 from unittest.mock import AsyncMock, MagicMock
 
 import langsmith as ls
@@ -1185,7 +1185,7 @@ async def test_remote_graph_stream_messages_tuple(
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("headers", [None, {"foo": "bar"}])
 async def test_include_headers(
-    distributed_tracing: bool, stream: bool, headers: dict[str, str] | None
+    distributed_tracing: bool, stream: bool, headers: Optional[dict[str, str]]
 ):
     mock_async_client = MagicMock()
     async_iter = MagicMock()
