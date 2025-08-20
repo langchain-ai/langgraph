@@ -60,7 +60,7 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10
 F = TypeVar("F", bound=Callable[..., Any])
 
 StructuredResponseT = TypeVar(
-    "StructuredResponseT", bound=dict | BaseModel | None, default=None
+    "StructuredResponseT", bound=Union[dict, BaseModel, None], default=None
 )
 
 
