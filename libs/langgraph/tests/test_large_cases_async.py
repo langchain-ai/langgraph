@@ -1143,11 +1143,11 @@ async def test_prebuilt_tool_chat() -> None:
             ),
             {
                 "langgraph_step": 1,
-                "langgraph_node": "agent",
-                "langgraph_triggers": ("branch:to:agent",),
-                "langgraph_path": (PULL, "agent"),
-                "langgraph_checkpoint_ns": AnyStr("agent:"),
-                "checkpoint_ns": AnyStr("agent:"),
+                "langgraph_node": "model",
+                "langgraph_triggers": ("branch:to:model",),
+                "langgraph_path": (PULL, "model"),
+                "langgraph_checkpoint_ns": AnyStr("model:"),
+                "checkpoint_ns": AnyStr("model:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
             },
@@ -1202,11 +1202,11 @@ async def test_prebuilt_tool_chat() -> None:
             ),
             {
                 "langgraph_step": 3,
-                "langgraph_node": "agent",
-                "langgraph_triggers": ("branch:to:agent",),
-                "langgraph_path": (PULL, "agent"),
-                "langgraph_checkpoint_ns": AnyStr("agent:"),
-                "checkpoint_ns": AnyStr("agent:"),
+                "langgraph_node": "model",
+                "langgraph_triggers": ("branch:to:model",),
+                "langgraph_path": (PULL, "model"),
+                "langgraph_checkpoint_ns": AnyStr("model:"),
+                "checkpoint_ns": AnyStr("model:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
             },
@@ -1250,11 +1250,11 @@ async def test_prebuilt_tool_chat() -> None:
             ),
             {
                 "langgraph_step": 5,
-                "langgraph_node": "agent",
-                "langgraph_triggers": ("branch:to:agent",),
-                "langgraph_path": (PULL, "agent"),
-                "langgraph_checkpoint_ns": AnyStr("agent:"),
-                "checkpoint_ns": AnyStr("agent:"),
+                "langgraph_node": "model",
+                "langgraph_triggers": ("branch:to:model",),
+                "langgraph_path": (PULL, "model"),
+                "langgraph_checkpoint_ns": AnyStr("model:"),
+                "checkpoint_ns": AnyStr("model:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
             },
@@ -1269,7 +1269,7 @@ async def test_prebuilt_tool_chat() -> None:
     ]
     assert stream_updates_events[:3] == [
         {
-            "agent": {
+            "model": {
                 "messages": [
                     _AnyIdAIMessage(
                         content="",
@@ -1296,7 +1296,7 @@ async def test_prebuilt_tool_chat() -> None:
             }
         },
         {
-            "agent": {
+            "model": {
                 "messages": [
                     _AnyIdAIMessage(
                         content="",
@@ -1342,7 +1342,7 @@ async def test_prebuilt_tool_chat() -> None:
         },
     )
     assert stream_updates_events[5:] == [
-        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}}
+        {"model": {"messages": [_AnyIdAIMessage(content="answer")]}}
     ]
 
 

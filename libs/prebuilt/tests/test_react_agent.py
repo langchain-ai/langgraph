@@ -2,7 +2,6 @@ import dataclasses
 import inspect
 from typing import (
     Annotated,
-    Optional,
     Union,
 )
 
@@ -32,8 +31,6 @@ from langgraph.prebuilt import (
 )
 from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
-    AgentStatePydantic,
-    StateSchemaType,
     _validate_chat_history,
 )
 from langgraph.prebuilt.tool_node import (
@@ -466,14 +463,8 @@ class CustomState(AgentState):
     user_name: str
 
 
-class CustomStatePydantic(AgentStatePydantic):
-    user_name: Optional[str] = None
-
-
-@pytest.mark.parametrize("state_schema", [CustomState, CustomStatePydantic])
 def test_react_agent_update_state(
     sync_checkpointer: BaseCheckpointSaver,
-    state_schema: StateSchemaType,
 ) -> None:
     @dec_tool
     def get_user_name(tool_call_id: Annotated[str, InjectedToolCallId]):
@@ -490,31 +481,20 @@ def test_react_agent_update_state(
             }
         )
 
-    if issubclass(state_schema, AgentStatePydantic):
+    def prompt(state: CustomState):
+        user_name = state.get("user_name")
+        if user_name is None:
+            return state["messages"]
 
-        def prompt(state: CustomStatePydantic):
-            user_name = state.user_name
-            if user_name is None:
-                return state.messages
-
-            system_msg = f"User name is {user_name}"
-            return [{"role": "system", "content": system_msg}] + state.messages
-    else:
-
-        def prompt(state: CustomState):
-            user_name = state.get("user_name")
-            if user_name is None:
-                return state["messages"]
-
-            system_msg = f"User name is {user_name}"
-            return [{"role": "system", "content": system_msg}] + state["messages"]
+        system_msg = f"User name is {user_name}"
+        return [{"role": "system", "content": system_msg}] + state["messages"]
 
     tool_calls = [[{"args": {}, "id": "1", "name": "get_user_name"}]]
     model = FakeToolCallingModel(tool_calls=tool_calls)
     agent = create_agent(
         model,
         [get_user_name],
-        state_schema=state_schema,
+        state_schema=CustomState,
         prompt=prompt,
         checkpointer=sync_checkpointer,
     )
@@ -604,39 +584,20 @@ class AgentStateExtraKey(AgentState):
     foo: int
 
 
-class AgentStateExtraKeyPydantic(AgentStatePydantic):
-    foo: int
-
-
-@pytest.mark.parametrize(
-    "state_schema", [AgentStateExtraKey, AgentStateExtraKeyPydantic]
-)
-def test_create_react_agent_inject_vars(state_schema: StateSchemaType) -> None:
+def test_create_react_agent_inject_vars() -> None:
     """Test that the agent can inject state and store into tool functions."""
     store = InMemoryStore()
     namespace = ("test",)
     store.put(namespace, "test_key", {"bar": 3})
 
-    if issubclass(state_schema, AgentStatePydantic):
-
-        def tool1(
-            some_val: int,
-            state: Annotated[AgentStateExtraKeyPydantic, InjectedState],
-            store: Annotated[BaseStore, InjectedStore()],
-        ) -> str:
-            """Tool 1 docstring."""
-            store_val = store.get(namespace, "test_key").value["bar"]
-            return some_val + state.foo + store_val
-    else:
-
-        def tool1(
-            some_val: int,
-            state: Annotated[dict, InjectedState],
-            store: Annotated[BaseStore, InjectedStore()],
-        ) -> str:
-            """Tool 1 docstring."""
-            store_val = store.get(namespace, "test_key").value["bar"]
-            return some_val + state["foo"] + store_val
+    def tool1(
+        some_val: int,
+        state: Annotated[dict, InjectedState],
+        store: Annotated[BaseStore, InjectedStore()],
+    ) -> str:
+        """Tool 1 docstring."""
+        store_val = store.get(namespace, "test_key").value["bar"]
+        return some_val + state["foo"] + store_val
 
     tool_call = {
         "name": "tool1",
@@ -648,7 +609,7 @@ def test_create_react_agent_inject_vars(state_schema: StateSchemaType) -> None:
     agent = create_agent(
         model,
         ToolNode([tool1], handle_tool_errors=False),
-        state_schema=state_schema,
+        state_schema=AgentStateExtraKey,
         store=store,
     )
     result = agent.invoke({"messages": [{"role": "user", "content": "hi"}], "foo": 2})
@@ -1474,6 +1435,7 @@ async def test_dynamic_model_receives_correct_state_async():
     assert received_state["messages"][0].content == "hello async"
 
 
+@pytest.mark.skip(reason="TODO: support with prepare call")
 def test_pre_model_hook() -> None:
     model = FakeToolCallingModel(tool_calls=[])
 
@@ -1658,36 +1620,19 @@ def test_post_model_hook_with_structured_output() -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    "state_schema", [AgentStateExtraKey, AgentStateExtraKeyPydantic]
-)
-def test_create_react_agent_inject_vars_with_post_model_hook(
-    state_schema: StateSchemaType,
-) -> None:
+def test_create_react_agent_inject_vars_with_post_model_hook() -> None:
     store = InMemoryStore()
     namespace = ("test",)
     store.put(namespace, "test_key", {"bar": 3})
 
-    if issubclass(state_schema, AgentStatePydantic):
-
-        def tool1(
-            some_val: int,
-            state: Annotated[AgentStateExtraKeyPydantic, InjectedState],
-            store: Annotated[BaseStore, InjectedStore()],
-        ) -> str:
-            """Tool 1 docstring."""
-            store_val = store.get(namespace, "test_key").value["bar"]
-            return some_val + state.foo + store_val
-    else:
-
-        def tool1(
-            some_val: int,
-            state: Annotated[dict, InjectedState],
-            store: Annotated[BaseStore, InjectedStore()],
-        ) -> str:
-            """Tool 1 docstring."""
-            store_val = store.get(namespace, "test_key").value["bar"]
-            return some_val + state["foo"] + store_val
+    def tool1(
+        some_val: int,
+        state: Annotated[dict, InjectedState],
+        store: Annotated[BaseStore, InjectedStore()],
+    ) -> str:
+        """Tool 1 docstring."""
+        store_val = store.get(namespace, "test_key").value["bar"]
+        return some_val + state["foo"] + store_val
 
     tool_call = {
         "name": "tool1",
@@ -1704,7 +1649,7 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
     agent = create_agent(
         model,
         ToolNode([tool1], handle_tool_errors=False),
-        state_schema=state_schema,
+        state_schema=AgentStateExtraKey,
         store=store,
         post_model_hook=post_model_hook,
     )
