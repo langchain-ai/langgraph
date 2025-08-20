@@ -197,7 +197,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
         self._setup_tools()
         self._setup_state_schema()
-        self._setup_structured_output_tools()
+        self._setup_structured_output()
         self._setup_model()
 
     def _setup_tools(self) -> None:
@@ -218,7 +218,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         }
         self._tool_calling_enabled = len(self._tool_classes) > 0
 
-    def _setup_structured_output_tools(self) -> None:
+    def _setup_structured_output(self) -> None:
         """Set up structured output tracking for "tools" and "native" strategies.
 
         "tools" strategy for structured output:
@@ -230,8 +230,6 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         1. Capturing the schema reference for later parsing
         2. Binding provider-native response_format kwargs at model bind time
         3. Parsing provider-enforced structured output directly into the schema
-
-        Future strategies (json_mode, guided) will have separate setup methods.
         """
         self.structured_output_tools: dict[
             str, OutputToolBinding[StructuredResponseT]
@@ -781,7 +779,7 @@ def create_agent(
     *,
     prompt: Optional[Prompt] = None,
     response_format: Optional[
-        Union[ToolOutput[StructuredResponseT], type[StructuredResponseT]]
+        Union[ToolOutput[StructuredResponseT], NativeOutput[StructuredResponseT], type[StructuredResponseT]]
     ] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
@@ -956,13 +954,12 @@ def create_agent(
             print(chunk)
         ```
     """
-    if response_format and not isinstance(response_format, ToolOutput):
+    if response_format and not isinstance(response_format, (ToolOutput, NativeOutput)):
         # Then it's a pydantic model or JSONSchema. We'll automatically convert
         # it to the tool output strategy as it is widely supported.
         response_format = ToolOutput(
             schema=response_format,
         )
-
     elif isinstance(response_format, tuple):
         if len(response_format) == 2:
             raise ValueError(
