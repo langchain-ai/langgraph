@@ -28,7 +28,6 @@ from typing import (
 
 import httpx
 import orjson
-from langgraph.types import Durability
 
 import langgraph_sdk
 from langgraph_sdk.schema import (
@@ -46,6 +45,7 @@ from langgraph_sdk.schema import (
     CronSelectField,
     CronSortBy,
     DisconnectMode,
+    Durability,
     GraphSchema,
     IfNotExists,
     Item,
