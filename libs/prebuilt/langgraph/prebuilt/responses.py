@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass, is_dataclass
-from typing import Any, Generic, Literal, TypeVar, Union, get_args, get_origin
+from typing import Any, Generic, Literal, TypeVar, Union, cast, get_args, get_origin
 
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool, StructuredTool
@@ -59,7 +59,7 @@ def _parse_with_json_schema(
 
 
 def _parse_with_schema(
-    schema: Union[type, dict], schema_kind: SchemaKind, data: dict[str, Any]
+    schema: Union[type[SchemaT], dict], schema_kind: SchemaKind, data: dict[str, Any]
 ) -> Any:
     """Parse data using for any supported schema type.
 
@@ -74,10 +74,10 @@ def _parse_with_schema(
         ValueError: If parsing fails
     """
     if schema_kind == "json_schema":
-        return _parse_with_json_schema(schema, data)
+        return _parse_with_json_schema(cast(dict[str, Any], schema), data)
     else:
         try:
-            adapter = TypeAdapter(schema)
+            adapter: TypeAdapter[SchemaT] = TypeAdapter(schema)
             return adapter.validate_python(data)
         except Exception as e:
             schema_name = getattr(schema, "__name__", str(schema))
@@ -103,14 +103,14 @@ class _SchemaSpec(Generic[SchemaT]):
     If not provided, provided will use the model's docstring.
     """
 
-    strict: bool = False
-    """Whether to enforce strict validation of the schema."""
-
     schema_kind: SchemaKind
     """The kind of schema."""
 
     json_schema: dict[str, Any]
     """JSON schema associated with the schema."""
+
+    strict: bool = False
+    """Whether to enforce strict validation of the schema."""
 
     def __init__(
         self,
@@ -132,7 +132,8 @@ class _SchemaSpec(Generic[SchemaT]):
         self.description = description or (
             schema.get("description", "")
             if isinstance(schema, dict)
-            else getattr(schema, "__doc__", "")
+            # TODO: do we want to enforce docstrings / descriptions?
+            else getattr(schema, "__doc__", None) or ""
         )
 
         self.strict = strict
@@ -194,13 +195,13 @@ class NativeOutput(Generic[SchemaT]):
     schema: Union[type[SchemaT], dict[str, Any]]
     """Schema for native mode."""
 
+    schema_spec: _SchemaSpec[SchemaT]
+    """Schema spec for native mode."""
+
     provider: Literal["openai", "grok"] = "openai"
     """Provider hint. Grok uses OpenAI-compatible payload, but other providers 
     may use a different format when native structured output is more widely supported.
     """
-
-    schema_spec: _SchemaSpec[SchemaT]
-    """Schema spec for native mode."""
 
     def __init__(
         self,

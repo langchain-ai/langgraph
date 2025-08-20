@@ -409,14 +409,14 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                         self.response_format.provider == "openai"
                         or self.response_format.provider == "grok"
                     ):
-                        model = cast(BaseChatModel, model).bind_tools(
+                        model = cast(BaseChatModel, model).bind_tools(  # type: ignore[assignment]
                             all_tools, strict=True
                         )
                     else:
-                        model = cast(BaseChatModel, model).bind_tools(all_tools)
+                        model = cast(BaseChatModel, model).bind_tools(all_tools)  # type: ignore[assignment]
 
             # bind native structured-output kwargs
-            model = self._apply_native_output_binding(model)
+            model = self._apply_native_output_binding(model)  # type: ignore[arg-type]
 
             # Extract just the model part for direct invocation
             self._static_model: Optional[Runnable] = model
@@ -429,7 +429,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         """Resolve the model to use, handling both static and dynamic models."""
         if self._is_dynamic_model:
             dynamic_model = self.model(state, runtime)  # type: ignore[operator, arg-type]
-            return self._apply_native_output_binding(dynamic_model)
+            return self._apply_native_output_binding(dynamic_model)  # type: ignore[arg-type]
         else:
             return self._static_model
 
@@ -445,8 +445,8 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             resolved_model = await dynamic_model(state, runtime)
             return resolved_model
         elif self._is_dynamic_model:
-            dynamic_model = self.model(state, runtime)  # type: ignore[arg-type, operator]
-            return self._apply_native_output_binding(dynamic_model)
+            dynamic_model = self.model(state, runtime)  # type: ignore[arg-type, assignment, operator]
+            return self._apply_native_output_binding(dynamic_model)  # type: ignore[arg-type]
         else:
             return self._static_model
 
@@ -975,7 +975,9 @@ def create_agent(
         model=model,
         tools=tools,
         prompt=prompt,
-        response_format=response_format,
+        response_format=cast(
+            Union[ResponseFormat[StructuredResponseT], None], response_format
+        ),
         pre_model_hook=pre_model_hook,
         post_model_hook=post_model_hook,
         state_schema=state_schema,
