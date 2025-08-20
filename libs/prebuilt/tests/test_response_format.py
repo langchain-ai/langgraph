@@ -45,14 +45,23 @@ class LocationResponse(BaseModel):
 
 def get_weather() -> str:
     """Get the weather."""
-
     return "The weather is sunny and 75°F."
 
 
 def get_location() -> str:
     """Get the current location."""
-
     return "You are in New York, USA."
+
+
+# Standardized test data
+WEATHER_DATA = {"temperature": 75.0, "condition": "sunny"}
+LOCATION_DATA = {"city": "New York", "country": "USA"}
+
+# Standardized expected responses
+EXPECTED_WEATHER_PYDANTIC = WeatherBaseModel(**WEATHER_DATA)
+EXPECTED_WEATHER_DATACLASS = WeatherDataclass(**WEATHER_DATA)
+EXPECTED_WEATHER_DICT = WEATHER_DATA
+EXPECTED_LOCATION = LocationResponse(**LOCATION_DATA)
 
 
 class TestResponseFormatAsModel:
@@ -64,20 +73,19 @@ class TestResponseFormatAsModel:
                 {
                     "name": "WeatherBaseModel",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = WeatherBaseModel(temperature=75.0, condition="sunny")
         model = FakeToolCallingModel[WeatherBaseModel](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_PYDANTIC
         )
 
         agent = create_agent(model, [get_weather], response_format=WeatherBaseModel)
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
         assert len(response["messages"]) == 5
 
     def test_dataclass(self) -> None:
@@ -88,20 +96,19 @@ class TestResponseFormatAsModel:
                 {
                     "name": "WeatherDataclass",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = WeatherDataclass(temperature=75.0, condition="sunny")
         model = FakeToolCallingModel[WeatherDataclass](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DATACLASS
         )
 
         agent = create_agent(model, [get_weather], response_format=WeatherDataclass)
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_DATACLASS
         assert len(response["messages"]) == 5
 
     def test_typed_dict(self) -> None:
@@ -112,20 +119,19 @@ class TestResponseFormatAsModel:
                 {
                     "name": "WeatherTypedDict",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = {"temperature": 75.0, "condition": "sunny"}
         model = FakeToolCallingModel[dict](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DICT
         )
 
         agent = create_agent(model, [get_weather], response_format=WeatherTypedDict)
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_DICT
         assert len(response["messages"]) == 5
 
     def test_json_schema(self) -> None:
@@ -136,20 +142,19 @@ class TestResponseFormatAsModel:
                 {
                     "name": "weather_schema",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = {"temperature": 75.0, "condition": "sunny"}
         model = FakeToolCallingModel[dict](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DICT
         )
 
         agent = create_agent(model, [get_weather], response_format=weather_json_schema)
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_DICT
         assert len(response["messages"]) == 5
 
 
@@ -162,14 +167,13 @@ class TestResponseFormatAsToolOutput:
                 {
                     "name": "WeatherBaseModel",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = WeatherBaseModel(temperature=75.0, condition="sunny")
         model = FakeToolCallingModel[WeatherBaseModel](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_PYDANTIC
         )
 
         agent = create_agent(
@@ -177,7 +181,7 @@ class TestResponseFormatAsToolOutput:
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
         assert len(response["messages"]) == 5
 
     def test_dataclass(self) -> None:
@@ -188,14 +192,13 @@ class TestResponseFormatAsToolOutput:
                 {
                     "name": "WeatherDataclass",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = WeatherDataclass(temperature=75.0, condition="sunny")
         model = FakeToolCallingModel[WeatherDataclass](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DATACLASS
         )
 
         agent = create_agent(
@@ -203,7 +206,7 @@ class TestResponseFormatAsToolOutput:
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_DATACLASS
         assert len(response["messages"]) == 5
 
     def test_typed_dict(self) -> None:
@@ -214,14 +217,13 @@ class TestResponseFormatAsToolOutput:
                 {
                     "name": "WeatherTypedDict",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = {"temperature": 75.0, "condition": "sunny"}
         model = FakeToolCallingModel[dict](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DICT
         )
 
         agent = create_agent(
@@ -229,7 +231,7 @@ class TestResponseFormatAsToolOutput:
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_DICT
         assert len(response["messages"]) == 5
 
     def test_json_schema(self) -> None:
@@ -240,14 +242,13 @@ class TestResponseFormatAsToolOutput:
                 {
                     "name": "weather_schema",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = {"temperature": 75.0, "condition": "sunny"}
         model = FakeToolCallingModel[dict](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DICT
         )
 
         agent = create_agent(
@@ -255,7 +256,7 @@ class TestResponseFormatAsToolOutput:
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_DICT
         assert len(response["messages"]) == 5
 
     def test_union_of_types(self) -> None:
@@ -267,14 +268,13 @@ class TestResponseFormatAsToolOutput:
                 {
                     "name": "WeatherBaseModel",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = WeatherBaseModel(temperature=75.0, condition="sunny")
         model = FakeToolCallingModel[Union[WeatherBaseModel, LocationResponse]](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_PYDANTIC
         )
 
         agent = create_agent(
@@ -284,7 +284,7 @@ class TestResponseFormatAsToolOutput:
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
         assert len(response["messages"]) == 5
 
         # Test with LocationResponse
@@ -294,17 +294,16 @@ class TestResponseFormatAsToolOutput:
                 {
                     "name": "LocationResponse",
                     "id": "2",
-                    "args": {"city": "New York", "country": "USA"},
+                    "args": LOCATION_DATA,
                 }
             ],
         ]
 
-        expected_location_response = LocationResponse(city="New York", country="USA")
         model_location = FakeToolCallingModel[
             Union[WeatherBaseModel, LocationResponse]
         ](
             tool_calls=tool_calls_location,
-            structured_response=expected_location_response,
+            structured_response=EXPECTED_LOCATION,
         )
 
         agent_location = create_agent(
@@ -316,7 +315,7 @@ class TestResponseFormatAsToolOutput:
             {"messages": [HumanMessage("Where am I?")]}
         )
 
-        assert response_location["structured_response"] == expected_location_response
+        assert response_location["structured_response"] == EXPECTED_LOCATION
         assert len(response_location["messages"]) == 5
 
 
@@ -330,14 +329,13 @@ class TestResponseFormatAsNativeOutput:
                 {
                     "name": "WeatherBaseModel",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = WeatherBaseModel(temperature=75.0, condition="sunny")
         model = FakeToolCallingModel[WeatherBaseModel](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_PYDANTIC
         )
 
         agent = create_agent(
@@ -345,7 +343,7 @@ class TestResponseFormatAsNativeOutput:
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
         assert len(response["messages"]) == 5
 
     def test_dataclass(self) -> None:
@@ -356,14 +354,13 @@ class TestResponseFormatAsNativeOutput:
                 {
                     "name": "WeatherDataclass",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = WeatherDataclass(temperature=75.0, condition="sunny")
         model = FakeToolCallingModel[WeatherDataclass](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DATACLASS
         )
 
         agent = create_agent(
@@ -371,7 +368,7 @@ class TestResponseFormatAsNativeOutput:
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_DATACLASS
         assert len(response["messages"]) == 5
 
     def test_typed_dict(self) -> None:
@@ -382,14 +379,13 @@ class TestResponseFormatAsNativeOutput:
                 {
                     "name": "WeatherTypedDict",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = {"temperature": 75.0, "condition": "sunny"}
         model = FakeToolCallingModel[dict](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DICT
         )
 
         agent = create_agent(
@@ -397,7 +393,7 @@ class TestResponseFormatAsNativeOutput:
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_DICT
         assert len(response["messages"]) == 5
 
     def test_json_schema(self) -> None:
@@ -408,14 +404,13 @@ class TestResponseFormatAsNativeOutput:
                 {
                     "name": "weather_schema",
                     "id": "2",
-                    "args": {"temperature": 75.0, "condition": "sunny"},
+                    "args": WEATHER_DATA,
                 }
             ],
         ]
 
-        expected_response = {"temperature": 75.0, "condition": "sunny"}
         model = FakeToolCallingModel[dict](
-            tool_calls=tool_calls, structured_response=expected_response
+            tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DICT
         )
 
         agent = create_agent(
@@ -423,7 +418,7 @@ class TestResponseFormatAsNativeOutput:
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-        assert response["structured_response"] == expected_response
+        assert response["structured_response"] == EXPECTED_WEATHER_DICT
         assert len(response["messages"]) == 5
 
 
@@ -435,14 +430,13 @@ def test_union_of_types(self) -> None:
             {
                 "name": "WeatherBaseModel",
                 "id": "2",
-                "args": {"temperature": 75.0, "condition": "sunny"},
+                "args": WEATHER_DATA,
             }
         ],
     ]
 
-    expected_response = WeatherBaseModel(temperature=75.0, condition="sunny")
     model = FakeToolCallingModel[Union[WeatherBaseModel, LocationResponse]](
-        tool_calls=tool_calls, structured_response=expected_response
+        tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_PYDANTIC
     )
 
     agent = create_agent(
@@ -452,5 +446,5 @@ def test_union_of_types(self) -> None:
     )
     response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
-    assert response["structured_response"] == expected_response
+    assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
     assert len(response["messages"]) == 5
