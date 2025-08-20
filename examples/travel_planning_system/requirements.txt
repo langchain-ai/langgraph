@@ -1,0 +1,41 @@
+# Travel Planning System Requirements
+# Core dependencies for the enhanced multi-agent travel planning system
+
+# HTTP client for API calls
+aiohttp>=3.8.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Date/time handling
+python-dateutil>=2.8.0
+
+# OpenTelemetry and tracing
+opentelemetry-api>=1.20.0
+opentelemetry-sdk>=1.20.0
+opentelemetry-exporter-otlp>=1.20.0
+azure-monitor-opentelemetry>=1.0.0
+
+# LangChain ecosystem
+langchain>=0.1.0
+langchain-core>=0.1.0
+langchain-openai>=0.0.5
+langchain-azure-ai>=0.1.0
+
+# Azure OpenAI (fallback)
+openai>=1.0.0
+
+# LangGraph
+langgraph>=0.0.40
+
+# Data processing
+pydantic>=2.0.0
+
+# Optional: Jupyter notebook support for development
+# jupyter>=1.0.0
+# ipykernel>=6.0.0
+
+# Optional: Development tools
+# pytest>=7.0.0
+# black>=23.0.0
+# flake8>=6.0.0
