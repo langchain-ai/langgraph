@@ -2,18 +2,18 @@
 # name: test_react_agent_graph_structure[None-None-tools0]
   '''
   graph TD;
-  	__start__ --> agent;
-  	agent --> __end__;
+  	__start__ --> model;
+  	model --> __end__;
   
   '''
 # ---
 # name: test_react_agent_graph_structure[None-None-tools1]
   '''
   graph TD;
-  	__start__ --> agent;
-  	agent -.-> __end__;
-  	agent -.-> tools;
-  	tools --> agent;
+  	__start__ --> model;
+  	model -.-> __end__;
+  	model -.-> tools;
+  	tools --> model;
   
   '''
 # ---
@@ -21,8 +21,8 @@
   '''
   graph TD;
   	__start__ --> pre_model_hook;
-  	pre_model_hook --> agent;
-  	agent --> __end__;
+  	pre_model_hook --> model;
+  	model --> __end__;
   
   '''
 # ---
@@ -30,9 +30,9 @@
   '''
   graph TD;
   	__start__ --> pre_model_hook;
-  	agent -.-> __end__;
-  	agent -.-> tools;
-  	pre_model_hook --> agent;
+  	model -.-> __end__;
+  	model -.-> tools;
+  	pre_model_hook --> model;
   	tools --> pre_model_hook;
   
   '''
@@ -40,8 +40,8 @@
 # name: test_react_agent_graph_structure[post_model_hook-None-tools0]
   '''
   graph TD;
-  	__start__ --> agent;
-  	agent --> post_model_hook;
+  	__start__ --> model;
+  	model --> post_model_hook;
   	post_model_hook --> __end__;
   
   '''
@@ -49,12 +49,12 @@
 # name: test_react_agent_graph_structure[post_model_hook-None-tools1]
   '''
   graph TD;
-  	__start__ --> agent;
-  	agent --> post_model_hook;
+  	__start__ --> model;
+  	model --> post_model_hook;
   	post_model_hook -.-> __end__;
-  	post_model_hook -.-> agent;
+  	post_model_hook -.-> model;
   	post_model_hook -.-> tools;
-  	tools --> agent;
+  	tools --> model;
   
   '''
 # ---
@@ -62,8 +62,8 @@
   '''
   graph TD;
   	__start__ --> pre_model_hook;
-  	agent --> post_model_hook;
-  	pre_model_hook --> agent;
+  	model --> post_model_hook;
+  	pre_model_hook --> model;
   	post_model_hook --> __end__;
   
   '''
@@ -72,11 +72,11 @@
   '''
   graph TD;
   	__start__ --> pre_model_hook;
-  	agent --> post_model_hook;
+  	model --> post_model_hook;
   	post_model_hook -.-> __end__;
   	post_model_hook -.-> pre_model_hook;
   	post_model_hook -.-> tools;
-  	pre_model_hook --> agent;
+  	pre_model_hook --> model;
   	tools --> pre_model_hook;
   
   '''

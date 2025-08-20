@@ -2,6 +2,7 @@ from typing import (
     Any,
     Callable,
     Dict,
+    Generic,
     List,
     Literal,
     Optional,
@@ -25,7 +26,7 @@ from pydantic import BaseModel
 from langgraph.prebuilt.chat_agent_executor import StructuredResponseT
 
 
-class FakeToolCallingModel(BaseChatModel):
+class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
     tool_calls: Optional[list[list[ToolCall]]] = None
     structured_response: Optional[StructuredResponseT] = None
     index: int = 0
