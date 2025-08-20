@@ -10,7 +10,7 @@ from typing import (
     Type,
     Union,
 )
-
+import json
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import (
@@ -22,6 +22,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
+from dataclasses import asdict, is_dataclass
 
 from langgraph.prebuilt.chat_agent_executor import StructuredResponseT
 
@@ -40,15 +41,36 @@ class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
         **kwargs: Any,
     ) -> ChatResult:
         """Top Level call"""
-        messages_string = "-".join([m.content for m in messages])
-        tool_calls = (
-            self.tool_calls[self.index % len(self.tool_calls)]
-            if self.tool_calls
-            else []
-        )
-        message = AIMessage(
-            content=messages_string, id=str(self.index), tool_calls=tool_calls.copy()
-        )
+        rf = kwargs.get("response_format")
+        is_native = isinstance(rf, dict) and rf.get("type") == "json_schema"
+        if is_native:
+            print("NATIVE. tool_calls: ", self.tool_calls)
+
+        if self.tool_calls:
+            if is_native:
+                tool_calls = (
+                    self.tool_calls[self.index] 
+                    if self.index < len(self.tool_calls) 
+                    else []
+                )
+            else:
+                tool_calls = self.tool_calls[self.index % len(self.tool_calls)]
+        else:
+            tool_calls = []
+
+        if is_native and not tool_calls:
+            if isinstance(self.structured_response, BaseModel):
+                content_obj = self.structured_response.model_dump()
+            elif is_dataclass(self.structured_response):
+                content_obj = asdict(self.structured_response)
+            elif isinstance(self.structured_response, dict):
+                content_obj = self.structured_response
+            message = AIMessage(content=json.dumps(content_obj), id=str(self.index))
+        else:
+            messages_string = "-".join([m.content for m in messages])
+            message = AIMessage(
+                content=messages_string, id=str(self.index), tool_calls=tool_calls.copy()
+            )
         self.index += 1
         return ChatResult(generations=[ChatGeneration(message=message)])
 

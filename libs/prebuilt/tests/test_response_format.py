@@ -347,7 +347,7 @@ class TestResponseFormatAsNativeOutput:
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
         assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
-        assert len(response["messages"]) == 5
+        assert len(response["messages"]) == 4
 
     def test_dataclass(self) -> None:
         """Test response_format as NativeOutput with dataclass."""
@@ -367,7 +367,7 @@ class TestResponseFormatAsNativeOutput:
         )
 
         assert response["structured_response"] == EXPECTED_WEATHER_DATACLASS
-        assert len(response["messages"]) == 5
+        assert len(response["messages"]) == 4
 
     def test_typed_dict(self) -> None:
         """Test response_format as NativeOutput with TypedDict."""
@@ -385,7 +385,7 @@ class TestResponseFormatAsNativeOutput:
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
         assert response["structured_response"] == EXPECTED_WEATHER_DICT
-        assert len(response["messages"]) == 5
+        assert len(response["messages"]) == 4
 
     def test_json_schema(self) -> None:
         """Test response_format as NativeOutput with JSON schema."""
@@ -403,7 +403,7 @@ class TestResponseFormatAsNativeOutput:
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
         assert response["structured_response"] == EXPECTED_WEATHER_DICT
-        assert len(response["messages"]) == 5
+        assert len(response["messages"]) == 4
 
 
 def test_union_of_types() -> None:
@@ -431,4 +431,4 @@ def test_union_of_types() -> None:
     response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
     assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
-    assert len(response["messages"]) == 5
+    assert len(response["messages"]) == 4
