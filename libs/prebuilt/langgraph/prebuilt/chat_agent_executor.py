@@ -55,7 +55,8 @@ from langgraph.types import Checkpointer, Command, Send
 from langgraph.typing import ContextT, StateT
 
 StructuredResponseT = TypeVar(
-    "StructuredResponseT", bound=Union[dict, BaseModel, None], default=None
+    "StructuredResponseT",
+    default=None,
 )
 
 
