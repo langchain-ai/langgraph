@@ -365,6 +365,7 @@ services:
             POSTGRES_URI: {DEFAULT_POSTGRES_URI}"""
     assert clean_empty_lines(actual_compose_str) == expected_compose_str
 
+
 def test_parse_version_normal_versions():
     """Test _parse_version with normal semantic versions."""
     assert _parse_version("1.2.3") == Version(1, 2, 3)
@@ -408,12 +409,11 @@ def test_parse_version_edge_cases():
     # Missing patch version
     assert _parse_version("1.2") == Version(1, 2, 0)
     assert _parse_version("28.1") == Version(28, 1, 0)
-    
+
     # Missing minor and patch versions
     assert _parse_version("1") == Version(1, 0, 0)
     assert _parse_version("28") == Version(28, 0, 0)
-    
+
     # With 'v' prefix and missing components
     assert _parse_version("v1.2") == Version(1, 2, 0)
     assert _parse_version("v1") == Version(1, 0, 0)
-
