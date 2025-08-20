@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass, is_dataclass
-from typing import Any, Generic, Literal, TypeVar, Union, cast, get_args, get_origin
+from typing import Any, Generic, Literal, TypeVar, Union, get_args, get_origin
 
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool, StructuredTool
@@ -23,41 +23,6 @@ else:
 SchemaKind = Literal["pydantic", "dataclass", "typeddict", "json_schema"]
 
 
-def _parse_with_json_schema(
-    schema: dict[str, Any], data: dict[str, Any]
-) -> dict[str, Any]:
-    """Parse data using a JSON schema for validation.
-
-    Args:
-        schema: The JSON schema dict
-        data: The data to parse
-
-    Returns:
-        The validated data
-
-    Raises:
-        ValueError: If validation fails
-    """
-    try:
-        # Check required fields
-        if "required" in schema and isinstance(schema["required"], list):
-            missing_fields = set(schema["required"]) - set(data.keys())
-            if missing_fields:
-                raise ValueError(f"Missing required fields: {missing_fields}")
-        # Filter data to only include valid properties
-        if "properties" in schema and isinstance(schema["properties"], dict):
-            valid_keys = set(schema["properties"].keys())
-            filtered_data = {k: v for k, v in data.items() if k in valid_keys}
-            return filtered_data
-        return data
-
-    except Exception as e:
-        schema_title = schema.get("title", "Schema")
-        raise ValueError(
-            f"Failed to validate data against JSON schema '{schema_title}': {e}"
-        ) from e
-
-
 def _parse_with_schema(
     schema: Union[type[SchemaT], dict], schema_kind: SchemaKind, data: dict[str, Any]
 ) -> Any:
@@ -74,7 +39,8 @@ def _parse_with_schema(
         ValueError: If parsing fails
     """
     if schema_kind == "json_schema":
-        return _parse_with_json_schema(cast(dict[str, Any], schema), data)
+        # TODO: do we want to validate json schema here? we should use a third party library for this if so
+        return data
     else:
         try:
             adapter: TypeAdapter[SchemaT] = TypeAdapter(schema)
