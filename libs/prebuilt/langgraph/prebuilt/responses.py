@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
-from types import UnionType
 from typing import Any, Generic, Literal, TypeVar, Union, cast, get_args, get_origin
 
 from langchain_core.tools import BaseTool
@@ -13,6 +13,12 @@ from typing_extensions import Self
 
 # For now, we support only Pydantic models as schemas.
 SchemaT = TypeVar("SchemaT")
+
+
+if sys.version_info >= (3, 10):
+    from types import UnionType
+else:
+    UnionType = Union
 
 
 @dataclass(init=False)
