@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-import json
 from typing import (
     Any,
     Awaitable,
@@ -9,7 +8,6 @@ from typing import (
     Generic,
     Optional,
     Sequence,
-    Type,
     Union,
     cast,
     get_type_hints,
