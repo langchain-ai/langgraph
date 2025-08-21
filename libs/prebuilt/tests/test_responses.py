@@ -39,7 +39,7 @@ class TestUsingToolStrategy:
         """Test basic UsingToolStrategy creation."""
         strategy = ToolOutput(schema=_TestModel)
         assert strategy.schema == _TestModel
-        assert strategy.tool_message_content == "ok!"
+        assert strategy.tool_message_content is None
         assert len(strategy.schema_specs) == 1
 
     def test_multiple_schemas(self):

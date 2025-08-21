@@ -1,3 +1,5 @@
+import json
+from dataclasses import asdict, is_dataclass
 from typing import (
     Any,
     Callable,
@@ -10,7 +12,7 @@ from typing import (
     Type,
     Union,
 )
-import json
+
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import (
@@ -22,7 +24,6 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
-from dataclasses import asdict, is_dataclass
 
 from langgraph.prebuilt.chat_agent_executor import StructuredResponseT
 
@@ -49,8 +50,8 @@ class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
         if self.tool_calls:
             if is_native:
                 tool_calls = (
-                    self.tool_calls[self.index] 
-                    if self.index < len(self.tool_calls) 
+                    self.tool_calls[self.index]
+                    if self.index < len(self.tool_calls)
                     else []
                 )
             else:
@@ -69,7 +70,9 @@ class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
         else:
             messages_string = "-".join([m.content for m in messages])
             message = AIMessage(
-                content=messages_string, id=str(self.index), tool_calls=tool_calls.copy()
+                content=messages_string,
+                id=str(self.index),
+                tool_calls=tool_calls.copy(),
             )
         self.index += 1
         return ChatResult(generations=[ChatGeneration(message=message)])

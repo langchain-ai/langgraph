@@ -308,27 +308,28 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                 "Behavior has not yet been defined in this case."
             )
 
-        if isinstance(self.response_format, ToolOutput):
-            tool_message_content = self.response_format.tool_message_content
-        else:
-            tool_message_content = "ok!"
-
         if len(structured_tool_calls) == 1:
             tool_call = structured_tool_calls[0]
-            messages = [
-                response,
-                ToolMessage(
-                    content=tool_message_content,
-                    tool_call_id=tool_call["id"],
-                    name=tool_call["name"],
-                ),
-            ]
             structured_tool_binding = self.structured_output_tools[tool_call["name"]]
             structured_response = structured_tool_binding.parse(tool_call["args"])
 
+            tool_message_content = (
+                self.response_format.tool_message_content
+                if isinstance(self.response_format, ToolOutput)
+                and self.response_format.tool_message_content
+                else f"Returning structured response: {repr(structured_response)}"
+            )
+
             return Command(
                 update={
-                    "messages": messages,
+                    "messages": [
+                        response,
+                        ToolMessage(
+                            content=tool_message_content,
+                            tool_call_id=tool_call["id"],
+                            name=tool_call["name"],
+                        ),
+                    ],
                     "structured_response": structured_response,
                 }
             )

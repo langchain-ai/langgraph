@@ -39,7 +39,6 @@ def _parse_with_schema(
         ValueError: If parsing fails
     """
     if schema_kind == "json_schema":
-        # TODO: do we want to validate json schema here? we should use a third party library for this if so
         return data
     else:
         try:
@@ -98,16 +97,12 @@ class _SchemaSpec(Generic[SchemaT]):
         self.description = description or (
             schema.get("description", "")
             if isinstance(schema, dict)
-            # TODO: do we want to enforce docstrings / descriptions?
             else getattr(schema, "__doc__", None) or ""
         )
 
         self.strict = strict
 
-        # TODO: do we need to add title to json schema?
-
         if isinstance(schema, dict):
-            # TODO: we could validate json schema here
             self.schema_kind = "json_schema"
             self.json_schema = schema
         elif isinstance(schema, type) and issubclass(schema, BaseModel):
@@ -133,16 +128,16 @@ class ToolOutput(Generic[SchemaT]):
     schema: Union[type[SchemaT], dict[str, Any]]
     """Schema for the tool calls."""
 
-    tool_message_content: str
-    """The content of the tool message to be returned when the model calls an artificial structured output tool."""
-
     schema_specs: list[_SchemaSpec[SchemaT]]
     """Schema specs for the tool calls."""
+
+    tool_message_content: str | None
+    """The content of the tool message to be returned when the model calls an artificial structured output tool."""
 
     def __init__(
         self,
         schema: Union[type[SchemaT], dict[str, Any]],
-        tool_message_content: str = "ok!",
+        tool_message_content: str | None = None,
     ) -> None:
         """Initialize ToolOutput with schemas and tool message content."""
         self.schema = schema

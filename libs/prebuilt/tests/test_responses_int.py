@@ -130,9 +130,7 @@ def test_responses_integration_matrix(case: Dict[str, Any]) -> None:
         assert dept_tool["mock"].call_count == expected_calls["getEmployeeDepartment"]
 
         # Check last message content
-        # TODO: Change last message from "ok!" to JS format.
         last_message = result["messages"][-1]
-        print("last_message.content: ", last_message.content)
         assert last_message.content == expected_last_message
 
         # Check structured response

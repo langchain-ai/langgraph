@@ -363,7 +363,7 @@ class TestResponseFormatAsNativeOutput:
             model, [get_weather], response_format=NativeOutput(WeatherDataclass)
         )
         response = agent.invoke(
-            {"messages": [HumanMessage("What's the weather?")]}, {"recursion_limit": 6}
+            {"messages": [HumanMessage("What's the weather?")]},
         )
 
         assert response["structured_response"] == EXPECTED_WEATHER_DATACLASS
@@ -431,4 +431,4 @@ def test_union_of_types() -> None:
     response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
     assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
-    assert len(response["messages"]) == 4
+    assert len(response["messages"]) == 5

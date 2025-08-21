@@ -26,7 +26,7 @@
             "getEmployeeRole": 1,
             "getEmployeeDepartment": 0
           },
-          "expectedLastMessage": "ok!",
+          "expectedLastMessage": "Returning structured response: structured_output_format_1(name='Sabine', role='Developer')",
           "expectedStructuredResponse": { "name": "Sabine", "role": "Developer" },
           "llmRequestCount": 2
         },
@@ -36,7 +36,7 @@
             "getEmployeeRole": 1,
             "getEmployeeDepartment": 1
           },
-          "expectedLastMessage": "ok!",
+          "expectedLastMessage": "Returning structured response: structured_output_format_2(name='Henrik', department='IT')",
           "expectedStructuredResponse": { "name": "Henrik", "department": "IT" },
           "llmRequestCount": 4
         }
