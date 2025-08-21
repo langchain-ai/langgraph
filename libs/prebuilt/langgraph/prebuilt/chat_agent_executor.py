@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import asdict, is_dataclass
 from typing import (
     Annotated,
     Any,
-    Callable,
     Generic,
-    Union,
     cast,
     get_type_hints,
 )
@@ -72,12 +70,12 @@ class AgentState(TypedDict, Generic[StructuredResponseT]):
 
 PROMPT_RUNNABLE_NAME = "Prompt"
 
-Prompt = Union[
-    SystemMessage,
-    str,
-    Callable[[StateT], LanguageModelInput],
-    Runnable[StateT, LanguageModelInput],
-]
+Prompt = (
+    SystemMessage
+    | str
+    | Callable[[StateT], LanguageModelInput]
+    | Runnable[StateT, LanguageModelInput]
+)
 
 
 def _get_state_value(state: StateT, key: str, default: Any = None) -> Any:
@@ -368,7 +366,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
     def _setup_model(self) -> None:
         """Setup model-related attributes."""
         self._is_dynamic_model = not isinstance(
-            self.model, (str, Runnable)
+            self.model, str | Runnable
         ) and callable(self.model)
         self._is_async_dynamic_model = (
             self._is_dynamic_model and inspect.iscoroutinefunction(self.model)
@@ -980,7 +978,7 @@ def create_agent(
             print(chunk)
         ```
     """
-    if response_format and not isinstance(response_format, (ToolOutput, NativeOutput)):
+    if response_format and not isinstance(response_format, ToolOutput | NativeOutput):
         if _supports_native_structured_output(model):
             response_format = NativeOutput(
                 schema=response_format,
@@ -1001,7 +999,7 @@ def create_agent(
         tools=tools,
         prompt=prompt,
         response_format=cast(
-            Union[ResponseFormat[StructuredResponseT], None], response_format
+            ResponseFormat[StructuredResponseT] | None, response_format
         ),
         pre_model_hook=pre_model_hook,
         post_model_hook=post_model_hook,

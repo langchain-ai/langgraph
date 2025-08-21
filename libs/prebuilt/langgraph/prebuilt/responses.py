@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass, is_dataclass
+from types import UnionType
 from typing import Any, Generic, Literal, TypeVar, Union, get_args, get_origin
 
 from langchain_core.messages import AIMessage
@@ -13,12 +13,6 @@ from typing_extensions import Self, is_typeddict
 
 # Supported schema types: Pydantic models, dataclasses, TypedDict, JSON schema dicts
 SchemaT = TypeVar("SchemaT")
-
-
-if sys.version_info >= (3, 10):
-    from types import UnionType
-else:
-    UnionType = Union
 
 SchemaKind = Literal["pydantic", "dataclass", "typeddict", "json_schema"]
 
@@ -316,4 +310,4 @@ class NativeOutputBinding(Generic[SchemaT]):
         return str(content)
 
 
-ResponseFormat = Union[ToolOutput[SchemaT], NativeOutput[SchemaT]]
+ResponseFormat = ToolOutput[SchemaT] | NativeOutput[SchemaT]

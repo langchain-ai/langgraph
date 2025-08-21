@@ -1,13 +1,10 @@
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, is_dataclass
 from typing import (
     Any,
-    Callable,
     Generic,
     Literal,
-    Optional,
-    Union,
 )
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -26,16 +23,16 @@ from langgraph.prebuilt.chat_agent_executor import StructuredResponseT
 
 
 class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
-    tool_calls: Optional[Union[list[list[ToolCall]], list[list[dict]]]] = None
-    structured_response: Optional[StructuredResponseT] = None
+    tool_calls: list[list[ToolCall]] | list[list[dict]] | None = None
+    structured_response: StructuredResponseT | None = None
     index: int = 0
     tool_style: Literal["openai", "anthropic"] = "openai"
 
     def _generate(
         self,
         messages: list[BaseMessage],
-        stop: Optional[list[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Top Level call"""
@@ -80,7 +77,7 @@ class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
 
     def bind_tools(
         self,
-        tools: Sequence[Union[dict[str, Any], type[BaseModel], Callable, BaseTool]],
+        tools: Sequence[dict[str, Any] | type[BaseModel] | Callable | BaseTool],
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         if len(tools) == 0:

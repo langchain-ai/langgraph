@@ -2,7 +2,6 @@ import dataclasses
 import inspect
 from typing import (
     Annotated,
-    Union,
 )
 
 import pytest
@@ -360,7 +359,7 @@ def test__infer_handled_types() -> None:
     def handle2(e: Exception) -> str:
         return ""
 
-    def handle3(e: Union[ValueError, ToolException]) -> str:
+    def handle3(e: ValueError | ToolException) -> str:
         return ""
 
     class Handler:
@@ -369,7 +368,7 @@ def test__infer_handled_types() -> None:
 
     handle4 = Handler().handle
 
-    def handle5(e: Union[Union[TypeError, ValueError], ToolException]):
+    def handle5(e: TypeError | ValueError | ToolException):
         return ""
 
     expected: tuple = (Exception,)
@@ -408,7 +407,7 @@ def test__infer_handled_types() -> None:
 
     with pytest.raises(ValueError):
 
-        def handler(e: Union[str, int]):
+        def handler(e: str | int):
             return ""
 
         _infer_handled_types(handler)
@@ -1524,7 +1523,7 @@ def test_post_model_hook_with_structured_output() -> None:
         flag: bool
         structured_response: WeatherResponse
 
-    def post_model_hook(state: State) -> Union[dict[str, bool], Command]:
+    def post_model_hook(state: State) -> dict[str, bool] | Command:
         return {"flag": True}
 
     model = FakeToolCallingModel(tool_calls=tool_calls)

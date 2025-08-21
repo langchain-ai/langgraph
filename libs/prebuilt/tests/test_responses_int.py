@@ -72,12 +72,12 @@ def _build_tool_output_response_format(
         fields = {}
         for k, prop in properties.items():
             py_type = type_map.get(prop.get("type"), Any)
-            fields[k] = (py_type, ...) if k in required else (Optional[py_type], None)
+            fields[k] = (py_type, ...) if k in required else (Optional[py_type], None)  # noqa: UP045
         model = create_model(type_name, **fields)
         models.append(model)
         keyset_to_tool_name[frozenset(required)] = type_name
 
-    union_type = Union[tuple(models)]
+    union_type = Union[tuple(models)]  # noqa: UP045, UP007
     return ToolOutput(union_type)
 
 

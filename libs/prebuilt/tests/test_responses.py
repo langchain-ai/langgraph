@@ -1,7 +1,5 @@
 """Unit tests for langgraph.prebuilt.responses module."""
 
-from typing import Union
-
 import pytest
 from pydantic import BaseModel
 
@@ -44,7 +42,7 @@ class TestUsingToolStrategy:
 
     def test_multiple_schemas(self):
         """Test UsingToolStrategy with multiple schemas."""
-        strategy = ToolOutput(schema=Union[_TestModel, CustomModel])
+        strategy = ToolOutput(schema=_TestModel | CustomModel)
         assert len(strategy.schema_specs) == 2
         assert strategy.schema_specs[0].schema == _TestModel
         assert strategy.schema_specs[1].schema == CustomModel

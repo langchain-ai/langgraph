@@ -1,7 +1,6 @@
 """Test suite for create_react_agent with structured output response_format permutations."""
 
 from dataclasses import dataclass
-from typing import Union
 
 import pytest
 from langchain_core.messages import HumanMessage
@@ -275,14 +274,12 @@ class TestResponseFormatAsToolOutput:
             ],
         ]
 
-        model = FakeToolCallingModel[Union[WeatherBaseModel, LocationResponse]](
-            tool_calls=tool_calls
-        )
+        model = FakeToolCallingModel(tool_calls=tool_calls)
 
         agent = create_agent(
             model,
             [get_weather, get_location],
-            response_format=ToolOutput(Union[WeatherBaseModel, LocationResponse]),
+            response_format=ToolOutput(WeatherBaseModel | LocationResponse),
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
@@ -306,7 +303,7 @@ class TestResponseFormatAsToolOutput:
         agent_location = create_agent(
             model_location,
             [get_weather, get_location],
-            response_format=ToolOutput(Union[WeatherBaseModel, LocationResponse]),
+            response_format=ToolOutput(WeatherBaseModel | LocationResponse),
         )
         response_location = agent_location.invoke(
             {"messages": [HumanMessage("Where am I?")]}
@@ -338,7 +335,7 @@ class TestResponseFormatAsToolOutput:
         agent = create_agent(
             model,
             [get_weather],
-            response_format=ToolOutput(Union[WeatherBaseModel, WeatherDataclass]),
+            response_format=ToolOutput(WeatherBaseModel | WeatherDataclass),
         )
 
         with pytest.raises(
@@ -437,14 +434,14 @@ def test_union_of_types() -> None:
         ],
     ]
 
-    model = FakeToolCallingModel[Union[WeatherBaseModel, LocationResponse]](
+    model = FakeToolCallingModel[WeatherBaseModel | LocationResponse](
         tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_PYDANTIC
     )
 
     agent = create_agent(
         model,
         [get_weather, get_location],
-        response_format=ToolOutput(Union[WeatherBaseModel, LocationResponse]),
+        response_format=ToolOutput(WeatherBaseModel | LocationResponse),
     )
     response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 

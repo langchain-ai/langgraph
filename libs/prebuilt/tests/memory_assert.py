@@ -2,7 +2,6 @@ import os
 import tempfile
 from collections import defaultdict
 from functools import partial
-from typing import Optional
 
 from langgraph.checkpoint.base import (
     ChannelVersions,
@@ -20,8 +19,8 @@ class MemorySaverAssertImmutable(InMemorySaver):
     def __init__(
         self,
         *,
-        serde: Optional[SerializerProtocol] = None,
-        put_sleep: Optional[float] = None,
+        serde: SerializerProtocol | None = None,
+        put_sleep: float | None = None,
     ) -> None:
         _, filename = tempfile.mkstemp()
         super().__init__(

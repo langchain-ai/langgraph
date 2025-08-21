@@ -36,16 +36,17 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from copy import copy, deepcopy
 from dataclasses import replace
 from typing import (
     Annotated,
     Any,
-    Callable,
     Literal,
     Union,
     cast,
+    get_args,
+    get_origin,
     get_type_hints,
 )
 
@@ -69,7 +70,6 @@ from langchain_core.tools.base import (
     get_all_basemodel_annotations,
 )
 from pydantic import BaseModel
-from typing_extensions import get_args, get_origin
 
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
@@ -151,7 +151,7 @@ def _handle_tool_error(
         The tuple case is handled by the caller through exception type checking,
         not by this function directly.
     """
-    if isinstance(flag, (bool, tuple)):
+    if isinstance(flag, bool | tuple):
         content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
     elif isinstance(flag, str):
         content = flag
@@ -494,9 +494,7 @@ class ToolNode(RunnableCallable):
         if isinstance(response, Command):
             return self._validate_tool_command(response, call, input_type)
         elif isinstance(response, ToolMessage):
-            response.content = cast(
-                Union[str, list], msg_content_output(response.content)
-            )
+            response.content = cast(str | list, msg_content_output(response.content))
             return response
         else:
             raise TypeError(
@@ -552,9 +550,7 @@ class ToolNode(RunnableCallable):
         if isinstance(response, Command):
             return self._validate_tool_command(response, call, input_type)
         elif isinstance(response, ToolMessage):
-            response.content = cast(
-                Union[str, list], msg_content_output(response.content)
-            )
+            response.content = cast(str | list, msg_content_output(response.content))
             return response
         else:
             raise TypeError(

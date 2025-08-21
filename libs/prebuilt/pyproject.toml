@@ -54,6 +54,7 @@ asyncio_mode = "auto"
 [tool.ruff]
 lint.select = [ "E", "F", "I", "TID251", "UP" ]
 lint.ignore = [ "E501" ]
+target-version = "py310"
 
 [tool.pytest-watcher]
 now = true
