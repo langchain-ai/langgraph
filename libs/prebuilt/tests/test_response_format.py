@@ -268,7 +268,9 @@ class TestResponseFormatAsToolOutput:
             ],
         ]
 
-        model = FakeToolCallingModel[Union[WeatherBaseModel, LocationResponse]](tool_calls=tool_calls)
+        model = FakeToolCallingModel[Union[WeatherBaseModel, LocationResponse]](
+            tool_calls=tool_calls
+        )
 
         agent = create_agent(
             model,

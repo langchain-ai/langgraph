@@ -159,19 +159,11 @@ class NativeOutput(Generic[SchemaT]):
     schema_spec: _SchemaSpec[SchemaT]
     """Schema spec for native mode."""
 
-    provider: Literal["openai", "grok"] = "openai"
-    """Provider hint. Grok uses OpenAI-compatible payload, but other providers 
-    may use a different format when native structured output is more widely supported.
-    """
-
     def __init__(
         self,
         schema: Union[type[SchemaT], dict[str, Any]],
-        *,
-        provider: Literal["openai", "grok"] = "openai",
     ) -> None:
         self.schema = schema
-        self.provider = provider
         self.schema_spec = _SchemaSpec(schema)
 
     def to_model_kwargs(self) -> dict[str, Any]:

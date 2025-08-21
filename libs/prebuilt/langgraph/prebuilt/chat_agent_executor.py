@@ -406,10 +406,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                     )
                 else:
                     # If native output is configured, bind tools with strict=True. Required for OpenAI.
-                    if isinstance(self.response_format, NativeOutput) and (
-                        self.response_format.provider == "openai"
-                        or self.response_format.provider == "grok"
-                    ):
+                    if isinstance(self.response_format, NativeOutput):
                         model = cast(BaseChatModel, model).bind_tools(  # type: ignore[assignment]
                             all_tools, strict=True
                         )
