@@ -85,124 +85,80 @@ Let's [run the agent](../../agents/run_agents.md) to verify that it behaves as e
 
 !!! note "We'll use `pretty_print_messages` helper to render the streamed agent outputs nicely"
 
-    ```python
-    from langchain_core.messages import convert_to_messages
-    
-    
-    def pretty_print_message(message, indent=False):
-        pretty_message = message.pretty_repr(html=True)
-        if not indent:
-            print(pretty_message)
-            return
-    
-        indented = "\n".join("\t" + c for c in pretty_message.split("\n"))
-        print(indented)
-    
-    
-    def pretty_print_messages(update, last_message=False):
-        is_subgraph = False
-        if isinstance(update, tuple):
-            ns, update = update
-            # skip parent graph updates in the printouts
-            if len(ns) == 0:
-                return
-    
-            graph_id = ns[-1].split(":")[0]
-            print(f"Update from subgraph {graph_id}:")
-            print("\n")
-            is_subgraph = True
-    
-        for node_name, node_update in update.items():
-            update_label = f"Update from node {node_name}:"
-            if is_subgraph:
-                update_label = "\t" + update_label
-    
-            print(update_label)
-            print("\n")
-    
-            messages = convert_to_messages(node_update["messages"])
-            if last_message:
-                messages = messages[-1:]
-    
-            for m in messages:
-                pretty_print_message(m, indent=is_subgraph)
-            print("\n")
-    ```
-
-```python
-from langchain_core.messages import convert_to_messages
+  ```python
+  from langchain_core.messages import convert_to_messages
 
 
-def pretty_print_message(message, indent=False):
-    pretty_message = message.pretty_repr(html=True)
-    if not indent:
-        print(pretty_message)
-        return
+  def pretty_print_message(message, indent=False):
+      pretty_message = message.pretty_repr(html=True)
+      if not indent:
+          print(pretty_message)
+          return
 
-    indented = "\n".join("\t" + c for c in pretty_message.split("\n"))
-    print(indented)
-
-
-def pretty_print_messages(update, last_message=False):
-    is_subgraph = False
-    if isinstance(update, tuple):
-        ns, update = update
-        # skip parent graph updates in the printouts
-        if len(ns) == 0:
-            return
-
-        graph_id = ns[-1].split(":")[0]
-        print(f"Update from subgraph {graph_id}:")
-        print("\n")
-        is_subgraph = True
-
-    for node_name, node_update in update.items():
-        update_label = f"Update from node {node_name}:"
-        if is_subgraph:
-            update_label = "\t" + update_label
-
-        print(update_label)
-        print("\n")
-
-        messages = convert_to_messages(node_update["messages"])
-        if last_message:
-            messages = messages[-1:]
-
-        for m in messages:
-            pretty_print_message(m, indent=is_subgraph)
-        print("\n")
-```
-
-```python
-for chunk in research_agent.stream(
-    {"messages": [{"role": "user", "content": "who is the mayor of NYC?"}]}
-):
-    pretty_print_messages(chunk)
-```
-
-**Output:**
-```
-Update from node agent:
+      indented = "\n".join("\t" + c for c in pretty_message.split("\n"))
+      print(indented)
 
 
-================================== Ai Message ==================================
-Name: research_agent
-Tool Calls:
-  tavily_search (call_U748rQhQXT36sjhbkYLSXQtJ)
- Call ID: call_U748rQhQXT36sjhbkYLSXQtJ
-  Args:
-    query: current mayor of New York City
-    search_depth: basic
+  def pretty_print_messages(update, last_message=False):
+      is_subgraph = False
+      if isinstance(update, tuple):
+          ns, update = update
+          # skip parent graph updates in the printouts
+          if len(ns) == 0:
+              return
+
+          graph_id = ns[-1].split(":")[0]
+          print(f"Update from subgraph {graph_id}:")
+          print("\n")
+          is_subgraph = True
+
+      for node_name, node_update in update.items():
+          update_label = f"Update from node {node_name}:"
+          if is_subgraph:
+              update_label = "\t" + update_label
+
+          print(update_label)
+          print("\n")
+
+          messages = convert_to_messages(node_update["messages"])
+          if last_message:
+              messages = messages[-1:]
+
+          for m in messages:
+              pretty_print_message(m, indent=is_subgraph)
+          print("\n")
+  ```
+
+  ```python
+  for chunk in research_agent.stream(
+      {"messages": [{"role": "user", "content": "who is the mayor of NYC?"}]}
+  ):
+      pretty_print_messages(chunk)
+  ```
+
+  **Output:**
+  ```
+  Update from node agent:
 
 
-Update from node tools:
+  ================================== Ai Message ==================================
+  Name: research_agent
+  Tool Calls:
+    tavily_search (call_U748rQhQXT36sjhbkYLSXQtJ)
+   Call ID: call_U748rQhQXT36sjhbkYLSXQtJ
+    Args:
+      query: current mayor of New York City
+      search_depth: basic
 
 
-================================= Tool Message ==================================
-Name: tavily_search
+  Update from node tools:
 
-{"query": "current mayor of New York City", "follow_up_questions": null, "answer": null, "images": [], "results": [{"title": "List of mayors of New York City - Wikipedia", "url": "https://en.wikipedia.org/wiki/List_of_mayors_of_New_York_City", "content": "The mayor of New York City is the chief executive of the Government of New York City, as stipulated by New York City's charter.The current officeholder, the 110th in the sequence of regular mayors, is Eric Adams, a member of the Democratic Party.. During the Dutch colonial period from 1624 to 1664, New Amsterdam was governed by the Director of Netherland.", "score": 0.9039154, "raw_content": null}, {"title": "Office of the Mayor | Mayor's Bio | City of New York - NYC.gov", "url": "https://www.nyc.gov/office-of-the-mayor/bio.page", "content": "Mayor Eric Adams has served the people of New York City as an NYPD officer, State Senator, Brooklyn Borough President, and now as the 110th Mayor of the City of New York. He gave voice to a diverse coalition of working families in all five boroughs and is leading the fight to bring back New York City's economy, reduce inequality, improve", "score": 0.8405867, "raw_content": null}, {"title": "Eric Adams - Wikipedia", "url": "https://en.wikipedia.org/wiki/Eric_Adams", "content": "Eric Leroy Adams (born September 1, 1960) is an American politician and former police officer who has served as the 110th mayor of New York City since 2022. Adams was an officer in the New York City Transit Police and then the New York City Police Department (```
-```
+
+  ================================= Tool Message ==================================
+  Name: tavily_search
+
+  {"query": "current mayor of New York City", "follow_up_questions": null, "answer": null, "images": [], "results": [{"title": "List of mayors of New York City - Wikipedia", "url": "https://en.wikipedia.org/wiki/List_of_mayors_of_New_York_City", "content": "The mayor of New York City is the chief executive of the Government of New York City, as stipulated by New York City's charter.The current officeholder, the 110th in the sequence of regular mayors, is Eric Adams, a member of the Democratic Party.. During the Dutch colonial period from 1624 to 1664, New Amsterdam was governed by the Director of Netherland.", "score": 0.9039154, "raw_content": null}, {"title": "Office of the Mayor | Mayor's Bio | City of New York - NYC.gov", "url": "https://www.nyc.gov/office-of-the-mayor/bio.page", "content": "Mayor Eric Adams has served the people of New York City as an NYPD officer, State Senator, Brooklyn Borough President, and now as the 110th Mayor of the City of New York. He gave voice to a diverse coalition of working families in all five boroughs and is leading the fight to bring back New York City's economy, reduce inequality, improve", "score": 0.8405867, "raw_content": null}, {"title": "Eric Adams - Wikipedia", "url": "https://en.wikipedia.org/wiki/Eric_Adams", "content": "Eric Leroy Adams (born September 1, 1960) is an American politician and former police officer who has served as the 110th mayor of New York City since 2022. Adams was an officer in the New York City Transit Police and then the New York City Police Department (```
+  ```
 
 ### Math agent
 
@@ -306,7 +262,7 @@ Name: math_agent
 
 ## 2. Create supervisor with `langgraph-supervisor`
 
-To implement out multi-agent system, we will use [`create_supervisor`][langgraph_supervisor.supervisor.create_supervisor] from the prebuilt `langgraph-supervisor` library:
+To implement out multi-agent system, we will use @[`create_supervisor`][create_supervisor] from the prebuilt `langgraph-supervisor` library:
 
 ```python
 from langgraph_supervisor import create_supervisor
@@ -478,7 +434,7 @@ assign_to_math_agent = create_handoff_tool(
 
 ### Create supervisor agent
 
-Then, let's create the supervisor agent with the handoff tools we just defined. We will use the prebuilt [`create_react_agent`][langgraph.prebuilt.chat_agent_executor.create_react_agent]:
+Then, let's create the supervisor agent with the handoff tools we just defined. We will use the prebuilt @[`create_react_agent`][create_react_agent]:
 
 ```python
 supervisor_agent = create_react_agent(
@@ -654,7 +610,7 @@ Name: tavily_search
 !!! important
     You can see that the supervisor system appends **all** of the individual agent messages (i.e., their internal tool-calling loop) to the full message history. This means that on every supervisor turn, supervisor agent sees this full history. If you want more control over:
 
-    * **how inputs are passed to agents**: you can use LangGraph [`Send()`][langgraph.types.Send] primitive to directly send data to the worker agents during the handoff. See the [task delegation](#4-create-delegation-tasks) example below
+    * **how inputs are passed to agents**: you can use LangGraph @[`Send()`][Send] primitive to directly send data to the worker agents during the handoff. See the [task delegation](#4-create-delegation-tasks) example below
     * **how agent outputs are added**: you can control how much of the agent's internal message history is added to the overall supervisor message history by wrapping the agent in a separate node function:
 
         ```python
@@ -742,7 +698,7 @@ supervisor_with_description = (
 ```
 
 !!! note
-    We're using [`Send()`][langgraph.types.Send] primitive in the `handoff_tool`. This means that instead of receiving the full `supervisor` graph state as input, each worker agent only sees the contents of the `Send` payload. In this example, we're sending the task description as a single "human" message.
+    We're using @[`Send()`][Send] primitive in the `handoff_tool`. This means that instead of receiving the full `supervisor` graph state as input, each worker agent only sees the contents of the `Send` payload. In this example, we're sending the task description as a single "human" message.
 
 Let's now running it with the same input query:
 

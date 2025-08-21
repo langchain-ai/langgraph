@@ -381,7 +381,9 @@ def test_dockerfile_command_with_base_image() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert re.match("FROM langchain/langgraph-server:0.2-py3.*", dockerfile)
+            assert re.match("FROM langchain/langgraph-server:0.2-py3.*", dockerfile), (
+                "\n".join(dockerfile.splitlines()[:3])
+            )
 
 
 def test_dockerfile_command_with_docker_compose() -> None:
@@ -574,3 +576,248 @@ def test_build_generate_proper_build_context():
         assert len(build_contexts) == 2, (
             f"Expected 2 build contexts, but found {len(build_contexts)}"
         )
+
+
+def test_dockerfile_command_with_api_version() -> None:
+    """Test the 'dockerfile' command with --api-version flag."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            [
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--api-version",
+                "0.2.74",
+            ],
+        )
+
+        # Assert command was successful
+        assert result.exit_code == 0, result.output
+        assert "✅ Created: Dockerfile" in result.output
+
+        # Check if Dockerfile was created and contains correct FROM line
+        assert save_path.exists()
+        with open(save_path) as f:
+            dockerfile = f.read()
+            assert "FROM langchain/langgraph-api:0.2.74-py3.11" in dockerfile
+
+
+def test_dockerfile_command_with_api_version_and_base_image() -> None:
+    """Test the 'dockerfile' command with both --api-version and --base-image flags."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.12",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+        "image_distro": "wolfi",
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            [
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--api-version",
+                "1.0.0",
+                "--base-image",
+                "my-registry/custom-api",
+            ],
+        )
+
+        # Assert command was successful
+        assert result.exit_code == 0, result.output
+        assert "✅ Created: Dockerfile" in result.output
+
+        # Check if Dockerfile was created and contains correct FROM line
+        assert save_path.exists()
+        with open(save_path) as f:
+            dockerfile = f.read()
+            assert "FROM my-registry/custom-api:1.0.0-py3.12-wolfi" in dockerfile
+
+
+def test_dockerfile_command_with_api_version_nodejs() -> None:
+    """Test the 'dockerfile' command with --api-version flag for Node.js config."""
+    runner = CliRunner()
+    config_content = {
+        "node_version": "20",
+        "graphs": {"agent": "agent.js:graph"},
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.js"
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            [
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--api-version",
+                "0.2.74",
+            ],
+        )
+
+        # Assert command was successful
+        assert result.exit_code == 0, result.output
+        assert "✅ Created: Dockerfile" in result.output
+
+        # Check if Dockerfile was created and contains correct FROM line
+        assert save_path.exists()
+        with open(save_path) as f:
+            dockerfile = f.read()
+            assert "FROM langchain/langgraphjs-api:0.2.74-node20" in dockerfile
+
+
+def test_build_command_with_api_version() -> None:
+    """Test the 'build' command with --api-version flag."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+        "image_distro": "wolfi",  # Use wolfi to avoid warning messages
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        # Mock docker command since we don't want to actually build
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                cli,
+                [
+                    "build",
+                    "--tag",
+                    "test-image",
+                    "--config",
+                    str(temp_dir / "config.json"),
+                    "--api-version",
+                    "0.2.74",
+                    "--no-pull",  # Avoid pulling non-existent images
+                ],
+                catch_exceptions=True,
+            )
+
+        # Check that the build command is called with the correct tag
+        # The output should contain the docker build command with the api_version tag
+        assert "langchain/langgraph-api:0.2.74-py3.11-wolfi" in result.output
+
+
+def test_build_command_with_api_version_and_base_image() -> None:
+    """Test the 'build' command with both --api-version and --base-image flags."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.12",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+        "image_distro": "wolfi",  # Use wolfi to avoid warning messages
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        # Mock docker command since we don't want to actually build
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                cli,
+                [
+                    "build",
+                    "--tag",
+                    "test-image",
+                    "--config",
+                    str(temp_dir / "config.json"),
+                    "--api-version",
+                    "1.0.0",
+                    "--base-image",
+                    "my-registry/custom-api",
+                    "--no-pull",  # Avoid pulling non-existent images
+                ],
+                catch_exceptions=True,
+            )
+
+        # Check that the build command includes the api_version
+        assert "my-registry/custom-api:1.0.0-py3.12-wolfi" in result.output
+
+
+def test_prepare_args_and_stdin_with_api_version() -> None:
+    """Test prepare_args_and_stdin function with api_version parameter."""
+    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config = validate_config(
+        Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
+    )
+    port = 8000
+    api_version = "0.2.74"
+
+    actual_args, actual_stdin = prepare_args_and_stdin(
+        capabilities=DEFAULT_DOCKER_CAPABILITIES,
+        config_path=config_path,
+        config=config,
+        docker_compose=None,
+        port=port,
+        watch=False,
+        api_version=api_version,
+    )
+
+    expected_args = [
+        "--project-directory",
+        str(pathlib.Path(__file__).parent.absolute()),
+        "-f",
+        "-",
+    ]
+
+    # Check that the args are correct
+    assert actual_args == expected_args
+
+    # Check that the stdin contains the correct FROM line with api_version
+    assert "FROM langchain/langgraph-api:0.2.74-py3.11" in actual_stdin
+
+
+def test_prepare_args_and_stdin_with_api_version_and_image() -> None:
+    """Test prepare_args_and_stdin function with both api_version and image parameters."""
+    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config = validate_config(
+        Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
+    )
+    port = 8000
+    api_version = "0.2.74"
+    image = "my-custom-image:latest"
+
+    actual_args, actual_stdin = prepare_args_and_stdin(
+        capabilities=DEFAULT_DOCKER_CAPABILITIES,
+        config_path=config_path,
+        config=config,
+        docker_compose=None,
+        port=port,
+        watch=False,
+        api_version=api_version,
+        image=image,
+    )
+
+    # When image is provided, api_version should be ignored for the image
+    # but the stdin should not contain a build section (since image is provided)
+    assert "pull_policy: build" not in actual_stdin

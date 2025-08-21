@@ -3,7 +3,8 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
 
 permissions:
@@ -77,6 +78,7 @@ jobs:
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
             "libs/prebuilt",
+            "libs/sdk-py",
           ]
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
     uses: ./.github/workflows/_test.yml

@@ -17,18 +17,19 @@ import langsmith
 import pytest
 from typing_extensions import NotRequired, Required, TypedDict
 
-from langgraph.graph import END, StateGraph
-from langgraph.graph.state import CompiledStateGraph
-from langgraph.utils.config import _is_not_empty
-from langgraph.utils.fields import (
+from langgraph._internal._config import _is_not_empty
+from langgraph._internal._fields import (
     _is_optional_type,
     get_enhanced_type_hints,
     get_field_default,
 )
-from langgraph.utils.runnable import (
+from langgraph._internal._runnable import (
     is_async_callable,
     is_async_generator,
 )
+from langgraph.constants import END
+from langgraph.graph import StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 pytestmark = pytest.mark.anyio
 
