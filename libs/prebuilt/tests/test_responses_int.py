@@ -15,14 +15,14 @@ from langgraph.prebuilt import create_agent
 from langgraph.prebuilt.responses import ToolOutput
 
 
-def load_spec() -> List[Dict[str, Any]]:
+def _load_spec() -> List[Dict[str, Any]]:
     with (Path(__file__).parent / "specifications" / "responses.json").open(
         "r", encoding="utf-8"
     ) as f:
         return json.load(f)
 
 
-TEST_CASES = load_spec()
+TEST_CASES = _load_spec()
 
 AGENT_PROMPT = "You are an HR assistant."
 
@@ -33,7 +33,7 @@ EMPLOYEES = [
 ]
 
 
-def make_tool(fn, *, name: str, description: str):
+def _make_tool(fn, *, name: str, description: str):
     mock = MagicMock(side_effect=lambda *, name: fn(name=name))
     InputModel = create_model(f"{name}_input", name=(str, ...))
 
@@ -88,12 +88,12 @@ def test_responses_integration_matrix(case: Dict[str, Any]) -> None:
                 return e["department"]
         return None
 
-    role_tool = make_tool(
+    role_tool = _make_tool(
         get_employee_role,
         name="getEmployeeRole",
         description="Get the employee role by name",
     )
-    dept_tool = make_tool(
+    dept_tool = _make_tool(
         get_employee_department,
         name="getEmployeeDepartment",
         description="Get the employee department by name",
