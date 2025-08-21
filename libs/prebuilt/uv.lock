@@ -316,7 +316,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.6.0"
+version = "0.6.6"
 source = { editable = "../langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -359,6 +359,7 @@ dev = [
     { name = "pytest-repeat" },
     { name = "pytest-watcher" },
     { name = "pytest-xdist", extras = ["psutil"] },
+    { name = "redis" },
     { name = "ruff" },
     { name = "syrupy" },
     { name = "types-requests" },
@@ -392,6 +393,7 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
+    { name = "redis" },
     { name = "ruff" },
 ]
 
@@ -460,7 +462,7 @@ dev = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.6.0"
+version = "0.6.4"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },
@@ -507,7 +509,6 @@ dev = [
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.2.0"
 source = { editable = "../sdk-py" }
 dependencies = [
     { name = "httpx" },

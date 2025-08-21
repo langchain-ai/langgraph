@@ -28,6 +28,14 @@
     {
       "name": "Store",
       "description": "Store is an API for managing persistent key-value store (long-term memory) that is available from any thread."
+    },
+    {
+      "name": "MCP",
+      "description": "Model Context Protocol related endpoints for exposing an agent as an MCP server."
+    },
+    {
+      "name": "System",
+      "description": "System endpoints for health checks, metrics, and server information."
     }
   ],
   "paths": {
@@ -122,6 +130,59 @@
                   },
                   "type": "array",
                   "title": "Response Search Assistants Assistants Search Post"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assistants/count": {
+      "post": {
+        "tags": [
+          "Assistants"
+        ],
+        "summary": "Count Assistants",
+        "description": "Get the count of assistants matching the specified criteria.",
+        "operationId": "count_assistants_assistants_count_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantCountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "title": "Count"
                 }
               }
             }
@@ -805,6 +866,59 @@
         }
       }
     },
+    "/threads/count": {
+      "post": {
+        "tags": [
+          "Threads"
+        ],
+        "summary": "Count Threads",
+        "description": "Get the count of threads matching the specified criteria.",
+        "operationId": "count_threads_threads_count_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThreadCountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "title": "Count"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/threads/{thread_id}/state": {
       "get": {
         "tags": [
@@ -1460,6 +1574,30 @@
               ]
             },
             "name": "status",
+            "in": "query"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "run_id",
+                  "thread_id",
+                  "assistant_id",
+                  "created_at",
+                  "updated_at",
+                  "status",
+                  "metadata",
+                  "kwargs",
+                  "multitask_strategy"
+                ]
+              },
+              "title": "Select",
+              "description": "Specify which fields to return. If not provided, all fields are returned."
+            },
+            "name": "select",
             "in": "query"
           }
         ],
@@ -2312,6 +2450,59 @@
         }
       }
     },
+    "/runs/crons/count": {
+      "post": {
+        "tags": [
+          "Crons (Plus tier)"
+        ],
+        "summary": "Count Crons",
+        "description": "Get the count of crons matching the specified criteria.",
+        "operationId": "count_crons_runs_crons_count_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CronCountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "integer",
+                  "title": "Count"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/runs/stream": {
       "post": {
         "tags": [
@@ -2996,6 +3187,153 @@
           "MCP"
         ]
       }
+    },
+    "/info": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Server Information",
+        "description": "Get server version information, feature flags, and metadata.",
+        "operationId": "server_info_info_get",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string",
+                      "title": "Version",
+                      "description": "LangGraph API version"
+                    },
+                    "langgraph_py_version": {
+                      "type": "string",
+                      "title": "LangGraph Python Version",
+                      "description": "LangGraph Python library version"
+                    },
+                    "flags": {
+                      "type": "object",
+                      "title": "Feature Flags",
+                      "description": "Enabled features and capabilities"
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "title": "Metadata",
+                      "description": "Server deployment metadata"
+                    }
+                  },
+                  "required": ["version", "langgraph_py_version", "flags", "metadata"],
+                  "title": "ServerInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "System Metrics",
+        "description": "Get system metrics in Prometheus or JSON format for monitoring and observability.",
+        "operationId": "system_metrics_metrics_get",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["prometheus", "json"],
+              "default": "prometheus",
+              "title": "Output Format",
+              "description": "Response format: prometheus (default) or json"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "title": "Prometheus Metrics",
+                  "description": "Metrics in Prometheus exposition format"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "JSON Metrics",
+                  "description": "Metrics in JSON format including queue stats, worker stats, and HTTP metrics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ok": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health Check",
+        "description": "Check the health status of the server. Optionally check database connectivity.",
+        "operationId": "health_check_ok_get",
+        "parameters": [
+          {
+            "name": "check_db",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "enum": [0, 1],
+              "default": 0,
+              "title": "Check Database",
+              "description": "Whether to check database connectivity (0=false, 1=true)"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true,
+                      "title": "OK",
+                      "description": "Indicates the server is healthy"
+                    }
+                  },
+                  "required": ["ok"],
+                  "title": "HealthResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3034,6 +3372,11 @@
             "type": "object",
             "title": "Config",
             "description": "The assistant config."
+          },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
           },
           "created_at": {
             "type": "string",
@@ -3100,6 +3443,11 @@
             "title": "Config",
             "description": "Configuration to use for the graph. Useful when graph is configurable and you want to create different assistants based on different configurations."
           },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
+          },
           "metadata": {
             "type": "object",
             "title": "Metadata",
@@ -3147,6 +3495,11 @@
             "type": "object",
             "title": "Config",
             "description": "Configuration to use for the graph. Useful when graph is configurable and you want to update the assistant's configuration."
+          },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
           },
           "metadata": {
             "type": "object",
@@ -3209,6 +3562,12 @@
             "title": "Cron Id",
             "description": "The ID of the cron."
           },
+          "assistant_id": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "title": "Assistant Id",
+            "description": "The ID of the assistant."
+          },
           "thread_id": {
             "type": "string",
             "format": "uuid",
@@ -3238,10 +3597,26 @@
             "title": "Updated At",
             "description": "The last time the cron was updated."
           },
+          "user_id": {
+            "type": ["string", "null"],
+            "title": "User Id",
+            "description": "The ID of the user."
+          },
           "payload": {
             "type": "object",
             "title": "Payload",
             "description": "The run payload to use for creating new run."
+          },
+          "next_run_date": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "title": "Next Run Date",
+            "description": "The next run date of the cron."
+          },
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "The cron metadata."
           }
         },
         "type": "object",
@@ -3326,6 +3701,11 @@
             "title": "Config",
             "description": "The configuration for the assistant."
           },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
+          },
           "webhook": {
             "type": "string",
             "maxLength": 65536,
@@ -3380,7 +3760,7 @@
             ],
             "title": "Multitask Strategy",
             "description": "Multitask strategy to use. Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.",
-            "default": "reject"
+            "default": "enqueue"
           }
         },
         "type": "object",
@@ -3397,7 +3777,7 @@
             "type": "string",
             "format": "uuid",
             "title": "Assistant Id",
-            "description": "The assistant ID or graph name to search for."
+            "description": "The assistant ID or graph name to filter by using exact match."
           },
           "thread_id": {
             "type": "string",
@@ -3433,12 +3813,53 @@
             "description": "The order to sort by.",
             "default": "desc",
             "enum": ["asc", "desc"]
+          },
+          "select": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "cron_id",
+                "assistant_id",
+                "thread_id",
+                "end_time",
+                "schedule",
+                "created_at",
+                "updated_at",
+                "user_id",
+                "payload",
+                "next_run_date",
+                "metadata",
+                "now"
+              ]
+            },
+            "title": "Select",
+            "description": "Specify which fields to return. If not provided, all fields are returned."
           }
         },
         "type": "object",
         "required": [],
         "title": "CronSearch",
         "description": "Payload for listing crons"
+      },
+      "CronCountRequest": {
+        "properties": {
+          "assistant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Assistant Id",
+            "description": "The assistant ID or graph name to search for."
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Thread Id",
+            "description": "The thread ID to search for."
+          }
+        },
+        "type": "object",
+        "title": "CronCountRequest",
+        "description": "Payload for counting crons"
       },
       "GraphSchema": {
         "properties": {
@@ -3466,13 +3887,17 @@
             "type": "object",
             "title": "Config Schema",
             "description": "The schema for the graph config. Missing if unable to generate JSON schema from graph."
+          },
+          "context_schema": {
+            "type": "object",
+            "title": "Context Schema",
+            "description": "The schema for the graph context. Missing if unable to generate JSON schema from graph."
           }
         },
         "type": "object",
         "required": [
           "graph_id",
-          "state_schema",
-          "config_schema"
+          "state_schema"
         ],
         "title": "GraphSchema",
         "description": "Defines the structure and properties of a graph."
@@ -3498,14 +3923,18 @@
             "type": "object",
             "title": "Config Schema",
             "description": "The schema for the graph config. Missing if unable to generate JSON schema from graph."
+          },
+          "context_schema": {
+            "type": "object",
+            "title": "Context Schema",
+            "description": "The schema for the graph context. Missing if unable to generate JSON schema from graph."
           }
         },
         "type": "object",
         "required": [
           "input_schema",
           "output_schema",
-          "state_schema",
-          "config_schema"
+          "state_schema"
         ],
         "title": "GraphSchemaNoId",
         "description": "Defines the structure and properties of a graph without an ID."
@@ -3516,7 +3945,7 @@
           "$ref": "#/components/schemas/GraphSchemaNoId"
         },
         "title": "Subgraphs",
-        "description": "Map of graph name to graph schema metadata (`input_schema`, `output_schema`, `state_schema`, `config_schema`)."
+        "description": "Map of graph name to graph schema metadata (`input_schema`, `output_schema`, `state_schema`, `config_schema`, `context_schema`)."
       },
       "Run": {
         "properties": {
@@ -3766,6 +4195,11 @@
             "title": "Config",
             "description": "The configuration for the assistant."
           },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
+          },
           "webhook": {
             "type": "string",
             "maxLength": 65536,
@@ -3819,6 +4253,8 @@
                     "values",
                     "messages",
                     "messages-tuple",
+                    "tasks",
+                    "checkpoints",
                     "updates",
                     "events",
                     "debug",
@@ -3833,6 +4269,8 @@
                   "values",
                   "messages",
                   "messages-tuple",
+                  "tasks",
+                  "checkpoints",
                   "updates",
                   "events",
                   "debug",
@@ -3886,7 +4324,7 @@
             ],
             "title": "Multitask Strategy",
             "description": "Multitask strategy to use. Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.",
-            "default": "reject"
+            "default": "enqueue"
           },
           "if_not_exists": {
             "type": "string",
@@ -4005,6 +4443,11 @@
             "title": "Config",
             "description": "The configuration for the assistant."
           },
+          "context": {
+            "type": "object",
+            "title": "Context",
+            "description": "Static context added to the assistant."
+          },
           "webhook": {
             "type": "string",
             "maxLength": 65536,
@@ -4058,6 +4501,8 @@
                     "values",
                     "messages",
                     "messages-tuple",
+                    "tasks",
+                    "checkpoints",
                     "updates",
                     "events",
                     "debug",
@@ -4072,6 +4517,8 @@
                   "values",
                   "messages",
                   "messages-tuple",
+                  "tasks",
+                  "checkpoints",
                   "updates",
                   "events",
                   "debug",
@@ -4191,11 +4638,48 @@
             ],
             "title": "Sort Order",
             "description": "The order to sort by."
+          },
+          "select": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "assistant_id",
+                "graph_id", 
+                "name",
+                "description",
+                "config",
+                "context",
+                "created_at",
+                "updated_at",
+                "metadata",
+                "version"
+              ]
+            },
+            "title": "Select",
+            "description": "Specify which fields to return. If not provided, all fields are returned."
           }
         },
         "type": "object",
         "title": "AssistantSearchRequest",
         "description": "Payload for listing assistants."
+      },
+      "AssistantCountRequest": {
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "Metadata to filter by. Exact match filter for each KV pair."
+          },
+          "graph_id": {
+            "type": "string",
+            "title": "Graph Id",
+            "description": "The ID of the graph to filter by. The graph ID is normally set in your langgraph.json configuration."
+          }
+        },
+        "type": "object",
+        "title": "AssistantCountRequest",
+        "description": "Payload for counting assistants."
       },
       "AssistantVersionsSearchRequest": {
         "properties": {
@@ -4281,11 +4765,58 @@
             ],
             "title": "Sort Order",
             "description": "Sort order."
+          },
+          "select": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "thread_id",
+                "created_at",
+                "updated_at",
+                "metadata",
+                "config",
+                "context",
+                "status",
+                "values",
+                "interrupts"
+              ]
+            },
+            "title": "Select",
+            "description": "Specify which fields to return. If not provided, all fields are returned."
           }
         },
         "type": "object",
         "title": "ThreadSearchRequest",
         "description": "Payload for listing threads."
+      },
+      "ThreadCountRequest": {
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "Thread metadata to filter on."
+          },
+          "values": {
+            "type": "object",
+            "title": "Values",
+            "description": "State values to filter on."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "busy",
+              "interrupted",
+              "error"
+            ],
+            "title": "Status",
+            "description": "Thread status to filter on."
+          }
+        },
+        "type": "object",
+        "title": "ThreadCountRequest",
+        "description": "Payload for counting threads."
       },
       "Thread": {
         "properties": {
@@ -4312,6 +4843,11 @@
             "title": "Metadata",
             "description": "The thread metadata."
           },
+          "config": {
+            "type": "object",
+            "title": "Config",
+            "description": "The thread config."
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -4327,6 +4863,11 @@
             "type": "object",
             "title": "Values",
             "description": "The current state of the thread."
+          },
+          "interrupts": {
+            "type": "object",
+            "title": "Interrupts",
+            "description": "The current interrupts of the thread."
           }
         },
         "type": "object",
@@ -4476,7 +5017,9 @@
                 },
                 "interrupts": {
                   "type": "array",
-                  "items": {}
+                  "items": {
+                    "$ref": "#/components/schemas/Interrupt"
+                  }
                 },
                 "checkpoint": {
                   "$ref": "#/components/schemas/CheckpointConfig",
@@ -4509,6 +5052,12 @@
           "parent_checkpoint": {
             "type": "object",
             "title": "Parent Checkpoint"
+          },
+          "interrupts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Interrupt"
+            }
           }
         },
         "type": "object",
@@ -4527,7 +5076,7 @@
             "type": "integer",
             "title": "Limit",
             "description": "The maximum number of states to return.",
-            "default": 10,
+            "default": 1,
             "maximum": 1000,
             "minimum": 1
           },
@@ -4954,6 +5503,24 @@
             }
           }
         }
+      },
+      "Interrupt": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value": {
+            "type": "object"
+          }
+        },
+        "title": "Interrupt",
+        "required": [
+          "value"
+        ]
       }
     }
   }

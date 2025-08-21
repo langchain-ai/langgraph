@@ -1,8 +1,16 @@
 # LangGraph Server Changelog
 
+> **Note:** This changelog is no longer actively maintained. For the most up-to-date LangGraph Server changelog, please visit our new documentation site: [LangGraph Server Changelog](https://docs.langchain.com/langgraph-platform/langgraph-server-changelog#langgraph-server-changelog)
+
 [LangGraph Server](../../concepts/langgraph_server.md) is an API platform for creating and managing agent-based applications. It provides built-in persistence, a task queue, and supports deploying, configuring, and running assistants (agentic workflows) at scale. This changelog documents all notable updates, features, and fixes to LangGraph Server releases.
 
 ---
+
+## v0.2.111 (2025-07-29)
+- Started the heartbeat immediately upon connection to prevent JS graph streaming errors during long startups.
+
+## v0.2.110 (2025-07-29)
+- Added interrupts as default values for all operations except streams to maintain consistent behavior.
 
 ## v0.2.109 (2025-07-28)
 - Fixed an issue where missing config schema occurred when `config_type` was not set.

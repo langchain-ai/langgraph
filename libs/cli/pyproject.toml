@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-cli"
-version = "0.3.6"
+dynamic = ["version"]
 description = "CLI for interacting with LangGraph API"
 authors = []
 requires-python = ">=3.9"
@@ -15,11 +15,12 @@ dependencies = [
     "click>=8.1.7",
     "langgraph-sdk>=0.1.0 ; python_version >= '3.11'",
 ]
-
+[tool.hatch.version]
+path = "langgraph_cli/__init__.py"
 [project.optional-dependencies]
 inmem = [
-    "langgraph-api>=0.2.67,<0.3.0 ; python_version >= '3.11'",
-    "langgraph-runtime-inmem>=0.6.0 ; python_version >= '3.11'",
+    "langgraph-api>=0.2.120,<0.4.0 ; python_version >= '3.11'",
+    "langgraph-runtime-inmem>=0.6.8 ; python_version >= '3.11'",
     "python-dotenv>=0.8.0",
 ]
 

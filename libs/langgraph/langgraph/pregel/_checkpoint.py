@@ -29,6 +29,7 @@ def create_checkpoint(
     step: int,
     *,
     id: str | None = None,
+    updated_channels: set[str] | None = None,
 ) -> Checkpoint:
     """Create a checkpoint for the given channels."""
     ts = datetime.now(timezone.utc).isoformat()
@@ -49,6 +50,7 @@ def create_checkpoint(
         channel_values=values,
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
+        updated_channels=None if updated_channels is None else sorted(updated_channels),
     )
 
 
@@ -81,4 +83,5 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         channel_values=checkpoint["channel_values"].copy(),
         channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
+        updated_channels=checkpoint.get("updated_channels", None),
     )

@@ -78,17 +78,17 @@ Scale down actions are delayed for 30 minutes before any action is taken. In oth
 ### Static IP Addresses
 
 !!! info "Only for Cloud SaaS"
-    Static IP addresses are only available for [Cloud SaaS](../concepts/langgraph_cloud.md) deployments.
+Static IP addresses are only available for [Cloud SaaS](../concepts/langgraph_cloud.md) deployments.
 
 All traffic from deployments created after January 6th 2025 will come through a NAT gateway. This NAT gateway will have several static IP addresses depending on the data region. Refer to the table below for the list of static IP addresses:
 
 | US             | EU             |
-|----------------|----------------|
+| -------------- | -------------- |
 | 35.197.29.146  | 34.13.192.67   |
 | 34.145.102.123 | 34.147.105.64  |
 | 34.169.45.153  | 34.90.22.166   |
 | 34.82.222.17   | 34.147.36.213  |
-| 35.227.171.135 | 34.32.137.113  | 
+| 35.227.171.135 | 34.32.137.113  |
 | 34.169.88.30   | 34.91.238.184  |
 | 34.19.93.202   | 35.204.101.241 |
 | 34.19.34.50    | 35.204.48.32   |
@@ -103,8 +103,8 @@ All traffic from deployments created after January 6th 2025 will come through a 
 
 ### Custom Postgres
 
-!!! info 
-    Custom Postgres instances are only available for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
+!!! info
+Custom Postgres instances are only available for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 A custom Postgres instance can be used instead of the [one automatically created by the control plane](./langgraph_control_plane.md#database-provisioning). Specify the [`POSTGRES_URI_CUSTOM`](../cloud/reference/env_var.md#postgres_uri_custom) environment variable to use a custom Postgres instance.
 
@@ -113,10 +113,9 @@ Multiple deployments can share the same Postgres instance. For example, for `Dep
 ### Custom Redis
 
 !!! info
-    Custom Redis instances are only available for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_control_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
+Custom Redis instances are only available for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_control_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 A custom Redis instance can be used instead of the one automatically created by the control plane. Specify the [REDIS_URI_CUSTOM](../cloud/reference/env_var.md#redis_uri_custom) environment variable to use a custom Redis instance.
-
 
 Multiple deployments can share the same Redis instance. For example, for `Deployment A`, `REDIS_URI_CUSTOM` can be set to `redis://<hostname_1>:<port>/1` and for `Deployment B`, `REDIS_URI_CUSTOM` can be set to `redis://<hostname_1>:<port>/2`. `1` and `2` are different database numbers within the same instance, but `<hostname_1>` is shared. **The same database number cannot be used for separate deployments**.
 
@@ -124,22 +123,22 @@ Multiple deployments can share the same Redis instance. For example, for `Deploy
 
 LangGraph Server is automatically configured to send traces to LangSmith. See the table below for details with respect to each deployment option.
 
-| Cloud SaaS | Self-Hosted Data Plane | Self-Hosted Control Plane | Standalone Container |
-|------------|------------------------|---------------------------|----------------------|
+| Cloud SaaS                               | Self-Hosted Data Plane                                      | Self-Hosted Control Plane                                          | Standalone Container                                                                         |
+| ---------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
 | Required<br><br>Trace to LangSmith SaaS. | Optional<br><br>Disable tracing or trace to LangSmith SaaS. | Optional<br><br>Disable tracing or trace to Self-Hosted LangSmith. | Optional<br><br>Disable tracing, trace to LangSmith SaaS, or trace to Self-Hosted LangSmith. |
 
 ### Telemetry
 
 LangGraph Server is automatically configured to report telemetry metadata for billing purposes. See the table below for details with respect to each deployment option.
 
-| Cloud SaaS | Self-Hosted Data Plane | Self-Hosted Control Plane | Standalone Container |
-|------------|------------------------|---------------------------|----------------------|
+| Cloud SaaS                        | Self-Hosted Data Plane            | Self-Hosted Control Plane                                                                                                           | Standalone Container                                                                                                                |
+| --------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Telemetry sent to LangSmith SaaS. | Telemetry sent to LangSmith SaaS. | Self-reported usage (audit) for air-gapped license key.<br><br>Telemetry sent to LangSmith SaaS for LangGraph Platform License Key. | Self-reported usage (audit) for air-gapped license key.<br><br>Telemetry sent to LangSmith SaaS for LangGraph Platform License Key. |
 
 ### Licensing
 
 LangGraph Server is automatically configured to perform license key validation. See the table below for details with respect to each deployment option.
 
-| Cloud SaaS | Self-Hosted Data Plane | Self-Hosted Control Plane | Standalone Container |
-|------------|------------------------|---------------------------|----------------------|
+| Cloud SaaS                                          | Self-Hosted Data Plane                              | Self-Hosted Control Plane                                                                  | Standalone Container                                                                       |
+| --------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | LangSmith API Key validated against LangSmith SaaS. | LangSmith API Key validated against LangSmith SaaS. | Air-gapped license key or LangGraph Platform License Key validated against LangSmith SaaS. | Air-gapped license key or LangGraph Platform License Key validated against LangSmith SaaS. |
