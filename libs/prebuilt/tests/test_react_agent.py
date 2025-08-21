@@ -455,7 +455,7 @@ def test_react_agent_with_structured_response() -> None:
         "What's the weather?",
         "The weather is sunny and 75°F.",
         "What's the weather?-What's the weather?-The weather is sunny and 75°F.",
-        "Returning structured response: WeatherResponse(temperature=75.0)",
+        "Returning structured response: {'temperature': 75.0}",
     ]
 
 
@@ -1608,7 +1608,7 @@ def test_post_model_hook_with_structured_output() -> None:
                         ],
                     ),
                     _AnyIdToolMessage(
-                        content="Returning structured response: WeatherResponse(temperature=75.0)",
+                        content="Returning structured response: {'temperature': 75.0}",
                         name="WeatherResponse",
                         tool_call_id="2",
                     ),

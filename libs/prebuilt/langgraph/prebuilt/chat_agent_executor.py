@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import asdict, is_dataclass
 from typing import (
     Any,
     Awaitable,
@@ -313,11 +314,18 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             structured_tool_binding = self.structured_output_tools[tool_call["name"]]
             structured_response = structured_tool_binding.parse(tool_call["args"])
 
+            if isinstance(structured_response, BaseModel):
+                structured_response_dict = structured_response.model_dump()
+            elif is_dataclass(structured_response):
+                structured_response_dict = asdict(structured_response)  # type: ignore[arg-type]
+            else:
+                structured_response_dict = structured_response
+
             tool_message_content = (
                 self.response_format.tool_message_content
                 if isinstance(self.response_format, ToolOutput)
                 and self.response_format.tool_message_content
-                else f"Returning structured response: {repr(structured_response)}"
+                else f"Returning structured response: {structured_response_dict}"
             )
 
             return Command(
@@ -767,6 +775,32 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         return workflow
 
 
+def _supports_native_structured_output(
+    model: Union[
+        str, BaseChatModel, SyncOrAsync[[StateT, Runtime[ContextT]], BaseChatModel]
+    ],
+) -> bool:
+    """Check if a model supports native structured output.
+
+    TODO: replace with more robust model profiles.
+    """
+    model_name: str | None = None
+    if isinstance(model, str):
+        model_name = model
+    elif isinstance(model, BaseChatModel):
+        model_name = getattr(model, "model_name", None)
+
+    return (
+        "grok" in model_name.lower()
+        or any(
+            part in model_name
+            for part in ["gpt-5", "gpt-4.1", "gpt-oss", "o3-pro", "o3-mini"]
+        )
+        if model_name
+        else False
+    )
+
+
 def create_agent(
     model: Union[
         str,
@@ -957,26 +991,7 @@ def create_agent(
         ```
     """
     if response_format and not isinstance(response_format, (ToolOutput, NativeOutput)):
-        if isinstance(model, str):
-            model_name = model
-        elif isinstance(model, BaseChatModel):
-            model_name = getattr(model, "model_name", None)
-        else:
-            model_name = None
-
-        # Dirty check to see if model supports native structured output
-        # TODO: replace with more robust model profiles
-        supports_native = (
-            "grok" in model_name.lower()
-            or any(
-                part in model_name
-                for part in ["gpt-5", "gpt-4.1", "gpt-oss", "o3-pro", "o3-mini"]
-            )
-            if model_name
-            else False
-        )
-
-        if supports_native:
+        if _supports_native_structured_output(model):
             response_format = NativeOutput(
                 schema=response_format,
             )
