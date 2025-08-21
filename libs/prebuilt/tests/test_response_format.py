@@ -5,13 +5,19 @@ from typing import Union
 
 import pytest
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
 from langgraph.prebuilt import create_agent
 from langgraph.prebuilt.responses import NativeOutput, ToolOutput
 from tests.model import FakeToolCallingModel
+
+try:
+    from langchain_openai import ChatOpenAI
+except ImportError:
+    skip_openai_integration_tests = True
+else:
+    skip_openai_integration_tests = False
 
 
 # Test data models
@@ -446,6 +452,9 @@ def test_union_of_types() -> None:
     assert len(response["messages"]) == 5
 
 
+@pytest.mark.skipif(
+    skip_openai_integration_tests, reason="OpenAI integration tests are disabled."
+)
 def test_inference_to_native_output() -> None:
     """Test that native output is inferred when a model supports it."""
     model = ChatOpenAI(model="gpt-5")
@@ -470,6 +479,9 @@ def test_inference_to_native_output() -> None:
     ]
 
 
+@pytest.mark.skipif(
+    skip_openai_integration_tests, reason="OpenAI integration tests are disabled."
+)
 def test_inference_to_tool_output() -> None:
     """Test that tool output is inferred when a model supports it."""
     model = ChatOpenAI(model="gpt-4")
