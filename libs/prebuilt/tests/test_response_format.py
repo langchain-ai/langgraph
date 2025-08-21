@@ -465,7 +465,7 @@ def test_inference_to_native_output() -> None:
     assert [m.type for m in response["messages"]] == [
         "human",  # "What's the weather?"
         "ai",  # "What's the weather?"
-        "tool",  # "The weather is sunny and 72°F."
+        "tool",  # "The weather is sunny and 75°F."
         "ai",  # structured response
     ]
 
