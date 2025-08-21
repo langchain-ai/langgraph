@@ -1,3 +1,5 @@
+import json
+from dataclasses import asdict, is_dataclass
 from typing import (
     Any,
     Callable,
@@ -19,7 +21,7 @@ from langchain_core.messages import (
     ToolCall,
 )
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 
@@ -27,7 +29,7 @@ from langgraph.prebuilt.chat_agent_executor import StructuredResponseT
 
 
 class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
-    tool_calls: Optional[list[list[ToolCall]]] = None
+    tool_calls: Optional[Union[list[list[ToolCall]], list[list[dict]]]] = None
     structured_response: Optional[StructuredResponseT] = None
     index: int = 0
     tool_style: Literal["openai", "anthropic"] = "openai"
@@ -40,29 +42,44 @@ class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
         **kwargs: Any,
     ) -> ChatResult:
         """Top Level call"""
-        messages_string = "-".join([m.content for m in messages])
-        tool_calls = (
-            self.tool_calls[self.index % len(self.tool_calls)]
-            if self.tool_calls
-            else []
-        )
-        message = AIMessage(
-            content=messages_string, id=str(self.index), tool_calls=tool_calls.copy()
-        )
+        rf = kwargs.get("response_format")
+        is_native = isinstance(rf, dict) and rf.get("type") == "json_schema"
+        if is_native:
+            print("NATIVE. tool_calls: ", self.tool_calls)
+
+        if self.tool_calls:
+            if is_native:
+                tool_calls = (
+                    self.tool_calls[self.index]
+                    if self.index < len(self.tool_calls)
+                    else []
+                )
+            else:
+                tool_calls = self.tool_calls[self.index % len(self.tool_calls)]
+        else:
+            tool_calls = []
+
+        if is_native and not tool_calls:
+            if isinstance(self.structured_response, BaseModel):
+                content_obj = self.structured_response.model_dump()
+            elif is_dataclass(self.structured_response):
+                content_obj = asdict(self.structured_response)
+            elif isinstance(self.structured_response, dict):
+                content_obj = self.structured_response
+            message = AIMessage(content=json.dumps(content_obj), id=str(self.index))
+        else:
+            messages_string = "-".join([m.content for m in messages])
+            message = AIMessage(
+                content=messages_string,
+                id=str(self.index),
+                tool_calls=tool_calls.copy(),
+            )
         self.index += 1
         return ChatResult(generations=[ChatGeneration(message=message)])
 
     @property
     def _llm_type(self) -> str:
         return "fake-tool-call-model"
-
-    def with_structured_output(
-        self, schema: Type[BaseModel]
-    ) -> Runnable[LanguageModelInput, StructuredResponseT]:
-        if self.structured_response is None:
-            raise ValueError("Structured response is not set")
-
-        return RunnableLambda(lambda x: self.structured_response)
 
     def bind_tools(
         self,

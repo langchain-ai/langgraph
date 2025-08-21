@@ -447,7 +447,7 @@ def test_react_agent_with_structured_response() -> None:
         "ai",  # "What's the weather?"
         "tool",  # "The weather is sunny and 75°F."
         "ai",  # structured response
-        "tool",  # ok!
+        "tool",  # artificial tool message
     ]
 
     assert [m.content for m in response["messages"]] == [
@@ -455,7 +455,7 @@ def test_react_agent_with_structured_response() -> None:
         "What's the weather?",
         "The weather is sunny and 75°F.",
         "What's the weather?-What's the weather?-The weather is sunny and 75°F.",
-        "ok!",
+        "Returning structured response: {'temperature': 75.0}",
     ]
 
 
@@ -1608,7 +1608,7 @@ def test_post_model_hook_with_structured_output() -> None:
                         ],
                     ),
                     _AnyIdToolMessage(
-                        content="ok!",
+                        content="Returning structured response: {'temperature': 75.0}",
                         name="WeatherResponse",
                         tool_call_id="2",
                     ),

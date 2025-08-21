@@ -39,7 +39,7 @@ class TestUsingToolStrategy:
         """Test basic UsingToolStrategy creation."""
         strategy = ToolOutput(schema=_TestModel)
         assert strategy.schema == _TestModel
-        assert strategy.tool_message_content == "ok!"
+        assert strategy.tool_message_content is None
         assert len(strategy.schema_specs) == 1
 
     def test_multiple_schemas(self):
@@ -130,39 +130,8 @@ class TestOutputToolBinding:
         # Missing required field 'name'
         tool_args = {"age": 30}
 
-        with pytest.raises(ValueError, match="Failed to parse tool args to _TestModel"):
+        with pytest.raises(ValueError, match="Failed to parse data to _TestModel"):
             tool_binding.parse(tool_args)
-
-    def test_parse_payload_invalid_kind(self):
-        """Test parsing with invalid kind."""
-        from unittest.mock import Mock
-
-        mock_tool = Mock()
-
-        tool_binding = OutputToolBinding(
-            schema=_TestModel,
-            schema_kind="invalid_kind",  # type: ignore
-            tool=mock_tool,
-        )
-
-        with pytest.raises(ValueError, match="Unsupported schema kind: invalid_kind"):
-            tool_binding.parse({"name": "test", "age": 25})
-
-    def test_parse_payload_invalid_pydantic_schema(self):
-        """Test parsing with invalid schema for pydantic kind."""
-        from unittest.mock import Mock
-
-        mock_tool = Mock()
-
-        # Create tool binding with dict schema but pydantic kind
-        tool_binding = OutputToolBinding(
-            schema={"type": "object"}, schema_kind="pydantic", tool=mock_tool
-        )
-
-        with pytest.raises(
-            ValueError, match="Expected Pydantic model class for 'pydantic' kind"
-        ):
-            tool_binding.parse({"name": "test", "age": 25})
 
 
 class TestEdgeCases:
