@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "setuptools-scm[toml]>=8.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-dynamic = ["version"]
+version = "0.6.6"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.9"
@@ -112,12 +112,3 @@ addopts = "--full-trace --strict-markers --strict-config --durations=5 --snapsho
 [tool.codespell]
 # Ignore words specific to the LangGraph library code
 ignore-words-list = "infor,thead,stdio,nd,jupyter,lets,lite,uis,deque,langgraph,langchain,pydantic,typing,async,await,coroutine,iterable,iterables,serializable,deserializable,checkpointer,checkpointing,stateful,statefulness,prebuilt,prebuilt,supervisor,supervisory,swarm,swarming,multiactor,multiactors,subgraph,subgraphs,workflow,workflows,streaming,streamable,streamed,streamer,streamers,streaming,streamable,streamed,streamer,streamers"
-
-[tool.setuptools_scm]
-write_to = "langgraph/about.py"
-write_to_template = "__version__ = '{version}'"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["langgraph*"]
-exclude = ["bench*", "tests*"]
