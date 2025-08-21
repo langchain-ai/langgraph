@@ -8,11 +8,17 @@ from unittest.mock import MagicMock
 import pytest
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, create_model
 
 from langgraph.prebuilt import create_agent
 from langgraph.prebuilt.responses import ToolOutput
+
+try:
+    from langchain_openai import ChatOpenAI
+except ImportError:
+    skip_openai_integration_tests = True
+else:
+    skip_openai_integration_tests = False
 
 
 def _load_spec() -> List[Dict[str, Any]]:
@@ -74,6 +80,9 @@ def _build_tool_output_response_format(
     return ToolOutput(union_type)
 
 
+@pytest.mark.skipif(
+    skip_openai_integration_tests, reason="OpenAI integration tests are disabled."
+)
 @pytest.mark.xfail(
     reason="currently failing due to undefined behavior for multiple structured responses."
 )
