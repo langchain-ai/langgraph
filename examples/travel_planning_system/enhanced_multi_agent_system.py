@@ -838,19 +838,96 @@ def main():
     
     print("\n🚀 Starting travel planning process...\n")
     
-    # Execute with tracing
+    # Execute with tracing - following OpenTelemetry GenAI semantic conventions
     root_span = None
+    root_span_context = None
+    token = None
+    
     if trace and SpanKind:
         tracer = trace.get_tracer(__name__)
+        
+        # Define child agents following GenAI conventions
+        child_agents = [
+            {
+                "id": f"coordinator_{session_id}",
+                "name": "coordinator",
+                "role": "travel coordination",
+                "mode": "assistant"
+            },
+            {
+                "id": f"flight_specialist_{session_id}",
+                "name": "flight_specialist", 
+                "role": "flight booking",
+                "mode": "assistant"
+            },
+            {
+                "id": f"hotel_specialist_{session_id}",
+                "name": "hotel_specialist",
+                "role": "hotel booking", 
+                "mode": "assistant"
+            },
+            {
+                "id": f"activity_specialist_{session_id}",
+                "name": "activity_specialist",
+                "role": "activity planning",
+                "mode": "assistant"
+            },
+            {
+                "id": f"budget_analyst_{session_id}",
+                "name": "budget_analyst",
+                "role": "cost analysis",
+                "mode": "assistant"
+            },
+            {
+                "id": f"plan_synthesizer_{session_id}",
+                "name": "plan_synthesizer", 
+                "role": "plan synthesis",
+                "mode": "assistant"
+            }
+        ]
+        
+        # Create root span following GenAI semantic conventions
         root_span = tracer.start_span(
-            "enhanced_travel_planning_session",
-            kind=SpanKind.SERVER,
+            "invoke_agent enhanced_multi_agent_travel_planning",  # Format: "invoke_agent {agent_name}"
+            kind=SpanKind.SERVER,  # SERVER for root span
             attributes={
-                "session_id": session_id,
-                "user_request": user_input,
-                "system": "enhanced-multi-agent-travel-planning"
+                # REQUIRED GenAI attributes (top level, not nested)
+                "gen_ai.operation.name": "invoke_agent",
+                "gen_ai.system": "langgraph", 
+                "gen_ai.agent.name": "enhanced_multi_agent_travel_planning",
+                "gen_ai.agent.id": f"enhanced_travel_planner_{session_id}",
+                
+                # CONDITIONALLY REQUIRED attributes
+                "gen_ai.request.model": config.llm.azure_deployment_name or config.llm.openai_model or "gpt-4",
+                "gen_ai.request.temperature": 0.7,
+                "gen_ai.request.top_p": 1.0,
+                "gen_ai.request.max_tokens": 4096,
+                "gen_ai.conversation.id": session_id,
+                
+                # RECOMMENDED attributes
+                "gen_ai.agent.mode": "autonomous",
+                "gen_ai.provider.name": "azure_openai" if config.llm.azure_openai_api_key else "openai",
+                "server.address": config.llm.azure_openai_endpoint.replace("https://", "").replace("/", "") if config.llm.azure_openai_endpoint else "api.openai.com",
+                "server.port": 443,
+                "gen_ai.request.frequency_penalty": 0.0,
+                "gen_ai.request.presence_penalty": 0.0,
+                
+                # Child agents as JSON following GenAI conventions
+                "gen_ai.agent.child_agents": json.dumps(child_agents),
+                
+                # Additional context
+                "session.id": session_id,
+                "user.request": user_input,
+                "service.name": "enhanced-multi-agent-travel-planning", 
+                "service.version": "1.0.0",
+                "span.kind": "server"
             }
         )
+        
+        # Set up span context for child operations
+        root_span_context = trace.set_span_in_context(root_span)
+        if root_span_context and context:
+            token = context.attach(root_span_context)
     
     try:
         # Stream the execution
@@ -891,16 +968,35 @@ def main():
                 print(f"  {handoff['from']} → {handoff['to']}: {handoff['task']}")
         
         if root_span:
+            # Add GenAI response attributes
+            root_span.set_attribute("gen_ai.response.model", config.llm.azure_deployment_name or config.llm.openai_model or "gpt-4")
+            if final_state.values.get("final_plan"):
+                plan_content = final_state.values["final_plan"]
+                root_span.set_attribute("travel.plan.final", plan_content[:500] + "..." if len(plan_content) > 500 else plan_content)
+            
             root_span.set_attribute("planning_completed", True)
             root_span.set_attribute("agents_used", len(final_state.values.get("completed_steps", [])))
+            
+            # Add planning completion event
+            root_span.add_event("travel_plan_completed", {
+                "plan_length": str(len(final_state.values.get("final_plan", ""))),
+                "agents_used": str(len(final_state.values.get("completed_steps", []))),
+                "session_completed": "true"
+            })
             
     except Exception as e:
         print(f"\n❌ Error during planning: {e}")
         traceback.print_exc()
         if root_span:
             root_span.record_exception(e)
+            root_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
     finally:
+        # Detach context token if we attached one
+        if token is not None and context:
+            context.detach(token)
+            
         if root_span:
+            root_span.set_status(trace.Status(trace.StatusCode.OK))
             root_span.end()
     
     print("\n🎊 Travel planning completed!")
