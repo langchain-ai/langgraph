@@ -957,11 +957,33 @@ def create_agent(
         ```
     """
     if response_format and not isinstance(response_format, (ToolOutput, NativeOutput)):
-        # Then it's a pydantic model or JSONSchema. We'll automatically convert
-        # it to the tool output strategy as it is widely supported.
-        response_format = ToolOutput(
-            schema=response_format,
+        if isinstance(model, str):
+            model_name = model
+        elif isinstance(model, BaseChatModel):
+            model_name = getattr(model, "model_name", None)
+        else:
+            model_name = None
+
+        # Dirty check to see if model supports native structured output
+        # TODO: replace with more robust model profiles
+        supports_native = (
+            "grok" in model_name.lower()
+            or any(
+                part in model_name
+                for part in ["gpt-5", "gpt-4.1", "gpt-oss", "o3-pro", "o3-mini"]
+            )
+            if model_name
+            else False
         )
+
+        if supports_native:
+            response_format = NativeOutput(
+                schema=response_format,
+            )
+        else:
+            response_format = ToolOutput(
+                schema=response_format,
+            )
     elif isinstance(response_format, tuple):
         if len(response_format) == 2:
             raise ValueError(
