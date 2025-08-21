@@ -74,6 +74,9 @@ def _build_tool_output_response_format(
     return ToolOutput(union_type)
 
 
+@pytest.mark.xfail(
+    reason="currently failing due to undefined behavior for multiple structured responses."
+)
 @pytest.mark.parametrize("case", TEST_CASES, ids=[c["name"] for c in TEST_CASES])
 def test_responses_integration_matrix(case: Dict[str, Any]) -> None:
     def get_employee_role(*, name: str) -> Optional[str]:

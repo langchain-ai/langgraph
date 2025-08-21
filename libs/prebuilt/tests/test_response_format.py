@@ -5,6 +5,7 @@ from typing import Union
 
 import pytest
 from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
@@ -443,3 +444,52 @@ def test_union_of_types() -> None:
 
     assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
     assert len(response["messages"]) == 5
+
+
+def test_inference_to_native_output() -> None:
+    """Test that native output is inferred when a model supports it."""
+    model = ChatOpenAI(model="gpt-5")
+    agent = create_agent(
+        model,
+        prompt="You are a helpful weather assistant. Please call the get_weather tool, then use the WeatherReport tool to generate the final response.",
+        tools=[get_weather],
+        response_format=WeatherBaseModel,
+    )
+    response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
+
+    assert isinstance(response["structured_response"], WeatherBaseModel)
+    assert response["structured_response"].temperature == 75.0
+    assert response["structured_response"].condition.lower() == "sunny"
+    assert len(response["messages"]) == 4
+
+    assert [m.type for m in response["messages"]] == [
+        "human",  # "What's the weather?"
+        "ai",  # "What's the weather?"
+        "tool",  # "The weather is sunny and 72°F."
+        "ai",  # structured response
+    ]
+
+
+def test_inference_to_tool_output() -> None:
+    """Test that tool output is inferred when a model supports it."""
+    model = ChatOpenAI(model="gpt-4")
+    agent = create_agent(
+        model,
+        prompt="You are a helpful weather assistant. Please call the get_weather tool, then use the WeatherReport tool to generate the final response.",
+        tools=[get_weather],
+        response_format=ToolOutput(WeatherBaseModel),
+    )
+    response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
+
+    assert isinstance(response["structured_response"], WeatherBaseModel)
+    assert response["structured_response"].temperature == 75.0
+    assert response["structured_response"].condition.lower() == "sunny"
+    assert len(response["messages"]) == 5
+
+    assert [m.type for m in response["messages"]] == [
+        "human",  # "What's the weather?"
+        "ai",  # "What's the weather?"
+        "tool",  # "The weather is sunny and 75°F."
+        "ai",  # structured response
+        "tool",  # artificial tool message
+    ]

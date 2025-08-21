@@ -319,7 +319,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             elif is_dataclass(structured_response):
                 structured_response_dict = asdict(structured_response)  # type: ignore[arg-type]
             else:
-                structured_response_dict = structured_response
+                structured_response_dict = cast(dict, structured_response)
 
             tool_message_content = (
                 self.response_format.tool_message_content
