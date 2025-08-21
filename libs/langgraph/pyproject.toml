@@ -116,3 +116,8 @@ ignore-words-list = "infor,thead,stdio,nd,jupyter,lets,lite,uis,deque,langgraph,
 [tool.setuptools_scm]
 write_to = "langgraph/about.py"
 write_to_template = "__version__ = '{version}'"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["langgraph*"]
+exclude = ["bench*", "tests*"]
