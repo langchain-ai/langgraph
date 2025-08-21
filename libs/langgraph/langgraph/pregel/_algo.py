@@ -836,7 +836,18 @@ def prepare_single_task(
                     writes = deque()
                     cache_policy = proc.cache_policy or cache_policy
                     if cache_policy:
-                        args_key = cache_policy.key_func(val)
+                        # For caching purposes, filter the state to only include inputs that are 
+                        # stable across executions. This fixes the issue where StateGraph cache keys
+                        # change due to accumulated state from previous executions
+                        cache_input = val
+                        if (isinstance(val, dict) and 
+                            len(proc.channels) > 1 and  # StateGraph with multiple channels
+                            checkpointer is not None):  # Only when checkpointer is present
+                            # For StateGraph nodes with checkpointer, filter out potential output fields
+                            # We keep fields that match the input schema structure
+                            # This is a heuristic: exclude fields likely to be outputs
+                            cache_input = _filter_cache_input(val, name, checkpoint)
+                        args_key = cache_policy.key_func(cache_input)
                         cache_key = CacheKey(
                             (
                                 CACHE_NS_WRITES,
@@ -1086,6 +1097,52 @@ def task_path_str(tup: str | int | tuple) -> str:
         if isinstance(tup, int)
         else str(tup)
     )
+
+
+def _filter_cache_input(
+    val: dict[str, Any], 
+    node_name: str, 
+    checkpoint: Checkpoint
+) -> dict[str, Any]:
+    """Filter cache input to exclude fields that vary between executions.
+    
+    For StateGraph nodes with checkpointers, this heuristically excludes fields
+    that are likely outputs from previous executions to ensure stable cache keys.
+    """
+    if not isinstance(val, dict):
+        return val
+    
+    # Get the initial state to understand what fields were originally present
+    # We use step 0 to identify fields that were in the original input
+    if checkpoint.get("channel_values"):
+        # If we're past the first step, try to identify output fields
+        # by looking at which fields might have been added by previous executions
+        
+        # Simple heuristic: if a field has a name that suggests it's an output
+        # (contains 'result', 'output', 'response', etc.) and the node name doesn't 
+        # contain those words, it's likely an output field to exclude
+        output_indicators = ['result', 'output', 'response', 'answer', 'generated']
+        node_name_lower = node_name.lower()
+        
+        filtered_val = {}
+        for key, value in val.items():
+            key_lower = key.lower()
+            # Keep the field if:
+            # 1. It's likely an input field (doesn't contain output indicators)
+            # 2. OR the node name suggests it works with this specific type of field
+            # 3. OR it's a common state field (like 'input', 'data', 'state')
+            
+            is_output_field = any(indicator in key_lower for indicator in output_indicators)
+            node_handles_this_field = any(indicator in node_name_lower for indicator in output_indicators if indicator in key_lower)
+            is_common_field = key_lower in ['input', 'data', 'state', 'query', 'text', 'message']
+            
+            if not is_output_field or node_handles_this_field or is_common_field:
+                filtered_val[key] = value
+        
+        # If we filtered out everything, return the original to be safe
+        return filtered_val if filtered_val else val
+    
+    return val
 
 
 LAZY_ATOMIC_COUNTER_LOCK = threading.Lock()
