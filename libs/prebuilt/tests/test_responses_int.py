@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Type, Union
+from typing import Any, Optional, Union
 from unittest.mock import MagicMock
 
 import pytest
@@ -21,7 +22,7 @@ else:
     skip_openai_integration_tests = False
 
 
-def _load_spec() -> List[Dict[str, Any]]:
+def _load_spec() -> list[dict[str, Any]]:
     with (Path(__file__).parent / "specifications" / "responses.json").open(
         "r", encoding="utf-8"
     ) as f:
@@ -51,10 +52,10 @@ def _make_tool(fn, *, name: str, description: str):
 
 
 def _build_tool_output_response_format(
-    response_format_spec: Sequence[Dict[str, Any]],
+    response_format_spec: Sequence[dict[str, Any]],
 ) -> ToolOutput:
-    models: List[Type[BaseModel]] = []
-    keyset_to_tool_name: Dict[frozenset[str], str] = {}
+    models: list[type[BaseModel]] = []
+    keyset_to_tool_name: dict[frozenset[str], str] = {}
     type_map = {
         "string": str,
         "number": float,
@@ -87,14 +88,14 @@ def _build_tool_output_response_format(
     reason="currently failing due to undefined behavior for multiple structured responses."
 )
 @pytest.mark.parametrize("case", TEST_CASES, ids=[c["name"] for c in TEST_CASES])
-def test_responses_integration_matrix(case: Dict[str, Any]) -> None:
-    def get_employee_role(*, name: str) -> Optional[str]:
+def test_responses_integration_matrix(case: dict[str, Any]) -> None:
+    def get_employee_role(*, name: str) -> str | None:
         for e in EMPLOYEES:
             if e["name"] == name:
                 return e["role"]
         return None
 
-    def get_employee_department(*, name: str) -> Optional[str]:
+    def get_employee_department(*, name: str) -> str | None:
         for e in EMPLOYEES:
             if e["name"] == name:
                 return e["department"]
@@ -118,7 +119,7 @@ def test_responses_integration_matrix(case: Dict[str, Any]) -> None:
 
     for assertion in case["assertionsByInvocation"]:
         prompt: str = assertion["prompt"]
-        expected_calls: Dict[str, int] = assertion["toolsWithExpectedCalls"]
+        expected_calls: dict[str, int] = assertion["toolsWithExpectedCalls"]
         expected_structured = assertion.get("expectedStructuredResponse")
         expected_last_message = assertion.get("expectedLastMessage")
 

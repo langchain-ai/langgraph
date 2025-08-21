@@ -24,7 +24,7 @@ SchemaKind = Literal["pydantic", "dataclass", "typeddict", "json_schema"]
 
 
 def _parse_with_schema(
-    schema: Union[type[SchemaT], dict], schema_kind: SchemaKind, data: dict[str, Any]
+    schema: type[SchemaT] | dict, schema_kind: SchemaKind, data: dict[str, Any]
 ) -> Any:
     """Parse data using for any supported schema type.
 
@@ -53,7 +53,7 @@ def _parse_with_schema(
 class _SchemaSpec(Generic[SchemaT]):
     """Describes a structured output schema."""
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT] | dict[str, Any]
     """The schema for the response, can be a Pydantic model, dataclass, TypedDict, or JSON schema dict."""
 
     name: str
@@ -79,7 +79,7 @@ class _SchemaSpec(Generic[SchemaT]):
 
     def __init__(
         self,
-        schema: Union[type[SchemaT], dict[str, Any]],
+        schema: type[SchemaT] | dict[str, Any],
         *,
         name: str | None = None,
         description: str | None = None,
@@ -125,7 +125,7 @@ class _SchemaSpec(Generic[SchemaT]):
 class ToolOutput(Generic[SchemaT]):
     """Use a tool calling strategy for model responses."""
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT] | dict[str, Any]
     """Schema for the tool calls."""
 
     schema_specs: list[_SchemaSpec[SchemaT]]
@@ -136,7 +136,7 @@ class ToolOutput(Generic[SchemaT]):
 
     def __init__(
         self,
-        schema: Union[type[SchemaT], dict[str, Any]],
+        schema: type[SchemaT] | dict[str, Any],
         tool_message_content: str | None = None,
     ) -> None:
         """Initialize ToolOutput with schemas and tool message content."""
@@ -153,7 +153,7 @@ class ToolOutput(Generic[SchemaT]):
 class NativeOutput(Generic[SchemaT]):
     """Use the model provider's native structured output method."""
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT] | dict[str, Any]
     """Schema for native mode."""
 
     schema_spec: _SchemaSpec[SchemaT]
@@ -161,7 +161,7 @@ class NativeOutput(Generic[SchemaT]):
 
     def __init__(
         self,
-        schema: Union[type[SchemaT], dict[str, Any]],
+        schema: type[SchemaT] | dict[str, Any],
     ) -> None:
         self.schema = schema
         self.schema_spec = _SchemaSpec(schema)
@@ -188,7 +188,7 @@ class OutputToolBinding(Generic[SchemaT]):
     and the corresponding tool implementation used by the tools strategy.
     """
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT] | dict[str, Any]
     """The original schema provided for structured output (Pydantic model, dataclass, TypedDict, or JSON schema dict)."""
 
     schema_kind: SchemaKind
@@ -241,7 +241,7 @@ class NativeOutputBinding(Generic[SchemaT]):
     its type classification, and parsing logic for provider-enforced JSON.
     """
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT] | dict[str, Any]
     """The original schema provided for structured output (Pydantic model, dataclass, TypedDict, or JSON schema dict)."""
 
     schema_kind: SchemaKind

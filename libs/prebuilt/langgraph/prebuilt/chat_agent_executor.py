@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Awaitable, Sequence
 from dataclasses import asdict, is_dataclass
 from typing import (
+    Annotated,
     Any,
-    Awaitable,
     Callable,
     Generic,
-    Optional,
-    Sequence,
     Union,
     cast,
     get_type_hints,
@@ -31,7 +30,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
-from typing_extensions import Annotated, NotRequired, TypedDict, TypeVar
+from typing_extensions import NotRequired, TypedDict, TypeVar
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph.errors import ErrorCode, create_error_message
@@ -89,7 +88,7 @@ def _get_state_value(state: StateT, key: str, default: Any = None) -> Any:
     )
 
 
-def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
+def _get_prompt_runnable(prompt: Prompt | None) -> Runnable:
     prompt_runnable: Runnable
     if prompt is None:
         prompt_runnable = RunnableCallable(
@@ -163,21 +162,19 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
     def __init__(
         self,
-        model: Union[
-            str,
-            BaseChatModel,
-            SyncOrAsync[[StateT, Runtime[ContextT]], BaseChatModel],
-        ],
-        tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
+        model: str
+        | BaseChatModel
+        | SyncOrAsync[[StateT, Runtime[ContextT]], BaseChatModel],
+        tools: Sequence[BaseTool | Callable | dict[str, Any]] | ToolNode,
         *,
-        prompt: Optional[Prompt] = None,
-        response_format: Optional[ResponseFormat[StructuredResponseT]] = None,
-        pre_model_hook: Optional[RunnableLike] = None,
-        post_model_hook: Optional[RunnableLike] = None,
-        state_schema: Optional[type[StateT]] = None,
-        context_schema: Optional[type[ContextT]] = None,
-        name: Optional[str] = None,
-        store: Optional[BaseStore] = None,
+        prompt: Prompt | None = None,
+        response_format: ResponseFormat[StructuredResponseT] | None = None,
+        pre_model_hook: RunnableLike | None = None,
+        post_model_hook: RunnableLike | None = None,
+        state_schema: type[StateT] | None = None,
+        context_schema: type[ContextT] | None = None,
+        name: str | None = None,
+        store: BaseStore | None = None,
     ):
         self.model = model
         self.tools = tools
@@ -282,7 +279,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
     def _handle_structured_response_tool_calls(
         self, response: AIMessage
-    ) -> Optional[Command]:
+    ) -> Command | None:
         """Handle tool calls that match structured output tools using the tools strategy.
 
         Args:
@@ -354,9 +351,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         model_with_native_output = model.bind(**kwargs)
         return model_with_native_output
 
-    def _handle_structured_response_native(
-        self, response: AIMessage
-    ) -> Optional[Command]:
+    def _handle_structured_response_native(self, response: AIMessage) -> Command | None:
         """If native output is configured and there are no tool calls, parse using NativeOutputBinding."""
         if self.native_output_binding is None:
             return None
@@ -425,7 +420,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             model = self._apply_native_output_binding(model)  # type: ignore[arg-type]
 
             # Extract just the model part for direct invocation
-            self._static_model: Optional[Runnable] = model
+            self._static_model: Runnable | None = model
         else:
             self._static_model = None
 
@@ -583,10 +578,10 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
         return RunnableCallable(call_model, acall_model)
 
-    def create_model_router(self) -> Callable[[StateT], Union[str, list[Send]]]:
+    def create_model_router(self) -> Callable[[StateT], str | list[Send]]:
         """Create routing function for model node conditional edges."""
 
-        def should_continue(state: StateT) -> Union[str, list[Send]]:
+        def should_continue(state: StateT) -> str | list[Send]:
             messages = _get_state_value(state, "messages")
             last_message = messages[-1]
 
@@ -621,10 +616,10 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
     def create_post_model_hook_router(
         self,
-    ) -> Callable[[StateT], Union[str, list[Send]]]:
+    ) -> Callable[[StateT], str | list[Send]]:
         """Create a routing function for post_model_hook node conditional edges."""
 
-        def post_model_hook_router(state: StateT) -> Union[str, list[Send]]:
+        def post_model_hook_router(state: StateT) -> str | list[Send]:
             messages = _get_state_value(state, "messages")
 
             # Check if the last message is a ToolMessage from a structured tool.
@@ -661,7 +656,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
         return post_model_hook_router
 
-    def create_tools_router(self) -> Optional[Callable[[StateT], str]]:
+    def create_tools_router(self) -> Callable[[StateT], str] | None:
         """Create a routing function for tools node conditional edges."""
         if not self._should_return_direct:
             return None
@@ -776,9 +771,9 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
 
 def _supports_native_structured_output(
-    model: Union[
-        str, BaseChatModel, SyncOrAsync[[StateT, Runtime[ContextT]], BaseChatModel]
-    ],
+    model: str
+    | BaseChatModel
+    | SyncOrAsync[[StateT, Runtime[ContextT]], BaseChatModel],
 ) -> bool:
     """Check if a model supports native structured output.
 
@@ -802,31 +797,26 @@ def _supports_native_structured_output(
 
 
 def create_agent(
-    model: Union[
-        str,
-        BaseChatModel,
-        SyncOrAsync[[StateT, Runtime[ContextT]], BaseChatModel],
-    ],
-    tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
+    model: str
+    | BaseChatModel
+    | SyncOrAsync[[StateT, Runtime[ContextT]], BaseChatModel],
+    tools: Sequence[BaseTool | Callable | dict[str, Any]] | ToolNode,
     *,
-    prompt: Optional[Prompt] = None,
-    response_format: Optional[
-        Union[
-            ToolOutput[StructuredResponseT],
-            NativeOutput[StructuredResponseT],
-            type[StructuredResponseT],
-        ]
-    ] = None,
-    pre_model_hook: Optional[RunnableLike] = None,
-    post_model_hook: Optional[RunnableLike] = None,
-    state_schema: Optional[type[StateT]] = None,
-    context_schema: Optional[type[ContextT]] = None,
-    checkpointer: Optional[Checkpointer] = None,
-    store: Optional[BaseStore] = None,
-    interrupt_before: Optional[list[str]] = None,
-    interrupt_after: Optional[list[str]] = None,
+    prompt: Prompt | None = None,
+    response_format: ToolOutput[StructuredResponseT]
+    | NativeOutput[StructuredResponseT]
+    | type[StructuredResponseT]
+    | None = None,
+    pre_model_hook: RunnableLike | None = None,
+    post_model_hook: RunnableLike | None = None,
+    state_schema: type[StateT] | None = None,
+    context_schema: type[ContextT] | None = None,
+    checkpointer: Checkpointer | None = None,
+    store: BaseStore | None = None,
+    interrupt_before: list[str] | None = None,
+    interrupt_after: list[str] | None = None,
     debug: bool = False,
-    name: Optional[str] = None,
+    name: str | None = None,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
 

@@ -5,14 +5,11 @@ returns a ToolMessage with the error message. The ValidationNode can be used in 
 StateGraph with a "messages" key. If multiple tool calls are requested, they will be run in parallel.
 """
 
+from collections.abc import Sequence
 from typing import (
     Any,
     Callable,
-    Dict,
     Optional,
-    Sequence,
-    Tuple,
-    Type,
     Union,
     cast,
 )
@@ -39,7 +36,7 @@ from langgraph._internal._runnable import RunnableCallable
 def _default_format_error(
     error: BaseException,
     call: ToolCall,
-    schema: Union[Type[BaseModel], Type[BaseModelV1]],
+    schema: Union[type[BaseModel], type[BaseModelV1]],
 ) -> str:
     """Default error formatting function."""
     return f"{repr(error)}\n\nRespond after fixing all validation errors."
@@ -127,17 +124,17 @@ class ValidationNode(RunnableCallable):
 
     def __init__(
         self,
-        schemas: Sequence[Union[BaseTool, Type[BaseModel], Callable]],
+        schemas: Sequence[Union[BaseTool, type[BaseModel], Callable]],
         *,
         format_error: Optional[
-            Callable[[BaseException, ToolCall, Type[BaseModel]], str]
+            Callable[[BaseException, ToolCall, type[BaseModel]], str]
         ] = None,
         name: str = "validation",
         tags: Optional[list[str]] = None,
     ) -> None:
         super().__init__(self._func, None, name=name, tags=tags, trace=False)
         self._format_error = format_error or _default_format_error
-        self.schemas_by_name: Dict[str, Type[BaseModel]] = {}
+        self.schemas_by_name: dict[str, type[BaseModel]] = {}
         for schema in schemas:
             if isinstance(schema, BaseTool):
                 if schema.args_schema is None:
@@ -155,7 +152,7 @@ class ValidationNode(RunnableCallable):
             elif isinstance(schema, type) and issubclass(
                 schema, (BaseModel, BaseModelV1)
             ):
-                self.schemas_by_name[schema.__name__] = cast(Type[BaseModel], schema)
+                self.schemas_by_name[schema.__name__] = cast(type[BaseModel], schema)
             elif callable(schema):
                 base_model = create_schema_from_function("Validation", schema)
                 self.schemas_by_name[schema.__name__] = base_model
@@ -166,7 +163,7 @@ class ValidationNode(RunnableCallable):
 
     def _get_message(
         self, input: Union[list[AnyMessage], dict[str, Any]]
-    ) -> Tuple[str, AIMessage]:
+    ) -> tuple[str, AIMessage]:
         """Extract the last AIMessage from the input."""
         if isinstance(input, list):
             output_type = "list"

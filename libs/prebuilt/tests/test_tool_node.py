@@ -4,8 +4,6 @@ from functools import partial
 from typing import (
     Annotated,
     Any,
-    List,
-    Type,
     TypeVar,
     Union,
 )
@@ -1216,7 +1214,7 @@ T = TypeVar("T")
         _InjectedStateDataclassSchema,
     ],
 )
-def test_tool_node_inject_state(schema_: Type[T]) -> None:
+def test_tool_node_inject_state(schema_: type[T]) -> None:
     def tool1(some_val: int, state: Annotated[T, InjectedState]) -> str:
         """Tool 1 docstring."""
         if isinstance(state, dict):
@@ -1234,13 +1232,13 @@ def test_tool_node_inject_state(schema_: Type[T]) -> None:
     def tool3(
         some_val: int,
         foo: Annotated[str, InjectedState("foo")],
-        msgs: Annotated[List[AnyMessage], InjectedState("messages")],
+        msgs: Annotated[list[AnyMessage], InjectedState("messages")],
     ) -> str:
         """Tool 1 docstring."""
         return foo
 
     def tool4(
-        some_val: int, msgs: Annotated[List[AnyMessage], InjectedState("messages")]
+        some_val: int, msgs: Annotated[list[AnyMessage], InjectedState("messages")]
     ) -> str:
         """Tool 1 docstring."""
         return msgs[0].content

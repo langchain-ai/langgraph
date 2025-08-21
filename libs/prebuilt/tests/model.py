@@ -1,15 +1,12 @@
 import json
+from collections.abc import Sequence
 from dataclasses import asdict, is_dataclass
 from typing import (
     Any,
     Callable,
-    Dict,
     Generic,
-    List,
     Literal,
     Optional,
-    Sequence,
-    Type,
     Union,
 )
 
@@ -36,8 +33,8 @@ class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
+        messages: list[BaseMessage],
+        stop: Optional[list[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
         **kwargs: Any,
     ) -> ChatResult:
@@ -83,7 +80,7 @@ class FakeToolCallingModel(BaseChatModel, Generic[StructuredResponseT]):
 
     def bind_tools(
         self,
-        tools: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
+        tools: Sequence[Union[dict[str, Any], type[BaseModel], Callable, BaseTool]],
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         if len(tools) == 0:

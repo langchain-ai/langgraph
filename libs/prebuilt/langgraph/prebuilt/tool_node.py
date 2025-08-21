@@ -36,16 +36,14 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+from collections.abc import Sequence
 from copy import copy, deepcopy
 from dataclasses import replace
 from typing import (
+    Annotated,
     Any,
     Callable,
     Literal,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
     Union,
     cast,
     get_type_hints,
@@ -71,7 +69,7 @@ from langchain_core.tools.base import (
     get_all_basemodel_annotations,
 )
 from pydantic import BaseModel
-from typing_extensions import Annotated, get_args, get_origin
+from typing_extensions import get_args, get_origin
 
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
@@ -85,7 +83,7 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
-def msg_content_output(output: Any) -> Union[str, list[dict]]:
+def msg_content_output(output: Any) -> str | list[dict]:
     """Convert tool output to valid message content format.
 
     LangChain ToolMessages accept either string content or a list of content blocks.
@@ -127,12 +125,7 @@ def msg_content_output(output: Any) -> Union[str, list[dict]]:
 def _handle_tool_error(
     e: Exception,
     *,
-    flag: Union[
-        bool,
-        str,
-        Callable[..., str],
-        tuple[type[Exception], ...],
-    ],
+    flag: bool | str | Callable[..., str] | tuple[type[Exception], ...],
 ) -> str:
     """Generate error message content based on exception handling configuration.
 
@@ -338,13 +331,14 @@ class ToolNode(RunnableCallable):
 
     def __init__(
         self,
-        tools: Sequence[Union[BaseTool, Callable]],
+        tools: Sequence[BaseTool | Callable],
         *,
         name: str = "tools",
-        tags: Optional[list[str]] = None,
-        handle_tool_errors: Union[
-            bool, str, Callable[..., str], tuple[type[Exception], ...]
-        ] = True,
+        tags: list[str] | None = None,
+        handle_tool_errors: bool
+        | str
+        | Callable[..., str]
+        | tuple[type[Exception], ...] = True,
         messages_key: str = "messages",
     ) -> None:
         """Initialize the ToolNode with the provided tools and configuration.
@@ -358,13 +352,13 @@ class ToolNode(RunnableCallable):
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self._tools_by_name: dict[str, BaseTool] = {}
-        self._tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
-        self._tool_to_store_arg: dict[str, Optional[str]] = {}
+        self._tool_to_state_args: dict[str, dict[str, str | None]] = {}
+        self._tool_to_store_arg: dict[str, str | None] = {}
         self._handle_tool_errors = handle_tool_errors
         self._messages_key = messages_key
         for tool in tools:
             if not isinstance(tool, BaseTool):
-                tool_ = create_tool(cast(Type[BaseTool], tool))
+                tool_ = create_tool(cast(type[BaseTool], tool))
             else:
                 tool_ = tool
             self._tools_by_name[tool_.name] = tool_
@@ -378,14 +372,10 @@ class ToolNode(RunnableCallable):
 
     def _func(
         self,
-        input: Union[
-            list[AnyMessage],
-            dict[str, Any],
-            BaseModel,
-        ],
+        input: list[AnyMessage] | dict[str, Any] | BaseModel,
         config: RunnableConfig,
         *,
-        store: Optional[BaseStore],
+        store: BaseStore | None,
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
         config_list = get_config_list(config, len(tool_calls))
@@ -399,14 +389,10 @@ class ToolNode(RunnableCallable):
 
     async def _afunc(
         self,
-        input: Union[
-            list[AnyMessage],
-            dict[str, Any],
-            BaseModel,
-        ],
+        input: list[AnyMessage] | dict[str, Any] | BaseModel,
         config: RunnableConfig,
         *,
-        store: Optional[BaseStore],
+        store: BaseStore | None,
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
         outputs = await asyncio.gather(
@@ -417,9 +403,9 @@ class ToolNode(RunnableCallable):
 
     def _combine_tool_outputs(
         self,
-        outputs: list[Union[ToolMessage, Command]],
+        outputs: list[ToolMessage | Command],
         input_type: Literal["list", "dict", "tool_calls"],
-    ) -> list[Union[Command, list[ToolMessage], dict[str, list[ToolMessage]]]]:
+    ) -> list[Command | list[ToolMessage] | dict[str, list[ToolMessage]]]:
         # preserve existing behavior for non-command tool outputs for backwards
         # compatibility
         if not any(isinstance(output, Command) for output in outputs):
@@ -433,7 +419,7 @@ class ToolNode(RunnableCallable):
         ] = []
 
         # combine all parent commands with goto into a single parent command
-        parent_command: Optional[Command] = None
+        parent_command: Command | None = None
         for output in outputs:
             if isinstance(output, Command):
                 if (
@@ -464,7 +450,7 @@ class ToolNode(RunnableCallable):
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
-    ) -> Union[ToolMessage, Command]:
+    ) -> ToolMessage | Command:
         """Run a single tool call synchronously."""
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
@@ -522,7 +508,7 @@ class ToolNode(RunnableCallable):
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
-    ) -> Union[ToolMessage, Command]:
+    ) -> ToolMessage | Command:
         """Run a single tool call asynchronously."""
         if invalid_tool_message := self._validate_tool_call(call):
             return invalid_tool_message
@@ -577,13 +563,9 @@ class ToolNode(RunnableCallable):
 
     def _parse_input(
         self,
-        input: Union[
-            list[AnyMessage],
-            dict[str, Any],
-            BaseModel,
-        ],
-        store: Optional[BaseStore],
-    ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
+        input: list[AnyMessage] | dict[str, Any] | BaseModel,
+        store: BaseStore | None,
+    ) -> tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         input_type: Literal["list", "dict", "tool_calls"]
         if isinstance(input, list):
             if isinstance(input[-1], dict) and input[-1].get("type") == "tool_call":
@@ -616,7 +598,7 @@ class ToolNode(RunnableCallable):
         ]
         return tool_calls, input_type
 
-    def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
+    def _validate_tool_call(self, call: ToolCall) -> ToolMessage | None:
         requested_tool = call["name"]
         if requested_tool not in self.tools_by_name:
             all_tool_names = list(self.tools_by_name.keys())
@@ -633,11 +615,7 @@ class ToolNode(RunnableCallable):
     def _inject_state(
         self,
         tool_call: ToolCall,
-        input: Union[
-            list[AnyMessage],
-            dict[str, Any],
-            BaseModel,
-        ],
+        input: list[AnyMessage] | dict[str, Any] | BaseModel,
     ) -> ToolCall:
         state_args = self._tool_to_state_args[tool_call["name"]]
         if state_args and isinstance(input, list):
@@ -675,9 +653,7 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
-    def _inject_store(
-        self, tool_call: ToolCall, store: Optional[BaseStore]
-    ) -> ToolCall:
+    def _inject_store(self, tool_call: ToolCall, store: BaseStore | None) -> ToolCall:
         store_arg = self._tool_to_store_arg[tool_call["name"]]
         if not store_arg:
             return tool_call
@@ -697,12 +673,8 @@ class ToolNode(RunnableCallable):
     def inject_tool_args(
         self,
         tool_call: ToolCall,
-        input: Union[
-            list[AnyMessage],
-            dict[str, Any],
-            BaseModel,
-        ],
-        store: Optional[BaseStore],
+        input: list[AnyMessage] | dict[str, Any] | BaseModel,
+        store: BaseStore | None,
     ) -> ToolCall:
         """Inject graph state and store into tool call arguments.
 
@@ -808,7 +780,7 @@ class ToolNode(RunnableCallable):
 
 
 def tools_condition(
-    state: Union[list[AnyMessage], dict[str, Any], BaseModel],
+    state: list[AnyMessage] | dict[str, Any] | BaseModel,
     messages_key: str = "messages",
 ) -> Literal["tools", "__end__"]:
     """Conditional routing function for tool-calling workflows.
@@ -954,7 +926,7 @@ class InjectedState(InjectedToolArg):
           tool execution
     """  # noqa: E501
 
-    def __init__(self, field: Optional[str] = None) -> None:
+    def __init__(self, field: str | None = None) -> None:
         self.field = field
 
 
@@ -1035,7 +1007,7 @@ class InjectedStore(InjectedToolArg):
 
 
 def _is_injection(
-    type_arg: Any, injection_type: Union[Type[InjectedState], Type[InjectedStore]]
+    type_arg: Any, injection_type: type[InjectedState] | type[InjectedStore]
 ) -> bool:
     """Check if a type argument represents an injection annotation.
 
@@ -1060,7 +1032,7 @@ def _is_injection(
     return False
 
 
-def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
+def _get_state_args(tool: BaseTool) -> dict[str, str | None]:
     """Extract state injection mappings from tool annotations.
 
     This function analyzes a tool's input schema to identify arguments that should
@@ -1099,7 +1071,7 @@ def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
     return tool_args_to_state_fields
 
 
-def _get_store_arg(tool: BaseTool) -> Optional[str]:
+def _get_store_arg(tool: BaseTool) -> str | None:
     """Extract store injection argument from tool annotations.
 
     This function analyzes a tool's input schema to identify the argument that
