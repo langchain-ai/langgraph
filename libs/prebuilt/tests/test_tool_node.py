@@ -1156,3 +1156,4 @@ async def test_tool_node_command_remove_all_messages():
     command = result[0]
     assert isinstance(command, Command)
     assert command.update == {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]}
+
