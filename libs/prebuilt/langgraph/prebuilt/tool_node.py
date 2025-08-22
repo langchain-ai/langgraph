@@ -908,6 +908,16 @@ def tools_condition(
 class InjectedState(InjectedToolArg):
     """Annotation for injecting graph state into tool arguments.
 
+    .. deprecated:: 0.2.0
+        Use reserved keyword 'state' instead of InjectedState annotation.
+        The annotation-based approach will be removed in a future version.
+        
+        Instead of:
+            def tool(x: int, state: Annotated[dict, InjectedState]) -> str:
+        
+        Use:
+            def tool(x: int, state) -> str:
+
     This annotation enables tools to access graph state without exposing state
     management details to the language model. Tools annotated with InjectedState
     receive state data automatically during execution while remaining invisible
@@ -1303,6 +1313,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
