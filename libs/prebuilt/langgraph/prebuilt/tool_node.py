@@ -1223,34 +1223,35 @@ def _wrap_tool_with_reserved_keywords(
     class FilteredTool(tool.__class__):
         """Tool wrapper that excludes reserved keywords from schema."""
 
-        def get_input_schema(self, config: Optional[RunnableConfig] = None) -> Type[BaseModel]:
+        def get_input_schema(
+            self, config: Optional[RunnableConfig] = None
+        ) -> Type[BaseModel]:
             """Return the filtered schema without reserved keywords."""
             original_schema = super().get_input_schema(config)
-            
+
             # If no reserved args to filter, return original
             if not reserved_args:
                 return original_schema
-            
+
             # Create a new schema class dynamically
             from pydantic import create_model
-            
+
             # Get fields to keep (exclude reserved keywords)
-            if hasattr(original_schema, 'model_fields'):
+            if hasattr(original_schema, "model_fields"):
                 # Pydantic v2
                 fields_to_keep = {
-                    name: (field.annotation, field) 
+                    name: (field.annotation, field)
                     for name, field in original_schema.model_fields.items()
                     if name not in reserved_args
                 }
             else:
                 # Pydantic v1 fallback
                 fields_to_keep = {}
-            
+
             # Create filtered schema
             try:
                 filtered_schema = create_model(
-                    f"{original_schema.__name__}Filtered",
-                    **fields_to_keep
+                    f"{original_schema.__name__}Filtered", **fields_to_keep
                 )
                 return filtered_schema
             except Exception:
@@ -1261,20 +1262,28 @@ def _wrap_tool_with_reserved_keywords(
     filtered_tool = FilteredTool(
         name=tool.name,
         description=tool.description,
-        func=getattr(tool, 'func', None),
+        func=getattr(tool, "func", None),
         args_schema=tool.get_input_schema(),  # Use original schema for initialization
     )
 
     # Copy over other attributes
-    for attr in ['return_direct', 'verbose', 'callbacks', 'tags', 'metadata', 
-                 'handle_tool_error', 'handle_validation_error', 'response_format']:
+    for attr in [
+        "return_direct",
+        "verbose",
+        "callbacks",
+        "tags",
+        "metadata",
+        "handle_tool_error",
+        "handle_validation_error",
+        "response_format",
+    ]:
         if hasattr(tool, attr):
             setattr(filtered_tool, attr, getattr(tool, attr))
 
     # Copy run methods
-    if hasattr(tool, '_run'):
+    if hasattr(tool, "_run"):
         filtered_tool._run = tool._run
-    if hasattr(tool, '_arun'):
+    if hasattr(tool, "_arun"):
         filtered_tool._arun = tool._arun
 
     return filtered_tool
@@ -1384,7 +1393,3 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return "runtime" if "runtime" in reserved_args else None
-
-
-
-
