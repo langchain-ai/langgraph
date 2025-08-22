@@ -665,6 +665,42 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
+    def _inject_runtime(
+        self, tool_call: ToolCall, config: RunnableConfig
+    ) -> ToolCall:
+        """Inject runtime from config into tool call arguments.
+
+        This method extracts the runtime from the RunnableConfig and injects it
+        into the tool call arguments for tools that require runtime access.
+
+        Args:
+            tool_call: The tool call to augment with runtime.
+            config: The RunnableConfig containing the runtime.
+
+        Returns:
+            The tool call with runtime injected if required.
+
+        Raises:
+            ValueError: If a tool requires runtime injection but runtime is not
+                available in the config.
+        """
+        runtime_arg = self.tool_to_runtime_arg[tool_call["name"]]
+        if not runtime_arg:
+            return tool_call
+
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+        if runtime is None:
+            raise ValueError(
+                "Cannot inject runtime into tools with InjectedRuntime annotations - "
+                "runtime not found in config."
+            )
+
+        tool_call["args"] = {
+            **tool_call["args"],
+            runtime_arg: runtime,
+        }
+        return tool_call
+
     def inject_tool_args(
         self,
         tool_call: ToolCall,
@@ -1220,6 +1256,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
+
 
 
 
