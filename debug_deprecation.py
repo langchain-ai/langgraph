@@ -5,7 +5,8 @@ from typing import Annotated
 from langgraph.prebuilt import ToolNode, InjectedState, InjectedStore
 from langgraph.prebuilt.tool_node import _get_state_args, _get_store_arg, _get_reserved_keyword_args
 from langgraph.store.base import BaseStore
-from langchain_core.tools import create_tool
+from langchain_core.tools.base import create_schema_from_function
+from langchain_core.tools import StructuredTool
 
 
 def tool_with_injected_state(x: int, state: Annotated[dict, InjectedState]) -> str:
@@ -43,3 +44,4 @@ print(f"\nTool 2 warning condition:")
 print(f"  store_arg: {store_arg}")
 print(f"  reserved_args.get('runtime'): {reserved_args2.get('runtime')}")
 print(f"  Should warn: {bool(store_arg and not reserved_args2.get('runtime'))}")
+
