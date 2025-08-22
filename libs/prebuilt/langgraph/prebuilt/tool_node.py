@@ -1221,7 +1221,7 @@ def _wrap_tool_with_reserved_keywords(
 
     # Create a wrapper tool that filters the schema
     # Use type: ignore to suppress mypy error for dynamic class creation
-    class FilteredTool(tool.__class__):  # type: ignore[name-defined]
+    class FilteredTool(tool.__class__):  # type: ignore[name-defined,misc]
         """Tool wrapper that excludes reserved keywords from schema."""
 
         def get_input_schema(
@@ -1405,3 +1405,4 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return "runtime" if "runtime" in reserved_args else None
+
