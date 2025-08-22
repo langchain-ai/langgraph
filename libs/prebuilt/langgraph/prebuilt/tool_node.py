@@ -664,6 +664,44 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
+    def _inject_runtime(
+        self,
+        tool_call: ToolCall,
+        store: Optional[BaseStore],
+        config: RunnableConfig,
+    ) -> ToolCall:
+        """Inject runtime object into tool call arguments.
+
+        This method creates and injects a Runtime object containing store and
+        context into tools that have a 'runtime' reserved keyword parameter.
+
+        Args:
+            tool_call: The tool call dictionary to augment with runtime.
+            store: The persistent store instance to include in runtime.
+            config: The runnable configuration containing context.
+
+        Returns:
+            The tool call with runtime injected if needed.
+        """
+        runtime_arg = self.tool_to_runtime_arg[tool_call["name"]]
+        if not runtime_arg:
+            return tool_call
+
+        # Create a Runtime object with store and context from config
+        # The context will be available from the config if set
+        runtime = Runtime(
+            context=config.get("configurable", {}).get("context"),
+            store=store,
+            stream_writer=lambda _: None,  # Default no-op stream writer
+            previous=None,
+        )
+
+        tool_call["args"] = {
+            **tool_call["args"],
+            runtime_arg: runtime,
+        }
+        return tool_call
+
     def inject_tool_args(
         self,
         tool_call: ToolCall,
@@ -1174,6 +1212,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
