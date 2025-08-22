@@ -992,6 +992,17 @@ class InjectedState(InjectedToolArg):
 class InjectedStore(InjectedToolArg):
     """Annotation for injecting persistent store into tool arguments.
 
+    .. deprecated:: 0.2.0
+        Use reserved keyword 'runtime' instead of InjectedStore annotation.
+        The annotation-based approach will be removed in a future version.
+        
+        Instead of:
+            def tool(x: int, store: Annotated[BaseStore, InjectedStore()]) -> str:
+        
+        Use:
+            def tool(x: int, runtime) -> str:
+                # Access store via runtime.store
+
     This annotation enables tools to access LangGraph's persistent storage system
     without exposing storage details to the language model. Tools annotated with
     InjectedStore receive the store instance automatically during execution while
@@ -1313,6 +1324,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
