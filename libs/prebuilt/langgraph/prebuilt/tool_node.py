@@ -1183,3 +1183,41 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
     return None
 
 
+def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
+    """Extract runtime injection argument from tool annotations.
+
+    This function analyzes a tool's input schema to identify the argument that
+    should be injected with the graph runtime. Only one runtime argument is supported
+    per tool.
+
+    Args:
+        tool: The tool to analyze for runtime injection requirements.
+
+    Returns:
+        The name of the argument that should receive the runtime injection, or None
+        if no runtime injection is required.
+
+    Raises:
+        ValueError: If a tool argument has multiple InjectedRuntime annotations.
+    """
+    full_schema = tool.get_input_schema()
+    for name, type_ in get_all_basemodel_annotations(full_schema).items():
+        injections = [
+            type_arg
+            for type_arg in get_args(type_)
+            if _is_injection(type_arg, InjectedRuntime)
+        ]
+        if len(injections) > 1:
+            raise ValueError(
+                "A tool argument should not be annotated with InjectedRuntime more than "
+                f"once. Received arg {name} with annotations {injections}."
+            )
+        elif len(injections) == 1:
+            return name
+        else:
+            pass
+
+    return None
+
+
+
