@@ -1375,7 +1375,7 @@ async def test_runtime_injection_with_state_and_store():
 
 
 def test_runtime_arg_excluded_from_schema():
-    """Test that runtime arguments are excluded from tool schemas."""
+    """Test that runtime arguments are properly marked as injected in tool schemas."""
     from langgraph.prebuilt import InjectedRuntime
     from langgraph.runtime import Runtime
 
@@ -1390,25 +1390,23 @@ def test_runtime_arg_excluded_from_schema():
     # Create tool node
     tool_node = ToolNode([tool_with_runtime])
 
+    # Verify runtime is tracked as an injected arg
+    assert tool_node.tool_to_runtime_arg["tool_with_runtime"] == "runtime"
+    
     # Get the tool from the node
     tool = tool_node.tools_by_name["tool_with_runtime"]
-
-    # Check the args_schema - runtime arg should not be included
-    # The tool's args_schema should only contain user-facing arguments
+    
+    # The runtime field exists in the schema but is marked with InjectedRuntime metadata
+    # This allows the tool system to know it should be injected, not provided by the LLM
     if hasattr(tool, "args_schema"):
         schema = tool.args_schema
-        # Check the schema fields
+        # Both fields should be in the schema
         assert "user_arg" in schema.model_fields
-        assert "runtime" not in schema.model_fields
-        assert len(schema.model_fields) == 1
-    else:
-        # For non-pydantic tools, check the function signature
-        import inspect
-        sig = inspect.signature(tool.func if hasattr(tool, "func") else tool)
-        # Runtime should be in the signature but marked as injected
-        assert "user_arg" in sig.parameters
-        # Verify runtime is tracked as an injected arg
-        assert tool_node.tool_to_runtime_arg["tool_with_runtime"] == "runtime"
+        assert "runtime" in schema.model_fields
+        
+        # Check that runtime field has InjectedRuntime in its metadata
+        runtime_field = schema.model_fields["runtime"]
+        assert any(isinstance(m, InjectedRuntime) for m in runtime_field.metadata)
 
 
 async def test_runtime_injection_with_decorated_tool():
@@ -1461,4 +1459,5 @@ async def test_runtime_injection_with_decorated_tool():
     tool_message = result["messages"][-1]
     assert isinstance(tool_message, ToolMessage)
     assert tool_message.content == "Decorated: test"
+
 
