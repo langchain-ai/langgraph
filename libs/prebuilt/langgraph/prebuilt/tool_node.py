@@ -1244,8 +1244,10 @@ def _wrap_tool_with_reserved_keywords(
                 for name, field in original_schema.model_fields.items():
                     if name not in reserved_args:
                         # For create_model, we need to properly extract field information
-                        field_type = field.annotation if hasattr(field, "annotation") else Any
-                        
+                        field_type = (
+                            field.annotation if hasattr(field, "annotation") else Any
+                        )
+
                         # Handle field defaults and constraints
                         if hasattr(field, "default") and field.default is not ...:
                             # Field has a default value
@@ -1403,9 +1405,3 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return "runtime" if "runtime" in reserved_args else None
-
-
-
-
-
-
