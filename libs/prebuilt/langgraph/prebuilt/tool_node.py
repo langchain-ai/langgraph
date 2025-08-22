@@ -342,6 +342,7 @@ class ToolNode(RunnableCallable):
         self.tools_by_name: dict[str, BaseTool] = {}
         self.tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
         self.tool_to_store_arg: dict[str, Optional[str]] = {}
+        self.tool_to_runtime_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
         for tool_ in tools:
@@ -350,6 +351,7 @@ class ToolNode(RunnableCallable):
             self.tools_by_name[tool_.name] = tool_
             self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
             self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
+            self.tool_to_runtime_arg[tool_.name] = _get_runtime_arg(tool_)
 
     def _func(
         self,
@@ -1218,6 +1220,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
+
 
 
 
