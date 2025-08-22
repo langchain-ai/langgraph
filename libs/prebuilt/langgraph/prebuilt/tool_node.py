@@ -1121,6 +1121,72 @@ def _get_reserved_keyword_args(tool: BaseTool) -> dict[str, str]:
     return reserved_args
 
 
+def _wrap_tool_with_reserved_keywords(tool: BaseTool, reserved_args: dict[str, str]) -> BaseTool:
+    """Wrap a tool to exclude reserved keyword parameters from its schema.
+
+    This function creates a wrapper around tools that use reserved keywords
+    ('state' and 'runtime') to ensure these parameters are excluded from the
+    schema presented to LLMs, similar to how InjectedToolArg annotations work.
+
+    Args:
+        tool: The original tool to wrap.
+        reserved_args: Dictionary of reserved keyword parameters to exclude.
+
+    Returns:
+        A wrapped tool with reserved keywords excluded from its schema.
+    """
+    # Get the original schema
+    original_schema = tool.get_input_schema()
+    
+    # Create a new schema class that excludes reserved keywords
+    class FilteredSchema(original_schema):
+        """Schema with reserved keywords filtered out."""
+        pass
+    
+    # Remove reserved keyword fields from the schema
+    if hasattr(FilteredSchema, 'model_fields'):
+        # Pydantic v2
+        for param_name in reserved_args:
+            if param_name in FilteredSchema.model_fields:
+                delattr(FilteredSchema, param_name)
+                FilteredSchema.model_fields.pop(param_name, None)
+    elif hasattr(FilteredSchema, '__fields__'):
+        # Pydantic v1 (backward compatibility)
+        for param_name in reserved_args:
+            if param_name in FilteredSchema.__fields__:
+                delattr(FilteredSchema, param_name)
+                FilteredSchema.__fields__.pop(param_name, None)
+    
+    # Create a wrapper tool with the filtered schema
+    class WrappedTool(type(tool)):
+        """Tool wrapper that excludes reserved keywords from schema."""
+        
+        def get_input_schema(self, config: Optional[RunnableConfig] = None) -> Type[BaseModel]:
+            """Return the filtered schema without reserved keywords."""
+            return FilteredSchema
+    
+    # Create the wrapped tool instance
+    wrapped = WrappedTool(
+        name=tool.name,
+        description=tool.description,
+        func=tool.func if hasattr(tool, 'func') else None,
+    )
+    
+    # Copy over other attributes
+    for attr in ['return_direct', 'verbose', 'callbacks', 'tags', 'metadata', 
+                 'handle_tool_error', 'handle_validation_error', 'response_format']:
+        if hasattr(tool, attr):
+            setattr(wrapped, attr, getattr(tool, attr))
+    
+    # Ensure the wrapped tool still has access to the original run method
+    if hasattr(tool, '_run'):
+        wrapped._run = tool._run
+    if hasattr(tool, '_arun'):
+        wrapped._arun = tool._arun
+    
+    return wrapped
+
+
 def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
     """Extract state injection mappings from tool annotations or reserved keywords.
 
@@ -1225,6 +1291,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
