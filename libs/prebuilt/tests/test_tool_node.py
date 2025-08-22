@@ -1392,10 +1392,10 @@ def test_runtime_arg_excluded_from_schema():
 
     # Verify runtime is tracked as an injected arg
     assert tool_node.tool_to_runtime_arg["tool_with_runtime"] == "runtime"
-    
+
     # Get the tool from the node
     tool = tool_node.tools_by_name["tool_with_runtime"]
-    
+
     # The runtime field exists in the schema but is marked with InjectedRuntime metadata
     # This allows the tool system to know it should be injected, not provided by the LLM
     if hasattr(tool, "args_schema"):
@@ -1403,7 +1403,7 @@ def test_runtime_arg_excluded_from_schema():
         # Both fields should be in the schema
         assert "user_arg" in schema.model_fields
         assert "runtime" in schema.model_fields
-        
+
         # Check that runtime field has InjectedRuntime in its metadata
         runtime_field = schema.model_fields["runtime"]
         assert any(isinstance(m, InjectedRuntime) for m in runtime_field.metadata)
@@ -1459,5 +1459,3 @@ async def test_runtime_injection_with_decorated_tool():
     tool_message = result["messages"][-1]
     assert isinstance(tool_message, ToolMessage)
     assert tool_message.content == "Decorated: test"
-
-
