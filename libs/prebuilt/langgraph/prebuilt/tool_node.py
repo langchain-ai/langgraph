@@ -1168,7 +1168,7 @@ def _get_reserved_keyword_args(tool: BaseTool) -> dict[str, str]:
         A dictionary mapping reserved parameter names to their injection type.
         Keys are parameter names, values are either 'state' or 'runtime'.
     """
-    reserved_args = {}
+    reserved_args: dict[str, str] = {}
 
     # Get the underlying function from the tool
     if hasattr(tool, "func"):
@@ -1393,3 +1393,4 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return "runtime" if "runtime" in reserved_args else None
+
