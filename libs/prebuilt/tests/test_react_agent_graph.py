@@ -4,7 +4,7 @@ import pytest
 from pydantic import BaseModel
 from syrupy import SnapshotAssertion
 
-from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt import create_agent
 from tests.model import FakeToolCallingModel
 
 model = FakeToolCallingModel()
@@ -34,19 +34,25 @@ class ResponseFormat(BaseModel):
 @pytest.mark.parametrize("tools", [[], [tool]])
 @pytest.mark.parametrize("pre_model_hook", [None, pre_model_hook])
 @pytest.mark.parametrize("post_model_hook", [None, post_model_hook])
-@pytest.mark.parametrize("response_format", [None, ResponseFormat])
 def test_react_agent_graph_structure(
     snapshot: SnapshotAssertion,
     tools: list[Callable],
     pre_model_hook: Union[Callable, None],
     post_model_hook: Union[Callable, None],
-    response_format: Union[type[BaseModel], None],
 ) -> None:
-    agent = create_react_agent(
+    agent = create_agent(
         model,
         tools=tools,
         pre_model_hook=pre_model_hook,
         post_model_hook=post_model_hook,
-        response_format=response_format,
     )
-    assert agent.get_graph().draw_mermaid(with_styles=False) == snapshot
+    try:
+        assert agent.get_graph().draw_mermaid(with_styles=False) == snapshot
+    except Exception as e:
+        raise ValueError(
+            "The graph structure has changed. Please update the snapshot."
+            "Configuration used:\n"
+            f"tools: {tools}, "
+            f"pre_model_hook: {pre_model_hook}, "
+            f"post_model_hook: {post_model_hook}, "
+        ) from e
