@@ -1141,12 +1141,12 @@ await agent.invoke(
 Short-term memory maintains **dynamic** state that changes during a single execution.
 
 :::python
-To **access** (read) the graph state inside the tools, you can use a special parameter **annotation** — @[`InjectedState`][InjectedState]:
+To **access** (read) the graph state inside the tools, you can use the reserved keyword parameter `state`:
 
 ```python
-from typing import Annotated, NotRequired
+from typing import NotRequired
 from langchain_core.tools import tool
-from langgraph.prebuilt import InjectedState, create_react_agent
+from langgraph.prebuilt import create_react_agent
 from langgraph.prebuilt.chat_agent_executor import AgentState
 
 class CustomState(AgentState):
@@ -1156,7 +1156,7 @@ class CustomState(AgentState):
 @tool
 def get_user_name(
     # highlight-next-line
-    state: Annotated[CustomState, InjectedState]
+    state  # Reserved keyword - automatically injected
 ) -> str:
     """Retrieve the current user-name from state."""
     # Return stored name or a default if not set
@@ -1172,6 +1172,9 @@ agent = create_react_agent(
 # Invocation: reads the name from state (initially empty)
 agent.invoke({"messages": "what's my name?"})
 ```
+
+!!! note "Migration from Annotations"
+    The old annotation-based approach using `Annotated[CustomState, InjectedState]` is deprecated but still supported for backward compatibility. Simply use the reserved keyword `state` without any type annotation for cleaner code.
 
 :::
 
@@ -2387,3 +2390,4 @@ Some commonly used tool categories include:
 
 These integrations can be configured and added to your agents using the same `tools` parameter shown in the examples above.
 :::
+
