@@ -1180,10 +1180,14 @@ def _get_reserved_keyword_args(tool: BaseTool) -> dict[str, str]:
     try:
         sig = inspect.signature(func)
         for param_name, param in sig.parameters.items():
-            # Check for reserved keywords
-            if param_name == 'state':
+            # Check for reserved keywords only if they don't have injection annotations
+            # Parameters with InjectedState or InjectedStore annotations should not be
+            # considered reserved keywords (they use the old annotation-based approach)
+            if param_name == 'state' and param.annotation == inspect.Parameter.empty:
+                # Only consider 'state' as reserved if it has no annotation
                 reserved_args['state'] = 'state'
-            elif param_name == 'runtime':
+            elif param_name == 'runtime' and param.annotation == inspect.Parameter.empty:
+                # Only consider 'runtime' as reserved if it has no annotation
                 reserved_args['runtime'] = 'runtime'
     except (ValueError, TypeError):
         # If we can't inspect the signature, return empty
@@ -1374,6 +1378,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
