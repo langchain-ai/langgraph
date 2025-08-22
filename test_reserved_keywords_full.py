@@ -4,7 +4,7 @@ from langchain_core.messages import AIMessage, AnyMessage
 from langgraph.prebuilt import ToolNode, InjectedState, InjectedStore
 from langgraph.store.memory import InMemoryStore
 from langgraph.store.base import BaseStore
-from langgraph.types import MessagesState
+from langgraph.graph import MessagesState
 
 
 def test_tool_node_inject_runtime_reserved_keyword() -> None:
@@ -178,4 +178,5 @@ if __name__ == "__main__":
     print("✓ Mixed injection styles test passed!")
     
     print("\nAll tests passed!")
+
 
