@@ -1168,7 +1168,7 @@ async def test_runtime_injection():
     # Create a mock runtime with store
     store = InMemoryStore()
     runtime = Runtime(store=store)
-    
+
     # Tool that uses runtime injection
     def tool_with_runtime(
         value: str,
@@ -1181,17 +1181,13 @@ async def test_runtime_injection():
         # Store a value using runtime's store
         runtime.store.put(("test", "namespace"), "test_key", {"value": value})
         return f"Stored: {value}"
-    
+
     # Create tool node
     tool_node = ToolNode([tool_with_runtime])
-    
+
     # Create config with runtime
-    config = {
-        CONF: {
-            CONFIG_KEY_RUNTIME: runtime
-        }
-    }
-    
+    config = {CONF: {CONFIG_KEY_RUNTIME: runtime}}
+
     # Invoke tool with runtime in config
     result = await tool_node.ainvoke(
         {
@@ -1210,14 +1206,14 @@ async def test_runtime_injection():
         },
         config=config,
     )
-    
+
     # Verify result
     assert "messages" in result
     tool_message = result["messages"][-1]
     assert isinstance(tool_message, ToolMessage)
     assert tool_message.content == "Stored: test_value"
     assert tool_message.tool_call_id == "call_1"
-    
+
     # Verify value was stored
     stored = store.get(("test", "namespace"), "test_key")
     assert stored.value == {"value": "test_value"}
@@ -1232,7 +1228,7 @@ async def test_runtime_injection_sync_tool():
 
     # Create a mock runtime
     runtime = Runtime(store=InMemoryStore())
-    
+
     # Synchronous tool that uses runtime injection
     def sync_tool_with_runtime(
         value: int,
@@ -1241,17 +1237,13 @@ async def test_runtime_injection_sync_tool():
         """Sync tool that accesses runtime."""
         assert runtime is not None
         return f"Runtime available: {value}"
-    
+
     # Create tool node
     tool_node = ToolNode([sync_tool_with_runtime])
-    
+
     # Create config with runtime
-    config = {
-        CONF: {
-            CONFIG_KEY_RUNTIME: runtime
-        }
-    }
-    
+    config = {CONF: {CONFIG_KEY_RUNTIME: runtime}}
+
     # Invoke tool synchronously
     result = tool_node.invoke(
         {
@@ -1270,7 +1262,7 @@ async def test_runtime_injection_sync_tool():
         },
         config=config,
     )
-    
+
     # Verify result
     tool_message = result["messages"][-1]
     assert isinstance(tool_message, ToolMessage)
@@ -1289,10 +1281,10 @@ async def test_runtime_injection_error_no_runtime():
     ) -> str:
         """Tool that needs runtime."""
         return f"Value: {value}"
-    
+
     # Create tool node
     tool_node = ToolNode([tool_needs_runtime])
-    
+
     # Try to invoke without runtime in config
     with pytest.raises(ValueError, match="Cannot inject runtime into tools"):
         await tool_node.ainvoke(
@@ -1324,7 +1316,7 @@ async def test_runtime_injection_with_state_and_store():
     # Create runtime and store
     store = InMemoryStore()
     runtime = Runtime(store=store)
-    
+
     # Tool that uses all three injections
     def tool_with_all_injections(
         value: str,
@@ -1338,25 +1330,21 @@ async def test_runtime_injection_with_state_and_store():
         assert store is not None
         assert runtime is not None
         assert runtime.store == store  # Runtime's store should match injected store
-        
+
         # Access state
         messages = state.get("messages", [])
-        
+
         # Use store
         store.put(("test", "ns"), "key", {"val": value})
-        
+
         return f"Processed {value} with {len(messages)} messages"
-    
+
     # Create tool node
     tool_node = ToolNode([tool_with_all_injections])
-    
+
     # Create config with runtime
-    config = {
-        CONF: {
-            CONFIG_KEY_RUNTIME: runtime
-        }
-    }
-    
+    config = {CONF: {CONFIG_KEY_RUNTIME: runtime}}
+
     # Invoke with state, store, and runtime
     result = await tool_node.ainvoke(
         {
@@ -1375,12 +1363,12 @@ async def test_runtime_injection_with_state_and_store():
         },
         config=config,
     )
-    
+
     # Verify result
     tool_message = result["messages"][-1]
     assert isinstance(tool_message, ToolMessage)
     assert "Processed test_data with 1 messages" in tool_message.content
-    
+
     # Verify store was updated
     stored = store.get(("test", "ns"), "key")
     assert stored.value == {"val": "test_data"}
@@ -1398,17 +1386,17 @@ def test_runtime_arg_excluded_from_schema():
     ) -> str:
         """Tool with runtime injection."""
         return f"Processed: {user_arg}"
-    
+
     # Create tool node
     tool_node = ToolNode([tool_with_runtime])
-    
+
     # Get the tool from the node
     tool = tool_node.tools_by_name["tool_with_runtime"]
-    
+
     # Check the schema - runtime arg should not be included
     schema = tool.get_input_schema()
     properties = schema.schema()["properties"]
-    
+
     # Only user_arg should be in the schema
     assert "user_arg" in properties
     assert "runtime" not in properties
@@ -1424,7 +1412,7 @@ async def test_runtime_injection_with_decorated_tool():
 
     # Create runtime
     runtime = Runtime(store=InMemoryStore())
-    
+
     # Decorated tool with runtime injection
     @dec_tool
     def decorated_tool_with_runtime(
@@ -1435,17 +1423,13 @@ async def test_runtime_injection_with_decorated_tool():
         assert runtime is not None
         assert runtime.store is not None
         return f"Decorated: {value}"
-    
+
     # Create tool node
     tool_node = ToolNode([decorated_tool_with_runtime])
-    
+
     # Create config
-    config = {
-        CONF: {
-            CONFIG_KEY_RUNTIME: runtime
-        }
-    }
-    
+    config = {CONF: {CONFIG_KEY_RUNTIME: runtime}}
+
     # Invoke tool
     result = await tool_node.ainvoke(
         {
@@ -1464,10 +1448,8 @@ async def test_runtime_injection_with_decorated_tool():
         },
         config=config,
     )
-    
+
     # Verify result
     tool_message = result["messages"][-1]
     assert isinstance(tool_message, ToolMessage)
     assert tool_message.content == "Decorated: test"
-
-

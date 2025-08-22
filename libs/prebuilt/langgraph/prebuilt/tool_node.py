@@ -75,7 +75,6 @@ from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
 
@@ -665,9 +664,7 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
-    def _inject_runtime(
-        self, tool_call: ToolCall, config: RunnableConfig
-    ) -> ToolCall:
+    def _inject_runtime(self, tool_call: ToolCall, config: RunnableConfig) -> ToolCall:
         """Inject runtime from config into tool call arguments.
 
         This method extracts the runtime from the RunnableConfig and injects it
@@ -754,12 +751,12 @@ class ToolNode(RunnableCallable):
         tool_call_copy: ToolCall = copy(tool_call)
         tool_call_with_state = self._inject_state(tool_call_copy, input)
         tool_call_with_store = self._inject_store(tool_call_with_state, store)
-        
+
         # Only inject runtime if config is provided
         if config is not None:
             tool_call_with_runtime = self._inject_runtime(tool_call_with_store, config)
             return tool_call_with_runtime
-        
+
         return tool_call_with_store
 
     def _validate_tool_command(
@@ -1080,13 +1077,13 @@ class InjectedRuntime(InjectedToolArg):
             if runtime.context:
                 user_id = runtime.context.user_id
                 return f"Processing query for user {user_id}: {query}"
-            
+
             # Access runtime store
             if runtime.store:
                 data = runtime.store.get(("users",), user_id)
                 if data:
                     return f"Found user data: {data.value}"
-            
+
             return "No context available"
 
         @tool
@@ -1130,7 +1127,10 @@ class InjectedRuntime(InjectedToolArg):
 
 
 def _is_injection(
-    type_arg: Any, injection_type: Union[Type[InjectedState], Type[InjectedStore], Type[InjectedRuntime]]
+    type_arg: Any,
+    injection_type: Union[
+        Type[InjectedState], Type[InjectedStore], Type[InjectedRuntime]
+    ],
 ) -> bool:
     """Check if a type argument represents an injection annotation.
 
@@ -1266,9 +1266,3 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
-
-
-
-
-
-
