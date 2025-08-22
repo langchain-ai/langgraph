@@ -1262,6 +1262,7 @@ def _wrap_tool_with_reserved_keywords(
         name=tool.name,
         description=tool.description,
         func=getattr(tool, 'func', None),
+        args_schema=tool.get_input_schema(),  # Use original schema for initialization
     )
 
     # Copy over other attributes
@@ -1383,4 +1384,5 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return "runtime" if "runtime" in reserved_args else None
+
 
