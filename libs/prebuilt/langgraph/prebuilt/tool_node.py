@@ -1232,7 +1232,7 @@ def _wrap_tool_with_reserved_keywords(
 
             # If no reserved args to filter, return original
             if not reserved_args:
-                return original_schema
+                return original_schema  # type: ignore[no-any-return]
 
             # Create a new schema class dynamically
             from pydantic import create_model
@@ -1405,6 +1405,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return "runtime" if "runtime" in reserved_args else None
+
 
 
 
