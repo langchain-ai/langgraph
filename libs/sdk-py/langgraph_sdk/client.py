@@ -45,6 +45,7 @@ from langgraph_sdk.schema import (
     CronSelectField,
     CronSortBy,
     DisconnectMode,
+    Durability,
     GraphSchema,
     IfNotExists,
     Item,
@@ -1785,6 +1786,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -1822,6 +1824,7 @@ class RunsClient:
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
             on_run_created: Callback when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
 
         Returns:
             AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
@@ -1881,6 +1884,7 @@ class RunsClient:
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -1982,6 +1986,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Run:
         """Create a background run.
 
@@ -2015,6 +2020,7 @@ class RunsClient:
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
 
         Returns:
             Run: The created background run.
@@ -2112,6 +2118,7 @@ class RunsClient:
             "if_not_exists": if_not_exists,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
 
@@ -2222,6 +2229,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -2253,6 +2261,7 @@ class RunsClient:
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -2326,6 +2335,7 @@ class RunsClient:
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
@@ -4836,6 +4846,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Iterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -4872,6 +4883,7 @@ class SyncRunsClient:
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
 
         Returns:
             Iterator[StreamPart]: Iterator of stream results.
@@ -4928,6 +4940,7 @@ class SyncRunsClient:
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -5029,6 +5042,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Run:
         """Create a background run.
 
@@ -5062,6 +5076,7 @@ class SyncRunsClient:
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
 
         Returns:
             Run: The created background run.
@@ -5159,6 +5174,7 @@ class SyncRunsClient:
             "if_not_exists": if_not_exists,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
 
@@ -5269,6 +5285,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -5301,6 +5318,7 @@ class SyncRunsClient:
             raise_error: Whether to raise an error if the run fails.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -5376,6 +5394,7 @@ class SyncRunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
             "raise_error": raise_error,
+            "durability": durability,
         }
 
         def on_response(res: httpx.Response):

@@ -91,6 +91,12 @@ Defines action after completion:
 - "keep": Retain resources after completion.
 """
 
+Durability = Literal["sync", "async", "exit"]
+"""Durability mode for the graph execution.
+- `"sync"`: Changes are persisted synchronously before the next step starts.
+- `"async"`: Changes are persisted asynchronously while the next step executes.
+- `"exit"`: Changes are persisted only when the graph exits."""
+
 All = Literal["*"]
 """Represents a wildcard or 'all' selector."""
 
