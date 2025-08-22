@@ -381,7 +381,7 @@ const multiAgentGraph = new StateGraph(MessagesZodState)
     from typing import Annotated
     from langchain_core.messages import convert_to_messages
     from langchain_core.tools import tool, InjectedToolCallId
-    from langgraph.prebuilt import create_react_agent, InjectedState
+    from langgraph.prebuilt import create_react_agent
     from langgraph.graph import StateGraph, START, MessagesState
     from langgraph.types import Command
     
@@ -1250,5 +1250,6 @@ LangGraph comes with prebuilt implementations of two of the most popular multi-a
 - [supervisor](../agents/multi-agent.md#supervisor) — individual agents are coordinated by a central supervisor agent. The supervisor controls all communication flow and task delegation, making decisions about which agent to invoke based on the current context and task requirements. You can use [`langgraph-supervisor`](https://github.com/langchain-ai/langgraph-supervisor-js) library to create a supervisor multi-agent systems.
 - [swarm](../agents/multi-agent.md#supervisor) — agents dynamically hand off control to one another based on their specializations. The system remembers which agent was last active, ensuring that on subsequent interactions, the conversation resumes with that agent. You can use [`langgraph-swarm`](https://github.com/langchain-ai/langgraph-swarm-js) library to create a swarm multi-agent systems.
 :::
+
 
 
