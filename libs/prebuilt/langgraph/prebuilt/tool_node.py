@@ -399,31 +399,9 @@ class ToolNode(RunnableCallable):
                 )
 
             # Check for reserved keywords and wrap the tool if needed
-            # Also wrap tools with annotation-based injection to ensure their parameters are excluded from schemas
-            if reserved_args or has_injected_state or has_injected_store:
-                # Create a combined dict of parameters to exclude from schema
-                params_to_exclude = dict(reserved_args)  # Start with reserved keywords
-                
-                # Add annotation-based parameters
-                if has_injected_state:
-                    # Find the parameter name that has InjectedState annotation
-                    for name, type_ in get_all_basemodel_annotations(full_schema).items():
-                        type_args = get_args(type_)
-                        for type_arg in type_args:
-                            if _is_injection(type_arg, InjectedState):
-                                params_to_exclude[name] = 'state'
-                                break
-                
-                if has_injected_store:
-                    # Find the parameter name that has InjectedStore annotation
-                    for name, type_ in get_all_basemodel_annotations(full_schema).items():
-                        type_args = get_args(type_)
-                        for type_arg in type_args:
-                            if _is_injection(type_arg, InjectedStore):
-                                params_to_exclude[name] = 'store'
-                                break
-                
-                tool_ = _wrap_tool_with_reserved_keywords(tool_, params_to_exclude)
+            # Only wrap tools with reserved keywords for now to avoid breaking existing functionality
+            if reserved_args:
+                tool_ = _wrap_tool_with_reserved_keywords(tool_, reserved_args)
 
             self.tools_by_name[tool_.name] = tool_
             self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
@@ -1406,6 +1384,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return "runtime" if "runtime" in reserved_args else None
+
 
 
 
