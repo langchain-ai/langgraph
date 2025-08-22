@@ -1216,10 +1216,67 @@ def _wrap_tool_with_reserved_keywords(
     Returns:
         A wrapped tool with reserved keywords excluded from its schema.
     """
-    # For now, return the original tool since schema filtering is complex
-    # The reserved keywords will still be properly injected, they just won't
-    # be filtered from the schema. This is acceptable for the initial implementation.
-    return tool
+    if not reserved_args:
+        return tool
+
+    # Create a wrapper tool that filters the schema
+    class FilteredTool(tool.__class__):
+        """Tool wrapper that excludes reserved keywords from schema."""
+
+        def get_input_schema(self, config: Optional[RunnableConfig] = None) -> Type[BaseModel]:
+            """Return the filtered schema without reserved keywords."""
+            original_schema = super().get_input_schema(config)
+            
+            # If no reserved args to filter, return original
+            if not reserved_args:
+                return original_schema
+            
+            # Create a new schema class dynamically
+            from pydantic import create_model
+            
+            # Get fields to keep (exclude reserved keywords)
+            if hasattr(original_schema, 'model_fields'):
+                # Pydantic v2
+                fields_to_keep = {
+                    name: (field.annotation, field) 
+                    for name, field in original_schema.model_fields.items()
+                    if name not in reserved_args
+                }
+            else:
+                # Pydantic v1 fallback
+                fields_to_keep = {}
+            
+            # Create filtered schema
+            try:
+                filtered_schema = create_model(
+                    f"{original_schema.__name__}Filtered",
+                    **fields_to_keep
+                )
+                return filtered_schema
+            except Exception:
+                # If schema creation fails, return original
+                return original_schema
+
+    # Create the filtered tool instance
+    filtered_tool = FilteredTool(
+        name=tool.name,
+        description=tool.description,
+        func=getattr(tool, 'func', None),
+    )
+
+    # Copy over other attributes
+    for attr in ['return_direct', 'verbose', 'callbacks', 'tags', 'metadata', 
+                 'handle_tool_error', 'handle_validation_error', 'response_format']:
+        if hasattr(tool, attr):
+            setattr(filtered_tool, attr, getattr(tool, attr))
+
+    # Copy run methods
+    if hasattr(tool, '_run'):
+        filtered_tool._run = tool._run
+    if hasattr(tool, '_arun'):
+        filtered_tool._arun = tool._arun
+
+    return filtered_tool
 
 
 def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
@@ -1326,3 +1383,4 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return "runtime" if "runtime" in reserved_args else None
+
