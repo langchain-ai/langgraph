@@ -1269,7 +1269,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.6.5"
+version = "0.6.6"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },
@@ -1350,7 +1350,7 @@ dev = [
 
 [[package]]
 name = "langgraph-api"
-version = "0.2.134"
+version = "0.2.135"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle", marker = "python_full_version >= '3.11'" },
@@ -1373,9 +1373,9 @@ dependencies = [
     { name = "uvicorn", marker = "python_full_version >= '3.11'" },
     { name = "watchfiles", marker = "python_full_version >= '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3d/34/a7f7560b00973c66e11a962a5cb3f878c412adb5dba52faa8e272d6afe4b/langgraph_api-0.2.134.tar.gz", hash = "sha256:75a098c9241dc29c0968b69e249c984f4bd3d77d91716837e490f80a282d93dd", size = 253684, upload-time = "2025-08-18T09:01:53.279Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8f/1e/5ca12f00852e2f54075c65dc2d4eca4d2d8facd404d5c0d17803fe620eae/langgraph_api-0.2.135.tar.gz", hash = "sha256:8cbcd5ff7be89a72d01dd3b32b0873bc5114ab9ff206fc94c2781ba56d09182a", size = 255563, upload-time = "2025-08-20T01:02:01.661Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/59/95/81610cccfa280d04d084dfcc8a9bdf9924ffe9a43ed4a4c788f7721748e4/langgraph_api-0.2.134-py3-none-any.whl", hash = "sha256:f30fb474a346ddf40c9e8b2aad485bcce9be33d294fea68769c5a6315f0457e8", size = 205842, upload-time = "2025-08-18T09:01:51.796Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/98/18c475de127927622079e087b7cfe1ab97ed44fe1a2425f8c8de07ea0e64/langgraph_api-0.2.135-py3-none-any.whl", hash = "sha256:ac78035075230ccb816f48b242a76c5f8e607c074fe7802928425ba76a11b3f4", size = 205849, upload-time = "2025-08-20T01:02:00.156Z" },
 ]
 
 [[package]]
@@ -1474,7 +1474,6 @@ dev = [
 
 [[package]]
 name = "langgraph-cli"
-version = "0.3.6"
 source = { editable = "../cli" }
 dependencies = [
     { name = "click", version = "8.1.8", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
@@ -1492,8 +1491,8 @@ inmem = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1.7" },
-    { name = "langgraph-api", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.2.67,<0.3.0" },
-    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.6.0" },
+    { name = "langgraph-api", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.2.120,<0.4.0" },
+    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.6.8" },
     { name = "langgraph-sdk", marker = "python_full_version >= '3.11'", specifier = ">=0.1.0" },
     { name = "python-dotenv", marker = "extra == 'inmem'", specifier = ">=0.8.0" },
 ]
@@ -2774,7 +2773,7 @@ wheels = [
 
 [[package]]
 name = "requests"
-version = "2.32.4"
+version = "2.32.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2782,9 +2781,9 @@ dependencies = [
     { name = "idna" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e1/0a/929373653770d8a0d7ea76c37de6e41f11eb07559b103b1c02cafb3f7cf8/requests-2.32.4.tar.gz", hash = "sha256:27d0316682c8a29834d3264820024b62a36942083d52caf2f14c0591336d3422", size = 135258, upload-time = "2025-06-09T16:43:07.34Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c9/74/b3ff8e6c8446842c3f5c837e9c3dfcfe2018ea6ecef224c710c85ef728f4/requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf", size = 134517, upload-time = "2025-08-18T20:46:02.573Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/e4/56027c4a6b4ae70ca9de302488c5ca95ad4a39e190093d6c1a8ace08341b/requests-2.32.4-py3-none-any.whl", hash = "sha256:27babd3cda2a6d50b30443204ee89830707d396671944c998b5975b031ac2b2c", size = 64847, upload-time = "2025-06-09T16:43:05.728Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/db/4254e3eabe8020b458f1a747140d32277ec7a271daf1d235b70dc0b4e6e3/requests-2.32.5-py3-none-any.whl", hash = "sha256:2462f94637a34fd532264295e186976db0f5d453d1cdd31473c85a6a161affb6", size = 64738, upload-time = "2025-08-18T20:46:00.542Z" },
 ]
 
 [[package]]

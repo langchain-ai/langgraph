@@ -17,6 +17,9 @@ DEFAULT_PYTHON_VERSION = "3.11"
 DEFAULT_IMAGE_DISTRO = "debian"
 
 
+Distros = Literal["debian", "wolfi", "bullseye", "bookworm"]
+
+
 class TTLConfig(TypedDict, total=False):
     """Configuration for TTL (time-to-live) behavior in the store."""
 
@@ -371,6 +374,13 @@ class Config(TypedDict, total=False):
     Must be >= 20 if provided.
     """
 
+    api_version: Optional[str]
+    """Optional. Which semantic version of the LangGraph API server to use.
+    
+    Defaults to latest. Check the
+    [changelog](https://docs.langchain.com/langgraph-platform/langgraph-server-changelog)
+    for more information."""
+
     _INTERNAL_docker_tag: Optional[str]
     """Optional. Internal use only.
     """
@@ -380,10 +390,11 @@ class Config(TypedDict, total=False):
     
     Defaults to langchain/langgraph-api or langchain/langgraphjs-api."""
 
-    image_distro: Optional[str]
+    image_distro: Optional[Distros]
     """Optional. Linux distribution for the base image.
     
-    Must be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.
+    Must be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.
+    If omitted, defaults to 'debian' ('latest').
     """
 
     pip_config_file: Optional[str]
@@ -589,13 +600,28 @@ def validate_config(config: Config) -> Config:
     )
 
     image_distro = config.get("image_distro", DEFAULT_IMAGE_DISTRO)
+    internal_docker_tag = config.get("_INTERNAL_docker_tag")
+    api_version = config.get("api_version")
+    if internal_docker_tag:
+        if api_version:
+            raise click.UsageError(
+                "Cannot specify both _INTERNAL_docker_tag and api_version."
+            )
+    if api_version:
+        try:
+            parts = tuple(map(int, api_version.split("-")[0].split(".")))
+            if len(parts) > 3:
+                raise ValueError(
+                    "Version must be major or major.minor or major.minor.patch."
+                )
+        except TypeError:
+            raise click.UsageError(f"Invalid version format: {api_version}") from None
 
     config = {
         "node_version": node_version,
         "python_version": python_version,
         "pip_config_file": config.get("pip_config_file"),
         "pip_installer": config.get("pip_installer", "auto"),
-        "_INTERNAL_docker_tag": config.get("_INTERNAL_docker_tag"),
         "base_image": config.get("base_image"),
         "image_distro": image_distro,
         "dependencies": config.get("dependencies", []),
@@ -610,6 +636,10 @@ def validate_config(config: Config) -> Config:
         "ui_config": config.get("ui_config"),
         "keep_pkg_tools": config.get("keep_pkg_tools"),
     }
+    if internal_docker_tag:
+        config["_INTERNAL_docker_tag"] = internal_docker_tag
+    if api_version:
+        config["api_version"] = api_version
 
     if config.get("node_version"):
         node_version = config["node_version"]
@@ -646,17 +676,17 @@ def validate_config(config: Config) -> Config:
                 "Add at least one dependency to 'dependencies' list."
             )
 
-    if not config["graphs"]:
+    if not config.get("graphs"):
         raise click.UsageError(
             "No graphs found in config. Add at least one graph to 'graphs' dictionary."
         )
 
     # Validate image_distro config
     if image_distro := config.get("image_distro"):
-        if image_distro not in ["debian", "wolfi"]:
+        if image_distro not in Distros.__args__:
             raise click.UsageError(
                 f"Invalid image_distro: '{image_distro}'. "
-                "Must be either 'debian' or 'wolfi'."
+                "Must be one of 'debian', 'bullseye', or 'bookworm'."
             )
 
     if pip_installer := config.get("pip_installer"):
@@ -1467,6 +1497,7 @@ def docker_tag(
     base_image: Optional[str] = None,
     api_version: Optional[str] = None,
 ) -> str:
+    api_version = api_version or config.get("api_version")
     base_image = base_image or default_base_image(config)
 
     image_distro = config.get("image_distro")
@@ -1474,9 +1505,6 @@ def docker_tag(
 
     if config.get("_INTERNAL_docker_tag"):
         return f"{base_image}:{config['_INTERNAL_docker_tag']}"
-
-    if "/langgraph-server" in base_image:
-        return f"{base_image}-py{config['python_version']}"
 
     # Build the standard tag format
     language, version = None, None
@@ -1490,6 +1518,8 @@ def docker_tag(
     # Prepend API version if provided
     if api_version:
         full_tag = f"{api_version}-{language}{version_distro_tag}"
+    elif "/langgraph-server" in base_image and version_distro_tag not in base_image:
+        return f"{base_image}-{language}{version_distro_tag}"
     else:
         full_tag = version_distro_tag
 
