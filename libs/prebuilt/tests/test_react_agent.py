@@ -992,6 +992,16 @@ def test_tool_node_inject_state_reserved_keyword() -> None:
             assert tool_message.content == "val: 2, foo: baz", f"Failed for tool={tool_name} with Pydantic state"
 
 
+def test_tool_node_inject_runtime_reserved_keyword() -> None:
+    """Test that tools can use 'runtime' as a reserved keyword parameter."""
+    pass  # TODO: Implementation to be added
+
+
+def test_tool_node_mixed_injection_styles() -> None:
+    """Test that tools can mix reserved keywords and annotations."""
+    pass  # TODO: Implementation to be added
+
+
 def test_tool_node_ensure_utf8() -> None:
     @dec_tool
     def get_day_list(days: list[str]) -> list[str]:
@@ -2239,5 +2249,6 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
 
 
