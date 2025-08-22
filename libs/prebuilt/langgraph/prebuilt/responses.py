@@ -93,9 +93,11 @@ class _SchemaSpec(Generic[SchemaT]):
         self.name = name or (
             schema.get("title", f"structured_output_format_{str(uuid.uuid4())[:4]}")
             if isinstance(schema, dict)
-            else getattr(schema, "__name__", f"structured_output_format_{str(uuid.uuid4())[:4]}")
+            else getattr(
+                schema, "__name__", f"structured_output_format_{str(uuid.uuid4())[:4]}"
+            )
         )
-        
+
         self.description = description or (
             schema.get("description", "")
             if isinstance(schema, dict)
