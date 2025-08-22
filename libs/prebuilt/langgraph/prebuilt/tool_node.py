@@ -1266,7 +1266,7 @@ def _wrap_tool_with_reserved_keywords(
                 return filtered_schema
             except Exception:
                 # If schema creation fails, return original
-                return original_schema  # type: ignore[no-any-return]
+                return original_schema
 
     # Create the filtered tool instance
     filtered_tool = FilteredTool(
@@ -1403,6 +1403,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return "runtime" if "runtime" in reserved_args else None
+
 
 
 
