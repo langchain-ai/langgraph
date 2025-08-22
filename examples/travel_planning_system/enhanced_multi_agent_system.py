@@ -52,6 +52,14 @@ except ImportError:
     context = None
     SpanKind = None
 
+from phoenix.otel import register
+
+# configure the Phoenix tracer
+tracer_provider = register(
+  project_name="default", # Default is 'default'
+  auto_instrument=True # Auto-instrument your app based on installed OI dependencies
+)
+
 # State definition
 class TravelPlanState(TypedDict):
     """Enhanced state for travel planning with LangGraph."""
@@ -92,15 +100,20 @@ class AgentType(Enum):
     PLAN_SYNTHESIZER = "plan_synthesizer"
 
 # Initialize tracing
+_TRACERS: Optional[List[Any]] = None
+
 def setup_tracing():
-    """Set up tracing infrastructure."""
+    """Set up tracing infrastructure and cache the handlers for reuse."""
+    global _TRACERS
+    if _TRACERS is not None:
+        return _TRACERS
     tracers = []
     
     # Azure Application Insights
     if config.tracing.application_insights_connection_string and AzureOpenAITracingCallback:
         azure_tracer = AzureOpenAITracingCallback(
             connection_string=config.tracing.application_insights_connection_string,
-            enable_content_recording=config.tracing.enable_content_recording
+            enable_content_recording=True
         )
         tracers.append(azure_tracer)
         logger.info("Azure tracing enabled")
@@ -110,12 +123,24 @@ def setup_tracing():
         otel_tracer = OpenTelemetryTracer(
             service_name=config.tracing.otel_service_name,
             otlp_endpoint=config.tracing.otel_exporter_otlp_endpoint,
-            enable_content_recording=config.tracing.enable_content_recording
+            enable_content_recording=True
         )
         tracers.append(otel_tracer)
         logger.info("OpenTelemetry tracing enabled")
     
-    return tracers
+    _TRACERS = tracers
+    return _TRACERS
+
+def _get_otel_tracer() -> Optional[Any]:
+    """Return the OpenTelemetryTracer instance if present in our cached tracers."""
+    tracers = setup_tracing()
+    for t in tracers:
+        try:
+            if OpenTelemetryTracer and isinstance(t, OpenTelemetryTracer):
+                return t
+        except Exception:
+            continue
+    return None
 
 # LLM setup
 def create_llm(agent_type: str = "default") -> Any:
@@ -842,6 +867,7 @@ def main():
     root_span = None
     root_span_context = None
     token = None
+    tracers = setup_tracing()
     
     if trace and SpanKind:
         tracer = trace.get_tracer(__name__)
@@ -924,20 +950,32 @@ def main():
             }
         )
         
+        # If using our custom tracer, set this span as external root so callbacks parent correctly
+        otel_cb = _get_otel_tracer()
+        if otel_cb and hasattr(otel_cb, "set_root_span"):
+            try:
+                otel_cb.set_root_span(root_span, session_id)
+            except Exception:
+                pass
+
         # Set up span context for child operations
         root_span_context = trace.set_span_in_context(root_span)
         if root_span_context and context:
             token = context.attach(root_span_context)
     
     try:
+        # Include callbacks so LangGraph nodes/tools emit child spans under the same root
+        config_dict_with_callbacks = dict(config_dict)
+        config_dict_with_callbacks["callbacks"] = tracers
+
         # Stream the execution
-        for step in app.stream(initial_state, config_dict):
+        for step in app.stream(initial_state, config_dict_with_callbacks):
             agent_name = list(step.keys())[0]
             agent_state = step[agent_name]
-            
+
             print(f"🤖 {agent_name.replace('_', ' ').title()} Agent")
             print("="*50)
-            
+
             if agent_state.get("messages"):
                 last_message = agent_state["messages"][-1]
                 if hasattr(last_message, 'content') and last_message.content:
@@ -946,43 +984,56 @@ def main():
                     if len(content) > 1000:
                         content = content[:1000] + "... [truncated]"
                     print(content)
-            
+
             print(f"\n✅ Completed: {', '.join(agent_state.get('completed_steps', []))}")
             print(f"🎯 Next: {agent_state.get('current_step', 'unknown')}")
             print()
-        
+
         # Get final state
-        final_state = app.get_state(config_dict)
-        
+        final_state = app.get_state(config_dict_with_callbacks)
+
         if final_state.values.get("final_plan"):
             print("\n" + "="*70)
             print("🎉 FINAL TRAVEL PLAN")
             print("="*70)
             print(final_state.values["final_plan"])
             print("="*70)
-        
+
         # Show agent handoffs
         if final_state.values.get("agent_handoffs"):
             print("\n🔄 Agent Collaboration Summary:")
             for handoff in final_state.values["agent_handoffs"]:
                 print(f"  {handoff['from']} → {handoff['to']}: {handoff['task']}")
-        
+
         if root_span:
             # Add GenAI response attributes
-            root_span.set_attribute("gen_ai.response.model", config.llm.azure_deployment_name or config.llm.openai_model or "gpt-4")
+            root_span.set_attribute(
+                "gen_ai.response.model",
+                config.llm.azure_deployment_name or config.llm.openai_model or "gpt-4",
+            )
             if final_state.values.get("final_plan"):
                 plan_content = final_state.values["final_plan"]
-                root_span.set_attribute("travel.plan.final", plan_content[:500] + "..." if len(plan_content) > 500 else plan_content)
-            
+                root_span.set_attribute(
+                    "travel.plan.final",
+                    plan_content[:500] + "..." if len(plan_content) > 500 else plan_content,
+                )
+
             root_span.set_attribute("planning_completed", True)
-            root_span.set_attribute("agents_used", len(final_state.values.get("completed_steps", [])))
-            
+            root_span.set_attribute(
+                "agents_used", len(final_state.values.get("completed_steps", []))
+            )
+
             # Add planning completion event
-            root_span.add_event("travel_plan_completed", {
-                "plan_length": str(len(final_state.values.get("final_plan", ""))),
-                "agents_used": str(len(final_state.values.get("completed_steps", []))),
-                "session_completed": "true"
-            })
+            root_span.add_event(
+                "travel_plan_completed",
+                {
+                    "plan_length": str(len(final_state.values.get("final_plan", ""))),
+                    "agents_used": str(
+                        len(final_state.values.get("completed_steps", []))
+                    ),
+                    "session_completed": "true",
+                },
+            )
             
     except Exception as e:
         print(f"\n❌ Error during planning: {e}")
@@ -998,9 +1049,18 @@ def main():
         if root_span:
             root_span.set_status(trace.Status(trace.StatusCode.OK))
             root_span.end()
-    
+
+        # Ensure spans are flushed to the exporter for short-lived processes
+        try:
+            provider = trace.get_tracer_provider()
+            if hasattr(provider, "force_flush"):
+                provider.force_flush()
+            if hasattr(provider, "shutdown"):
+                provider.shutdown()
+        except Exception:
+            pass
+
     print("\n🎊 Travel planning completed!")
     print("Thank you for using the Enhanced Multi-Agent Travel Planning System!")
-
 if __name__ == "__main__":
     main()
