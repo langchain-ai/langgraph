@@ -1181,6 +1181,7 @@ def _wrap_tool_with_reserved_keywords(tool: BaseTool, reserved_args: dict[str, s
         name=tool.name,
         description=tool.description,
         func=tool.func if hasattr(tool, 'func') else None,
+        args_schema=FilteredSchema,  # Set the filtered schema
     )
     
     # Copy over other attributes
@@ -1302,6 +1303,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
