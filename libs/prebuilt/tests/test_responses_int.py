@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Type, Union
+from typing import Any, Dict, List, Optional, Union
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
@@ -12,6 +11,7 @@ from pydantic import BaseModel, create_model
 
 from langgraph.prebuilt import create_agent
 from langgraph.prebuilt.responses import ToolOutput
+from tests.utils import load_spec
 
 try:
     from langchain_openai import ChatOpenAI
@@ -20,23 +20,36 @@ except ImportError:
 else:
     skip_openai_integration_tests = False
 
-
-def _load_spec() -> List[Dict[str, Any]]:
-    with (Path(__file__).parent / "specifications" / "responses.json").open(
-        "r", encoding="utf-8"
-    ) as f:
-        return json.load(f)
-
-
-TEST_CASES = _load_spec()
-
 AGENT_PROMPT = "You are an HR assistant."
 
-EMPLOYEES = [
-    {"name": "Sabine", "role": "Developer", "department": "IT"},
-    {"name": "Henrik", "role": "Product Manager", "department": "IT"},
-    {"name": "Jessica", "role": "HR", "department": "People"},
+
+class AssertionByInvocation(BaseModel):
+    prompt: str
+    tools_with_expected_calls: Dict[str, int]
+    expected_last_message: str
+    expected_structured_response: Optional[Dict[str, Any]]
+    llm_request_count: int
+
+
+class TestCase(BaseModel):
+    name: str
+    response_format: Union[Dict[str, Any], List[Dict[str, Any]]]
+    assertions_by_invocation: List[AssertionByInvocation]
+
+
+class Employee(BaseModel):
+    name: str
+    role: str
+    department: str
+
+
+EMPLOYEES: list[Employee] = [
+    Employee(name="Sabine", role="Developer", department="IT"),
+    Employee(name="Henrik", role="Product Manager", department="IT"),
+    Employee(name="Jessica", role="HR", department="People"),
 ]
+
+TEST_CASES = load_spec("responses", as_model=TestCase)
 
 
 def _make_tool(fn, *, name: str, description: str):
@@ -50,81 +63,65 @@ def _make_tool(fn, *, name: str, description: str):
     return {"tool": _wrapped, "mock": mock}
 
 
-def _build_tool_output_response_format(
-    response_format_spec: Sequence[Dict[str, Any]],
-) -> ToolOutput:
-    models: List[Type[BaseModel]] = []
-    keyset_to_tool_name: Dict[frozenset[str], str] = {}
-    type_map = {
-        "string": str,
-        "number": float,
-        "integer": int,
-        "boolean": bool,
-        "object": dict,
-        "array": list,
-    }
-
-    for idx, schema in enumerate(response_format_spec):
-        properties = schema["properties"]
-        required = set(schema["required"])
-        type_name = schema.get("title") or f"structured_output_format_{idx + 1}"
-        fields = {}
-        for k, prop in properties.items():
-            py_type = type_map.get(prop.get("type"), Any)
-            fields[k] = (py_type, ...) if k in required else (Optional[py_type], None)
-        model = create_model(type_name, **fields)
-        models.append(model)
-        keyset_to_tool_name[frozenset(required)] = type_name
-
-    union_type = Union[tuple(models)]
-    return ToolOutput(union_type)
-
-
 @pytest.mark.skipif(
     skip_openai_integration_tests, reason="OpenAI integration tests are disabled."
 )
-@pytest.mark.xfail(
-    reason="currently failing due to undefined behavior for multiple structured responses."
-)
-@pytest.mark.parametrize("case", TEST_CASES, ids=[c["name"] for c in TEST_CASES])
-def test_responses_integration_matrix(case: Dict[str, Any]) -> None:
+@pytest.mark.parametrize("case", TEST_CASES, ids=[c.name for c in TEST_CASES])
+def test_responses_integration_matrix(case: TestCase) -> None:
+    if case.name == "asking for information that does not fit into the response format":
+        pytest.xfail(
+            "currently failing due to undefined behavior when model cannot conform to any of the structured response formats."
+        )
+
     def get_employee_role(*, name: str) -> Optional[str]:
         for e in EMPLOYEES:
-            if e["name"] == name:
-                return e["role"]
+            if e.name == name:
+                return e.role
         return None
 
     def get_employee_department(*, name: str) -> Optional[str]:
         for e in EMPLOYEES:
-            if e["name"] == name:
-                return e["department"]
+            if e.name == name:
+                return e.department
         return None
 
     role_tool = _make_tool(
         get_employee_role,
-        name="getEmployeeRole",
+        name="get_employee_role",
         description="Get the employee role by name",
     )
     dept_tool = _make_tool(
         get_employee_department,
-        name="getEmployeeDepartment",
+        name="get_employee_department",
         description="Get the employee department by name",
     )
 
-    response_spec = case["responseFormat"]
-    if isinstance(response_spec, dict):
-        response_spec = [response_spec]
-    tool_output = _build_tool_output_response_format(response_spec)
+    response_format_spec = case.response_format
+    if isinstance(response_format_spec, dict):
+        response_format_spec = [response_format_spec]
+    # Unwrap nested schema objects
+    response_format_spec = [item.get("schema", item) for item in response_format_spec]
+    if len(response_format_spec) == 1:
+        tool_output = ToolOutput(response_format_spec[0])
+    else:
+        tool_output = ToolOutput({"oneOf": response_format_spec})
 
-    for assertion in case["assertionsByInvocation"]:
-        prompt: str = assertion["prompt"]
-        expected_calls: Dict[str, int] = assertion["toolsWithExpectedCalls"]
-        expected_structured = assertion.get("expectedStructuredResponse")
-        expected_last_message = assertion.get("expectedLastMessage")
+    llm_request_count = 0
+
+    for assertion in case.assertions_by_invocation:
+
+        def on_request(request: httpx.Request) -> None:
+            nonlocal llm_request_count
+            llm_request_count += 1
+
+        http_client = httpx.Client(
+            event_hooks={"request": [on_request]},
+        )
 
         model = ChatOpenAI(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             temperature=0,
+            http_client=http_client,
         )
 
         agent = create_agent(
@@ -133,20 +130,26 @@ def test_responses_integration_matrix(case: Dict[str, Any]) -> None:
             prompt=AGENT_PROMPT,
             response_format=tool_output,
         )
-        result = agent.invoke({"messages": [HumanMessage(prompt)]})
 
-        # TODO: Count LLM calls. JS handles with mock fetch. Could pass in mock http_client?
+        result = agent.invoke({"messages": [HumanMessage(assertion.prompt)]})
 
         # Count tool calls
-        assert role_tool["mock"].call_count == expected_calls["getEmployeeRole"]
-        assert dept_tool["mock"].call_count == expected_calls["getEmployeeDepartment"]
+        assert (
+            role_tool["mock"].call_count
+            == assertion.tools_with_expected_calls["get_employee_role"]
+        )
+        assert (
+            dept_tool["mock"].call_count
+            == assertion.tools_with_expected_calls["get_employee_department"]
+        )
+
+        # Count LLM calls
+        assert llm_request_count == assertion.llm_request_count
 
         # Check last message content
         last_message = result["messages"][-1]
-        assert last_message.content == expected_last_message
+        assert last_message.content == assertion.expected_last_message
 
         # Check structured response
-        structured_response_json = result["structured_response"].model_dump()
-        assert structured_response_json == expected_structured
-
-        print("Passed test for: ", case["name"])
+        structured_response_json = result["structured_response"]
+        assert structured_response_json == assertion.expected_structured_response
