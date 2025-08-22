@@ -1069,11 +1069,11 @@ def _get_reserved_keyword_args(tool: BaseTool) -> dict[str, str]:
 
 
 def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
-    """Extract state injection mappings from tool annotations.
+    """Extract state injection mappings from tool annotations or reserved keywords.
 
-    This function analyzes a tool's input schema to identify arguments that should
-    be injected with graph state. It processes InjectedState annotations to build
-    a mapping of tool argument names to state field names.
+    This function analyzes a tool to identify arguments that should be injected
+    with graph state. It first checks for the reserved keyword 'state', then
+    falls back to processing InjectedState annotations for backward compatibility.
 
     Args:
         tool: The tool to analyze for state injection requirements.
@@ -1082,10 +1082,20 @@ def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
         A dictionary mapping tool argument names to state field names. If a field
         name is None, the entire state should be injected for that argument.
     """
-    full_schema = tool.get_input_schema()
     tool_args_to_state_fields: dict = {}
-
+    
+    # First check for reserved keywords
+    reserved_args = _get_reserved_keyword_args(tool)
+    if 'state' in reserved_args:
+        tool_args_to_state_fields['state'] = None
+    
+    # Then check for annotation-based injection (backward compatibility)
+    full_schema = tool.get_input_schema()
     for name, type_ in get_all_basemodel_annotations(full_schema).items():
+        # Skip if already handled by reserved keyword
+        if name in tool_args_to_state_fields:
+            continue
+            
         injections = [
             type_arg
             for type_arg in get_args(type_)
@@ -1142,5 +1152,6 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
+
 
 
