@@ -26,7 +26,7 @@ To implement handoffs, you can return `Command` objects from your agent nodes or
 ```python
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolCallId
-from langgraph.prebuilt import create_react_agent, InjectedState
+from langgraph.prebuilt import create_react_agent
 from langgraph.graph import StateGraph, START, MessagesState
 from langgraph.types import Command
 
@@ -37,7 +37,7 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
     @tool(name, description=description)
     def handoff_tool(
         # highlight-next-line
-        state: Annotated[MessagesState, InjectedState], # (1)!
+        state,  # (1)! Reserved keyword - automatically injected
         # highlight-next-line
         tool_call_id: Annotated[str, InjectedToolCallId],
     ) -> Command:
@@ -58,7 +58,7 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
     return handoff_tool
 ```
 
-1. Access the [state](../concepts/low_level.md#state) of the agent that is calling the handoff tool using the @[InjectedState] annotation. 
+1. Access the [state](../concepts/low_level.md#state) of the agent using the reserved keyword `state`. No annotation needed - LangGraph automatically injects the state when it sees this parameter name. 
 2. The `Command` primitive allows specifying a state update and a node transition as a single operation, making it useful for implementing handoffs.
 3. Name of the agent or node to hand off to.
 4. Take the agent's messages and **add** them to the parent's **state** as part of the handoff. The next agent will see the parent state.
