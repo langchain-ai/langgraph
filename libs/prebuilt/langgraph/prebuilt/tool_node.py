@@ -349,14 +349,41 @@ class ToolNode(RunnableCallable):
             if not isinstance(tool_, BaseTool):
                 tool_ = create_tool(tool_)
             
+            # Check for deprecated annotation usage and emit warnings
+            state_args = _get_state_args(tool_)
+            store_arg = _get_store_arg(tool_)
+            
+            # Check if tool uses deprecated InjectedState annotation
+            if state_args and not _get_reserved_keyword_args(tool_).get('state'):
+                warnings.warn(
+                    f"Tool '{tool_.name}' uses deprecated InjectedState annotation. "
+                    f"Please update to use reserved keyword 'state' instead. "
+                    f"Example: def {tool_.name}(..., state) instead of "
+                    f"def {tool_.name}(..., state: Annotated[dict, InjectedState]). "
+                    f"The annotation-based approach will be removed in a future version.",
+                    DeprecationWarning,
+                    stacklevel=2
+                )
+            
+            # Check if tool uses deprecated InjectedStore annotation
+            if store_arg and not _get_reserved_keyword_args(tool_).get('runtime'):
+                warnings.warn(
+                    f"Tool '{tool_.name}' uses deprecated InjectedStore annotation. "
+                    f"Please update to use reserved keyword 'runtime' instead. "
+                    f"Example: def {tool_.name}(..., runtime) and access store via runtime.store. "
+                    f"The annotation-based approach will be removed in a future version.",
+                    DeprecationWarning,
+                    stacklevel=2
+                )
+            
             # Check for reserved keywords and wrap the tool if needed
             reserved_args = _get_reserved_keyword_args(tool_)
             if reserved_args:
                 tool_ = _wrap_tool_with_reserved_keywords(tool_, reserved_args)
             
             self.tools_by_name[tool_.name] = tool_
-            self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
-            self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
+            self.tool_to_state_args[tool_.name] = state_args
+            self.tool_to_store_arg[tool_.name] = store_arg
             self.tool_to_runtime_arg[tool_.name] = _get_runtime_arg(tool_)
 
     def _func(
@@ -1325,6 +1352,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
