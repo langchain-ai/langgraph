@@ -404,8 +404,8 @@ class ToolNode(RunnableCallable):
                 tool_ = _wrap_tool_with_reserved_keywords(tool_, reserved_args)
             
             self.tools_by_name[tool_.name] = tool_
-            self.tool_to_state_args[tool_.name] = state_args
-            self.tool_to_store_arg[tool_.name] = store_arg
+            self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
+            self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
             self.tool_to_runtime_arg[tool_.name] = _get_runtime_arg(tool_)
 
     def _func(
@@ -1374,6 +1374,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
