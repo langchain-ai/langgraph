@@ -1003,8 +1003,86 @@ class InjectedStore(InjectedToolArg):
     """  # noqa: E501
 
 
+class InjectedRuntime(InjectedToolArg):
+    """Annotation for injecting Runtime into tool arguments.
+
+    This annotation enables tools to access the LangGraph runtime without exposing
+    runtime details to the language model. Tools annotated with InjectedRuntime
+    receive the runtime instance automatically during execution while remaining
+    invisible to the model's tool-calling interface.
+
+    The runtime provides access to context, store, stream writer, and other
+    runtime utilities that tools can use for advanced control flow and state
+    management.
+
+    Example:
+        ```python
+        from typing_extensions import Annotated
+        from langchain_core.tools import tool
+        from langgraph.runtime import Runtime
+        from langgraph.prebuilt import InjectedRuntime, ToolNode
+
+        @tool
+        def context_aware_tool(
+            query: str,
+            runtime: Annotated[Runtime, InjectedRuntime()]
+        ) -> str:
+            '''Tool that accesses runtime context.'''
+            # Access runtime context
+            if runtime.context:
+                user_id = runtime.context.user_id
+                return f"Processing query for user {user_id}: {query}"
+            
+            # Access runtime store
+            if runtime.store:
+                data = runtime.store.get(("users",), user_id)
+                if data:
+                    return f"Found user data: {data.value}"
+            
+            return "No context available"
+
+        @tool
+        def stream_writer_tool(
+            message: str,
+            runtime: Annotated[Runtime, InjectedRuntime()]
+        ) -> str:
+            '''Tool that writes to custom stream.'''
+            runtime.stream_writer({"custom_event": message})
+            return f"Streamed: {message}"
+        ```
+
+        Usage with ToolNode:
+
+        ```python
+        from langgraph.graph import StateGraph
+        from langgraph.runtime import Runtime
+
+        tool_node = ToolNode([context_aware_tool, stream_writer_tool])
+
+        graph = StateGraph(State)
+        graph.add_node("tools", tool_node)
+        compiled_graph = graph.compile()
+
+        # Runtime is injected automatically from config
+        result = graph.invoke(
+            {"messages": [HumanMessage("Process this query")]},
+            context={"user_id": "user_123"}
+        )
+        ```
+
+    Note:
+        - InjectedRuntime arguments are automatically excluded from tool schemas
+          presented to language models
+        - The runtime instance is automatically injected by ToolNode during execution
+        - Tools can access runtime context, store, stream writer, and previous values
+        - Runtime is extracted from the RunnableConfig during tool execution
+    """  # noqa: E501
+
+    pass
+
+
 def _is_injection(
-    type_arg: Any, injection_type: Union[Type[InjectedState], Type[InjectedStore]]
+    type_arg: Any, injection_type: Union[Type[InjectedState], Type[InjectedStore], Type[InjectedRuntime]]
 ) -> bool:
     """Check if a type argument represents an injection annotation.
 
@@ -1103,4 +1181,5 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
+
 
