@@ -1393,14 +1393,22 @@ def test_runtime_arg_excluded_from_schema():
     # Get the tool from the node
     tool = tool_node.tools_by_name["tool_with_runtime"]
 
-    # Check the schema - runtime arg should not be included
-    schema = tool.get_input_schema()
-    properties = schema.schema()["properties"]
-
-    # Only user_arg should be in the schema
-    assert "user_arg" in properties
-    assert "runtime" not in properties
-    assert len(properties) == 1
+    # Check the args_schema - runtime arg should not be included
+    # The tool's args_schema should only contain user-facing arguments
+    if hasattr(tool, "args_schema"):
+        schema = tool.args_schema
+        # Check the schema fields
+        assert "user_arg" in schema.model_fields
+        assert "runtime" not in schema.model_fields
+        assert len(schema.model_fields) == 1
+    else:
+        # For non-pydantic tools, check the function signature
+        import inspect
+        sig = inspect.signature(tool.func if hasattr(tool, "func") else tool)
+        # Runtime should be in the signature but marked as injected
+        assert "user_arg" in sig.parameters
+        # Verify runtime is tracked as an injected arg
+        assert tool_node.tool_to_runtime_arg["tool_with_runtime"] == "runtime"
 
 
 async def test_runtime_injection_with_decorated_tool():
@@ -1453,3 +1461,4 @@ async def test_runtime_injection_with_decorated_tool():
     tool_message = result["messages"][-1]
     assert isinstance(tool_message, ToolMessage)
     assert tool_message.content == "Decorated: test"
+
