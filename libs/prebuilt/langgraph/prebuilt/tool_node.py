@@ -1139,23 +1139,34 @@ def _wrap_tool_with_reserved_keywords(tool: BaseTool, reserved_args: dict[str, s
     original_schema = tool.get_input_schema()
     
     # Create a new schema class that excludes reserved keywords
-    class FilteredSchema(original_schema):
-        """Schema with reserved keywords filtered out."""
-        pass
+    # We need to dynamically create a new Pydantic model with filtered fields
+    from pydantic import create_model
+    from pydantic.fields import FieldInfo
     
-    # Remove reserved keyword fields from the schema
-    if hasattr(FilteredSchema, 'model_fields'):
+    # Get the original fields
+    if hasattr(original_schema, 'model_fields'):
         # Pydantic v2
-        for param_name in reserved_args:
-            if param_name in FilteredSchema.model_fields:
-                delattr(FilteredSchema, param_name)
-                FilteredSchema.model_fields.pop(param_name, None)
-    elif hasattr(FilteredSchema, '__fields__'):
+        original_fields = original_schema.model_fields
+        filtered_fields = {}
+        for field_name, field_info in original_fields.items():
+            if field_name not in reserved_args:
+                # Create a tuple for create_model: (type, field_info)
+                field_type = field_info.annotation if hasattr(field_info, 'annotation') else Any
+                filtered_fields[field_name] = (field_type, field_info)
+    else:
         # Pydantic v1 (backward compatibility)
-        for param_name in reserved_args:
-            if param_name in FilteredSchema.__fields__:
-                delattr(FilteredSchema, param_name)
-                FilteredSchema.__fields__.pop(param_name, None)
+        original_fields = original_schema.__fields__
+        filtered_fields = {}
+        for field_name, field_info in original_fields.items():
+            if field_name not in reserved_args:
+                filtered_fields[field_name] = (field_info.type_, field_info.field_info)
+    
+    # Create the filtered schema model
+    FilteredSchema = create_model(
+        f"{original_schema.__name__}Filtered",
+        __base__=BaseModel,
+        **filtered_fields
+    )
     
     # Create a wrapper tool with the filtered schema
     class WrappedTool(type(tool)):
@@ -1291,6 +1302,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
