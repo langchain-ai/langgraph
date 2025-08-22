@@ -1243,11 +1243,16 @@ def _wrap_tool_with_reserved_keywords(
                 fields_to_keep: dict[str, Any] = {}
                 for name, field in original_schema.model_fields.items():
                     if name not in reserved_args:
-                        # For create_model, we need (type, default) or just type
-                        field_type = (
-                            field.annotation if hasattr(field, "annotation") else Any
-                        )
-                        fields_to_keep[name] = field_type
+                        # For create_model, we need to properly extract field information
+                        field_type = field.annotation if hasattr(field, "annotation") else Any
+                        
+                        # Handle field defaults and constraints
+                        if hasattr(field, "default") and field.default is not ...:
+                            # Field has a default value
+                            fields_to_keep[name] = (field_type, field.default)
+                        else:
+                            # Field has no default (required field)
+                            fields_to_keep[name] = (field_type, ...)
             else:
                 # Pydantic v1 fallback
                 fields_to_keep = {}
@@ -1256,7 +1261,6 @@ def _wrap_tool_with_reserved_keywords(
             try:
                 filtered_schema = create_model(
                     f"{original_schema.__name__}Filtered",
-                    __base__=BaseModel,
                     **fields_to_keep,
                 )
                 return filtered_schema
@@ -1399,5 +1403,6 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return "runtime" if "runtime" in reserved_args else None
+
 
 
