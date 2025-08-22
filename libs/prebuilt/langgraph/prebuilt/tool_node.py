@@ -557,6 +557,7 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        config: Optional[RunnableConfig] = None,
     ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         input_type: Literal["list", "dict", "tool_calls"]
         if isinstance(input, list):
@@ -1266,3 +1267,4 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
+
