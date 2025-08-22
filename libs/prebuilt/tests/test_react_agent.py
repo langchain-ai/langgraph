@@ -910,6 +910,88 @@ def test_tool_node_inject_store() -> None:
         failing_graph.invoke({"messages": [msg], "bar": "baz"})
 
 
+def test_tool_node_inject_state_reserved_keyword() -> None:
+    """Test that tools can use 'state' as a reserved keyword parameter."""
+    def tool1(some_val: int, state) -> str:
+        """Tool 1 with reserved keyword 'state'."""
+        if isinstance(state, dict):
+            return state["foo"]
+        else:
+            return getattr(state, "foo")
+
+    def tool2(some_val: int, state) -> str:
+        """Tool 2 with reserved keyword 'state'."""
+        if isinstance(state, dict):
+            return f"val: {some_val}, foo: {state['foo']}"
+        else:
+            return f"val: {some_val}, foo: {getattr(state, 'foo')}"
+
+    def tool3(some_val: int, y: str, state) -> str:
+        """Tool 3 with reserved keyword 'state' and other params."""
+        if isinstance(state, dict):
+            return f"{y}: {state['foo']}"
+        else:
+            return f"{y}: {getattr(state, 'foo')}"
+
+    # Test with dict state
+    node = ToolNode([tool1, tool2, tool3])
+    
+    # Verify that 'state' is excluded from tool schemas
+    for tool in [tool1, tool2, tool3]:
+        schema = node.tools_by_name[tool.__name__].get_input_schema()
+        if hasattr(schema, 'model_fields'):
+            assert "state" not in schema.model_fields, f"'state' should be excluded from {tool.__name__} schema"
+        else:
+            assert "state" not in schema.__fields__, f"'state' should be excluded from {tool.__name__} schema"
+    
+    for tool_name in ("tool1", "tool2"):
+        tool_call = {
+            "name": tool_name,
+            "args": {"some_val": 1},
+            "id": "some 0",
+            "type": "tool_call",
+        }
+        msg = AIMessage("hi?", tool_calls=[tool_call])
+        result = node.invoke({"messages": [msg], "foo": "bar"})
+        tool_message = result["messages"][-1]
+        if tool_name == "tool1":
+            assert tool_message.content == "bar", f"Failed for tool={tool_name}"
+        else:
+            assert tool_message.content == "val: 1, foo: bar", f"Failed for tool={tool_name}"
+    
+    # Test tool3 with additional parameter
+    tool_call = {
+        "name": "tool3",
+        "args": {"some_val": 1, "y": "test"},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+    result = node.invoke({"messages": [msg], "foo": "bar"})
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "test: bar"
+
+    # Test with Pydantic state
+    class State(MessagesState):
+        foo: str
+
+    node_pydantic = ToolNode([tool1, tool2, tool3])
+    for tool_name in ("tool1", "tool2"):
+        tool_call = {
+            "name": tool_name,
+            "args": {"some_val": 2},
+            "id": "some 1",
+            "type": "tool_call",
+        }
+        msg = AIMessage("hi?", tool_calls=[tool_call])
+        result = node_pydantic.invoke(State(messages=[msg], foo="baz"))
+        tool_message = result["messages"][-1]
+        if tool_name == "tool1":
+            assert tool_message.content == "baz", f"Failed for tool={tool_name} with Pydantic state"
+        else:
+            assert tool_message.content == "val: 2, foo: baz", f"Failed for tool={tool_name} with Pydantic state"
+
+
 def test_tool_node_ensure_utf8() -> None:
     @dec_tool
     def get_day_list(days: list[str]) -> list[str]:
@@ -2157,4 +2239,5 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
 
