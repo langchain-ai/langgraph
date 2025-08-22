@@ -399,7 +399,7 @@ class ToolNode(RunnableCallable):
                 )
             
             # Check for reserved keywords and wrap the tool if needed
-            reserved_args = _get_reserved_keyword_args(tool_)
+            # (already computed above, no need to recompute)
             if reserved_args:
                 tool_ = _wrap_tool_with_reserved_keywords(tool_, reserved_args)
             
@@ -1374,6 +1374,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
