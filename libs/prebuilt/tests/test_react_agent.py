@@ -912,6 +912,7 @@ def test_tool_node_inject_store() -> None:
 
 def test_tool_node_inject_state_reserved_keyword() -> None:
     """Test that tools can use 'state' as a reserved keyword parameter."""
+
     def tool1(some_val: int, state) -> str:
         """Tool 1 with reserved keyword 'state'."""
         if isinstance(state, dict):
@@ -935,15 +936,19 @@ def test_tool_node_inject_state_reserved_keyword() -> None:
 
     # Test with dict state
     node = ToolNode([tool1, tool2, tool3])
-    
+
     # Verify that 'state' is excluded from tool schemas
     for tool in [tool1, tool2, tool3]:
         schema = node.tools_by_name[tool.__name__].get_input_schema()
-        if hasattr(schema, 'model_fields'):
-            assert "state" not in schema.model_fields, f"'state' should be excluded from {tool.__name__} schema"
+        if hasattr(schema, "model_fields"):
+            assert "state" not in schema.model_fields, (
+                f"'state' should be excluded from {tool.__name__} schema"
+            )
         else:
-            assert "state" not in schema.__fields__, f"'state' should be excluded from {tool.__name__} schema"
-    
+            assert "state" not in schema.__fields__, (
+                f"'state' should be excluded from {tool.__name__} schema"
+            )
+
     for tool_name in ("tool1", "tool2"):
         tool_call = {
             "name": tool_name,
@@ -957,8 +962,10 @@ def test_tool_node_inject_state_reserved_keyword() -> None:
         if tool_name == "tool1":
             assert tool_message.content == "bar", f"Failed for tool={tool_name}"
         else:
-            assert tool_message.content == "val: 1, foo: bar", f"Failed for tool={tool_name}"
-    
+            assert tool_message.content == "val: 1, foo: bar", (
+                f"Failed for tool={tool_name}"
+            )
+
     # Test tool3 with additional parameter
     tool_call = {
         "name": "tool3",
@@ -987,15 +994,19 @@ def test_tool_node_inject_state_reserved_keyword() -> None:
         result = node_pydantic.invoke(State(messages=[msg], foo="baz"))
         tool_message = result["messages"][-1]
         if tool_name == "tool1":
-            assert tool_message.content == "baz", f"Failed for tool={tool_name} with Pydantic state"
+            assert tool_message.content == "baz", (
+                f"Failed for tool={tool_name} with Pydantic state"
+            )
         else:
-            assert tool_message.content == "val: 2, foo: baz", f"Failed for tool={tool_name} with Pydantic state"
+            assert tool_message.content == "val: 2, foo: baz", (
+                f"Failed for tool={tool_name} with Pydantic state"
+            )
 
 
 def test_tool_node_inject_runtime_reserved_keyword() -> None:
     """Test that tools can use 'runtime' as a reserved keyword parameter."""
     from langgraph.runtime import Runtime
-    
+
     def tool1(some_val: int, runtime) -> str:
         """Tool 1 with reserved keyword 'runtime'."""
         assert isinstance(runtime, Runtime)
@@ -1007,16 +1018,16 @@ def test_tool_node_inject_runtime_reserved_keyword() -> None:
 
     store = InMemoryStore()
     store.put(("test",), "test_key", {"foo": "bar"})
-    
+
     node = ToolNode([tool1])
-    
+
     # Verify that 'runtime' is excluded from tool schemas
     schema = node.tools_by_name[tool1.__name__].get_input_schema()
-    if hasattr(schema, 'model_fields'):
+    if hasattr(schema, "model_fields"):
         assert "runtime" not in schema.model_fields
     else:
         assert "runtime" not in schema.__fields__
-    
+
     # Test with store
     tool_call = {
         "name": "tool1",
@@ -2282,7 +2293,3 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
-
-
-
-

@@ -348,34 +348,34 @@ class ToolNode(RunnableCallable):
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
                 tool_ = create_tool(tool_)
-            
+
             # Check for deprecated annotation usage and emit warnings
             # We need to check for annotations directly, not just the presence of state/store args
             # because _get_state_args returns both reserved keywords and annotations
             reserved_args = _get_reserved_keyword_args(tool_)
-            
+
             # Check for InjectedState and InjectedStore annotations
             full_schema = tool_.get_input_schema()
             has_injected_state = False
             has_injected_store = False
-            
+
             for name, type_ in get_all_basemodel_annotations(full_schema).items():
                 type_args = get_args(type_)
-                
+
                 # Check for InjectedState (can be class or instance)
                 for type_arg in type_args:
                     if _is_injection(type_arg, InjectedState):
-                        if 'state' not in reserved_args:
+                        if "state" not in reserved_args:
                             has_injected_state = True
                             break
-                
+
                 # Check for InjectedStore (can be class or instance)
                 for type_arg in type_args:
                     if _is_injection(type_arg, InjectedStore):
-                        if 'runtime' not in reserved_args:
+                        if "runtime" not in reserved_args:
                             has_injected_store = True
                             break
-            
+
             # Emit deprecation warnings
             if has_injected_state:
                 warnings.warn(
@@ -385,9 +385,9 @@ class ToolNode(RunnableCallable):
                     f"def {tool_.name}(..., state: Annotated[dict, InjectedState]). "
                     f"The annotation-based approach will be removed in a future version.",
                     DeprecationWarning,
-                    stacklevel=2
+                    stacklevel=2,
                 )
-            
+
             if has_injected_store:
                 warnings.warn(
                     f"Tool '{tool_.name}' uses deprecated InjectedStore annotation. "
@@ -395,14 +395,14 @@ class ToolNode(RunnableCallable):
                     f"Example: def {tool_.name}(..., runtime) and access store via runtime.store. "
                     f"The annotation-based approach will be removed in a future version.",
                     DeprecationWarning,
-                    stacklevel=2
+                    stacklevel=2,
                 )
-            
+
             # Check for reserved keywords and wrap the tool if needed
             # (already computed above, no need to recompute)
             if reserved_args:
                 tool_ = _wrap_tool_with_reserved_keywords(tool_, reserved_args)
-            
+
             self.tools_by_name[tool_.name] = tool_
             self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
             self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
@@ -812,7 +812,9 @@ class ToolNode(RunnableCallable):
         tool_call_with_state = self._inject_state(tool_call_copy, input)
         tool_call_with_store = self._inject_store(tool_call_with_state, store)
         if config:
-            tool_call_with_runtime = self._inject_runtime(tool_call_with_store, store, config)
+            tool_call_with_runtime = self._inject_runtime(
+                tool_call_with_store, store, config
+            )
             return tool_call_with_runtime
         return tool_call_with_store
 
@@ -961,10 +963,10 @@ class InjectedState(InjectedToolArg):
     .. deprecated:: 0.2.0
         Use reserved keyword 'state' instead of InjectedState annotation.
         The annotation-based approach will be removed in a future version.
-        
+
         Instead of:
             def tool(x: int, state: Annotated[dict, InjectedState]) -> str:
-        
+
         Use:
             def tool(x: int, state) -> str:
 
@@ -1045,10 +1047,10 @@ class InjectedStore(InjectedToolArg):
     .. deprecated:: 0.2.0
         Use reserved keyword 'runtime' instead of InjectedStore annotation.
         The annotation-based approach will be removed in a future version.
-        
+
         Instead of:
             def tool(x: int, store: Annotated[BaseStore, InjectedStore()]) -> str:
-        
+
         Use:
             def tool(x: int, runtime) -> str:
                 # Access store via runtime.store
@@ -1167,15 +1169,15 @@ def _get_reserved_keyword_args(tool: BaseTool) -> dict[str, str]:
         Keys are parameter names, values are either 'state' or 'runtime'.
     """
     reserved_args = {}
-    
+
     # Get the underlying function from the tool
-    if hasattr(tool, 'func'):
+    if hasattr(tool, "func"):
         func = tool.func
-    elif hasattr(tool, '_run'):
+    elif hasattr(tool, "_run"):
         func = tool._run
     else:
         return reserved_args
-    
+
     # Inspect the function signature
     try:
         sig = inspect.signature(func)
@@ -1183,20 +1185,24 @@ def _get_reserved_keyword_args(tool: BaseTool) -> dict[str, str]:
             # Check for reserved keywords only if they don't have injection annotations
             # Parameters with InjectedState or InjectedStore annotations should not be
             # considered reserved keywords (they use the old annotation-based approach)
-            if param_name == 'state' and param.annotation == inspect.Parameter.empty:
+            if param_name == "state" and param.annotation == inspect.Parameter.empty:
                 # Only consider 'state' as reserved if it has no annotation
-                reserved_args['state'] = 'state'
-            elif param_name == 'runtime' and param.annotation == inspect.Parameter.empty:
+                reserved_args["state"] = "state"
+            elif (
+                param_name == "runtime" and param.annotation == inspect.Parameter.empty
+            ):
                 # Only consider 'runtime' as reserved if it has no annotation
-                reserved_args['runtime'] = 'runtime'
+                reserved_args["runtime"] = "runtime"
     except (ValueError, TypeError):
         # If we can't inspect the signature, return empty
         pass
-    
+
     return reserved_args
 
 
-def _wrap_tool_with_reserved_keywords(tool: BaseTool, reserved_args: dict[str, str]) -> BaseTool:
+def _wrap_tool_with_reserved_keywords(
+    tool: BaseTool, reserved_args: dict[str, str]
+) -> BaseTool:
     """Wrap a tool to exclude reserved keyword parameters from its schema.
 
     This function creates a wrapper around tools that use reserved keywords
@@ -1212,21 +1218,22 @@ def _wrap_tool_with_reserved_keywords(tool: BaseTool, reserved_args: dict[str, s
     """
     # Get the original schema
     original_schema = tool.get_input_schema()
-    
+
     # Create a new schema class that excludes reserved keywords
     # We need to dynamically create a new Pydantic model with filtered fields
     from pydantic import create_model
-    from pydantic.fields import FieldInfo
-    
+
     # Get the original fields
-    if hasattr(original_schema, 'model_fields'):
+    if hasattr(original_schema, "model_fields"):
         # Pydantic v2
         original_fields = original_schema.model_fields
         filtered_fields = {}
         for field_name, field_info in original_fields.items():
             if field_name not in reserved_args:
                 # Create a tuple for create_model: (type, field_info)
-                field_type = field_info.annotation if hasattr(field_info, 'annotation') else Any
+                field_type = (
+                    field_info.annotation if hasattr(field_info, "annotation") else Any
+                )
                 filtered_fields[field_name] = (field_type, field_info)
     else:
         # Pydantic v1 (backward compatibility)
@@ -1235,42 +1242,50 @@ def _wrap_tool_with_reserved_keywords(tool: BaseTool, reserved_args: dict[str, s
         for field_name, field_info in original_fields.items():
             if field_name not in reserved_args:
                 filtered_fields[field_name] = (field_info.type_, field_info.field_info)
-    
+
     # Create the filtered schema model
     FilteredSchema = create_model(
-        f"{original_schema.__name__}Filtered",
-        __base__=BaseModel,
-        **filtered_fields
+        f"{original_schema.__name__}Filtered", __base__=BaseModel, **filtered_fields
     )
-    
+
     # Create a wrapper tool with the filtered schema
     class WrappedTool(type(tool)):
         """Tool wrapper that excludes reserved keywords from schema."""
-        
-        def get_input_schema(self, config: Optional[RunnableConfig] = None) -> Type[BaseModel]:
+
+        def get_input_schema(
+            self, config: Optional[RunnableConfig] = None
+        ) -> Type[BaseModel]:
             """Return the filtered schema without reserved keywords."""
             return FilteredSchema
-    
+
     # Create the wrapped tool instance
     wrapped = WrappedTool(
         name=tool.name,
         description=tool.description,
-        func=tool.func if hasattr(tool, 'func') else None,
+        func=tool.func if hasattr(tool, "func") else None,
         args_schema=FilteredSchema,  # Set the filtered schema
     )
-    
+
     # Copy over other attributes
-    for attr in ['return_direct', 'verbose', 'callbacks', 'tags', 'metadata', 
-                 'handle_tool_error', 'handle_validation_error', 'response_format']:
+    for attr in [
+        "return_direct",
+        "verbose",
+        "callbacks",
+        "tags",
+        "metadata",
+        "handle_tool_error",
+        "handle_validation_error",
+        "response_format",
+    ]:
         if hasattr(tool, attr):
             setattr(wrapped, attr, getattr(tool, attr))
-    
+
     # Ensure the wrapped tool still has access to the original run method
-    if hasattr(tool, '_run'):
+    if hasattr(tool, "_run"):
         wrapped._run = tool._run
-    if hasattr(tool, '_arun'):
+    if hasattr(tool, "_arun"):
         wrapped._arun = tool._arun
-    
+
     return wrapped
 
 
@@ -1289,19 +1304,19 @@ def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
         name is None, the entire state should be injected for that argument.
     """
     tool_args_to_state_fields: dict = {}
-    
+
     # First check for reserved keywords
     reserved_args = _get_reserved_keyword_args(tool)
-    if 'state' in reserved_args:
-        tool_args_to_state_fields['state'] = None
-    
+    if "state" in reserved_args:
+        tool_args_to_state_fields["state"] = None
+
     # Then check for annotation-based injection (backward compatibility)
     full_schema = tool.get_input_schema()
     for name, type_ in get_all_basemodel_annotations(full_schema).items():
         # Skip if already handled by reserved keyword
         if name in tool_args_to_state_fields:
             continue
-            
+
         injections = [
             type_arg
             for type_arg in get_args(type_)
@@ -1377,29 +1392,4 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
         The string 'runtime' if the tool has a runtime parameter, or None otherwise.
     """
     reserved_args = _get_reserved_keyword_args(tool)
-    return 'runtime' if 'runtime' in reserved_args else None
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    return "runtime" if "runtime" in reserved_args else None
