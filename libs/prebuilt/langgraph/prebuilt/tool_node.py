@@ -350,11 +350,34 @@ class ToolNode(RunnableCallable):
                 tool_ = create_tool(tool_)
             
             # Check for deprecated annotation usage and emit warnings
-            state_args = _get_state_args(tool_)
-            store_arg = _get_store_arg(tool_)
+            # We need to check for annotations directly, not just the presence of state/store args
+            # because _get_state_args returns both reserved keywords and annotations
+            reserved_args = _get_reserved_keyword_args(tool_)
             
-            # Check if tool uses deprecated InjectedState annotation
-            if state_args and not _get_reserved_keyword_args(tool_).get('state'):
+            # Check for InjectedState annotations
+            full_schema = tool_.get_input_schema()
+            has_injected_state = False
+            has_injected_store = False
+            
+            for name, type_ in get_all_basemodel_annotations(full_schema).items():
+                # Check for InjectedState
+                injected_state_args = [
+                    type_arg for type_arg in get_args(type_)
+                    if _is_injection(type_arg, InjectedState)
+                ]
+                if injected_state_args and 'state' not in reserved_args:
+                    has_injected_state = True
+                
+                # Check for InjectedStore
+                injected_store_args = [
+                    type_arg for type_arg in get_args(type_)
+                    if _is_injection(type_arg, InjectedStore)
+                ]
+                if injected_store_args and 'runtime' not in reserved_args:
+                    has_injected_store = True
+            
+            # Emit deprecation warnings
+            if has_injected_state:
                 warnings.warn(
                     f"Tool '{tool_.name}' uses deprecated InjectedState annotation. "
                     f"Please update to use reserved keyword 'state' instead. "
@@ -365,8 +388,7 @@ class ToolNode(RunnableCallable):
                     stacklevel=2
                 )
             
-            # Check if tool uses deprecated InjectedStore annotation
-            if store_arg and not _get_reserved_keyword_args(tool_).get('runtime'):
+            if has_injected_store:
                 warnings.warn(
                     f"Tool '{tool_.name}' uses deprecated InjectedStore annotation. "
                     f"Please update to use reserved keyword 'runtime' instead. "
@@ -1352,6 +1374,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
