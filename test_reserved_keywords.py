@@ -94,7 +94,7 @@ def test_reserved_keywords():
     
     # Test injection
     from langchain_core.runnables import RunnableConfig
-    config = RunnableConfig()
+    config = RunnableConfig(configurable={"context": {"user_id": "test_user"}})
     
     injected1 = node.inject_tool_args(tool_call1, state, store, config)
     print(f"\nInjected args for tool_with_state: {injected1['args']}")
@@ -114,3 +114,4 @@ def test_reserved_keywords():
 
 if __name__ == "__main__":
     test_reserved_keywords()
+
