@@ -1,5 +1,4 @@
 """Test reserved keywords for tool injection."""
-import pytest
 from typing import Annotated, List
 from langchain_core.messages import AIMessage, AnyMessage
 from langgraph.prebuilt import ToolNode, InjectedState, InjectedStore
@@ -179,3 +178,4 @@ if __name__ == "__main__":
     print("✓ Mixed injection styles test passed!")
     
     print("\nAll tests passed!")
+
