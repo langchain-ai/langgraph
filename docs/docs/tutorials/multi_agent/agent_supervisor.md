@@ -383,7 +383,6 @@ We will implement handoffs via **handoff tools** and give these tools to the sup
 ```python
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolCallId
-from langgraph.prebuilt import InjectedState
 from langgraph.graph import StateGraph, START, MessagesState
 from langgraph.types import Command
 
@@ -394,7 +393,7 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
 
     @tool(name, description=description)
     def handoff_tool(
-        state: Annotated[MessagesState, InjectedState],
+        state,  # Reserved keyword - automatically injected
         tool_call_id: Annotated[str, InjectedToolCallId],
     ) -> Command:
         tool_message = {
@@ -766,3 +765,4 @@ Update from subgraph research_agent:
 	
 	{"query": "2024 United States GDP value from a reputable source", "follow_up_questions": null, "answer": null, "images": [], "results": [{"url": "https://www.focus-economics.com/countries/united-states/", "title": "United States Economy Overview - Focus Economics", "content": "The United States' Macroeconomic Analysis:\n------------------------------------------\n\n**Nominal GDP of USD 29,185 billion in 2024.**\n\n**Nominal GDP of USD 29,179 billion in 2024.**\n\n**GDP per capita of USD 86,635 compared to the global average of USD 10,589.**\n\n**GDP per capita of USD 86,652 compared to the global average of USD 10,589.**\n\n**Average real GDP growth of 2.5% over the last decade.**\n\n**Average real GDP growth of ```
 ``` 
+
