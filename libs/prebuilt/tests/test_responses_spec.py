@@ -11,7 +11,7 @@ from pydantic import BaseModel, create_model
 
 from langgraph.prebuilt import create_agent
 from langgraph.prebuilt.responses import ToolOutput
-from tests.utils import load_spec
+from tests.utils import BaseSchema, load_spec
 
 try:
     from langchain_openai import ChatOpenAI
@@ -23,15 +23,20 @@ else:
 AGENT_PROMPT = "You are an HR assistant."
 
 
-class AssertionByInvocation(BaseModel):
+class ToolCalls(BaseSchema):
+    get_employee_role: int
+    get_employee_department: int
+
+
+class AssertionByInvocation(BaseSchema):
     prompt: str
-    tools_with_expected_calls: Dict[str, int]
+    tools_with_expected_calls: ToolCalls
     expected_last_message: str
     expected_structured_response: Optional[Dict[str, Any]]
     llm_request_count: int
 
 
-class TestCase(BaseModel):
+class TestCase(BaseSchema):
     name: str
     response_format: Union[Dict[str, Any], List[Dict[str, Any]]]
     assertions_by_invocation: List[AssertionByInvocation]
@@ -136,11 +141,11 @@ def test_responses_integration_matrix(case: TestCase) -> None:
         # Count tool calls
         assert (
             role_tool["mock"].call_count
-            == assertion.tools_with_expected_calls["get_employee_role"]
+            == assertion.tools_with_expected_calls.get_employee_role
         )
         assert (
             dept_tool["mock"].call_count
-            == assertion.tools_with_expected_calls["get_employee_department"]
+            == assertion.tools_with_expected_calls.get_employee_department
         )
 
         # Count LLM calls

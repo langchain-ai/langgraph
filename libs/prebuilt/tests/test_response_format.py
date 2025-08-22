@@ -59,6 +59,22 @@ class LocationResponse(BaseModel):
     country: str = Field(description="The country name")
 
 
+class LocationTypedDict(TypedDict):
+    city: str
+    country: str
+
+
+location_json_schema = {
+    "type": "object",
+    "properties": {
+        "city": {"type": "string", "description": "The city name"},
+        "country": {"type": "string", "description": "The country name"},
+    },
+    "title": "location_schema",
+    "required": ["city", "country"],
+}
+
+
 def get_weather() -> str:
     """Get the weather."""
 
@@ -80,6 +96,7 @@ EXPECTED_WEATHER_PYDANTIC = WeatherBaseModel(**WEATHER_DATA)
 EXPECTED_WEATHER_DATACLASS = WeatherDataclass(**WEATHER_DATA)
 EXPECTED_WEATHER_DICT: WeatherTypedDict = {"temperature": 75.0, "condition": "sunny"}
 EXPECTED_LOCATION = LocationResponse(**LOCATION_DATA)
+EXPECTED_LOCATION_DICT: LocationTypedDict = {"city": "New York", "country": "USA"}
 
 
 class TestResponseFormatAsModel:
@@ -260,6 +277,61 @@ class TestResponseFormatAsToolOutput:
 
         assert response["structured_response"] == EXPECTED_WEATHER_DICT
         assert len(response["messages"]) == 5
+
+    def test_union_of_json_schemas(self) -> None:
+        """Test response_format as ToolOutput with union of JSON schemas."""
+        tool_calls = [
+            [{"args": {}, "id": "1", "name": "get_weather"}],
+            [
+                {
+                    "name": "weather_schema",
+                    "id": "2",
+                    "args": WEATHER_DATA,
+                }
+            ],
+        ]
+
+        model = FakeToolCallingModel(tool_calls=tool_calls)
+
+        agent = create_agent(
+            model,
+            [get_weather, get_location],
+            response_format=ToolOutput(
+                {"oneOf": [weather_json_schema, location_json_schema]}
+            ),
+        )
+        response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
+
+        assert response["structured_response"] == EXPECTED_WEATHER_DICT
+        assert len(response["messages"]) == 5
+
+        # Test with LocationResponse
+        tool_calls_location = [
+            [{"args": {}, "id": "1", "name": "get_location"}],
+            [
+                {
+                    "name": "location_schema",
+                    "id": "2",
+                    "args": LOCATION_DATA,
+                }
+            ],
+        ]
+
+        model_location = FakeToolCallingModel(tool_calls=tool_calls_location)
+
+        agent_location = create_agent(
+            model_location,
+            [get_weather, get_location],
+            response_format=ToolOutput(
+                {"oneOf": [weather_json_schema, location_json_schema]}
+            ),
+        )
+        response_location = agent_location.invoke(
+            {"messages": [HumanMessage("Where am I?")]}
+        )
+
+        assert response_location["structured_response"] == EXPECTED_LOCATION_DICT
+        assert len(response_location["messages"]) == 5
 
     def test_union_of_types(self) -> None:
         """Test response_format as ToolOutput with Union of various types."""

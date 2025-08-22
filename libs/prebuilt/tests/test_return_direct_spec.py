@@ -6,11 +6,10 @@ from unittest.mock import MagicMock
 import pytest
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
-from pydantic import BaseModel
 
 from langgraph.prebuilt import create_agent
 from langgraph.prebuilt.responses import ToolOutput
-from tests.utils import load_spec
+from tests.utils import BaseSchema, load_spec
 
 try:
     from langchain_openai import ChatOpenAI
@@ -28,7 +27,7 @@ You are a strict polling bot.
 """
 
 
-class TestCase(BaseModel):
+class TestCase(BaseSchema):
     name: str
     return_direct: bool
     response_format: Optional[Dict[str, Any]]
@@ -72,10 +71,7 @@ def _make_tool(return_direct: bool):
 )
 @pytest.mark.parametrize("case", TEST_CASES, ids=[c.name for c in TEST_CASES])
 def test_return_direct_integration_matrix(case: TestCase) -> None:
-    print("case:", case)
-
     poll_tool = _make_tool(case.return_direct)
-    print("poll_tool:", poll_tool)
 
     model = ChatOpenAI(
         model="gpt-4o",
