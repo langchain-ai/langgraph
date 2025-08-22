@@ -584,7 +584,7 @@ class ToolNode(RunnableCallable):
             raise ValueError("No AIMessage found in input")
 
         tool_calls = [
-            self.inject_tool_args(call, input, store)
+            self.inject_tool_args(call, input, store, config)
             for call in latest_ai_message.tool_calls
         ]
         return tool_calls, input_type
@@ -1267,4 +1267,5 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
+
 
