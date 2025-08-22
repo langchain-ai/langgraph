@@ -1028,6 +1028,46 @@ def _is_injection(
     return False
 
 
+def _get_reserved_keyword_args(tool: BaseTool) -> dict[str, str]:
+    """Extract reserved keyword arguments from tool function signature.
+
+    This function inspects the tool's underlying function signature to identify
+    parameters with reserved names ('state' and 'runtime') that should be injected
+    automatically without requiring annotations.
+
+    Args:
+        tool: The tool to analyze for reserved keyword parameters.
+
+    Returns:
+        A dictionary mapping reserved parameter names to their injection type.
+        Keys are parameter names, values are either 'state' or 'runtime'.
+    """
+    reserved_args = {}
+    
+    # Get the underlying function from the tool
+    if hasattr(tool, 'func'):
+        func = tool.func
+    elif hasattr(tool, '_run'):
+        func = tool._run
+    else:
+        return reserved_args
+    
+    # Inspect the function signature
+    try:
+        sig = inspect.signature(func)
+        for param_name, param in sig.parameters.items():
+            # Check for reserved keywords
+            if param_name == 'state':
+                reserved_args['state'] = 'state'
+            elif param_name == 'runtime':
+                reserved_args['runtime'] = 'runtime'
+    except (ValueError, TypeError):
+        # If we can't inspect the signature, return empty
+        pass
+    
+    return reserved_args
+
+
 def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
     """Extract state injection mappings from tool annotations.
 
@@ -1102,4 +1142,5 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
+
 
