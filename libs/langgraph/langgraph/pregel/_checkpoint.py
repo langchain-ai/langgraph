@@ -46,7 +46,7 @@ def create_checkpoint(
     return Checkpoint(
         v=LATEST_VERSION,
         ts=ts,
-        id=id or str(uuid6(clock_seq=step)),
+        id=str(uuid6(clock_seq=step)),
         channel_values=values,
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
@@ -79,7 +79,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
     return Checkpoint(
         v=checkpoint["v"],
         ts=checkpoint["ts"],
-        id=checkpoint["id"],
+        id=str(uuid6()),
         channel_values=checkpoint["channel_values"].copy(),
         channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
