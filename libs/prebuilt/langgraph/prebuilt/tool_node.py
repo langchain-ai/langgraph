@@ -384,7 +384,7 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store, config)
         outputs = await asyncio.gather(
             *(self._arun_one(call, input_type, config) for call in tool_calls)
         )
@@ -1267,6 +1267,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
+
 
 
 
