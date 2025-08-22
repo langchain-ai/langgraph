@@ -1220,7 +1220,8 @@ def _wrap_tool_with_reserved_keywords(
         return tool
 
     # Create a wrapper tool that filters the schema
-    class FilteredTool(tool.__class__):
+    # Use type: ignore to suppress mypy error for dynamic class creation
+    class FilteredTool(tool.__class__):  # type: ignore[name-defined]
         """Tool wrapper that excludes reserved keywords from schema."""
 
         def get_input_schema(
@@ -1239,11 +1240,12 @@ def _wrap_tool_with_reserved_keywords(
             # Get fields to keep (exclude reserved keywords)
             if hasattr(original_schema, "model_fields"):
                 # Pydantic v2
-                fields_to_keep = {
-                    name: (field.annotation, field)
-                    for name, field in original_schema.model_fields.items()
-                    if name not in reserved_args
-                }
+                fields_to_keep: dict[str, Any] = {}
+                for name, field in original_schema.model_fields.items():
+                    if name not in reserved_args:
+                        # For create_model, we need (type, default) or just type
+                        field_type = field.annotation if hasattr(field, 'annotation') else Any
+                        fields_to_keep[name] = field_type
             else:
                 # Pydantic v1 fallback
                 fields_to_keep = {}
@@ -1251,7 +1253,9 @@ def _wrap_tool_with_reserved_keywords(
             # Create filtered schema
             try:
                 filtered_schema = create_model(
-                    f"{original_schema.__name__}Filtered", **fields_to_keep
+                    f"{original_schema.__name__}Filtered", 
+                    __base__=BaseModel,
+                    **fields_to_keep
                 )
                 return filtered_schema
             except Exception:
@@ -1393,3 +1397,4 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return "runtime" if "runtime" in reserved_args else None
+
