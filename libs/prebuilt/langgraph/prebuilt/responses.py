@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import sys
+import uuid
 from dataclasses import dataclass, is_dataclass
-from typing import Any, Generic, Literal, TypeVar, Union, get_args, get_origin
+from typing import Any, Generic, Iterable, Literal, TypeVar, Union, get_args, get_origin
 
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool, StructuredTool
@@ -59,7 +60,7 @@ class _SchemaSpec(Generic[SchemaT]):
     name: str
     """Name of the schema, used for tool calling.
     
-    If not provided, the name will be the model name or "structured_output" if it's a JSON schema.
+    If not provided, the name will be the model name or "response_format" if it's a JSON schema.
     """
 
     description: str
@@ -88,10 +89,11 @@ class _SchemaSpec(Generic[SchemaT]):
         """Initialize SchemaSpec with schema and optional parameters."""
         self.schema = schema
 
+        # Schema names must be unique so we use a shortened UUID suffix
         self.name = name or (
-            schema.get("title", "structured_output")
+            schema.get("title", f"response_format_{str(uuid.uuid4())[:4]}")
             if isinstance(schema, dict)
-            else getattr(schema, "__name__", "structured_output")
+            else getattr(schema, "__name__", f"response_format_{str(uuid.uuid4())[:4]}")
         )
 
         self.description = description or (
@@ -143,10 +145,22 @@ class ToolOutput(Generic[SchemaT]):
         self.schema = schema
         self.tool_message_content = tool_message_content
 
-        if get_origin(schema) in (UnionType, Union):
-            self.schema_specs = [_SchemaSpec(s) for s in get_args(schema)]
-        else:
-            self.schema_specs = [_SchemaSpec(schema)]
+        def _iter_variants(schema: Any) -> Iterable[Any]:
+            """Yield leaf variants from Union and JSON Schema oneOf."""
+
+            if get_origin(schema) in (UnionType, Union):
+                for arg in get_args(schema):
+                    yield from _iter_variants(arg)
+                return
+
+            if isinstance(schema, dict) and "oneOf" in schema:
+                for sub in schema.get("oneOf", []):
+                    yield from _iter_variants(sub)
+                return
+
+            yield schema
+
+        self.schema_specs = [_SchemaSpec(s) for s in _iter_variants(schema)]
 
 
 @dataclass(init=False)
@@ -282,7 +296,7 @@ class NativeOutputBinding(Generic[SchemaT]):
         try:
             data = json.loads(raw_text)
         except Exception as e:
-            schema_name = getattr(self.schema, "__name__", "structured_output")
+            schema_name = getattr(self.schema, "__name__", "response_format")
             raise ValueError(
                 f"Native structured output expected valid JSON for {schema_name}, but parsing failed: {e}."
             ) from e
