@@ -711,13 +711,15 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        config: Optional[RunnableConfig] = None,
     ) -> ToolCall:
-        """Inject graph state and store into tool call arguments.
+        """Inject graph state, store, and runtime into tool call arguments.
 
         This method enables tools to access graph context that should not be controlled
-        by the model. Tools can declare dependencies on graph state or persistent storage
-        using InjectedState and InjectedStore annotations. This method automatically
-        identifies these dependencies and injects the appropriate values.
+        by the model. Tools can declare dependencies using either reserved keywords
+        ('state' and 'runtime') or annotations (InjectedState and InjectedStore for
+        backward compatibility). This method automatically identifies these dependencies
+        and injects the appropriate values.
 
         The injection process preserves the original tool call structure while adding
         the necessary context arguments. This allows tools to be both model-callable
@@ -730,10 +732,11 @@ class ToolNode(RunnableCallable):
                 Can be a message list, state dictionary, or BaseModel instance.
             store: The persistent store instance to inject into tools requiring storage.
                 Will be None if no store is configured for the graph.
+            config: The runnable configuration containing context for runtime injection.
 
         Returns:
             A new ToolCall dictionary with the same structure as the input but with
-            additional arguments injected based on the tool's annotation requirements.
+            additional arguments injected based on the tool's requirements.
 
         Raises:
             ValueError: If a tool requires store injection but no store is provided,
@@ -751,6 +754,9 @@ class ToolNode(RunnableCallable):
         tool_call_copy: ToolCall = copy(tool_call)
         tool_call_with_state = self._inject_state(tool_call_copy, input)
         tool_call_with_store = self._inject_store(tool_call_with_state, store)
+        if config:
+            tool_call_with_runtime = self._inject_runtime(tool_call_with_store, store, config)
+            return tool_call_with_runtime
         return tool_call_with_store
 
     def _validate_tool_command(
@@ -1212,6 +1218,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
