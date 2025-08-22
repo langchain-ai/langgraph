@@ -354,27 +354,27 @@ class ToolNode(RunnableCallable):
             # because _get_state_args returns both reserved keywords and annotations
             reserved_args = _get_reserved_keyword_args(tool_)
             
-            # Check for InjectedState annotations
+            # Check for InjectedState and InjectedStore annotations
             full_schema = tool_.get_input_schema()
             has_injected_state = False
             has_injected_store = False
             
             for name, type_ in get_all_basemodel_annotations(full_schema).items():
-                # Check for InjectedState
-                injected_state_args = [
-                    type_arg for type_arg in get_args(type_)
-                    if _is_injection(type_arg, InjectedState)
-                ]
-                if injected_state_args and 'state' not in reserved_args:
-                    has_injected_state = True
+                type_args = get_args(type_)
                 
-                # Check for InjectedStore
-                injected_store_args = [
-                    type_arg for type_arg in get_args(type_)
-                    if _is_injection(type_arg, InjectedStore)
-                ]
-                if injected_store_args and 'runtime' not in reserved_args:
-                    has_injected_store = True
+                # Check for InjectedState (can be class or instance)
+                for type_arg in type_args:
+                    if _is_injection(type_arg, InjectedState):
+                        if 'state' not in reserved_args:
+                            has_injected_state = True
+                            break
+                
+                # Check for InjectedStore (can be class or instance)
+                for type_arg in type_args:
+                    if _is_injection(type_arg, InjectedStore):
+                        if 'runtime' not in reserved_args:
+                            has_injected_store = True
+                            break
             
             # Emit deprecation warnings
             if has_injected_state:
@@ -1374,6 +1374,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
     """
     reserved_args = _get_reserved_keyword_args(tool)
     return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
