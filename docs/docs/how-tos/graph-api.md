@@ -2333,7 +2333,7 @@ from IPython.display import Image, display
 display(Image(graph.get_graph().draw_mermaid_png()))
 ```
 
-![Simple loop graph](assets/graph_api_image_3.png)
+![Simple loop graph](assets/graph_api_image_7.png)
 :::
 
 :::js
