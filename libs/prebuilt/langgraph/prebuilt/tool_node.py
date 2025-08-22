@@ -1124,6 +1124,9 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
     should be injected with the graph store. Only one store argument is supported
     per tool.
 
+    Note: With the new reserved keyword approach, store is accessed via the
+    'runtime' parameter which provides both store and context access.
+
     Args:
         tool: The tool to analyze for store injection requirements.
 
@@ -1134,6 +1137,7 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
     Raises:
         ValueError: If a tool argument has multiple InjectedStore annotations.
     """
+    # Check for annotation-based injection (backward compatibility)
     full_schema = tool.get_input_schema()
     for name, type_ in get_all_basemodel_annotations(full_schema).items():
         injections = [
@@ -1152,6 +1156,23 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
+
+
+def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
+    """Extract runtime injection argument from tool signature.
+
+    This function checks if a tool has a 'runtime' reserved keyword parameter
+    that should be injected with a Runtime object containing store and context.
+
+    Args:
+        tool: The tool to analyze for runtime injection requirements.
+
+    Returns:
+        The string 'runtime' if the tool has a runtime parameter, or None otherwise.
+    """
+    reserved_args = _get_reserved_keyword_args(tool)
+    return 'runtime' if 'runtime' in reserved_args else None
+
 
 
 
