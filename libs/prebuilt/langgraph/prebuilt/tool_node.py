@@ -710,13 +710,14 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        config: Optional[RunnableConfig] = None,
     ) -> ToolCall:
-        """Inject graph state and store into tool call arguments.
+        """Inject graph state, store, and runtime into tool call arguments.
 
         This method enables tools to access graph context that should not be controlled
-        by the model. Tools can declare dependencies on graph state or persistent storage
-        using InjectedState and InjectedStore annotations. This method automatically
-        identifies these dependencies and injects the appropriate values.
+        by the model. Tools can declare dependencies on graph state, persistent storage,
+        or runtime using InjectedState, InjectedStore, and InjectedRuntime annotations.
+        This method automatically identifies these dependencies and injects the appropriate values.
 
         The injection process preserves the original tool call structure while adding
         the necessary context arguments. This allows tools to be both model-callable
@@ -729,6 +730,8 @@ class ToolNode(RunnableCallable):
                 Can be a message list, state dictionary, or BaseModel instance.
             store: The persistent store instance to inject into tools requiring storage.
                 Will be None if no store is configured for the graph.
+            config: The RunnableConfig containing runtime and other configuration.
+                Will be None if runtime injection is not needed.
 
         Returns:
             A new ToolCall dictionary with the same structure as the input but with
@@ -736,7 +739,8 @@ class ToolNode(RunnableCallable):
 
         Raises:
             ValueError: If a tool requires store injection but no store is provided,
-                       or if state injection requirements cannot be satisfied.
+                       if state injection requirements cannot be satisfied,
+                       or if runtime injection is required but not available in config.
 
         Note:
             This method is automatically called during tool execution but can also
@@ -750,6 +754,12 @@ class ToolNode(RunnableCallable):
         tool_call_copy: ToolCall = copy(tool_call)
         tool_call_with_state = self._inject_state(tool_call_copy, input)
         tool_call_with_store = self._inject_store(tool_call_with_state, store)
+        
+        # Only inject runtime if config is provided
+        if config is not None:
+            tool_call_with_runtime = self._inject_runtime(tool_call_with_store, config)
+            return tool_call_with_runtime
+        
         return tool_call_with_store
 
     def _validate_tool_command(
@@ -1256,6 +1266,7 @@ def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
+
 
 
 
