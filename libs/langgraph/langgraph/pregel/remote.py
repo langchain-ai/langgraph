@@ -367,6 +367,16 @@ class RemoteGraph(PregelProtocol):
         sanitized: RunnableConfig = {}
         if "recursion_limit" in config:
             sanitized["recursion_limit"] = config["recursion_limit"]
+
+        if "run_name" in config:
+            sanitized["run_name"] = config["run_name"]
+
+        if "max_concurrency" in config and config["max_concurrency"] is not None:
+            sanitized["max_concurrency"] = config["max_concurrency"]
+
+        if "run_id" in config and config["run_id"] is not None:
+            sanitized["run_id"] = str(config["run_id"])
+
         if "tags" in config:
             sanitized["tags"] = [tag for tag in config["tags"] if isinstance(tag, str)]
 
@@ -694,7 +704,7 @@ class RemoteGraph(PregelProtocol):
         """Create a run and stream the results.
 
         This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
-        is speciffed in the `configurable` field of the config or
+        is specified in the `configurable` field of the config or
         `POST /runs/stream` otherwise.
 
         Args:
@@ -803,7 +813,7 @@ class RemoteGraph(PregelProtocol):
         """Create a run and stream the results.
 
         This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
-        is speciffed in the `configurable` field of the config or
+        is specified in the `configurable` field of the config or
         `POST /runs/stream` otherwise.
 
         Args:
