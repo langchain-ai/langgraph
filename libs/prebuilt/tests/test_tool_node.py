@@ -1157,3 +1157,317 @@ async def test_tool_node_command_remove_all_messages():
     assert isinstance(command, Command)
     assert command.update == {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]}
 
+
+async def test_runtime_injection():
+    """Test that runtime can be injected into tools."""
+    from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
+    from langgraph.prebuilt import InjectedRuntime
+    from langgraph.runtime import Runtime
+    from langgraph.store.memory import InMemoryStore
+
+    # Create a mock runtime with store
+    store = InMemoryStore()
+    runtime = Runtime(store=store)
+    
+    # Tool that uses runtime injection
+    def tool_with_runtime(
+        value: str,
+        runtime: Annotated[Runtime, InjectedRuntime()],
+    ) -> str:
+        """Tool that accesses runtime."""
+        # Verify runtime is injected
+        assert runtime is not None
+        assert runtime.store is not None
+        # Store a value using runtime's store
+        runtime.store.put(("test", "namespace"), "test_key", {"value": value})
+        return f"Stored: {value}"
+    
+    # Create tool node
+    tool_node = ToolNode([tool_with_runtime])
+    
+    # Create config with runtime
+    config = {
+        CONF: {
+            CONFIG_KEY_RUNTIME: runtime
+        }
+    }
+    
+    # Invoke tool with runtime in config
+    result = await tool_node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "tool_with_runtime",
+                            "args": {"value": "test_value"},
+                            "id": "call_1",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=config,
+    )
+    
+    # Verify result
+    assert "messages" in result
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.content == "Stored: test_value"
+    assert tool_message.tool_call_id == "call_1"
+    
+    # Verify value was stored
+    stored = store.get(("test", "namespace"), "test_key")
+    assert stored.value == {"value": "test_value"}
+
+
+async def test_runtime_injection_sync_tool():
+    """Test that runtime can be injected into synchronous tools."""
+    from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
+    from langgraph.prebuilt import InjectedRuntime
+    from langgraph.runtime import Runtime
+    from langgraph.store.memory import InMemoryStore
+
+    # Create a mock runtime
+    runtime = Runtime(store=InMemoryStore())
+    
+    # Synchronous tool that uses runtime injection
+    def sync_tool_with_runtime(
+        value: int,
+        runtime: Annotated[Runtime, InjectedRuntime()],
+    ) -> str:
+        """Sync tool that accesses runtime."""
+        assert runtime is not None
+        return f"Runtime available: {value}"
+    
+    # Create tool node
+    tool_node = ToolNode([sync_tool_with_runtime])
+    
+    # Create config with runtime
+    config = {
+        CONF: {
+            CONFIG_KEY_RUNTIME: runtime
+        }
+    }
+    
+    # Invoke tool synchronously
+    result = tool_node.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "sync_tool_with_runtime",
+                            "args": {"value": 42},
+                            "id": "call_2",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=config,
+    )
+    
+    # Verify result
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.content == "Runtime available: 42"
+
+
+async def test_runtime_injection_error_no_runtime():
+    """Test error handling when runtime is not available in config."""
+    from langgraph.prebuilt import InjectedRuntime
+    from langgraph.runtime import Runtime
+
+    # Tool that requires runtime
+    def tool_needs_runtime(
+        value: str,
+        runtime: Annotated[Runtime, InjectedRuntime()],
+    ) -> str:
+        """Tool that needs runtime."""
+        return f"Value: {value}"
+    
+    # Create tool node
+    tool_node = ToolNode([tool_needs_runtime])
+    
+    # Try to invoke without runtime in config
+    with pytest.raises(ValueError, match="Cannot inject runtime into tools"):
+        await tool_node.ainvoke(
+            {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "tool_needs_runtime",
+                                "args": {"value": "test"},
+                                "id": "call_3",
+                            }
+                        ],
+                    )
+                ]
+            }
+        )
+
+
+async def test_runtime_injection_with_state_and_store():
+    """Test that runtime injection works alongside state and store injection."""
+    from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
+    from langgraph.prebuilt import InjectedRuntime, InjectedState, InjectedStore
+    from langgraph.runtime import Runtime
+    from langgraph.store.base import BaseStore
+    from langgraph.store.memory import InMemoryStore
+
+    # Create runtime and store
+    store = InMemoryStore()
+    runtime = Runtime(store=store)
+    
+    # Tool that uses all three injections
+    def tool_with_all_injections(
+        value: str,
+        state: Annotated[dict, InjectedState],
+        store: Annotated[BaseStore, InjectedStore()],
+        runtime: Annotated[Runtime, InjectedRuntime()],
+    ) -> str:
+        """Tool that uses state, store, and runtime injection."""
+        # Verify all injections work
+        assert state is not None
+        assert store is not None
+        assert runtime is not None
+        assert runtime.store == store  # Runtime's store should match injected store
+        
+        # Access state
+        messages = state.get("messages", [])
+        
+        # Use store
+        store.put(("test", "ns"), "key", {"val": value})
+        
+        return f"Processed {value} with {len(messages)} messages"
+    
+    # Create tool node
+    tool_node = ToolNode([tool_with_all_injections])
+    
+    # Create config with runtime
+    config = {
+        CONF: {
+            CONFIG_KEY_RUNTIME: runtime
+        }
+    }
+    
+    # Invoke with state, store, and runtime
+    result = await tool_node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    content="Hello",
+                    tool_calls=[
+                        {
+                            "name": "tool_with_all_injections",
+                            "args": {"value": "test_data"},
+                            "id": "call_4",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=config,
+    )
+    
+    # Verify result
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert "Processed test_data with 1 messages" in tool_message.content
+    
+    # Verify store was updated
+    stored = store.get(("test", "ns"), "key")
+    assert stored.value == {"val": "test_data"}
+
+
+def test_runtime_arg_excluded_from_schema():
+    """Test that runtime arguments are excluded from tool schemas."""
+    from langgraph.prebuilt import InjectedRuntime
+    from langgraph.runtime import Runtime
+
+    # Tool with runtime injection
+    def tool_with_runtime(
+        user_arg: str,
+        runtime: Annotated[Runtime, InjectedRuntime()],
+    ) -> str:
+        """Tool with runtime injection."""
+        return f"Processed: {user_arg}"
+    
+    # Create tool node
+    tool_node = ToolNode([tool_with_runtime])
+    
+    # Get the tool from the node
+    tool = tool_node.tools_by_name["tool_with_runtime"]
+    
+    # Check the schema - runtime arg should not be included
+    schema = tool.get_input_schema()
+    properties = schema.schema()["properties"]
+    
+    # Only user_arg should be in the schema
+    assert "user_arg" in properties
+    assert "runtime" not in properties
+    assert len(properties) == 1
+
+
+async def test_runtime_injection_with_decorated_tool():
+    """Test runtime injection with @tool decorated functions."""
+    from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
+    from langgraph.prebuilt import InjectedRuntime
+    from langgraph.runtime import Runtime
+    from langgraph.store.memory import InMemoryStore
+
+    # Create runtime
+    runtime = Runtime(store=InMemoryStore())
+    
+    # Decorated tool with runtime injection
+    @dec_tool
+    def decorated_tool_with_runtime(
+        value: str,
+        runtime: Annotated[Runtime, InjectedRuntime()],
+    ) -> str:
+        """Decorated tool that uses runtime."""
+        assert runtime is not None
+        assert runtime.store is not None
+        return f"Decorated: {value}"
+    
+    # Create tool node
+    tool_node = ToolNode([decorated_tool_with_runtime])
+    
+    # Create config
+    config = {
+        CONF: {
+            CONFIG_KEY_RUNTIME: runtime
+        }
+    }
+    
+    # Invoke tool
+    result = await tool_node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "decorated_tool_with_runtime",
+                            "args": {"value": "test"},
+                            "id": "call_5",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=config,
+    )
+    
+    # Verify result
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.content == "Decorated: test"
+
+
