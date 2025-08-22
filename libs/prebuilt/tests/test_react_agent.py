@@ -994,7 +994,40 @@ def test_tool_node_inject_state_reserved_keyword() -> None:
 
 def test_tool_node_inject_runtime_reserved_keyword() -> None:
     """Test that tools can use 'runtime' as a reserved keyword parameter."""
-    pass  # TODO: Implementation to be added
+    from langgraph.runtime import Runtime
+    
+    def tool1(some_val: int, runtime) -> str:
+        """Tool 1 with reserved keyword 'runtime'."""
+        assert isinstance(runtime, Runtime)
+        if runtime.store:
+            store_val = runtime.store.get(("test",), "test_key")
+            if store_val:
+                return f"val: {some_val}, store: {store_val.value['foo']}"
+        return f"val: {some_val}, no store"
+
+    store = InMemoryStore()
+    store.put(("test",), "test_key", {"foo": "bar"})
+    
+    node = ToolNode([tool1])
+    
+    # Verify that 'runtime' is excluded from tool schemas
+    schema = node.tools_by_name[tool1.__name__].get_input_schema()
+    if hasattr(schema, 'model_fields'):
+        assert "runtime" not in schema.model_fields
+    else:
+        assert "runtime" not in schema.__fields__
+    
+    # Test with store
+    tool_call = {
+        "name": "tool1",
+        "args": {"some_val": 1},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+    result = node.invoke({"messages": [msg]}, store=store)
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "val: 1, store: bar"
 
 
 def test_tool_node_mixed_injection_styles() -> None:
@@ -2249,6 +2282,7 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
 
 
 
