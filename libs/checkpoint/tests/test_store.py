@@ -137,34 +137,57 @@ def test_get_text_at_path() -> None:
     assert get_text_at_path(nested_data, "{unclosed") == []
     assert get_text_at_path(nested_data, "nested[{invalid}]") == []
 
-def test_Non_ASCII_semantic_search():
-    from langgraph.store.memory import InMemoryStore
-    from langchain_openai import OpenAIEmbeddings
-    import os
-    from dotenv import load_dotenv
 
-    load_dotenv()
-
-    embeddings = OpenAIEmbeddings(
-        openai_api_key=os.getenv("OPENAI_API_KEY"),
-        model='text-embedding-3-small',
-    )
+def test_Non_ASCII_semantic_search(fake_embeddings: CharacterEmbeddings) -> None:
+    """Test semantic search functionality with non-ASCII text."""
     store = InMemoryStore(
         index={
-            "embed": embeddings,
-            "dims": 1536,
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
         }
     )
-    store.put(("user_123", "memories"), "1", {"text": "This is English"})
-    store.put(("user_123", "memories"), "2", {"text": "这是中文"})
-    store.put(("user_123", "memories"), "3", {"text": "これは日本語です"})
+    # Insert test documents
+    docs = [
+        ("doc1", {"text": "This is English"}, None),
+        ("doc2", {"text": "这是中文"}, None), 
+        ("doc3", {"text": "これは日本語です"}, None), 
+        ("doc4", {"text": "This is English"}, ["text"]),
+        ("doc5", {"text": "这是中文"}, ["text"]), 
+        ("doc6", {"text": "これは日本語です"}, ["text"]), 
+        ("doc7", {"text": ["남극 대륙", "남미"]}, ["text"]),
+    ]
 
-    items1 = store.search(("user_123", "memories"), query='{"text": "This is English"}')
-    assert items1[0].score > 0.999
-    items2 = store.search(("user_123", "memories"), query='{"text": "这是中文"}')
-    assert items2[0].score > 0.999
-    items3 = store.search(("user_123", "memories"), query='{"text": "これは日本語です"}')
-    assert items3[0].score > 0.999
+    for key, value, index in docs:
+        store.put(("test",), key, value, index)
+
+    results = store.search(("test",), query='{"text": "This is English"}')
+    assert results[0].value == {'text': 'This is English'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query='{"text": "这是中文"}')
+    assert results[0].value == {'text': '这是中文'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query='{"text": "これは日本語です"}')
+    assert results[0].value == {'text': 'これは日本語です'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query="This is English")
+    assert results[0].value == {'text': 'This is English'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query="这是中文")
+    assert results[0].value == {'text': '这是中文'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query="これは日本語です")
+    assert results[0].value == {'text': 'これは日本語です'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query='["남극 대륙", "남미"]')
+    assert results[0].value == {'text': ['남극 대륙', '남미']}
+    assert results[0].score > 0.999
+
 
 async def test_async_batch_store(mocker: MockerFixture) -> None:
     abatch = mocker.stub()
