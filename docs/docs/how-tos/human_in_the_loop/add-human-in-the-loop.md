@@ -366,8 +366,8 @@ result = graph.invoke(
 
 # Resume with mapping of interrupt IDs to values
 resume_map = {
-    i.interrupt_id: f"human input for prompt {i.value}"
-    for i in parent.get_state(thread_config).interrupts
+    i.id: f"edited text for {i.value['text_to_revise']}"
+    for i in graph.get_state(config).interrupts
 }
 print(graph.invoke(Command(resume=resume_map), config=config))
 # > {'text_1': 'edited text for original text 1', 'text_2': 'edited text for original text 2'}
