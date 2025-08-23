@@ -138,6 +138,57 @@ def test_get_text_at_path() -> None:
     assert get_text_at_path(nested_data, "nested[{invalid}]") == []
 
 
+def test_Non_ASCII_semantic_search(fake_embeddings: CharacterEmbeddings) -> None:
+    """Test semantic search functionality with non-ASCII text."""
+    store = InMemoryStore(
+        index={
+            "dims": fake_embeddings.dims,
+            "embed": fake_embeddings,
+        }
+    )
+    # Insert test documents
+    docs = [
+        ("doc1", {"text": "This is English"}, None),
+        ("doc2", {"text": "这是中文"}, None), 
+        ("doc3", {"text": "これは日本語です"}, None), 
+        ("doc4", {"text": "This is English"}, ["text"]),
+        ("doc5", {"text": "这是中文"}, ["text"]), 
+        ("doc6", {"text": "これは日本語です"}, ["text"]), 
+        ("doc7", {"text": ["남극 대륙", "남미"]}, ["text"]),
+    ]
+
+    for key, value, index in docs:
+        store.put(("test",), key, value, index)
+
+    results = store.search(("test",), query='{"text": "This is English"}')
+    assert results[0].value == {'text': 'This is English'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query='{"text": "这是中文"}')
+    assert results[0].value == {'text': '这是中文'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query='{"text": "これは日本語です"}')
+    assert results[0].value == {'text': 'これは日本語です'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query="This is English")
+    assert results[0].value == {'text': 'This is English'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query="这是中文")
+    assert results[0].value == {'text': '这是中文'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query="これは日本語です")
+    assert results[0].value == {'text': 'これは日本語です'}
+    assert results[0].score > 0.999
+
+    results = store.search(("test",), query='["남극 대륙", "남미"]')
+    assert results[0].value == {'text': ['남극 대륙', '남미']}
+    assert results[0].score > 0.999
+
+
 async def test_async_batch_store(mocker: MockerFixture) -> None:
     abatch = mocker.stub()
 
