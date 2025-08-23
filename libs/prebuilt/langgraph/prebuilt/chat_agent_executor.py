@@ -43,7 +43,6 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import RemainingSteps
-from langgraph.prebuilt._internal import ToolCallWithContext
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
@@ -474,6 +473,11 @@ def create_react_agent(
         if context_schema is None:
             context_schema = config_schema
 
+    if len(deprecated_kwargs) > 0:
+        raise TypeError(
+            f"create_react_agent() got unexpected keyword arguments: {deprecated_kwargs}"
+        )
+
     if version not in ("v1", "v2"):
         raise ValueError(
             f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
@@ -790,17 +794,11 @@ def create_react_agent(
             elif version == "v2":
                 if post_model_hook is not None:
                     return "post_model_hook"
-                return [
-                    Send(
-                        "tools",
-                        ToolCallWithContext(
-                            __type="tool_call_with_context",
-                            tool_call=tool_call,
-                            state=state,
-                        ),
-                    )
-                    for tool_call in last_message.tool_calls
+                tool_calls = [
+                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    for call in last_message.tool_calls
                 ]
+                return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
     workflow = StateGraph(
@@ -881,17 +879,11 @@ def create_react_agent(
             ]
 
             if pending_tool_calls:
-                return [
-                    Send(
-                        "tools",
-                        ToolCallWithContext(
-                            __type="tool_call_with_context",
-                            tool_call=tool_call,
-                            state=state,
-                        ),
-                    )
-                    for tool_call in pending_tool_calls
+                pending_tool_calls = [
+                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    for call in pending_tool_calls
                 ]
+                return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
             elif isinstance(messages[-1], ToolMessage):
                 return entrypoint
             elif response_format is not None:
@@ -901,13 +893,13 @@ def create_react_agent(
 
         workflow.add_conditional_edges(
             "post_model_hook",
-            post_model_hook_router,  # type: ignore[arg-type]
+            post_model_hook_router,
             path_map=post_model_hook_paths,
         )
 
     workflow.add_conditional_edges(
         "agent",
-        should_continue,  # type: ignore[arg-type]
+        should_continue,
         path_map=agent_paths,
     )
 

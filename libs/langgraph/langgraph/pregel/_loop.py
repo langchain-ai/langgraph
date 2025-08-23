@@ -568,7 +568,9 @@ class PregelLoop:
             if task := tasks.get(tid):
                 task.writes.append((k, v))
 
-    def _first(self, *, input_keys: str | Sequence[str]) -> set[str] | None:
+    def _first(
+        self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
+    ) -> set[str] | None:
         # resuming from previous checkpoint requires
         # - finding a previous checkpoint
         # - receiving None input (outer graph) or RESUMING flag (subgraph)
@@ -585,8 +587,6 @@ class PregelLoop:
                 ),
             )
         )
-        # this can be set only when there are input_writes
-        updated_channels: set[str] | None = None
 
         # map command to writes
         if isinstance(self.input, Command):
@@ -614,13 +614,15 @@ class PregelLoop:
         if null_writes := [
             w[1:] for w in self.checkpoint_pending_writes if w[0] == NULL_TASK_ID
         ]:
-            apply_writes(
+            null_updated_channels = apply_writes(
                 self.checkpoint,
                 self.channels,
                 [PregelTaskWrites((), INPUT, null_writes, [])],
                 self.checkpointer_get_next_version,
                 self.trigger_to_nodes,
             )
+            if updated_channels is not None:
+                updated_channels.update(null_updated_channels)
         # proceed past previous checkpoint
         if is_resuming:
             self.checkpoint["versions_seen"].setdefault(INTERRUPT, {})
@@ -648,6 +650,7 @@ class PregelLoop:
                 store=None,
                 checkpointer=None,
                 manager=None,
+                updated_channels=updated_channels,
             )
             # apply input writes
             updated_channels = apply_writes(
@@ -661,6 +664,7 @@ class PregelLoop:
                 self.trigger_to_nodes,
             )
             # save input checkpoint
+            self.updated_channels = updated_channels
             self._put_checkpoint({"source": "input"})
         elif CONFIG_KEY_RESUMING not in configurable:
             raise EmptyInputError(f"Received no input for {input_keys}")
@@ -693,6 +697,7 @@ class PregelLoop:
             self.channels if do_checkpoint else None,
             self.step,
             id=self.checkpoint["id"] if exiting else None,
+            updated_channels=self.updated_channels,
         )
         # bail if no checkpointer
         if do_checkpoint and self._checkpointer_put_after_previous is not None:
@@ -1036,7 +1041,12 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
         self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
-        self.updated_channels = self._first(input_keys=self.input_keys)
+        self.updated_channels = self._first(
+            input_keys=self.input_keys,
+            updated_channels=set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
+            if self.checkpoint.get("updated_channels")
+            else None,
+        )
 
         return self
 
@@ -1212,7 +1222,12 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
         self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
-        self.updated_channels = self._first(input_keys=self.input_keys)
+        self.updated_channels = self._first(
+            input_keys=self.input_keys,
+            updated_channels=set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
+            if self.checkpoint.get("updated_channels")
+            else None,
+        )
 
         return self
 

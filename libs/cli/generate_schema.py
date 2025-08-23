@@ -163,14 +163,7 @@ def generate_schema():
 
     # Add enum constraint for python_version
     if "python_version" in python_schema["properties"]:
-        python_schema["properties"]["python_version"]["enum"] = ["3.11", "3.12"]
-
-    # Add enum constraint for image_distro
-    if "image_distro" in python_schema["properties"]:
-        python_schema["properties"]["image_distro"]["anyOf"] = [
-            {"type": "string", "enum": ["debian", "wolfi"]},
-            {"type": "null"},
-        ]
+        python_schema["properties"]["python_version"]["enum"] = ["3.11", "3.12", "3.13"]
 
     # Create Node.js schema with node_version
     node_schema = {

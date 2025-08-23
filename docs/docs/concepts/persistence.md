@@ -315,7 +315,8 @@ In our example, the output of `get_state_history` will look like this:
         tasks=(),
     ),
     StateSnapshot(
-        values={'foo': 'a', 'bar': ['a']}, next=('node_b',),
+        values={'foo': 'a', 'bar': ['a']},
+        next=('node_b',),
         config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef663ba-28f9-6ec4-8001-31981c2c39f8'}},
         metadata={'source': 'loop', 'writes': {'node_a': {'foo': 'a', 'bar': ['a']}}, 'step': 1},
         created_at='2024-08-29T19:19:38.819946+00:00',

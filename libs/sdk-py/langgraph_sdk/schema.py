@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import (
     Any,
@@ -10,6 +10,7 @@ from typing import (
     NamedTuple,
     Optional,
     TypedDict,
+    Union,
 )
 
 from typing_extensions import TypeAlias
@@ -346,6 +347,72 @@ class Cron(TypedDict):
     """The next run date of the cron."""
     metadata: dict
     """The metadata of the cron."""
+
+
+# Select field aliases for client-side typing of `select` parameters.
+# These mirror the server's allowed field sets.
+
+AssistantSelectField = Literal[
+    "assistant_id",
+    "graph_id",
+    "name",
+    "description",
+    "config",
+    "context",
+    "created_at",
+    "updated_at",
+    "metadata",
+    "version",
+]
+
+ThreadSelectField = Literal[
+    "thread_id",
+    "created_at",
+    "updated_at",
+    "metadata",
+    "config",
+    "context",
+    "status",
+    "values",
+    "interrupts",
+]
+
+RunSelectField = Literal[
+    "run_id",
+    "thread_id",
+    "assistant_id",
+    "created_at",
+    "updated_at",
+    "status",
+    "metadata",
+    "kwargs",
+    "multitask_strategy",
+]
+
+CronSelectField = Literal[
+    "cron_id",
+    "assistant_id",
+    "thread_id",
+    "end_time",
+    "schedule",
+    "created_at",
+    "updated_at",
+    "user_id",
+    "payload",
+    "next_run_date",
+    "metadata",
+    "now",
+]
+
+PrimitiveData = Optional[Union[str, int, float, bool]]
+
+QueryParamTypes = Union[
+    Mapping[str, Union[PrimitiveData, Sequence[PrimitiveData]]],
+    list[tuple[str, PrimitiveData]],
+    tuple[tuple[str, PrimitiveData], ...],
+    str,
+    bytes,
+]
 
 
 class RunCreate(TypedDict):

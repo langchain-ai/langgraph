@@ -26,7 +26,7 @@ from langchain_core.utils.aiter import aclosing
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph.cache.base import BaseCache
@@ -1908,6 +1908,7 @@ async def test_pending_writes_resume(
                 "branch:to:two": AnyVersion(),
             },
             "channel_values": {"value": 6},
+            "updated_channels": ["value"],
         },
         metadata={
             "parents": {},
@@ -1955,6 +1956,7 @@ async def test_pending_writes_resume(
                 "branch:to:one": None,
                 "branch:to:two": None,
             },
+            "updated_channels": ["branch:to:one", "branch:to:two", "value"],
         },
         metadata={
             "parents": {},
@@ -2002,6 +2004,7 @@ async def test_pending_writes_resume(
                 "__start__": AnyVersion(),
             },
             "channel_values": {"__start__": {"value": 1}},
+            "updated_channels": ["__start__"],
         },
         metadata={
             "parents": {},
@@ -9050,3 +9053,57 @@ async def test_fork_and_update_task_results(
             ],
         ],
     ]
+
+
+async def test_subgraph_streaming_async() -> None:
+    """Test subgraph streaming when used as a node in async version"""
+
+    # Create a fake chat model that returns a simple response
+    model = GenericFakeChatModel(messages=iter(["The weather is sunny today."]))
+
+    # Create a subgraph that uses the fake chat model
+    async def call_model_node(
+        state: MessagesState, config: RunnableConfig
+    ) -> MessagesState:
+        """Node that calls the model with the last message."""
+        messages = state["messages"]
+        last_message = messages[-1].content if messages else ""
+        response = await model.ainvoke([("user", last_message)], config)
+        return {"messages": [response]}
+
+    # Build the subgraph
+    subgraph = StateGraph(MessagesState)
+    subgraph.add_node("call_model", call_model_node)
+    subgraph.add_edge(START, "call_model")
+    compiled_subgraph = subgraph.compile()
+
+    class SomeCustomState(TypedDict):
+        last_chunk: NotRequired[str]
+        num_chunks: NotRequired[int]
+
+    # Will invoke a subgraph as a function
+    async def parent_node(state: SomeCustomState, config: RunnableConfig) -> dict:
+        """Node that runs the subgraph."""
+        msgs = {"messages": [("user", "What is the weather in Tokyo?")]}
+        events = []
+        async for event in compiled_subgraph.astream(
+            msgs, config, stream_mode="messages"
+        ):
+            events.append(event)
+        ai_msg_chunks = [ai_msg_chunk for ai_msg_chunk, _ in events]
+        return {
+            "last_chunk": ai_msg_chunks[-1],
+            "num_chunks": len(ai_msg_chunks),
+        }
+
+    # Build the main workflow
+    workflow = StateGraph(SomeCustomState)
+    workflow.add_node("subgraph", parent_node)
+    workflow.add_edge(START, "subgraph")
+    compiled_workflow = workflow.compile()
+
+    # Test the basic functionality
+    result = await compiled_workflow.ainvoke({})
+
+    assert result["last_chunk"].content == "today."
+    assert result["num_chunks"] == 9

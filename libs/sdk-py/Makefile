@@ -1,7 +1,7 @@
-.PHONY: lint format
+.PHONY: lint format test
 
 test:
-	echo "No tests to run"
+	uv run pytest tests
 
 ######################
 # LINTING AND FORMATTING
@@ -17,7 +17,7 @@ lint lint_diff:
 	uv run ruff check .
 	[ "$(PYTHON_FILES)" = "" ] || uv run ruff format $(PYTHON_FILES) --diff
 	[ "$(PYTHON_FILES)" = "" ] || uv run ruff check --select I $(PYTHON_FILES)
-	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE) || uv run mypy $(PYTHON_FILES) --cache-dir $(MYPY_CACHE)
+	uvx ty check .
 
 format format_diff:
 	uv run ruff check --select I --fix $(PYTHON_FILES)
