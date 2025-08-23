@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint"
-version = "2.1.1"
+dynamic = ["version"]
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
 requires-python = ">=3.9"
@@ -67,3 +67,11 @@ warn_unused_ignores = "True"
 warn_redundant_casts = "True"
 allow_redefinition = "True"
 disable_error_code = "typeddict-item, return-value"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+bump = true
