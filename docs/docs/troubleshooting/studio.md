@@ -6,19 +6,22 @@ Safari blocks plain-HTTP traffic on localhost. When running Studio with `langgra
 
 ### Solution 1: Use Cloudflare Tunnel
 
-=== "Python"
+:::python
 
-    ```shell
-    pip install -U langgraph-cli>=0.2.6
-    langgraph dev --tunnel
-    ```
+```shell
+pip install -U langgraph-cli>=0.2.6
+langgraph dev --tunnel
+```
 
-=== "JS"
+:::
 
-    ```shell
-    # Requires @langchain/langgraph-cli>=0.0.26
-    npx @langchain/langgraph-cli dev
-    ```
+:::js
+
+```shell
+npx @langchain/langgraph-cli dev
+```
+
+:::
 
 The command outputs a URL in this format:
 
@@ -44,19 +47,22 @@ Disable Brave Shields for LangSmith using the Brave icon in the URL bar.
 
 ### Solution 2: Use Cloudflare Tunnel
 
-=== "Python"
+:::python
 
-    ```shell
-    pip install -U langgraph-cli>=0.2.6
-    langgraph dev --tunnel
-    ```
+```shell
+pip install -U langgraph-cli>=0.2.6
+langgraph dev --tunnel
+```
 
-=== "JS"
+:::
 
-    ```shell
-    # Requires @langchain/langgraph-cli>=0.0.26
-    npx @langchain/langgraph-cli dev
-    ```
+:::js
+
+```shell
+npx @langchain/langgraph-cli dev
+```
+
+:::
 
 The command outputs a URL in this format:
 
@@ -68,6 +74,7 @@ Use this URL in Brave to load Studio. Here, the `baseUrl` parameter specifies yo
 
 ## Graph Edge Issues
 
+:::python
 Undefined conditional edges may show unexpected connections in your graph. This is
 because without proper definition, LangGraph Studio assumes the conditional edge could access all other nodes. To address this, explicitly define the routing paths using one of these methods:
 
@@ -75,17 +82,9 @@ because without proper definition, LangGraph Studio assumes the conditional edge
 
 Define a mapping between router outputs and target nodes:
 
-=== "Python"
-
-    ```python
-    graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: "node_c"})
-    ```
-
-=== "Javascript"
-
-    ```ts
-    graph.addConditionalEdges("node_a", routingFunction, { true: "node_b", false: "node_c" });
-    ```
+```python
+graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: "node_c"})
+```
 
 ### Solution 2: Router Type Definition (Python)
 
@@ -98,3 +97,18 @@ def routing_function(state: GraphState) -> Literal["node_b","node_c"]:
     else:
         return "node_c"
 ```
+
+:::
+
+:::js
+Undefined conditional edges may show unexpected connections in your graph. This is because without proper definition, LangGraph Studio assumes the conditional edge could access all other nodes.
+To address this, explicitly define a mapping between router outputs and target nodes:
+
+```typescript
+graph.addConditionalEdges("node_a", routingFunction, {
+  true: "node_b",
+  false: "node_c",
+});
+```
+
+:::

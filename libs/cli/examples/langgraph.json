@@ -8,6 +8,7 @@
     "scikit-learn",
     "./graphs"
   ],
+  "keep_pkg_tools": false, 
   "graphs": {
     "agent": "./graphs/agent.py:graph",
     "storm": "./graphs/storm.py:graph"

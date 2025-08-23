@@ -6,24 +6,27 @@ from dataclasses import replace
 from typing import Annotated, Any, Literal, Optional, Union, cast
 
 import pytest
+from langchain_core.messages import AIMessage, AnyMessage, ToolCall
 from langchain_core.runnables import RunnableConfig, RunnableMap, RunnablePick
+from langchain_core.tools import tool
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import PULL, PUSH
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.constants import END, PULL, PUSH, START
-from langgraph.errors import NodeInterrupt
+from langgraph.constants import END, START
 from langgraph.graph import StateGraph
-from langgraph.graph.message import MessageGraph, MessagesState, add_messages
+from langgraph.graph.message import MessagesState, add_messages
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import (
     Command,
+    Durability,
     Interrupt,
     PregelTask,
     RetryPolicy,
@@ -69,7 +72,7 @@ def test_invoke_two_processes_in_out_interrupt(
     thread2 = {"configurable": {"thread_id": "2"}}
 
     # start execution, stop at inbox
-    assert app.invoke(2, thread1, checkpoint_during=True) is None
+    assert app.invoke(2, thread1, durability="async") is None
 
     # inbox == 3
     checkpoint = sync_checkpointer.get(thread1)
@@ -77,10 +80,10 @@ def test_invoke_two_processes_in_out_interrupt(
     assert checkpoint["channel_values"]["inbox"] == 3
 
     # resume execution, finish
-    assert app.invoke(None, thread1, checkpoint_during=True) == 4
+    assert app.invoke(None, thread1, durability="async") == 4
 
     # start execution again, stop at inbox
-    assert app.invoke(20, thread1, checkpoint_during=True) is None
+    assert app.invoke(20, thread1, durability="async") is None
 
     # inbox == 21
     checkpoint = sync_checkpointer.get(thread1)
@@ -88,11 +91,11 @@ def test_invoke_two_processes_in_out_interrupt(
     assert checkpoint["channel_values"]["inbox"] == 21
 
     # send a new value in, interrupting the previous execution
-    assert app.invoke(3, thread1, checkpoint_during=True) is None
-    assert app.invoke(None, thread1, checkpoint_during=True) == 5
+    assert app.invoke(3, thread1, durability="async") is None
+    assert app.invoke(None, thread1, durability="async") == 5
 
     # start execution again, stopping at inbox
-    assert app.invoke(20, thread2, checkpoint_during=True) is None
+    assert app.invoke(20, thread2, durability="async") is None
 
     # inbox == 21
     snapshot = app.get_state(thread2)
@@ -299,9 +302,7 @@ def test_fork_always_re_runs_nodes(
 
     # start execution, stop at inbox
     assert [
-        *graph.stream(
-            1, thread1, stream_mode=["values", "updates"], checkpoint_during=True
-        )
+        *graph.stream(1, thread1, stream_mode=["values", "updates"], durability="async")
     ] == [
         ("values", 1),
         ("updates", {"add_one": 1}),
@@ -569,8 +570,8 @@ def test_conditional_state_graph(
     app = workflow.compile()
 
     if isinstance(sync_checkpointer, InMemorySaver):
-        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_input_jsonschema()) == snapshot
+        assert json.dumps(app.get_output_jsonschema()) == snapshot
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -666,7 +667,7 @@ def test_conditional_state_graph(
     assert [
         c
         for c in app_w_interrupt.stream(
-            {"input": "what is weather in sf"}, config, checkpoint_during=False
+            {"input": "what is weather in sf"}, config, durability="exit"
         )
     ] == [
         {
@@ -836,7 +837,7 @@ def test_conditional_state_graph(
     assert [
         c
         for c in app_w_interrupt.stream(
-            {"input": "what is weather in sf"}, config, checkpoint_during=False
+            {"input": "what is weather in sf"}, config, durability="exit"
         )
     ] == [
         {
@@ -1003,7 +1004,7 @@ def test_conditional_state_graph(
     assert [
         c
         for c in app_w_interrupt.stream(
-            {"input": "what is weather in sf"}, config, checkpoint_during=False
+            {"input": "what is weather in sf"}, config, durability="exit"
         )
     ] == [
         {"__interrupt__": ()},
@@ -1150,7 +1151,7 @@ def test_conditional_state_graph(
     assert [
         c
         for c in app_w_interrupt.stream(
-            {"input": "what is weather in sf"}, config, checkpoint_during=False
+            {"input": "what is weather in sf"}, config, durability="exit"
         )
     ] == [
         {
@@ -1302,8 +1303,8 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
     app = create_react_agent(model, tools)
 
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_input_jsonschema()) == snapshot
+    assert json.dumps(app.get_output_jsonschema()) == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -1851,7 +1852,7 @@ def test_state_graph_packets(
         for c in app_w_interrupt.stream(
             {"messages": HumanMessage(content="what is weather in sf")},
             config,
-            checkpoint_during=False,
+            durability="exit",
         )
     ] == [
         {
@@ -2116,7 +2117,7 @@ def test_state_graph_packets(
         for c in app_w_interrupt.stream(
             {"messages": HumanMessage(content="what is weather in sf")},
             config,
-            checkpoint_during=False,
+            durability="exit",
         )
     ] == [
         {
@@ -2377,7 +2378,7 @@ def test_message_graph(
     from langchain_core.outputs import ChatGeneration, ChatResult
     from langchain_core.tools import tool
 
-    class FakeFuntionChatModel(FakeMessagesListChatModel):
+    class FakeFunctionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
             return self
 
@@ -2403,7 +2404,7 @@ def test_message_graph(
 
     tools = [search_api]
 
-    model = FakeFuntionChatModel(
+    model = FakeFunctionChatModel(
         responses=[
             AIMessage(
                 content="",
@@ -2442,7 +2443,7 @@ def test_message_graph(
             return "continue"
 
     # Define a new graph
-    workflow = MessageGraph()
+    workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", model)
@@ -2483,12 +2484,12 @@ def test_message_graph(
     app = workflow.compile()
 
     if isinstance(sync_checkpointer, InMemorySaver):
-        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_input_jsonschema()) == snapshot
+        assert json.dumps(app.get_output_jsonschema()) == snapshot
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
-    assert app.invoke(HumanMessage(content="what is weather in sf")) == [
+    assert app.invoke([HumanMessage(content="what is weather in sf")]) == [
         _AnyIdHumanMessage(
             content="what is weather in sf",
         ),
@@ -2584,7 +2585,7 @@ def test_message_graph(
     assert [
         c
         for c in app_w_interrupt.stream(
-            ("human", "what is weather in sf"), config, checkpoint_during=False
+            ("human", "what is weather in sf"), config, durability="exit"
         )
     ] == [
         {
@@ -2809,7 +2810,7 @@ def test_message_graph(
     assert [
         c
         for c in app_w_interrupt.stream(
-            "what is weather in sf", config, checkpoint_during=False
+            "what is weather in sf", config, durability="exit"
         )
     ] == [
         {
@@ -3100,7 +3101,7 @@ def test_root_graph(
     from langchain_core.outputs import ChatGeneration, ChatResult
     from langchain_core.tools import tool
 
-    class FakeFuntionChatModel(FakeMessagesListChatModel):
+    class FakeFunctionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
             return self
 
@@ -3126,7 +3127,7 @@ def test_root_graph(
 
     tools = [search_api]
 
-    model = FakeFuntionChatModel(
+    model = FakeFunctionChatModel(
         responses=[
             AIMessage(
                 content="",
@@ -3306,7 +3307,7 @@ def test_root_graph(
     assert [
         c
         for c in app_w_interrupt.stream(
-            ("human", "what is weather in sf"), config, checkpoint_during=False
+            ("human", "what is weather in sf"), config, durability="exit"
         )
     ] == [
         {
@@ -3533,7 +3534,7 @@ def test_root_graph(
     assert [
         c
         for c in app_w_interrupt.stream(
-            "what is weather in sf", config, checkpoint_during=False
+            "what is weather in sf", config, durability="exit"
         )
     ] == [
         {
@@ -4173,9 +4174,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
     ) == {
         "my_key": "value",
         "market": "DE",
-        "__interrupt__": [
-            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
-        ],
+        "__interrupt__": [Interrupt(value="Just because...", id=AnyStr())],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -4205,8 +4204,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
             "__interrupt__": (
                 Interrupt(
                     value="Just because...",
-                    resumable=True,
-                    ns=[AnyStr("tool_two:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -4220,13 +4218,11 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
     thread1 = {"configurable": {"thread_id": "1"}}
     # stop when about to enter node
     assert tool_two.invoke(
-        {"my_key": "value ⛰️", "market": "DE"}, thread1, checkpoint_during=False
+        {"my_key": "value ⛰️", "market": "DE"}, thread1, durability="exit"
     ) == {
         "my_key": "value ⛰️",
         "market": "DE",
-        "__interrupt__": [
-            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
-        ],
+        "__interrupt__": [Interrupt(value="Just because...", id=AnyStr())],
     }
 
     assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
@@ -4248,8 +4244,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
                 interrupts=(
                     Interrupt(
                         value="Just because...",
-                        resumable=True,
-                        ns=[AnyStr("tool_two:")],
+                        id=AnyStr(),
                     ),
                 ),
             ),
@@ -4271,8 +4266,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
         interrupts=(
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:")],
+                id=AnyStr(),
             ),
         ),
     )
@@ -4336,9 +4330,7 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
     ) == {
         "my_key": "value one",
         "market": "DE",
-        "__interrupt__": [
-            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
-        ],
+        "__interrupt__": [Interrupt(value="Just because...", id=AnyStr())],
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
     assert len(tracer.runs) == 1
@@ -4371,8 +4363,7 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
             "__interrupt__": (
                 Interrupt(
                     value="Just because...",
-                    resumable=True,
-                    ns=[AnyStr("tool_two:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -4387,13 +4378,11 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
     thread1 = {"configurable": {"thread_id": "1"}}
     # stop when about to enter node
     assert tool_two.invoke(
-        {"my_key": "value ⛰️", "market": "DE"}, thread1, checkpoint_during=False
+        {"my_key": "value ⛰️", "market": "DE"}, thread1, durability="exit"
     ) == {
         "my_key": "value ⛰️ one",
         "market": "DE",
-        "__interrupt__": [
-            Interrupt(value="Just because...", resumable=True, ns=[AnyStr("tool_two:")])
-        ],
+        "__interrupt__": [Interrupt(value="Just because...", id=AnyStr())],
     }
     assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
         {
@@ -4420,8 +4409,7 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
                 interrupts=(
                     Interrupt(
                         value="Just because...",
-                        resumable=True,
-                        ns=[AnyStr("tool_two:")],
+                        id=AnyStr(),
                     ),
                 ),
             ),
@@ -4443,8 +4431,7 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
         interrupts=(
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:")],
+                id=AnyStr(),
             ),
         ),
     )
@@ -4513,8 +4500,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
         "__interrupt__": [
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -4546,8 +4532,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
             "__interrupt__": (
                 Interrupt(
                     value="Just because...",
-                    resumable=True,
-                    ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                    id=AnyStr(),
                 ),
             )
         },
@@ -4561,15 +4546,14 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
     thread1 = {"configurable": {"thread_id": "1"}}
     # stop when about to enter node
     assert tool_two.invoke(
-        {"my_key": "value ⛰️", "market": "DE"}, thread1, checkpoint_during=False
+        {"my_key": "value ⛰️", "market": "DE"}, thread1, durability="exit"
     ) == {
         "my_key": "value ⛰️",
         "market": "DE",
         "__interrupt__": [
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                id=AnyStr(),
             )
         ],
     }
@@ -4598,8 +4582,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
                 interrupts=(
                     Interrupt(
                         value="Just because...",
-                        resumable=True,
-                        ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                        id=AnyStr(),
                     ),
                 ),
                 state={
@@ -4627,8 +4610,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
         interrupts=(
             Interrupt(
                 value="Just because...",
-                resumable=True,
-                ns=[AnyStr("tool_two:"), AnyStr("do:")],
+                id=AnyStr(),
             ),
         ),
     )
@@ -4664,7 +4646,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
 
 
 def test_send_dedupe_on_resume(
-    sync_checkpointer: BaseCheckpointSaver, checkpoint_during: bool
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
     class InterruptOnce:
         ticks: int = 0
@@ -4672,7 +4654,7 @@ def test_send_dedupe_on_resume(
         def __call__(self, state):
             self.ticks += 1
             if self.ticks == 1:
-                raise NodeInterrupt("Bahh")
+                interrupt("Bahh")
             return ["|".join(("flaky", str(state)))]
 
     class Node:
@@ -4718,12 +4700,11 @@ def test_send_dedupe_on_resume(
 
     graph = builder.compile(checkpointer=sync_checkpointer)
     thread1 = {"configurable": {"thread_id": "1"}}
-    assert graph.invoke(["0"], thread1, checkpoint_during=checkpoint_during) == {
+    assert graph.invoke(["0"], thread1, durability=durability) == {
         "__interrupt__": [
             Interrupt(
                 value="Bahh",
-                resumable=False,
-                ns=None,
+                id=AnyStr(),
             ),
         ],
     }
@@ -4734,10 +4715,10 @@ def test_send_dedupe_on_resume(
     assert state.next == ("flaky",)
     # check history
     history = [c for c in graph.get_state_history(thread1)]
-    assert len(history) == (4 if checkpoint_during else 1)
+    assert len(history) == (4 if durability != "exit" else 1)
 
     # resume execution
-    assert graph.invoke(None, thread1, checkpoint_during=checkpoint_during) == [
+    assert graph.invoke(None, thread1, durability=durability) == [
         "0",
         "1",
         "3.1",
@@ -4757,7 +4738,7 @@ def test_send_dedupe_on_resume(
     assert state.next == ()
     # check history
     history = [c for c in graph.get_state_history(thread1)]
-    assert len(history) == (6 if checkpoint_during else 2)
+    assert len(history) == (6 if durability != "exit" else 2)
     expected_history = [
         StateSnapshot(
             values=[
@@ -4884,9 +4865,9 @@ def test_send_dedupe_on_resume(
                     name="flaky",
                     path=("__pregel_push", 1, False),
                     error=None,
-                    interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
+                    interrupts=(Interrupt(value="Bahh", id=AnyStr()),),
                     state=None,
-                    result=["flaky|4"] if checkpoint_during else None,
+                    result=["flaky|4"] if durability != "exit" else None,
                 ),
                 PregelTask(
                     id=AnyStr(),
@@ -4898,7 +4879,7 @@ def test_send_dedupe_on_resume(
                     result=["3"],
                 ),
             ),
-            interrupts=(Interrupt(value="Bahh", resumable=False, ns=None),),
+            interrupts=(Interrupt(value="Bahh", id=AnyStr()),),
         ),
         StateSnapshot(
             values=["0", "1"],
@@ -5021,7 +5002,7 @@ def test_send_dedupe_on_resume(
             ),
         ),
     ]
-    if checkpoint_during:
+    if durability != "exit":
         assert history == expected_history
     else:
         assert history[0] == expected_history[0]._replace(
@@ -5079,7 +5060,7 @@ def test_nested_graph_state(sync_checkpointer: BaseCheckpointSaver) -> None:
     app = graph.compile(checkpointer=sync_checkpointer)
 
     config = {"configurable": {"thread_id": "1"}}
-    app.invoke({"my_key": "my value"}, config, checkpoint_during=False)
+    app.invoke({"my_key": "my value"}, config, durability="exit")
     # test state w/ nested subgraph state (right after interrupt)
     # first get_state without subgraph state
     expected = StateSnapshot(
@@ -5203,7 +5184,7 @@ def test_nested_graph_state(sync_checkpointer: BaseCheckpointSaver) -> None:
     assert child_history == expected_child_history
 
     # resume
-    app.invoke(None, config, checkpoint_during=False)
+    app.invoke(None, config, durability="exit")
     # test state w/ nested subgraph state (after resuming from interrupt)
     assert app.get_state(config) == StateSnapshot(
         values={"my_key": "hi my value here and there and back again"},
@@ -5359,7 +5340,7 @@ def test_doubly_nested_graph_state(
     assert [
         c
         for c in app.stream(
-            {"my_key": "my value"}, config, subgraphs=True, checkpoint_during=False
+            {"my_key": "my value"}, config, subgraphs=True, durability="exit"
         )
     ] == [
         ((), {"parent_1": {"my_key": "hi my value"}}),
@@ -5578,9 +5559,7 @@ def test_doubly_nested_graph_state(
         interrupts=(),
     )
     # # resume
-    assert [
-        c for c in app.stream(None, config, subgraphs=True, checkpoint_during=False)
-    ] == [
+    assert [c for c in app.stream(None, config, subgraphs=True, durability="exit")] == [
         (
             (AnyStr("child:"), AnyStr("child_1:")),
             {"grandchild_2": {"my_key": "hi my value here and there"}},
@@ -5938,7 +5917,7 @@ def test_send_react_interrupt(
     graph = builder.compile(checkpointer=sync_checkpointer, interrupt_before=["foo"])
     thread1 = {"configurable": {"thread_id": "2"}}
     assert graph.invoke(
-        {"messages": [HumanMessage("hello")]}, thread1, checkpoint_during=False
+        {"messages": [HumanMessage("hello")]}, thread1, durability="exit"
     ) == {
         "messages": [
             _AnyIdHumanMessage(content="hello"),
@@ -6062,7 +6041,7 @@ def test_send_react_interrupt(
     graph = builder.compile(checkpointer=sync_checkpointer, interrupt_before=["foo"])
     thread1 = {"configurable": {"thread_id": "3"}}
     assert graph.invoke(
-        {"messages": [HumanMessage("hello")]}, thread1, checkpoint_during=False
+        {"messages": [HumanMessage("hello")]}, thread1, durability="exit"
     ) == {
         "messages": [
             _AnyIdHumanMessage(content="hello"),
@@ -6328,7 +6307,7 @@ def test_send_react_interrupt_control(
     graph = builder.compile(checkpointer=sync_checkpointer, interrupt_before=["foo"])
     thread1 = {"configurable": {"thread_id": "2"}}
     assert graph.invoke(
-        {"messages": [HumanMessage("hello")]}, thread1, checkpoint_during=False
+        {"messages": [HumanMessage("hello")]}, thread1, durability="exit"
     ) == {
         "messages": [
             _AnyIdHumanMessage(content="hello"),
@@ -6458,10 +6437,6 @@ def test_weather_subgraph(
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, ToolCall
-    from langchain_core.tools import tool
-
-    from langgraph.graph import MessagesState
 
     # setup subgraph
 
@@ -6587,7 +6562,7 @@ def test_weather_subgraph(
             config=config,
             stream_mode="updates",
             subgraphs=True,
-            checkpoint_during=False,
+            durability="exit",
         )
     ] == [
         ((), {"router_node": {"route": "weather"}}),
@@ -6674,7 +6649,7 @@ def test_weather_subgraph(
             config=config,
             stream_mode="updates",
             subgraphs=True,
-            checkpoint_during=False,
+            durability="exit",
         )
     ] == [
         ((), {"router_node": {"route": "weather"}}),
@@ -6955,3 +6930,30 @@ def test_weather_subgraph(
             },
         ),
     ]
+
+
+def test_subgraph_to_end_does_not_warn() -> None:
+    """Regression test for https://github.com/langchain-ai/langgraph/issues/5572."""
+
+    class State(TypedDict):
+        x: str
+
+    def update_x(state: State):
+        return Command(goto=END, update={"x": state["x"] + "!"})
+
+    # Subgraph
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node("update_x", update_x)
+    subgraph_builder.add_edge(START, "update_x")
+    subgraph_builder.add_edge("update_x", END)
+    subgraph = subgraph_builder.compile()
+
+    # Parent graph
+    builder = StateGraph(State)
+    builder.add_node("subgraph_node", subgraph)
+    builder.add_edge(START, "subgraph_node")
+    builder.add_edge("subgraph_node", END)
+    graph = builder.compile()
+
+    response = graph.invoke({"x": "hello"})
+    assert response == {"x": "hello!"}

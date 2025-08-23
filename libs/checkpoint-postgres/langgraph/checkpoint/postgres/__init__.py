@@ -284,11 +284,9 @@ class PostgresSaver(BasePostgresSaver):
         configurable = config["configurable"].copy()
         thread_id = configurable.pop("thread_id")
         checkpoint_ns = configurable.pop("checkpoint_ns")
-        checkpoint_id = configurable.pop(
-            "checkpoint_id", configurable.pop("thread_ts", None)
-        )
-
+        checkpoint_id = configurable.pop("checkpoint_id", None)
         copy = checkpoint.copy()
+        copy["channel_values"] = copy["channel_values"].copy()
         next_config = {
             "configurable": {
                 "thread_id": thread_id,
@@ -297,16 +295,28 @@ class PostgresSaver(BasePostgresSaver):
             }
         }
 
+        # inline primitive values in checkpoint table
+        # others are stored in blobs table
+        blob_values = {}
+        for k, v in checkpoint["channel_values"].items():
+            if v is None or isinstance(v, (str, int, float, bool)):
+                pass
+            else:
+                blob_values[k] = copy["channel_values"].pop(k)
+
         with self._cursor(pipeline=True) as cur:
-            cur.executemany(
-                self.UPSERT_CHECKPOINT_BLOBS_SQL,
-                self._dump_blobs(
-                    thread_id,
-                    checkpoint_ns,
-                    copy.pop("channel_values"),  # type: ignore[misc]
-                    new_versions,
-                ),
-            )
+            if blob_versions := {
+                k: v for k, v in new_versions.items() if k in blob_values
+            }:
+                cur.executemany(
+                    self.UPSERT_CHECKPOINT_BLOBS_SQL,
+                    self._dump_blobs(
+                        thread_id,
+                        checkpoint_ns,
+                        blob_values,
+                        blob_versions,
+                    ),
+                )
             cur.execute(
                 self.UPSERT_CHECKPOINTS_SQL,
                 (
@@ -439,7 +449,10 @@ class PostgresSaver(BasePostgresSaver):
             },
             {
                 **value["checkpoint"],
-                "channel_values": self._load_blobs(value["channel_values"]),
+                "channel_values": {
+                    **value["checkpoint"].get("channel_values"),
+                    **self._load_blobs(value["channel_values"]),
+                },
             },
             value["metadata"],
             (

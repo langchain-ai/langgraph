@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import datetime
 import logging
+import re
 import sqlite3
 import threading
 from collections import defaultdict
@@ -105,6 +106,23 @@ def _namespace_to_text(
 def _decode_ns_text(namespace: str) -> tuple[str, ...]:
     """Convert namespace string to tuple."""
     return tuple(namespace.split("."))
+
+
+def _validate_filter_key(key: str) -> None:
+    """Validate that a filter key is safe for use in SQL queries.
+
+    Args:
+        key: The filter key to validate
+
+    Raises:
+        ValueError: If the key contains invalid characters that could enable SQL injection
+    """
+    # Allow alphanumeric characters, underscores, dots, and hyphens
+    # This covers typical JSON property names while preventing SQL injection
+    if not re.match(r"^[a-zA-Z0-9_.-]+$", key):
+        raise ValueError(
+            f"Invalid filter key: '{key}'. Filter keys must contain only alphanumeric characters, underscores, dots, and hyphens."
+        )
 
 
 def _json_loads(content: bytes | str | orjson.Fragment) -> Any:
@@ -372,6 +390,8 @@ class BaseSqliteStore:
             filter_conditions = []
             if op.filter:
                 for key, value in op.filter.items():
+                    _validate_filter_key(key)
+
                     if isinstance(value, dict):
                         for op_name, val in value.items():
                             condition, filter_params_ = self._get_filter_condition(
@@ -610,6 +630,8 @@ class BaseSqliteStore:
 
     def _get_filter_condition(self, key: str, op: str, value: Any) -> tuple[str, list]:
         """Helper to generate filter conditions."""
+        _validate_filter_key(key)
+
         # We need to properly format values for SQLite JSON extraction comparison
         if op == "$eq":
             if isinstance(value, str):
@@ -846,6 +868,8 @@ class SqliteStore(BaseSqliteStore, BaseStore):
 
     def _get_filter_condition(self, key: str, op: str, value: Any) -> tuple[str, list]:
         """Helper to generate filter conditions."""
+        _validate_filter_key(key)
+
         # We need to properly format values for SQLite JSON extraction comparison
         if op == "$eq":
             if isinstance(value, str):

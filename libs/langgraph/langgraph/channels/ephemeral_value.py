@@ -1,17 +1,24 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
 from typing import Any, Generic
 
 from typing_extensions import Self
 
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
+
+__all__ = ("EphemeralValue",)
 
 
 class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the value received in the step immediately preceding, clears after."""
 
     __slots__ = ("value", "guard")
+
+    value: Value | Any
+    guard: bool
 
     def __init__(self, typ: Any, guard: bool = True) -> None:
         super().__init__(typ)

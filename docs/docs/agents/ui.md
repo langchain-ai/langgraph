@@ -13,7 +13,7 @@ You can use a prebuilt chat UI for interacting with any LangGraph agent through 
 
 ## Run agent in UI
 
-First, set up LangGraph API server [locally](./deployment.md#launch-langgraph-server-locally) or deploy your agent on [LangGraph Platform](https://langchain-ai.github.io/langgraph/cloud/quick_start/).
+First, set up LangGraph API server [locally](../tutorials/langgraph-platform/local-server.md) or deploy your agent on [LangGraph Platform](https://langchain-ai.github.io/langgraph/cloud/quick_start/).
 
 Then, navigate to [Agent Chat UI](https://agentchat.vercel.app), or clone the repository and [run the dev server locally](https://github.com/langchain-ai/agent-chat-ui?tab=readme-ov-file#setup):
 
@@ -25,13 +25,13 @@ Then, navigate to [Agent Chat UI](https://agentchat.vercel.app), or clone the re
 
 ## Add human-in-the-loop
 
-Agent Chat UI has full support for [human-in-the-loop](../concepts/human_in_the_loop.md) workflows. To try it out, replace the agent code in `src/agent/graph.py` (from the [deployment](./deployment.md) guide) with this [agent implementation](../how-tos/human_in_the_loop/add-human-in-the-loop.md#add-interrupts-to-any-tool):
+Agent Chat UI has full support for [human-in-the-loop](../concepts/human_in_the_loop.md) workflows. To try it out, replace the agent code in `src/agent/graph.py` (from the [deployment](../tutorials/langgraph-platform/local-server.md) guide) with this [agent implementation](../how-tos/human_in_the_loop/add-human-in-the-loop.md#add-interrupts-to-any-tool):
 
 <video controls src="../assets/interrupt-chat-ui.mp4" type="video/mp4"></video>
 
 !!! Important
 
-    Agent Chat UI works best if your LangGraph agent interrupts using the [`HumanInterrupt` schema][langgraph.prebuilt.interrupt.HumanInterrupt]. If you do not use that schema, the Agent Chat UI will be able to render the input passed to the `interrupt` function, but it will not have full support for resuming your graph.
+    Agent Chat UI works best if your LangGraph agent interrupts using the @[`HumanInterrupt` schema][HumanInterrupt]. If you do not use that schema, the Agent Chat UI will be able to render the input passed to the `interrupt` function, but it will not have full support for resuming your graph.
 
 ## Generative UI
 

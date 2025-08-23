@@ -335,8 +335,10 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
     @typing.overload
     def __call__(
         self,
-        fn: _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]
-        | _ActionHandler[dict[str, typing.Any]],
+        fn: (
+            _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]
+            | _ActionHandler[dict[str, typing.Any]]
+        ),
     ) -> _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]: ...
 
     @typing.overload
@@ -352,9 +354,11 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
 
     def __call__(
         self,
-        fn: _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]
-        | _ActionHandler[dict[str, typing.Any]]
-        | None = None,
+        fn: (
+            _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]
+            | _ActionHandler[dict[str, typing.Any]]
+            | None
+        ) = None,
         *,
         resources: str | Sequence[str] | None = None,
         actions: str | Sequence[str] | None = None,
@@ -381,6 +385,8 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
                 _register_handler(self.auth, self.resource, "*", handler),
             )
 
+        # Accept keyword-only parameters for future filtering behavior; referenced to satisfy linters.
+        _ = resources, actions
         return decorator
 
 
@@ -476,9 +482,13 @@ class _StoreOn:
     def __call__(
         self,
         *,
-        actions: typing.Literal["put", "get", "search", "list_namespaces", "delete"]
-        | Sequence[typing.Literal["put", "get", "search", "list_namespaces", "delete"]]
-        | None = None,
+        actions: (
+            typing.Literal["put", "get", "search", "list_namespaces", "delete"]
+            | Sequence[
+                typing.Literal["put", "get", "search", "list_namespaces", "delete"]
+            ]
+            | None
+        ) = None,
     ) -> Callable[[AHO], AHO]: ...
 
     @typing.overload
@@ -488,9 +498,13 @@ class _StoreOn:
         self,
         fn: AHO | None = None,
         *,
-        actions: typing.Literal["put", "get", "search", "list_namespaces", "delete"]
-        | Sequence[typing.Literal["put", "get", "search", "list_namespaces", "delete"]]
-        | None = None,
+        actions: (
+            typing.Literal["put", "get", "search", "list_namespaces", "delete"]
+            | Sequence[
+                typing.Literal["put", "get", "search", "list_namespaces", "delete"]
+            ]
+            | None
+        ) = None,
     ) -> AHO | Callable[[AHO], AHO]:
         """Register a handler for specific resources and actions.
 
@@ -689,7 +703,7 @@ def _validate_handler(fn: Callable[..., typing.Any]) -> None:
     """
     if not inspect.iscoroutinefunction(fn):
         raise ValueError(
-            f"Auth handler '{fn.__name__}' must be an async function. "
+            f"Auth handler '{getattr(fn, '__name__', fn)}' must be an async function. "
             "Add 'async' before 'def' to make it asynchronous and ensure"
             " any IO operations are non-blocking."
         )
@@ -697,15 +711,25 @@ def _validate_handler(fn: Callable[..., typing.Any]) -> None:
     sig = inspect.signature(fn)
     if "ctx" not in sig.parameters:
         raise ValueError(
-            f"Auth handler '{fn.__name__}' must have a 'ctx: AuthContext' parameter. "
+            f"Auth handler '{getattr(fn, '__name__', fn)}' must have a 'ctx: AuthContext' parameter. "
             "Update the function signature to include this required parameter."
         )
     if "value" not in sig.parameters:
         raise ValueError(
-            f"Auth handler '{fn.__name__}' must have a 'value' parameter. "
+            f"Auth handler '{getattr(fn, '__name__', fn)}' must have a 'value' parameter. "
             " The value contains the mutable data being sent to the endpoint."
             "Update the function signature to include this required parameter."
         )
+
+
+def is_studio_user(
+    user: types.MinimalUser | types.BaseUser | types.MinimalUserDict,
+) -> bool:
+    return (
+        isinstance(user, types.StudioUser)
+        or isinstance(user, dict)
+        and user.get("kind") == "StudioUser"
+    )
 
 
 __all__ = ["Auth", "types", "exceptions"]
