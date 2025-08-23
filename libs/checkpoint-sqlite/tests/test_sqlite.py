@@ -116,7 +116,93 @@ class TestSqliteSaver:
                 search_results_5[1].config["configurable"]["checkpoint_ns"],
             } == {"", "inner"}
 
-            # TODO: test before and limit params
+            # Test before and limit params
+            # First, let's create multiple checkpoints to test with
+            prev_checkpoint = empty_checkpoint()
+            for i in range(5):
+                checkpoint = create_checkpoint(prev_checkpoint, {}, i)
+                saver.put(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-before-limit",
+                            "checkpoint_ns": "",
+                        }
+                    },
+                    checkpoint,
+                    {"source": "loop", "step": i, "writes": {"value": f"test_{i}"}},
+                    {},
+                )
+                prev_checkpoint = checkpoint
+
+            # Test limit parameter - should return only 3 checkpoints
+            limited_results = list(
+                saver.list(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-before-limit",
+                            "checkpoint_ns": "",
+                        }
+                    },
+                    limit=3,
+                )
+            )
+            assert len(limited_results) == 3
+
+            # Test before parameter - should return checkpoints before the specified one
+            all_checkpoints = list(
+                saver.list(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-before-limit",
+                            "checkpoint_ns": "",
+                        }
+                    }
+                )
+            )
+            assert len(all_checkpoints) == 5
+
+            # Use the third checkpoint as the "before" reference
+            before_checkpoint = all_checkpoints[2]
+            before_results = list(
+                saver.list(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-before-limit",
+                            "checkpoint_ns": "",
+                        }
+                    },
+                    before=before_checkpoint.config,
+                )
+            )
+            # Should return checkpoints after the third one (index 3 and 4)
+            assert len(before_results) == 2
+            assert (
+                before_results[0].checkpoint["id"]
+                == all_checkpoints[3].checkpoint["id"]
+            )
+            assert (
+                before_results[1].checkpoint["id"]
+                == all_checkpoints[4].checkpoint["id"]
+            )
+
+            # Test both before and limit together
+            combined_results = list(
+                saver.list(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-before-limit",
+                            "checkpoint_ns": "",
+                        }
+                    },
+                    before=all_checkpoints[1].config,
+                    limit=1,
+                )
+            )
+            assert len(combined_results) == 1
+            assert (
+                combined_results[0].checkpoint["id"]
+                == all_checkpoints[2].checkpoint["id"]
+            )
 
     def test_search_where(self) -> None:
         # call method / assertions
