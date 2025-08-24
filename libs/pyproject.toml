@@ -1,0 +1,42 @@
+[project]
+name = "libs"
+version = "0.5.2"
+description = "LangGraph uv workspace"
+requires-python = ">=3.9"
+dependencies = [
+  'langgraph',
+  'langgraph-checkpoint',
+  'langgraph-checkpoint-postgres',
+  'langgraph-checkpoint-sqlite',
+  'langgraph-prebuilt',
+  'langgraph-sdk',
+  'langgraph-cli'
+]
+
+[dependency-groups]
+dev = [
+  "ruff"
+]
+
+[tool.uv.sources]
+langgraph = { workspace = true }
+langgraph-checkpoint = { workspace = true }
+langgraph-checkpoint-postgres = { workspace = true }
+langgraph-checkpoint-sqlite = { workspace = true }
+langgraph-prebuilt = { workspace = true }
+langgraph-sdk = { workspace = true }
+langgraph-cli = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+  './langgraph',
+  './sdk-py',
+  './cli',
+  './checkpoint',
+  './checkpoint-sqlite',
+  './checkpoint-postgres',
+  './prebuilt'
+]
+exclude = [
+  './sdk-js'
+]
