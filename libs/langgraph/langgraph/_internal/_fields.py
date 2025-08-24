@@ -160,26 +160,55 @@ def get_enhanced_type_hints(
 def get_update_as_tuples(input: Any, keys: Sequence[str]) -> list[tuple[str, Any]]:
     """Get Pydantic state update as a list of (key, value) tuples."""
     if isinstance(input, BaseModel):
-        keep = input.model_fields_set
-        defaults = {k: v.default for k, v in type(input).model_fields.items()}
+        # For Pydantic v2
+        if hasattr(input, "model_fields_set"):
+            keep = input.model_fields_set
+            model_fields = type(input).model_fields
+            defaults = {k: v.default for k, v in model_fields.items()}
+            
+            # Create a mapping from alias to field name
+            alias_to_field = {}
+            for field_name, field_info in model_fields.items():
+                if hasattr(field_info, "alias") and field_info.alias:
+                    alias_to_field[field_info.alias] = field_name
+        # For Pydantic v1
+        elif hasattr(input, "__fields__"):
+            keep = set(input.__fields_set__)
+            defaults = {k: v.default for k, v in type(input).__fields__.items()}
+            
+            # Create a mapping from alias to field name
+            alias_to_field = {}
+            for field_name, field_info in type(input).__fields__.items():
+                if hasattr(field_info, "alias") and field_info.alias:
+                    alias_to_field[field_info.alias] = field_name
+        else:
+            keep = None
+            defaults = {}
+            alias_to_field = {}
     else:
         keep = None
         defaults = {}
+        alias_to_field = {}
 
     # NOTE: This behavior for Pydantic is somewhat inelegant,
     # but we keep around for backwards compatibility
     # if input is a Pydantic model, only update values
     # that are different from the default values or in the keep set
-    return [
-        (k, value)
-        for k in keys
-        if (value := getattr(input, k, MISSING)) is not MISSING
-        and (
-            value is not None
-            or defaults.get(k, MISSING) is not None
-            or (keep is not None and k in keep)
-        )
-    ]
+    result = []
+    for k in keys:
+        # Check if this is a field alias and get the actual field name if it is
+        field_name = alias_to_field.get(k, k)
+        
+        if (value := getattr(input, field_name, MISSING)) is not MISSING:
+            if (
+                value is not None
+                or defaults.get(field_name, MISSING) is not None
+                or (keep is not None and field_name in keep)
+            ):
+                # Use the original key in the result tuple, not the field_name
+                result.append((k, value))
+    
+    return result
 
 
 ANNOTATED_KEYS_CACHE: weakref.WeakKeyDictionary[type[Any], tuple[str, ...]] = (
