@@ -3,11 +3,21 @@ from __future__ import annotations
 from collections.abc import Hashable, Mapping, Sequence
 from typing import Any
 
+try:
+    from pydantic import BaseModel
+except ImportError:
+    BaseModel = None
+
 
 def _freeze(obj: Any, depth: int = 10) -> Hashable:
     if isinstance(obj, Hashable) or depth <= 0:
         # already hashable, no need to freeze
         return obj
+    elif BaseModel is not None and isinstance(obj, BaseModel):
+        # Handle Pydantic models deterministically
+        # Convert to Python dict, then freeze recursively to sort keys
+        dumped = obj.model_dump(mode='python')
+        return (type(obj).__name__, _freeze(dumped, depth - 1))
     elif isinstance(obj, Mapping):
         # sort keys so {"a":1,"b":2} == {"b":2,"a":1}
         return tuple(sorted((k, _freeze(v, depth - 1)) for k, v in obj.items()))
