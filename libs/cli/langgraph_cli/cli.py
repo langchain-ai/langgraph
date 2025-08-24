@@ -89,8 +89,7 @@ OPT_CONFIG = click.option(
     Defaults to looking for langgraph.json in the current directory.""",
     default=DEFAULT_CONFIG,
     type=click.Path(
-        exists=True,
-        file_okay=True,
+        file_okay=True, 
         dir_okay=False,
         resolve_path=True,
         path_type=pathlib.Path,
@@ -577,6 +576,11 @@ def dockerfile(
     )
 
 
+@cli.command(
+    "dev",
+    help="🏃‍♀️‍➡️ Run LangGraph API server in development mode. Can serve a single graph or use a langgraph.json file.",
+)
+@click.argument("graph_ref", required=False, metavar="[FILE:OBJECT]")
 @click.option(
     "--host",
     default="127.0.0.1",
@@ -595,9 +599,9 @@ def dockerfile(
 )
 @click.option(
     "--config",
-    type=click.Path(exists=True),
+    type=click.Path(exists=False),
     default="langgraph.json",
-    help="Path to configuration file declaring dependencies, graphs and environment variables",
+    help="Path to configuration file declaring dependencies, graphs and environment variables. Ignored if FILE:OBJECT is provided.",
 )
 @click.option(
     "--n-jobs-per-worker",
@@ -648,12 +652,9 @@ def dockerfile(
     default="WARNING",
     help="Set the log level for the API server.",
 )
-@cli.command(
-    "dev",
-    help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
-)
 @log_command
 def dev(
+    graph_ref: Optional[str],
     host: str,
     port: int,
     no_reload: bool,
@@ -700,11 +701,31 @@ def dev(
             f"{py_version_msg}"
         ) from None
 
-    config_json = langgraph_cli.config.validate_config_file(pathlib.Path(config))
-    if config_json.get("node_version"):
-        raise click.UsageError(
-            "In-mem server for JS graphs is not supported in this version of the LangGraph CLI. Please use `npx @langchain/langgraph-cli` instead."
-        ) from None
+    config_json = {}
+    graphs = {}
+
+    if graph_ref:
+        if ":" not in graph_ref:
+            raise click.UsageError(
+                f"Invalid format for graph reference: '{graph_ref}'.\n"
+                "Please use the format 'file:object' (e.g., 'my_module:my_graph')."
+            )
+        graphs = {"default": graph_ref}
+        secho(f"Serving single graph: {graph_ref}", fg="green")
+    else:
+        config_path = pathlib.Path(config)
+        if not config_path.exists():
+            raise click.UsageError(
+                "No graph reference provided and 'langgraph.json' not found.\n"
+                "To serve a single graph, use: langgraph dev my_module:my_graph\n"
+                "To use a configuration file, create a 'langgraph.json' or specify one with --config."
+            )
+        config_json = langgraph_cli.config.validate_config_file(config_path)
+        if config_json.get("node_version"):
+            raise click.UsageError(
+                "In-mem server for JS graphs is not supported in this version of the LangGraph CLI. Please use `npx @langchain/langgraph-cli` instead."
+            ) from None
+        graphs = config_json.get("graphs", {})
 
     cwd = os.getcwd()
     sys.path.append(cwd)
@@ -713,8 +734,6 @@ def dev(
         dep_path = pathlib.Path(cwd) / dep
         if dep_path.is_dir() and dep_path.exists():
             sys.path.append(str(dep_path))
-
-    graphs = config_json.get("graphs", {})
 
     run_server(
         host,
