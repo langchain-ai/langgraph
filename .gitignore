@@ -182,3 +182,8 @@ Chinook.db
 .turbo
 .editorconfig
 .scratch
+
+CLAUDE.md
+.claude/
+GEMINI.md
+.gemini/
