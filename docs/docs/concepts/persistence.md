@@ -60,6 +60,7 @@ Let's see what checkpoints are saved when a simple graph is invoked as follows:
 ```python
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
+from langchain_core.runnables import RunnableConfig
 from typing import Annotated
 from typing_extensions import TypedDict
 from operator import add
@@ -85,7 +86,7 @@ workflow.add_edge("node_b", END)
 checkpointer = InMemorySaver()
 graph = workflow.compile(checkpointer=checkpointer)
 
-config = {"configurable": {"thread_id": "1"}}
+config: RunnableConfig = {"configurable": {"thread_id": "1"}}
 graph.invoke({"foo": ""}, config)
 ```
 
