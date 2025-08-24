@@ -19,7 +19,7 @@ jobs:
       run:
         working-directory: libs/cli
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Get changed files
         id: changed-files
         uses: Ana06/get-changed-files@v2.3.0

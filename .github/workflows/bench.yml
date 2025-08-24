@@ -15,7 +15,7 @@ jobs:
       run:
         working-directory: libs/langgraph
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: files
         name: Get changed files
         uses: Ana06/get-changed-files@v2.3.0
