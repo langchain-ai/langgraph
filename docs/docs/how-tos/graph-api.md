@@ -1019,7 +1019,7 @@ console.log(await graph.invoke({}, { configurable: { myRuntimeValue: "b" } }));
     # Usage
     input_message = {"role": "user", "content": "hi"}
     # With no configuration, uses default (Anthropic)
-    response_1 = graph.invoke({"messages": [input_message]})["messages"][-1]
+    response_1 = graph.invoke({"messages": [input_message]}, context=ContextSchema())["messages"][-1]
     # Or, can set OpenAI
     response_2 = graph.invoke({"messages": [input_message]}, context={"model_provider": "openai"})["messages"][-1]
 
