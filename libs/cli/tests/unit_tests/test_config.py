@@ -38,7 +38,6 @@ def test_validate_config():
     }
     actual_config = validate_config(expected_config)
     expected_config = {
-        "_INTERNAL_docker_tag": None,
         "base_image": None,
         "python_version": "3.11",
         "node_version": None,
@@ -61,7 +60,6 @@ def test_validate_config():
     # full config
     env = ".env"
     expected_config = {
-        "_INTERNAL_docker_tag": None,
         "base_image": None,
         "python_version": "3.12",
         "node_version": None,
@@ -190,7 +188,6 @@ def test_validate_config_image_distro():
             }
         )
     assert "Invalid image_distro: 'ubuntu'" in str(exc_info.value)
-    assert "Must be either 'debian' or 'wolfi'" in str(exc_info.value)
 
     with pytest.raises(click.UsageError) as exc_info:
         validate_config(
@@ -1339,19 +1336,22 @@ def test_docker_tag_different_node_versions_with_distro():
         assert tag == expected_tag, f"Failed for Node.js {node_version}"
 
 
-def test_docker_tag_with_api_version():
+@pytest.mark.parametrize("in_config", [False, True])
+def test_docker_tag_with_api_version(in_config: bool):
     """Test docker_tag function with api_version parameter."""
 
     # Test 1: Python config with api_version and default distro
+    version = "0.2.74"
     config = validate_config(
         {
             "python_version": "3.11",
             "dependencies": ["."],
             "graphs": {"agent": "./agent.py:graph"},
+            "api_version": version if in_config else None,
         }
     )
-    tag = docker_tag(config, api_version="0.2.74")
-    assert tag == "langchain/langgraph-api:0.2.74-py3.11"
+    tag = docker_tag(config, api_version=version if not in_config else None)
+    assert tag == f"langchain/langgraph-api:{version}-py3.11"
 
     # Test 2: Python config with api_version and wolfi distro
     config = validate_config(
@@ -1360,20 +1360,22 @@ def test_docker_tag_with_api_version():
             "dependencies": ["."],
             "graphs": {"agent": "./agent.py:graph"},
             "image_distro": "wolfi",
+            "api_version": version if in_config else None,
         }
     )
-    tag = docker_tag(config, api_version="0.2.74")
-    assert tag == "langchain/langgraph-api:0.2.74-py3.12-wolfi"
+    tag = docker_tag(config, api_version=version if not in_config else None)
+    assert tag == f"langchain/langgraph-api:{version}-py3.12-wolfi"
 
     # Test 3: Node.js config with api_version and default distro
     config = validate_config(
         {
             "node_version": "20",
             "graphs": {"agent": "./agent.js:graph"},
+            "api_version": version if in_config else None,
         }
     )
-    tag = docker_tag(config, api_version="0.2.74")
-    assert tag == "langchain/langgraphjs-api:0.2.74-node20"
+    tag = docker_tag(config, api_version=version if not in_config else None)
+    assert tag == f"langchain/langgraphjs-api:{version}-node20"
 
     # Test 4: Node.js config with api_version and wolfi distro
     config = validate_config(
@@ -1381,10 +1383,11 @@ def test_docker_tag_with_api_version():
             "node_version": "20",
             "graphs": {"agent": "./agent.js:graph"},
             "image_distro": "wolfi",
+            "api_version": version if in_config else None,
         }
     )
-    tag = docker_tag(config, api_version="0.2.74")
-    assert tag == "langchain/langgraphjs-api:0.2.74-node20-wolfi"
+    tag = docker_tag(config, api_version=version if not in_config else None)
+    assert tag == f"langchain/langgraphjs-api:{version}-node20-wolfi"
 
     # Test 5: Custom base image with api_version
     config = validate_config(
@@ -1393,10 +1396,15 @@ def test_docker_tag_with_api_version():
             "dependencies": ["."],
             "graphs": {"agent": "./agent.py:graph"},
             "base_image": "my-registry/custom-image",
+            "api_version": version if in_config else None,
         }
     )
-    tag = docker_tag(config, base_image="my-registry/custom-image", api_version="1.0.0")
-    assert tag == "my-registry/custom-image:1.0.0-py3.11"
+    tag = docker_tag(
+        config,
+        base_image="my-registry/custom-image",
+        api_version=version if not in_config else None,
+    )
+    assert tag == f"my-registry/custom-image:{version}-py3.11"
 
     # Test 6: api_version with different Python versions
     for python_version in ["3.11", "3.12", "3.13"]:
@@ -1405,10 +1413,11 @@ def test_docker_tag_with_api_version():
                 "python_version": python_version,
                 "dependencies": ["."],
                 "graphs": {"agent": "./agent.py:graph"},
+                "api_version": version if in_config else None,
             }
         )
-        tag = docker_tag(config, api_version="0.2.74")
-        assert tag == f"langchain/langgraph-api:0.2.74-py{python_version}"
+        tag = docker_tag(config, api_version=version if not in_config else None)
+        assert tag == f"langchain/langgraph-api:{version}-py{python_version}"
 
     # Test 7: Without api_version should work as before
     config = validate_config(
@@ -1428,10 +1437,11 @@ def test_docker_tag_with_api_version():
             "node_version": "20",
             "dependencies": ["."],
             "graphs": {"python": "./agent.py:graph", "js": "./agent.js:graph"},
+            "api_version": version if in_config else None,
         }
     )
-    tag = docker_tag(config, api_version="0.2.74")
-    assert tag == "langchain/langgraph-api:0.2.74-py3.11"
+    tag = docker_tag(config, api_version=version if not in_config else None)
+    assert tag == f"langchain/langgraph-api:{version}-py3.11"
 
     # Test 9: api_version with _INTERNAL_docker_tag should ignore api_version
     config = validate_config(
@@ -1451,12 +1461,15 @@ def test_docker_tag_with_api_version():
             "python_version": "3.11",
             "dependencies": ["."],
             "graphs": {"agent": "./agent.py:graph"},
+            "api_version": version if in_config else None,
         }
     )
     tag = docker_tag(
-        config, base_image="langchain/langgraph-server:0.2", api_version="0.2.74"
+        config,
+        base_image="langchain/langgraph-server",
+        api_version=version if not in_config else None,
     )
-    assert tag == "langchain/langgraph-server:0.2-py3.11"
+    assert tag == f"langchain/langgraph-server:{version}-py3.11"
 
 
 def test_config_to_docker_with_api_version():
