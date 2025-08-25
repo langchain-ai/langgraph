@@ -317,8 +317,8 @@ class ToolNode(RunnableCallable):
               propagate.
 
             Defaults to a callable that:
-                - catches tool parsing errors and returns a ToolMessage with the error message
-                - ignores tool execution errors (they will be raised)
+                - catches tool invocation errors (due to invalid arguments provided by the model) and returns a descriptive error message
+                - ignores tool execution errors (they will be re-raised)
 
         messages_key: The key in the state dictionary that contains the message list.
             This same key will be used for the output ToolMessages.
