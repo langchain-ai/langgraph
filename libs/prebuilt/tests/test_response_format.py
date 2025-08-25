@@ -13,7 +13,6 @@ from langgraph.prebuilt.responses import (
     MultipleStructuredOutputsError,
     NativeOutput,
     StructuredOutputParsingError,
-    StructuredOutputRetryPolicy,
     ToolOutput,
 )
 from tests.model import FakeToolCallingModel
@@ -394,7 +393,7 @@ class TestResponseFormatAsToolOutput:
         assert len(response_location["messages"]) == 5
 
     def test_multiple_structured_outputs_error_without_retry(self) -> None:
-        """Test that MultipleStructuredOutputsError is raised when model returns multiple structured tool calls without retry policy."""
+        """Test that MultipleStructuredOutputsError is raised when model returns multiple structured tool calls without retry."""
         tool_calls = [
             [
                 {
@@ -415,7 +414,10 @@ class TestResponseFormatAsToolOutput:
         agent = create_agent(
             model,
             [],
-            response_format=ToolOutput(Union[WeatherBaseModel, LocationResponse]),
+            response_format=ToolOutput(
+                Union[WeatherBaseModel, LocationResponse],
+                retry_on=False,
+            ),
         )
 
         with pytest.raises(
@@ -425,7 +427,7 @@ class TestResponseFormatAsToolOutput:
             agent.invoke({"messages": [HumanMessage("Give me weather and location")]})
 
     def test_multiple_structured_outputs_with_retry(self) -> None:
-        """Test that retry policy handles multiple structured output tool calls."""
+        """Test that retry handles multiple structured output tool calls."""
         tool_calls = [
             [
                 {
@@ -450,16 +452,12 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        retry_policy = StructuredOutputRetryPolicy(
-            retry_on=MultipleStructuredOutputsError,
-        )
-
         agent = create_agent(
             model,
             [],
             response_format=ToolOutput(
                 Union[WeatherBaseModel, LocationResponse],
-                retry_policy=retry_policy,
+                retry_on=True,
             ),
         )
 
@@ -470,7 +468,7 @@ class TestResponseFormatAsToolOutput:
         assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
 
     def test_structured_output_parsing_error_without_retry(self) -> None:
-        """Test that StructuredOutputParsingError is raised when tool args fail to parse without retry policy."""
+        """Test that StructuredOutputParsingError is raised when tool args fail to parse without retry."""
         tool_calls = [
             [
                 {
@@ -486,7 +484,10 @@ class TestResponseFormatAsToolOutput:
         agent = create_agent(
             model,
             [],
-            response_format=ToolOutput(WeatherBaseModel),
+            response_format=ToolOutput(
+                WeatherBaseModel,
+                retry_on=False,
+            ),
         )
 
         with pytest.raises(
@@ -496,7 +497,7 @@ class TestResponseFormatAsToolOutput:
             agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
     def test_structured_output_parsing_error_with_retry(self) -> None:
-        """Test that retry policy handles parsing errors for structured output."""
+        """Test that retry handles parsing errors for structured output."""
         tool_calls = [
             [
                 {
@@ -516,16 +517,12 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        retry_policy = StructuredOutputRetryPolicy(
-            retry_on=StructuredOutputParsingError,
-        )
-
         agent = create_agent(
             model,
             [],
             response_format=ToolOutput(
                 WeatherBaseModel,
-                retry_policy=retry_policy,
+                retry_on=(StructuredOutputParsingError,),
             ),
         )
 
@@ -535,8 +532,8 @@ class TestResponseFormatAsToolOutput:
         assert len(response["messages"]) == 5
         assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
 
-    def test_retry_policy_with_custom_function(self) -> None:
-        """Test retry policy with custom retry logic and message generation."""
+    def test_retry_with_custom_function(self) -> None:
+        """Test retry with custom message generation."""
         tool_calls = [
             [
                 {
@@ -561,25 +558,17 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        def should_retry_custom(exception: Exception) -> bool:
-            return isinstance(exception, MultipleStructuredOutputsError)
-
-        def custom_message(exception: Exception, tool_name: str) -> str:
+        def custom_message(exception: Exception) -> str:
             if isinstance(exception, MultipleStructuredOutputsError):
-                return f"Custom error for {tool_name}: Multiple outputs not allowed"
-            return f"Custom error for {tool_name}"
-
-        retry_policy = StructuredOutputRetryPolicy(
-            retry_on=should_retry_custom,
-            tool_message_content=custom_message,
-        )
+                return "Custom error: Multiple outputs not allowed"
+            return "Custom error"
 
         agent = create_agent(
             model,
             [],
             response_format=ToolOutput(
                 Union[WeatherBaseModel, LocationResponse],
-                retry_policy=retry_policy,
+                retry_on=custom_message,
             ),
         )
 
@@ -588,12 +577,51 @@ class TestResponseFormatAsToolOutput:
         # HumanMessage, AIMessage, ToolMessage, ToolMessage, AI, ToolMessage
         assert len(response["messages"]) == 6
         assert (
-            "Custom error for WeatherBaseModel: Multiple outputs not allowed"
-            in response["messages"][2].content
+            response["messages"][2].content
+            == "Custom error: Multiple outputs not allowed"
         )
         assert (
-            "Custom error for LocationResponse: Multiple outputs not allowed"
-            in response["messages"][3].content
+            response["messages"][3].content
+            == "Custom error: Multiple outputs not allowed"
+        )
+        assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
+
+    def test_retry_with_custom_string_message(self) -> None:
+        """Test retry with custom static string message."""
+        tool_calls = [
+            [
+                {
+                    "name": "WeatherBaseModel",
+                    "id": "1",
+                    "args": {"invalid": "data"},
+                },
+            ],
+            [
+                {
+                    "name": "WeatherBaseModel",
+                    "id": "2",
+                    "args": WEATHER_DATA,
+                },
+            ],
+        ]
+
+        model = FakeToolCallingModel(tool_calls=tool_calls)
+
+        agent = create_agent(
+            model,
+            [],
+            response_format=ToolOutput(
+                WeatherBaseModel,
+                retry_on="Please provide valid weather data with temperature and condition.",
+            ),
+        )
+
+        response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
+
+        assert len(response["messages"]) == 5
+        assert (
+            response["messages"][2].content
+            == "Please provide valid weather data with temperature and condition."
         )
         assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
 

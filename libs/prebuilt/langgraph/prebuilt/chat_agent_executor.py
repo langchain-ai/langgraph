@@ -49,8 +49,8 @@ from langgraph.prebuilt.responses import (
     OutputToolBinding,
     ResponseFormat,
     StructuredOutputParsingError,
-    StructuredOutputRetryPolicy,
     ToolOutput,
+    default_error_template,
 )
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
@@ -310,35 +310,32 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         if not structured_tool_calls:
             return None
 
-        retry_policy = self.response_format.retry_policy
-
         if len(structured_tool_calls) > 1:
             return self._handle_multiple_structured_outputs(
-                response, structured_tool_calls, retry_policy
+                response, structured_tool_calls
             )
 
-        return self._handle_single_structured_output(
-            response, structured_tool_calls[0], retry_policy
-        )
+        return self._handle_single_structured_output(response, structured_tool_calls[0])
 
     def _handle_multiple_structured_outputs(
         self,
         response: AIMessage,
         structured_tool_calls: Any,
-        retry_policy: Optional[StructuredOutputRetryPolicy],
     ) -> Command:
         """Handle error case when multiple structured output tools are called."""
+        assert isinstance(self.response_format, ToolOutput)
         tool_names = [tool_call["name"] for tool_call in structured_tool_calls]
         exception = MultipleStructuredOutputsError(tool_names)
 
-        if not retry_policy or not retry_policy.should_retry(exception):
+        retry_on = self.response_format.retry_on
+        error_message = self._get_retry_message(exception, retry_on)
+
+        if error_message is None:
             raise exception
 
         tool_messages = [
             ToolMessage(
-                content=retry_policy.get_tool_message_content(
-                    exception, tool_call["name"]
-                ),
+                content=error_message,
                 tool_call_id=tool_call["id"],
                 name=tool_call["name"],
             )
@@ -354,9 +351,9 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         self,
         response: AIMessage,
         tool_call: Any,
-        retry_policy: Optional[StructuredOutputRetryPolicy],
     ) -> Command:
         """Handle parsing and returning a single structured output tool call."""
+        assert isinstance(self.response_format, ToolOutput)
         structured_tool_binding = self.structured_output_tools[tool_call["name"]]
 
         try:
@@ -370,8 +367,10 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                 structured_response_dict = cast(dict, structured_response)
 
             tool_message_content = (
-                self.response_format.tool_message_content  # type: ignore[union-attr]
-                or f"Returning structured response: {structured_response_dict}"
+                self.response_format.tool_message_content
+                if isinstance(self.response_format, ToolOutput)
+                and self.response_format.tool_message_content
+                else f"Returning structured response: {structured_response_dict}"
             )
 
             return Command(
@@ -390,12 +389,11 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         except Exception as parse_error:
             exception = StructuredOutputParsingError(tool_call["name"], parse_error)
 
-            if not retry_policy or not retry_policy.should_retry(exception):
-                raise exception
+            retry_on = self.response_format.retry_on
+            error_message = self._get_retry_message(exception, retry_on)
 
-            error_message = retry_policy.get_tool_message_content(
-                exception, tool_call["name"]
-            )
+            if error_message is None:
+                raise exception
 
             return Command(
                 update={
@@ -410,6 +408,31 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                 },
                 goto="model",
             )
+
+    def _get_retry_message(
+        self,
+        exception: Exception,
+        retry_on: Union[
+            bool, str, Callable[[Exception], str], tuple[type[Exception], ...]
+        ],
+    ) -> Optional[str]:
+        """Get retry message based on retry_on configuration.
+
+        Returns None if retry should not happen.
+        """
+        if retry_on is False:
+            return None
+        if retry_on is True:
+            return default_error_template(exception)
+        if isinstance(retry_on, str):
+            return retry_on
+        if isinstance(retry_on, tuple):
+            if any(isinstance(exception, exc_type) for exc_type in retry_on):
+                return default_error_template(exception)
+            return None
+        if callable(retry_on):
+            return retry_on(exception)
+        return None
 
     def _apply_native_output_binding(
         self, model: LanguageModelLike

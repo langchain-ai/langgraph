@@ -44,8 +44,7 @@ class MultipleStructuredOutputsError(StructuredOutputError):
     def __init__(self, tool_names: list[str]):
         self.tool_names = tool_names
         super().__init__(
-            f"Model incorrectly returned multiple structured responses ({', '.join(tool_names)}) when only one is expected. "
-            "Consider defining a retry policy to handle this behavior: ToolOutput(..., retry_policy=StructuredOutputRetryPolicy(...))"
+            f"Model incorrectly returned multiple structured responses ({', '.join(tool_names)}) when only one is expected."
         )
 
 
@@ -56,71 +55,13 @@ class StructuredOutputParsingError(StructuredOutputError):
         self.tool_name = tool_name
         self.parse_error = parse_error
         super().__init__(
-            f"Failed to parse structured output for tool '{tool_name}': {parse_error}. "
-            "Consider defining a retry policy to handle this behavior: ToolOutput(..., retry_policy=StructuredOutputRetryPolicy(...))"
+            f"Failed to parse structured output for tool '{tool_name}': {parse_error}."
         )
 
 
-def _default_error_message_generator(
-    exception: Exception, tool_name: str | None
-) -> str:
-    """Generate a default error message for structured output failures."""
-    if isinstance(exception, MultipleStructuredOutputsError):
-        return (
-            "Error: You called multiple structured output tools, but only one is expected. "
-            "Please call only one."
-        )
-    elif isinstance(exception, StructuredOutputParsingError):
-        return (
-            f"Error: The arguments provided to '{tool_name}' don't match the expected format. "
-            f"Please check the tool schema and provide valid arguments. Details: {exception.parse_error}"
-        )
-    else:
-        return f"Error processing structured output: {str(exception)}. Please try again with the correct format."
-
-
-@dataclass
-class StructuredOutputRetryPolicy:
-    """Policy for handling structured output errors and retries."""
-
-    retry_on: Union[
-        type[Exception],
-        Union[type[Exception]],
-        Callable[[Exception], bool],
-        bool,
-    ] = True
-    """What exceptions to retry on. Default is True (catch all exceptions)."""
-
-    tool_message_content: str | Callable[[Exception, str], str] = (
-        _default_error_message_generator
-    )
-    """Content for tool message sent to model on error. Can be static string or callable that takes (exception, tool_name)."""
-
-    def should_retry(self, exception: Exception) -> bool:
-        """Check if the exception should trigger a retry."""
-        if isinstance(self.retry_on, bool):
-            return self.retry_on
-
-        if isinstance(self.retry_on, type) and issubclass(self.retry_on, Exception):
-            return isinstance(exception, self.retry_on)
-
-        if get_origin(self.retry_on) in (UnionType, Union):
-            exception_types = get_args(self.retry_on)
-            return any(isinstance(exception, exc_type) for exc_type in exception_types)
-
-        if isinstance(self.retry_on, (list, tuple)):
-            return any(isinstance(exception, exc_type) for exc_type in self.retry_on)
-
-        if callable(self.retry_on):
-            return self.retry_on(exception)  # type: ignore[call-arg]
-
-        return False
-
-    def get_tool_message_content(self, exception: Exception, tool_name: str) -> str:
-        """Get the tool message content for the given exception."""
-        if callable(self.tool_message_content):
-            return self.tool_message_content(exception, tool_name)
-        return self.tool_message_content
+def default_error_template(exception: Exception) -> str:
+    """Default error message template for structured output failures."""
+    return f"{str(exception)} Fix your error."
 
 
 def _parse_with_schema(
@@ -239,19 +180,28 @@ class ToolOutput(Generic[SchemaT]):
     tool_message_content: str | None
     """The content of the tool message to be returned when the model calls an artificial structured output tool."""
 
-    retry_policy: StructuredOutputRetryPolicy | None
-    """Policy for handling structured output errors and retries."""
+    retry_on: Union[bool, str, Callable[[Exception], str], tuple[type[Exception], ...]]
+    """Error retry strategy. Default is True.
+    
+    - True: Catch all errors with default error template
+    - str: Catch all errors with this custom message
+    - tuple[type[Exception], ...]: Only catch these exception types with default message
+    - Callable[[Exception], str]: Custom function that returns error message
+    - False: No retry, let exceptions propagate
+    """
 
     def __init__(
         self,
         schema: type[SchemaT],
         tool_message_content: str | None = None,
-        retry_policy: StructuredOutputRetryPolicy | None = None,
+        retry_on: Union[
+            bool, str, Callable[[Exception], str], tuple[type[Exception], ...]
+        ] = True,
     ) -> None:
-        """Initialize ToolOutput with schemas, tool message content, and retry policy."""
+        """Initialize ToolOutput with schemas, tool message content, and retry strategy."""
         self.schema = schema
         self.tool_message_content = tool_message_content
-        self.retry_policy = retry_policy
+        self.retry_on = retry_on
 
         def _iter_variants(schema: Any) -> Iterable[Any]:
             """Yield leaf variants from Union and JSON Schema oneOf."""
