@@ -21,9 +21,8 @@ from langchain_core.messages import (
 )
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.tools import tool as dec_tool
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
-from pydantic.v1 import ValidationError as ValidationErrorV1
 from typing_extensions import TypedDict
 
 from langgraph.config import get_stream_writer
@@ -37,6 +36,7 @@ from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     InjectedState,
     InjectedStore,
+    ToolInvocationError,
     tools_condition,
 )
 from langgraph.store.base import BaseStore
@@ -220,8 +220,56 @@ async def test_tool_node_tool_call_input() -> None:
     ]
 
 
+def test_tool_node_error_handling_default_invocation() -> None:
+    tn = ToolNode([tool1])
+    result = tn.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"invalid": 0, "args": "foo"},
+                            "id": "some id",
+                        },
+                    ],
+                )
+            ]
+        }
+    )
+
+    assert all(m.type == "tool" for m in result["messages"])
+    assert all(m.status == "error" for m in result["messages"])
+    assert (
+        "Error invoking tool 'tool1' with kwargs {'invalid': 0, 'args': 'foo'} with error:\n"
+        in result["messages"][0].content
+    )
+
+
+def test_tool_node_error_handling_default_exception() -> None:
+    tn = ToolNode([tool1])
+    with pytest.raises(ValueError):
+        tn.invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "hi?",
+                        tool_calls=[
+                            {
+                                "name": "tool1",
+                                "args": {"some_val": 0, "some_other_val": "foo"},
+                                "id": "some id",
+                            },
+                        ],
+                    )
+                ]
+            }
+        )
+
+
 async def test_tool_node_error_handling() -> None:
-    def handle_all(e: Union[ValueError, ToolException, ValidationError]):
+    def handle_all(e: Union[ValueError, ToolException, ToolInvocationError]):
         return TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
 
     # test catching all exceptions, via:
@@ -230,7 +278,7 @@ async def test_tool_node_error_handling() -> None:
     # - passing a callable with all exceptions in the signature
     for handle_tool_errors in (
         True,
-        (ValueError, ToolException, ValidationError),
+        (ValueError, ToolException, ToolInvocationError),
         handle_all,
     ):
         result_error = await ToolNode(
@@ -413,7 +461,7 @@ async def test_tool_node_handle_tool_errors_false():
     assert str(exc_info.value) == "Test error"
 
     # test validation errors get raised if handle_tool_errors is False
-    with pytest.raises((ValidationError, ValidationErrorV1)):
+    with pytest.raises((ToolInvocationError)):
         ToolNode([tool1], handle_tool_errors=False).invoke(
             {
                 "messages": [
@@ -1245,7 +1293,7 @@ def test_tool_node_inject_state(schema_: Type[T]) -> None:
         """Tool 1 docstring."""
         return msgs[0].content
 
-    node = ToolNode([tool1, tool2, tool3, tool4])
+    node = ToolNode([tool1, tool2, tool3, tool4], handle_tool_errors=True)
     for tool_name in ("tool1", "tool2", "tool3"):
         tool_call = {
             "name": tool_name,
