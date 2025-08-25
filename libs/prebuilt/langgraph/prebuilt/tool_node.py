@@ -64,7 +64,7 @@ from langchain_core.runnables.config import (
     get_config_list,
     get_executor_for_config,
 )
-from langchain_core.tools import BaseTool, InjectedToolArg, ToolException
+from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from langchain_core.tools.base import (
     TOOL_MESSAGE_BLOCK_TYPES,
@@ -505,8 +505,6 @@ class ToolNode(RunnableCallable):
 
             try:
                 response = tool.invoke(call_args, config)
-            except ToolException as exc:
-                raise exc
             except ValidationError as exc:
                 raise ToolInvocationError(call["name"], exc, call["args"])
 
@@ -569,8 +567,6 @@ class ToolNode(RunnableCallable):
 
             try:
                 response = await tool.ainvoke(call_args, config)
-            except ToolException as exc:
-                raise exc
             except ValidationError as exc:
                 raise ToolInvocationError(call["name"], exc, call["args"])
 
