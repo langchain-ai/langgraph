@@ -70,7 +70,7 @@ from langchain_core.tools.base import (
     TOOL_MESSAGE_BLOCK_TYPES,
     get_all_basemodel_annotations,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph._internal._runnable import RunnableCallable
@@ -507,7 +507,7 @@ class ToolNode(RunnableCallable):
                 response = tool.invoke(call_args, config)
             except ToolException as exc:
                 raise exc
-            except Exception as exc:
+            except ValidationError as exc:
                 raise ToolInvocationError(call["name"], exc, call["args"])
 
         # GraphInterrupt is a special exception that will always be raised.
@@ -571,7 +571,7 @@ class ToolNode(RunnableCallable):
                 response = await tool.ainvoke(call_args, config)
             except ToolException as exc:
                 raise exc
-            except Exception as exc:
+            except ValidationError as exc:
                 raise ToolInvocationError(call["name"], exc, call["args"])
 
         # GraphInterrupt is a special exception that will always be raised.
