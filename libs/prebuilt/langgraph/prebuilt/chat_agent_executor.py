@@ -50,7 +50,6 @@ from langgraph.prebuilt.responses import (
     ResponseFormat,
     StructuredOutputParsingError,
     ToolOutput,
-    default_error_template,
 )
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
@@ -62,6 +61,8 @@ StructuredResponseT = TypeVar(
     "StructuredResponseT",
     default=None,
 )
+
+STRUCTURED_OUTPUT_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
 class AgentState(TypedDict, Generic[StructuredResponseT]):
@@ -423,12 +424,12 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         if retry_on is False:
             return None
         if retry_on is True:
-            return default_error_template(exception)
+            return STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(error=repr(exception))
         if isinstance(retry_on, str):
             return retry_on
         if isinstance(retry_on, tuple):
             if any(isinstance(exception, exc_type) for exc_type in retry_on):
-                return default_error_template(exception)
+                return STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(error=repr(exception))
             return None
         if callable(retry_on):
             return retry_on(exception)

@@ -59,11 +59,6 @@ class StructuredOutputParsingError(StructuredOutputError):
         )
 
 
-def default_error_template(exception: Exception) -> str:
-    """Default error message template for structured output failures."""
-    return f"{str(exception)} Fix your error."
-
-
 def _parse_with_schema(
     schema: Union[type[SchemaT], dict], schema_kind: SchemaKind, data: dict[str, Any]
 ) -> Any:
