@@ -1252,7 +1252,7 @@ wheels = [
 [[package]]
 name = "langchain-core"
 version = "0.3.74"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/langchain-ai/langchain/?subdirectory=libs%2Fcore&branch=cc%2F1.0%2Fstandard_content_parse_tc#b3d38c589d63a9295b3509fe261d066dc5ea980e" }
 dependencies = [
     { name = "jsonpatch" },
     { name = "langsmith" },
@@ -1261,10 +1261,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "tenacity" },
     { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f1/c6/5d755a0f1f4857abbe5ea6f5907ed0e2b5df52bf4dde0a0fd768290e3084/langchain_core-0.3.74.tar.gz", hash = "sha256:ff604441aeade942fbcc0a3860a592daba7671345230c2078ba2eb5f82b6ba76", size = 569553, upload-time = "2025-08-07T20:47:05.094Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4d/26/545283681ac0379d31c7ad0bac5f195e1982092d76c65ca048db9e3cec0e/langchain_core-0.3.74-py3-none-any.whl", hash = "sha256:088338b5bc2f6a66892f9afc777992c24ee3188f41cbc603d09181e34a228ce7", size = 443453, upload-time = "2025-08-07T20:47:03.853Z" },
 ]
 
 [[package]]
@@ -1284,6 +1280,7 @@ dependencies = [
 dev = [
     { name = "httpx" },
     { name = "jupyter" },
+    { name = "langchain-core" },
     { name = "langgraph-checkpoint" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite" },
@@ -1311,7 +1308,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=0.1" },
+    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain/?subdirectory=libs%2Fcore&branch=cc%2F1.0%2Fstandard_content_parse_tc" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-prebuilt", editable = "../prebuilt" },
     { name = "langgraph-sdk", editable = "../sdk-py" },
@@ -1323,6 +1320,7 @@ requires-dist = [
 dev = [
     { name = "httpx" },
     { name = "jupyter" },
+    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain/?subdirectory=libs%2Fcore&branch=cc%2F1.0%2Fstandard_content_parse_tc" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
