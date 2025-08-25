@@ -43,10 +43,12 @@ from langgraph.prebuilt._internal._typing import (
     SyncOrAsync,
 )
 from langgraph.prebuilt.responses import (
+    MultipleStructuredOutputsError,
     NativeOutput,
     NativeOutputBinding,
     OutputToolBinding,
     ResponseFormat,
+    StructuredOutputParsingError,
     ToolOutput,
 )
 from langgraph.prebuilt.tool_node import ToolNode
@@ -59,6 +61,8 @@ StructuredResponseT = TypeVar(
     "StructuredResponseT",
     default=None,
 )
+
+STRUCTURED_OUTPUT_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
 class AgentState(TypedDict, Generic[StructuredResponseT]):
@@ -292,9 +296,10 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             Command with structured response update if found, None otherwise
 
         Raises:
-            AssertionError: If multiple structured responses are returned
+            MultipleStructuredOutputsError: If multiple structured responses are returned and no retry policy
+            StructuredOutputParsingError: If parsing fails and no retry policy
         """
-        if not response.tool_calls:
+        if not isinstance(self.response_format, ToolOutput) or not response.tool_calls:
             return None
 
         structured_tool_calls = [
@@ -303,15 +308,56 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             if tool_call["name"] in self.structured_output_tools
         ]
 
+        if not structured_tool_calls:
+            return None
+
         if len(structured_tool_calls) > 1:
-            raise AssertionError(
-                "Model incorrectly returned multiple structured responses. "
-                "Behavior has not yet been defined in this case."
+            return self._handle_multiple_structured_outputs(
+                response, structured_tool_calls
             )
 
-        if len(structured_tool_calls) == 1:
-            tool_call = structured_tool_calls[0]
-            structured_tool_binding = self.structured_output_tools[tool_call["name"]]
+        return self._handle_single_structured_output(response, structured_tool_calls[0])
+
+    def _handle_multiple_structured_outputs(
+        self,
+        response: AIMessage,
+        structured_tool_calls: Any,
+    ) -> Command:
+        """Handle error case when multiple structured output tools are called."""
+        assert isinstance(self.response_format, ToolOutput)
+        tool_names = [tool_call["name"] for tool_call in structured_tool_calls]
+        exception = MultipleStructuredOutputsError(tool_names)
+
+        retry_on = self.response_format.retry_on
+        error_message = self._get_retry_message(exception, retry_on)
+
+        if error_message is None:
+            raise exception
+
+        tool_messages = [
+            ToolMessage(
+                content=error_message,
+                tool_call_id=tool_call["id"],
+                name=tool_call["name"],
+            )
+            for tool_call in structured_tool_calls
+        ]
+
+        return Command(
+            update={"messages": [response, *tool_messages]},
+            goto="model",
+        )
+
+    def _handle_single_structured_output(
+        self,
+        response: AIMessage,
+        tool_call: Any,
+    ) -> Command:
+        """Handle parsing and returning a single structured output tool call."""
+        assert isinstance(self.response_format, ToolOutput)
+        structured_tool_binding = self.structured_output_tools[tool_call["name"]]
+
+        try:
             structured_response = structured_tool_binding.parse(tool_call["args"])
 
             if isinstance(structured_response, BaseModel):
@@ -341,7 +387,52 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                     "structured_response": structured_response,
                 }
             )
+        except Exception as parse_error:
+            exception = StructuredOutputParsingError(tool_call["name"], parse_error)
 
+            retry_on = self.response_format.retry_on
+            error_message = self._get_retry_message(exception, retry_on)
+
+            if error_message is None:
+                raise exception
+
+            return Command(
+                update={
+                    "messages": [
+                        response,
+                        ToolMessage(
+                            content=error_message,
+                            tool_call_id=tool_call["id"],
+                            name=tool_call["name"],
+                        ),
+                    ],
+                },
+                goto="model",
+            )
+
+    def _get_retry_message(
+        self,
+        exception: Exception,
+        retry_on: Union[
+            bool, str, Callable[[Exception], str], tuple[type[Exception], ...]
+        ],
+    ) -> Optional[str]:
+        """Get retry message based on retry_on configuration.
+
+        Returns None if retry should not happen.
+        """
+        if retry_on is False:
+            return None
+        if retry_on is True:
+            return STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(error=repr(exception))
+        if isinstance(retry_on, str):
+            return retry_on
+        if isinstance(retry_on, tuple):
+            if any(isinstance(exception, exc_type) for exc_type in retry_on):
+                return STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(error=repr(exception))
+            return None
+        if callable(retry_on):
+            return retry_on(exception)
         return None
 
     def _apply_native_output_binding(
