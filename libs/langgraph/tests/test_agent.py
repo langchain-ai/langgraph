@@ -1,0 +1,226 @@
+from langchain_core.messages import AIMessage, ToolCall
+from syrupy import SnapshotAssertion
+
+from langgraph.agent import create_agent
+from langgraph.agent.types import AgentMiddleware
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from tests.fake_chat import FakeChatModel
+from tests.messages import _AnyIdToolMessage
+
+
+def test_create_agent_diagram(
+    snapshot: SnapshotAssertion,
+):
+    class NoopOne(AgentMiddleware):
+        def before_model(self, state):
+            pass
+
+    class NoopTwo(AgentMiddleware):
+        def before_model(self, state):
+            pass
+
+    class NoopThree(AgentMiddleware):
+        def before_model(self, state):
+            pass
+
+    class NoopFour(AgentMiddleware):
+        def after_model(self, state):
+            pass
+
+    class NoopFive(AgentMiddleware):
+        def after_model(self, state):
+            pass
+
+    class NoopSix(AgentMiddleware):
+        def after_model(self, state):
+            pass
+
+    class NoopSeven(AgentMiddleware):
+        def before_model(self, state):
+            pass
+
+        def after_model(self, state):
+            pass
+
+    class NoopEight(AgentMiddleware):
+        def before_model(self, state):
+            pass
+
+        def after_model(self, state):
+            pass
+
+    class NoopNine(AgentMiddleware):
+        def before_model(self, state):
+            pass
+
+        def after_model(self, state):
+            pass
+
+    agent_zero = create_agent(
+        model=FakeChatModel(messages=[]),
+        tools=[],
+        system_prompt="You are a helpful assistant.",
+    )
+
+    assert agent_zero.compile().get_graph().draw_mermaid() == snapshot
+
+    agent_one = create_agent(
+        model=FakeChatModel(messages=[]),
+        tools=[],
+        system_prompt="You are a helpful assistant.",
+        middleware=[NoopOne()],
+    )
+
+    assert agent_one.compile().get_graph().draw_mermaid() == snapshot
+
+    agent_two = create_agent(
+        model=FakeChatModel(messages=[]),
+        tools=[],
+        system_prompt="You are a helpful assistant.",
+        middleware=[NoopOne(), NoopTwo()],
+    )
+
+    assert agent_two.compile().get_graph().draw_mermaid() == snapshot
+
+    agent_three = create_agent(
+        model=FakeChatModel(messages=[]),
+        tools=[],
+        system_prompt="You are a helpful assistant.",
+        middleware=[NoopOne(), NoopTwo(), NoopThree()],
+    )
+
+    assert agent_three.compile().get_graph().draw_mermaid() == snapshot
+
+    agent_four = create_agent(
+        model=FakeChatModel(messages=[]),
+        tools=[],
+        system_prompt="You are a helpful assistant.",
+        middleware=[NoopFour()],
+    )
+
+    assert agent_four.compile().get_graph().draw_mermaid() == snapshot
+
+    agent_five = create_agent(
+        model=FakeChatModel(messages=[]),
+        tools=[],
+        system_prompt="You are a helpful assistant.",
+        middleware=[NoopFour(), NoopFive()],
+    )
+
+    assert agent_five.compile().get_graph().draw_mermaid() == snapshot
+
+    agent_six = create_agent(
+        model=FakeChatModel(messages=[]),
+        tools=[],
+        system_prompt="You are a helpful assistant.",
+        middleware=[NoopFour(), NoopFive(), NoopSix()],
+    )
+
+    assert agent_six.compile().get_graph().draw_mermaid() == snapshot
+
+    agent_seven = create_agent(
+        model=FakeChatModel(messages=[]),
+        tools=[],
+        system_prompt="You are a helpful assistant.",
+        middleware=[NoopSeven()],
+    )
+
+    assert agent_seven.compile().get_graph().draw_mermaid() == snapshot
+
+    agent_eight = create_agent(
+        model=FakeChatModel(messages=[]),
+        tools=[],
+        system_prompt="You are a helpful assistant.",
+        middleware=[NoopSeven(), NoopEight()],
+    )
+
+    assert agent_eight.compile().get_graph().draw_mermaid() == snapshot
+
+    agent_nine = create_agent(
+        model=FakeChatModel(messages=[]),
+        tools=[],
+        system_prompt="You are a helpful assistant.",
+        middleware=[NoopSeven(), NoopEight(), NoopNine()],
+    )
+
+    assert agent_nine.compile().get_graph().draw_mermaid() == snapshot
+
+
+def test_create_agent_invoke(
+    snapshot: SnapshotAssertion,
+    sync_checkpointer: BaseCheckpointSaver,
+):
+    calls = []
+
+    class NoopSeven(AgentMiddleware):
+        def before_model(self, state):
+            calls.append("NoopSeven.before_model")
+
+        def after_model(self, state):
+            calls.append("NoopSeven.after_model")
+
+    class NoopEight(AgentMiddleware):
+        def before_model(self, state):
+            calls.append("NoopEight.before_model")
+
+        def after_model(self, state):
+            calls.append("NoopEight.after_model")
+
+    def my_tool(input: str) -> str:
+        """A great tool"""
+        calls.append("my_tool")
+        return input.upper()
+
+    agent_one = create_agent(
+        model=FakeChatModel(
+            messages=[
+                AIMessage(
+                    "",
+                    id="ai1",
+                    tool_calls=[ToolCall(id="1", name="my_tool", args={"input": "yo"})],
+                ),
+                AIMessage(id="ai2", content="Hello, how can I assist you today?"),
+            ]
+        ),
+        tools=[my_tool],
+        system_prompt="You are a helpful assistant.",
+        middleware=[NoopSeven(), NoopEight()],
+    ).compile(checkpointer=sync_checkpointer)
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert agent_one.invoke({"messages": []}, thread1) == {
+        "messages": [
+            AIMessage(
+                content="",
+                additional_kwargs={},
+                response_metadata={},
+                id="ai1",
+                tool_calls=[
+                    {
+                        "name": "my_tool",
+                        "args": {"input": "yo"},
+                        "id": "1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            _AnyIdToolMessage(content="YO", name="my_tool", tool_call_id="1"),
+            AIMessage(
+                content="Hello, how can I assist you today?",
+                additional_kwargs={},
+                response_metadata={},
+                id="ai2",
+            ),
+        ]
+    }
+    assert calls == [
+        "NoopSeven.before_model",
+        "NoopEight.before_model",
+        "NoopEight.after_model",
+        "NoopSeven.after_model",
+        "my_tool",
+        "NoopSeven.before_model",
+        "NoopEight.before_model",
+        "NoopEight.after_model",
+        "NoopSeven.after_model",
+    ]
