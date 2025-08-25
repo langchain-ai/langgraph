@@ -7,9 +7,12 @@ from typing import Annotated, Any, Self
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AnyMessage
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from langgraph.graph.message import Messages, add_messages
+
+ResponseFormat = dict | type[BaseModel]
 
 
 @dataclass
@@ -19,6 +22,7 @@ class ModelRequest:
     messages: Sequence[AnyMessage]  # excluding system prompt
     tool_choice: Any
     tools: Sequence[BaseTool]
+    response_format: ResponseFormat | None
 
 
 class AgentMiddleware:

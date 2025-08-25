@@ -5,7 +5,13 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.tools import BaseTool
 
-from langgraph.agent.types import AgentInput, AgentMiddleware, AgentState, ModelRequest
+from langgraph.agent.types import (
+    AgentInput,
+    AgentMiddleware,
+    AgentState,
+    ModelRequest,
+    ResponseFormat,
+)
 from langgraph.constants import END, START
 from langgraph.graph.state import StateGraph
 from langgraph.prebuilt.tool_node import ToolNode
@@ -17,6 +23,7 @@ def create_agent(
     tools: Sequence[BaseTool | Callable],
     system_prompt: str,
     middleware: Sequence[AgentMiddleware] = (),
+    response_format: ResponseFormat | None = None,
 ) -> StateGraph[AgentState, None, AgentInput]:
     # init chat model
     if isinstance(model, str):
@@ -59,6 +66,7 @@ def create_agent(
             tools=list(tool_node.tools_by_name.values()),
             system_prompt=system_prompt,
             middleware=middleware,
+            response_format=response_format,
         ),
     )
     graph.add_node("tools", tool_node)
@@ -123,6 +131,7 @@ def _make_model_request_node(
     model: BaseChatModel,
     tools: Sequence[BaseTool],
     middleware: Sequence[AgentMiddleware],
+    response_format: ResponseFormat | None = None,
 ) -> Callable[[AgentState], AgentState]:
     def model_request(state: AgentState) -> AgentState:
         # create request
@@ -132,6 +141,7 @@ def _make_model_request_node(
             messages=state.messages,
             tool_choice=None,
             tools=tools,
+            response_format=response_format,
         )
         # visit middleware in order
         for mw in middleware:
@@ -141,8 +151,13 @@ def _make_model_request_node(
             messages = [SystemMessage(request.system_prompt)] + request.messages
         else:
             messages = request.messages
+        # prepare model
+        if request.response_format:
+            model_ = request.model.with_structured_output(request.response_format)
+        else:
+            model_ = request.model
         # call model
-        output = request.model.invoke(
+        output = model_.invoke(
             messages, tools=request.tools, tool_choice=request.tool_choice
         )
         return {"messages": output}
