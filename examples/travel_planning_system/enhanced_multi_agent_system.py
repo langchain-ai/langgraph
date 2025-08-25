@@ -52,13 +52,6 @@ except ImportError:
     context = None
     SpanKind = None
 
-from phoenix.otel import register
-
-# configure the Phoenix tracer
-tracer_provider = register(
-  project_name="default", # Default is 'default'
-  auto_instrument=True # Auto-instrument your app based on installed OI dependencies
-)
 
 # State definition
 class TravelPlanState(TypedDict):
