@@ -323,15 +323,13 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         response: AIMessage,
         structured_tool_calls: Any,
     ) -> Command:
-        """Handle error case when multiple structured output tools are called."""
-        assert isinstance(self.response_format, ToolOutput)
+        """Handle multiple structured output tool calls."""
         tool_names = [tool_call["name"] for tool_call in structured_tool_calls]
         exception = MultipleStructuredOutputsError(tool_names)
 
-        retry_on = self.response_format.retry_on
-        error_message = self._get_retry_message(exception, retry_on)
+        should_retry, error_message = self._handle_structured_output_error(exception)
 
-        if error_message is None:
+        if not should_retry:
             raise exception
 
         tool_messages = [
@@ -353,8 +351,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         response: AIMessage,
         tool_call: Any,
     ) -> Command:
-        """Handle parsing and returning a single structured output tool call."""
-        assert isinstance(self.response_format, ToolOutput)
+        """Handle a single structured output tool call."""
         structured_tool_binding = self.structured_output_tools[tool_call["name"]]
 
         try:
@@ -390,10 +387,11 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         except Exception as parse_error:
             exception = StructuredOutputParsingError(tool_call["name"], parse_error)
 
-            retry_on = self.response_format.retry_on
-            error_message = self._get_retry_message(exception, retry_on)
+            should_retry, error_message = self._handle_structured_output_error(
+                exception
+            )
 
-            if error_message is None:
+            if not should_retry:
                 raise exception
 
             return Command(
@@ -410,30 +408,38 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                 goto="model",
             )
 
-    def _get_retry_message(
+    def _handle_structured_output_error(
         self,
         exception: Exception,
-        retry_on: Union[
-            bool, str, Callable[[Exception], str], tuple[type[Exception], ...]
-        ],
-    ) -> Optional[str]:
-        """Get retry message based on retry_on configuration.
+    ) -> tuple[bool, str]:
+        """Handle structured output error based on retry_on configuration.
 
-        Returns None if retry should not happen.
+        Returns (should_retry, retry_tool_message).
         """
+        assert isinstance(self.response_format, ToolOutput)
+        retry_on = self.response_format.retry_on
+
         if retry_on is False:
-            return None
-        if retry_on is True:
-            return STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(error=repr(exception))
-        if isinstance(retry_on, str):
-            return retry_on
-        if isinstance(retry_on, tuple):
+            return False, ""
+        elif retry_on is True:
+            return True, STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(error=str(exception))
+        elif isinstance(retry_on, str):
+            return True, retry_on
+        elif isinstance(retry_on, type) and issubclass(retry_on, Exception):
+            if isinstance(exception, retry_on):
+                return True, STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(
+                    error=str(exception)
+                )
+            return False, ""
+        elif isinstance(retry_on, tuple):
             if any(isinstance(exception, exc_type) for exc_type in retry_on):
-                return STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(error=repr(exception))
-            return None
-        if callable(retry_on):
-            return retry_on(exception)
-        return None
+                return True, STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(
+                    error=str(exception)
+                )
+            return False, ""
+        elif callable(retry_on):
+            return True, retry_on(exception)  # type: ignore[call-arg]
+        return False, ""
 
     def _apply_native_output_binding(
         self, model: LanguageModelLike

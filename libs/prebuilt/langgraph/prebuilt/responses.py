@@ -175,11 +175,18 @@ class ToolOutput(Generic[SchemaT]):
     tool_message_content: str | None
     """The content of the tool message to be returned when the model calls an artificial structured output tool."""
 
-    retry_on: Union[bool, str, Callable[[Exception], str], tuple[type[Exception], ...]]
-    """Error retry strategy. Default is True.
+    retry_on: Union[
+        bool,
+        str,
+        type[Exception],
+        tuple[type[Exception], ...],
+        Callable[[Exception], str],
+    ]
+    """Error retry strategy for structured output via ToolOutput. Default is True.
     
     - True: Catch all errors with default error template
     - str: Catch all errors with this custom message
+    - type[Exception]: Only catch this exception type with default message
     - tuple[type[Exception], ...]: Only catch these exception types with default message
     - Callable[[Exception], str]: Custom function that returns error message
     - False: No retry, let exceptions propagate
@@ -190,7 +197,11 @@ class ToolOutput(Generic[SchemaT]):
         schema: type[SchemaT],
         tool_message_content: str | None = None,
         retry_on: Union[
-            bool, str, Callable[[Exception], str], tuple[type[Exception], ...]
+            bool,
+            str,
+            type[Exception],
+            tuple[type[Exception], ...],
+            Callable[[Exception], str],
         ] = True,
     ) -> None:
         """Initialize ToolOutput with schemas, tool message content, and retry strategy."""
