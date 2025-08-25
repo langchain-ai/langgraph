@@ -5,7 +5,17 @@ from __future__ import annotations
 import sys
 import uuid
 from dataclasses import dataclass, is_dataclass
-from typing import Any, Generic, Iterable, Literal, TypeVar, Union, get_args, get_origin
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Iterable,
+    Literal,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+)
 
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool, StructuredTool
@@ -22,6 +32,95 @@ else:
     UnionType = Union
 
 SchemaKind = Literal["pydantic", "dataclass", "typeddict", "json_schema"]
+
+
+class StructuredOutputError(Exception):
+    """Base class for structured output errors."""
+
+
+class MultipleStructuredOutputsError(StructuredOutputError):
+    """Raised when model returns multiple structured output tool calls when only one is expected."""
+
+    def __init__(self, tool_names: list[str]):
+        self.tool_names = tool_names
+        super().__init__(
+            f"Model incorrectly returned multiple structured responses ({', '.join(tool_names)}) when only one is expected. "
+            "Consider defining a retry policy to handle this behavior: ToolOutput(..., retry_policy=StructuredOutputRetryPolicy(...))"
+        )
+
+
+class StructuredOutputParsingError(StructuredOutputError):
+    """Raised when structured output tool call arguments fail to parse according to the schema."""
+
+    def __init__(self, tool_name: str, parse_error: Exception):
+        self.tool_name = tool_name
+        self.parse_error = parse_error
+        super().__init__(
+            f"Failed to parse structured output for tool '{tool_name}': {parse_error}. "
+            "Consider defining a retry policy to handle this behavior: ToolOutput(..., retry_policy=StructuredOutputRetryPolicy(...))"
+        )
+
+
+def _default_error_message_generator(
+    exception: Exception, tool_name: str | None
+) -> str:
+    """Generate a default error message for structured output failures."""
+    if isinstance(exception, MultipleStructuredOutputsError):
+        return (
+            "Error: You called multiple structured output tools, but only one is expected. "
+            "Please call only one."
+        )
+    elif isinstance(exception, StructuredOutputParsingError):
+        return (
+            f"Error: The arguments provided to '{tool_name}' don't match the expected format. "
+            f"Please check the tool schema and provide valid arguments. Details: {exception.parse_error}"
+        )
+    else:
+        return f"Error processing structured output: {str(exception)}. Please try again with the correct format."
+
+
+@dataclass
+class StructuredOutputRetryPolicy:
+    """Policy for handling structured output errors and retries."""
+
+    retry_on: Union[
+        type[Exception],
+        Union[type[Exception]],
+        Callable[[Exception], bool],
+        bool,
+    ] = True
+    """What exceptions to retry on. Default is True (catch all exceptions)."""
+
+    tool_message_content: str | Callable[[Exception, str], str] = (
+        _default_error_message_generator
+    )
+    """Content for tool message sent to model on error. Can be static string or callable that takes (exception, tool_name)."""
+
+    def should_retry(self, exception: Exception) -> bool:
+        """Check if the exception should trigger a retry."""
+        if isinstance(self.retry_on, bool):
+            return self.retry_on
+
+        if isinstance(self.retry_on, type) and issubclass(self.retry_on, Exception):
+            return isinstance(exception, self.retry_on)
+
+        if get_origin(self.retry_on) in (UnionType, Union):
+            exception_types = get_args(self.retry_on)
+            return any(isinstance(exception, exc_type) for exc_type in exception_types)
+
+        if isinstance(self.retry_on, (list, tuple)):
+            return any(isinstance(exception, exc_type) for exc_type in self.retry_on)
+
+        if callable(self.retry_on):
+            return self.retry_on(exception)  # type: ignore[call-arg]
+
+        return False
+
+    def get_tool_message_content(self, exception: Exception, tool_name: str) -> str:
+        """Get the tool message content for the given exception."""
+        if callable(self.tool_message_content):
+            return self.tool_message_content(exception, tool_name)
+        return self.tool_message_content
 
 
 def _parse_with_schema(
@@ -54,7 +153,7 @@ def _parse_with_schema(
 class _SchemaSpec(Generic[SchemaT]):
     """Describes a structured output schema."""
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT]
     """The schema for the response, can be a Pydantic model, dataclass, TypedDict, or JSON schema dict."""
 
     name: str
@@ -80,7 +179,7 @@ class _SchemaSpec(Generic[SchemaT]):
 
     def __init__(
         self,
-        schema: Union[type[SchemaT], dict[str, Any]],
+        schema: type[SchemaT],
         *,
         name: str | None = None,
         description: str | None = None,
@@ -90,11 +189,16 @@ class _SchemaSpec(Generic[SchemaT]):
         self.schema = schema
 
         # Schema names must be unique so we use a shortened UUID suffix
-        self.name = name or (
-            schema.get("title", f"response_format_{str(uuid.uuid4())[:4]}")
-            if isinstance(schema, dict)
-            else getattr(schema, "__name__", f"response_format_{str(uuid.uuid4())[:4]}")
-        )
+        if name:
+            self.name = name
+        elif isinstance(schema, dict):
+            self.name = str(
+                schema.get("title", f"response_format_{str(uuid.uuid4())[:4]}")
+            )
+        else:
+            self.name = str(
+                getattr(schema, "__name__", f"response_format_{str(uuid.uuid4())[:4]}")
+            )
 
         self.description = description or (
             schema.get("description", "")
@@ -127,7 +231,7 @@ class _SchemaSpec(Generic[SchemaT]):
 class ToolOutput(Generic[SchemaT]):
     """Use a tool calling strategy for model responses."""
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT]
     """Schema for the tool calls."""
 
     schema_specs: list[_SchemaSpec[SchemaT]]
@@ -136,14 +240,19 @@ class ToolOutput(Generic[SchemaT]):
     tool_message_content: str | None
     """The content of the tool message to be returned when the model calls an artificial structured output tool."""
 
+    retry_policy: StructuredOutputRetryPolicy | None
+    """Policy for handling structured output errors and retries."""
+
     def __init__(
         self,
-        schema: Union[type[SchemaT], dict[str, Any]],
+        schema: type[SchemaT],
         tool_message_content: str | None = None,
+        retry_policy: StructuredOutputRetryPolicy | None = None,
     ) -> None:
-        """Initialize ToolOutput with schemas and tool message content."""
+        """Initialize ToolOutput with schemas, tool message content, and retry policy."""
         self.schema = schema
         self.tool_message_content = tool_message_content
+        self.retry_policy = retry_policy
 
         def _iter_variants(schema: Any) -> Iterable[Any]:
             """Yield leaf variants from Union and JSON Schema oneOf."""
@@ -167,7 +276,7 @@ class ToolOutput(Generic[SchemaT]):
 class NativeOutput(Generic[SchemaT]):
     """Use the model provider's native structured output method."""
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT]
     """Schema for native mode."""
 
     schema_spec: _SchemaSpec[SchemaT]
@@ -175,7 +284,7 @@ class NativeOutput(Generic[SchemaT]):
 
     def __init__(
         self,
-        schema: Union[type[SchemaT], dict[str, Any]],
+        schema: type[SchemaT],
     ) -> None:
         self.schema = schema
         self.schema_spec = _SchemaSpec(schema)
@@ -202,7 +311,7 @@ class OutputToolBinding(Generic[SchemaT]):
     and the corresponding tool implementation used by the tools strategy.
     """
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT]
     """The original schema provided for structured output (Pydantic model, dataclass, TypedDict, or JSON schema dict)."""
 
     schema_kind: SchemaKind
@@ -255,7 +364,7 @@ class NativeOutputBinding(Generic[SchemaT]):
     its type classification, and parsing logic for provider-enforced JSON.
     """
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT]
     """The original schema provided for structured output (Pydantic model, dataclass, TypedDict, or JSON schema dict)."""
 
     schema_kind: SchemaKind

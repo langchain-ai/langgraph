@@ -43,10 +43,13 @@ from langgraph.prebuilt._internal._typing import (
     SyncOrAsync,
 )
 from langgraph.prebuilt.responses import (
+    MultipleStructuredOutputsError,
     NativeOutput,
     NativeOutputBinding,
     OutputToolBinding,
     ResponseFormat,
+    StructuredOutputParsingError,
+    StructuredOutputRetryPolicy,
     ToolOutput,
 )
 from langgraph.prebuilt.tool_node import ToolNode
@@ -292,9 +295,10 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             Command with structured response update if found, None otherwise
 
         Raises:
-            AssertionError: If multiple structured responses are returned
+            MultipleStructuredOutputsError: If multiple structured responses are returned and no retry policy
+            StructuredOutputParsingError: If parsing fails and no retry policy
         """
-        if not response.tool_calls:
+        if not isinstance(self.response_format, ToolOutput) or not response.tool_calls:
             return None
 
         structured_tool_calls = [
@@ -303,15 +307,59 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             if tool_call["name"] in self.structured_output_tools
         ]
 
+        if not structured_tool_calls:
+            return None
+
+        retry_policy = self.response_format.retry_policy
+
         if len(structured_tool_calls) > 1:
-            raise AssertionError(
-                "Model incorrectly returned multiple structured responses. "
-                "Behavior has not yet been defined in this case."
+            return self._handle_multiple_structured_outputs(
+                response, structured_tool_calls, retry_policy
             )
 
-        if len(structured_tool_calls) == 1:
-            tool_call = structured_tool_calls[0]
-            structured_tool_binding = self.structured_output_tools[tool_call["name"]]
+        return self._handle_single_structured_output(
+            response, structured_tool_calls[0], retry_policy
+        )
+
+    def _handle_multiple_structured_outputs(
+        self,
+        response: AIMessage,
+        structured_tool_calls: Any,
+        retry_policy: Optional[StructuredOutputRetryPolicy],
+    ) -> Command:
+        """Handle error case when multiple structured output tools are called."""
+        tool_names = [tool_call["name"] for tool_call in structured_tool_calls]
+        exception = MultipleStructuredOutputsError(tool_names)
+
+        if not retry_policy or not retry_policy.should_retry(exception):
+            raise exception
+
+        tool_messages = [
+            ToolMessage(
+                content=retry_policy.get_tool_message_content(
+                    exception, tool_call["name"]
+                ),
+                tool_call_id=tool_call["id"],
+                name=tool_call["name"],
+            )
+            for tool_call in structured_tool_calls
+        ]
+
+        return Command(
+            update={"messages": [response, *tool_messages]},
+            goto="model",
+        )
+
+    def _handle_single_structured_output(
+        self,
+        response: AIMessage,
+        tool_call: Any,
+        retry_policy: Optional[StructuredOutputRetryPolicy],
+    ) -> Command:
+        """Handle parsing and returning a single structured output tool call."""
+        structured_tool_binding = self.structured_output_tools[tool_call["name"]]
+
+        try:
             structured_response = structured_tool_binding.parse(tool_call["args"])
 
             if isinstance(structured_response, BaseModel):
@@ -322,10 +370,8 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                 structured_response_dict = cast(dict, structured_response)
 
             tool_message_content = (
-                self.response_format.tool_message_content
-                if isinstance(self.response_format, ToolOutput)
-                and self.response_format.tool_message_content
-                else f"Returning structured response: {structured_response_dict}"
+                self.response_format.tool_message_content  # type: ignore[union-attr]
+                or f"Returning structured response: {structured_response_dict}"
             )
 
             return Command(
@@ -341,8 +387,29 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                     "structured_response": structured_response,
                 }
             )
+        except Exception as parse_error:
+            exception = StructuredOutputParsingError(tool_call["name"], parse_error)
 
-        return None
+            if not retry_policy or not retry_policy.should_retry(exception):
+                raise exception
+
+            error_message = retry_policy.get_tool_message_content(
+                exception, tool_call["name"]
+            )
+
+            return Command(
+                update={
+                    "messages": [
+                        response,
+                        ToolMessage(
+                            content=error_message,
+                            tool_call_id=tool_call["id"],
+                            name=tool_call["name"],
+                        ),
+                    ],
+                },
+                goto="model",
+            )
 
     def _apply_native_output_binding(
         self, model: LanguageModelLike
