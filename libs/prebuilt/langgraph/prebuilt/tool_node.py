@@ -64,13 +64,13 @@ from langchain_core.runnables.config import (
     get_config_list,
     get_executor_for_config,
 )
-from langchain_core.tools import BaseTool, InjectedToolArg
+from langchain_core.tools import BaseTool, InjectedToolArg, ToolException
 from langchain_core.tools import tool as create_tool
 from langchain_core.tools.base import (
     TOOL_MESSAGE_BLOCK_TYPES,
     get_all_basemodel_annotations,
 )
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph._internal._runnable import RunnableCallable
@@ -124,19 +124,6 @@ def msg_content_output(output: Any) -> Union[str, list[dict]]:
             return json.dumps(output, ensure_ascii=False)
         except Exception:
             return str(output)
-
-
-class ToolExecutionError(Exception):
-    """Exception raised when a tool execution fails."""
-
-    def __init__(self, tool_name: str, error: Exception, tool_kwargs: dict[str, Any]):
-        self.message = TOOL_EXECUTION_ERROR_TEMPLATE.format(
-            tool_name=tool_name, tool_kwargs=tool_kwargs, error=error
-        )
-        self.tool_name = tool_name
-        self.tool_kwargs = tool_kwargs
-        self.error = error
-        super().__init__(self.message)
 
 
 class ToolInvocationError(Exception):
@@ -518,10 +505,10 @@ class ToolNode(RunnableCallable):
 
             try:
                 response = tool.invoke(call_args, config)
-            except ValidationError as exc:
-                raise ToolInvocationError(call["name"], exc, call["args"])
+            except ToolException as exc:
+                raise exc
             except Exception as exc:
-                raise ToolExecutionError(call["name"], exc, call["args"])
+                raise ToolInvocationError(call["name"], exc, call["args"])
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios,
@@ -582,10 +569,10 @@ class ToolNode(RunnableCallable):
 
             try:
                 response = await tool.ainvoke(call_args, config)
-            except ValidationError as exc:
-                raise ToolInvocationError(call["name"], exc, call["args"])
+            except ToolException as exc:
+                raise exc
             except Exception as exc:
-                raise ToolExecutionError(call["name"], exc, call["args"])
+                raise ToolInvocationError(call["name"], exc, call["args"])
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios,
