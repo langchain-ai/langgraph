@@ -175,14 +175,14 @@ class ToolOutput(Generic[SchemaT]):
     tool_message_content: str | None
     """The content of the tool message to be returned when the model calls an artificial structured output tool."""
 
-    retry_on: Union[
+    handle_errors: Union[
         bool,
         str,
         type[Exception],
         tuple[type[Exception], ...],
         Callable[[Exception], str],
     ]
-    """Error retry strategy for structured output via ToolOutput. Default is True.
+    """Error handling strategy for structured output via ToolOutput. Default is True.
     
     - True: Catch all errors with default error template
     - str: Catch all errors with this custom message
@@ -196,7 +196,7 @@ class ToolOutput(Generic[SchemaT]):
         self,
         schema: type[SchemaT],
         tool_message_content: str | None = None,
-        retry_on: Union[
+        handle_errors: Union[
             bool,
             str,
             type[Exception],
@@ -204,10 +204,10 @@ class ToolOutput(Generic[SchemaT]):
             Callable[[Exception], str],
         ] = True,
     ) -> None:
-        """Initialize ToolOutput with schemas, tool message content, and retry strategy."""
+        """Initialize ToolOutput with schemas, tool message content, and error handling strategy."""
         self.schema = schema
         self.tool_message_content = tool_message_content
-        self.retry_on = retry_on
+        self.handle_errors = handle_errors
 
         def _iter_variants(schema: Any) -> Iterable[Any]:
             """Yield leaf variants from Union and JSON Schema oneOf."""

@@ -416,7 +416,7 @@ class TestResponseFormatAsToolOutput:
             [],
             response_format=ToolOutput(
                 Union[WeatherBaseModel, LocationResponse],
-                retry_on=False,
+                handle_errors=False,
             ),
         )
 
@@ -457,7 +457,7 @@ class TestResponseFormatAsToolOutput:
             [],
             response_format=ToolOutput(
                 Union[WeatherBaseModel, LocationResponse],
-                retry_on=True,
+                handle_errors=True,
             ),
         )
 
@@ -486,7 +486,7 @@ class TestResponseFormatAsToolOutput:
             [],
             response_format=ToolOutput(
                 WeatherBaseModel,
-                retry_on=False,
+                handle_errors=False,
             ),
         )
 
@@ -522,7 +522,7 @@ class TestResponseFormatAsToolOutput:
             [],
             response_format=ToolOutput(
                 WeatherBaseModel,
-                retry_on=(StructuredOutputParsingError,),
+                handle_errors=(StructuredOutputParsingError,),
             ),
         )
 
@@ -568,7 +568,7 @@ class TestResponseFormatAsToolOutput:
             [],
             response_format=ToolOutput(
                 Union[WeatherBaseModel, LocationResponse],
-                retry_on=custom_message,
+                handle_errors=custom_message,
             ),
         )
 

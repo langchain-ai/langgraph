@@ -296,8 +296,8 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             Command with structured response update if found, None otherwise
 
         Raises:
-            MultipleStructuredOutputsError: If multiple structured responses are returned and no retry policy
-            StructuredOutputParsingError: If parsing fails and no retry policy
+            MultipleStructuredOutputsError: If multiple structured responses are returned and error handling is disabled
+            StructuredOutputParsingError: If parsing fails and error handling is disabled
         """
         if not isinstance(self.response_format, ToolOutput) or not response.tool_calls:
             return None
@@ -412,33 +412,33 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         self,
         exception: Exception,
     ) -> tuple[bool, str]:
-        """Handle structured output error based on retry_on configuration.
+        """Handle structured output error.
 
         Returns (should_retry, retry_tool_message).
         """
         assert isinstance(self.response_format, ToolOutput)
-        retry_on = self.response_format.retry_on
+        handle_errors = self.response_format.handle_errors
 
-        if retry_on is False:
+        if handle_errors is False:
             return False, ""
-        elif retry_on is True:
+        elif handle_errors is True:
             return True, STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(error=str(exception))
-        elif isinstance(retry_on, str):
-            return True, retry_on
-        elif isinstance(retry_on, type) and issubclass(retry_on, Exception):
-            if isinstance(exception, retry_on):
+        elif isinstance(handle_errors, str):
+            return True, handle_errors
+        elif isinstance(handle_errors, type) and issubclass(handle_errors, Exception):
+            if isinstance(exception, handle_errors):
                 return True, STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(
                     error=str(exception)
                 )
             return False, ""
-        elif isinstance(retry_on, tuple):
-            if any(isinstance(exception, exc_type) for exc_type in retry_on):
+        elif isinstance(handle_errors, tuple):
+            if any(isinstance(exception, exc_type) for exc_type in handle_errors):
                 return True, STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(
                     error=str(exception)
                 )
             return False, ""
-        elif callable(retry_on):
-            return True, retry_on(exception)  # type: ignore[call-arg]
+        elif callable(handle_errors):
+            return True, handle_errors(exception)  # type: ignore[call-arg]
         return False, ""
 
     def _apply_native_output_binding(
