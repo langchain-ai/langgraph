@@ -65,17 +65,17 @@ The system handles various complex travel scenarios with detailed requirements. 
 
 ### Business Trip
 ```
-"I need to plan a comprehensive business trip to London, UK for 3 days from March 15-17, 2024, traveling from Seattle (SEA) with arrival by 9 AM London time on March 15th for an 11 AM board meeting and departure by 6 PM on March 17th to catch a connecting domestic flight. I prefer business class or premium economy flights with major airlines like British Airways, Virgin Atlantic, or Delta. For accommodations, I require a 4-star or 5-star hotel in the City of London financial district within walking distance of Bank or Monument stations, featuring business center facilities, high-speed WiFi, room service until midnight, concierge service, quiet rooms with workspace, express check-in/out, 24-hour fitness center, laundry services, and ideally a business lounge. My itinerary includes visiting the London Stock Exchange area on March 15th afternoon, client meetings in Canary Wharf on March 16th morning, business dinner near Covent Garden on March 16th evening, and a morning meeting in Mayfair on March 17th before departure, requiring reliable transportation via Underground and taxi services. I want to maximize limited free time with 1-2 quintessential London cultural sites like Westminster Abbey, Tower Bridge, or British Museum, plus recommendations for excellent traditional British cuisine including historic pubs for casual meals and upscale restaurants for business entertainment. Essential requirements include seamless mobile phone connectivity for maps and communication, currency exchange guidance, payment method preferences, tipping customs, weather forecasts for appropriate business attire packing, transportation guidance between financial district and Canary Wharf, time zone considerations, business etiquette notes, emergency contacts, trip extension options if meetings run late, corporate expense tracking advice, evening networking districts, and March travel considerations including potential weather delays. My total budget is approximately $3,000 USD covering flights, accommodation, local transportation, meals, and cultural activities."
+"I need to plan a comprehensive business trip to London, UK for 3 days from March 15-17, 2026, traveling from Seattle (SEA) with arrival by 9 AM London time on March 15th for an 11 AM board meeting and departure by 6 PM on March 17th to catch a connecting domestic flight. I prefer business class or premium economy flights with major airlines like British Airways, Virgin Atlantic, or Delta. For accommodations, I require a 4-star or 5-star hotel in the City of London financial district within walking distance of Bank or Monument stations, featuring business center facilities, high-speed WiFi, room service until midnight, concierge service, quiet rooms with workspace, express check-in/out, 24-hour fitness center, laundry services, and ideally a business lounge. My itinerary includes visiting the London Stock Exchange area on March 15th, Canary Wharf on March 16th morning, Covent Garden on March 16th evening, and a morning in Mayfair on March 17th before departure. My total budget is approximately $3,000 USD."
 ```
 
 ### Family Vacation
 ```
-"Please plan a comprehensive family vacation to Paris, France for our family of four - 2 adults (ages 38 and 42) and 2 children (ages 8 and 12) - for 10 days from July 20-29, 2024, flying from Los Angeles (LAX) with preference for direct flights or minimal layovers departing in the morning to maximize our first day, using major carriers with good family services, entertainment systems for kids, and option to select seats together. We need family-friendly accommodations that comfortably sleep four people - either connecting rooms, a suite, or vacation rental with at least 2 bedrooms - in the 6th or 7th arrondissement or near Latin Quarter with easy metro access to major attractions, reliable WiFi, air conditioning for July weather, and laundry facilities for our 10-day stay. Our family loves museums and cultural experiences with age-appropriate activities engaging both an 8-year-old and 12-year-old, prioritizing Eiffel Tower (sunset ascent), Louvre (family-friendly tour), Notre-Dame area, Versailles day trip, Paris parks like Luxembourg Gardens and Tuileries where kids can play and run around. Food is important - we want authentic French cuisine but need kid-friendly options since our 8-year-old is picky, so we need family-catering restaurants, information about French foods kids enjoy, Seine river cruise with dinner if family-appropriate, and visits to local bakeries and markets where kids can sample treats. We're interested in cultural activities like family-friendly cooking classes, visiting local markets with samples, and short day trips to Giverny for Monet's gardens or nearby châteaux good for kids, balancing educational experiences with fun activities that won't overwhelm young attention spans. Transportation concerns with children and luggage require advice on navigating Paris metro with kids, whether day passes or individual tickets work better for families, alternative transportation when metro stations lack elevators, and child-safe walking routes between attractions. Practical family considerations include finding pharmacies with children's medications, understanding French emergency services and pediatric care, locating playgrounds and family restrooms, child discounts for attractions and transportation, managing jet lag with children, and maintaining routines while traveling. Our budget is flexible at approximately $8,000 total covering flights, accommodation, local transportation, meals, attraction tickets, and activities, and we need current weather forecasts for packing with kids, metro navigation advice, tips for keeping kids engaged during cultural visits, French customs when traveling with children, emergency contacts, required documentation for traveling to France with minors, and age-appropriate souvenirs and educational materials for lasting French cultural memories."
+"Please plan a comprehensive family vacation to Paris, France for our family of four - 2 adults (ages 38 and 42) and 2 children (ages 8 and 12) - for 10 days from July 20-29, 2026, flying from Los Angeles (LAX) with preference for direct flights, using major carriers with good family services and option to select seats together. We need family-friendly accommodations that comfortably sleep four people - in the 6th or 7th arrondissement or near Latin Quarter with easy metro access to major attractions, reliable WiFi, air conditioning for July weather, and laundry facilities for our 10-day stay. Our family loves museums and cultural experiences with age-appropriate activities engaging both kids, Eiffel Tower, Louvre, Notre-Dame area, Versailles day trip, Luxembourg Gardens and Tuileries. Food is important - need kid-friendly options since our 8-year-old is picky, so we need family-catering restaurants, information about French foods kids enjoy. Our budget is flexible at approximately $8,000 total."
 ```
 
 ### Romantic Getaway
 ```
-"I'm planning a special romantic anniversary trip to Rome, Italy for my partner and me (both in our early 30s) to celebrate our 5th wedding anniversary from September 10-16, 2024, departing from Chicago (ORD) with preference for business class or premium economy if budget allows, evening departures so we can work half day before leaving, prioritizing flight comfort for this once-in-a-lifetime trip using airlines known for excellent service and comfortable seating. We want luxury accommodations - a 5-star boutique hotel or romantic bed & breakfast in the heart of Rome near Spanish Steps, Trastevere for romantic atmosphere, or close to Pantheon area, featuring historic character and charm with room views (city or charming courtyard), luxury amenities like marble bathroom, high-quality linens, room service for romantic in-room breakfasts, and ideally rooftop terrace or balcony for sunset aperitivos. Our romantic wishlist includes classic Rome experiences with elevated, intimate touches: private or small-group Vatican Museums and Sistine Chapel tour early morning before crowds, sunset visit to Trevi Fountain, romantic evening stroll through Trastevere cobblestone streets, and Colosseum special access tour at sunset or with underground access. For dining, we're serious food lovers wanting authentic, high-end Roman cuisine at romantic restaurants with exceptional cacio e pepe, carbonara, and Roman specialties, featuring intimate lighting, excellent wine lists, and preferably outdoor seating for warm September evenings, plus wine tasting experience in Frascati or nearby wine region, and cooking class together focusing on traditional Roman dishes. We're interested in romantic day trips to charming hill towns like Orvieto or Civita di Bagnoregio, or Villa d'Este in Tivoli for romantic gardens, preferring intimate art and history experiences over crowded tourist activities, including private tours of lesser-known churches with beautiful art and sunset photography sessions at romantic locations. Transportation preferences include comfortable private airport transfers and for day trips, private drivers or small group tours rather than large bus tours, with scenic walking routes between attractions for romantic atmosphere. Special romantic touches we're considering include professional photography session to capture our anniversary celebration, arranged flowers or champagne in room, couples spa treatments, reservations at restaurants known for marriage proposals for romantic atmosphere, and romantic shopping for matching jewelry or art pieces to commemorate our trip. Our budget is up to $6,000 for this special celebration, willing to splurge on unique experiences, exceptional dining, and luxury accommodations, and we need current weather forecasts for September in Rome, recommendations for romantic photography spots, tips for avoiding crowds at major attractions, suggestions for surprise romantic touches we could arrange for each other, Italian dining customs, tipping etiquette, romantic traditions unique to Rome, and learning romantic Italian phrases and cultural customs around romance in Italy."
+"I'm planning a special romantic anniversary trip to Rome, Italy for my partner and me (both in our early 30s) to celebrate our 5th wedding anniversary from September 10-16, 2026, departing from Chicago (ORD). We want luxury accommodations - a 5-star boutique hotel or romantic bed & breakfast in the heart of Rome near Spanish Steps, Trastevere for romantic atmosphere, or close to Pantheon area, featuring historic character and charm with room views (city or charming courtyard), luxury amenities like marble bathroom, high-quality linens, room service for romantic in-room breakfasts, and ideally rooftop terrace or balcony for sunset aperitivos. Our romantic wishlist includes classic Rome experiences with elevated, intimate touches. Our budget is up to $6,000 for this special celebration, willing to splurge on unique experiences, exceptional dining, and luxury accommodations, and we need current weather forecasts for September in Rome, recommendations for romantic photography spots, tips for avoiding crowds."
 ```
 
 ### Group Adventure
@@ -147,15 +147,187 @@ OPENAI_API_KEY=your_key
 Start → Coordinator → Flight Specialist → Hotel Specialist → Activity Specialist → Budget Analyst → Plan Synthesizer → End
 ```
 
+### Runtime State Schema
+The `TravelPlanState` (see `enhanced_multi_agent_system.py`) persists across nodes:
+- messages: conversation history (LangChain message objects)
+- user_request: original free‑form request
+- destination / origin: city names or IATA-origin city
+- budget: numeric (total trip budget – may be None if unspecified)
+- travelers: integer (defaults 2)
+- departure_date / return_date: ISO `YYYY-MM-DD` (auto-assigned if missing)
+- trip_type: business | leisure | family | romantic | luxury (inferred)
+- preferences: dict / structured tags (e.g. adventure_activities, luxury_accommodations)
+- flight_results / hotel_results / activity_results: lists of tool or agent messages
+- weather_results: list of weather lookups
+- budget_analysis: generated analysis text / messages
+- current_step: routing cursor for conditional edges
+- completed_steps: ordered list of finished phases
+- final_plan: synthesized comprehensive plan (string)
+- session_id: UUID for checkpoint isolation
+- agent_handoffs: audit log of inter-agent transitions
+
+### Execution Flow (Happy Path)
+
+1. Coordinator extracts & normalizes request details (may invoke `extract_trip_details` tool)
+2. Flight Specialist (flights + optional weather) → stores flight options
+3. Hotel Specialist chooses accommodation recommendations
+4. Activity Specialist compiles itinerary options (uses weather & preference cues)
+5. Budget Analyst aggregates estimated costs & optimization guidance
+6. Plan Synthesizer produces structured final plan
+7. Graph ends; `final_plan` available in state
+
+If any step sets `current_step` unexpectedly, routing fallback returns `END`.
+
+### Tools (Implemented / Placeholders)
+
+The following tool functions are scaffolded in `enhanced_multi_agent_system.py`:
+
+- search_flights
+- search_hotels
+- search_activities
+- get_weather_forecast
+- analyze_budget
+- extract_trip_details (partially implemented; performs lightweight regex + keyword extraction)
+
+At present several tool bodies are placeholders awaiting integration with concrete implementations from `data_sources.py` (e.g. `search_flights_sync`, `search_hotels_sync`). Fill each `try/except` block with calls to synchronous wrappers, serialize structured JSON (string return required by LangChain tool contract), and provide graceful fallbacks when external APIs are not configured.
+
+### Tracing & Observability
+
+The system optionally wires:
+
+- Azure Application Insights (via `AzureOpenAITracingCallback`)
+- OpenTelemetry exporter (`OpenTelemetryTracer`) emitting spans for: agent node execution, tool calls, LLM invocations
+
+Enable by setting in `.env` (names may map through `config.py`):
+
+```bash
+APPLICATION_INSIGHTS_CONNECTION_STRING=...
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces
+OTEL_SERVICE_NAME=enhanced-travel-planner
+```
+During execution, each agent could emit spans once `_get_otel_tracer` helper is fully implemented (currently partially stubbed). To finalize:
+1. Populate `_get_otel_tracer()` loop to return the cached `OpenTelemetryTracer` instance.
+2. Wrap main graph invocation in a root span (already scaffolded in `main()` with TODO comments).
+3. For each node, optionally create child spans annotating input parameters and summary of outputs (avoid full PII unless redaction configured).
+
+### Completing the Remaining TODOs
+
+Open `enhanced_multi_agent_system.py` and implement the following:
+
+1. Import missing standard libs at top (`import logging, json, re`).
+2. Fill in `_get_otel_tracer()` try/except (identify tracer by `isinstance(t, OpenTelemetryTracer)`).
+3. Implement each tool body:
+  * Call corresponding `*_sync` function from `data_sources` (e.g., `search_flights_sync`).
+  * On success: return `json.dumps({"status": "ok", "data": results})`.
+  * On failure: log error and return fallback structure with `status=error` and message.
+4. In `extract_trip_details` loops, set fields when keywords match; add budget & preference extraction logic (currently placeholders).
+5. In coordinator node, after tool response, parse tool JSON to update `destination`, `origin`, `travelers`, `trip_type`, `budget`, `preferences`.
+6. In synthesis node, iterate messages (they may be LangChain message objects) and append `.content` safely.
+7. Finish tracing root span creation and ensure closing in `finally` to flush exporters.
+
+### Sample Output Structure (Excerpt)
+
+```text
+EXECUTIVE SUMMARY
+Trip: 2 travelers, Seattle → London (Mar 15–17 2026)
+Primary Goals: Board meeting, site visits (LSE, Canary Wharf), evening networking
+
+FLIGHTS
+- Option 1: SEA → LHR (BA52) Business Class ...
+...
+
+HOTELS (City / Bank District)
+- Hotel A (5★) ...
+
+ITINERARY (Condensed)
+Day 1 AM: Arrival + Transfer; Midday: Board Meeting...
+...
+
+BUDGET SUMMARY
+Flights: $X
+Hotels: $Y (2 nights)
+Per Diem / Meals: $Z
+Total vs Budget: $Total / $Budget (Δ)
+```
+
+### Command Line Usage Patterns
+
+Interactive (prompts for request if none provided):
+
+```bash
+python enhanced_multi_agent_system.py
+```
+
+Programmatic (embedding in another script):
+
+```python
+from enhanced_multi_agent_system import create_travel_planning_graph, TravelPlanState
+from langchain_core.messages import HumanMessage
+
+graph = create_travel_planning_graph()
+state = TravelPlanState(
+  messages=[HumanMessage(content="Plan a 5 day art trip to NYC in November for 2 people, budget $3500")],
+  user_request="Plan a 5 day art trip to NYC in November for 2 people, budget $3500",
+  destination=None, origin=None, budget=None, travelers=2,
+  departure_date=None, return_date=None, trip_type=None, preferences={},
+  flight_results=[], hotel_results=[], activity_results=[], weather_results=[],
+  budget_analysis=None, current_step="start", completed_steps=[], final_plan=None,
+  session_id="dev-session", agent_handoffs=[]
+)
+for event in graph.stream(state, {"configurable": {"thread_id": "dev-session"}}):
+  pass
+```
+
+### Adding a New Agent (Example: Visa Specialist)
+
+1. Extend `AgentType` enum and temperature map in `create_llm`.
+2. Add fields to `TravelPlanState` if persistent outputs required (e.g. `visa_requirements`).
+3. Implement node function (e.g. `visa_specialist_node`).
+4. Insert conditional routing branch in `should_continue` and graph construction.
+5. Provide tools (e.g. `lookup_visa_requirements`) referencing new or existing data sources.
+6. Update README and tests.
+
+### Testing Recommendations
+
+- Unit style: create lightweight tests calling each tool with mocked/fallback responses.
+- Integration: run the graph end‑to‑end with a deterministic seed or mocked LLM (LangChain Fake LLM) for CI stability.
+- Snapshot: store golden plan outlines to detect structural regressions.
+
+### Troubleshooting Quick Reference
+
+| Symptom | Likely Cause | Resolution |
+| ------- | ------------ | ---------- |
+| ValueError: No LLM configuration found | Missing Azure/OpenAI keys | Populate `.env` then re-run `python setup.py` |
+| Empty flight/hotel/activity results | Tool bodies still placeholders | Implement tool logic calling `data_sources` helpers |
+| Tracing not emitting spans | `_get_otel_tracer` incomplete or env vars absent | Finish helper & set OTEL env vars |
+| JSON decode errors in coordinator | Tool returned non-JSON string | Ensure tools return serialized JSON |
+| Plan synthesizer missing sections | Upstream lists empty or not iterated | Confirm earlier nodes append `.content` |
+
+### Roadmap (Proposed Enhancements)
+
+- Deterministic test harness with mock LLM & fixtures
+- Caching layer between repeated API calls across sessions
+- Cost model normalization (different currencies → base currency via ExchangeRate API)
+- Additional agents: Visa, Insurance, Safety Advisory
+- Web UI (Next.js) integration & streaming plan updates
+- Persistent vector store for previously generated itineraries
+
+---
+This README reflects the enhanced system structure including current implementation gaps (placeholders) and outlines concrete steps to complete and extend the platform.
+
 ### State Management
+
 The system maintains a comprehensive state object that tracks:
+
 - User requirements and preferences
 - Search results from each specialist
 - Agent handoffs and collaboration history
 - Final plan synthesis
 
 ### Agent Collaboration
+
 Each agent:
+
 1. Receives context from previous agents
 2. Performs specialized tasks using real APIs
 3. Updates shared state with findings
@@ -164,16 +336,19 @@ Each agent:
 ## 🔍 Tracing and Observability
 
 ### OpenTelemetry Support
+
 - Comprehensive span tracking for all agent activities
 - Tool usage and API call monitoring
 - Performance metrics and error tracking
 
 ### Azure Application Insights Integration
+
 - Production-ready observability
 - GenAI semantic conventions compliance
 - Content recording with PII protection
 
 ### Configuration
+
 ```bash
 # Azure Application Insights
 APPLICATION_INSIGHTS_CONNECTION_STRING=your_connection_string
@@ -185,7 +360,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces
 ## 🛠️ Development
 
 ### Project Structure
-```
+
+```text
 travel_planning_system/
 ├── enhanced_multi_agent_system.py  # Main system
 ├── config.py                       # Configuration management
@@ -200,18 +376,21 @@ travel_planning_system/
 ### Key Components
 
 #### Configuration (`config.py`)
+
 - Centralized configuration management
 - API key validation
 - Environment-based settings
 - Missing configuration detection
 
 #### Data Sources (`data_sources.py`)
+
 - Async API clients for all external services
 - Intelligent fallback mechanisms
 - Rate limiting and error handling
 - Realistic data generation
 
 #### Enhanced System (`enhanced_multi_agent_system.py`)
+
 - LangGraph workflow implementation
 - Specialized agent nodes
 - State management and routing
@@ -228,6 +407,7 @@ travel_planning_system/
 ## 🧪 Testing
 
 ### Manual Testing
+
 ```bash
 # Test with sample inputs
 python enhanced_multi_agent_system.py
@@ -237,7 +417,9 @@ python setup.py
 ```
 
 ### System Validation
+
 The setup script validates:
+
 - Python version compatibility
 - Required dependencies
 - Configuration completeness
@@ -246,12 +428,14 @@ The setup script validates:
 ## 📊 Performance
 
 ### API Usage Optimization
+
 - Intelligent caching for repeated requests
 - Batch API calls where possible
 - Graceful degradation to fallbacks
 - Rate limiting respect
 
 ### Resource Management
+
 - Async HTTP client pooling
 - Memory-efficient state management
 - Configurable timeout handling
@@ -260,12 +444,14 @@ The setup script validates:
 ## 🔒 Security and Privacy
 
 ### API Key Management
+
 - Environment variable storage
 - No hardcoded credentials
 - Template-based configuration
 - Validation warnings
 
 ### Content Recording
+
 - Configurable PII protection
 - Tracing content redaction
 - Development vs production modes
@@ -274,6 +460,7 @@ The setup script validates:
 ## 🤝 Contributing
 
 ### Enhancement Ideas
+
 - Additional destination coverage
 - More specialized agents (visa, insurance)
 - Integration with booking platforms
@@ -281,6 +468,7 @@ The setup script validates:
 - Voice interaction support
 
 ### Code Contributions
+
 1. Follow existing patterns
 2. Add comprehensive error handling
 3. Include fallback mechanisms
@@ -296,19 +484,23 @@ This project is part of the LangGraph repository and follows the same licensing 
 ### Common Issues
 
 #### "No LLM configuration found"
+
 - Add Azure OpenAI or OpenAI credentials to `.env`
 - Run `python setup.py` to validate configuration
 
 #### "API key missing" warnings
+
 - Optional - system works with fallback data
 - Add desired API keys for real data
 - See API setup instructions above
 
 #### Import errors
+
 - Run `python setup.py` to install dependencies
 - Ensure Python 3.8+ is installed
 
 ### Getting Help
+
 1. Check the setup script output
 2. Validate `.env` configuration
 3. Review error messages for missing dependencies
