@@ -70,7 +70,7 @@ from langchain_core.tools.base import (
     TOOL_MESSAGE_BLOCK_TYPES,
     get_all_basemodel_annotations,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph._internal._runnable import RunnableCallable
@@ -83,6 +83,8 @@ INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
 )
 TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
+TOOL_EXECUTION_ERROR_TEMPLATE = "Error executing tool '{tool_name}' with kwargs {tool_kwargs} with error:\n {error}\n Please fix the error and try again."
+TOOL_INVOCATION_ERROR_TEMPLATE = "Error invoking tool '{tool_name}' with kwargs {tool_kwargs} with error:\n {error}\n Please fix the error and try again."
 
 
 def msg_content_output(output: Any) -> Union[str, list[dict]]:
@@ -122,6 +124,43 @@ def msg_content_output(output: Any) -> Union[str, list[dict]]:
             return json.dumps(output, ensure_ascii=False)
         except Exception:
             return str(output)
+
+
+class ToolExecutionError(Exception):
+    """Exception raised when a tool execution fails."""
+
+    def __init__(self, tool_name: str, error: Exception, tool_kwargs: dict[str, Any]):
+        self.message = TOOL_EXECUTION_ERROR_TEMPLATE.format(
+            tool_name=tool_name, tool_kwargs=tool_kwargs, error=error
+        )
+        self.tool_name = tool_name
+        self.tool_kwargs = tool_kwargs
+        self.error = error
+        super().__init__(self.message)
+
+
+class ToolInvocationError(Exception):
+    """Exception raised when a tool invocation fails due to invalid arguments."""
+
+    def __init__(self, tool_name: str, error: Exception, tool_kwargs: dict[str, Any]):
+        self.message = TOOL_INVOCATION_ERROR_TEMPLATE.format(
+            tool_name=tool_name, tool_kwargs=tool_kwargs, error=error
+        )
+        self.tool_name = tool_name
+        self.tool_kwargs = tool_kwargs
+        self.error = error
+        super().__init__(self.message)
+
+
+def _default_handle_tool_errors(e: Exception) -> str:
+    """Default error handler for tool errors.
+
+    If the tool is a tool invocation error, return its message.
+    Otherwise, raise the error.
+    """
+    if isinstance(e, ToolInvocationError):
+        return e.message
+    raise e
 
 
 def _handle_tool_error(
@@ -277,7 +316,7 @@ class ToolNode(RunnableCallable):
         tags: Optional metadata tags to associate with the node for filtering
             and organization. Defaults to None.
         handle_tool_errors: Configuration for error handling during tool execution.
-            Defaults to True. Supports multiple strategies:
+            Supports multiple strategies:
 
             - **True**: Catch all errors and return a ToolMessage with the default
               error template containing the exception details.
@@ -289,6 +328,10 @@ class ToolNode(RunnableCallable):
               and return the string result of calling it with the exception.
             - **False**: Disable error handling entirely, allowing exceptions to
               propagate.
+
+            Defaults to a callable that:
+                - catches tool parsing errors and returns a ToolMessage with the error message
+                - ignores tool execution errors (they will be raised)
 
         messages_key: The key in the state dictionary that contains the message list.
             This same key will be used for the output ToolMessages.
@@ -344,7 +387,7 @@ class ToolNode(RunnableCallable):
         tags: Optional[list[str]] = None,
         handle_tool_errors: Union[
             bool, str, Callable[..., str], tuple[type[Exception], ...]
-        ] = True,
+        ] = _default_handle_tool_errors,
         messages_key: str = "messages",
     ) -> None:
         """Initialize the ToolNode with the provided tools and configuration.
@@ -472,7 +515,13 @@ class ToolNode(RunnableCallable):
         try:
             call_args = {**call, **{"type": "tool_call"}}
             tool = self.tools_by_name[call["name"]]
-            response = tool.invoke(call_args, config)
+
+            try:
+                response = tool.invoke(call_args, config)
+            except ValidationError as exc:
+                raise ToolInvocationError(call["name"], exc, call["args"])
+            except Exception as exc:
+                raise ToolExecutionError(call["name"], exc, call["args"])
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios,
@@ -530,7 +579,14 @@ class ToolNode(RunnableCallable):
         try:
             call_args = {**call, **{"type": "tool_call"}}
             tool = self.tools_by_name[call["name"]]
-            response = await tool.ainvoke(call_args, config)
+
+            try:
+                response = await tool.ainvoke(call_args, config)
+            except ValidationError as exc:
+                raise ToolInvocationError(call["name"], exc, call["args"])
+            except Exception as exc:
+                raise ToolExecutionError(call["name"], exc, call["args"])
+
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios,
         # Where GraphInterrupt(GraphBubbleUp) is raised from an `interrupt` invocation most commonly:
