@@ -863,87 +863,86 @@ def main():
     tracers = setup_tracing()
     
     if trace and SpanKind:
-        tracer = trace.get_tracer(__name__)
-        
-        # Define child agents following GenAI conventions
+
         child_agents = [
-            {
-                "id": f"coordinator_{session_id}",
-                "name": "coordinator",
-                "role": "travel coordination",
-                "mode": "assistant"
-            },
-            {
-                "id": f"flight_specialist_{session_id}",
-                "name": "flight_specialist", 
-                "role": "flight booking",
-                "mode": "assistant"
-            },
-            {
-                "id": f"hotel_specialist_{session_id}",
-                "name": "hotel_specialist",
-                "role": "hotel booking", 
-                "mode": "assistant"
-            },
-            {
-                "id": f"activity_specialist_{session_id}",
-                "name": "activity_specialist",
-                "role": "activity planning",
-                "mode": "assistant"
-            },
-            {
-                "id": f"budget_analyst_{session_id}",
-                "name": "budget_analyst",
-                "role": "cost analysis",
-                "mode": "assistant"
-            },
-            {
-                "id": f"plan_synthesizer_{session_id}",
-                "name": "plan_synthesizer", 
-                "role": "plan synthesis",
-                "mode": "assistant"
-            }
+            {"id": f"coordinator_{session_id}",
+             "name": "coordinator",
+             "role": "travel coordination",
+             "mode": "assistant"},
+            {"id": f"flight_specialist_{session_id}",
+             "name": "flight_specialist",
+             "role": "flight booking",
+             "mode": "assistant"},
+            {"id": f"hotel_specialist_{session_id}",
+             "name": "hotel_specialist",
+             "role": "hotel booking",
+             "mode": "assistant"},
+            {"id": f"activity_specialist_{session_id}",
+             "name": "activity_specialist",
+             "role": "activity planning",
+             "mode": "assistant"},
+            {"id": f"budget_analyst_{session_id}",
+             "name": "budget_analyst",
+             "role": "cost analysis",
+             "mode": "assistant"},
+            {"id": f"plan_synthesizer_{session_id}",
+             "name": "plan_synthesizer",
+             "role": "plan synthesis",
+             "mode": "assistant"},
         ]
-        
-        # Create root span following GenAI semantic conventions
-        root_span = tracer.start_span(
-            "invoke_agent enhanced_multi_agent_travel_planning",  # Format: "invoke_agent {agent_name}"
-            kind=SpanKind.SERVER,  # SERVER for root span
+
+        orchestrator_input_messages = [
+            {"role": "user",
+             "parts": [{"type": "text", "content": user_input}]}
+        ]
+
+        provider_name = (
+            "azure.ai.openai" if config.llm.azure_openai_api_key else "openai"
+        )
+        model_name = (
+            config.llm.azure_deployment_name
+            or config.llm.openai_model
+            or "unknown"
+        )
+
+        root_span = trace.get_tracer(__name__).start_span(
+            name="invoke_agent enhanced_multi_agent_travel_planning",
+            kind="GenAI", # TODO: change this
             attributes={
-                # REQUIRED GenAI attributes (top level, not nested)
+                "span_type": "GenAI",
                 "gen_ai.operation.name": "invoke_agent",
-                "gen_ai.system": "langgraph", 
+                "gen_ai.provider.name": provider_name,
+                "gen_ai.request.model": model_name,
                 "gen_ai.agent.name": "enhanced_multi_agent_travel_planning",
                 "gen_ai.agent.id": f"enhanced_travel_planner_{session_id}",
-                
-                # CONDITIONALLY REQUIRED attributes
-                "gen_ai.request.model": config.llm.azure_deployment_name or config.llm.openai_model or "gpt-4",
+                "gen_ai.conversation.id": session_id,
                 "gen_ai.request.temperature": 0.7,
                 "gen_ai.request.top_p": 1.0,
                 "gen_ai.request.max_tokens": 4096,
-                "gen_ai.conversation.id": session_id,
-                
-                # RECOMMENDED attributes
-                "gen_ai.agent.mode": "autonomous",
-                "gen_ai.provider.name": "azure_openai" if config.llm.azure_openai_api_key else "openai",
-                "server.address": config.llm.azure_openai_endpoint.replace("https://", "").replace("/", "") if config.llm.azure_openai_endpoint else "api.openai.com",
-                "server.port": 443,
                 "gen_ai.request.frequency_penalty": 0.0,
                 "gen_ai.request.presence_penalty": 0.0,
-                
-                # Child agents as JSON following GenAI conventions
-                "gen_ai.agent.child_agents": json.dumps(child_agents),
-                
-                # Additional context
-                "session.id": session_id,
-                "user.request": user_input,
-                "service.name": "enhanced-multi-agent-travel-planning", 
-                "service.version": "1.0.0",
-                "span.kind": "server"
-            }
+                "gen_ai.orchestrator.agent_definitions": json.dumps(
+                    child_agents
+                ),
+                "gen_ai.input.messages": json.dumps(
+                    orchestrator_input_messages
+                ),
+                "server.address": (
+                    config.llm.azure_openai_endpoint.replace(
+                        "https://", ""
+                    ).rstrip("/")
+                    if config.llm.azure_openai_endpoint
+                    else "api.openai.com"
+                ),
+                "server.port": 443,
+                "metadata.session_id": session_id,
+                "metadata.service.name": (
+                    "enhanced-multi-agent-travel-planning"
+                ),
+                "metadata.service.version": "1.0.0",
+            },
         )
-        
-        # If using our custom tracer, set this span as external root so callbacks parent correctly
+
         otel_cb = _get_otel_tracer()
         if otel_cb and hasattr(otel_cb, "set_root_span"):
             try:
@@ -951,13 +950,12 @@ def main():
             except Exception:
                 pass
 
-        # Set up span context for child operations
         root_span_context = trace.set_span_in_context(root_span)
         if root_span_context and context:
             token = context.attach(root_span_context)
     
     try:
-        # Include callbacks so LangGraph nodes/tools emit child spans under the same root
+        # Include callbacks so LangGraph nodes/tools parent under same root
         config_dict_with_callbacks = dict(config_dict)
         config_dict_with_callbacks["callbacks"] = tracers
 
@@ -978,7 +976,8 @@ def main():
                         content = content[:1000] + "... [truncated]"
                     print(content)
 
-            print(f"\n✅ Completed: {', '.join(agent_state.get('completed_steps', []))}")
+            completed = ", ".join(agent_state.get("completed_steps", []))
+            print(f"\n✅ Completed: {completed}")
             print(f"🎯 Next: {agent_state.get('current_step', 'unknown')}")
             print()
 
@@ -996,35 +995,62 @@ def main():
         if final_state.values.get("agent_handoffs"):
             print("\n🔄 Agent Collaboration Summary:")
             for handoff in final_state.values["agent_handoffs"]:
-                print(f"  {handoff['from']} → {handoff['to']}: {handoff['task']}")
-
-        if root_span:
-            # Add GenAI response attributes
-            root_span.set_attribute(
-                "gen_ai.response.model",
-                config.llm.azure_deployment_name or config.llm.openai_model or "gpt-4",
-            )
-            if final_state.values.get("final_plan"):
-                plan_content = final_state.values["final_plan"]
-                root_span.set_attribute(
-                    "travel.plan.final",
-                    plan_content[:500] + "..." if len(plan_content) > 500 else plan_content,
+                print(
+                    f"  {handoff['from']} → {handoff['to']}: {handoff['task']}"
                 )
 
-            root_span.set_attribute("planning_completed", True)
+        if root_span:
+            # Set response model (recommended)
+            root_span.set_attribute("gen_ai.response.model", model_name)
+
+            # Add final output messages (opt-in)
+            if final_state.values.get("final_plan"):
+                plan_content = final_state.values["final_plan"]
+                orchestrator_output_messages = [
+                    {
+                        "role": "assistant",
+                        "parts": [
+                            {
+                                "type": "text",
+                                # cap size to avoid huge attributes
+                                "content": plan_content[:4000]
+                            }
+                        ],
+                        "finish_reason": "stop"
+                    }
+                ]
+                root_span.set_attribute(
+                    "gen_ai.output.messages",
+                    json.dumps(orchestrator_output_messages)
+                )
+                # Store a shortened preview under metadata
+                root_span.set_attribute(
+                    "metadata.final_plan.preview",
+                    (
+                        plan_content[:500] + "..."
+                        if len(plan_content) > 500
+                        else plan_content
+                    ),
+                )
+
+            # Planning summary custom metadata
+            root_span.set_attribute("metadata.planning_completed", True)
             root_span.set_attribute(
-                "agents_used", len(final_state.values.get("completed_steps", []))
+                "metadata.agents_used",
+                len(final_state.values.get("completed_steps", [])),
             )
 
-            # Add planning completion event
+            # Completion event (custom, retains for analytics)
             root_span.add_event(
-                "travel_plan_completed",
+                "planning.completed",
                 {
-                    "plan_length": str(len(final_state.values.get("final_plan", ""))),
-                    "agents_used": str(
+                    "metadata.plan_length": str(
+                        len(final_state.values.get("final_plan", ""))
+                    ),
+                    "metadata.agents_used": str(
                         len(final_state.values.get("completed_steps", []))
                     ),
-                    "session_completed": "true",
+                    "metadata.session_completed": "true",
                 },
             )
             
@@ -1054,6 +1080,10 @@ def main():
             pass
 
     print("\n🎊 Travel planning completed!")
-    print("Thank you for using the Enhanced Multi-Agent Travel Planning System!")
+    print(
+        "Thank you for using the Enhanced Multi-Agent Travel Planning System!"
+    )
+
+
 if __name__ == "__main__":
     main()
