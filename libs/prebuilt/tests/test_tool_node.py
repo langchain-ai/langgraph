@@ -220,6 +220,54 @@ async def test_tool_node_tool_call_input() -> None:
     ]
 
 
+def test_tool_node_error_handling_default_invocation() -> None:
+    tn = ToolNode([tool1])
+    result = tn.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"invalid": 0, "args": "foo"},
+                            "id": "some id",
+                        },
+                    ],
+                )
+            ]
+        }
+    )
+
+    assert all(m.type == "tool" for m in result["messages"])
+    assert all(m.status == "error" for m in result["messages"])
+    assert (
+        "Error invoking tool 'tool1' with kwargs {'invalid': 0, 'args': 'foo'} with error:\n"
+        in result["messages"][0].content
+    )
+
+
+def test_tool_node_error_handling_default_exception() -> None:
+    tn = ToolNode([tool1])
+    with pytest.raises(ValueError):
+        tn.invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "hi?",
+                        tool_calls=[
+                            {
+                                "name": "tool1",
+                                "args": {"some_val": 0, "some_other_val": "foo"},
+                                "id": "some id",
+                            },
+                        ],
+                    )
+                ]
+            }
+        )
+
+
 async def test_tool_node_error_handling() -> None:
     def handle_all(e: Union[ValueError, ToolException, ToolInvocationError]):
         return TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
