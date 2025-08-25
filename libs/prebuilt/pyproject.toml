@@ -28,6 +28,7 @@ dev = [
     "pytest-mock",
     "pytest-watcher",
     "mypy",
+    "langchain-core",
     "langgraph",
     "langgraph-checkpoint",
     "langgraph-checkpoint-sqlite",
@@ -39,6 +40,7 @@ dev = [
 default-groups = ['dev']
 
 [tool.uv.sources]
+langchain-core = { git = "https://github.com/langchain-ai/langchain/", branch = "cc/1.0/standard_content_parse_tc", subdirectory = "libs/core"}
 langgraph = { path = "../langgraph", editable = true }
 langgraph-checkpoint = { path = "../checkpoint", editable = true }
 langgraph-checkpoint-sqlite = { path = "../checkpoint-sqlite", editable = true }
