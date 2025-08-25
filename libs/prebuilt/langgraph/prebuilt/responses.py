@@ -188,7 +188,6 @@ class _SchemaSpec(Generic[SchemaT]):
         """Initialize SchemaSpec with schema and optional parameters."""
         self.schema = schema
 
-        # Schema names must be unique so we use a shortened UUID suffix
         if name:
             self.name = name
         elif isinstance(schema, dict):
