@@ -156,12 +156,20 @@ def test_create_agent_invoke(
         def before_model(self, state):
             calls.append("NoopSeven.before_model")
 
+        def modify_model_request(self, request, state):
+            calls.append("NoopSeven.modify_model_request")
+            return request
+
         def after_model(self, state):
             calls.append("NoopSeven.after_model")
 
     class NoopEight(AgentMiddleware):
         def before_model(self, state):
             calls.append("NoopEight.before_model")
+
+        def modify_model_request(self, request, state):
+            calls.append("NoopEight.modify_model_request")
+            return request
 
         def after_model(self, state):
             calls.append("NoopEight.after_model")
@@ -216,11 +224,15 @@ def test_create_agent_invoke(
     assert calls == [
         "NoopSeven.before_model",
         "NoopEight.before_model",
+        "NoopSeven.modify_model_request",
+        "NoopEight.modify_model_request",
         "NoopEight.after_model",
         "NoopSeven.after_model",
         "my_tool",
         "NoopSeven.before_model",
         "NoopEight.before_model",
+        "NoopSeven.modify_model_request",
+        "NoopEight.modify_model_request",
         "NoopEight.after_model",
         "NoopSeven.after_model",
     ]

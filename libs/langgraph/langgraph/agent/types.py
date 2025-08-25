@@ -31,7 +31,9 @@ class AgentMiddleware:
     def before_model(self, state: AgentState) -> AgentState | None:
         pass
 
-    def modify_model_request(self, request: ModelRequest) -> ModelRequest:
+    def modify_model_request(
+        self, request: ModelRequest, state: AgentState
+    ) -> ModelRequest:
         return request
 
     def after_model(self, state: AgentState) -> AgentState | None:

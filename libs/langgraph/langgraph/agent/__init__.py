@@ -135,7 +135,7 @@ def _make_model_request_node(
         )
         # visit middleware in order
         for mw in middleware:
-            request = mw.modify_model_request(request)
+            request = mw.modify_model_request(request, state)
         # prepare messages
         if request.system_prompt:
             messages = [SystemMessage(request.system_prompt)] + request.messages
