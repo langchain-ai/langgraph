@@ -71,6 +71,7 @@ from langchain_core.tools.base import (
 from pydantic import BaseModel
 from typing_extensions import Annotated, get_args, get_origin
 
+from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
@@ -340,6 +341,7 @@ class ToolNode(RunnableCallable):
         self.tools_by_name: dict[str, BaseTool] = {}
         self.tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
         self.tool_to_store_arg: dict[str, Optional[str]] = {}
+        self.tool_to_runtime_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
         for tool_ in tools:
@@ -348,6 +350,7 @@ class ToolNode(RunnableCallable):
             self.tools_by_name[tool_.name] = tool_
             self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
             self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
+            self.tool_to_runtime_arg[tool_.name] = _get_runtime_arg(tool_)
 
     def _func(
         self,
@@ -360,7 +363,7 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store, config)
         config_list = get_config_list(config, len(tool_calls))
         input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
@@ -381,7 +384,7 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store, config)
         outputs = await asyncio.gather(
             *(self._arun_one(call, input_type, config) for call in tool_calls)
         )
@@ -554,6 +557,7 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        config: Optional[RunnableConfig] = None,
     ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         input_type: Literal["list", "dict", "tool_calls"]
         if isinstance(input, list):
@@ -580,7 +584,7 @@ class ToolNode(RunnableCallable):
             raise ValueError("No AIMessage found in input")
 
         tool_calls = [
-            self.inject_tool_args(call, input, store)
+            self.inject_tool_args(call, input, store, config)
             for call in latest_ai_message.tool_calls
         ]
         return tool_calls, input_type
@@ -661,6 +665,40 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
+    def _inject_runtime(self, tool_call: ToolCall, config: RunnableConfig) -> ToolCall:
+        """Inject runtime from config into tool call arguments.
+
+        This method extracts the runtime from the RunnableConfig and injects it
+        into the tool call arguments for tools that require runtime access.
+
+        Args:
+            tool_call: The tool call to augment with runtime.
+            config: The RunnableConfig containing the runtime.
+
+        Returns:
+            The tool call with runtime injected if required.
+
+        Raises:
+            ValueError: If a tool requires runtime injection but runtime is not
+                available in the config.
+        """
+        runtime_arg = self.tool_to_runtime_arg[tool_call["name"]]
+        if not runtime_arg:
+            return tool_call
+
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+        if runtime is None:
+            raise ValueError(
+                "Cannot inject runtime into tools with InjectedRuntime annotations - "
+                "runtime not found in config."
+            )
+
+        tool_call["args"] = {
+            **tool_call["args"],
+            runtime_arg: runtime,
+        }
+        return tool_call
+
     def inject_tool_args(
         self,
         tool_call: ToolCall,
@@ -670,13 +708,14 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        config: Optional[RunnableConfig] = None,
     ) -> ToolCall:
-        """Inject graph state and store into tool call arguments.
+        """Inject graph state, store, and runtime into tool call arguments.
 
         This method enables tools to access graph context that should not be controlled
-        by the model. Tools can declare dependencies on graph state or persistent storage
-        using InjectedState and InjectedStore annotations. This method automatically
-        identifies these dependencies and injects the appropriate values.
+        by the model. Tools can declare dependencies on graph state, persistent storage,
+        or runtime using InjectedState, InjectedStore, and InjectedRuntime annotations.
+        This method automatically identifies these dependencies and injects the appropriate values.
 
         The injection process preserves the original tool call structure while adding
         the necessary context arguments. This allows tools to be both model-callable
@@ -689,6 +728,8 @@ class ToolNode(RunnableCallable):
                 Can be a message list, state dictionary, or BaseModel instance.
             store: The persistent store instance to inject into tools requiring storage.
                 Will be None if no store is configured for the graph.
+            config: The RunnableConfig containing runtime and other configuration.
+                Will be None if runtime injection is not needed.
 
         Returns:
             A new ToolCall dictionary with the same structure as the input but with
@@ -696,7 +737,8 @@ class ToolNode(RunnableCallable):
 
         Raises:
             ValueError: If a tool requires store injection but no store is provided,
-                       or if state injection requirements cannot be satisfied.
+                       if state injection requirements cannot be satisfied,
+                       or if runtime injection is required but not available in config.
 
         Note:
             This method is automatically called during tool execution but can also
@@ -710,6 +752,12 @@ class ToolNode(RunnableCallable):
         tool_call_copy: ToolCall = copy(tool_call)
         tool_call_with_state = self._inject_state(tool_call_copy, input)
         tool_call_with_store = self._inject_store(tool_call_with_state, store)
+
+        # Only inject runtime if config is provided
+        if config is not None:
+            tool_call_with_runtime = self._inject_runtime(tool_call_with_store, config)
+            return tool_call_with_runtime
+
         return tool_call_with_store
 
     def _validate_tool_command(
@@ -1001,8 +1049,89 @@ class InjectedStore(InjectedToolArg):
     """  # noqa: E501
 
 
+class InjectedRuntime(InjectedToolArg):
+    """Annotation for injecting Runtime into tool arguments.
+
+    This annotation enables tools to access the LangGraph runtime without exposing
+    runtime details to the language model. Tools annotated with InjectedRuntime
+    receive the runtime instance automatically during execution while remaining
+    invisible to the model's tool-calling interface.
+
+    The runtime provides access to context, store, stream writer, and other
+    runtime utilities that tools can use for advanced control flow and state
+    management.
+
+    Example:
+        ```python
+        from typing_extensions import Annotated
+        from langchain_core.tools import tool
+        from langgraph.runtime import Runtime
+        from langgraph.prebuilt import InjectedRuntime, ToolNode
+
+        @tool
+        def context_aware_tool(
+            query: str,
+            runtime: Annotated[Runtime, InjectedRuntime()]
+        ) -> str:
+            '''Tool that accesses runtime context.'''
+            # Access runtime context
+            if runtime.context:
+                user_id = runtime.context.user_id
+                return f"Processing query for user {user_id}: {query}"
+
+            # Access runtime store
+            if runtime.store:
+                data = runtime.store.get(("users",), user_id)
+                if data:
+                    return f"Found user data: {data.value}"
+
+            return "No context available"
+
+        @tool
+        def stream_writer_tool(
+            message: str,
+            runtime: Annotated[Runtime, InjectedRuntime()]
+        ) -> str:
+            '''Tool that writes to custom stream.'''
+            runtime.stream_writer({"custom_event": message})
+            return f"Streamed: {message}"
+        ```
+
+        Usage with ToolNode:
+
+        ```python
+        from langgraph.graph import StateGraph
+        from langgraph.runtime import Runtime
+
+        tool_node = ToolNode([context_aware_tool, stream_writer_tool])
+
+        graph = StateGraph(State)
+        graph.add_node("tools", tool_node)
+        compiled_graph = graph.compile()
+
+        # Runtime is injected automatically from config
+        result = graph.invoke(
+            {"messages": [HumanMessage("Process this query")]},
+            context={"user_id": "user_123"}
+        )
+        ```
+
+    Note:
+        - InjectedRuntime arguments are automatically excluded from tool schemas
+          presented to language models
+        - The runtime instance is automatically injected by ToolNode during execution
+        - Tools can access runtime context, store, stream writer, and previous values
+        - Runtime is extracted from the RunnableConfig during tool execution
+    """  # noqa: E501
+
+    pass
+
+
 def _is_injection(
-    type_arg: Any, injection_type: Union[Type[InjectedState], Type[InjectedStore]]
+    type_arg: Any,
+    injection_type: Union[
+        Type[InjectedState], Type[InjectedStore], Type[InjectedRuntime]
+    ],
 ) -> bool:
     """Check if a type argument represents an injection annotation.
 
@@ -1093,6 +1222,43 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
         if len(injections) > 1:
             raise ValueError(
                 "A tool argument should not be annotated with InjectedStore more than "
+                f"once. Received arg {name} with annotations {injections}."
+            )
+        elif len(injections) == 1:
+            return name
+        else:
+            pass
+
+    return None
+
+
+def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
+    """Extract runtime injection argument from tool annotations.
+
+    This function analyzes a tool's input schema to identify the argument that
+    should be injected with the graph runtime. Only one runtime argument is supported
+    per tool.
+
+    Args:
+        tool: The tool to analyze for runtime injection requirements.
+
+    Returns:
+        The name of the argument that should receive the runtime injection, or None
+        if no runtime injection is required.
+
+    Raises:
+        ValueError: If a tool argument has multiple InjectedRuntime annotations.
+    """
+    full_schema = tool.get_input_schema()
+    for name, type_ in get_all_basemodel_annotations(full_schema).items():
+        injections = [
+            type_arg
+            for type_arg in get_args(type_)
+            if _is_injection(type_arg, InjectedRuntime)
+        ]
+        if len(injections) > 1:
+            raise ValueError(
+                "A tool argument should not be annotated with InjectedRuntime more than "
                 f"once. Received arg {name} with annotations {injections}."
             )
         elif len(injections) == 1:
