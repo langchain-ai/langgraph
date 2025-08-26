@@ -37,13 +37,12 @@ from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
 # Tracing imports
 try:
-    from otel_tracer import OpenTelemetryTracer
     from langchain_azure_ai.callbacks.tracers import AzureOpenAITracingCallback
 except ImportError as e:
     logger.warning(f"Tracing imports failed: {e}")
-    OpenTelemetryTracer = None
     AzureOpenAITracingCallback = None
-
+    
+OpenTelemetryTracer = None
 try:
     from opentelemetry import trace, context
     from opentelemetry.trace import SpanKind
