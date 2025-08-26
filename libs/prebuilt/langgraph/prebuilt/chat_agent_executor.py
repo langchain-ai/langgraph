@@ -14,6 +14,7 @@ from typing import (
     cast,
     get_type_hints,
 )
+from warnings import warn
 
 from langchain_core.language_models import (
     BaseChatModel,
@@ -36,6 +37,7 @@ from pydantic import BaseModel
 from typing_extensions import Annotated, NotRequired, TypedDict, TypeVar
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
+from langgraph._internal._typing import MISSING
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
@@ -932,6 +934,7 @@ def create_react_agent(
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
+    **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
 
@@ -1065,8 +1068,13 @@ def create_react_agent(
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
 
+    !!! warning "`config_schema` Deprecated"
+        The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
+        Please use `context_schema` instead to specify the schema for run-scoped context.
+
+
     Returns:
-        A CompiledStateGraph that can be used for chat interactions.
+        A compiled LangChain runnable that can be used for chat interactions.
 
     The "model" node calls the language model with the messages list (after applying the prompt).
     If the resulting AIMessage contains `tool_calls`, the graph will then call the ["tools"][langgraph.prebuilt.tool_node.ToolNode].
@@ -1107,7 +1115,6 @@ def create_react_agent(
             print(chunk)
         ```
     """
-
     # Handle deprecated config_schema parameter
     if (
         config_schema := deprecated_kwargs.pop("config_schema", MISSING)
