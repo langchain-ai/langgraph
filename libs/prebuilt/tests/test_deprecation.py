@@ -14,7 +14,7 @@ class Config(TypedDict):
 @pytest.mark.filterwarnings("ignore:`get_config_jsonschema` is deprecated")
 def test_config_schema_deprecation() -> None:
     with pytest.warns(
-        LangGraphDeprecatedSinceV10,
+        DeprecationWarning,
         match="`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
     ):
         agent = create_react_agent(FakeToolCallingModel(), [], config_schema=Config)
