@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
-from langgraph.prebuilt import create_agent
+from langgraph.prebuilt import create_react_agent
 from langgraph.prebuilt.responses import (
     MultipleStructuredOutputsError,
     NativeOutput,
@@ -120,7 +120,7 @@ class TestResponseFormatAsModel:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(model, [get_weather], response_format=WeatherBaseModel)
+        agent = create_react_agent(model, [get_weather], response_format=WeatherBaseModel)
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
         assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
@@ -141,7 +141,7 @@ class TestResponseFormatAsModel:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(model, [get_weather], response_format=WeatherDataclass)
+        agent = create_react_agent(model, [get_weather], response_format=WeatherDataclass)
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
         assert response["structured_response"] == EXPECTED_WEATHER_DATACLASS
@@ -162,7 +162,7 @@ class TestResponseFormatAsModel:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(model, [get_weather], response_format=WeatherTypedDict)
+        agent = create_react_agent(model, [get_weather], response_format=WeatherTypedDict)
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
         assert response["structured_response"] == EXPECTED_WEATHER_DICT
@@ -183,7 +183,7 @@ class TestResponseFormatAsModel:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(model, [get_weather], response_format=weather_json_schema)
+        agent = create_react_agent(model, [get_weather], response_format=weather_json_schema)
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
         assert response["structured_response"] == EXPECTED_WEATHER_DICT
@@ -206,7 +206,7 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(
+        agent = create_react_agent(
             model, [get_weather], response_format=ToolOutput(WeatherBaseModel)
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
@@ -229,7 +229,7 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(
+        agent = create_react_agent(
             model, [get_weather], response_format=ToolOutput(WeatherDataclass)
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
@@ -252,7 +252,7 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(
+        agent = create_react_agent(
             model, [get_weather], response_format=ToolOutput(WeatherTypedDict)
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
@@ -275,7 +275,7 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(
+        agent = create_react_agent(
             model, [get_weather], response_format=ToolOutput(weather_json_schema)
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
@@ -298,7 +298,7 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(
+        agent = create_react_agent(
             model,
             [get_weather, get_location],
             response_format=ToolOutput(
@@ -324,7 +324,7 @@ class TestResponseFormatAsToolOutput:
 
         model_location = FakeToolCallingModel(tool_calls=tool_calls_location)
 
-        agent_location = create_agent(
+        agent_location = create_react_agent(
             model_location,
             [get_weather, get_location],
             response_format=ToolOutput(
@@ -356,7 +356,7 @@ class TestResponseFormatAsToolOutput:
             tool_calls=tool_calls
         )
 
-        agent = create_agent(
+        agent = create_react_agent(
             model,
             [get_weather, get_location],
             response_format=ToolOutput(Union[WeatherBaseModel, LocationResponse]),
@@ -380,7 +380,7 @@ class TestResponseFormatAsToolOutput:
 
         model_location = FakeToolCallingModel(tool_calls=tool_calls_location)
 
-        agent_location = create_agent(
+        agent_location = create_react_agent(
             model_location,
             [get_weather, get_location],
             response_format=ToolOutput(Union[WeatherBaseModel, LocationResponse]),
@@ -411,7 +411,7 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(
+        agent = create_react_agent(
             model,
             [],
             response_format=ToolOutput(
@@ -452,7 +452,7 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(
+        agent = create_react_agent(
             model,
             [],
             response_format=ToolOutput(
@@ -481,7 +481,7 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(
+        agent = create_react_agent(
             model,
             [],
             response_format=ToolOutput(
@@ -517,7 +517,7 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(
+        agent = create_react_agent(
             model,
             [],
             response_format=ToolOutput(
@@ -563,7 +563,7 @@ class TestResponseFormatAsToolOutput:
                 return "Custom error: Multiple outputs not allowed"
             return "Custom error"
 
-        agent = create_agent(
+        agent = create_react_agent(
             model,
             [],
             response_format=ToolOutput(
@@ -607,7 +607,7 @@ class TestResponseFormatAsToolOutput:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_agent(
+        agent = create_react_agent(
             model,
             [],
             response_format=ToolOutput(
@@ -637,7 +637,7 @@ class TestResponseFormatAsNativeOutput:
             tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_PYDANTIC
         )
 
-        agent = create_agent(
+        agent = create_react_agent(
             model, [get_weather], response_format=NativeOutput(WeatherBaseModel)
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
@@ -655,7 +655,7 @@ class TestResponseFormatAsNativeOutput:
             tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DATACLASS
         )
 
-        agent = create_agent(
+        agent = create_react_agent(
             model, [get_weather], response_format=NativeOutput(WeatherDataclass)
         )
         response = agent.invoke(
@@ -675,7 +675,7 @@ class TestResponseFormatAsNativeOutput:
             tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DICT
         )
 
-        agent = create_agent(
+        agent = create_react_agent(
             model, [get_weather], response_format=NativeOutput(WeatherTypedDict)
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
@@ -693,7 +693,7 @@ class TestResponseFormatAsNativeOutput:
             tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_DICT
         )
 
-        agent = create_agent(
+        agent = create_react_agent(
             model, [get_weather], response_format=NativeOutput(weather_json_schema)
         )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
@@ -719,7 +719,7 @@ def test_union_of_types() -> None:
         tool_calls=tool_calls, structured_response=EXPECTED_WEATHER_PYDANTIC
     )
 
-    agent = create_agent(
+    agent = create_react_agent(
         model,
         [get_weather, get_location],
         response_format=ToolOutput(Union[WeatherBaseModel, LocationResponse]),
@@ -736,7 +736,7 @@ def test_union_of_types() -> None:
 def test_inference_to_native_output() -> None:
     """Test that native output is inferred when a model supports it."""
     model = ChatOpenAI(model="gpt-5")
-    agent = create_agent(
+    agent = create_react_agent(
         model,
         prompt="You are a helpful weather assistant. Please call the get_weather tool, then use the WeatherReport tool to generate the final response.",
         tools=[get_weather],
@@ -763,7 +763,7 @@ def test_inference_to_native_output() -> None:
 def test_inference_to_tool_output() -> None:
     """Test that tool output is inferred when a model supports it."""
     model = ChatOpenAI(model="gpt-4")
-    agent = create_agent(
+    agent = create_react_agent(
         model,
         prompt="You are a helpful weather assistant. Please call the get_weather tool, then use the WeatherReport tool to generate the final response.",
         tools=[get_weather],

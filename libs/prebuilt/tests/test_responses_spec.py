@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 from pydantic import BaseModel, create_model
 
-from langgraph.prebuilt import create_agent
+from langgraph.prebuilt import create_react_agent
 from langgraph.prebuilt.responses import ToolOutput
 from tests.utils import BaseSchema, load_spec
 
@@ -129,7 +129,7 @@ def test_responses_integration_matrix(case: TestCase) -> None:
             http_client=http_client,
         )
 
-        agent = create_agent(
+        agent = create_react_agent(
             model,
             tools=[role_tool["tool"], dept_tool["tool"]],
             prompt=AGENT_PROMPT,

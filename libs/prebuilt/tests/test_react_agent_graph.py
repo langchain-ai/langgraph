@@ -4,7 +4,7 @@ import pytest
 from pydantic import BaseModel
 from syrupy import SnapshotAssertion
 
-from langgraph.prebuilt import create_agent
+from langgraph.prebuilt import create_react_agent
 from tests.model import FakeToolCallingModel
 
 model = FakeToolCallingModel()
@@ -40,7 +40,7 @@ def test_react_agent_graph_structure(
     pre_model_hook: Union[Callable, None],
     post_model_hook: Union[Callable, None],
 ) -> None:
-    agent = create_agent(
+    agent = create_react_agent(
         model,
         tools=tools,
         pre_model_hook=pre_model_hook,

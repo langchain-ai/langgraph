@@ -7,7 +7,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
-from langgraph.prebuilt import create_agent
+from langgraph.prebuilt import create_react_agent
 from langgraph.prebuilt.responses import ToolOutput
 from tests.utils import BaseSchema, load_spec
 
@@ -79,14 +79,14 @@ def test_return_direct_integration_matrix(case: TestCase) -> None:
     )
 
     if case.response_format:
-        agent = create_agent(
+        agent = create_react_agent(
             model,
             tools=[poll_tool["tool"]],
             prompt=AGENT_PROMPT,
             response_format=ToolOutput(case.response_format),
         )
     else:
-        agent = create_agent(
+        agent = create_react_agent(
             model,
             tools=[poll_tool["tool"]],
             prompt=AGENT_PROMPT,
