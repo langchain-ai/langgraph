@@ -23,6 +23,7 @@ from langchain_core.messages import (
     AIMessage,
     BaseMessage,
     SystemMessage,
+    ToolCall,
     ToolMessage,
 )
 from langchain_core.runnables import (
@@ -321,7 +322,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
     def _handle_multiple_structured_outputs(
         self,
         response: AIMessage,
-        structured_tool_calls: Any,
+        structured_tool_calls: list[ToolCall],
     ) -> Command:
         """Handle multiple structured output tool calls."""
         tool_names = [tool_call["name"] for tool_call in structured_tool_calls]
