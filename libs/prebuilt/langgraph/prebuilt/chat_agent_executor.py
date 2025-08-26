@@ -312,7 +312,7 @@ class _AgentBuilder(Generic[StructuredResponseT]):
             self._final_state_schema = self.state_schema
         else:
             self._final_state_schema = (
-                AgentStateWithStructuredResponse
+                AgentStateWithStructuredResponse  # type: ignore[assignment]
                 if self.response_format is not None
                 else AgentState
             )
@@ -1200,7 +1200,7 @@ def create_react_agent(
         )
 
     if response_format and not isinstance(response_format, (ToolOutput, NativeOutput)):
-        if _supports_native_structured_output(model):
+        if _supports_native_structured_output(model):  # type: ignore[arg-type]
             response_format = NativeOutput(
                 schema=response_format,
             )
