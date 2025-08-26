@@ -38,6 +38,12 @@ Represents the status of a thread:
 - "error": An exception occurred during task processing.
 """
 
+ThreadStreamMode = Literal[
+    "run_modes",
+    "lifecycle",
+    "state_update"
+]
+
 StreamMode = Literal[
     "values",
     "messages",
