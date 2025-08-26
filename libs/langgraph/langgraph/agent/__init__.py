@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from inspect import signature
 from typing import Callable, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -6,9 +7,11 @@ from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.tools import BaseTool
 
 from langgraph.agent.types import (
-    AgentInput,
+    AgentGoTo,
     AgentMiddleware,
     AgentState,
+    AgentUpdate,
+    GoTo,
     ModelRequest,
     ResponseFormat,
 )
@@ -24,7 +27,7 @@ def create_agent(
     system_prompt: str,
     middleware: Sequence[AgentMiddleware] = (),
     response_format: ResponseFormat | None = None,
-) -> StateGraph[AgentState, None, AgentInput]:
+) -> StateGraph[AgentState, None, AgentUpdate]:
     # init chat model
     if isinstance(model, str):
         try:
@@ -58,7 +61,7 @@ def create_agent(
     ]
 
     # create graph, add nodes
-    graph = StateGraph(AgentState, input_schema=AgentInput)
+    graph = StateGraph(AgentState, input_schema=AgentUpdate, output_schema=AgentUpdate)
     graph.add_node(
         "model_request",
         _make_model_request_node(
@@ -95,18 +98,26 @@ def create_agent(
         _make_tools_to_model_edge(tool_node, first_node),
         [first_node, END],
     )
-    graph.add_conditional_edges(last_node, _make_model_to_tools_edge(), ["tools", END])
+    graph.add_conditional_edges(
+        last_node, _make_model_to_tools_edge(first_node), ["tools", END]
+    )
 
     # add before model edges
     if middleware_w_before:
         for m1, m2 in zip(middleware_w_before, middleware_w_before[1:]):
-            graph.add_edge(
+            _add_middleware_edge(
+                graph,
+                m1.before_model,
                 f"{m1.__class__.__name__}.before_model",
                 f"{m2.__class__.__name__}.before_model",
+                first_node,
             )
-        graph.add_edge(
+        _add_middleware_edge(
+            graph,
+            middleware_w_before[-1].before_model,
             f"{middleware_w_before[-1].__class__.__name__}.before_model",
             "model_request",
+            first_node,
         )
 
     # add after model edges
@@ -117,9 +128,12 @@ def create_agent(
         for idx in range(len(middleware_w_after) - 1, 0, -1):
             m1 = middleware_w_after[idx]
             m2 = middleware_w_after[idx - 1]
-            graph.add_edge(
+            _add_middleware_edge(
+                graph,
+                m1.after_model,
                 f"{m1.__class__.__name__}.after_model",
                 f"{m2.__class__.__name__}.after_model",
+                first_node,
             )
 
     return graph
@@ -146,6 +160,7 @@ def _make_model_request_node(
         # visit middleware in order
         for mw in middleware:
             request = mw.modify_model_request(request, state)
+            # TODO assert request.tools in tools, or pass them to tool node
         # prepare messages
         if request.system_prompt:
             messages = [SystemMessage(request.system_prompt)] + request.messages
@@ -165,8 +180,17 @@ def _make_model_request_node(
     return model_request
 
 
-def _make_model_to_tools_edge() -> Callable[[AgentState], str | None]:
+def _resolve_goto(goto: GoTo | None, first_node: str) -> str | None:
+    if goto == "model":
+        return first_node
+    elif goto:
+        return goto
+
+
+def _make_model_to_tools_edge(first_node: str) -> Callable[[AgentState], str | None]:
     def model_to_tools(state: AgentState) -> str | None:
+        if state.goto:
+            return _resolve_goto(state.goto, first_node)
         message = state.messages[-1]
         if isinstance(message, AIMessage) and message.tool_calls:
             return "tools"
@@ -191,3 +215,29 @@ def _make_tools_to_model_edge(
         return next_node
 
     return tools_to_model
+
+
+def _add_middleware_edge(
+    graph: StateGraph,
+    method: Callable[[AgentState], AgentUpdate | AgentGoTo | None],
+    name: str,
+    default_destination: str,
+    model_destination: str,
+) -> None:
+    sig = signature(method)
+    uses_goto = sig.return_annotation is AgentGoTo or AgentGoTo in getattr(
+        sig.return_annotation, "__args__", ()
+    )
+
+    if uses_goto:
+
+        def goto_edge(state: AgentState) -> str:
+            return _resolve_goto(state.goto, model_destination) or default_destination
+
+        destinations = [default_destination, END, "tools"]
+        if name != model_destination:
+            destinations.append(model_destination)
+
+        graph.add_conditional_edges(name, goto_edge, destinations)
+    else:
+        graph.add_edge(name, default_destination)

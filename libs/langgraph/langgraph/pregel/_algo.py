@@ -198,11 +198,8 @@ def local_read(
         # apply writes
         local_channels: dict[str, BaseChannel] = {}
         for k in channels:
-            if k in updated:
-                cc = channels[k].copy()
-                cc.update(updated[k])
-            else:
-                cc = channels[k]
+            cc = channels[k].copy()
+            cc.update(updated[k])
             local_channels[k] = cc
         # read fresh values
         values = read_channels(local_channels, select)

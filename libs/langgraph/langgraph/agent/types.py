@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AnyMessage
@@ -10,9 +10,11 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
+from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.graph.message import Messages, add_messages
 
 ResponseFormat = dict | type[BaseModel]
+GoTo = Literal["tools", "model", "__end__"]
 
 
 @dataclass
@@ -32,7 +34,7 @@ class AgentMiddleware:
     def __copy__(self) -> Self:
         return self.__class__(**self.__dict__)
 
-    def before_model(self, state: AgentState) -> AgentState | None:
+    def before_model(self, state: AgentState) -> AgentUpdate | AgentGoTo | None:
         pass
 
     def modify_model_request(
@@ -40,14 +42,20 @@ class AgentMiddleware:
     ) -> ModelRequest:
         return request
 
-    def after_model(self, state: AgentState) -> AgentState | None:
+    def after_model(self, state: AgentState) -> AgentUpdate | AgentGoTo | None:
         pass
 
 
-class AgentInput(TypedDict):
+class AgentUpdate(TypedDict, total=False):
     messages: Messages
+
+
+class AgentGoTo(TypedDict, total=False):
+    messages: Messages
+    goto: GoTo
 
 
 @dataclass
 class AgentState:
     messages: Annotated[list[AnyMessage], add_messages]
+    goto: Annotated[GoTo | None, EphemeralValue] = None

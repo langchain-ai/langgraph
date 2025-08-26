@@ -2,8 +2,10 @@ from langchain_core.messages import AIMessage, ToolCall
 from syrupy import SnapshotAssertion
 
 from langgraph.agent import create_agent
-from langgraph.agent.types import AgentMiddleware
+from langgraph.agent.types import AgentGoTo, AgentMiddleware
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.constants import END
 from tests.fake_chat import FakeChatModel
 from tests.messages import _AnyIdToolMessage
 
@@ -236,3 +238,61 @@ def test_create_agent_invoke(
         "NoopEight.after_model",
         "NoopSeven.after_model",
     ]
+
+
+def test_create_agent_goto(
+    snapshot: SnapshotAssertion,
+    sync_checkpointer: BaseCheckpointSaver,
+):
+    calls = []
+
+    class NoopSeven(AgentMiddleware):
+        def before_model(self, state):
+            calls.append("NoopSeven.before_model")
+
+        def modify_model_request(self, request, state):
+            calls.append("NoopSeven.modify_model_request")
+            return request
+
+        def after_model(self, state):
+            calls.append("NoopSeven.after_model")
+
+    class NoopEight(AgentMiddleware):
+        def before_model(self, state) -> AgentGoTo:
+            calls.append("NoopEight.before_model")
+            return {"goto": END}
+
+        def modify_model_request(self, request, state):
+            calls.append("NoopEight.modify_model_request")
+            return request
+
+        def after_model(self, state):
+            calls.append("NoopEight.after_model")
+
+    def my_tool(input: str) -> str:
+        """A great tool"""
+        calls.append("my_tool")
+        return input.upper()
+
+    agent_one = create_agent(
+        model=FakeChatModel(
+            messages=[
+                AIMessage(
+                    "",
+                    id="ai1",
+                    tool_calls=[ToolCall(id="1", name="my_tool", args={"input": "yo"})],
+                ),
+                AIMessage(id="ai2", content="Hello, how can I assist you today?"),
+            ]
+        ),
+        tools=[my_tool],
+        system_prompt="You are a helpful assistant.",
+        middleware=[NoopSeven(), NoopEight()],
+    ).compile(checkpointer=sync_checkpointer)
+
+    if isinstance(sync_checkpointer, InMemorySaver):
+        assert agent_one.get_graph().draw_mermaid() == snapshot
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    assert agent_one.invoke({"messages": []}, thread1) == {"messages": []}
+    assert calls == ["NoopSeven.before_model", "NoopEight.before_model"]
