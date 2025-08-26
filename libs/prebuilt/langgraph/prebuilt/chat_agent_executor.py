@@ -63,8 +63,6 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Command, Send
 from langgraph.typing import ContextT, StateT
 
-F = TypeVar("F", bound=Callable[..., Any])
-
 StructuredResponseT = TypeVar("StructuredResponseT", default=None)
 
 STRUCTURED_OUTPUT_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
