@@ -185,12 +185,14 @@ def _handle_tool_error(
         The tuple case is handled by the caller through exception type checking,
         not by this function directly.
     """
-    if isinstance(flag, (bool, tuple)) or (isinstance(flag, type) and issubclass(flag, Exception)):
+    if isinstance(flag, (bool, tuple)) or (
+        isinstance(flag, type) and issubclass(flag, Exception)
+    ):
         content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
     elif isinstance(flag, str):
         content = flag
     elif callable(flag):
-        content = flag(e)
+        content = flag(e)  # type: ignore [assignment, call-arg]
     else:
         raise ValueError(
             f"Got unexpected type of `handle_tool_error`. Expected bool, str "
@@ -520,11 +522,16 @@ class ToolNode(RunnableCallable):
         except GraphBubbleUp as e:
             raise e
         except Exception as e:
-            if isinstance(self._handle_tool_errors, type) and issubclass(self._handle_tool_errors, Exception):
-                handled_types: tuple = (self._handle_tool_errors,)
+            handled_types: tuple[type[Exception], ...]
+            if isinstance(self._handle_tool_errors, type) and issubclass(
+                self._handle_tool_errors, Exception
+            ):
+                handled_types = (self._handle_tool_errors,)
             elif isinstance(self._handle_tool_errors, tuple):
-                handled_types: tuple = self._handle_tool_errors
-            elif callable(self._handle_tool_errors):
+                handled_types = self._handle_tool_errors
+            elif callable(self._handle_tool_errors) and not isinstance(
+                self._handle_tool_errors, type
+            ):
                 handled_types = _infer_handled_types(self._handle_tool_errors)
             else:
                 # default behavior is catching all exceptions
@@ -584,11 +591,16 @@ class ToolNode(RunnableCallable):
         except GraphBubbleUp as e:
             raise e
         except Exception as e:
-            if isinstance(self._handle_tool_errors, type) and issubclass(self._handle_tool_errors, Exception):
-                handled_types: tuple = (self._handle_tool_errors,)
+            handled_types: tuple[type[Exception], ...]
+            if isinstance(self._handle_tool_errors, type) and issubclass(
+                self._handle_tool_errors, Exception
+            ):
+                handled_types = (self._handle_tool_errors,)
             elif isinstance(self._handle_tool_errors, tuple):
-                handled_types: tuple = self._handle_tool_errors
-            elif callable(self._handle_tool_errors):
+                handled_types = self._handle_tool_errors
+            elif callable(self._handle_tool_errors) and not isinstance(
+                self._handle_tool_errors, type
+            ):
                 handled_types = _infer_handled_types(self._handle_tool_errors)
             else:
                 # default behavior is catching all exceptions
