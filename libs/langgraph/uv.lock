@@ -1350,7 +1350,7 @@ dev = [
 
 [[package]]
 name = "langgraph-api"
-version = "0.2.135"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle", marker = "python_full_version >= '3.11'" },
@@ -1373,9 +1373,9 @@ dependencies = [
     { name = "uvicorn", marker = "python_full_version >= '3.11'" },
     { name = "watchfiles", marker = "python_full_version >= '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8f/1e/5ca12f00852e2f54075c65dc2d4eca4d2d8facd404d5c0d17803fe620eae/langgraph_api-0.2.135.tar.gz", hash = "sha256:8cbcd5ff7be89a72d01dd3b32b0873bc5114ab9ff206fc94c2781ba56d09182a", size = 255563, upload-time = "2025-08-20T01:02:01.661Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/86/4b9be876021e5c52a94d41aed32eeb2f5f8a41f19407ad3ba9faeb5ba9fa/langgraph_api-0.4.0.tar.gz", hash = "sha256:af2b1f40f8bfa653fb814858aa17dc19f7158d53f4e4cf749bd55db1ba13b7d8", size = 256440, upload-time = "2025-08-26T01:11:51.368Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/98/18c475de127927622079e087b7cfe1ab97ed44fe1a2425f8c8de07ea0e64/langgraph_api-0.2.135-py3-none-any.whl", hash = "sha256:ac78035075230ccb816f48b242a76c5f8e607c074fe7802928425ba76a11b3f4", size = 205849, upload-time = "2025-08-20T01:02:00.156Z" },
+    { url = "https://files.pythonhosted.org/packages/ce/27/025a50160e56b86da8b3ac70a7941c8a14ffa9fcb78c1afa17be748343b2/langgraph_api-0.4.0-py3-none-any.whl", hash = "sha256:f9933f3c2685fe41c75504026b0174f948686c6a39d6af0a618e2ab7f1429eb7", size = 206653, upload-time = "2025-08-26T01:11:49.78Z" },
 ]
 
 [[package]]
@@ -1491,8 +1491,8 @@ inmem = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1.7" },
-    { name = "langgraph-api", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.2.120,<0.4.0" },
-    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.6.8" },
+    { name = "langgraph-api", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.3,<0.5.0" },
+    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.7" },
     { name = "langgraph-sdk", marker = "python_full_version >= '3.11'", specifier = ">=0.1.0" },
     { name = "python-dotenv", marker = "extra == 'inmem'", specifier = ">=0.8.0" },
 ]
