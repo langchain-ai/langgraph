@@ -910,6 +910,7 @@ def main():
             kind="GenAI", # TODO: change this
             attributes={
                 "span_type": "GenAI",
+                "gen_ai.system": "langgraph multi agent", #TODO: change this
                 "gen_ai.operation.name": "invoke_agent",
                 "gen_ai.provider.name": provider_name,
                 "gen_ai.request.model": model_name,
