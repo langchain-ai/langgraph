@@ -23,6 +23,7 @@ from langchain_core.messages import (
     AIMessage,
     BaseMessage,
     SystemMessage,
+    ToolCall,
     ToolMessage,
 )
 from langchain_core.runnables import (
@@ -43,10 +44,12 @@ from langgraph.prebuilt._internal._typing import (
     SyncOrAsync,
 )
 from langgraph.prebuilt.responses import (
+    MultipleStructuredOutputsError,
     NativeOutput,
     NativeOutputBinding,
     OutputToolBinding,
     ResponseFormat,
+    StructuredOutputParsingError,
     ToolOutput,
 )
 from langgraph.prebuilt.tool_node import ToolNode
@@ -59,6 +62,8 @@ StructuredResponseT = TypeVar(
     "StructuredResponseT",
     default=None,
 )
+
+STRUCTURED_OUTPUT_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
 class AgentState(TypedDict, Generic[StructuredResponseT]):
@@ -292,9 +297,10 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             Command with structured response update if found, None otherwise
 
         Raises:
-            AssertionError: If multiple structured responses are returned
+            MultipleStructuredOutputsError: If multiple structured responses are returned and error handling is disabled
+            StructuredOutputParsingError: If parsing fails and error handling is disabled
         """
-        if not response.tool_calls:
+        if not isinstance(self.response_format, ToolOutput) or not response.tool_calls:
             return None
 
         structured_tool_calls = [
@@ -303,15 +309,53 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             if tool_call["name"] in self.structured_output_tools
         ]
 
+        if not structured_tool_calls:
+            return None
+
         if len(structured_tool_calls) > 1:
-            raise AssertionError(
-                "Model incorrectly returned multiple structured responses. "
-                "Behavior has not yet been defined in this case."
+            return self._handle_multiple_structured_outputs(
+                response, structured_tool_calls
             )
 
-        if len(structured_tool_calls) == 1:
-            tool_call = structured_tool_calls[0]
-            structured_tool_binding = self.structured_output_tools[tool_call["name"]]
+        return self._handle_single_structured_output(response, structured_tool_calls[0])
+
+    def _handle_multiple_structured_outputs(
+        self,
+        response: AIMessage,
+        structured_tool_calls: list[ToolCall],
+    ) -> Command:
+        """Handle multiple structured output tool calls."""
+        tool_names = [tool_call["name"] for tool_call in structured_tool_calls]
+        exception = MultipleStructuredOutputsError(tool_names)
+
+        should_retry, error_message = self._handle_structured_output_error(exception)
+
+        if not should_retry:
+            raise exception
+
+        tool_messages = [
+            ToolMessage(
+                content=error_message,
+                tool_call_id=tool_call["id"],
+                name=tool_call["name"],
+            )
+            for tool_call in structured_tool_calls
+        ]
+
+        return Command(
+            update={"messages": [response, *tool_messages]},
+            goto="model",
+        )
+
+    def _handle_single_structured_output(
+        self,
+        response: AIMessage,
+        tool_call: Any,
+    ) -> Command:
+        """Handle a single structured output tool call."""
+        structured_tool_binding = self.structured_output_tools[tool_call["name"]]
+
+        try:
             structured_response = structured_tool_binding.parse(tool_call["args"])
 
             if isinstance(structured_response, BaseModel):
@@ -341,8 +385,62 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                     "structured_response": structured_response,
                 }
             )
+        except Exception as parse_error:
+            exception = StructuredOutputParsingError(tool_call["name"], parse_error)
 
-        return None
+            should_retry, error_message = self._handle_structured_output_error(
+                exception
+            )
+
+            if not should_retry:
+                raise exception
+
+            return Command(
+                update={
+                    "messages": [
+                        response,
+                        ToolMessage(
+                            content=error_message,
+                            tool_call_id=tool_call["id"],
+                            name=tool_call["name"],
+                        ),
+                    ],
+                },
+                goto="model",
+            )
+
+    def _handle_structured_output_error(
+        self,
+        exception: Exception,
+    ) -> tuple[bool, str]:
+        """Handle structured output error.
+
+        Returns (should_retry, retry_tool_message).
+        """
+        assert isinstance(self.response_format, ToolOutput)
+        handle_errors = self.response_format.handle_errors
+
+        if handle_errors is False:
+            return False, ""
+        elif handle_errors is True:
+            return True, STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(error=str(exception))
+        elif isinstance(handle_errors, str):
+            return True, handle_errors
+        elif isinstance(handle_errors, type) and issubclass(handle_errors, Exception):
+            if isinstance(exception, handle_errors):
+                return True, STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(
+                    error=str(exception)
+                )
+            return False, ""
+        elif isinstance(handle_errors, tuple):
+            if any(isinstance(exception, exc_type) for exc_type in handle_errors):
+                return True, STRUCTURED_OUTPUT_ERROR_TEMPLATE.format(
+                    error=str(exception)
+                )
+            return False, ""
+        elif callable(handle_errors):
+            return True, handle_errors(exception)  # type: ignore[call-arg]
+        return False, ""
 
     def _apply_native_output_binding(
         self, model: LanguageModelLike

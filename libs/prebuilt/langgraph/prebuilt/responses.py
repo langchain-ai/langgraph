@@ -5,7 +5,17 @@ from __future__ import annotations
 import sys
 import uuid
 from dataclasses import dataclass, is_dataclass
-from typing import Any, Generic, Iterable, Literal, TypeVar, Union, get_args, get_origin
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Iterable,
+    Literal,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+)
 
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool, StructuredTool
@@ -22,6 +32,31 @@ else:
     UnionType = Union
 
 SchemaKind = Literal["pydantic", "dataclass", "typeddict", "json_schema"]
+
+
+class StructuredOutputError(Exception):
+    """Base class for structured output errors."""
+
+
+class MultipleStructuredOutputsError(StructuredOutputError):
+    """Raised when model returns multiple structured output tool calls when only one is expected."""
+
+    def __init__(self, tool_names: list[str]):
+        self.tool_names = tool_names
+        super().__init__(
+            f"Model incorrectly returned multiple structured responses ({', '.join(tool_names)}) when only one is expected."
+        )
+
+
+class StructuredOutputParsingError(StructuredOutputError):
+    """Raised when structured output tool call arguments fail to parse according to the schema."""
+
+    def __init__(self, tool_name: str, parse_error: Exception):
+        self.tool_name = tool_name
+        self.parse_error = parse_error
+        super().__init__(
+            f"Failed to parse structured output for tool '{tool_name}': {parse_error}."
+        )
 
 
 def _parse_with_schema(
@@ -54,7 +89,7 @@ def _parse_with_schema(
 class _SchemaSpec(Generic[SchemaT]):
     """Describes a structured output schema."""
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT]
     """The schema for the response, can be a Pydantic model, dataclass, TypedDict, or JSON schema dict."""
 
     name: str
@@ -80,7 +115,7 @@ class _SchemaSpec(Generic[SchemaT]):
 
     def __init__(
         self,
-        schema: Union[type[SchemaT], dict[str, Any]],
+        schema: type[SchemaT],
         *,
         name: str | None = None,
         description: str | None = None,
@@ -89,12 +124,16 @@ class _SchemaSpec(Generic[SchemaT]):
         """Initialize SchemaSpec with schema and optional parameters."""
         self.schema = schema
 
-        # Schema names must be unique so we use a shortened UUID suffix
-        self.name = name or (
-            schema.get("title", f"response_format_{str(uuid.uuid4())[:4]}")
-            if isinstance(schema, dict)
-            else getattr(schema, "__name__", f"response_format_{str(uuid.uuid4())[:4]}")
-        )
+        if name:
+            self.name = name
+        elif isinstance(schema, dict):
+            self.name = str(
+                schema.get("title", f"response_format_{str(uuid.uuid4())[:4]}")
+            )
+        else:
+            self.name = str(
+                getattr(schema, "__name__", f"response_format_{str(uuid.uuid4())[:4]}")
+            )
 
         self.description = description or (
             schema.get("description", "")
@@ -127,7 +166,7 @@ class _SchemaSpec(Generic[SchemaT]):
 class ToolOutput(Generic[SchemaT]):
     """Use a tool calling strategy for model responses."""
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT]
     """Schema for the tool calls."""
 
     schema_specs: list[_SchemaSpec[SchemaT]]
@@ -136,14 +175,39 @@ class ToolOutput(Generic[SchemaT]):
     tool_message_content: str | None
     """The content of the tool message to be returned when the model calls an artificial structured output tool."""
 
+    handle_errors: Union[
+        bool,
+        str,
+        type[Exception],
+        tuple[type[Exception], ...],
+        Callable[[Exception], str],
+    ]
+    """Error handling strategy for structured output via ToolOutput. Default is True.
+    
+    - True: Catch all errors with default error template
+    - str: Catch all errors with this custom message
+    - type[Exception]: Only catch this exception type with default message
+    - tuple[type[Exception], ...]: Only catch these exception types with default message
+    - Callable[[Exception], str]: Custom function that returns error message
+    - False: No retry, let exceptions propagate
+    """
+
     def __init__(
         self,
-        schema: Union[type[SchemaT], dict[str, Any]],
+        schema: type[SchemaT],
         tool_message_content: str | None = None,
+        handle_errors: Union[
+            bool,
+            str,
+            type[Exception],
+            tuple[type[Exception], ...],
+            Callable[[Exception], str],
+        ] = True,
     ) -> None:
-        """Initialize ToolOutput with schemas and tool message content."""
+        """Initialize ToolOutput with schemas, tool message content, and error handling strategy."""
         self.schema = schema
         self.tool_message_content = tool_message_content
+        self.handle_errors = handle_errors
 
         def _iter_variants(schema: Any) -> Iterable[Any]:
             """Yield leaf variants from Union and JSON Schema oneOf."""
@@ -167,7 +231,7 @@ class ToolOutput(Generic[SchemaT]):
 class NativeOutput(Generic[SchemaT]):
     """Use the model provider's native structured output method."""
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT]
     """Schema for native mode."""
 
     schema_spec: _SchemaSpec[SchemaT]
@@ -175,7 +239,7 @@ class NativeOutput(Generic[SchemaT]):
 
     def __init__(
         self,
-        schema: Union[type[SchemaT], dict[str, Any]],
+        schema: type[SchemaT],
     ) -> None:
         self.schema = schema
         self.schema_spec = _SchemaSpec(schema)
@@ -202,7 +266,7 @@ class OutputToolBinding(Generic[SchemaT]):
     and the corresponding tool implementation used by the tools strategy.
     """
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT]
     """The original schema provided for structured output (Pydantic model, dataclass, TypedDict, or JSON schema dict)."""
 
     schema_kind: SchemaKind
@@ -255,7 +319,7 @@ class NativeOutputBinding(Generic[SchemaT]):
     its type classification, and parsing logic for provider-enforced JSON.
     """
 
-    schema: Union[type[SchemaT], dict[str, Any]]
+    schema: type[SchemaT]
     """The original schema provided for structured output (Pydantic model, dataclass, TypedDict, or JSON schema dict)."""
 
     schema_kind: SchemaKind
