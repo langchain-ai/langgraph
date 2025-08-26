@@ -120,7 +120,9 @@ class TestResponseFormatAsModel:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_react_agent(model, [get_weather], response_format=WeatherBaseModel)
+        agent = create_react_agent(
+            model, [get_weather], response_format=WeatherBaseModel
+        )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
         assert response["structured_response"] == EXPECTED_WEATHER_PYDANTIC
@@ -141,7 +143,9 @@ class TestResponseFormatAsModel:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_react_agent(model, [get_weather], response_format=WeatherDataclass)
+        agent = create_react_agent(
+            model, [get_weather], response_format=WeatherDataclass
+        )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
         assert response["structured_response"] == EXPECTED_WEATHER_DATACLASS
@@ -162,7 +166,9 @@ class TestResponseFormatAsModel:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_react_agent(model, [get_weather], response_format=WeatherTypedDict)
+        agent = create_react_agent(
+            model, [get_weather], response_format=WeatherTypedDict
+        )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
         assert response["structured_response"] == EXPECTED_WEATHER_DICT
@@ -183,7 +189,9 @@ class TestResponseFormatAsModel:
 
         model = FakeToolCallingModel(tool_calls=tool_calls)
 
-        agent = create_react_agent(model, [get_weather], response_format=weather_json_schema)
+        agent = create_react_agent(
+            model, [get_weather], response_format=weather_json_schema
+        )
         response = agent.invoke({"messages": [HumanMessage("What's the weather?")]})
 
         assert response["structured_response"] == EXPECTED_WEATHER_DICT

@@ -7,12 +7,14 @@ from typing import (
     Awaitable,
     Callable,
     Generic,
+    Literal,
     Optional,
     Sequence,
     Union,
     cast,
     get_type_hints,
 )
+from warnings import warn
 
 from langchain_core.language_models import (
     BaseChatModel,
@@ -21,6 +23,7 @@ from langchain_core.language_models import (
 )
 from langchain_core.messages import (
     AIMessage,
+    AnyMessage,
     BaseMessage,
     SystemMessage,
     ToolCall,
@@ -35,6 +38,7 @@ from pydantic import BaseModel
 from typing_extensions import Annotated, NotRequired, TypedDict, TypeVar
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
+from langgraph._internal._typing import MISSING
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
@@ -58,22 +62,39 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Command, Send
 from langgraph.typing import ContextT, StateT
 
-StructuredResponseT = TypeVar(
-    "StructuredResponseT",
-    default=None,
-)
+StructuredResponseT = TypeVar("StructuredResponseT", default=None)
 
 STRUCTURED_OUTPUT_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
 
 
-class AgentState(TypedDict, Generic[StructuredResponseT]):
+class AgentState(TypedDict):
     """The state of the agent."""
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
     remaining_steps: NotRequired[RemainingSteps]
 
-    structured_response: NotRequired[StructuredResponseT]
+
+class AgentStatePydantic(BaseModel):
+    """The state of the agent."""
+
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+
+    remaining_steps: RemainingSteps = 25
+
+
+class AgentStateWithStructuredResponse(AgentState, Generic[StructuredResponseT]):
+    """The state of the agent with a structured response."""
+
+    structured_response: StructuredResponseT
+
+
+class AgentStateWithStructuredResponsePydantic(
+    AgentStatePydantic, Generic[StructuredResponseT]
+):
+    """The state of the agent with a structured response."""
+
+    structured_response: StructuredResponseT
 
 
 PROMPT_RUNNABLE_NAME = "Prompt"
@@ -161,17 +182,15 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
-class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
+class _AgentBuilder(Generic[StructuredResponseT]):
     """Internal builder class for constructing and agent."""
-
-    _final_state_schema: type[StateT]
 
     def __init__(
         self,
         model: Union[
             str,
             BaseChatModel,
-            SyncOrAsync[[StateT, Runtime[ContextT]], BaseChatModel],
+            SyncOrAsync[[StateT, Runtime[ContextT]], BaseModel],
         ],
         tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
         *,
@@ -181,6 +200,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         post_model_hook: Optional[RunnableLike] = None,
         state_schema: Optional[type[StateT]] = None,
         context_schema: Optional[type[ContextT]] = None,
+        version: Literal["v1", "v2"] = "v2",
         name: Optional[str] = None,
         store: Optional[BaseStore] = None,
     ):
@@ -192,6 +212,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         self.post_model_hook = post_model_hook
         self.state_schema = state_schema
         self.context_schema = context_schema
+        self.version = version
         self.name = name
         self.store = store
 
@@ -283,7 +304,11 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
             self._final_state_schema = self.state_schema
         else:
-            self._final_state_schema = cast(type[StateT], AgentState)
+            self._final_state_schema = (
+                AgentStateWithStructuredResponse  # type: ignore[assignment]
+                if self.response_format is not None
+                else AgentState
+            )
 
     def _handle_structured_response_tool_calls(
         self, response: AIMessage
@@ -344,7 +369,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
         return Command(
             update={"messages": [response, *tool_messages]},
-            goto="model",
+            goto="agent",
         )
 
     def _handle_single_structured_output(
@@ -406,7 +431,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                         ),
                     ],
                 },
-                goto="model",
+                goto="agent",
             )
 
     def _handle_structured_output_error(
@@ -558,10 +583,20 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         """Create the 'agent' node that calls the LLM."""
 
         def _get_model_input_state(state: StateT) -> StateT:
-            messages = _get_state_value(state, "messages")
-            error_msg = (
-                f"Expected input to call_model to have 'messages' key, but got {state}"
-            )
+            if self.pre_model_hook is not None:
+                messages = _get_state_value(
+                    state, "llm_input_messages"
+                ) or _get_state_value(state, "messages")
+                error_msg = (
+                    f"Expected input to call_model to have 'llm_input_messages' "
+                    f"or 'messages' key, but got {state}"
+                )
+            else:
+                messages = _get_state_value(state, "messages")
+                error_msg = (
+                    f"Expected input to call_model to "
+                    f"have 'messages' key, but got {state}"
+                )
 
             if messages is None:
                 raise ValueError(error_msg)
@@ -681,6 +716,28 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
         return RunnableCallable(call_model, acall_model)
 
+    def _get_input_schema(self) -> type[StateT]:
+        """Get input schema for model node."""
+        if self.pre_model_hook is not None:
+            if isinstance(self._final_state_schema, type) and issubclass(
+                self._final_state_schema, BaseModel
+            ):
+                from pydantic import create_model
+
+                return create_model(
+                    "CallModelInputSchema",
+                    llm_input_messages=(list[AnyMessage], ...),
+                    __base__=self._final_state_schema,
+                )
+            else:
+
+                class CallModelInputSchema(self._final_state_schema):  # type: ignore
+                    llm_input_messages: list[AnyMessage]
+
+                return CallModelInputSchema
+        else:
+            return self._final_state_schema
+
     def create_model_router(self) -> Callable[[StateT], Union[str, list[Send]]]:
         """Create routing function for model node conditional edges."""
 
@@ -707,13 +764,16 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                 else:
                     return END
             else:
-                if self.post_model_hook is not None:
-                    return "post_model_hook"
-                tool_calls = [
-                    self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
-                    for call in last_message.tool_calls
-                ]
-                return [Send("tools", [tool_call]) for tool_call in tool_calls]
+                if self.version == "v1":
+                    return "tools"
+                elif self.version == "v2":
+                    if self.post_model_hook is not None:
+                        return "post_model_hook"
+                    tool_calls = [
+                        self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
+                        for call in last_message.tool_calls
+                    ]
+                    return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
         return should_continue
 
@@ -784,7 +844,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
     def _get_entry_point(self) -> str:
         """Get the workflow entry point."""
-        return "pre_model_hook" if self.pre_model_hook else "model"
+        return "pre_model_hook" if self.pre_model_hook else "agent"
 
     def _get_model_paths(self) -> list[str]:
         """Get possible edge destinations from model node."""
@@ -817,7 +877,9 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         workflow.set_entry_point(self._get_entry_point())
 
         # Add nodes
-        workflow.add_node("model", self.create_model_node())
+        workflow.add_node(
+            "agent", self.create_model_node(), input_schema=self._get_input_schema()
+        )
 
         if self._tool_calling_enabled:
             workflow.add_node("tools", self._tool_node)
@@ -830,10 +892,10 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
 
         # Add edges
         if self.pre_model_hook:
-            workflow.add_edge("pre_model_hook", "model")
+            workflow.add_edge("pre_model_hook", "agent")
 
         if self.post_model_hook:
-            workflow.add_edge("model", "post_model_hook")
+            workflow.add_edge("agent", "post_model_hook")
             post_hook_paths = self._get_post_model_hook_paths()
             if len(post_hook_paths) == 1:
                 # No need for a conditional edge if there's only one path
@@ -848,10 +910,10 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
             model_paths = self._get_model_paths()
             if len(model_paths) == 1:
                 # No need for a conditional edge if there's only one path
-                workflow.add_edge("model", model_paths[0])
+                workflow.add_edge("agent", model_paths[0])
             else:
                 workflow.add_conditional_edges(
-                    "model",
+                    "agent",
                     self.create_model_router(),
                     path_map=model_paths,
                 )
@@ -903,7 +965,7 @@ def create_react_agent(
     model: Union[
         str,
         BaseChatModel,
-        SyncOrAsync[[StateT, Runtime[ContextT]], BaseChatModel],
+        SyncOrAsync[[StateT, Runtime[ContextT]], BaseModel],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
@@ -924,7 +986,9 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
+    version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
+    **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
 
@@ -1006,17 +1070,24 @@ def create_react_agent(
             Useful for managing long message histories (e.g., message trimming, summarization, etc.).
             Pre-model hook must be a callable or a runnable that takes in current graph state and returns a state update in the form of
                 ```python
-                # Where `messages` MUST be provided
+                # At least one of `messages` or `llm_input_messages` MUST be provided
                 {
-                    # will UPDATE the `messages` in the state
+                    # If provided, will UPDATE the `messages` in the state
                     "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), ...],
+                    # If provided, will be used as the input to the LLM,
+                    # and will NOT UPDATE `messages` in the state
+                    "llm_input_messages": [...],
                     # Any other state keys that need to be propagated
                     ...
                 }
                 ```
 
+            !!! Important
+                At least one of `messages` or `llm_input_messages` MUST be provided and will be used as an input to the `agent` node.
+                The rest of the keys will be added to the graph state.
+
             !!! Warning
-                you should OVERWRITE the `messages` key by doing the following:
+                If you are returning `messages` in the pre-model hook, you should OVERWRITE the `messages` key by doing the following:
 
                 ```python
                 {
@@ -1027,6 +1098,9 @@ def create_react_agent(
         post_model_hook: An optional node to add after the `agent` node (i.e., the node that calls the LLM).
             Useful for implementing human-in-the-loop, guardrails, validation, or other post-processing.
             Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
+
+            !!! Note
+                Only available with `version="v2"`.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -1036,20 +1110,34 @@ def create_react_agent(
         store: An optional store object. This is used for persisting data
             across multiple threads (e.g., multiple conversations / users).
         interrupt_before: An optional list of node names to interrupt before.
-            Should be one of the following: "model", "tools".
+            Should be one of the following: "agent", "tools".
             This is useful if you want to add a user confirmation or other interrupt before taking an action.
         interrupt_after: An optional list of node names to interrupt after.
-            Should be one of the following: "model", "tools".
+            Should be one of the following: "agent", "tools".
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
+        version: Determines the version of the graph to create.
+            Can be one of:
+
+            - `"v1"`: The tool node processes a single message. All tool
+                calls in the message are executed in parallel within the tool node.
+            - `"v2"`: The tool node processes a tool call.
+                Tool calls are distributed across multiple instances of the tool
+                node using the [Send](https://langchain-ai.github.io/langgraph/concepts/low_level/#send)
+                API.
         name: An optional name for the CompiledStateGraph.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
 
-    Returns:
-        A CompiledStateGraph that can be used for chat interactions.
+    !!! warning "`config_schema` Deprecated"
+        The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
+        Please use `context_schema` instead to specify the schema for run-scoped context.
 
-    The "model" node calls the language model with the messages list (after applying the prompt).
+
+    Returns:
+        A compiled LangChain runnable that can be used for chat interactions.
+
+    The "agent" node calls the language model with the messages list (after applying the prompt).
     If the resulting AIMessage contains `tool_calls`, the graph will then call the ["tools"][langgraph.prebuilt.tool_node.ToolNode].
     The "tools" node executes the tools (1 tool per `tool_call`) and adds the responses to the messages list
     as `ToolMessage` objects. The agent node then calls the language model again.
@@ -1088,8 +1176,24 @@ def create_react_agent(
             print(chunk)
         ```
     """
+    # Handle deprecated config_schema parameter
+    if (
+        config_schema := deprecated_kwargs.pop("config_schema", MISSING)
+    ) is not MISSING:
+        warn(
+            "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
+            category=DeprecationWarning,
+        )
+        if context_schema is None:
+            context_schema = config_schema
+
+    if len(deprecated_kwargs) > 0:
+        raise TypeError(
+            f"create_react_agent() got unexpected keyword arguments: {deprecated_kwargs}"
+        )
+
     if response_format and not isinstance(response_format, (ToolOutput, NativeOutput)):
-        if _supports_native_structured_output(model):
+        if _supports_native_structured_output(model):  # type: ignore[arg-type]
             response_format = NativeOutput(
                 schema=response_format,
             )
@@ -1104,7 +1208,7 @@ def create_react_agent(
             )
 
     # Create and configure the agent builder
-    builder = _AgentBuilder[StateT, ContextT, StructuredResponseT](
+    builder = _AgentBuilder(
         model=model,
         tools=tools,
         prompt=prompt,
@@ -1115,6 +1219,7 @@ def create_react_agent(
         post_model_hook=post_model_hook,
         state_schema=state_schema,
         context_schema=context_schema,
+        version=version,
         name=name,
         store=store,
     )
@@ -1134,4 +1239,7 @@ def create_react_agent(
 __all__ = [
     "create_react_agent",
     "AgentState",
+    "AgentStatePydantic",
+    "AgentStateWithStructuredResponse",
+    "AgentStateWithStructuredResponsePydantic",
 ]

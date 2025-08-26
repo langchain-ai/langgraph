@@ -69,7 +69,7 @@ def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
     elif request.param == "redis":
         # Get worker ID for parallel test isolation
         worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
-
+        
         redis_client = redis.Redis(
             host="localhost", port=6379, db=0, decode_responses=False
         )

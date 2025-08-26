@@ -1390,11 +1390,11 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             ),
             {
                 "langgraph_step": 1,
-                "langgraph_node": "model",
-                "langgraph_triggers": ("branch:to:model",),
-                "langgraph_path": (PULL, "model"),
-                "langgraph_checkpoint_ns": AnyStr("model:"),
-                "checkpoint_ns": AnyStr("model:"),
+                "langgraph_node": "agent",
+                "langgraph_triggers": ("branch:to:agent",),
+                "langgraph_path": (PULL, "agent"),
+                "langgraph_checkpoint_ns": AnyStr("agent:"),
+                "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
             },
@@ -1449,11 +1449,11 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             ),
             {
                 "langgraph_step": 3,
-                "langgraph_node": "model",
-                "langgraph_triggers": ("branch:to:model",),
-                "langgraph_path": (PULL, "model"),
-                "langgraph_checkpoint_ns": AnyStr("model:"),
-                "checkpoint_ns": AnyStr("model:"),
+                "langgraph_node": "agent",
+                "langgraph_triggers": ("branch:to:agent",),
+                "langgraph_path": (PULL, "agent"),
+                "langgraph_checkpoint_ns": AnyStr("agent:"),
+                "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
             },
@@ -1497,11 +1497,11 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             ),
             {
                 "langgraph_step": 5,
-                "langgraph_node": "model",
-                "langgraph_triggers": ("branch:to:model",),
-                "langgraph_path": (PULL, "model"),
-                "langgraph_checkpoint_ns": AnyStr("model:"),
-                "checkpoint_ns": AnyStr("model:"),
+                "langgraph_node": "agent",
+                "langgraph_triggers": ("branch:to:agent",),
+                "langgraph_path": (PULL, "agent"),
+                "langgraph_checkpoint_ns": AnyStr("agent:"),
+                "checkpoint_ns": AnyStr("agent:"),
                 "ls_provider": "fakechatmodel",
                 "ls_model_type": "chat",
             },
@@ -1533,7 +1533,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     for output in (invoke_updates_events, stream_updates_events):
         assert output[:3] == [
             {
-                "model": {
+                "agent": {
                     "messages": [
                         _AnyIdAIMessage(
                             content="",
@@ -1560,7 +1560,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 }
             },
             {
-                "model": {
+                "agent": {
                     "messages": [
                         _AnyIdAIMessage(
                             content="",
@@ -1606,7 +1606,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             },
         )
         assert output[5:] == [
-            {"model": {"messages": [_AnyIdAIMessage(content="answer")]}}
+            {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}}
         ]
 
 
