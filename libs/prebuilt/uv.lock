@@ -316,7 +316,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "0.6.5"
+version = "0.6.6"
 source = { editable = "../langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -509,7 +509,6 @@ dev = [
 
 [[package]]
 name = "langgraph-sdk"
-version = "0.2.0"
 source = { editable = "../sdk-py" }
 dependencies = [
     { name = "httpx" },
