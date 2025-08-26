@@ -1121,7 +1121,7 @@ def create_react_agent(
     ) is not MISSING:
         warn(
             "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
-            category=LangGraphDeprecatedSinceV10,
+            category=DeprecationWarning,
         )
         if context_schema is None:
             context_schema = config_schema
@@ -1131,14 +1131,15 @@ def create_react_agent(
             f"create_react_agent() got unexpected keyword arguments: {deprecated_kwargs}"
         )
 
-    if response_format and not isinstance(response_format, ToolOutput):
-        # Then it's a pydantic model or JSONSchema. We'll automatically convert
-        # it to the tool output strategy as it is widely supported.
-        response_format = ToolOutput(
-            schemas=[SchemaSpec(response_format)],
-            tool_choice="required",
-        )
-
+    if response_format and not isinstance(response_format, (ToolOutput, NativeOutput)):
+        if _supports_native_structured_output(model):
+            response_format = NativeOutput(
+                schema=response_format,
+            )
+        else:
+            response_format = ToolOutput(
+                schema=response_format,
+            )
     elif isinstance(response_format, tuple):
         if len(response_format) == 2:
             raise ValueError(
