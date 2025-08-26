@@ -7,6 +7,7 @@ from typing import (
     Awaitable,
     Callable,
     Generic,
+    Literal,
     Optional,
     Sequence,
     Union,
@@ -181,6 +182,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         post_model_hook: Optional[RunnableLike] = None,
         state_schema: Optional[type[StateT]] = None,
         context_schema: Optional[type[ContextT]] = None,
+        version: Literal["v1", "v2"] = "v2",
         name: Optional[str] = None,
         store: Optional[BaseStore] = None,
     ):
@@ -192,6 +194,7 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
         self.post_model_hook = post_model_hook
         self.state_schema = state_schema
         self.context_schema = context_schema
+        self.version = version
         self.name = name
         self.store = store
 
@@ -707,13 +710,16 @@ class _AgentBuilder(Generic[StateT, ContextT, StructuredResponseT]):
                 else:
                     return END
             else:
-                if self.post_model_hook is not None:
-                    return "post_model_hook"
-                tool_calls = [
-                    self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
-                    for call in last_message.tool_calls
-                ]
-                return [Send("tools", [tool_call]) for tool_call in tool_calls]
+                if self.version == "v1":
+                    return "tools"
+                elif self.version == "v2":
+                    if self.post_model_hook is not None:
+                        return "post_model_hook"
+                    tool_calls = [
+                        self._tool_node.inject_tool_args(call, state, self.store)  # type: ignore[arg-type]
+                        for call in last_message.tool_calls
+                    ]
+                    return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
         return should_continue
 
@@ -924,6 +930,7 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
+    version: Literal["v1", "v2"] = "v2",
     name: Optional[str] = None,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
@@ -1027,6 +1034,9 @@ def create_react_agent(
         post_model_hook: An optional node to add after the `agent` node (i.e., the node that calls the LLM).
             Useful for implementing human-in-the-loop, guardrails, validation, or other post-processing.
             Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
+
+            !!! Note
+                Only available with `version="v2"`.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -1042,6 +1052,15 @@ def create_react_agent(
             Should be one of the following: "model", "tools".
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
+        version: Determines the version of the graph to create.
+            Can be one of:
+
+            - `"v1"`: The tool node processes a single message. All tool
+                calls in the message are executed in parallel within the tool node.
+            - `"v2"`: The tool node processes a tool call.
+                Tool calls are distributed across multiple instances of the tool
+                node using the [Send](https://langchain-ai.github.io/langgraph/concepts/low_level/#send)
+                API.
         name: An optional name for the CompiledStateGraph.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
@@ -1088,15 +1107,31 @@ def create_react_agent(
             print(chunk)
         ```
     """
-    if response_format and not isinstance(response_format, (ToolOutput, NativeOutput)):
-        if _supports_native_structured_output(model):
-            response_format = NativeOutput(
-                schema=response_format,
-            )
-        else:
-            response_format = ToolOutput(
-                schema=response_format,
-            )
+
+    # Handle deprecated config_schema parameter
+    if (
+        config_schema := deprecated_kwargs.pop("config_schema", MISSING)
+    ) is not MISSING:
+        warn(
+            "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
+            category=LangGraphDeprecatedSinceV10,
+        )
+        if context_schema is None:
+            context_schema = config_schema
+
+    if len(deprecated_kwargs) > 0:
+        raise TypeError(
+            f"create_react_agent() got unexpected keyword arguments: {deprecated_kwargs}"
+        )
+
+    if response_format and not isinstance(response_format, ToolOutput):
+        # Then it's a pydantic model or JSONSchema. We'll automatically convert
+        # it to the tool output strategy as it is widely supported.
+        response_format = ToolOutput(
+            schemas=[SchemaSpec(response_format)],
+            tool_choice="required",
+        )
+
     elif isinstance(response_format, tuple):
         if len(response_format) == 2:
             raise ValueError(
@@ -1115,6 +1150,7 @@ def create_react_agent(
         post_model_hook=post_model_hook,
         state_schema=state_schema,
         context_schema=context_schema,
+        version=version,
         name=name,
         store=store,
     )
