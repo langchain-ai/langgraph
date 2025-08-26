@@ -10,7 +10,6 @@ from typing import (
     Literal,
     Optional,
     Sequence,
-    Type,
     Union,
     cast,
     get_type_hints,
@@ -98,21 +97,17 @@ class AgentStateWithStructuredResponsePydantic(
     structured_response: StructuredResponseT
 
 
-StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
-StateSchemaType = Type[StateSchema]
-
-
 PROMPT_RUNNABLE_NAME = "Prompt"
 
 Prompt = Union[
     SystemMessage,
     str,
-    Callable[[StateSchema], LanguageModelInput],
-    Runnable[StateSchema, LanguageModelInput],
+    Callable[[StateT], LanguageModelInput],
+    Runnable[StateT, LanguageModelInput],
 ]
 
 
-def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
+def _get_state_value(state: StateT, key: str, default: Any = None) -> Any:
     return (
         state.get(key, default)
         if isinstance(state, dict)
@@ -195,7 +190,7 @@ class _AgentBuilder(Generic[StructuredResponseT]):
         model: Union[
             str,
             BaseChatModel,
-            SyncOrAsync[[StateSchema, Runtime[ContextT]], BaseModel],
+            SyncOrAsync[[StateT, Runtime[ContextT]], BaseModel],
         ],
         tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
         *,
@@ -558,7 +553,7 @@ class _AgentBuilder(Generic[StructuredResponseT]):
             self._static_model = None
 
     def _resolve_model(
-        self, state: StateSchema, runtime: Runtime[ContextT]
+        self, state: StateT, runtime: Runtime[ContextT]
     ) -> LanguageModelLike:
         """Resolve the model to use, handling both static and dynamic models."""
         if self._is_dynamic_model:
@@ -568,12 +563,12 @@ class _AgentBuilder(Generic[StructuredResponseT]):
             return self._static_model
 
     async def _aresolve_model(
-        self, state: StateSchema, runtime: Runtime[ContextT]
+        self, state: StateT, runtime: Runtime[ContextT]
     ) -> LanguageModelLike:
         """Async resolve the model to use, handling both static and dynamic models."""
         if self._is_async_dynamic_model:
             dynamic_model = cast(
-                Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
+                Callable[[StateT, Runtime[ContextT]], Awaitable[BaseChatModel]],
                 self.model,
             )
             resolved_model = await dynamic_model(state, runtime)
@@ -587,7 +582,7 @@ class _AgentBuilder(Generic[StructuredResponseT]):
     def create_model_node(self) -> RunnableCallable:
         """Create the 'agent' node that calls the LLM."""
 
-        def _get_model_input_state(state: StateSchema) -> StateSchema:
+        def _get_model_input_state(state: StateT) -> StateT:
             if self.pre_model_hook is not None:
                 messages = _get_state_value(
                     state, "llm_input_messages"
@@ -618,7 +613,7 @@ class _AgentBuilder(Generic[StructuredResponseT]):
                 state["messages"] = messages  # type: ignore
             return state
 
-        def _are_more_steps_needed(state: StateSchema, response: BaseMessage) -> bool:
+        def _are_more_steps_needed(state: StateT, response: BaseMessage) -> bool:
             has_tool_calls = isinstance(response, AIMessage) and response.tool_calls
             all_tools_return_direct = (
                 all(
@@ -637,7 +632,7 @@ class _AgentBuilder(Generic[StructuredResponseT]):
             return False
 
         def call_model(
-            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+            state: StateT, runtime: Runtime[ContextT], config: RunnableConfig
         ) -> dict[str, Any] | Command:
             """Call the model with the current state and return the response."""
             if self._is_async_dynamic_model:
@@ -680,7 +675,7 @@ class _AgentBuilder(Generic[StructuredResponseT]):
             return {"messages": [response]}
 
         async def acall_model(
-            state: StateSchema, runtime: Runtime[ContextT], config: RunnableConfig
+            state: StateT, runtime: Runtime[ContextT], config: RunnableConfig
         ) -> dict[str, Any] | Command:
             """Call the model with the current state and return the response."""
             model_input = _get_model_input_state(state)
@@ -721,7 +716,7 @@ class _AgentBuilder(Generic[StructuredResponseT]):
 
         return RunnableCallable(call_model, acall_model)
 
-    def _get_input_schema(self) -> StateSchemaType:
+    def _get_input_schema(self) -> type[StateT]:
         """Get input schema for model node."""
         if self.pre_model_hook is not None:
             if isinstance(self._final_state_schema, type) and issubclass(
@@ -743,10 +738,10 @@ class _AgentBuilder(Generic[StructuredResponseT]):
         else:
             return self._final_state_schema
 
-    def create_model_router(self) -> Callable[[StateSchema], Union[str, list[Send]]]:
+    def create_model_router(self) -> Callable[[StateT], Union[str, list[Send]]]:
         """Create routing function for model node conditional edges."""
 
-        def should_continue(state: StateSchema) -> Union[str, list[Send]]:
+        def should_continue(state: StateT) -> Union[str, list[Send]]:
             messages = _get_state_value(state, "messages")
             last_message = messages[-1]
 
@@ -784,10 +779,10 @@ class _AgentBuilder(Generic[StructuredResponseT]):
 
     def create_post_model_hook_router(
         self,
-    ) -> Callable[[StateSchema], Union[str, list[Send]]]:
+    ) -> Callable[[StateT], Union[str, list[Send]]]:
         """Create a routing function for post_model_hook node conditional edges."""
 
-        def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
+        def post_model_hook_router(state: StateT) -> Union[str, list[Send]]:
             messages = _get_state_value(state, "messages")
 
             # Check if the last message is a ToolMessage from a structured tool.
@@ -824,12 +819,12 @@ class _AgentBuilder(Generic[StructuredResponseT]):
 
         return post_model_hook_router
 
-    def create_tools_router(self) -> Optional[Callable[[StateSchema], str]]:
+    def create_tools_router(self) -> Optional[Callable[[StateT], str]]:
         """Create a routing function for tools node conditional edges."""
         if not self._should_return_direct:
             return None
 
-        def route_tool_responses(state: StateSchema) -> str:
+        def route_tool_responses(state: StateT) -> str:
             messages = _get_state_value(state, "messages")
             for m in reversed(messages):
                 if not isinstance(m, ToolMessage):
@@ -970,7 +965,7 @@ def create_react_agent(
     model: Union[
         str,
         BaseChatModel,
-        SyncOrAsync[[StateSchema, Runtime[ContextT]], BaseModel],
+        SyncOrAsync[[StateT, Runtime[ContextT]], BaseModel],
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
@@ -984,8 +979,8 @@ def create_react_agent(
     ] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
-    state_schema: Optional[StateSchemaType] = None,
-    context_schema: Optional[Type[Any]] = None,
+    state_schema: Optional[type[StateT]] = None,
+    context_schema: Optional[type[ContextT]] = None,
     checkpointer: Optional[Checkpointer] = None,
     store: Optional[BaseStore] = None,
     interrupt_before: Optional[list[str]] = None,
