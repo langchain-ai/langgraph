@@ -612,7 +612,7 @@ class TestResponseFormatAsToolOutput:
             [],
             response_format=ToolOutput(
                 WeatherBaseModel,
-                retry_on="Please provide valid weather data with temperature and condition.",
+                handle_errors="Please provide valid weather data with temperature and condition.",
             ),
         )
 
