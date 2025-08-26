@@ -21,7 +21,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.message import MessagesState, add_messages
-from langgraph.prebuilt.chat_agent_executor import create_agent
+from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import (
@@ -1301,7 +1301,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         ]
     )
 
-    app = create_agent(model, tools)
+    app = create_react_agent(model, tools)
 
     assert json.dumps(app.get_input_jsonschema()) == snapshot
     assert json.dumps(app.get_output_jsonschema()) == snapshot
