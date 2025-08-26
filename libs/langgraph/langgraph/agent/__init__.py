@@ -166,16 +166,24 @@ def _make_model_request_node(
             messages = [SystemMessage(request.system_prompt)] + request.messages
         else:
             messages = request.messages
-        # prepare model
+        # call model
         if request.response_format:
-            model_ = request.model.with_structured_output(request.response_format)
+            model_ = request.model.with_structured_output(
+                request.response_format, include_raw=True
+            )
+            output = model_.invoke(
+                messages, tools=request.tools, tool_choice=request.tool_choice
+            )
+            return {"messages": output["raw"], "response": output["parsed"]}
         else:
             model_ = request.model
-        # call model
-        output = model_.invoke(
-            messages, tools=request.tools, tool_choice=request.tool_choice
-        )
-        return {"messages": output}
+            output = model_.invoke(
+                messages, tools=request.tools, tool_choice=request.tool_choice
+            )
+            if state.response is not None:
+                return {"messages": output, "response": None}
+            else:
+                return {"messages": output}
 
     return model_request
 

@@ -221,7 +221,7 @@ def test_create_agent_invoke(
                 response_metadata={},
                 id="ai2",
             ),
-        ]
+        ],
     }
     assert calls == [
         "NoopSeven.before_model",

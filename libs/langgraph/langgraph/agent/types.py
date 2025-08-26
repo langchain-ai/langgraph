@@ -48,6 +48,7 @@ class AgentMiddleware:
 
 class AgentUpdate(TypedDict, total=False):
     messages: Messages
+    response: dict
 
 
 class AgentGoTo(TypedDict, total=False):
@@ -59,3 +60,4 @@ class AgentGoTo(TypedDict, total=False):
 class AgentState:
     messages: Annotated[list[AnyMessage], add_messages]
     goto: Annotated[GoTo | None, EphemeralValue] = None
+    response: dict | None = None
