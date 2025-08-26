@@ -274,10 +274,12 @@ async def test_tool_node_error_handling() -> None:
 
     # test catching all exceptions, via:
     # - handle_tool_errors = True
+    # - passing a single exception
     # - passing a tuple of all exceptions
     # - passing a callable with all exceptions in the signature
     for handle_tool_errors in (
         True,
+        Exception,
         (ValueError, ToolException, ToolInvocationError),
         handle_all,
     ):

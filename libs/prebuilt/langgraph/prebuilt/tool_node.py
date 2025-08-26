@@ -157,6 +157,7 @@ def _handle_tool_error(
         bool,
         str,
         Callable[..., str],
+        type[Exception],
         tuple[type[Exception], ...],
     ],
 ) -> str:
@@ -184,7 +185,7 @@ def _handle_tool_error(
         The tuple case is handled by the caller through exception type checking,
         not by this function directly.
     """
-    if isinstance(flag, (bool, tuple)):
+    if isinstance(flag, (bool, tuple)) or (isinstance(flag, type) and issubclass(flag, Exception)):
         content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
     elif isinstance(flag, str):
         content = flag
@@ -309,6 +310,7 @@ class ToolNode(RunnableCallable):
               error template containing the exception details.
             - **str**: Catch all errors and return a ToolMessage with this custom
               error message string.
+            - **type[Exception]**: Only catch exceptions with the specified type and return the default error message for it.
             - **tuple[type[Exception], ...]**: Only catch exceptions with the specified
               types and return default error messages for them.
             - **Callable[..., str]**: Catch exceptions matching the callable's signature
@@ -373,7 +375,7 @@ class ToolNode(RunnableCallable):
         name: str = "tools",
         tags: Optional[list[str]] = None,
         handle_tool_errors: Union[
-            bool, str, Callable[..., str], tuple[type[Exception], ...]
+            bool, str, Callable[..., str], type[Exception], tuple[type[Exception], ...]
         ] = _default_handle_tool_errors,
         messages_key: str = "messages",
     ) -> None:
@@ -518,7 +520,9 @@ class ToolNode(RunnableCallable):
         except GraphBubbleUp as e:
             raise e
         except Exception as e:
-            if isinstance(self._handle_tool_errors, tuple):
+            if isinstance(self._handle_tool_errors, type) and issubclass(self._handle_tool_errors, Exception):
+                handled_types: tuple = (self._handle_tool_errors,)
+            elif isinstance(self._handle_tool_errors, tuple):
                 handled_types: tuple = self._handle_tool_errors
             elif callable(self._handle_tool_errors):
                 handled_types = _infer_handled_types(self._handle_tool_errors)
@@ -580,7 +584,9 @@ class ToolNode(RunnableCallable):
         except GraphBubbleUp as e:
             raise e
         except Exception as e:
-            if isinstance(self._handle_tool_errors, tuple):
+            if isinstance(self._handle_tool_errors, type) and issubclass(self._handle_tool_errors, Exception):
+                handled_types: tuple = (self._handle_tool_errors,)
+            elif isinstance(self._handle_tool_errors, tuple):
                 handled_types: tuple = self._handle_tool_errors
             elif callable(self._handle_tool_errors):
                 handled_types = _infer_handled_types(self._handle_tool_errors)
