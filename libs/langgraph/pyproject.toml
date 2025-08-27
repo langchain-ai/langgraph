@@ -7,7 +7,7 @@ name = "langgraph"
 version = "0.6.6"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
@@ -15,7 +15,7 @@ dependencies = [
     "langchain-core>=0.1",
     "langgraph-checkpoint>=2.1.0,<3.0.0",
     "langgraph-sdk>=0.2.2,<0.3.0",
-    "langgraph-prebuilt>=0.6.0,<0.7.0",
+    "langgraph-prebuilt==0.7.0a1",
     "xxhash>=3.5.0",
     "pydantic>=2.7.4",
 ]
