@@ -67,7 +67,7 @@ class AgentState(TypedDict):
 
 
 @deprecated(
-    "AgentStatePydantic is deprecated and will be removed in v2.0.0. Please use AgentState from langgraph.agents instead.",
+    "AgentStatePydantic is deprecated. Please use AgentState from langgraph.agents instead.",
     category=LangGraphDeprecatedSinceV10,
 )
 class AgentStatePydantic(BaseModel):
@@ -79,7 +79,7 @@ class AgentStatePydantic(BaseModel):
 
 
 @deprecated(
-    "AgentStateWithStructuredResponse is deprecated and will be removed in v2.0.0. Please use AgentStateWithStructuredResponse from langgraph.agents instead.",
+    "AgentStateWithStructuredResponse is deprecated. Please use AgentStateWithStructuredResponse from langgraph.agents instead.",
     category=LangGraphDeprecatedSinceV10,
 )
 class AgentStateWithStructuredResponse(AgentState):
@@ -89,7 +89,7 @@ class AgentStateWithStructuredResponse(AgentState):
 
 
 @deprecated(
-    "AgentStateWithStructuredResponsePydantic is deprecated and will be removed in v2.0.0. Please use AgentStateWithStructuredResponse from langgraph.agents instead.",
+    "AgentStateWithStructuredResponsePydantic is deprecated. Please use AgentStateWithStructuredResponse from langgraph.agents instead.",
     category=LangGraphDeprecatedSinceV10,
 )
 class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
@@ -257,7 +257,7 @@ def _validate_chat_history(
 
 
 @deprecated(
-    "create_react_agent is deprecated and will be removed in v2.0.0. Please use create_react_agent from langgraph.agents instead.",
+    "create_react_agent is deprecated. Please use create_react_agent from langgraph.agents instead.",
     category=LangGraphDeprecatedSinceV10,
 )
 def create_react_agent(

@@ -238,7 +238,7 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
 
 
 @deprecated(
-    "ToolNode is deprecated and will be removed in v2.0.0. Please use ToolNode from langchain.agents instead.",
+    "ToolNode is deprecated. Please use ToolNode from langchain.agents instead.",
     category=LangGraphDeprecatedSinceV10,
 )
 class ToolNode(RunnableCallable):
@@ -857,7 +857,7 @@ def tools_condition(
 
 
 @deprecated(
-    "InjectedState is deprecated and will be removed in v2.0.0. Please use InjectedState from langchain.agents.tool_node instead.",
+    "InjectedState is deprecated. Please use InjectedState from langchain.agents.tool_node instead.",
     category=LangGraphDeprecatedSinceV10,
 )
 class InjectedState(InjectedToolArg):
@@ -935,7 +935,7 @@ class InjectedState(InjectedToolArg):
 
 
 @deprecated(
-    "InjectedStore is deprecated and will be removed in v2.0.0. Please use InjectedStore from langchain.agents.tool_node instead.",
+    "InjectedStore is deprecated. Please use InjectedStore from langchain.agents.tool_node instead.",
     category=LangGraphDeprecatedSinceV10,
 )
 class InjectedStore(InjectedToolArg):
