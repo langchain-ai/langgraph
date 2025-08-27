@@ -12,7 +12,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
-    "langchain-core==1.0.0a1",
+    "langchain-core>=0.1",
     "langgraph-checkpoint>=2.1.0,<3.0.0",
     "langgraph-sdk>=0.2.2,<0.3.0",
     "langgraph-prebuilt==0.7.0a1",
@@ -37,7 +37,7 @@ dev = [
     "jupyter",
     "pytest-xdist[psutil]",
     "pytest-repeat",
-    "langchain-core",
+    "langchain-core==1.0.0a1",
     "langgraph-prebuilt",
     "langgraph-checkpoint",
     "langgraph-checkpoint-sqlite",

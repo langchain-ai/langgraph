@@ -304,7 +304,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = "==1.0.0a1" },
+    { name = "langchain-core", specifier = ">=0.1" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-prebuilt", editable = "." },
     { name = "langgraph-sdk", editable = "../sdk-py" },
@@ -316,7 +316,7 @@ requires-dist = [
 dev = [
     { name = "httpx" },
     { name = "jupyter" },
-    { name = "langchain-core" },
+    { name = "langchain-core", specifier = "==1.0.0a1" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
