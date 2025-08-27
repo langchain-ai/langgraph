@@ -55,7 +55,7 @@ StructuredResponseSchema = Union[dict, type[BaseModel]]
 
 
 @deprecated(
-    "AgentState is deprecated and will be removed in v2.0.0. Please use AgentState from langgraph.agents instead.",
+    "AgentState has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentState'.",
     category=LangGraphDeprecatedSinceV10,
 )
 class AgentState(TypedDict):
@@ -67,7 +67,7 @@ class AgentState(TypedDict):
 
 
 @deprecated(
-    "AgentStatePydantic is deprecated. Please use AgentState from langgraph.agents instead.",
+    "AgentStatePydantic has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStatePydantic'.",
     category=LangGraphDeprecatedSinceV10,
 )
 class AgentStatePydantic(BaseModel):
@@ -79,7 +79,7 @@ class AgentStatePydantic(BaseModel):
 
 
 @deprecated(
-    "AgentStateWithStructuredResponse is deprecated. Please use AgentStateWithStructuredResponse from langgraph.agents instead.",
+    "AgentStateWithStructuredResponse has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStateWithStructuredResponse'.",
     category=LangGraphDeprecatedSinceV10,
 )
 class AgentStateWithStructuredResponse(AgentState):
@@ -89,7 +89,7 @@ class AgentStateWithStructuredResponse(AgentState):
 
 
 @deprecated(
-    "AgentStateWithStructuredResponsePydantic is deprecated. Please use AgentStateWithStructuredResponse from langgraph.agents instead.",
+    "AgentStateWithStructuredResponsePydantic has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStateWithStructuredResponsePydantic'.",
     category=LangGraphDeprecatedSinceV10,
 )
 class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
@@ -257,7 +257,7 @@ def _validate_chat_history(
 
 
 @deprecated(
-    "create_react_agent is deprecated. Please use create_react_agent from langgraph.agents instead.",
+    "create_react_agent has been moved to langchain.agents. Please update your import to 'from langchain.agents import create_react_agent'.",
     category=LangGraphDeprecatedSinceV10,
 )
 def create_react_agent(
