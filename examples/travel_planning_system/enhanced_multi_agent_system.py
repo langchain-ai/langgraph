@@ -37,12 +37,12 @@ from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
 # Tracing imports
 try:
-    from langchain_azure_ai.callbacks.tracers import AzureOpenAITracingCallback
+    from langchain_azure_ai.callbacks.tracers import AzureOpenAITracingCallback, AsyncAzureOpenAITracingCallback
 except ImportError as e:
     logger.warning(f"Tracing imports failed: {e}")
     AzureOpenAITracingCallback = None
-    
-OpenTelemetryTracer = None
+    AsyncAzureOpenAITracingCallback = None
+
 try:
     from opentelemetry import trace, context
     from opentelemetry.trace import SpanKind
@@ -50,6 +50,8 @@ except ImportError:
     trace = None
     context = None
     SpanKind = None
+
+OpenTelemetryTracer = None
 
 
 # State definition
@@ -108,6 +110,13 @@ def setup_tracing():
             enable_content_recording=True
         )
         tracers.append(azure_tracer)
+
+    if config.tracing.application_insights_connection_string and AsyncAzureOpenAITracingCallback:
+        async_azure_tracer = AsyncAzureOpenAITracingCallback(
+            connection_string=config.tracing.application_insights_connection_string,
+            enable_content_recording=True
+        )
+        tracers.append(async_azure_tracer)
         logger.info("Azure tracing enabled")
     
     # OpenTelemetry
