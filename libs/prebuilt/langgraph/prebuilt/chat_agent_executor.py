@@ -34,7 +34,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
-from typing_extensions import Annotated, NotRequired, TypedDict
+from typing_extensions import Annotated, NotRequired, TypedDict, deprecated
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
@@ -52,13 +52,12 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
-F = TypeVar("F", bound=Callable[..., Any])
 
 
-# We create the AgentState that we will pass around
-# This simply involves a list of messages
-# We want steps to return messages to append to the list
-# So we annotate the messages attribute with `add_messages` reducer
+@deprecated(
+    "AgentState has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentState'.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class AgentState(TypedDict):
     """The state of the agent."""
 
@@ -67,6 +66,10 @@ class AgentState(TypedDict):
     remaining_steps: NotRequired[RemainingSteps]
 
 
+@deprecated(
+    "AgentStatePydantic has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStatePydantic'.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class AgentStatePydantic(BaseModel):
     """The state of the agent."""
 
@@ -75,12 +78,20 @@ class AgentStatePydantic(BaseModel):
     remaining_steps: RemainingSteps = 25
 
 
+@deprecated(
+    "AgentStateWithStructuredResponse has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStateWithStructuredResponse'.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class AgentStateWithStructuredResponse(AgentState):
     """The state of the agent with a structured response."""
 
     structured_response: StructuredResponse
 
 
+@deprecated(
+    "AgentStateWithStructuredResponsePydantic has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStateWithStructuredResponsePydantic'.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
     """The state of the agent with a structured response."""
 
@@ -245,6 +256,10 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
+@deprecated(
+    "create_react_agent has been moved to langchain.agents. Please update your import to 'from langchain.agents import create_react_agent'.",
+    category=LangGraphDeprecatedSinceV10,
+)
 def create_react_agent(
     model: Union[
         str,

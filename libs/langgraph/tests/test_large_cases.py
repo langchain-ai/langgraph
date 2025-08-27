@@ -1387,6 +1387,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                         "type": "tool_call_chunk",
                     }
                 ],
+                chunk_position="last",
             ),
             {
                 "langgraph_step": 1,
@@ -1446,6 +1447,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                         "type": "tool_call_chunk",
                     },
                 ],
+                chunk_position="last",
             ),
             {
                 "langgraph_step": 3,
@@ -1494,6 +1496,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         (
             _AnyIdAIMessageChunk(
                 content="answer",
+                chunk_position="last",
             ),
             {
                 "langgraph_step": 5,

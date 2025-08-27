@@ -1140,6 +1140,7 @@ async def test_prebuilt_tool_chat() -> None:
                         "type": "tool_call_chunk",
                     }
                 ],
+                chunk_position="last",
             ),
             {
                 "langgraph_step": 1,
@@ -1199,6 +1200,7 @@ async def test_prebuilt_tool_chat() -> None:
                         "type": "tool_call_chunk",
                     },
                 ],
+                chunk_position="last",
             ),
             {
                 "langgraph_step": 3,
@@ -1247,6 +1249,7 @@ async def test_prebuilt_tool_chat() -> None:
         (
             _AnyIdAIMessageChunk(
                 content="answer",
+                chunk_position="last",
             ),
             {
                 "langgraph_step": 5,
