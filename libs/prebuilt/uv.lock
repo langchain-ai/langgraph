@@ -298,8 +298,8 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "0.3.68"
-source = { registry = "https://pypi.org/simple" }
+version = "0.3.74"
+source = { git = "https://github.com/langchain-ai/langchain/?subdirectory=libs%2Fcore&branch=cc%2F1.0%2Fstandard_content_parse_tc#b3d38c589d63a9295b3509fe261d066dc5ea980e" }
 dependencies = [
     { name = "jsonpatch" },
     { name = "langsmith" },
@@ -308,10 +308,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "tenacity" },
     { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/23/20/f5b18a17bfbe3416177e702ab2fd230b7d168abb17be31fb48f43f0bb772/langchain_core-0.3.68.tar.gz", hash = "sha256:312e1932ac9aa2eaf111b70fdc171776fa571d1a86c1f873dcac88a094b19c6f", size = 563041, upload-time = "2025-07-03T17:02:28.704Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/da/c89be0a272993bfcb762b2a356b9f55de507784c2755ad63caec25d183bf/langchain_core-0.3.68-py3-none-any.whl", hash = "sha256:5e5c1fbef419590537c91b8c2d86af896fbcbaf0d5ed7fdcdd77f7d8f3467ba0", size = 441405, upload-time = "2025-07-03T17:02:27.115Z" },
 ]
 
 [[package]]
@@ -329,7 +325,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=0.1" },
+    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain/?subdirectory=libs%2Fcore&branch=cc%2F1.0%2Fstandard_content_parse_tc" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-prebuilt", editable = "." },
     { name = "langgraph-sdk", editable = "../sdk-py" },
@@ -341,6 +337,7 @@ requires-dist = [
 dev = [
     { name = "httpx" },
     { name = "jupyter" },
+    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain/?subdirectory=libs%2Fcore&branch=cc%2F1.0%2Fstandard_content_parse_tc" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
@@ -472,6 +469,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "codespell" },
+    { name = "langchain-core" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint" },
     { name = "langgraph-checkpoint-postgres" },
@@ -487,13 +485,14 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=0.3.67" },
+    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain/?subdirectory=libs%2Fcore&branch=cc%2F1.0%2Fstandard_content_parse_tc" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "codespell" },
+    { name = "langchain-core", git = "https://github.com/langchain-ai/langchain/?subdirectory=libs%2Fcore&branch=cc%2F1.0%2Fstandard_content_parse_tc" },
     { name = "langgraph", editable = "../langgraph" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },

@@ -6597,7 +6597,7 @@ def test_tags_stream_mode_messages() -> None:
         )
     ) == [
         (
-            _AnyIdAIMessageChunk(content="foo"),
+            _AnyIdAIMessageChunk(content="foo", chunk_position="last"),
             {
                 "langgraph_step": 1,
                 "langgraph_node": "call_model",
