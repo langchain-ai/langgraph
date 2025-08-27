@@ -991,6 +991,34 @@ class AssistantsClient:
             params=params,
         )
 
+    async def count(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> int:
+        """Count assistants matching filters.
+
+        Args:
+            metadata: Metadata to filter by. Exact match for each key/value.
+            graph_id: Optional graph id to filter by.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            int: Number of assistants matching the criteria.
+        """
+        payload: dict[str, Any] = {}
+        if metadata:
+            payload["metadata"] = metadata
+        if graph_id:
+            payload["graph_id"] = graph_id
+        return await self.http.post(
+            "/assistants/count", json=payload, headers=headers, params=params
+        )
+
     async def get_versions(
         self,
         assistant_id: str,
@@ -1338,6 +1366,38 @@ class ThreadsClient:
             json=payload,
             headers=headers,
             params=params,
+        )
+
+    async def count(
+        self,
+        *,
+        metadata: Json = None,
+        values: Json = None,
+        status: ThreadStatus | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> int:
+        """Count threads matching filters.
+
+        Args:
+            metadata: Thread metadata to filter on.
+            values: State values to filter on.
+            status: Thread status to filter on.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            int: Number of threads matching the criteria.
+        """
+        payload: dict[str, Any] = {}
+        if metadata:
+            payload["metadata"] = metadata
+        if values:
+            payload["values"] = values
+        if status:
+            payload["status"] = status
+        return await self.http.post(
+            "/threads/count", json=payload, headers=headers, params=params
         )
 
     async def copy(
@@ -2855,6 +2915,34 @@ class CronClient:
             "/runs/crons/search", json=payload, headers=headers, params=params
         )
 
+    async def count(
+        self,
+        *,
+        assistant_id: str | None = None,
+        thread_id: str | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> int:
+        """Count cron jobs matching filters.
+
+        Args:
+            assistant_id: Assistant ID to filter by.
+            thread_id: Thread ID to filter by.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            int: Number of crons matching the criteria.
+        """
+        payload: dict[str, Any] = {}
+        if assistant_id:
+            payload["assistant_id"] = assistant_id
+        if thread_id:
+            payload["thread_id"] = thread_id
+        return await self.http.post(
+            "/runs/crons/count", json=payload, headers=headers, params=params
+        )
+
 
 class StoreClient:
     """Client for interacting with the graph's shared storage.
@@ -3974,6 +4062,34 @@ class SyncAssistantsClient:
             params=params,
         )
 
+    def count(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> int:
+        """Count assistants matching filters.
+
+        Args:
+            metadata: Metadata to filter by. Exact match for each key/value.
+            graph_id: Optional graph id to filter by.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            int: Number of assistants matching the criteria.
+        """
+        payload: dict[str, Any] = {}
+        if metadata:
+            payload["metadata"] = metadata
+        if graph_id:
+            payload["graph_id"] = graph_id
+        return self.http.post(
+            "/assistants/count", json=payload, headers=headers, params=params
+        )
+
     def get_versions(
         self,
         assistant_id: str,
@@ -4304,6 +4420,38 @@ class SyncThreadsClient:
             payload["select"] = select
         return self.http.post(
             "/threads/search", json=payload, headers=headers, params=params
+        )
+
+    def count(
+        self,
+        *,
+        metadata: Json = None,
+        values: Json = None,
+        status: ThreadStatus | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> int:
+        """Count threads matching filters.
+
+        Args:
+            metadata: Thread metadata to filter on.
+            values: State values to filter on.
+            status: Thread status to filter on.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            int: Number of threads matching the criteria.
+        """
+        payload: dict[str, Any] = {}
+        if metadata:
+            payload["metadata"] = metadata
+        if values:
+            payload["values"] = values
+        if status:
+            payload["status"] = status
+        return self.http.post(
+            "/threads/count", json=payload, headers=headers, params=params
         )
 
     def copy(
@@ -5779,6 +5927,34 @@ class SyncCronClient:
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(
             "/runs/crons/search", json=payload, headers=headers, params=params
+        )
+
+    def count(
+        self,
+        *,
+        assistant_id: str | None = None,
+        thread_id: str | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> int:
+        """Count cron jobs matching filters.
+
+        Args:
+            assistant_id: Assistant ID to filter by.
+            thread_id: Thread ID to filter by.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            int: Number of crons matching the criteria.
+        """
+        payload: dict[str, Any] = {}
+        if assistant_id:
+            payload["assistant_id"] = assistant_id
+        if thread_id:
+            payload["thread_id"] = thread_id
+        return self.http.post(
+            "/runs/crons/count", json=payload, headers=headers, params=params
         )
 
 
