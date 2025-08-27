@@ -1747,7 +1747,7 @@ class RunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             feedback_keys: Feedback keys to assign to run.
@@ -1766,6 +1766,9 @@ class RunsClient:
             params: Optional query parameters to include with the request.
             on_run_created: Callback when a run is created.
             durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
             AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
@@ -1954,7 +1957,7 @@ class RunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -1969,6 +1972,9 @@ class RunsClient:
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
             durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
             Run: The created background run.
@@ -2199,7 +2205,7 @@ class RunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -2216,6 +2222,9 @@ class RunsClient:
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
             durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -4738,7 +4747,7 @@ class SyncRunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             feedback_keys: Feedback keys to assign to run.
@@ -4756,6 +4765,10 @@ class SyncRunsClient:
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
             durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
+
 
         Returns:
             Iterator[StreamPart]: Iterator of stream results.
@@ -4940,7 +4953,7 @@ class SyncRunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -4955,6 +4968,9 @@ class SyncRunsClient:
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
             durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
             Run: The created background run.
@@ -5185,7 +5201,7 @@ class SyncRunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -5203,6 +5219,9 @@ class SyncRunsClient:
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
             durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
