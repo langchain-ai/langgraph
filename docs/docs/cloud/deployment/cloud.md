@@ -99,8 +99,8 @@ Starting from the `LangGraph Platform` view...
 1. In the top-right corner, select the gear icon (`Deployment Settings`).
 1. Update the `Git Branch` to the desired branch.
 1. Check/uncheck checkbox to `Automatically update deployment on push to branch`.
-    1. Branch creation/deletion and tag creation/deletion events will not trigger an update. Only pushes to an existing branch will trigger an update.
-    1. Pushes in quick succession to a branch will not trigger subsequent updates. In the future, this functionality may be changed/improved.
+1. Branch creation/deletion and tag creation/deletion events will not trigger an update. Only pushes to an existing branch will trigger an update.
+1. Pushes in quick succession to a branch will queue subsequent updates. Once a build completes, the most recent commit will begin building and the other queued builds will be skipped.
 
 ## Add or Remove GitHub Repositories
 
