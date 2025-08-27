@@ -15,6 +15,7 @@ import logging
 import os
 import re
 import sys
+import warnings
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from types import TracebackType
 from typing import (
@@ -1713,7 +1714,7 @@ class RunsClient:
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         feedback_keys: Sequence[str] | None = None,
@@ -1800,6 +1801,13 @@ class RunsClient:
             ```
 
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         payload = {
             "input": input,
             "command": (
@@ -1915,7 +1923,7 @@ class RunsClient:
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         webhook: str | None = None,
@@ -2036,6 +2044,12 @@ class RunsClient:
             }
             ```
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         payload = {
             "input": input,
             "command": (
@@ -2156,7 +2170,7 @@ class RunsClient:
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         webhook: str | None = None,
@@ -2255,6 +2269,12 @@ class RunsClient:
             ```
 
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         payload = {
             "input": input,
             "command": (
@@ -4685,7 +4705,7 @@ class SyncRunsClient:
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         feedback_keys: Sequence[str] | None = None,
@@ -4768,6 +4788,12 @@ class SyncRunsClient:
             StreamPart(event='end', data=None)
             ```
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         payload = {
             "input": input,
             "command": (
@@ -4883,7 +4909,7 @@ class SyncRunsClient:
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         webhook: str | None = None,
@@ -5004,6 +5030,12 @@ class SyncRunsClient:
             }
             ```
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         payload = {
             "input": input,
             "command": (
@@ -5122,7 +5154,7 @@ class SyncRunsClient:
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -5225,6 +5257,12 @@ class SyncRunsClient:
             ```
 
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         payload = {
             "input": input,
             "command": (
