@@ -171,6 +171,7 @@ def create_llm(agent_type: str = "default") -> Any:
             tags=[agent_type, "enhanced-travel-planning"],
             metadata={
                 "agent_type": agent_type,
+                "agent_name": agent_type,
                 "system": "enhanced-travel-planning",
                 "provider": "azure_openai"
             }
@@ -983,7 +984,6 @@ def main():
                     content = last_message.content
                     if len(content) > 1000:
                         content = content[:1000] + "... [truncated]"
-                    print(content)
 
             completed = ", ".join(agent_state.get("completed_steps", []))
             print(f"\n✅ Completed: {completed}")
