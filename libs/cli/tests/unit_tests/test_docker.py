@@ -1,7 +1,10 @@
+import pytest
+
 from langgraph_cli.docker import (
     DEFAULT_POSTGRES_URI,
     DockerCapabilities,
     Version,
+    _parse_version,
     compose,
 )
 from langgraph_cli.util import clean_empty_lines
@@ -363,3 +366,28 @@ services:
             REDIS_URI: redis://langgraph-redis:6379
             POSTGRES_URI: {DEFAULT_POSTGRES_URI}"""
     assert clean_empty_lines(actual_compose_str) == expected_compose_str
+
+
+@pytest.mark.parametrize(
+    "input_str,expected",
+    [
+        ("1.2.3", Version(1, 2, 3)),
+        ("v1.2.3", Version(1, 2, 3)),
+        ("1.2.3-alpha", Version(1, 2, 3)),
+        ("1.2.3+1", Version(1, 2, 3)),
+        ("1.2.3-alpha+build", Version(1, 2, 3)),
+        ("1.2", Version(1, 2, 0)),
+        ("1", Version(1, 0, 0)),
+        ("v28.1.1+1", Version(28, 1, 1)),
+        ("2.0.0-beta.1+exp.sha.5114f85", Version(2, 0, 0)),
+        ("v3.4.5-rc1+build.123", Version(3, 4, 5)),
+    ],
+)
+def test__parse_version_comprehensive(input_str, expected):
+    """
+    Test the _parse_version function with comprehensive input cases.
+    """
+    result = _parse_version(input_str)
+    assert result == expected, (
+        f"Failed for {input_str}: got {result}, expected {expected}"
+    )
