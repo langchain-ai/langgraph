@@ -14,7 +14,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.graph.message import Messages, add_messages
 
 ResponseFormat = dict | type[BaseModel]
-GoTo = Literal["tools", "model", "__end__"]
+JumpTo = Literal["tools", "model", "__end__"]
 
 
 @dataclass
@@ -53,11 +53,11 @@ class AgentUpdate(TypedDict, total=False):
 
 class AgentGoTo(TypedDict, total=False):
     messages: Messages
-    goto: GoTo
+    jump_to: JumpTo
 
 
 @dataclass
 class AgentState:
     messages: Annotated[list[AnyMessage], add_messages]
-    goto: Annotated[GoTo | None, EphemeralValue] = None
+    jump_to: Annotated[JumpTo | None, EphemeralValue] = None
     response: dict | None = None

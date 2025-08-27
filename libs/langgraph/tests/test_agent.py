@@ -240,7 +240,7 @@ def test_create_agent_invoke(
     ]
 
 
-def test_create_agent_goto(
+def test_create_agent_jump(
     snapshot: SnapshotAssertion,
     sync_checkpointer: BaseCheckpointSaver,
 ):
@@ -260,7 +260,7 @@ def test_create_agent_goto(
     class NoopEight(AgentMiddleware):
         def before_model(self, state) -> AgentGoTo:
             calls.append("NoopEight.before_model")
-            return {"goto": END}
+            return {"jump_to": END}
 
         def modify_model_request(self, request, state):
             calls.append("NoopEight.modify_model_request")

@@ -11,7 +11,7 @@ from langgraph.agent.types import (
     AgentMiddleware,
     AgentState,
     AgentUpdate,
-    GoTo,
+    JumpTo,
     ModelRequest,
     ResponseFormat,
 )
@@ -188,17 +188,17 @@ def _make_model_request_node(
     return model_request
 
 
-def _resolve_goto(goto: GoTo | None, first_node: str) -> str | None:
-    if goto == "model":
+def _resolve_jump(jump_to: JumpTo | None, first_node: str) -> str | None:
+    if jump_to == "model":
         return first_node
-    elif goto:
-        return goto
+    elif jump_to:
+        return jump_to
 
 
 def _make_model_to_tools_edge(first_node: str) -> Callable[[AgentState], str | None]:
     def model_to_tools(state: AgentState) -> str | None:
-        if state.goto:
-            return _resolve_goto(state.goto, first_node)
+        if state.jump_to:
+            return _resolve_jump(state.jump_to, first_node)
         message = state.messages[-1]
         if isinstance(message, AIMessage) and message.tool_calls:
             return "tools"
@@ -233,19 +233,21 @@ def _add_middleware_edge(
     model_destination: str,
 ) -> None:
     sig = signature(method)
-    uses_goto = sig.return_annotation is AgentGoTo or AgentGoTo in getattr(
+    uses_jump = sig.return_annotation is AgentGoTo or AgentGoTo in getattr(
         sig.return_annotation, "__args__", ()
     )
 
-    if uses_goto:
+    if uses_jump:
 
-        def goto_edge(state: AgentState) -> str:
-            return _resolve_goto(state.goto, model_destination) or default_destination
+        def jump_edge(state: AgentState) -> str:
+            return (
+                _resolve_jump(state.jump_to, model_destination) or default_destination
+            )
 
         destinations = [default_destination, END, "tools"]
         if name != model_destination:
             destinations.append(model_destination)
 
-        graph.add_conditional_edges(name, goto_edge, destinations)
+        graph.add_conditional_edges(name, jump_edge, destinations)
     else:
         graph.add_edge(name, default_destination)
