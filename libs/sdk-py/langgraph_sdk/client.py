@@ -71,6 +71,7 @@ from langgraph_sdk.schema import (
     ThreadSortBy,
     ThreadState,
     ThreadStatus,
+    ThreadStreamMode,
     ThreadUpdateStateResponse,
 )
 from langgraph_sdk.sse import SSEDecoder, aiter_lines_raw, iter_lines_raw
@@ -1682,6 +1683,53 @@ class ThreadsClient:
             json=payload,
             headers=headers,
             params=params,
+        )
+
+    async def join_stream(
+        self,
+        thread_id: str,
+        *,
+        last_event_id: str | None = None,
+        stream_mode: ThreadStreamMode | Sequence[ThreadStreamMode] = "run_modes",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> AsyncIterator[StreamPart]:
+        """Get a stream of events for a thread.
+
+        Args:
+            thread_id: The ID of the thread to get the stream for.
+            last_event_id: The ID of the last event to get.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            Iterator[StreamPart]: An iterator of stream parts.
+
+        ???+ example "Example Usage"
+
+            ```python
+
+            for chunk in client.threads.join_stream(
+                thread_id="my_thread_id",
+                last_event_id="my_event_id",
+            ):
+                print(chunk)
+            ```
+
+        """  # noqa: E501
+        query_params = {
+            "stream_mode": stream_mode,
+        }
+        if params:
+            query_params.update(params)
+        return self.http.stream(
+            f"/threads/{thread_id}/stream",
+            "GET",
+            headers={
+                **({"Last-Event-ID": last_event_id} if last_event_id else {}),
+                **(headers or {}),
+            },
+            params=query_params,
         )
 
 
@@ -4770,6 +4818,54 @@ class SyncThreadsClient:
             json=payload,
             headers=headers,
             params=params,
+        )
+
+    def join_stream(
+        self,
+        thread_id: str,
+        *,
+        stream_mode: ThreadStreamMode | Sequence[ThreadStreamMode] = "run_modes",
+        last_event_id: str | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> Iterator[StreamPart]:
+        """Get a stream of events for a thread.
+
+        Args:
+            thread_id: The ID of the thread to get the stream for.
+            last_event_id: The ID of the last event to get.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            Iterator[StreamPart]: An iterator of stream parts.
+
+        ???+ example "Example Usage"
+
+            ```python
+
+            for chunk in client.threads.join_stream(
+                thread_id="my_thread_id",
+                last_event_id="my_event_id",
+                stream_mode="run_modes",
+            ):
+                print(chunk)
+            ```
+
+        """  # noqa: E501
+        query_params = {
+            "stream_mode": stream_mode,
+        }
+        if params:
+            query_params.update(params)
+        return self.http.stream(
+            f"/threads/{thread_id}/stream",
+            "GET",
+            headers={
+                **({"Last-Event-ID": last_event_id} if last_event_id else {}),
+                **(headers or {}),
+            },
+            params=query_params,
         )
 
 
