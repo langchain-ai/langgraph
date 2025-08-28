@@ -328,7 +328,7 @@ def _build(
     is_js_project = config_json.get("node_version") and not config_json.get(
         "python_version"
     )
-    if is_js_project:
+    if is_js_project and (build_command or install_command):
         build_context = str(pathlib.Path.cwd())
     else:
         build_context = str(config.parent)
