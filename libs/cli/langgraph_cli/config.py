@@ -357,6 +357,8 @@ class HttpConfig(TypedDict, total=False):
 
     You can include or exclude headers as configurable values to condition your
     agent's behavior or permissions on a request's headers."""
+    logging_headers: Optional[ConfigurableHeaderConfig]
+    """Optional. Defines which headers are excluded from logging."""
 
 
 class Config(TypedDict, total=False):
