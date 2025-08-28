@@ -38,6 +38,14 @@ Represents the status of a thread:
 - "error": An exception occurred during task processing.
 """
 
+ThreadStreamMode = Literal["run_modes", "lifecycle", "state_update"]
+"""
+Defines the mode of streaming:
+- "run_modes": Stream the same events as the runs on thread, as well as run_done events.
+- "lifecycle": Stream only run start/end events.
+- "state_update": Stream state updates on the thread.
+"""
+
 StreamMode = Literal[
     "values",
     "messages",
@@ -90,6 +98,12 @@ Defines action after completion:
 - "delete": Delete resources after completion.
 - "keep": Retain resources after completion.
 """
+
+Durability = Literal["sync", "async", "exit"]
+"""Durability mode for the graph execution.
+- `"sync"`: Changes are persisted synchronously before the next step starts.
+- `"async"`: Changes are persisted asynchronously while the next step executes.
+- `"exit"`: Changes are persisted only when the graph exits."""
 
 All = Literal["*"]
 """Represents a wildcard or 'all' selector."""
