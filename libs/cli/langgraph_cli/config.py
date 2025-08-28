@@ -1449,13 +1449,13 @@ def node_config_to_docker(
     else:
         # Backward compatibility: use the original behavior
         faux_path = f"/deps/{config_path.parent.name}"
-    
+
     # Use custom install command or auto-detect
     if install_command:
         install_cmd = install_command
     else:
         install_cmd = _get_node_pm_install_cmd(config_path, config)
-    
+
     image_str = docker_tag(config, base_image, api_version)
 
     env_vars: list[str] = []
@@ -1487,7 +1487,7 @@ def node_config_to_docker(
         # Monorepo case: install from root, build from config directory
         container_root = f"/deps/{pathlib.Path(build_context).name}"
         install_step = f"RUN cd {container_root} && {install_cmd}"
-        
+
         if build_command:
             build_step = f"RUN cd {faux_path} && {build_command}"
         else:
@@ -1558,20 +1558,19 @@ def docker_tag(
     return f"{base_image}:{full_tag}"
 
 
-
 def _calculate_relative_workdir(config_path: pathlib.Path, build_context: str) -> str:
     """Calculate the relative path from build context to langgraph.json directory."""
     config_dir = config_path.parent.resolve()
     build_context_path = pathlib.Path(build_context).resolve()
-    
+
     try:
         relative_path = config_dir.relative_to(build_context_path)
         return str(relative_path) if str(relative_path) != "." else ""
-    except ValueError:
+    except ValueError as _:
         raise ValueError(
             f"Configuration file {config_path} is not under the build context {build_context}. "
             f"Please run the command from a directory that contains your langgraph.json file, "
-        )
+        ) from None
 
 
 def config_to_docker(
@@ -1586,7 +1585,15 @@ def config_to_docker(
     base_image = base_image or default_base_image(config)
 
     if config.get("node_version") and not config.get("python_version"):
-        return node_config_to_docker(config_path, config, base_image, api_version, install_command, build_command, build_context)
+        return node_config_to_docker(
+            config_path,
+            config,
+            base_image,
+            api_version,
+            install_command,
+            build_command,
+            build_context,
+        )
 
     return python_config_to_docker(config_path, config, base_image, api_version)
 

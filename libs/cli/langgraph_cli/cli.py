@@ -325,15 +325,23 @@ def _build(
         tag,
     ]
     # determine build context: use current directory for JS projects, config parent for Python
-    is_js_project = config_json.get("node_version") and not config_json.get("python_version")
+    is_js_project = config_json.get("node_version") and not config_json.get(
+        "python_version"
+    )
     if is_js_project:
         build_context = str(pathlib.Path.cwd())
     else:
         build_context = str(config.parent)
-    
+
     # apply config
     stdin, additional_contexts = langgraph_cli.config.config_to_docker(
-        config, config_json, base_image, api_version, install_command, build_command, build_context
+        config,
+        config_json,
+        base_image,
+        api_version,
+        install_command,
+        build_command,
+        build_context,
     )
     # add additional_contexts
     if additional_contexts:
@@ -376,11 +384,11 @@ def _build(
 @OPT_API_VERSION
 @click.option(
     "--install-command",
-    help="Custom install command to run from the build context root. If not provided, auto-detects based on package manager files."
+    help="Custom install command to run from the build context root. If not provided, auto-detects based on package manager files.",
 )
 @click.option(
-    "--build-command", 
-    help="Custom build command to run from the langgraph.json directory. If not provided, uses default build process."
+    "--build-command",
+    help="Custom build command to run from the langgraph.json directory. If not provided, uses default build process.",
 )
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(
