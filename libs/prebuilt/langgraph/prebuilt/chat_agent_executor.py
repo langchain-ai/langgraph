@@ -32,6 +32,7 @@ from langchain_core.runnables import (
     RunnableConfig,
     RunnableSequence,
 )
+from langchain_core.runnables.configurable import DynamicRunnable
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 from typing_extensions import Annotated, NotRequired, TypedDict
@@ -191,27 +192,40 @@ def _should_bind_tools(
     return False
 
 
-def _get_model(model: LanguageModelLike) -> BaseChatModel:
-    """Get the underlying model from a RunnableBinding or return the model itself."""
-    if isinstance(model, RunnableSequence):
-        model = next(
+def _get_model_rec(
+    model: LanguageModelLike,
+) -> LanguageModelLike:
+    """Recursively search through a combination of RunnableBinding, RunnableSequence and DynamicRunnable for the model itself."""
+    if isinstance(model, DynamicRunnable):
+        return _get_model_rec(
+            model.prepare()[0],
+        )
+    elif isinstance(model, RunnableSequence):
+        return next(
             (
-                step
+                step_model
                 for step in model.steps
-                if isinstance(step, (RunnableBinding, BaseChatModel))
+                if (step_model := _get_model_rec(step))
+                and isinstance(step_model, BaseChatModel)
             ),
             model,
         )
+    elif isinstance(model, RunnableBinding):
+        return _get_model_rec(model.bound)
+    else:
+        return model
 
-    if isinstance(model, RunnableBinding):
-        model = model.bound
 
-    if not isinstance(model, BaseChatModel):
+def _get_model(model: LanguageModelLike) -> BaseChatModel:
+    """Get the underlying model from a RunnableBinding or return the model itself."""
+    underlying_model = _get_model_rec(model)
+
+    if not isinstance(underlying_model, BaseChatModel):
         raise TypeError(
-            f"Expected `model` to be a ChatModel or RunnableBinding (e.g. model.bind_tools(...)), got {type(model)}"
+            f"Expected `model` to be a ChatModel or RunnableBinding (e.g. model.bind_tools(...)), got {type(underlying_model)}"
         )
 
-    return model
+    return underlying_model
 
 
 def _validate_chat_history(
