@@ -1156,3 +1156,36 @@ async def test_tool_node_command_remove_all_messages():
     command = result[0]
     assert isinstance(command, Command)
     assert command.update == {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]}
+
+
+async def test_async_tool_called_syncly() -> None:
+    """Confirm that async tools can be called synchronously."""
+
+    @dec_tool
+    async def async_tool():
+        """An async tool."""
+        return "async tool"
+
+    tool_node = ToolNode([async_tool])
+    result = tool_node.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "async_tool",
+                            "args": {},
+                            "id": "1",
+                            "type": "tool_call",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+    assert result == {
+        "messages": [
+            ToolMessage(content="async tool", name="async_tool", tool_call_id="1")
+        ]
+    }
