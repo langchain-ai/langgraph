@@ -913,10 +913,10 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
                         "Rename the directory to use it as flat-layout package."
                     )
                 check_reserved(resolved.name, local_dep)
-                container_path = f"/deps/__outer_{resolved.name}/{resolved.name}"
+                container_path = f"/deps/outer-{resolved.name}/{resolved.name}"
             else:
                 # src layout
-                container_path = f"/deps/__outer_{resolved.name}/src"
+                container_path = f"/deps/outer-{resolved.name}/src"
                 for file in files:
                     rfile = resolved / file
                     if (
@@ -1286,7 +1286,7 @@ def python_config_to_docker(
     if local_deps.pip_reqs:
         pip_reqs_str = os.linesep.join(
             (
-                f"COPY --from=__outer_{reqpath.name} requirements.txt {destpath}"
+                f"COPY --from=outer-{reqpath.name} requirements.txt {destpath}"
                 if reqpath.parent in local_deps.additional_contexts
                 else f"ADD {reqpath.relative_to(config_path.parent)} {destpath}"
             )
@@ -1305,7 +1305,7 @@ def python_config_to_docker(
     faux_pkgs_str = f"{os.linesep}{os.linesep}".join(
         (
             f"""# -- Adding non-package dependency {fullpath.name} --
-COPY --from=__outer_{fullpath.name} . {destpath}"""
+COPY --from=outer-{fullpath.name} . {destpath}"""
             if fullpath in local_deps.additional_contexts
             else f"""# -- Adding non-package dependency {fullpath.name} --
 ADD {relpath} {destpath}"""
@@ -1320,7 +1320,7 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_{fullpath.name}/pyproject.toml; \\
+        echo "$line" >> /deps/outer-{fullpath.name}/pyproject.toml; \\
     done
 # -- End of non-package dependency {fullpath.name} --"""
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
@@ -1423,7 +1423,7 @@ ADD {relpath} /deps/{name}
         if p in local_deps.real_pkgs:
             name = local_deps.real_pkgs[p][1]
         elif p in local_deps.faux_pkgs:
-            name = f"__outer_{p.name}"
+            name = f"outer-{p.name}"
         else:
             raise RuntimeError(f"Unknown additional context: {p}")
         additional_contexts[name] = str(p)
@@ -1436,9 +1436,28 @@ def node_config_to_docker(
     config: Config,
     base_image: str,
     api_version: Optional[str] = None,
+    install_command: Optional[str] = None,
+    build_command: Optional[str] = None,
+    build_context: Optional[str] = None,
 ) -> tuple[str, dict[str, str]]:
-    faux_path = f"/deps/{config_path.parent.name}"
-    install_cmd = _get_node_pm_install_cmd(config_path, config)
+    # Calculate paths for monorepo support
+    if build_context:
+        relative_workdir = _calculate_relative_workdir(config_path, build_context)
+        container_name = pathlib.Path(build_context).name
+        if relative_workdir:
+            faux_path = f"/deps/{container_name}/{relative_workdir}"
+        else:
+            faux_path = f"/deps/{container_name}"
+    else:
+        # Backward compatibility: use the original behavior
+        faux_path = f"/deps/{config_path.parent.name}"
+
+    # Use custom install command or auto-detect
+    if install_command:
+        install_cmd = install_command
+    else:
+        install_cmd = _get_node_pm_install_cmd(config_path, config)
+
     image_str = docker_tag(config, base_image, api_version)
 
     env_vars: list[str] = []
@@ -1465,20 +1484,35 @@ def node_config_to_docker(
 
     env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
 
+    # For monorepo support, we need to handle install and build commands differently
+    if build_context:
+        # Monorepo case: install from root, build from config directory
+        container_root = f"/deps/{pathlib.Path(build_context).name}"
+        install_step = f"RUN cd {container_root} && {install_cmd}"
+
+        if build_command:
+            build_step = f"RUN cd {faux_path} && {build_command}"
+        else:
+            build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
+    else:
+        # Original behavior: everything happens in the same directory
+        install_step = f"RUN cd {faux_path} && {install_cmd}"
+        build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
+
     docker_file_contents = [
         f"FROM {image_str}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
-        f"ADD . {faux_path}",
+        f"ADD . {faux_path if not build_context else container_root}",
         "",
-        f"RUN cd {faux_path} && {install_cmd}",
+        install_step,
         "",
         os.linesep.join(env_vars),
         "",
         f"WORKDIR {faux_path}",
         "",
-        'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts',
+        build_step,
     ]
 
     return os.linesep.join(docker_file_contents), {}
@@ -1526,16 +1560,42 @@ def docker_tag(
     return f"{base_image}:{full_tag}"
 
 
+def _calculate_relative_workdir(config_path: pathlib.Path, build_context: str) -> str:
+    """Calculate the relative path from build context to langgraph.json directory."""
+    config_dir = config_path.parent.resolve()
+    build_context_path = pathlib.Path(build_context).resolve()
+
+    try:
+        relative_path = config_dir.relative_to(build_context_path)
+        return str(relative_path) if str(relative_path) != "." else ""
+    except ValueError as _:
+        raise ValueError(
+            f"Configuration file {config_path} is not under the build context {build_context}. "
+            f"Please run the command from a directory that contains your langgraph.json file, "
+        ) from None
+
+
 def config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: Optional[str] = None,
     api_version: Optional[str] = None,
+    install_command: Optional[str] = None,
+    build_command: Optional[str] = None,
+    build_context: Optional[str] = None,
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or default_base_image(config)
 
     if config.get("node_version") and not config.get("python_version"):
-        return node_config_to_docker(config_path, config, base_image, api_version)
+        return node_config_to_docker(
+            config_path,
+            config,
+            base_image,
+            api_version,
+            install_command,
+            build_command,
+            build_context,
+        )
 
     return python_config_to_docker(config_path, config, base_image, api_version)
 

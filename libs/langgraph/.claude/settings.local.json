@@ -5,7 +5,9 @@
       "Bash(python:*)",
       "Bash(grep:*)",
       "Bash(sed:*)",
-      "Bash(awk:*)"
+      "Bash(awk:*)",
+      "Bash(uv run mypy:*)",
+      "Bash(uv run:*)"
     ],
     "deny": []
   }

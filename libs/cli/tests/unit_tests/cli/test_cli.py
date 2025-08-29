@@ -570,8 +570,9 @@ def test_build_generate_proper_build_context():
                 catch_exceptions=True,
             )
 
-        build_context_pattern = re.compile(r"--build-context\s+(\w+)=([^\s]+)")
+        build_context_pattern = re.compile(r"--build-context\s+([\w-]+)=([^\s]+)")
 
+        print(result.output)
         build_contexts = re.findall(build_context_pattern, result.output)
         assert len(build_contexts) == 2, (
             f"Expected 2 build contexts, but found {len(build_contexts)}"
