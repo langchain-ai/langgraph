@@ -93,3 +93,9 @@ jobs:
         working-directory: libs/cli/js-monorepo-example
         run: |
           langgraph build -t langgraph-test-f -c apps/agent/langgraph.json --build-command "yarn run turbo build" --install-command "yarn install"
+
+      - name: Build Python monorepo service
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/python-monorepo-example
+        run: |
+          langgraph build -t langgraph-test-g -c apps/agent/langgraph.json
