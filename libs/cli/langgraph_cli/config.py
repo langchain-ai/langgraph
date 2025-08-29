@@ -911,10 +911,10 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
                         "Rename the directory to use it as flat-layout package."
                     )
                 check_reserved(resolved.name, local_dep)
-                container_path = f"/deps/__outer_{resolved.name}/{resolved.name}"
+                container_path = f"/deps/outer-{resolved.name}/{resolved.name}"
             else:
                 # src layout
-                container_path = f"/deps/__outer_{resolved.name}/src"
+                container_path = f"/deps/outer-{resolved.name}/src"
                 for file in files:
                     rfile = resolved / file
                     if (
@@ -1284,7 +1284,7 @@ def python_config_to_docker(
     if local_deps.pip_reqs:
         pip_reqs_str = os.linesep.join(
             (
-                f"COPY --from=__outer_{reqpath.name} requirements.txt {destpath}"
+                f"COPY --from=outer-{reqpath.name} requirements.txt {destpath}"
                 if reqpath.parent in local_deps.additional_contexts
                 else f"ADD {reqpath.relative_to(config_path.parent)} {destpath}"
             )
@@ -1303,7 +1303,7 @@ def python_config_to_docker(
     faux_pkgs_str = f"{os.linesep}{os.linesep}".join(
         (
             f"""# -- Adding non-package dependency {fullpath.name} --
-COPY --from=__outer_{fullpath.name} . {destpath}"""
+COPY --from=outer-{fullpath.name} . {destpath}"""
             if fullpath in local_deps.additional_contexts
             else f"""# -- Adding non-package dependency {fullpath.name} --
 ADD {relpath} {destpath}"""
@@ -1318,7 +1318,7 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_{fullpath.name}/pyproject.toml; \\
+        echo "$line" >> /deps/outer-{fullpath.name}/pyproject.toml; \\
     done
 # -- End of non-package dependency {fullpath.name} --"""
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
@@ -1421,7 +1421,7 @@ ADD {relpath} /deps/{name}
         if p in local_deps.real_pkgs:
             name = local_deps.real_pkgs[p][1]
         elif p in local_deps.faux_pkgs:
-            name = f"__outer_{p.name}"
+            name = f"outer-{p.name}"
         else:
             raise RuntimeError(f"Unknown additional context: {p}")
         additional_contexts[name] = str(p)
