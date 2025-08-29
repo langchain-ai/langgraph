@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 from inspect import signature
-from typing import Callable, cast
+from typing import Any, Callable, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage
@@ -23,10 +23,11 @@ from langgraph.prebuilt.tool_node import ToolNode
 def create_agent(
     *,
     model: str | BaseChatModel,
-    tools: Sequence[BaseTool | Callable],
+    tools: Sequence[BaseTool | Callable] | ToolNode,
     system_prompt: str,
     middleware: Sequence[AgentMiddleware] = (),
     response_format: ResponseFormat | None = None,
+    context_schema: type[Any] | None = None,
 ) -> StateGraph[AgentState, None, AgentUpdate]:
     # init chat model
     if isinstance(model, str):
@@ -43,7 +44,7 @@ def create_agent(
         model = cast(BaseChatModel, init_chat_model(model))
 
     # init tool node
-    tool_node = ToolNode(tools=tools)
+    tool_node = tools if isinstance(tools, ToolNode) else ToolNode(tools=tools)
 
     # validate middleware
     assert len({m.__class__.__name__ for m in middleware}) == len(middleware), (
@@ -61,7 +62,12 @@ def create_agent(
     ]
 
     # create graph, add nodes
-    graph = StateGraph(AgentState, input_schema=AgentUpdate, output_schema=AgentUpdate)
+    graph = StateGraph(
+        AgentState,
+        input_schema=AgentUpdate,
+        output_schema=AgentUpdate,
+        context_schema=context_schema,
+    )
     graph.add_node(
         "model_request",
         _make_model_request_node(
@@ -144,7 +150,7 @@ def _make_model_request_node(
     system_prompt: str,
     model: BaseChatModel,
     tools: Sequence[BaseTool],
-    middleware: Sequence[AgentMiddleware],
+    middleware: Sequence[AgentMiddleware] = (),
     response_format: ResponseFormat | None = None,
 ) -> Callable[[AgentState], AgentState]:
     def model_request(state: AgentState) -> AgentState:

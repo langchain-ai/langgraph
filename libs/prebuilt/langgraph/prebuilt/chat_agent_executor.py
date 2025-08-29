@@ -38,6 +38,8 @@ from typing_extensions import Annotated, NotRequired, TypedDict
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
+from langgraph.agent import create_agent
+from langgraph.agent.types import AgentMiddleware
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
@@ -261,6 +263,7 @@ def create_react_agent(
     ],
     tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
     *,
+    middleware: Sequence[AgentMiddleware] = (),
     prompt: Optional[Prompt] = None,
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
@@ -462,6 +465,29 @@ def create_react_agent(
             print(chunk)
         ```
     """
+    if middleware:
+        assert isinstance(model, str | BaseChatModel)
+        assert isinstance(prompt, str | None)
+        assert not isinstance(response_format, tuple)
+        assert pre_model_hook is None
+        assert post_model_hook is None
+        assert state_schema is None
+        return create_agent(
+            model=model,
+            tools=tools,
+            system_prompt=prompt,
+            middleware=middleware,
+            response_format=response_format,
+            context_schema=context_schema,
+        ).compile(
+            checkpointer=checkpointer,
+            store=store,
+            name=name,
+            interrupt_after=interrupt_after,
+            interrupt_before=interrupt_before,
+            debug=debug,
+        )
+
     if (
         config_schema := deprecated_kwargs.pop("config_schema", MISSING)
     ) is not MISSING:
