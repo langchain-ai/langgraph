@@ -447,7 +447,7 @@ class ToolNode(RunnableCallable):
 
             try:
                 response = tool.invoke(call_args, config)
-            except NotImplementedError as e:
+            except NotImplementedError:
                 response = asyncio.run(tool.ainvoke(call_args, config))
 
         # GraphInterrupt is a special exception that will always be raised.
