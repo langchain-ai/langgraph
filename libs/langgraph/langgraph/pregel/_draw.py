@@ -203,7 +203,9 @@ def draw_graph(
         for task in start_tasks.values():
             add_edge(graph, START, task.name)
     # add discovered edges
-    for src, dest, is_conditional, label in sorted(edges):
+    for src, dest, is_conditional, label in sorted(
+        edges, key=lambda edge: tuple(field or "" for field in edge)
+    ):
         add_edge(
             graph,
             src,
