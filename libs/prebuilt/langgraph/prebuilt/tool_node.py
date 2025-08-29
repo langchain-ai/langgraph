@@ -443,7 +443,12 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
         try:
             call_args = {**call, **{"type": "tool_call"}}
-            response = self.tools_by_name[call["name"]].invoke(call_args, config)
+            tool = self.tools_by_name[call["name"]]
+
+            try:
+                response = tool.invoke(call_args, config)
+            except NotImplementedError as e:
+                response = asyncio.run(tool.ainvoke(call_args, config))
 
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios,
