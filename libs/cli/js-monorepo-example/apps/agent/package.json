@@ -1,0 +1,18 @@
+{
+  "name": "@js-monorepo-example/agent",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "src/graph.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@js-monorepo-example/shared": "*",
+    "@langchain/core": "^0.3.2",
+    "@langchain/langgraph": "^0.2.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
