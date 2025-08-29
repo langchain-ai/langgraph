@@ -15,7 +15,8 @@
               "description": "Optional. Python version in 'major.minor' format (e.g. '3.11').\nMust be at least 3.11 or greater for this deployment to function properly.\n",
               "enum": [
                 "3.11",
-                "3.12"
+                "3.12",
+                "3.13"
               ]
             },
             "pip_config_file": {
@@ -39,6 +40,17 @@
                 }
               ],
               "description": "Optional. Internal use only.\n"
+            },
+            "api_version": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Which semantic version of the LangGraph API server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
             },
             "auth": {
               "anyOf": [
@@ -122,8 +134,9 @@
             "image_distro": {
               "anyOf": [
                 {
-                  "type": "string",
                   "enum": [
+                    "bookworm",
+                    "bullseye",
                     "debian",
                     "wolfi"
                   ]
@@ -132,7 +145,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Linux distribution for the base image.\n\nMust be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.\n"
+              "description": "Optional. Linux distribution for the base image.\n\nMust be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.\nIf omitted, defaults to 'debian' ('latest').\n"
             },
             "keep_pkg_tools": {
               "anyOf": [
@@ -221,6 +234,17 @@
               ],
               "description": "Optional. Internal use only.\n"
             },
+            "api_version": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Which semantic version of the LangGraph API server to use.\n\nDefaults to latest. Check the\nfor more information.\n"
+            },
             "auth": {
               "anyOf": [
                 {
@@ -313,7 +337,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Linux distribution for the base image.\n\nMust be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.\n"
+              "description": "Optional. Linux distribution for the base image.\n\nMust be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.\nIf omitted, defaults to 'debian' ('latest').\n"
             },
             "keep_pkg_tools": {
               "anyOf": [
@@ -552,6 +576,17 @@
         "disable_threads": {
           "type": "boolean",
           "description": "Optional. If True, /threads routes are removed.\n\nDefault is False.\n"
+        },
+        "logging_headers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfigurableHeaderConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines which headers are excluded from logging."
         }
       },
       "required": []
