@@ -498,15 +498,14 @@ In this variant of the [supervisor](#supervisor) architecture, we define a super
 :::python
 
 ```python
-from typing import Annotated
 from langchain_openai import ChatOpenAI
-from langgraph.prebuilt import InjectedState, create_react_agent
+from langgraph.prebuilt import create_react_agent
 
 model = ChatOpenAI()
 
 # this is the agent function that will be called as tool
-# notice that you can pass the state to the tool via InjectedState annotation
-def agent_1(state: Annotated[dict, InjectedState]):
+# notice that you can pass the state to the tool via the reserved keyword 'state'
+def agent_1(state):  # 'state' is a reserved keyword - automatically injected
     # you can pass relevant parts of the state to the LLM (e.g., state["messages"])
     # and add any additional logic (different models, custom prompts, structured output, etc.)
     response = model.invoke(...)
@@ -515,7 +514,7 @@ def agent_1(state: Annotated[dict, InjectedState]):
     # by the prebuilt create_react_agent (supervisor)
     return response.content
 
-def agent_2(state: Annotated[dict, InjectedState]):
+def agent_2(state):  # 'state' is a reserved keyword - automatically injected
     response = model.invoke(...)
     return response.content
 
@@ -899,3 +898,4 @@ An agent might need to have a different state schema from the rest of the agents
 
 - Define [subgraph](./subgraphs.md) agents with a separate state schema. If there are no shared state keys (channels) between the subgraph and the parent graph, it's important to [add input / output transformations](../how-tos/subgraph.ipynb#different-state-schemas) so that the parent graph knows how to communicate with the subgraphs.
 - Define agent node functions with a [private input state schema](../how-tos/graph-api.ipynb#pass-private-state-between-nodes) that is distinct from the overall graph state schema. This allows passing information that is only needed for executing that particular agent.
+

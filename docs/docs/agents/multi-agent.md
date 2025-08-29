@@ -384,7 +384,7 @@ Putting this together, here is how you can implement a simple multi-agent system
 ```python
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolCallId
-from langgraph.prebuilt import create_react_agent, InjectedState
+from langgraph.prebuilt import create_react_agent
 from langgraph.graph import StateGraph, START, MessagesState
 from langgraph.types import Command
 
@@ -395,7 +395,7 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
     @tool(name, description=description)
     def handoff_tool(
         # highlight-next-line
-        state: Annotated[MessagesState, InjectedState], # (1)!
+        state,  # (1)! Reserved keyword - automatically injected
         # highlight-next-line
         tool_call_id: Annotated[str, InjectedToolCallId],
     ) -> Command:
@@ -636,3 +636,5 @@ Check out LangGraph [supervisor](https://github.com/langchain-ai/langgraph-super
 :::js
 Check out LangGraph [supervisor](https://github.com/langchain-ai/langgraphjs/tree/main/libs/langgraph-supervisor#customizing-handoff-tools) and [swarm](https://github.com/langchain-ai/langgraphjs/tree/main/libs/langgraph-swarm#customizing-handoff-tools) documentation to learn how to customize handoffs.
 :::
+
+

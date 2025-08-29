@@ -26,7 +26,7 @@ To implement handoffs, you can return `Command` objects from your agent nodes or
 ```python
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolCallId
-from langgraph.prebuilt import create_react_agent, InjectedState
+from langgraph.prebuilt import create_react_agent
 from langgraph.graph import StateGraph, START, MessagesState
 from langgraph.types import Command
 
@@ -37,7 +37,7 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
     @tool(name, description=description)
     def handoff_tool(
         # highlight-next-line
-        state: Annotated[MessagesState, InjectedState], # (1)!
+        state,  # (1)! Reserved keyword - automatically injected
         # highlight-next-line
         tool_call_id: Annotated[str, InjectedToolCallId],
     ) -> Command:
@@ -58,7 +58,7 @@ def create_handoff_tool(*, agent_name: str, description: str | None = None):
     return handoff_tool
 ```
 
-1. Access the [state](../concepts/low_level.md#state) of the agent that is calling the handoff tool using the @[InjectedState] annotation. 
+1. Access the [state](../concepts/low_level.md#state) of the agent using the reserved keyword `state`. No annotation needed - LangGraph automatically injects the state when it sees this parameter name. 
 2. The `Command` primitive allows specifying a state update and a node transition as a single operation, making it useful for implementing handoffs.
 3. Name of the agent or node to hand off to.
 4. Take the agent's messages and **add** them to the parent's **state** as part of the handoff. The next agent will see the parent state.
@@ -183,7 +183,6 @@ You can use the @[`Send()`][Send] primitive to directly send data to the worker 
 
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolCallId
-from langgraph.prebuilt import InjectedState
 from langgraph.graph import StateGraph, START, MessagesState
 # highlight-next-line
 from langgraph.types import Command, Send
@@ -202,7 +201,7 @@ def create_task_description_handoff_tool(
             "Description of what the next agent should do, including all of the relevant context.",
         ],
         # these parameters are ignored by the LLM
-        state: Annotated[MessagesState, InjectedState],
+        state,  # Reserved keyword - automatically injected
     ) -> Command:
         task_description_message = {"role": "user", "content": task_description}
         agent_input = {**state, "messages": [task_description_message]}
@@ -382,7 +381,7 @@ const multiAgentGraph = new StateGraph(MessagesZodState)
     from typing import Annotated
     from langchain_core.messages import convert_to_messages
     from langchain_core.tools import tool, InjectedToolCallId
-    from langgraph.prebuilt import create_react_agent, InjectedState
+    from langgraph.prebuilt import create_react_agent
     from langgraph.graph import StateGraph, START, MessagesState
     from langgraph.types import Command
     
@@ -435,7 +434,7 @@ const multiAgentGraph = new StateGraph(MessagesZodState)
         @tool(name, description=description)
         def handoff_tool(
             # highlight-next-line
-            state: Annotated[MessagesState, InjectedState], # (1)!
+            state,  # (1)! Reserved keyword - automatically injected
             # highlight-next-line
             tool_call_id: Annotated[str, InjectedToolCallId],
         ) -> Command:
@@ -789,7 +788,7 @@ function agent(state: MessagesState): Command {
     ```python
     from langchain_anthropic import ChatAnthropic
     from langgraph.graph import MessagesState, StateGraph, START
-    from langgraph.prebuilt import create_react_agent, InjectedState
+    from langgraph.prebuilt import create_react_agent
     from langgraph.types import Command, interrupt
     from langgraph.checkpoint.memory import InMemorySaver
     
@@ -1251,3 +1250,8 @@ LangGraph comes with prebuilt implementations of two of the most popular multi-a
 - [supervisor](../agents/multi-agent.md#supervisor) — individual agents are coordinated by a central supervisor agent. The supervisor controls all communication flow and task delegation, making decisions about which agent to invoke based on the current context and task requirements. You can use [`langgraph-supervisor`](https://github.com/langchain-ai/langgraph-supervisor-js) library to create a supervisor multi-agent systems.
 - [swarm](../agents/multi-agent.md#supervisor) — agents dynamically hand off control to one another based on their specializations. The system remembers which agent was last active, ensuring that on subsequent interactions, the conversation resumes with that agent. You can use [`langgraph-swarm`](https://github.com/langchain-ai/langgraph-swarm-js) library to create a swarm multi-agent systems.
 :::
+
+
+
+
+

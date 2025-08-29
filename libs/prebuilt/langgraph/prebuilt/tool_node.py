@@ -34,6 +34,7 @@ Typical Usage:
 import asyncio
 import inspect
 import json
+import warnings
 from copy import copy, deepcopy
 from dataclasses import replace
 from typing import (
@@ -74,6 +75,7 @@ from typing_extensions import Annotated, get_args, get_origin
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
 
@@ -340,14 +342,71 @@ class ToolNode(RunnableCallable):
         self.tools_by_name: dict[str, BaseTool] = {}
         self.tool_to_state_args: dict[str, dict[str, Optional[str]]] = {}
         self.tool_to_store_arg: dict[str, Optional[str]] = {}
+        self.tool_to_runtime_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
                 tool_ = create_tool(tool_)
+
+            # Check for deprecated annotation usage and emit warnings
+            # We need to check for annotations directly, not just the presence of state/store args
+            # because _get_state_args returns both reserved keywords and annotations
+            reserved_args = _get_reserved_keyword_args(tool_)
+
+            # Check for InjectedState and InjectedStore annotations
+            full_schema = tool_.get_input_schema()
+            has_injected_state = False
+            has_injected_store = False
+
+            for name, type_ in get_all_basemodel_annotations(full_schema).items():
+                type_args = get_args(type_)
+
+                # Check for InjectedState (can be class or instance)
+                for type_arg in type_args:
+                    if _is_injection(type_arg, InjectedState):
+                        if "state" not in reserved_args:
+                            has_injected_state = True
+                            break
+
+                # Check for InjectedStore (can be class or instance)
+                for type_arg in type_args:
+                    if _is_injection(type_arg, InjectedStore):
+                        if "runtime" not in reserved_args:
+                            has_injected_store = True
+                            break
+
+            # Emit deprecation warnings
+            if has_injected_state:
+                warnings.warn(
+                    f"Tool '{tool_.name}' uses deprecated InjectedState annotation. "
+                    f"Please update to use reserved keyword 'state' instead. "
+                    f"Example: def {tool_.name}(..., state) instead of "
+                    f"def {tool_.name}(..., state: Annotated[dict, InjectedState]). "
+                    f"The annotation-based approach will be removed in a future version.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
+            if has_injected_store:
+                warnings.warn(
+                    f"Tool '{tool_.name}' uses deprecated InjectedStore annotation. "
+                    f"Please update to use reserved keyword 'runtime' instead. "
+                    f"Example: def {tool_.name}(..., runtime) and access store via runtime.store. "
+                    f"The annotation-based approach will be removed in a future version.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
+            # Check for reserved keywords and wrap the tool if needed
+            # Only wrap tools with reserved keywords for now to avoid breaking existing functionality
+            if reserved_args:
+                tool_ = _wrap_tool_with_reserved_keywords(tool_, reserved_args)
+
             self.tools_by_name[tool_.name] = tool_
             self.tool_to_state_args[tool_.name] = _get_state_args(tool_)
             self.tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
+            self.tool_to_runtime_arg[tool_.name] = _get_runtime_arg(tool_)
 
     def _func(
         self,
@@ -360,7 +419,7 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store, config)
         config_list = get_config_list(config, len(tool_calls))
         input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
@@ -381,7 +440,7 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input, store)
+        tool_calls, input_type = self._parse_input(input, store, config)
         outputs = await asyncio.gather(
             *(self._arun_one(call, input_type, config) for call in tool_calls)
         )
@@ -554,6 +613,7 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        config: Optional[RunnableConfig] = None,
     ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         input_type: Literal["list", "dict", "tool_calls"]
         if isinstance(input, list):
@@ -580,7 +640,7 @@ class ToolNode(RunnableCallable):
             raise ValueError("No AIMessage found in input")
 
         tool_calls = [
-            self.inject_tool_args(call, input, store)
+            self.inject_tool_args(call, input, store, config)
             for call in latest_ai_message.tool_calls
         ]
         return tool_calls, input_type
@@ -661,6 +721,44 @@ class ToolNode(RunnableCallable):
         }
         return tool_call
 
+    def _inject_runtime(
+        self,
+        tool_call: ToolCall,
+        store: Optional[BaseStore],
+        config: RunnableConfig,
+    ) -> ToolCall:
+        """Inject runtime object into tool call arguments.
+
+        This method creates and injects a Runtime object containing store and
+        context into tools that have a 'runtime' reserved keyword parameter.
+
+        Args:
+            tool_call: The tool call dictionary to augment with runtime.
+            store: The persistent store instance to include in runtime.
+            config: The runnable configuration containing context.
+
+        Returns:
+            The tool call with runtime injected if needed.
+        """
+        runtime_arg = self.tool_to_runtime_arg[tool_call["name"]]
+        if not runtime_arg:
+            return tool_call
+
+        # Create a Runtime object with store and context from config
+        # The context will be available from the config if set
+        runtime = Runtime(
+            context=config.get("configurable", {}).get("context"),
+            store=store,
+            stream_writer=lambda _: None,  # Default no-op stream writer
+            previous=None,
+        )
+
+        tool_call["args"] = {
+            **tool_call["args"],
+            runtime_arg: runtime,
+        }
+        return tool_call
+
     def inject_tool_args(
         self,
         tool_call: ToolCall,
@@ -670,13 +768,15 @@ class ToolNode(RunnableCallable):
             BaseModel,
         ],
         store: Optional[BaseStore],
+        config: Optional[RunnableConfig] = None,
     ) -> ToolCall:
-        """Inject graph state and store into tool call arguments.
+        """Inject graph state, store, and runtime into tool call arguments.
 
         This method enables tools to access graph context that should not be controlled
-        by the model. Tools can declare dependencies on graph state or persistent storage
-        using InjectedState and InjectedStore annotations. This method automatically
-        identifies these dependencies and injects the appropriate values.
+        by the model. Tools can declare dependencies using either reserved keywords
+        ('state' and 'runtime') or annotations (InjectedState and InjectedStore for
+        backward compatibility). This method automatically identifies these dependencies
+        and injects the appropriate values.
 
         The injection process preserves the original tool call structure while adding
         the necessary context arguments. This allows tools to be both model-callable
@@ -689,10 +789,11 @@ class ToolNode(RunnableCallable):
                 Can be a message list, state dictionary, or BaseModel instance.
             store: The persistent store instance to inject into tools requiring storage.
                 Will be None if no store is configured for the graph.
+            config: The runnable configuration containing context for runtime injection.
 
         Returns:
             A new ToolCall dictionary with the same structure as the input but with
-            additional arguments injected based on the tool's annotation requirements.
+            additional arguments injected based on the tool's requirements.
 
         Raises:
             ValueError: If a tool requires store injection but no store is provided,
@@ -710,6 +811,11 @@ class ToolNode(RunnableCallable):
         tool_call_copy: ToolCall = copy(tool_call)
         tool_call_with_state = self._inject_state(tool_call_copy, input)
         tool_call_with_store = self._inject_store(tool_call_with_state, store)
+        if config:
+            tool_call_with_runtime = self._inject_runtime(
+                tool_call_with_store, store, config
+            )
+            return tool_call_with_runtime
         return tool_call_with_store
 
     def _validate_tool_command(
@@ -854,6 +960,16 @@ def tools_condition(
 class InjectedState(InjectedToolArg):
     """Annotation for injecting graph state into tool arguments.
 
+    .. deprecated:: 0.2.0
+        Use reserved keyword 'state' instead of InjectedState annotation.
+        The annotation-based approach will be removed in a future version.
+
+        Instead of:
+            def tool(x: int, state: Annotated[dict, InjectedState]) -> str:
+
+        Use:
+            def tool(x: int, state) -> str:
+
     This annotation enables tools to access graph state without exposing state
     management details to the language model. Tools annotated with InjectedState
     receive state data automatically during execution while remaining invisible
@@ -927,6 +1043,17 @@ class InjectedState(InjectedToolArg):
 
 class InjectedStore(InjectedToolArg):
     """Annotation for injecting persistent store into tool arguments.
+
+    .. deprecated:: 0.2.0
+        Use reserved keyword 'runtime' instead of InjectedStore annotation.
+        The annotation-based approach will be removed in a future version.
+
+        Instead of:
+            def tool(x: int, store: Annotated[BaseStore, InjectedStore()]) -> str:
+
+        Use:
+            def tool(x: int, runtime) -> str:
+                # Access store via runtime.store
 
     This annotation enables tools to access LangGraph's persistent storage system
     without exposing storage details to the language model. Tools annotated with
@@ -1027,12 +1154,159 @@ def _is_injection(
     return False
 
 
-def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
-    """Extract state injection mappings from tool annotations.
+def _get_reserved_keyword_args(tool: BaseTool) -> dict[str, str]:
+    """Extract reserved keyword arguments from tool function signature.
 
-    This function analyzes a tool's input schema to identify arguments that should
-    be injected with graph state. It processes InjectedState annotations to build
-    a mapping of tool argument names to state field names.
+    This function inspects the tool's underlying function signature to identify
+    parameters with reserved names ('state' and 'runtime') that should be injected
+    automatically without requiring annotations.
+
+    Args:
+        tool: The tool to analyze for reserved keyword parameters.
+
+    Returns:
+        A dictionary mapping reserved parameter names to their injection type.
+        Keys are parameter names, values are either 'state' or 'runtime'.
+    """
+    reserved_args: dict[str, str] = {}
+
+    # Get the underlying function from the tool
+    if hasattr(tool, "func"):
+        func = tool.func
+    elif hasattr(tool, "_run"):
+        func = tool._run
+    else:
+        return reserved_args
+
+    # Inspect the function signature
+    try:
+        sig = inspect.signature(func)
+        for param_name, param in sig.parameters.items():
+            # Check for reserved keywords only if they don't have injection annotations
+            # Parameters with InjectedState or InjectedStore annotations should not be
+            # considered reserved keywords (they use the old annotation-based approach)
+            if param_name == "state" and param.annotation == inspect.Parameter.empty:
+                # Only consider 'state' as reserved if it has no annotation
+                reserved_args["state"] = "state"
+            elif (
+                param_name == "runtime" and param.annotation == inspect.Parameter.empty
+            ):
+                # Only consider 'runtime' as reserved if it has no annotation
+                reserved_args["runtime"] = "runtime"
+    except (ValueError, TypeError):
+        # If we can't inspect the signature, return empty
+        pass
+
+    return reserved_args
+
+
+def _wrap_tool_with_reserved_keywords(
+    tool: BaseTool, reserved_args: dict[str, str]
+) -> BaseTool:
+    """Wrap a tool to exclude reserved keyword parameters from its schema.
+
+    This function creates a wrapper around tools that use reserved keywords
+    ('state' and 'runtime') to ensure these parameters are excluded from the
+    schema presented to LLMs, similar to how InjectedToolArg annotations work.
+
+    Args:
+        tool: The original tool to wrap.
+        reserved_args: Dictionary of reserved keyword parameters to exclude.
+
+    Returns:
+        A wrapped tool with reserved keywords excluded from its schema.
+    """
+    if not reserved_args:
+        return tool
+
+    # Create a wrapper tool that filters the schema
+    # Use type: ignore to suppress mypy error for dynamic class creation
+    class FilteredTool(tool.__class__):  # type: ignore[name-defined]
+        """Tool wrapper that excludes reserved keywords from schema."""
+
+        def get_input_schema(
+            self, config: Optional[RunnableConfig] = None
+        ) -> Type[BaseModel]:
+            """Return the filtered schema without reserved keywords."""
+            original_schema = super().get_input_schema(config)
+
+            # If no reserved args to filter, return original
+            if not reserved_args:
+                return original_schema
+
+            # Create a new schema class dynamically
+            from pydantic import create_model
+
+            # Get fields to keep (exclude reserved keywords)
+            if hasattr(original_schema, "model_fields"):
+                # Pydantic v2
+                fields_to_keep: dict[str, Any] = {}
+                for name, field in original_schema.model_fields.items():
+                    if name not in reserved_args:
+                        # For create_model, we need to properly extract field information
+                        field_type = (
+                            field.annotation if hasattr(field, "annotation") else Any
+                        )
+
+                        # Handle field defaults and constraints
+                        if hasattr(field, "default") and field.default is not ...:
+                            # Field has a default value
+                            fields_to_keep[name] = (field_type, field.default)
+                        else:
+                            # Field has no default (required field)
+                            fields_to_keep[name] = (field_type, ...)
+            else:
+                # Pydantic v1 fallback
+                fields_to_keep = {}
+
+            # Create filtered schema
+            try:
+                filtered_schema = create_model(
+                    f"{original_schema.__name__}Filtered",
+                    **fields_to_keep,
+                )
+                return filtered_schema
+            except Exception:
+                # If schema creation fails, return original
+                return original_schema
+
+    # Create the filtered tool instance
+    filtered_tool = FilteredTool(
+        name=tool.name,
+        description=tool.description,
+        func=getattr(tool, "func", None),
+        args_schema=tool.get_input_schema(),  # Use original schema for initialization
+    )
+
+    # Copy over other attributes
+    for attr in [
+        "return_direct",
+        "verbose",
+        "callbacks",
+        "tags",
+        "metadata",
+        "handle_tool_error",
+        "handle_validation_error",
+        "response_format",
+    ]:
+        if hasattr(tool, attr):
+            setattr(filtered_tool, attr, getattr(tool, attr))
+
+    # Copy run methods
+    if hasattr(tool, "_run"):
+        filtered_tool._run = tool._run
+    if hasattr(tool, "_arun"):
+        filtered_tool._arun = tool._arun
+
+    return filtered_tool
+
+
+def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
+    """Extract state injection mappings from tool annotations or reserved keywords.
+
+    This function analyzes a tool to identify arguments that should be injected
+    with graph state. It first checks for the reserved keyword 'state', then
+    falls back to processing InjectedState annotations for backward compatibility.
 
     Args:
         tool: The tool to analyze for state injection requirements.
@@ -1041,10 +1315,20 @@ def _get_state_args(tool: BaseTool) -> dict[str, Optional[str]]:
         A dictionary mapping tool argument names to state field names. If a field
         name is None, the entire state should be injected for that argument.
     """
-    full_schema = tool.get_input_schema()
     tool_args_to_state_fields: dict = {}
 
+    # First check for reserved keywords
+    reserved_args = _get_reserved_keyword_args(tool)
+    if "state" in reserved_args:
+        tool_args_to_state_fields["state"] = None
+
+    # Then check for annotation-based injection (backward compatibility)
+    full_schema = tool.get_input_schema()
     for name, type_ in get_all_basemodel_annotations(full_schema).items():
+        # Skip if already handled by reserved keyword
+        if name in tool_args_to_state_fields:
+            continue
+
         injections = [
             type_arg
             for type_arg in get_args(type_)
@@ -1073,6 +1357,9 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
     should be injected with the graph store. Only one store argument is supported
     per tool.
 
+    Note: With the new reserved keyword approach, store is accessed via the
+    'runtime' parameter which provides both store and context access.
+
     Args:
         tool: The tool to analyze for store injection requirements.
 
@@ -1083,6 +1370,7 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
     Raises:
         ValueError: If a tool argument has multiple InjectedStore annotations.
     """
+    # Check for annotation-based injection (backward compatibility)
     full_schema = tool.get_input_schema()
     for name, type_ in get_all_basemodel_annotations(full_schema).items():
         injections = [
@@ -1101,3 +1389,19 @@ def _get_store_arg(tool: BaseTool) -> Optional[str]:
             pass
 
     return None
+
+
+def _get_runtime_arg(tool: BaseTool) -> Optional[str]:
+    """Extract runtime injection argument from tool signature.
+
+    This function checks if a tool has a 'runtime' reserved keyword parameter
+    that should be injected with a Runtime object containing store and context.
+
+    Args:
+        tool: The tool to analyze for runtime injection requirements.
+
+    Returns:
+        The string 'runtime' if the tool has a runtime parameter, or None otherwise.
+    """
+    reserved_args = _get_reserved_keyword_args(tool)
+    return "runtime" if "runtime" in reserved_args else None
