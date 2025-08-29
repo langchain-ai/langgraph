@@ -1,10 +1,11 @@
 """Simple LangGraph agent for monorepo testing."""
 
-from langchain_core.messages import AIMessage
-from langgraph.graph import StateGraph, START, END
-from agent.state import State
-from shared import get_dummy_message
 from common import get_common_prefix
+from langchain_core.messages import AIMessage
+from langgraph.graph import END, START, StateGraph
+from shared import get_dummy_message
+
+from agent.state import State
 
 
 def call_model(state: State) -> dict:
@@ -12,11 +13,9 @@ def call_model(state: State) -> dict:
     # Use functions from both shared packages
     dummy_message = get_dummy_message()
     prefix = get_common_prefix()
-    
-    message = AIMessage(
-        content=f"{prefix} Agent says: {dummy_message}"
-    )
-    
+
+    message = AIMessage(content=f"{prefix} Agent says: {dummy_message}")
+
     return {"messages": [message]}
 
 
