@@ -381,7 +381,9 @@ def test_dockerfile_command_with_base_image() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert re.match("FROM langchain/langgraph-server:0.2-py3.*", dockerfile)
+            assert re.match("FROM langchain/langgraph-server:0.2-py3.*", dockerfile), (
+                "\n".join(dockerfile.splitlines()[:3])
+            )
 
 
 def test_dockerfile_command_with_docker_compose() -> None:
