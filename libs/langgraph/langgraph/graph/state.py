@@ -1227,7 +1227,16 @@ def _pick_mapper(
 
 
 def _coerce_state(schema: type[Any], input: dict[str, Any]) -> dict[str, Any]:
-    return schema(**input)
+    """Coerce input dictionary to a schema instance, respecting Pydantic field aliases."""
+    if isclass(schema) and hasattr(schema, 'model_validate'):
+        # For Pydantic v2
+        return schema.model_validate(input)
+    elif isclass(schema) and hasattr(schema, 'parse_obj'):
+        # For Pydantic v1
+        return schema.parse_obj(input)
+    else:
+        # Default behavior for non-Pydantic types
+        return schema(**input)
 
 
 def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
@@ -1312,6 +1321,23 @@ def _get_channels(
         for name, typ in type_hints.items()
         if name != "__slots__"
     }
+    
+    # Add support for Pydantic field aliases
+    if hasattr(schema, "model_fields"):  # Pydantic v2
+        for field_name, field_info in schema.model_fields.items():
+            if hasattr(field_info, "alias") and field_info.alias:
+                # Create a channel for the aliased field that points to the same type
+                all_keys[field_info.alias] = _get_channel(
+                    field_info.alias, type_hints.get(field_name, Any)
+                )
+    elif hasattr(schema, "__fields__"):  # Pydantic v1
+        for field_name, field_info in schema.__fields__.items():
+            if hasattr(field_info, "alias") and field_info.alias:
+                # Create a channel for the aliased field that points to the same type
+                all_keys[field_info.alias] = _get_channel(
+                    field_info.alias, type_hints.get(field_name, Any)
+                )
+    
     return (
         {k: v for k, v in all_keys.items() if isinstance(v, BaseChannel)},
         {k: v for k, v in all_keys.items() if is_managed_value(v)},
