@@ -1550,6 +1550,29 @@
             },
             "name": "Last-Event-ID",
             "in": "header"
+          },
+          {
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["lifecycle", "run_modes", "state_update"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["lifecycle", "run_modes", "state_update"]
+                  }
+                }
+              ],
+              "default": ["run_modes"],
+              "title": "Stream Modes",
+              "description": "Stream modes to control which events are returned. 'lifecycle' returns only run start/end events, 'run_modes' returns all run events (default behavior), 'state_update' returns only state update events."
+            },
+            "name": "stream_modes",
+            "in": "query"
           }
         ],
         "responses": {
@@ -4413,6 +4436,17 @@
             "title": "Checkpoint During",
             "description": "Whether to checkpoint during the run.",
             "default": false
+          },
+          "durability": {
+            "type": "string",
+            "enum": [
+              "sync",
+              "async",
+              "exit"
+            ],
+            "title": "Durability",
+            "description": "Durability level for the run. Must be one of 'sync', 'async', or 'exit'.",
+            "default": "async"
           }
         },
         "type": "object",
@@ -4649,6 +4683,17 @@
             "title": "Checkpoint During",
             "description": "Whether to checkpoint during the run.",
             "default": false
+          },
+          "durability": {
+            "type": "string",
+            "enum": [
+              "sync",
+              "async",
+              "exit"
+            ],
+            "title": "Durability",
+            "description": "Durability level for the run. Must be one of 'sync', 'async', or 'exit'.",
+            "default": "async"
           }
         },
         "type": "object",
