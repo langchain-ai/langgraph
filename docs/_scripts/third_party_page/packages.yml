@@ -40,6 +40,9 @@ packages:
     - name: "langgraph-codeact"
       repo: "langchain-ai/langgraph-codeact"
       description: "LangGraph implementation of CodeAct agent that generates and executes code instead of tool calling."
+    - name: "A_mail"
+      repo: "dev-yang-ai/A_mail"
+      description: "A Multi-Agent Communication Protocol Solution Based on LangGraph."
   js:
     - name: "@langchain/mcp-adapters"
       repo: "langchain-ai/langchainjs"
