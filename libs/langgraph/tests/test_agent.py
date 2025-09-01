@@ -2,7 +2,7 @@ from langchain_core.messages import AIMessage, ToolCall
 from syrupy import SnapshotAssertion
 
 from langgraph.agent import create_agent
-from langgraph.agent.types import AgentGoTo, AgentMiddleware
+from langgraph.agent.types import AgentJump, AgentMiddleware
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.constants import END
@@ -258,7 +258,7 @@ def test_create_agent_jump(
             calls.append("NoopSeven.after_model")
 
     class NoopEight(AgentMiddleware):
-        def before_model(self, state) -> AgentGoTo:
+        def before_model(self, state) -> AgentJump:
             calls.append("NoopEight.before_model")
             return {"jump_to": END}
 

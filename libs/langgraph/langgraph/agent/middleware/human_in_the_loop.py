@@ -1,25 +1,26 @@
-from langgraph.agent.types import AgentMiddleware, AgentState, AgentUpdate, AgentGoTo
-from typing import Dict, Any, List, Optional, Union
-from langgraph.types import interrupt
+from langgraph.agent.types import AgentJump, AgentMiddleware, AgentState, AgentUpdate
 from langgraph.prebuilt.interrupt import (
-    HumanInterruptConfig,
     ActionRequest,
     HumanInterrupt,
+    HumanInterruptConfig,
     HumanResponse,
 )
+from langgraph.types import interrupt
 
-ToolInterruptConfig = Dict[str, HumanInterruptConfig]
+ToolInterruptConfig = dict[str, HumanInterruptConfig]
+
 
 class HumanInTheLoopMiddleware(AgentMiddleware):
-
-    def __init__(self,
-    tool_configs: ToolInterruptConfig,
-    message_prefix: str = "Tool execution requires approval",):
+    def __init__(
+        self,
+        tool_configs: ToolInterruptConfig,
+        message_prefix: str = "Tool execution requires approval",
+    ):
         super().__init__()
         self.tool_configs = tool_configs
         self.message_prefix = message_prefix
 
-    def after_model(self, state: AgentState) -> AgentUpdate | AgentGoTo | None:
+    def after_model(self, state: AgentState) -> AgentUpdate | AgentJump | None:
         messages = state.messages
         if not messages:
             return
@@ -52,7 +53,9 @@ class HumanInTheLoopMiddleware(AgentMiddleware):
         for tool_call in interrupt_tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
-            description = f"{self.message_prefix}\n\nTool: {tool_name}\nArgs: {tool_args}"
+            description = (
+                f"{self.message_prefix}\n\nTool: {tool_name}\nArgs: {tool_args}"
+            )
             tool_config = self.tool_configs[tool_name]
 
             request: HumanInterrupt = {
@@ -65,7 +68,7 @@ class HumanInTheLoopMiddleware(AgentMiddleware):
             }
             requests.append(request)
 
-        responses: List[HumanResponse] = interrupt(requests)
+        responses: list[HumanResponse] = interrupt(requests)
 
         for i, response in enumerate(responses):
             tool_call = interrupt_tool_calls[i]
@@ -85,11 +88,12 @@ class HumanInTheLoopMiddleware(AgentMiddleware):
                 return {"goto": "__end__"}
             elif response["type"] == "response":
                 # NOTE: does not work with multiple interrupts
-                tool_message = {"role": "tool", "tool_call_id": tool_call["id"], "content": response["args"]}
-                return {
-                    "messages": [tool_message],
-                    "goto": "model"
+                tool_message = {
+                    "role": "tool",
+                    "tool_call_id": tool_call["id"],
+                    "content": response["args"],
                 }
+                return {"messages": [tool_message], "goto": "model"}
             else:
                 raise ValueError(f"Unknown response type: {response['type']}")
 

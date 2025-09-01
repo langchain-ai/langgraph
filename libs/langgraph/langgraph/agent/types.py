@@ -34,7 +34,7 @@ class AgentMiddleware:
     def __copy__(self) -> Self:
         return self.__class__(**self.__dict__)
 
-    def before_model(self, state: AgentState) -> AgentUpdate | AgentGoTo | None:
+    def before_model(self, state: AgentState) -> AgentUpdate | AgentJump | None:
         pass
 
     def modify_model_request(
@@ -42,7 +42,7 @@ class AgentMiddleware:
     ) -> ModelRequest:
         return request
 
-    def after_model(self, state: AgentState) -> AgentUpdate | AgentGoTo | None:
+    def after_model(self, state: AgentState) -> AgentUpdate | AgentJump | None:
         pass
 
 
@@ -51,7 +51,7 @@ class AgentUpdate(TypedDict, total=False):
     response: dict
 
 
-class AgentGoTo(TypedDict, total=False):
+class AgentJump(TypedDict, total=False):
     messages: Messages
     jump_to: JumpTo
 

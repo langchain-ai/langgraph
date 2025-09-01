@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.tools import BaseTool
 
 from langgraph.agent.types import (
-    AgentGoTo,
+    AgentJump,
     AgentMiddleware,
     AgentState,
     AgentUpdate,
@@ -233,13 +233,13 @@ def _make_tools_to_model_edge(
 
 def _add_middleware_edge(
     graph: StateGraph,
-    method: Callable[[AgentState], AgentUpdate | AgentGoTo | None],
+    method: Callable[[AgentState], AgentUpdate | AgentJump | None],
     name: str,
     default_destination: str,
     model_destination: str,
 ) -> None:
     sig = signature(method)
-    uses_jump = sig.return_annotation is AgentGoTo or AgentGoTo in getattr(
+    uses_jump = sig.return_annotation is AgentJump or AgentJump in getattr(
         sig.return_annotation, "__args__", ()
     )
 
