@@ -5015,6 +5015,12 @@
       },
       "ThreadSearchRequest": {
         "properties": {
+          "ids": {
+            "type": "array",
+            "items": {"type": "string", "format": "uuid"},
+            "title": "Ids",
+            "description": "List of thread IDs to include. Others are excluded."
+          },
           "metadata": {
             "type": "object",
             "title": "Metadata",
