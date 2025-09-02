@@ -1520,6 +1520,96 @@
         }
       }
     },
+    "/threads/{thread_id}/stream": {
+      "get": {
+        "tags": [
+          "Threads"
+        ],
+        "summary": "Join Thread Stream",
+        "description": "This endpoint streams output in real-time from a thread. The stream will include the output of each run executed sequentially on the thread and will remain open indefinitely. It is the responsibility of the calling client to close the connection.",
+        "operationId": "join_thread_stream_threads__thread_id__stream_get",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Last Event ID",
+              "description": "The ID of the last event received. Used to resume streaming from a specific point. Pass '-' to resume from the beginning."
+            },
+            "name": "Last-Event-ID",
+            "in": "header"
+          },
+          {
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["lifecycle", "run_modes", "state_update"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["lifecycle", "run_modes", "state_update"]
+                  }
+                }
+              ],
+              "default": ["run_modes"],
+              "title": "Stream Modes",
+              "description": "Stream modes to control which events are returned. 'lifecycle' returns only run start/end events, 'run_modes' returns all run events (default behavior), 'state_update' returns only state update events."
+            },
+            "name": "stream_modes",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/threads/{thread_id}/runs": {
       "get": {
         "tags": [
@@ -4346,6 +4436,17 @@
             "title": "Checkpoint During",
             "description": "Whether to checkpoint during the run.",
             "default": false
+          },
+          "durability": {
+            "type": "string",
+            "enum": [
+              "sync",
+              "async",
+              "exit"
+            ],
+            "title": "Durability",
+            "description": "Durability level for the run. Must be one of 'sync', 'async', or 'exit'.",
+            "default": "async"
           }
         },
         "type": "object",
@@ -4582,6 +4683,17 @@
             "title": "Checkpoint During",
             "description": "Whether to checkpoint during the run.",
             "default": false
+          },
+          "durability": {
+            "type": "string",
+            "enum": [
+              "sync",
+              "async",
+              "exit"
+            ],
+            "title": "Durability",
+            "description": "Durability level for the run. Must be one of 'sync', 'async', or 'exit'.",
+            "default": "async"
           }
         },
         "type": "object",
