@@ -257,7 +257,7 @@ def _validate_chat_history(
 
 
 @deprecated(
-    "create_react_agent has been moved to langchain.agents. Please update your import to 'from langchain.agents import create_react_agent'.",
+    "create_react_agent has been moved to langchain.agents. Please update your import to 'from langchain.agents import create_agent'.",
     category=LangGraphDeprecatedSinceV10,
 )
 def create_react_agent(
