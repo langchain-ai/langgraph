@@ -138,7 +138,7 @@ def test_get_text_at_path() -> None:
     assert get_text_at_path(nested_data, "nested[{invalid}]") == []
 
 
-def test_Non_ASCII_semantic_search(fake_embeddings: CharacterEmbeddings) -> None:
+def test_non_ascii_semantic_search(fake_embeddings: CharacterEmbeddings) -> None:
     """Test semantic search functionality with non-ASCII text."""
     store = InMemoryStore(
         index={
