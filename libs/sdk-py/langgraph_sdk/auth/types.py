@@ -489,6 +489,9 @@ class ThreadsSearch(typing.TypedDict, total=False):
     offset: int
     """Offset for pagination."""
 
+    ids: Sequence[UUID] | None
+    """typing.Optional list of thread IDs to filter by."""
+
     thread_id: UUID | None
     """typing.Optional thread ID to filter by."""
 
