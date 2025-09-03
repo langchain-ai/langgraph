@@ -21,16 +21,16 @@ JumpTo = Literal["tools", "model", "__end__"]
 class ModelRequest:
     model: BaseChatModel
     system_prompt: str
-    messages: Sequence[AnyMessage]  # excluding system prompt
+    messages: list[AnyMessage]  # excluding system prompt
     tool_choice: Any
-    tools: Sequence[BaseTool]
+    tools: list[BaseTool]
     response_format: ResponseFormat | None
 
 
 @dataclass
 class AgentState:
     messages: Annotated[list[AnyMessage], add_messages]
-    model_request: Annotated[ModelRequest | None, EphemeralValue]
+    model_request: Annotated[ModelRequest | None, EphemeralValue] = None
     jump_to: Annotated[JumpTo | None, EphemeralValue] = None
     response: dict | None = None
 

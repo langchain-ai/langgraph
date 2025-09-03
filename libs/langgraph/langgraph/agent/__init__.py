@@ -144,6 +144,8 @@ def create_agent(
     first_node = (
         f"{middleware_w_before[0].__class__.__name__}.before_model"
         if middleware_w_before
+        else f"{middleware_w_modify_model_request[0].__class__.__name__}.modify_model_request"
+        if middleware_w_modify_model_request
         else "model_request"
     )
     last_node = (

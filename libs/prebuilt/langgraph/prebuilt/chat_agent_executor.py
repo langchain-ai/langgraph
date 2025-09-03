@@ -38,7 +38,6 @@ from typing_extensions import Annotated, NotRequired, TypedDict
 
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
-from langgraph.agent import create_agent
 from langgraph.agent.types import AgentMiddleware
 from langgraph.errors import ErrorCode, create_error_message
 from langgraph.graph import END, StateGraph
@@ -472,6 +471,9 @@ def create_react_agent(
         assert pre_model_hook is None
         assert post_model_hook is None
         assert state_schema is None
+
+        from langgraph.agent import create_agent
+
         return create_agent(
             model=model,
             tools=tools,
