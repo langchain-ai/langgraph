@@ -81,9 +81,17 @@ def create_agent(
     graph.add_node("tools", tool_node)
     for m in middleware:
         if m.__class__.before_model is not AgentMiddleware.before_model:
-            graph.add_node(f"{m.__class__.__name__}.before_model", m.before_model)
+            graph.add_node(
+                f"{m.__class__.__name__}.before_model",
+                m.before_model,
+                input_schema=m.State,
+            )
         if m.__class__.after_model is not AgentMiddleware.after_model:
-            graph.add_node(f"{m.__class__.__name__}.after_model", m.after_model)
+            graph.add_node(
+                f"{m.__class__.__name__}.after_model",
+                m.after_model,
+                input_schema=m.State,
+            )
 
     # add start edge
     first_node = (
