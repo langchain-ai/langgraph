@@ -30,6 +30,7 @@ class ModelRequest:
 @dataclass
 class AgentState:
     messages: Annotated[list[AnyMessage], add_messages]
+    model_request: Annotated[ModelRequest | None, EphemeralValue]
     jump_to: Annotated[JumpTo | None, EphemeralValue] = None
     response: dict | None = None
 

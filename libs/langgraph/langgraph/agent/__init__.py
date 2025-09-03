@@ -55,11 +55,25 @@ def create_agent(
         for m in middleware
         if m.__class__.before_model is not AgentMiddleware.before_model
     ]
+    middleware_w_modify_model_request = [
+        m
+        for m in middleware
+        if m.__class__.modify_model_request is not AgentMiddleware.modify_model_request
+    ]
     middleware_w_after = [
         m
         for m in middleware
         if m.__class__.after_model is not AgentMiddleware.after_model
     ]
+
+    default_model_request = ModelRequest(
+        model=model, 
+        tools=list(tool_node.tools_by_name.values()), 
+        system_prompt=system_prompt, 
+        response_format=response_format,
+        messages=[],
+        tool_choice=None,
+    )
 
     # create graph, add nodes
     graph = StateGraph(
@@ -68,17 +82,38 @@ def create_agent(
         output_schema=AgentUpdate,
         context_schema=context_schema,
     )
-    graph.add_node(
-        "model_request",
-        _make_model_request_node(
-            model=model,
-            tools=list(tool_node.tools_by_name.values()),
-            system_prompt=system_prompt,
-            middleware=middleware,
-            response_format=response_format,
-        ),
-    )
+
+    def model_request(state: AgentState) -> AgentState:
+
+        request = state.model_request or default_model_request
+
+        # prepare messages
+        if request.system_prompt:
+            messages = [SystemMessage(request.system_prompt)] + request.messages
+        else:
+            messages = request.messages
+        # call model
+        if request.response_format:
+            model_ = request.model.with_structured_output(
+                request.response_format, include_raw=True
+            )
+            output = model_.invoke(
+                messages, tools=request.tools, tool_choice=request.tool_choice
+            )
+            return {"messages": output["raw"], "response": output["parsed"]}
+        else:
+            model_ = request.model
+            output = model_.invoke(
+                messages, tools=request.tools, tool_choice=request.tool_choice
+            )
+            if state.response is not None:
+                return {"messages": output, "response": None}
+            else:
+                return {"messages": output}
+
+    graph.add_node("model_request", model_request)
     graph.add_node("tools", tool_node)
+
     for m in middleware:
         if m.__class__.before_model is not AgentMiddleware.before_model:
             graph.add_node(
@@ -86,6 +121,18 @@ def create_agent(
                 m.before_model,
                 input_schema=m.State,
             )
+        if m.__class__.modify_model_request is not AgentMiddleware.modify_model_request:
+
+            def modify_model_request_node(state: AgentState) -> dict[str, ModelRequest]:
+                # TODO assert request.tools in tools, or pass them to tool node
+                return {"model_request": m.modify_model_request(state.model_request or default_model_request, state)}
+        
+            graph.add_node(
+                f"{m.__class__.__name__}.modify_model_request",
+                modify_model_request_node,
+                input_schema=m.State,
+            )
+
         if m.__class__.after_model is not AgentMiddleware.after_model:
             graph.add_node(
                 f"{m.__class__.__name__}.after_model",
@@ -134,6 +181,24 @@ def create_agent(
             first_node,
         )
 
+    # add modify model request edges
+    if middleware_w_modify_model_request:
+        for m1, m2 in zip(middleware_w_modify_model_request, middleware_w_modify_model_request[1:]):
+            _add_middleware_edge(
+                graph,
+                m1.modify_model_request,
+                f"{m1.__class__.__name__}.modify_model_request",
+                f"{m2.__class__.__name__}.modify_model_request",
+                first_node,
+            )
+        _add_middleware_edge(
+            graph,
+            middleware_w_modify_model_request[-1].modify_model_request,
+            f"{middleware_w_modify_model_request[-1].__class__.__name__}.modify_model_request",
+            "model_request",
+            first_node,
+        )
+
     # add after model edges
     if middleware_w_after:
         graph.add_edge(
@@ -151,55 +216,6 @@ def create_agent(
             )
 
     return graph
-
-
-def _make_model_request_node(
-    *,
-    system_prompt: str,
-    model: BaseChatModel,
-    tools: Sequence[BaseTool],
-    middleware: Sequence[AgentMiddleware] = (),
-    response_format: ResponseFormat | None = None,
-) -> Callable[[AgentState], AgentState]:
-    def model_request(state: AgentState) -> AgentState:
-        # create request
-        request = ModelRequest(
-            model=model,
-            system_prompt=system_prompt,
-            messages=state.messages,
-            tool_choice=None,
-            tools=tools,
-            response_format=response_format,
-        )
-        # visit middleware in order
-        for mw in middleware:
-            request = mw.modify_model_request(request, state)
-            # TODO assert request.tools in tools, or pass them to tool node
-        # prepare messages
-        if request.system_prompt:
-            messages = [SystemMessage(request.system_prompt)] + request.messages
-        else:
-            messages = request.messages
-        # call model
-        if request.response_format:
-            model_ = request.model.with_structured_output(
-                request.response_format, include_raw=True
-            )
-            output = model_.invoke(
-                messages, tools=request.tools, tool_choice=request.tool_choice
-            )
-            return {"messages": output["raw"], "response": output["parsed"]}
-        else:
-            model_ = request.model
-            output = model_.invoke(
-                messages, tools=request.tools, tool_choice=request.tool_choice
-            )
-            if state.response is not None:
-                return {"messages": output, "response": None}
-            else:
-                return {"messages": output}
-
-    return model_request
 
 
 def _resolve_jump(jump_to: JumpTo | None, first_node: str) -> str | None:
