@@ -66,15 +66,6 @@ def create_agent(
         if m.__class__.after_model is not AgentMiddleware.after_model
     ]
 
-    default_model_request = ModelRequest(
-        model=model, 
-        tools=list(tool_node.tools_by_name.values()), 
-        system_prompt=system_prompt, 
-        response_format=response_format,
-        messages=[],
-        tool_choice=None,
-    )
-
     # create graph, add nodes
     graph = StateGraph(
         AgentState,
@@ -85,7 +76,14 @@ def create_agent(
 
     def model_request(state: AgentState) -> AgentState:
 
-        request = state.model_request or default_model_request
+        request = state.model_request or ModelRequest(
+            model=model, 
+            tools=list(tool_node.tools_by_name.values()), 
+            system_prompt=system_prompt, 
+            response_format=response_format,
+            messages=state.messages,
+            tool_choice=None,
+        )
 
         # prepare messages
         if request.system_prompt:
@@ -102,10 +100,8 @@ def create_agent(
             )
             return {"messages": output["raw"], "response": output["parsed"]}
         else:
-            model_ = request.model
-            output = model_.invoke(
-                messages, tools=request.tools, tool_choice=request.tool_choice
-            )
+            model_ = request.model.bind_tools(request.tools, tool_choice=request.tool_choice)
+            output = model_.invoke(messages)
             if state.response is not None:
                 return {"messages": output, "response": None}
             else:
@@ -125,6 +121,16 @@ def create_agent(
 
             def modify_model_request_node(state: AgentState) -> dict[str, ModelRequest]:
                 # TODO assert request.tools in tools, or pass them to tool node
+
+                default_model_request = ModelRequest(
+                    model=model, 
+                    tools=list(tool_node.tools_by_name.values()), 
+                    system_prompt=system_prompt, 
+                    response_format=response_format,
+                    messages=state.messages,
+                    tool_choice=None,
+                )
+
                 return {"model_request": m.modify_model_request(state.model_request or default_model_request, state)}
         
             graph.add_node(
@@ -162,7 +168,7 @@ def create_agent(
         [first_node, END],
     )
     graph.add_conditional_edges(
-        last_node, _make_model_to_tools_edge(first_node), ["tools", END]
+        last_node, _make_model_to_tools_edge(first_node), [first_node, "tools", END]
     )
 
     # add before model edges
@@ -216,6 +222,13 @@ def create_agent(
                 f"{m2.__class__.__name__}.after_model",
                 first_node,
             )
+        # _add_middleware_edge(
+        #     graph,
+        #     middleware_w_after[-1].after_model,
+        #     f"{middleware_w_after[-1].__class__.__name__}.after_model",
+        #     "model_request",
+        #     first_node,
+        # )
 
     return graph
 
