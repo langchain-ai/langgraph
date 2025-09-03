@@ -1309,6 +1309,7 @@ class ThreadsClient:
         *,
         metadata: Json = None,
         values: Json = None,
+        ids: Sequence[str] | None = None,
         status: ThreadStatus | None = None,
         limit: int = 10,
         offset: int = 0,
@@ -1323,6 +1324,7 @@ class ThreadsClient:
         Args:
             metadata: Thread metadata to filter on.
             values: State values to filter on.
+            ids: List of thread IDs to filter by.
             status: Thread status to filter on.
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
@@ -1356,6 +1358,8 @@ class ThreadsClient:
             payload["metadata"] = metadata
         if values:
             payload["values"] = values
+        if ids:
+            payload["ids"] = ids
         if status:
             payload["status"] = status
         if sort_by:
@@ -4454,6 +4458,7 @@ class SyncThreadsClient:
         *,
         metadata: Json = None,
         values: Json = None,
+        ids: Sequence[str] | None = None,
         status: ThreadStatus | None = None,
         limit: int = 10,
         offset: int = 0,
@@ -4468,6 +4473,7 @@ class SyncThreadsClient:
         Args:
             metadata: Thread metadata to filter on.
             values: State values to filter on.
+            ids: List of thread IDs to filter by.
             status: Thread status to filter on.
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
@@ -4497,6 +4503,8 @@ class SyncThreadsClient:
             payload["metadata"] = metadata
         if values:
             payload["values"] = values
+        if ids:
+            payload["ids"] = ids
         if status:
             payload["status"] = status
         if sort_by:
