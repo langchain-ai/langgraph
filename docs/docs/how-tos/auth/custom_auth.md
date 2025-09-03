@@ -43,7 +43,7 @@ To leverage custom authentication and access user-level metadata in your deploym
 
     @auth.authenticate # (1)!
     async def authenticate(headers: dict) -> Auth.types.MinimalUserDict:
-        api_key = headers.get("x-api-key")
+        api_key = headers.get(b"x-api-key")
         if not api_key or not is_valid_key(api_key):
             raise Auth.exceptions.HTTPException(status_code=401, detail="Invalid API key")
 
