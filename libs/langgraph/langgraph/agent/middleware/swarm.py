@@ -24,6 +24,7 @@ class SwarmMiddleware(AgentMiddleware):
       * handoff tool naming / descriptions
     """
 
+    @dataclass
     class State(AgentMiddleware.State):
         active_agent: str | None = None
 
