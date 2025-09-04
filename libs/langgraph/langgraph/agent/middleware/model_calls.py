@@ -16,6 +16,7 @@ class ModelRequestLimitMiddleware(AgentMiddleware):
         self.max_requests = max_requests
 
     def before_model(self, state: State) -> AgentUpdate | AgentJump | None:
+        # TODO: want to be able to configure end behavior here
         if state.model_request_count == self.max_requests:
             return {"jump_to": "__end__"}
 
