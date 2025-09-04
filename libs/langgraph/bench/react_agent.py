@@ -10,7 +10,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import StructuredTool
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.prebuilt.chat_agent_executor import create_react_agent
+from langgraph.prebuilt.chat_agent_executor import create_agent
 from langgraph.pregel import Pregel
 
 
@@ -60,7 +60,7 @@ def react_agent(n_tools: int, checkpointer: Optional[BaseCheckpointSaver]) -> Pr
         ]
     )
 
-    return create_react_agent(model, [tool], checkpointer=checkpointer)
+    return create_agent(model, [tool], checkpointer=checkpointer)
 
 
 if __name__ == "__main__":
