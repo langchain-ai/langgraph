@@ -1179,6 +1179,7 @@ class ThreadsClient:
         if_exists: OnConflictBehavior | None = None,
         supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
         graph_id: str | None = None,
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -1193,6 +1194,9 @@ class ThreadsClient:
             supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
                 Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
             graph_id: Optional graph ID to associate with the thread.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -1234,6 +1238,11 @@ class ThreadsClient:
                 }
                 for s in supersteps
             ]
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
 
         return await self.http.post(
             "/threads", json=payload, headers=headers, params=params
@@ -1244,6 +1253,7 @@ class ThreadsClient:
         thread_id: str,
         *,
         metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -1252,6 +1262,9 @@ class ThreadsClient:
         Args:
             thread_id: ID of thread to update.
             metadata: Metadata to merge with existing thread metadata.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -1265,12 +1278,19 @@ class ThreadsClient:
             thread = await client.threads.update(
                 thread_id="my-thread-id",
                 metadata={"number":1},
+                ttl=43_200,
             )
             ```
         """  # noqa: E501
+        payload: dict[str, Any] = {"metadata": metadata}
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
         return await self.http.patch(
             f"/threads/{thread_id}",
-            json={"metadata": metadata},
+            json=payload,
             headers=headers,
             params=params,
         )
@@ -4332,6 +4352,7 @@ class SyncThreadsClient:
         if_exists: OnConflictBehavior | None = None,
         supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
         graph_id: str | None = None,
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -4346,6 +4367,9 @@ class SyncThreadsClient:
             supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
                 Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
             graph_id: Optional graph ID to associate with the thread.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
 
         Returns:
@@ -4387,6 +4411,11 @@ class SyncThreadsClient:
                 }
                 for s in supersteps
             ]
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
 
         return self.http.post("/threads", json=payload, headers=headers, params=params)
 
@@ -4395,6 +4424,7 @@ class SyncThreadsClient:
         thread_id: str,
         *,
         metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -4403,7 +4433,11 @@ class SyncThreadsClient:
         Args:
             thread_id: ID of thread to update.
             metadata: Metadata to merge with existing thread metadata.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Thread: The created thread.
@@ -4415,12 +4449,19 @@ class SyncThreadsClient:
             thread = client.threads.update(
                 thread_id="my-thread-id",
                 metadata={"number":1},
+                ttl=43_200,
             )
             ```
         """  # noqa: E501
+        payload: dict[str, Any] = {"metadata": metadata}
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
         return self.http.patch(
             f"/threads/{thread_id}",
-            json={"metadata": metadata},
+            json=payload,
             headers=headers,
             params=params,
         )
