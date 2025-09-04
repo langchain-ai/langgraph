@@ -75,11 +75,10 @@ def create_agent(
     )
 
     def model_request(state: AgentState) -> AgentState:
-
         request = state.model_request or ModelRequest(
-            model=model, 
-            tools=list(tool_node.tools_by_name.values()), 
-            system_prompt=system_prompt, 
+            model=model,
+            tools=list(tool_node.tools_by_name.values()),
+            system_prompt=system_prompt,
             response_format=response_format,
             messages=state.messages,
             tool_choice=None,
@@ -100,7 +99,11 @@ def create_agent(
             )
             return {"messages": output["raw"], "response": output["parsed"]}
         else:
-            model_ = request.model.bind_tools(request.tools, tool_choice=request.tool_choice)
+            model_ = request.model.bind_tools(
+                request.tools,
+                tool_choice=request.tool_choice,
+                parallel_tool_calls=False,
+            )
             output = model_.invoke(messages)
             if state.response is not None:
                 return {"messages": output, "response": None}
@@ -123,16 +126,20 @@ def create_agent(
                 # TODO assert request.tools in tools, or pass them to tool node
 
                 default_model_request = ModelRequest(
-                    model=model, 
-                    tools=list(tool_node.tools_by_name.values()), 
-                    system_prompt=system_prompt, 
+                    model=model,
+                    tools=list(tool_node.tools_by_name.values()),
+                    system_prompt=system_prompt,
                     response_format=response_format,
                     messages=state.messages,
                     tool_choice=None,
                 )
 
-                return {"model_request": m.modify_model_request(state.model_request or default_model_request, state)}
-        
+                return {
+                    "model_request": m.modify_model_request(
+                        state.model_request or default_model_request, state
+                    )
+                }
+
             graph.add_node(
                 f"{m.__class__.__name__}.modify_model_request",
                 modify_model_request_node,
@@ -191,7 +198,9 @@ def create_agent(
 
     # add modify model request edges
     if middleware_w_modify_model_request:
-        for m1, m2 in zip(middleware_w_modify_model_request, middleware_w_modify_model_request[1:]):
+        for m1, m2 in zip(
+            middleware_w_modify_model_request, middleware_w_modify_model_request[1:]
+        ):
             _add_middleware_edge(
                 graph,
                 m1.modify_model_request,

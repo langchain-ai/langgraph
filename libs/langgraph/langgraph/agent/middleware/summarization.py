@@ -1,20 +1,21 @@
+import uuid
+from collections.abc import Sequence
 from typing import Callable, Iterable
 
 from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import RemoveMessage, MessageLikeRepresentation
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    MessageLikeRepresentation,
+    RemoveMessage,
+    ToolMessage,
+)
 from langchain_core.messages.utils import count_tokens_approximately
-from collections.abc import Sequence
-from langchain_core.messages import AnyMessage, AIMessage, ToolMessage
-import uuid
-
 
 TokenCounter = Callable[[Iterable[MessageLikeRepresentation]], int]
 
 
-
-
 from langgraph.agent.types import AgentMiddleware, AgentState
-
 
 DEFAULT_SUMMARY_PROMPT = """<role>
 Context Extraction Assistant
@@ -41,13 +42,15 @@ Respond ONLY with the extracted context. Do not include any additional informati
 
 
 class SummarizationMiddleware(AgentMiddleware):
-
-    def __init__(self,model: LanguageModelLike,
-    max_tokens_before_summary: int | None = None,
-    token_counter: TokenCounter = count_tokens_approximately,
-                 messages_to_leave: int = 20,
-                 summary_system_prompt: str = DEFAULT_SUMMARY_PROMPT,
-                 fake_tool_call_name: str = "summarize_convo"):
+    def __init__(
+        self,
+        model: LanguageModelLike,
+        max_tokens_before_summary: int | None = None,
+        token_counter: TokenCounter = count_tokens_approximately,
+        messages_to_leave: int = 20,
+        summary_system_prompt: str = DEFAULT_SUMMARY_PROMPT,
+        fake_tool_call_name: str = "summarize_convo",
+    ):
         super().__init__()
         self.model = model
         self.max_tokens_before_summary = max_tokens_before_summary
@@ -64,33 +67,38 @@ class SummarizationMiddleware(AgentMiddleware):
             return None
         # Otherwise, we create a summary!
         # Get messages that we want to create a summary for
-        messages_to_summarize = messages[:-self.messages_to_leave]
+        messages_to_summarize = messages[: -self.messages_to_leave]
         # Create summary text
         summary = self._summarize_messages(messages_to_summarize)
         # Create fake messages to add to history
         fake_tool_call_id = str(uuid.uuid4())
-        fake_messages = [AIMessage(
-                    content="Looks like I'm running out of tokens. I'm going to summarize the conversation history to free up space.",
-                    tool_calls={
-                        "id": fake_tool_call_id,
-                        "name": self.fake_tool_call_name,
-                        "args": {
-            "reasoning":
-              "I'm running out of tokens. I'm going to summarize all of the messages since my last summary message to free up space.",
-          }
-                    }),
-                ToolMessage(tool_call_id= fake_tool_call_id, content=summary)]
+        fake_messages = [
+            AIMessage(
+                content="Looks like I'm running out of tokens. I'm going to summarize the conversation history to free up space.",
+                tool_calls={
+                    "id": fake_tool_call_id,
+                    "name": self.fake_tool_call_name,
+                    "args": {
+                        "reasoning": "I'm running out of tokens. I'm going to summarize all of the messages since my last summary message to free up space.",
+                    },
+                },
+            ),
+            ToolMessage(tool_call_id=fake_tool_call_id, content=summary),
+        ]
         return {
-            "messages": [RemoveMessage(id=m.id) for m in messages_to_summarize] + fake_messages
+            "messages": [RemoveMessage(id=m.id) for m in messages_to_summarize]
+            + fake_messages
         }
 
     def _summarize_messages(self, messages_to_summarize: Sequence[AnyMessage]) -> str:
         system_message = self.summary_system_prompt
         user_message = self._format_messages(messages_to_summarize)
-        response = self.model.invoke([
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_message}
-        ])
+        response = self.model.invoke(
+            [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message},
+            ]
+        )
         # Use new .text attribute when ready
         return response.content
 
@@ -98,7 +106,3 @@ class SummarizationMiddleware(AgentMiddleware):
     def _format_messages(messages_to_summarize: Sequence[AnyMessage]) -> str:
         # TODO: better formatting logic
         return "\n".join([m.content for m in messages_to_summarize])
-
-
-
-
