@@ -421,14 +421,14 @@ def test_config_to_docker_simple():
     expected_docker_stdin = f"""\
 FROM langchain/langgraph-api:3.11
 # -- Installing local requirements --
-COPY --from=__outer_requirements.txt requirements.txt /deps/__outer_graphs_reqs_a/graphs_reqs_a/requirements.txt
-RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r /deps/__outer_graphs_reqs_a/graphs_reqs_a/requirements.txt
+COPY --from=outer-requirements.txt requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
+RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
 # -- End of local requirements install --
 # -- Adding local package ../../examples --
 COPY --from=examples . /deps/examples
 # -- End of local package ../../examples --
 # -- Adding non-package dependency unit_tests --
-ADD . /deps/__outer_unit_tests/unit_tests
+ADD . /deps/outer-unit_tests/unit_tests
 RUN set -ex && \\
     for line in '[project]' \\
                 'name = "unit_tests"' \\
@@ -438,11 +438,11 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+        echo "$line" >> /deps/outer-unit_tests/pyproject.toml; \\
     done
 # -- End of non-package dependency unit_tests --
 # -- Adding non-package dependency graphs_reqs_a --
-COPY --from=__outer_graphs_reqs_a . /deps/__outer_graphs_reqs_a/graphs_reqs_a
+COPY --from=outer-graphs_reqs_a . /deps/outer-graphs_reqs_a/graphs_reqs_a
 RUN set -ex && \\
     for line in '[project]' \\
                 'name = "graphs_reqs_a"' \\
@@ -452,21 +452,21 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_graphs_reqs_a/pyproject.toml; \\
+        echo "$line" >> /deps/outer-graphs_reqs_a/pyproject.toml; \\
     done
 # -- End of non-package dependency graphs_reqs_a --
 # -- Installing all local dependencies --
 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
 # -- End of local dependencies install --
 ENV LANGGRAPH_HTTP='{{"app": "/deps/examples/my_app.py:app"}}'
-ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}}'
+ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {FORMATTED_CLEANUP_LINES}
-WORKDIR /deps/__outer_unit_tests/unit_tests\
+WORKDIR /deps/outer-unit_tests/unit_tests\
 """
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
 
     assert additional_contexts == {
-        "__outer_graphs_reqs_a": str(
+        "outer-graphs_reqs_a": str(
             (pathlib.Path(__file__).parent / "../../examples/graphs_reqs_a").resolve()
         ),
         "examples": str((pathlib.Path(__file__).parent / "../../examples").resolve()),
@@ -484,7 +484,7 @@ def test_config_to_docker_outside_path():
         """\
 FROM langchain/langgraph-api:3.11
 # -- Adding non-package dependency unit_tests --
-ADD . /deps/__outer_unit_tests/unit_tests
+ADD . /deps/outer-unit_tests/unit_tests
 RUN set -ex && \\
     for line in '[project]' \\
                 'name = "unit_tests"' \\
@@ -494,11 +494,11 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+        echo "$line" >> /deps/outer-unit_tests/pyproject.toml; \\
     done
 # -- End of non-package dependency unit_tests --
 # -- Adding non-package dependency tests --
-COPY --from=__outer_tests . /deps/__outer_tests/tests
+COPY --from=outer-tests . /deps/outer-tests/tests
 RUN set -ex && \\
     for line in '[project]' \\
                 'name = "tests"' \\
@@ -508,22 +508,22 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_tests/pyproject.toml; \\
+        echo "$line" >> /deps/outer-tests/pyproject.toml; \\
     done
 # -- End of non-package dependency tests --
 # -- Installing all local dependencies --
 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
+ENV LANGSERVE_GRAPHS='{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}'
 """
         + FORMATTED_CLEANUP_LINES
         + """
-WORKDIR /deps/__outer_unit_tests/unit_tests\
+WORKDIR /deps/outer-unit_tests/unit_tests\
 """
     )
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {
-        "__outer_tests": str(pathlib.Path(__file__).parent.parent.absolute()),
+        "outer-tests": str(pathlib.Path(__file__).parent.parent.absolute()),
     }
 
 
@@ -545,7 +545,7 @@ def test_config_to_docker_pipconfig():
 FROM langchain/langgraph-api:3.11
 ADD pipconfig.txt /pipconfig.txt
 # -- Adding non-package dependency unit_tests --
-ADD . /deps/__outer_unit_tests/unit_tests
+ADD . /deps/outer-unit_tests/unit_tests
 RUN set -ex && \\
     for line in '[project]' \\
                 'name = "unit_tests"' \\
@@ -555,17 +555,17 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+        echo "$line" >> /deps/outer-unit_tests/pyproject.toml; \\
     done
 # -- End of non-package dependency unit_tests --
 # -- Installing all local dependencies --
 RUN PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
+ENV LANGSERVE_GRAPHS='{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}'
 """
         + FORMATTED_CLEANUP_LINES
         + """
-WORKDIR /deps/__outer_unit_tests/unit_tests\
+WORKDIR /deps/outer-unit_tests/unit_tests\
 """
     )
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
@@ -607,7 +607,7 @@ def test_config_to_docker_local_deps():
     expected_docker_stdin = f"""\
 FROM langchain/langgraph-api-custom:3.11
 # -- Adding non-package dependency graphs --
-ADD ./graphs /deps/__outer_graphs/src
+ADD ./graphs /deps/outer-graphs/src
 RUN set -ex && \\
     for line in '[project]' \\
                 'name = "graphs"' \\
@@ -617,13 +617,13 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_graphs/pyproject.toml; \\
+        echo "$line" >> /deps/outer-graphs/pyproject.toml; \\
     done
 # -- End of non-package dependency graphs --
 # -- Installing all local dependencies --
 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_graphs/src/agent.py:graph"}}'
+ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-graphs/src/agent.py:graph"}}'
 {FORMATTED_CLEANUP_LINES}\
 """
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
@@ -691,7 +691,7 @@ ARG foo
 ADD pipconfig.txt /pipconfig.txt
 RUN PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt langchain langchain_openai
 # -- Adding non-package dependency graphs --
-ADD ./graphs/ /deps/__outer_graphs/src
+ADD ./graphs/ /deps/outer-graphs/src
 RUN set -ex && \\
     for line in '[project]' \\
                 'name = "graphs"' \\
@@ -701,13 +701,13 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_graphs/pyproject.toml; \\
+        echo "$line" >> /deps/outer-graphs/pyproject.toml; \\
     done
 # -- End of non-package dependency graphs --
 # -- Installing all local dependencies --
 RUN PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_graphs/src/agent.py:graph"}}'
+ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-graphs/src/agent.py:graph"}}'
 {FORMATTED_CLEANUP_LINES}"""
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
@@ -797,7 +797,7 @@ def test_config_to_docker_gen_ui_python():
     expected_docker_stdin = f"""FROM langchain/langgraph-api:3.11
 RUN /storage/install-node.sh
 # -- Adding non-package dependency unit_tests --
-ADD . /deps/__outer_unit_tests/unit_tests
+ADD . /deps/outer-unit_tests/unit_tests
 RUN set -ex && \\
     for line in '[project]' \\
                 'name = "unit_tests"' \\
@@ -807,7 +807,7 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+        echo "$line" >> /deps/outer-unit_tests/pyproject.toml; \\
     done
 # -- End of non-package dependency unit_tests --
 # -- Installing all local dependencies --
@@ -815,13 +815,13 @@ RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/con
 # -- End of local dependencies install --
 ENV LANGGRAPH_UI='{{"agent": "./graphs/agent.ui.jsx"}}'
 ENV LANGGRAPH_UI_CONFIG='{{"shared": ["nuqs"]}}'
-ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}}'
+ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 # -- Installing JS dependencies --
 ENV NODE_VERSION=20
-RUN cd /deps/__outer_unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
+RUN cd /deps/outer-unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
 {FORMATTED_CLEANUP_LINES}
-WORKDIR /deps/__outer_unit_tests/unit_tests"""
+WORKDIR /deps/outer-unit_tests/unit_tests"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
@@ -843,7 +843,7 @@ def test_config_to_docker_multiplatform():
     expected_docker_stdin = f"""FROM langchain/langgraph-api:3.11
 RUN /storage/install-node.sh
 # -- Adding non-package dependency unit_tests --
-ADD . /deps/__outer_unit_tests/unit_tests
+ADD . /deps/outer-unit_tests/unit_tests
 RUN set -ex && \\
     for line in '[project]' \\
                 'name = "unit_tests"' \\
@@ -853,19 +853,19 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+        echo "$line" >> /deps/outer-unit_tests/pyproject.toml; \\
     done
 # -- End of non-package dependency unit_tests --
 # -- Installing all local dependencies --
 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{{"python": "/deps/__outer_unit_tests/unit_tests/multiplatform/python.py:graph", "js": "/deps/__outer_unit_tests/unit_tests/multiplatform/js.mts:graph"}}'
+ENV LANGSERVE_GRAPHS='{{"python": "/deps/outer-unit_tests/unit_tests/multiplatform/python.py:graph", "js": "/deps/outer-unit_tests/unit_tests/multiplatform/js.mts:graph"}}'
 # -- Installing JS dependencies --
 ENV NODE_VERSION=22
-RUN cd /deps/__outer_unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
+RUN cd /deps/outer-unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
 {FORMATTED_CLEANUP_LINES}
-WORKDIR /deps/__outer_unit_tests/unit_tests"""
+WORKDIR /deps/outer-unit_tests/unit_tests"""
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
@@ -984,7 +984,7 @@ def test_config_to_compose_simple_config():
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
                 # -- Adding non-package dependency unit_tests --
-                ADD . /deps/__outer_unit_tests/unit_tests
+                ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
                     for line in '[project]' \\
                                 'name = "unit_tests"' \\
@@ -994,15 +994,15 @@ def test_config_to_compose_simple_config():
                                 '[build-system]' \\
                                 'requires = ["setuptools>=61"]' \\
                                 'build-backend = "setuptools.build_meta"'; do \\
-                        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+                        echo "$line" >> /deps/outer-unit_tests/pyproject.toml; \\
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
                 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
                 # -- End of local dependencies install --
-                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}}'
+                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/__outer_unit_tests/unit_tests
+                WORKDIR /deps/outer-unit_tests/unit_tests
         """
     actual_compose_stdin = config_to_compose(
         PATH_TO_CONFIG,
@@ -1025,7 +1025,7 @@ def test_config_to_compose_env_vars():
             dockerfile_inline: |
                 FROM langchain/langgraph-api-custom:3.11
                 # -- Adding non-package dependency unit_tests --
-                ADD . /deps/__outer_unit_tests/unit_tests
+                ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
                     for line in '[project]' \\
                                 'name = "unit_tests"' \\
@@ -1035,15 +1035,15 @@ def test_config_to_compose_env_vars():
                                 '[build-system]' \\
                                 'requires = ["setuptools>=61"]' \\
                                 'build-backend = "setuptools.build_meta"'; do \\
-                        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+                        echo "$line" >> /deps/outer-unit_tests/pyproject.toml; \\
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
                 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
                 # -- End of local dependencies install --
-                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}}'
+                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/__outer_unit_tests/unit_tests
+                WORKDIR /deps/outer-unit_tests/unit_tests
         """
     openai_api_key = "key"
     actual_compose_stdin = config_to_compose(
@@ -1070,7 +1070,7 @@ def test_config_to_compose_env_file():
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
                 # -- Adding non-package dependency unit_tests --
-                ADD . /deps/__outer_unit_tests/unit_tests
+                ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
                     for line in '[project]' \\
                                 'name = "unit_tests"' \\
@@ -1080,15 +1080,15 @@ def test_config_to_compose_env_file():
                                 '[build-system]' \\
                                 'requires = ["setuptools>=61"]' \\
                                 'build-backend = "setuptools.build_meta"'; do \\
-                        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+                        echo "$line" >> /deps/outer-unit_tests/pyproject.toml; \\
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
                 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
                 # -- End of local dependencies install --
-                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}}'
+                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/__outer_unit_tests/unit_tests
+                WORKDIR /deps/outer-unit_tests/unit_tests
         """
     actual_compose_stdin = config_to_compose(
         PATH_TO_CONFIG,
@@ -1108,7 +1108,7 @@ def test_config_to_compose_watch():
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
                 # -- Adding non-package dependency unit_tests --
-                ADD . /deps/__outer_unit_tests/unit_tests
+                ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
                     for line in '[project]' \\
                                 'name = "unit_tests"' \\
@@ -1118,15 +1118,15 @@ def test_config_to_compose_watch():
                                 '[build-system]' \\
                                 'requires = ["setuptools>=61"]' \\
                                 'build-backend = "setuptools.build_meta"'; do \\
-                        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+                        echo "$line" >> /deps/outer-unit_tests/pyproject.toml; \\
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
                 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
                 # -- End of local dependencies install --
-                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}}'
+                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/__outer_unit_tests/unit_tests
+                WORKDIR /deps/outer-unit_tests/unit_tests
         
         develop:
             watch:
@@ -1155,7 +1155,7 @@ def test_config_to_compose_end_to_end():
             dockerfile_inline: |
                 FROM langchain/langgraph-api:3.11
                 # -- Adding non-package dependency unit_tests --
-                ADD . /deps/__outer_unit_tests/unit_tests
+                ADD . /deps/outer-unit_tests/unit_tests
                 RUN set -ex && \\
                     for line in '[project]' \\
                                 'name = "unit_tests"' \\
@@ -1165,15 +1165,15 @@ def test_config_to_compose_end_to_end():
                                 '[build-system]' \\
                                 'requires = ["setuptools>=61"]' \\
                                 'build-backend = "setuptools.build_meta"'; do \\
-                        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+                        echo "$line" >> /deps/outer-unit_tests/pyproject.toml; \\
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
                 RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
                 # -- End of local dependencies install --
-                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}}'
+                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
-                WORKDIR /deps/__outer_unit_tests/unit_tests
+                WORKDIR /deps/outer-unit_tests/unit_tests
         
         develop:
             watch:
