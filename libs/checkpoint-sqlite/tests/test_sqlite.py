@@ -116,7 +116,21 @@ class TestSqliteSaver:
                 search_results_5[1].config["configurable"]["checkpoint_ns"],
             } == {"", "inner"}
 
-            # TODO: test before and limit params
+            # --- Test 'before' param ---
+            # search_results_5 contains the last two saved checkpoints (with config_2 and config_3),both for thread_id="thread-2"
+            # search_results_5[0] is with config_3 and search_results_5[1] is with config_2 as list retrieves the newest checkpoint first
+            search_results_6 = list(saver.list(None, before=search_results_5[1].config))
+            assert len(search_results_6) == 1
+            assert search_results_6[0].config["configurable"]["thread_id"] == "thread-1"
+
+            # --- Test 'limit' param ---
+            # This should return only 1 checkpoint, even if more match the config
+            # In actual, there are 2 checkpoints matching the config but only 1 is returned due to the limit
+            search_results_7 = list(
+                saver.list({"configurable": {"thread_id": "thread-2"}}, limit=1)
+            )
+            assert len(search_results_7) == 1
+            assert search_results_7[0].config["configurable"]["thread_id"] == "thread-2"
 
     def test_search_where(self) -> None:
         # call method / assertions
