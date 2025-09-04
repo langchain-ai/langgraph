@@ -5261,11 +5261,30 @@
             "type": "object",
             "title": "Metadata",
             "description": "Metadata to merge with existing thread metadata."
+          },
+          "ttl": {
+            "type": "object",
+            "title": "TTL",
+            "description": "The time-to-live for the thread.",
+            "properties": {
+              "strategy": {
+                "type": "string",
+                "enum": [
+                  "delete"
+                ],
+                "description": "The TTL strategy. 'delete' removes the entire thread.",
+                "default": "delete"
+              },
+              "ttl": {
+                "type": "number",
+                "description": "The time-to-live in minutes from now until thread should be swept."
+              }
+            }
           }
         },
         "type": "object",
         "title": "ThreadPatch",
-        "description": "Payload for creating a thread."
+        "description": "Payload for updating a thread."
       },
       "ThreadStateCheckpointRequest": {
         "properties": {
