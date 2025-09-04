@@ -328,6 +328,8 @@ def _build(
     is_js_project = config_json.get("node_version") and not config_json.get(
         "python_version"
     )
+    # build/install commands only apply to JS projects for now
+    # without install/build command, JS projects will follow the old behavior
     if is_js_project and (build_command or install_command):
         build_context = str(pathlib.Path.cwd())
     else:
