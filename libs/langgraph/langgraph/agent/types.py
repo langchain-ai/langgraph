@@ -12,6 +12,7 @@ from typing_extensions import TypedDict
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.graph.message import Messages, add_messages
+from langgraph.runtime import Runtime
 
 ResponseFormat = dict | type[BaseModel]
 JumpTo = Literal["tools", "model", "__end__"]
@@ -38,6 +39,8 @@ class AgentState:
 class AgentMiddleware:
     class State(AgentState):
         pass
+
+    tools: list[BaseTool]
 
     def before_model(self, state: State) -> AgentUpdate | AgentJump | None:
         pass

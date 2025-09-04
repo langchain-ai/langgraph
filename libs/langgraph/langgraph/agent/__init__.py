@@ -43,8 +43,14 @@ def create_agent(
 
         model = cast(BaseChatModel, init_chat_model(model))
 
-    # init tool node
-    tool_node = tools if isinstance(tools, ToolNode) else ToolNode(tools=tools)
+    if isinstance(tools, list):
+        all_tools = [t for m in middleware for t in m.tools] + list(tools)
+        tool_node = ToolNode(tools=all_tools)
+        default_tools = tools
+    else:
+        # TODO: what do we do when middleware tools are specified, plus a ToolNode is used?
+        tool_node = tools
+        default_tools = list(tool_node.tools_by_name.values())
 
     # validate middleware
     assert len({m.__class__.__name__ for m in middleware}) == len(middleware), (
@@ -77,7 +83,7 @@ def create_agent(
     def model_request(state: AgentState) -> AgentState:
         request = state.model_request or ModelRequest(
             model=model,
-            tools=list(tool_node.tools_by_name.values()),
+            tools=default_tools,
             system_prompt=system_prompt,
             response_format=response_format,
             messages=state.messages,
@@ -85,6 +91,7 @@ def create_agent(
         )
 
         # prepare messages
+        print(request.system_prompt)
         if request.system_prompt:
             messages = [SystemMessage(request.system_prompt)] + request.messages
         else:
@@ -127,7 +134,7 @@ def create_agent(
 
                 default_model_request = ModelRequest(
                     model=model,
-                    tools=list(tool_node.tools_by_name.values()),
+                    tools=default_tools,
                     system_prompt=system_prompt,
                     response_format=response_format,
                     messages=state.messages,

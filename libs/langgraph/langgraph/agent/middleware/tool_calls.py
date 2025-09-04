@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Annotated, Any, Dict, List, cast
 
 from langchain_core.messages import AIMessage
+from typing_extensions import Annotated
 
 from langgraph.agent.types import AgentJump, AgentMiddleware, AgentState, AgentUpdate
 
@@ -11,7 +12,15 @@ class ToolCallLimitMiddleware(AgentMiddleware):
 
     @dataclass
     class State(AgentMiddleware.State):
-        tool_call_count: dict[str, int] = field(default_factory=dict)
+        important: Annotated[dict[str, int], Input, Output] = field(default_factory=dict)
+
+    @dataclass
+    class InputState(AgentMiddleware.State):
+        important: dict[str, int]
+
+    @dataclass
+    class OutputState(AgentMiddleware.State):
+        important: dict[str, int]
 
     def __init__(self, tool_limits: dict[str, int]):
         self.tool_limits = tool_limits

@@ -15,8 +15,8 @@ class SwarmAgent:
     tools: list[BaseTool]
 
 
-class SwarmMiddleware(AgentMiddleware):
-    """Swarm middleware.
+class MultiAgentMiddleware(AgentMiddleware):
+    """Multi agent middleware (enabling swarm like behavior).
 
     TODOs:
     * Support create_agent for handoffs
@@ -59,6 +59,7 @@ class SwarmMiddleware(AgentMiddleware):
             request.tools = agent.tools
 
         request.tools.extend(self.handoff_tools)
+
         return request
 
     def after_model(self, state) -> State | None:
