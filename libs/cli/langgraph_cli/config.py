@@ -1256,7 +1256,7 @@ def python_config_to_docker(
         else:
             pip_installer = "pip"
     if pip_installer == "uv":
-        install_cmd = "uv pip install --system"
+        install_cmd = "uv pip install --system --prerelease=allow"
     elif pip_installer == "pip":
         install_cmd = "pip install"
     else:
