@@ -190,30 +190,30 @@ def get_client(
 
     ???+ example "Connect to a remote server:"
 
-            ```python
-            from langgraph_sdk import get_client
+        ```python
+        from langgraph_sdk import get_client
 
-            # get top-level LangGraphClient
-            client = get_client(url="http://localhost:8123")
+        # get top-level LangGraphClient
+        client = get_client(url="http://localhost:8123")
 
-            # example usage: client.<model>.<method_name>()
-            assistants = await client.assistants.get(assistant_id="some_uuid")
-            ```
+        # example usage: client.<model>.<method_name>()
+        assistants = await client.assistants.get(assistant_id="some_uuid")
+        ```
 
-        ???+ example "Connect in-process to a running LangGraph server:"
+    ???+ example "Connect in-process to a running LangGraph server:"
 
-            ```python
-            from langgraph_sdk import get_client
+        ```python
+        from langgraph_sdk import get_client
 
-            client = get_client(url=None)
+        client = get_client(url=None)
 
-            async def my_node(...):
-                subagent_result = await client.runs.wait(
-                    thread_id=None,
-                    assistant_id="agent",
-                    input={"messages": [{"role": "user", "content": "Foo"}]},
-                )
-            ```
+        async def my_node(...):
+            subagent_result = await client.runs.wait(
+                thread_id=None,
+                assistant_id="agent",
+                input={"messages": [{"role": "user", "content": "Foo"}]},
+            )
+        ```
     """
 
     transport: httpx.AsyncBaseTransport | None = None
