@@ -1,0 +1,12 @@
+{
+    "python_version": "3.12",
+    "dependencies": [
+      "."
+    ],
+    "graphs": {
+      "agent": "./agent.py:graph",
+      "storm": "./storm.py:graph"
+    },
+    "env": "../.env"
+  }
+  

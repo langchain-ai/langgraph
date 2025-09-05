@@ -102,3 +102,12 @@ jobs:
           cp apps/agent/.env.example apps/agent/.env
           if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> apps/agent/.env; fi
           timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-g -c apps/agent/langgraph.json
+
+      - name: Build and test prerelease reqs service
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples/graph_prerelease_reqs
+        run: |
+          langgraph build -t langgraph-test-h
+          cp .env.example .env
+          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h
