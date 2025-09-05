@@ -157,37 +157,63 @@ def get_client(
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
 ) -> LangGraphClient:
-    """Get a LangGraphClient instance.
+    """Create and configure a LangGraphClient.
+
+    The client provides programmatic access to a LangGraph Platform deployment. It supports
+    both remote servers and local in-process connections (when running inside a LangGraph server).
 
     Args:
-        url: The URL of the LangGraph API.
-        api_key: The API key. If not provided, it will be read from the environment.
-            Precedence:
-                1. explicit argument
-                2. LANGGRAPH_API_KEY
-                3. LANGSMITH_API_KEY
-                4. LANGCHAIN_API_KEY
-        headers: Optional custom headers
-        timeout: Optional timeout configuration for the HTTP client.
-            Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts.
-            Tuple format is (connect, read, write, pool)
-            If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
+        url:
+            Base URL of the LangGraph API.
+            – If `None`, the client first attempts an in-process connection via ASGI transport.
+              If that fails, it falls back to `http://localhost:8123`.
+        api_key:
+            API key for authentication. If omitted, the client reads from environment
+            variables in the following order:
+              1. Function argument
+              2. `LANGGRAPH_API_KEY`
+              3. `LANGSMITH_API_KEY`
+              4. `LANGCHAIN_API_KEY`
+        headers:
+            Additional HTTP headers to include in requests. Merged with authentication headers.
+        timeout:
+            HTTP timeout configuration. May be:
+              – `httpx.Timeout` instance
+              – float (total seconds)
+              – tuple `(connect, read, write, pool)` in seconds
+            Defaults: connect=5, read=300, write=300, pool=5.
 
     Returns:
-        LangGraphClient: The top-level client for accessing AssistantsClient,
-        ThreadsClient, RunsClient, and CronClient.
+        LangGraphClient:
+            A top-level client exposing sub-clients for assistants, threads,
+            runs, and cron operations.
 
-    ???+ example "Example"
+    ???+ example "Connect to a remote server:"
 
-        ```python
-        from langgraph_sdk import get_client
+            ```python
+            from langgraph_sdk import get_client
 
-        # get top-level LangGraphClient
-        client = get_client(url="http://localhost:8123")
+            # get top-level LangGraphClient
+            client = get_client(url="http://localhost:8123")
 
-        # example usage: client.<model>.<method_name>()
-        assistants = await client.assistants.get(assistant_id="some_uuid")
-        ```
+            # example usage: client.<model>.<method_name>()
+            assistants = await client.assistants.get(assistant_id="some_uuid")
+            ```
+
+        ???+ example "Connect in-process to a running LangGraph server:"
+
+            ```python
+            from langgraph_sdk import get_client
+
+            client = get_client(url=None)
+
+            async def my_node(...):
+                subagent_result = await client.runs.wait(
+                    thread_id=None,
+                    assistant_id="agent",
+                    input={"messages": [{"role": "user", "content": "Foo"}]},
+                )
+            ```
     """
 
     transport: httpx.AsyncBaseTransport | None = None
