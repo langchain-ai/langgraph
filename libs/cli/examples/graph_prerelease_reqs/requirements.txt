@@ -2,4 +2,5 @@ requests
 langchain_anthropic
 langchain_openai
 langchain_community
-langchain==1.0.0a2
+langchain
+langgraph==1.0.0a2
