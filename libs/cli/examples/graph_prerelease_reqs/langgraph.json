@@ -4,8 +4,7 @@
       "."
     ],
     "graphs": {
-      "agent": "./agent.py:graph",
-      "storm": "./storm.py:graph"
+      "agent": "./agent.py:graph"
     },
     "env": "../.env"
   }
