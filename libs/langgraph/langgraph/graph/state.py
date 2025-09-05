@@ -155,7 +155,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         graph = StateGraph(state_schema=State, context_schema=Context)
 
         def node(state: State, runtime: Runtime[Context]) -> dict:
-            r = runtie.context.get("r", 1.0)
+            r = runtime.context.get("r", 1.0)
             x = state["x"][-1]
             next_value = x * r * (1 - x)
             return {"x": next_value}
