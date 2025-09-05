@@ -20,7 +20,7 @@ from langgraph_cli.config import (
 from langgraph_cli.util import clean_empty_lines
 
 FORMATTED_CLEANUP_LINES = _get_pip_cleanup_lines(
-    install_cmd="uv pip install --system",
+    install_cmd="uv pip install --system --prerelease=allow",
     to_uninstall=("pip", "setuptools", "wheel"),
     pip_installer="uv",
 )
