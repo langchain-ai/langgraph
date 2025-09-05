@@ -81,17 +81,16 @@ def create_agent(
     )
 
     def model_request(state: AgentState) -> AgentState:
-        request = state.model_request or ModelRequest(
+        request = state.get("model_request") or ModelRequest(
             model=model,
             tools=default_tools,
             system_prompt=system_prompt,
             response_format=response_format,
-            messages=state.messages,
+            messages=state["messages"],
             tool_choice=None,
         )
 
         # prepare messages
-        print(request.system_prompt)
         if request.system_prompt:
             messages = [SystemMessage(request.system_prompt)] + request.messages
         else:
@@ -112,7 +111,7 @@ def create_agent(
                 parallel_tool_calls=False,
             )
             output = model_.invoke(messages)
-            if state.response is not None:
+            if state.get("response") is not None:
                 return {"messages": output, "response": None}
             else:
                 return {"messages": output}
@@ -125,7 +124,7 @@ def create_agent(
             graph.add_node(
                 f"{m.__class__.__name__}.before_model",
                 m.before_model,
-                input_schema=m.State,
+                input_schema=m.state_schema,
             )
         if m.__class__.modify_model_request is not AgentMiddleware.modify_model_request:
 
@@ -137,27 +136,27 @@ def create_agent(
                     tools=default_tools,
                     system_prompt=system_prompt,
                     response_format=response_format,
-                    messages=state.messages,
+                    messages=state["messages"],
                     tool_choice=None,
                 )
 
                 return {
                     "model_request": m.modify_model_request(
-                        state.model_request or default_model_request, state
+                        state.get("model_request") or default_model_request, state
                     )
                 }
 
             graph.add_node(
                 f"{m.__class__.__name__}.modify_model_request",
                 modify_model_request_node,
-                input_schema=m.State,
+                input_schema=m.state_schema,
             )
 
         if m.__class__.after_model is not AgentMiddleware.after_model:
             graph.add_node(
                 f"{m.__class__.__name__}.after_model",
                 m.after_model,
-                input_schema=m.State,
+                input_schema=m.state_schema,
             )
 
     # add start edge
@@ -258,9 +257,9 @@ def _resolve_jump(jump_to: JumpTo | None, first_node: str) -> str | None:
 
 def _make_model_to_tools_edge(first_node: str) -> Callable[[AgentState], str | None]:
     def model_to_tools(state: AgentState) -> str | None:
-        if state.jump_to:
-            return _resolve_jump(state.jump_to, first_node)
-        message = state.messages[-1]
+        if jump_to := state.get("jump_to"):
+            return _resolve_jump(jump_to, first_node)
+        message = state["messages"][-1]
         if isinstance(message, AIMessage) and message.tool_calls:
             return "tools"
 
@@ -273,7 +272,7 @@ def _make_tools_to_model_edge(
     tool_node: ToolNode, next_node: str
 ) -> Callable[[AgentState], str | None]:
     def tools_to_model(state: AgentState) -> str | None:
-        ai_message = [m for m in state.messages if isinstance(m, AIMessage)][-1]
+        ai_message = [m for m in state["messages"] if isinstance(m, AIMessage)][-1]
         if all(
             tool_node.tools_by_name[c["name"]].return_direct
             for c in ai_message.tool_calls
@@ -302,7 +301,7 @@ def _add_middleware_edge(
 
         def jump_edge(state: AgentState) -> str:
             return (
-                _resolve_jump(state.jump_to, model_destination) or default_destination
+                _resolve_jump(state.get("jump_to"), model_destination) or default_destination
             )
 
         destinations = [default_destination, END, "tools"]

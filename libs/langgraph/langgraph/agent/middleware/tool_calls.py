@@ -14,14 +14,6 @@ class ToolCallLimitMiddleware(AgentMiddleware):
     class State(AgentMiddleware.State):
         important: Annotated[dict[str, int], Input, Output] = field(default_factory=dict)
 
-    @dataclass
-    class InputState(AgentMiddleware.State):
-        important: dict[str, int]
-
-    @dataclass
-    class OutputState(AgentMiddleware.State):
-        important: dict[str, int]
-
     def __init__(self, tool_limits: dict[str, int]):
         self.tool_limits = tool_limits
 
