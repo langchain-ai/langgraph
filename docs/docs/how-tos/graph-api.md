@@ -1422,8 +1422,8 @@ const builder = new StateGraph(State)
 :::
 
 ??? info "Why split application steps into a sequence with LangGraph?"
-LangGraph makes it easy to add an underlying persistence layer to your application.
-This allows state to be checkpointed in between the execution of nodes, so your LangGraph nodes govern:
+    LangGraph makes it easy to add an underlying persistence layer to your application.
+    This allows state to be checkpointed in between the execution of nodes, so your LangGraph nodes govern:
 
     - How state updates are [checkpointed](../concepts/persistence.md)
     - How interruptions are resumed in [human-in-the-loop](../concepts/human_in_the_loop.md) workflows
