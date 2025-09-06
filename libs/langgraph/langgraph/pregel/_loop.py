@@ -741,8 +741,7 @@ class PregelLoop:
                     CONFIG_KEY_CHECKPOINT_ID: self.checkpoint["id"],
                 },
             }
-        if not exiting:
-            # increment step
+        if not exiting:            # increment step
             self.step += 1
 
     def _suppress_interrupt(
@@ -751,6 +750,8 @@ class PregelLoop:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> bool | None:
+        # Import Interrupt class at the beginning to avoid scoping issues
+        from langgraph.types import Interrupt
         # persist current checkpoint and writes
         if self.durability == "exit" and (
             # if it's a top graph
@@ -786,20 +787,85 @@ class PregelLoop:
                     self._emit(
                         "values",
                         map_output_values,
-                        self.output_keys,
-                        [w for t in self.tasks.values() for w in t.writes],
+                        self.output_keys,                        [w for t in self.tasks.values() for w in t.writes],
                         self.channels,
                     )
-            # emit INTERRUPT if exception is empty (otherwise emitted by put_writes)
-            if exc_value is not None and (not exc_value.args or not exc_value.args[0]):
+            
+            # emit INTERRUPT based on interrupt type
+            # Static interrupts have args[0] == () (empty tuple)
+            if exc_value is not None and exc_value.args and exc_value.args[0] == ():
+                # For static interrupts without args, emit proper interrupt object
+                static_interrupt = Interrupt(value=None)
                 self._emit(
                     "updates",
-                    lambda: iter(
-                        [{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}]
-                    ),
+                    lambda: iter([{INTERRUPT: [static_interrupt]}])
                 )
+            # Dynamic interrupts have Interrupt objects in args[0]
+            elif exc_value is not None and exc_value.args and isinstance(exc_value.args[0], Interrupt):
+                # For dynamic interrupts, emit the actual interrupt object
+                self._emit(
+                    "updates",
+                    lambda: iter([{INTERRUPT: cast(GraphInterrupt, exc_value).args[0]}])
+                )
+                
             # save final output
             self.output = read_channels(self.channels, self.output_keys)
+            
+            # Add interrupt information to final output when no checkpointer is present
+            # This ensures __interrupt__ is included in invoke() results even without checkpointer
+            if isinstance(exc_value, GraphInterrupt):
+                # Handle dynamic interrupts (interrupt() function calls)
+                if self.checkpoint_pending_writes:
+                    interrupt_writes = [
+                        write[2] for write in self.checkpoint_pending_writes 
+                        if write[1] == INTERRUPT
+                    ]
+                    if interrupt_writes:
+                        if isinstance(self.output, dict):
+                            self.output = dict(self.output)
+                            self.output[INTERRUPT] = interrupt_writes
+                        else:
+                            # If output is not a dict, wrap it                            original_output = self.output
+                            self.output = {INTERRUPT: interrupt_writes}
+                            if isinstance(self.output_keys, str):
+                                self.output[self.output_keys] = original_output
+                            elif hasattr(self.output_keys, '__iter__'):
+                                for key in self.output_keys:
+                                    self.output[key] = original_output
+                
+                # Handle static interrupts (interrupt_before/interrupt_after) 
+                # Static interrupts have args[0] == () (empty tuple)
+                elif exc_value.args and exc_value.args[0] == ():
+                    # Static interrupt - create proper interrupt list
+                    # For static interrupts we need to create a non-empty list for invoke() to detect
+                    static_interrupt = Interrupt(value=None)
+                    if isinstance(self.output, dict):
+                        self.output = dict(self.output)
+                        self.output[INTERRUPT] = [static_interrupt]
+                    else:
+                        original_output = self.output
+                        self.output = {INTERRUPT: [static_interrupt]}
+                        if isinstance(self.output_keys, str):
+                            self.output[self.output_keys] = original_output
+                        elif hasattr(self.output_keys, '__iter__'):
+                            for key in self.output_keys:
+                                self.output[key] = original_output
+                
+                # Handle dynamic interrupts (interrupt() function calls)
+                elif exc_value.args and isinstance(exc_value.args[0], Interrupt):
+                    # Dynamic interrupt with args
+                    if isinstance(self.output, dict):
+                        self.output = dict(self.output)
+                        self.output[INTERRUPT] = list(exc_value.args)
+                    else:
+                        original_output = self.output
+                        self.output = {INTERRUPT: list(exc_value.args)}
+                        if isinstance(self.output_keys, str):
+                            self.output[self.output_keys] = original_output
+                        elif hasattr(self.output_keys, '__iter__'):
+                            for key in self.output_keys:
+                                self.output[key] = original_output
+            
             # suppress interrupt
             return True
         elif exc_type is None:
