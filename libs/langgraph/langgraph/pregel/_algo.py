@@ -56,7 +56,6 @@ from langgraph._internal._constants import (
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
-from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
