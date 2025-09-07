@@ -56,6 +56,7 @@ from langgraph._internal._constants import (
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -203,9 +204,21 @@ def local_read(
                 cc.update(updated[k])
             else:
                 cc = channels[k]
+                if isinstance(cc, EphemeralValue):
+                    cc = channels[k].copy()
+                    cc.update([])
             local_channels[k] = cc
         # read fresh values
         values = read_channels(local_channels, select)
+    elif fresh:
+        fresh_channels: dict[str, BaseChannel] = {}
+        for k, cc in channels.items():
+            if isinstance(cc, EphemeralValue):
+                cc = channels[k].copy()
+                cc.update([])
+            fresh_channels[k] = cc
+        # read fresh values
+        values = read_channels(fresh_channels, select)
     else:
         values = read_channels(channels, select)
     if managed_keys:
