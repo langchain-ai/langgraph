@@ -195,30 +195,15 @@ def local_read(
         for c, v in task.writes:
             if c in select:
                 updated[c].append(v)
-    if fresh and updated:
+    if fresh:
         # apply writes
         local_channels: dict[str, BaseChannel] = {}
         for k in channels:
-            if k in updated:
-                cc = channels[k].copy()
-                cc.update(updated[k])
-            else:
-                cc = channels[k]
-                if isinstance(cc, EphemeralValue):
-                    cc = channels[k].copy()
-                    cc.update([])
+            cc = channels[k].copy()
+            cc.update(updated[k])
             local_channels[k] = cc
         # read fresh values
         values = read_channels(local_channels, select)
-    elif fresh:
-        fresh_channels: dict[str, BaseChannel] = {}
-        for k, cc in channels.items():
-            if isinstance(cc, EphemeralValue):
-                cc = channels[k].copy()
-                cc.update([])
-            fresh_channels[k] = cc
-        # read fresh values
-        values = read_channels(fresh_channels, select)
     else:
         values = read_channels(channels, select)
     if managed_keys:
