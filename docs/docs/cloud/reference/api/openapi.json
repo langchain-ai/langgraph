@@ -30,6 +30,10 @@
       "description": "Store is an API for managing persistent key-value store (long-term memory) that is available from any thread."
     },
     {
+      "name": "A2A",
+      "description": "Agent-to-Agent Protocol related endpoints for exposing assistants as A2A-compliant agents."
+    },
+    {
       "name": "MCP",
       "description": "Model Context Protocol related endpoints for exposing an agent as an MCP server."
     },
@@ -1493,6 +1497,96 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Thread"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/threads/{thread_id}/stream": {
+      "get": {
+        "tags": [
+          "Threads"
+        ],
+        "summary": "Join Thread Stream",
+        "description": "This endpoint streams output in real-time from a thread. The stream will include the output of each run executed sequentially on the thread and will remain open indefinitely. It is the responsibility of the calling client to close the connection.",
+        "operationId": "join_thread_stream_threads__thread_id__stream_get",
+        "parameters": [
+          {
+            "description": "The ID of the thread.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id",
+              "description": "The ID of the thread."
+            },
+            "name": "thread_id",
+            "in": "path"
+          },
+          {
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Last Event ID",
+              "description": "The ID of the last event received. Used to resume streaming from a specific point. Pass '-' to resume from the beginning."
+            },
+            "name": "Last-Event-ID",
+            "in": "header"
+          },
+          {
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["lifecycle", "run_modes", "state_update"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": ["lifecycle", "run_modes", "state_update"]
+                  }
+                }
+              ],
+              "default": ["run_modes"],
+              "title": "Stream Modes",
+              "description": "Stream modes to control which events are returned. 'lifecycle' returns only run start/end events, 'run_modes' returns all run events (default behavior), 'state_update' returns only state update events."
+            },
+            "name": "stream_modes",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "The server will send a stream of events in SSE format.\n\n**Example event**:\n\nid: 1\n\nevent: message\n\ndata: {}"
                 }
               }
             }
@@ -3092,6 +3186,195 @@
         }
       }
     },
+    "/a2a/{assistant_id}": {
+      "post": {
+        "operationId": "post_a2a",
+        "summary": "A2A Post",
+        "description": "Communicate with an assistant using the Agent-to-Agent Protocol.\nSends a JSON-RPC 2.0 message to the assistant.\n\n- **Request**: Provide an object with `jsonrpc`, `id`, `method`, and optional `params`.\n- **Response**: Returns a JSON-RPC response with task information or error.\n\n**Supported Methods:**\n- `message/send`: Send a message to the assistant\n- `tasks/get`: Get the status and result of a task\n\n**Notes:**\n- Supports threaded conversations via thread context\n- Messages can contain text and data parts\n- Tasks run asynchronously and return completion status\n",
+        "parameters": [
+          {
+            "name": "assistant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The ID of the assistant to communicate with"
+          },
+          {
+            "name": "Accept",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["application/json"]
+            },
+            "description": "Must be application/json"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "jsonrpc": {
+                    "type": "string",
+                    "enum": ["2.0"],
+                    "description": "JSON-RPC version"
+                  },
+                  "id": {
+                    "type": "string",
+                    "description": "Request identifier"
+                  },
+                  "method": {
+                    "type": "string",
+                    "enum": ["message/send", "tasks/get"],
+                    "description": "The method to invoke"
+                  },
+                  "params": {
+                    "type": "object",
+                    "description": "Method parameters",
+                    "oneOf": [
+                      {
+                        "title": "Message Send Parameters",
+                        "properties": {
+                          "message": {
+                            "type": "object",
+                            "properties": {
+                              "role": {
+                                "type": "string",
+                                "enum": ["user", "assistant"],
+                                "description": "Message role"
+                              },
+                              "parts": {
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "title": "Text Part",
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["text"]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": ["kind", "text"]
+                                    },
+                                    {
+                                      "title": "Data Part", 
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": ["data"]
+                                        },
+                                        "data": {
+                                          "type": "object"
+                                        }
+                                      },
+                                      "required": ["kind", "data"]
+                                    }
+                                  ]
+                                },
+                                "description": "Message parts"
+                              },
+                              "messageId": {
+                                "type": "string",
+                                "description": "Unique message identifier"
+                              }
+                            },
+                            "required": ["role", "parts", "messageId"]
+                          },
+                          "thread": {
+                            "type": "object",
+                            "properties": {
+                              "threadId": {
+                                "type": "string",
+                                "description": "Thread identifier for conversation context"
+                              }
+                            },
+                            "description": "Optional thread context"
+                          }
+                        },
+                        "required": ["message"]
+                      },
+                      {
+                        "title": "Task Get Parameters",
+                        "properties": {
+                          "taskId": {
+                            "type": "string",
+                            "description": "Task identifier to retrieve"
+                          }
+                        },
+                        "required": ["taskId"]
+                      }
+                    ]
+                  }
+                },
+                "required": ["jsonrpc", "id", "method"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JSON-RPC response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jsonrpc": {
+                      "type": "string",
+                      "enum": ["2.0"]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "object",
+                      "description": "Success result containing task information or task details"
+                    },
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "integer"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "description": "Error information if request failed"
+                    }
+                  },
+                  "required": ["jsonrpc", "id"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - invalid JSON-RPC or missing Accept header"
+          },
+          "404": {
+            "description": "Assistant not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "tags": [
+          "A2A"
+        ]
+      }
+    },
     "/mcp/": {
       "post": {
         "operationId": "post_mcp",
@@ -4346,6 +4629,17 @@
             "title": "Checkpoint During",
             "description": "Whether to checkpoint during the run.",
             "default": false
+          },
+          "durability": {
+            "type": "string",
+            "enum": [
+              "sync",
+              "async",
+              "exit"
+            ],
+            "title": "Durability",
+            "description": "Durability level for the run. Must be one of 'sync', 'async', or 'exit'.",
+            "default": "async"
           }
         },
         "type": "object",
@@ -4582,6 +4876,17 @@
             "title": "Checkpoint During",
             "description": "Whether to checkpoint during the run.",
             "default": false
+          },
+          "durability": {
+            "type": "string",
+            "enum": [
+              "sync",
+              "async",
+              "exit"
+            ],
+            "title": "Durability",
+            "description": "Durability level for the run. Must be one of 'sync', 'async', or 'exit'.",
+            "default": "async"
           }
         },
         "type": "object",
@@ -4710,6 +5015,12 @@
       },
       "ThreadSearchRequest": {
         "properties": {
+          "ids": {
+            "type": "array",
+            "items": {"type": "string", "format": "uuid"},
+            "title": "Ids",
+            "description": "List of thread IDs to include. Others are excluded."
+          },
           "metadata": {
             "type": "object",
             "title": "Metadata",
@@ -4950,11 +5261,30 @@
             "type": "object",
             "title": "Metadata",
             "description": "Metadata to merge with existing thread metadata."
+          },
+          "ttl": {
+            "type": "object",
+            "title": "TTL",
+            "description": "The time-to-live for the thread.",
+            "properties": {
+              "strategy": {
+                "type": "string",
+                "enum": [
+                  "delete"
+                ],
+                "description": "The TTL strategy. 'delete' removes the entire thread.",
+                "default": "delete"
+              },
+              "ttl": {
+                "type": "number",
+                "description": "The time-to-live in minutes from now until thread should be swept."
+              }
+            }
           }
         },
         "type": "object",
         "title": "ThreadPatch",
-        "description": "Payload for creating a thread."
+        "description": "Payload for updating a thread."
       },
       "ThreadStateCheckpointRequest": {
         "properties": {

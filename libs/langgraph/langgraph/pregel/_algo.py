@@ -194,15 +194,12 @@ def local_read(
         for c, v in task.writes:
             if c in select:
                 updated[c].append(v)
-    if fresh and updated:
+    if fresh:
         # apply writes
         local_channels: dict[str, BaseChannel] = {}
         for k in channels:
-            if k in updated:
-                cc = channels[k].copy()
-                cc.update(updated[k])
-            else:
-                cc = channels[k]
+            cc = channels[k].copy()
+            cc.update(updated[k])
             local_channels[k] = cc
         # read fresh values
         values = read_channels(local_channels, select)
