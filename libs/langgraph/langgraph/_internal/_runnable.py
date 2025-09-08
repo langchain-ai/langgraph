@@ -336,8 +336,7 @@ class RunnableCallable(Runnable):
                 "\nEither initialize with a synchronous function or invoke"
                 " via the async API (ainvoke, astream, etc.)"
             )
-        if config is None:
-            config = ensure_config()
+        config = ensure_config(config)
         if self.explode_args:
             args, _kwargs = input
             kwargs = {**self.kwargs, **_kwargs, **kwargs}
@@ -408,8 +407,7 @@ class RunnableCallable(Runnable):
     ) -> Any:
         if not self.afunc:
             return self.invoke(input, config)
-        if config is None:
-            config = ensure_config()
+        config = ensure_config(config)
         if self.explode_args:
             args, _kwargs = input
             kwargs = {**self.kwargs, **_kwargs, **kwargs}
