@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import random
 import asyncio
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Optional, Callable, Awaitable
 
 from langchain_core.runnables import RunnableConfig
-from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
+from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities, OperationalError, InterfaceError
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
@@ -39,6 +40,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
         conn: _ainternal.Conn,
         pipe: AsyncPipeline | None = None,
         serde: SerializerProtocol | None = None,
+        *,
+        retry_max_attempts: int = 5,
+        retry_initial_backoff: float = 0.25,   # seconds
+        retry_max_backoff: float = 3.0,    
+        reconnect_cb: Optional[Callable[[], Awaitable[AsyncConnection]]] = None,
     ) -> None:
         super().__init__(serde=serde)
         if isinstance(conn, AsyncConnectionPool) and pipe is not None:
@@ -52,6 +58,14 @@ class AsyncPostgresSaver(BasePostgresSaver):
         self.loop = asyncio.get_running_loop()
         self.supports_pipeline = Capabilities().has_pipeline()
 
+        # Retry config
+        self.retry_max_attempts = retry_max_attempts
+        self.retry_initial_backoff = retry_initial_backoff
+        self.retry_max_backoff = retry_max_backoff
+
+        # Reconnect factory for single-connection mode
+        self._reconnect_cb = reconnect_cb
+
     @classmethod
     @asynccontextmanager
     async def from_conn_string(
@@ -59,25 +73,111 @@ class AsyncPostgresSaver(BasePostgresSaver):
         conn_string: str,
         *,
         pipeline: bool = False,
-        serde: SerializerProtocol | None = None,
-    ) -> AsyncIterator[AsyncPostgresSaver]:
+        serde: Optional[SerializerProtocol] = None,
+        retry_max_attempts: int = 5,
+        retry_initial_backoff: float = 0.25,
+        retry_max_backoff: float = 3.0,
+    ) -> AsyncIterator["AsyncPostgresSaver"]:
         """Create a new AsyncPostgresSaver instance from a connection string.
 
         Args:
-            conn_string: The Postgres connection info string.
-            pipeline: whether to use AsyncPipeline
-
-        Returns:
-            AsyncPostgresSaver: A new AsyncPostgresSaver instance.
+            conn_string (str): The Postgres connection info string.
+            pipeline (bool): whether to use AsyncPipeline
         """
-        async with await AsyncConnection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
-        ) as conn:
+        async def _mkconn() -> AsyncConnection:
+            return await AsyncConnection.connect(
+                conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            )
+
+        async with await _mkconn() as conn:
             if pipeline:
                 async with conn.pipeline() as pipe:
-                    yield cls(conn=conn, pipe=pipe, serde=serde)
+                    yield cls(
+                        conn=conn,
+                        pipe=pipe,
+                        serde=serde,
+                        retry_max_attempts=retry_max_attempts,
+                        retry_initial_backoff=retry_initial_backoff,
+                        retry_max_backoff=retry_max_backoff,
+                        reconnect_cb=_mkconn,
+                    )
             else:
-                yield cls(conn=conn, serde=serde)
+                yield cls(
+                    conn=conn,
+                    serde=serde,
+                    retry_max_attempts=retry_max_attempts,
+                    retry_initial_backoff=retry_initial_backoff,
+                    retry_max_backoff=retry_max_backoff,
+                    reconnect_cb=_mkconn,
+                )
+
+    async def _ensure_connection_open(self) -> None:
+        """If we are in single-connection mode and it's closed, recreate it."""
+        if isinstance(self.conn, AsyncConnection):
+            closed = bool(getattr(self.conn, "closed", False))
+            if closed:
+                if not self._reconnect_cb:
+                    raise OperationalError("connection is closed and no reconnect callback provided")
+                # Replace the dead connection; pipeline context becomes invalid
+                self.conn = await self._reconnect_cb()
+                self.pipe = None  # switch to per-op pipeline/transaction
+
+    async def _reconnect_if_single_conn(self) -> None:
+        """Force reconnection for single AsyncConnection setups."""
+        if isinstance(self.conn, AsyncConnection) and self._reconnect_cb:
+            try:
+                self.conn = await self._reconnect_cb()
+            finally:
+                # Any previous long-lived pipeline is no longer valid
+                self.pipe = None
+
+    def _is_retryable_error(self, exc: BaseException) -> bool:
+        # Never retry cancellations
+        if isinstance(exc, asyncio.CancelledError):
+            return False
+
+        # psycopg3 transient client-side failures
+        if isinstance(exc, (OperationalError, InterfaceError, TimeoutError, ConnectionResetError)):
+            msg = str(exc).lower()
+            retry_signals = (
+                "ssl connection has been closed unexpectedly",
+                "could not receive data from server",
+                "server closed the connection unexpectedly",
+                "terminating connection due to administrator command",
+                "connection not open",
+                "connection already closed",
+                "the connection is closed",              
+                "eof detected",
+                "timeout expired",
+                "connection reset by peer",
+                "software caused connection abort",      # Windows WSAECONNABORTED (10053)
+            )
+            return any(s in msg for s in retry_signals)
+        return False
+
+    async def _with_retry(self, op, *, pipeline: bool = False):
+
+        delay = self.retry_initial_backoff
+        attempts = self.retry_max_attempts
+        last_exc: Optional[BaseException] = None
+
+        for i in range(attempts):
+            try:
+                await self._ensure_connection_open()
+                async with self._cursor(pipeline=pipeline) as cur:
+                    return await op(cur)
+            except BaseException as e:
+                last_exc = e
+                if not self._is_retryable_error(e) or i == attempts - 1:
+                    raise
+                # If the failure was due to a dead single connection, replace it now
+                await self._reconnect_if_single_conn()
+                # Exponential backoff with a bit of jitter
+                await asyncio.sleep(delay + random.random() * min(0.25, delay))
+                delay = min(delay * 2, self.retry_max_backoff)
+
+        if last_exc:
+            raise last_exc
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -86,22 +186,21 @@ class AsyncPostgresSaver(BasePostgresSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        async with self._cursor() as cur:
+        async def _do(cur: AsyncCursor[DictRow]):
             await cur.execute(self.MIGRATIONS[0])
             results = await cur.execute(
                 "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
             )
             row = await results.fetchone()
-            if row is None:
-                version = -1
-            else:
-                version = row["v"]
+            version = -1 if row is None else row["v"]
             for v, migration in zip(
                 range(version + 1, len(self.MIGRATIONS)),
                 self.MIGRATIONS[version + 1 :],
             ):
                 await cur.execute(migration)
                 await cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+
+        await self._with_retry(_do, pipeline=False)
         if self.pipe:
             await self.pipe.sync()
 
@@ -132,17 +231,19 @@ class AsyncPostgresSaver(BasePostgresSaver):
         if limit:
             query += f" LIMIT {limit}"
         # if we change this to use .stream() we need to make sure to close the cursor
-        async with self._cursor() as cur:
+        async def _do(cur):
             await cur.execute(query, args, binary=True)
             values = await cur.fetchall()
             if not values:
-                return
+                return []
+
             # migrate pending sends if necessary
-            if to_migrate := [
+            to_migrate = [
                 v
                 for v in values
                 if v["checkpoint"]["v"] < 4 and v["parent_checkpoint_id"]
-            ]:
+            ]
+            if to_migrate:
                 await cur.execute(
                     self.SELECT_PENDING_SENDS_SQL,
                     (
@@ -153,6 +254,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 grouped_by_parent = defaultdict(list)
                 for value in to_migrate:
                     grouped_by_parent[value["parent_checkpoint_id"]].append(value)
+
                 async for sends in cur:
                     for value in grouped_by_parent[sends["checkpoint_id"]]:
                         if value["channel_values"] is None:
@@ -162,8 +264,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
                             value["checkpoint"],
                             value["channel_values"],
                         )
-            for value in values:
-                yield await self._load_checkpoint_tuple(value)
+            return values
+
+        values = await self._with_retry(_do, pipeline=False)
+        for value in values:
+            yield await self._load_checkpoint_tuple(value)
 
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database asynchronously.
@@ -189,23 +294,20 @@ class AsyncPostgresSaver(BasePostgresSaver):
             args = (thread_id, checkpoint_ns)
             where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
 
-        async with self._cursor() as cur:
-            await cur.execute(
-                self.SELECT_SQL + where,
-                args,
-                binary=True,
-            )
+        async def _do(cur: AsyncCursor[DictRow]):
+            await cur.execute(self.SELECT_SQL + where, args, binary=True)
             value = await cur.fetchone()
             if value is None:
                 return None
 
-            # migrate pending sends if necessary
+            # migrate pending sends if necessary 
             if value["checkpoint"]["v"] < 4 and value["parent_checkpoint_id"]:
                 await cur.execute(
                     self.SELECT_PENDING_SENDS_SQL,
                     (thread_id, [value["parent_checkpoint_id"]]),
                 )
-                if sends := await cur.fetchone():
+                sends = await cur.fetchone()
+                if sends:
                     if value["channel_values"] is None:
                         value["channel_values"] = []
                     self._migrate_pending_sends(
@@ -213,8 +315,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
                         value["checkpoint"],
                         value["channel_values"],
                     )
+            return value
 
-            return await self._load_checkpoint_tuple(value)
+        value = await self._with_retry(_do, pipeline=False)
+        if value is None:
+            return None
+        return await self._load_checkpoint_tuple(value)
 
     async def aput(
         self,
@@ -253,39 +359,41 @@ class AsyncPostgresSaver(BasePostgresSaver):
         }
 
         # inline primitive values in checkpoint table
-        # others are stored in blobs table
-        blob_values = {}
+        # blobs stored separately 
+        blob_values: dict[str, Any] = {}
         for k, v in checkpoint["channel_values"].items():
             if v is None or isinstance(v, (str, int, float, bool)):
                 pass
             else:
                 blob_values[k] = copy["channel_values"].pop(k)
 
-        async with self._cursor(pipeline=True) as cur:
-            if blob_versions := {
-                k: v for k, v in new_versions.items() if k in blob_values
-            }:
-                await cur.executemany(
-                    self.UPSERT_CHECKPOINT_BLOBS_SQL,
-                    await asyncio.to_thread(
-                        self._dump_blobs,
-                        thread_id,
-                        checkpoint_ns,
-                        blob_values,
-                        blob_versions,
-                    ),
-                )
-            await cur.execute(
-                self.UPSERT_CHECKPOINTS_SQL,
-                (
-                    thread_id,
-                    checkpoint_ns,
-                    checkpoint["id"],
-                    checkpoint_id,
-                    Jsonb(copy),
-                    Jsonb(get_checkpoint_metadata(config, metadata)),
-                ),
+        blob_versions = {k: v for k, v in new_versions.items() if k in blob_values}
+        if blob_versions:
+            params_blobs = await asyncio.to_thread(
+                self._dump_blobs,
+                thread_id,
+                checkpoint_ns,
+                blob_values,
+                blob_versions,
             )
+        else:
+            params_blobs = None
+
+        payload_checkpoint = (
+            thread_id,
+            checkpoint_ns,
+            checkpoint["id"],
+            checkpoint_id,
+            Jsonb(copy),
+            Jsonb(get_checkpoint_metadata(config, metadata)),
+        )
+
+        async def _do(cur: AsyncCursor[DictRow]):
+            if params_blobs:
+                await cur.executemany(self.UPSERT_CHECKPOINT_BLOBS_SQL, params_blobs)
+            await cur.execute(self.UPSERT_CHECKPOINTS_SQL, payload_checkpoint)
+
+        await self._with_retry(_do, pipeline=True)
         return next_config
 
     async def aput_writes(
@@ -318,8 +426,10 @@ class AsyncPostgresSaver(BasePostgresSaver):
             task_path,
             writes,
         )
-        async with self._cursor(pipeline=True) as cur:
+        async def _do(cur: AsyncCursor[DictRow]):
             await cur.executemany(query, params)
+
+        await self._with_retry(_do, pipeline=True)
 
     async def adelete_thread(self, thread_id: str) -> None:
         """Delete all checkpoints and writes associated with a thread ID.
@@ -330,7 +440,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Returns:
             None
         """
-        async with self._cursor(pipeline=True) as cur:
+        async def _do(cur: AsyncCursor[DictRow]):
             await cur.execute(
                 "DELETE FROM checkpoints WHERE thread_id = %s",
                 (str(thread_id),),
@@ -343,6 +453,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 "DELETE FROM checkpoint_writes WHERE thread_id = %s",
                 (str(thread_id),),
             )
+        await self._with_retry(_do, pipeline=True)
 
     @asynccontextmanager
     async def _cursor(
@@ -355,6 +466,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 Will be applied regardless of whether the AsyncPostgresSaver instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
+        
         async with self.lock, _ainternal.get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
