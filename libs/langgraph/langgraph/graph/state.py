@@ -25,7 +25,7 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel, TypeAdapter
-from typing_extensions import Self, Unpack, is_typeddict
+from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
 from langgraph._internal._constants import (
     INTERRUPT,
@@ -1334,6 +1334,12 @@ def _get_channel(
 def _get_channel(
     name: str, annotation: Any, *, allow_managed: bool = True
 ) -> BaseChannel | ManagedValueSpec:
+    # Strip out Required and NotRequired wrappers
+    if hasattr(annotation, "__origin__") and annotation.__origin__ in (
+        Required,
+        NotRequired,
+    ):
+        annotation = annotation.__args__[0]
     if manager := _is_field_managed_value(name, annotation):
         if allow_managed:
             return manager

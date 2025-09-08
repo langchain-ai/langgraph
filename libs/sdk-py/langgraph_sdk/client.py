@@ -157,27 +157,38 @@ def get_client(
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
 ) -> LangGraphClient:
-    """Get a LangGraphClient instance.
+    """Create and configure a LangGraphClient.
+
+    The client provides programmatic access to a LangGraph Platform deployment. It supports
+    both remote servers and local in-process connections (when running inside a LangGraph server).
 
     Args:
-        url: The URL of the LangGraph API.
-        api_key: The API key. If not provided, it will be read from the environment.
-            Precedence:
-                1. explicit argument
-                2. LANGGRAPH_API_KEY
-                3. LANGSMITH_API_KEY
-                4. LANGCHAIN_API_KEY
-        headers: Optional custom headers
-        timeout: Optional timeout configuration for the HTTP client.
-            Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts.
-            Tuple format is (connect, read, write, pool)
-            If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
+        url:
+            Base URL of the LangGraph API.
+            – If `None`, the client first attempts an in-process connection via ASGI transport.
+              If that fails, it falls back to `http://localhost:8123`.
+        api_key:
+            API key for authentication. If omitted, the client reads from environment
+            variables in the following order:
+              1. Function argument
+              2. `LANGGRAPH_API_KEY`
+              3. `LANGSMITH_API_KEY`
+              4. `LANGCHAIN_API_KEY`
+        headers:
+            Additional HTTP headers to include in requests. Merged with authentication headers.
+        timeout:
+            HTTP timeout configuration. May be:
+              – `httpx.Timeout` instance
+              – float (total seconds)
+              – tuple `(connect, read, write, pool)` in seconds
+            Defaults: connect=5, read=300, write=300, pool=5.
 
     Returns:
-        LangGraphClient: The top-level client for accessing AssistantsClient,
-        ThreadsClient, RunsClient, and CronClient.
+        LangGraphClient:
+            A top-level client exposing sub-clients for assistants, threads,
+            runs, and cron operations.
 
-    ???+ example "Example"
+    ???+ example "Connect to a remote server:"
 
         ```python
         from langgraph_sdk import get_client
@@ -187,6 +198,21 @@ def get_client(
 
         # example usage: client.<model>.<method_name>()
         assistants = await client.assistants.get(assistant_id="some_uuid")
+        ```
+
+    ???+ example "Connect in-process to a running LangGraph server:"
+
+        ```python
+        from langgraph_sdk import get_client
+
+        client = get_client(url=None)
+
+        async def my_node(...):
+            subagent_result = await client.runs.wait(
+                thread_id=None,
+                assistant_id="agent",
+                input={"messages": [{"role": "user", "content": "Foo"}]},
+            )
         ```
     """
 
@@ -1179,6 +1205,7 @@ class ThreadsClient:
         if_exists: OnConflictBehavior | None = None,
         supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
         graph_id: str | None = None,
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -1193,6 +1220,9 @@ class ThreadsClient:
             supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
                 Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
             graph_id: Optional graph ID to associate with the thread.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -1234,6 +1264,11 @@ class ThreadsClient:
                 }
                 for s in supersteps
             ]
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
 
         return await self.http.post(
             "/threads", json=payload, headers=headers, params=params
@@ -1244,6 +1279,7 @@ class ThreadsClient:
         thread_id: str,
         *,
         metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -1252,6 +1288,9 @@ class ThreadsClient:
         Args:
             thread_id: ID of thread to update.
             metadata: Metadata to merge with existing thread metadata.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -1265,12 +1304,19 @@ class ThreadsClient:
             thread = await client.threads.update(
                 thread_id="my-thread-id",
                 metadata={"number":1},
+                ttl=43_200,
             )
             ```
         """  # noqa: E501
+        payload: dict[str, Any] = {"metadata": metadata}
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
         return await self.http.patch(
             f"/threads/{thread_id}",
-            json={"metadata": metadata},
+            json=payload,
             headers=headers,
             params=params,
         )
@@ -1309,6 +1355,7 @@ class ThreadsClient:
         *,
         metadata: Json = None,
         values: Json = None,
+        ids: Sequence[str] | None = None,
         status: ThreadStatus | None = None,
         limit: int = 10,
         offset: int = 0,
@@ -1323,6 +1370,7 @@ class ThreadsClient:
         Args:
             metadata: Thread metadata to filter on.
             values: State values to filter on.
+            ids: List of thread IDs to filter by.
             status: Thread status to filter on.
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
@@ -1356,6 +1404,8 @@ class ThreadsClient:
             payload["metadata"] = metadata
         if values:
             payload["values"] = values
+        if ids:
+            payload["ids"] = ids
         if status:
             payload["status"] = status
         if sort_by:
@@ -4328,6 +4378,7 @@ class SyncThreadsClient:
         if_exists: OnConflictBehavior | None = None,
         supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
         graph_id: str | None = None,
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -4342,6 +4393,9 @@ class SyncThreadsClient:
             supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
                 Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
             graph_id: Optional graph ID to associate with the thread.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
 
         Returns:
@@ -4383,6 +4437,11 @@ class SyncThreadsClient:
                 }
                 for s in supersteps
             ]
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
 
         return self.http.post("/threads", json=payload, headers=headers, params=params)
 
@@ -4391,6 +4450,7 @@ class SyncThreadsClient:
         thread_id: str,
         *,
         metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -4399,7 +4459,11 @@ class SyncThreadsClient:
         Args:
             thread_id: ID of thread to update.
             metadata: Metadata to merge with existing thread metadata.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Thread: The created thread.
@@ -4411,12 +4475,19 @@ class SyncThreadsClient:
             thread = client.threads.update(
                 thread_id="my-thread-id",
                 metadata={"number":1},
+                ttl=43_200,
             )
             ```
         """  # noqa: E501
+        payload: dict[str, Any] = {"metadata": metadata}
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
         return self.http.patch(
             f"/threads/{thread_id}",
-            json={"metadata": metadata},
+            json=payload,
             headers=headers,
             params=params,
         )
@@ -4454,6 +4525,7 @@ class SyncThreadsClient:
         *,
         metadata: Json = None,
         values: Json = None,
+        ids: Sequence[str] | None = None,
         status: ThreadStatus | None = None,
         limit: int = 10,
         offset: int = 0,
@@ -4468,6 +4540,7 @@ class SyncThreadsClient:
         Args:
             metadata: Thread metadata to filter on.
             values: State values to filter on.
+            ids: List of thread IDs to filter by.
             status: Thread status to filter on.
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
@@ -4497,6 +4570,8 @@ class SyncThreadsClient:
             payload["metadata"] = metadata
         if values:
             payload["values"] = values
+        if ids:
+            payload["ids"] = ids
         if status:
             payload["status"] = status
         if sort_by:
