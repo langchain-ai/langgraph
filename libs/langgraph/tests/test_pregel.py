@@ -8368,7 +8368,7 @@ def test_null_resume_disallowed_with_multiple_interrupts(
     )
 
     resume_map = {
-        i.id: f"human input for prompt {i.value}"
+        i.id: f"resume for prompt: {i.value['text_to_revise']}"
         for i in graph.get_state(config).interrupts
     }
     with pytest.raises(
@@ -8378,6 +8378,6 @@ def test_null_resume_disallowed_with_multiple_interrupts(
         graph.invoke(Command(resume="singular resume"), config=config)
 
     assert graph.invoke(Command(resume=resume_map), config=config) == {
-        "text_1": "edited text for original text 1",
-        "text_2": "edited text for original text 2",
+        "text_1": "resume for prompt: original text 1",
+        "text_2": "resume for prompt: original text 2",
     }

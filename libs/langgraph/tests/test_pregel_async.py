@@ -9117,11 +9117,11 @@ async def test_null_resume_disallowed_with_multiple_interrupts(
         text_2: str
 
     async def human_node_1(state: State):
-        value = interrupt({"text_to_revise": state["text_1"]})
+        value = interrupt(state["text_1"])
         return {"text_1": value}
 
     async def human_node_2(state: State):
-        value = interrupt({"text_to_revise": state["text_2"]})
+        value = interrupt(state["text_2"])
         return {"text_2": value}
 
     graph_builder = StateGraph(State)
@@ -9142,7 +9142,7 @@ async def test_null_resume_disallowed_with_multiple_interrupts(
     )
 
     resume_map = {
-        i.id: f"human input for prompt {i.value}"
+        i.id: f"resume for prompt: {i.value}"
         for i in (await graph.aget_state(config)).interrupts
     }
     with pytest.raises(
@@ -9152,6 +9152,6 @@ async def test_null_resume_disallowed_with_multiple_interrupts(
         await graph.ainvoke(Command(resume="singular resume"), config=config)
 
     assert await graph.ainvoke(Command(resume=resume_map), config=config) == {
-        "text_1": "edited text for original text 1",
-        "text_2": "edited text for original text 2",
+        "text_1": "resume for prompt: original text 1",
+        "text_2": "resume for prompt: original text 2",
     }
