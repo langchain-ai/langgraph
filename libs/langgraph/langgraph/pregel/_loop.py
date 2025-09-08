@@ -590,16 +590,33 @@ class PregelLoop:
 
         # map command to writes
         if isinstance(self.input, Command):
-            if resume_is_map := (
-                (resume := self.input.resume) is not None
-                and isinstance(resume, dict)
-                and all(is_xxh3_128_hexdigest(k) for k in resume)
-            ):
-                self.config[CONF][CONFIG_KEY_RESUME_MAP] = self.input.resume
-            if resume is not None and not self.checkpointer:
-                raise RuntimeError(
-                    "Cannot use Command(resume=...) without checkpointer"
-                )
+            if (resume := self.input.resume) is not None:
+                if not self.checkpointer:
+                    raise RuntimeError(
+                        "Cannot use Command(resume=...) without checkpointer"
+                    )
+
+                if resume_is_map := (
+                    isinstance(resume, dict)
+                    and all(is_xxh3_128_hexdigest(k) for k in resume)
+                ):
+                    self.config[CONF][CONFIG_KEY_RESUME_MAP] = resume
+                else:
+                    # don't allow null resume with multiple pending interrupts
+                    pending_interrupt_ids = {
+                        w[0]
+                        for w in self.checkpoint_pending_writes
+                        if w[1] == INTERRUPT
+                    }
+                    pending_resume_ids = {
+                        w[0] for w in self.checkpoint_pending_writes if w[1] == RESUME
+                    }
+                    if len(pending_interrupt_ids - pending_resume_ids) > 1:
+                        raise RuntimeError(
+                            "Cannot use null resume when there are multiple pending interrupts. "
+                            "Please instead provide a mapping of interrupt ids to resume values."
+                        )
+
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
             for tid, c, v in map_command(cmd=self.input):
