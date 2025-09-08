@@ -8333,3 +8333,22 @@ def test_subgraph_streaming_sync() -> None:
 
     assert result["last_chunk"].content == "today."
     assert result["num_chunks"] == 9
+
+def test_state_graph_special_chars(snapshot: SnapshotAssertion) -> None:
+    def node_1(state):
+        return {"a": 1}
+
+    def node_2(state):
+        return {"b": 2}
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("start", node_1)
+    builder.add_node("finish", node_2)
+
+    builder.set_entry_point("start")
+    builder.add_edge("start", "finish")
+    builder.set_finish_point("finish")
+
+    graph = builder.compile()
+
+    assert graph.get_graph().draw_mermaid() == snapshot
