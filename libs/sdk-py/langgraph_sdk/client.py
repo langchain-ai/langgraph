@@ -15,6 +15,7 @@ import logging
 import os
 import re
 import sys
+import warnings
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from types import TracebackType
 from typing import (
@@ -45,6 +46,7 @@ from langgraph_sdk.schema import (
     CronSelectField,
     CronSortBy,
     DisconnectMode,
+    Durability,
     GraphSchema,
     IfNotExists,
     Item,
@@ -69,6 +71,7 @@ from langgraph_sdk.schema import (
     ThreadSortBy,
     ThreadState,
     ThreadStatus,
+    ThreadStreamMode,
     ThreadUpdateStateResponse,
 )
 from langgraph_sdk.sse import SSEDecoder, aiter_lines_raw, iter_lines_raw
@@ -154,27 +157,38 @@ def get_client(
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
 ) -> LangGraphClient:
-    """Get a LangGraphClient instance.
+    """Create and configure a LangGraphClient.
+
+    The client provides programmatic access to a LangGraph Platform deployment. It supports
+    both remote servers and local in-process connections (when running inside a LangGraph server).
 
     Args:
-        url: The URL of the LangGraph API.
-        api_key: The API key. If not provided, it will be read from the environment.
-            Precedence:
-                1. explicit argument
-                2. LANGGRAPH_API_KEY
-                3. LANGSMITH_API_KEY
-                4. LANGCHAIN_API_KEY
-        headers: Optional custom headers
-        timeout: Optional timeout configuration for the HTTP client.
-            Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts.
-            Tuple format is (connect, read, write, pool)
-            If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
+        url:
+            Base URL of the LangGraph API.
+            – If `None`, the client first attempts an in-process connection via ASGI transport.
+              If that fails, it falls back to `http://localhost:8123`.
+        api_key:
+            API key for authentication. If omitted, the client reads from environment
+            variables in the following order:
+              1. Function argument
+              2. `LANGGRAPH_API_KEY`
+              3. `LANGSMITH_API_KEY`
+              4. `LANGCHAIN_API_KEY`
+        headers:
+            Additional HTTP headers to include in requests. Merged with authentication headers.
+        timeout:
+            HTTP timeout configuration. May be:
+              – `httpx.Timeout` instance
+              – float (total seconds)
+              – tuple `(connect, read, write, pool)` in seconds
+            Defaults: connect=5, read=300, write=300, pool=5.
 
     Returns:
-        LangGraphClient: The top-level client for accessing AssistantsClient,
-        ThreadsClient, RunsClient, and CronClient.
+        LangGraphClient:
+            A top-level client exposing sub-clients for assistants, threads,
+            runs, and cron operations.
 
-    ???+ example "Example"
+    ???+ example "Connect to a remote server:"
 
         ```python
         from langgraph_sdk import get_client
@@ -184,6 +198,21 @@ def get_client(
 
         # example usage: client.<model>.<method_name>()
         assistants = await client.assistants.get(assistant_id="some_uuid")
+        ```
+
+    ???+ example "Connect in-process to a running LangGraph server:"
+
+        ```python
+        from langgraph_sdk import get_client
+
+        client = get_client(url=None)
+
+        async def my_node(...):
+            subagent_result = await client.runs.wait(
+                thread_id=None,
+                assistant_id="agent",
+                input={"messages": [{"role": "user", "content": "Foo"}]},
+            )
         ```
     """
 
@@ -1176,6 +1205,7 @@ class ThreadsClient:
         if_exists: OnConflictBehavior | None = None,
         supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
         graph_id: str | None = None,
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -1190,6 +1220,9 @@ class ThreadsClient:
             supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
                 Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
             graph_id: Optional graph ID to associate with the thread.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -1231,6 +1264,11 @@ class ThreadsClient:
                 }
                 for s in supersteps
             ]
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
 
         return await self.http.post(
             "/threads", json=payload, headers=headers, params=params
@@ -1241,6 +1279,7 @@ class ThreadsClient:
         thread_id: str,
         *,
         metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -1249,6 +1288,9 @@ class ThreadsClient:
         Args:
             thread_id: ID of thread to update.
             metadata: Metadata to merge with existing thread metadata.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -1262,12 +1304,19 @@ class ThreadsClient:
             thread = await client.threads.update(
                 thread_id="my-thread-id",
                 metadata={"number":1},
+                ttl=43_200,
             )
             ```
         """  # noqa: E501
+        payload: dict[str, Any] = {"metadata": metadata}
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
         return await self.http.patch(
             f"/threads/{thread_id}",
-            json={"metadata": metadata},
+            json=payload,
             headers=headers,
             params=params,
         )
@@ -1306,6 +1355,7 @@ class ThreadsClient:
         *,
         metadata: Json = None,
         values: Json = None,
+        ids: Sequence[str] | None = None,
         status: ThreadStatus | None = None,
         limit: int = 10,
         offset: int = 0,
@@ -1320,6 +1370,7 @@ class ThreadsClient:
         Args:
             metadata: Thread metadata to filter on.
             values: State values to filter on.
+            ids: List of thread IDs to filter by.
             status: Thread status to filter on.
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
@@ -1353,6 +1404,8 @@ class ThreadsClient:
             payload["metadata"] = metadata
         if values:
             payload["values"] = values
+        if ids:
+            payload["ids"] = ids
         if status:
             payload["status"] = status
         if sort_by:
@@ -1682,6 +1735,53 @@ class ThreadsClient:
             params=params,
         )
 
+    async def join_stream(
+        self,
+        thread_id: str,
+        *,
+        last_event_id: str | None = None,
+        stream_mode: ThreadStreamMode | Sequence[ThreadStreamMode] = "run_modes",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> AsyncIterator[StreamPart]:
+        """Get a stream of events for a thread.
+
+        Args:
+            thread_id: The ID of the thread to get the stream for.
+            last_event_id: The ID of the last event to get.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            Iterator[StreamPart]: An iterator of stream parts.
+
+        ???+ example "Example Usage"
+
+            ```python
+
+            for chunk in client.threads.join_stream(
+                thread_id="my_thread_id",
+                last_event_id="my_event_id",
+            ):
+                print(chunk)
+            ```
+
+        """  # noqa: E501
+        query_params = {
+            "stream_mode": stream_mode,
+        }
+        if params:
+            query_params.update(params)
+        return self.http.stream(
+            f"/threads/{thread_id}/stream",
+            "GET",
+            headers={
+                **({"Last-Event-ID": last_event_id} if last_event_id else {}),
+                **(headers or {}),
+            },
+            params=query_params,
+        )
+
 
 class RunsClient:
     """Client for managing runs in LangGraph.
@@ -1772,7 +1872,7 @@ class RunsClient:
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         feedback_keys: Sequence[str] | None = None,
@@ -1785,6 +1885,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -1804,7 +1905,7 @@ class RunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             feedback_keys: Feedback keys to assign to run.
@@ -1822,6 +1923,10 @@ class RunsClient:
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
             on_run_created: Callback when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
             AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
@@ -1857,6 +1962,13 @@ class RunsClient:
             ```
 
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         payload = {
             "input": input,
             "command": (
@@ -1881,6 +1993,7 @@ class RunsClient:
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -1971,7 +2084,7 @@ class RunsClient:
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         webhook: str | None = None,
@@ -1982,6 +2095,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Run:
         """Create a background run.
 
@@ -2001,7 +2115,7 @@ class RunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -2015,6 +2129,10 @@ class RunsClient:
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
             Run: The created background run.
@@ -2090,6 +2208,12 @@ class RunsClient:
             }
             ```
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         payload = {
             "input": input,
             "command": (
@@ -2112,6 +2236,7 @@ class RunsClient:
             "if_not_exists": if_not_exists,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
 
@@ -2209,7 +2334,7 @@ class RunsClient:
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         webhook: str | None = None,
@@ -2222,6 +2347,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -2237,7 +2363,7 @@ class RunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -2253,6 +2379,10 @@ class RunsClient:
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -2306,6 +2436,12 @@ class RunsClient:
             ```
 
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         payload = {
             "input": input,
             "command": (
@@ -2326,6 +2462,7 @@ class RunsClient:
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
@@ -4241,6 +4378,7 @@ class SyncThreadsClient:
         if_exists: OnConflictBehavior | None = None,
         supersteps: Sequence[dict[str, Sequence[dict[str, Any]]]] | None = None,
         graph_id: str | None = None,
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -4255,6 +4393,9 @@ class SyncThreadsClient:
             supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
                 Each update has `values` or `command` and `as_node`. Used for copying a thread between deployments.
             graph_id: Optional graph ID to associate with the thread.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
 
         Returns:
@@ -4296,6 +4437,11 @@ class SyncThreadsClient:
                 }
                 for s in supersteps
             ]
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
 
         return self.http.post("/threads", json=payload, headers=headers, params=params)
 
@@ -4304,6 +4450,7 @@ class SyncThreadsClient:
         thread_id: str,
         *,
         metadata: Mapping[str, Any],
+        ttl: int | Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -4312,7 +4459,11 @@ class SyncThreadsClient:
         Args:
             thread_id: ID of thread to update.
             metadata: Metadata to merge with existing thread metadata.
+            ttl: Optional time-to-live in minutes for the thread. You can pass an
+                integer (minutes) or a mapping with keys `ttl` and optional
+                `strategy` (defaults to "delete").
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             Thread: The created thread.
@@ -4324,12 +4475,19 @@ class SyncThreadsClient:
             thread = client.threads.update(
                 thread_id="my-thread-id",
                 metadata={"number":1},
+                ttl=43_200,
             )
             ```
         """  # noqa: E501
+        payload: dict[str, Any] = {"metadata": metadata}
+        if ttl is not None:
+            if isinstance(ttl, (int, float)):
+                payload["ttl"] = {"ttl": ttl, "strategy": "delete"}
+            else:
+                payload["ttl"] = ttl
         return self.http.patch(
             f"/threads/{thread_id}",
-            json={"metadata": metadata},
+            json=payload,
             headers=headers,
             params=params,
         )
@@ -4367,6 +4525,7 @@ class SyncThreadsClient:
         *,
         metadata: Json = None,
         values: Json = None,
+        ids: Sequence[str] | None = None,
         status: ThreadStatus | None = None,
         limit: int = 10,
         offset: int = 0,
@@ -4381,6 +4540,7 @@ class SyncThreadsClient:
         Args:
             metadata: Thread metadata to filter on.
             values: State values to filter on.
+            ids: List of thread IDs to filter by.
             status: Thread status to filter on.
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
@@ -4410,6 +4570,8 @@ class SyncThreadsClient:
             payload["metadata"] = metadata
         if values:
             payload["values"] = values
+        if ids:
+            payload["ids"] = ids
         if status:
             payload["status"] = status
         if sort_by:
@@ -4733,6 +4895,54 @@ class SyncThreadsClient:
             params=params,
         )
 
+    def join_stream(
+        self,
+        thread_id: str,
+        *,
+        stream_mode: ThreadStreamMode | Sequence[ThreadStreamMode] = "run_modes",
+        last_event_id: str | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> Iterator[StreamPart]:
+        """Get a stream of events for a thread.
+
+        Args:
+            thread_id: The ID of the thread to get the stream for.
+            last_event_id: The ID of the last event to get.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            Iterator[StreamPart]: An iterator of stream parts.
+
+        ???+ example "Example Usage"
+
+            ```python
+
+            for chunk in client.threads.join_stream(
+                thread_id="my_thread_id",
+                last_event_id="my_event_id",
+                stream_mode="run_modes",
+            ):
+                print(chunk)
+            ```
+
+        """  # noqa: E501
+        query_params = {
+            "stream_mode": stream_mode,
+        }
+        if params:
+            query_params.update(params)
+        return self.http.stream(
+            f"/threads/{thread_id}/stream",
+            "GET",
+            headers={
+                **({"Last-Event-ID": last_event_id} if last_event_id else {}),
+                **(headers or {}),
+            },
+            params=query_params,
+        )
+
 
 class SyncRunsClient:
     """Synchronous client for managing runs in LangGraph.
@@ -4823,7 +5033,7 @@ class SyncRunsClient:
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         feedback_keys: Sequence[str] | None = None,
@@ -4836,6 +5046,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Iterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -4855,7 +5066,7 @@ class SyncRunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             feedback_keys: Feedback keys to assign to run.
@@ -4872,6 +5083,11 @@ class SyncRunsClient:
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
+
 
         Returns:
             Iterator[StreamPart]: Iterator of stream results.
@@ -4904,6 +5120,12 @@ class SyncRunsClient:
             StreamPart(event='end', data=None)
             ```
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         payload = {
             "input": input,
             "command": (
@@ -4928,6 +5150,7 @@ class SyncRunsClient:
             "on_disconnect": on_disconnect,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -5018,7 +5241,7 @@ class SyncRunsClient:
         context: Context | None = None,
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         webhook: str | None = None,
@@ -5029,6 +5252,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> Run:
         """Create a background run.
 
@@ -5048,7 +5272,7 @@ class SyncRunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -5062,6 +5286,10 @@ class SyncRunsClient:
                 Use to schedule future runs.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
             Run: The created background run.
@@ -5137,6 +5365,12 @@ class SyncRunsClient:
             }
             ```
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         payload = {
             "input": input,
             "command": (
@@ -5159,6 +5393,7 @@ class SyncRunsClient:
             "if_not_exists": if_not_exists,
             "on_completion": on_completion,
             "after_seconds": after_seconds,
+            "durability": durability,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
 
@@ -5254,7 +5489,7 @@ class SyncRunsClient:
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         checkpoint: Checkpoint | None = None,
         checkpoint_id: str | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -5269,6 +5504,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        durability: Durability | None = None,
     ) -> list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -5284,7 +5520,7 @@ class SyncRunsClient:
             context: Static context to add to the assistant.
                 !!! version-added "Supported with langgraph>=0.6.0"
             checkpoint: The checkpoint to resume from.
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -5301,6 +5537,10 @@ class SyncRunsClient:
             raise_error: Whether to raise an error if the run fails.
             headers: Optional custom headers to include with the request.
             on_run_created: Optional callback to call when a run is created.
+            durability: The durability to use for the run. Values are "sync", "async", or "exit".
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -5355,6 +5595,12 @@ class SyncRunsClient:
             ```
 
         """  # noqa: E501
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         payload = {
             "input": input,
             "command": (
@@ -5376,6 +5622,7 @@ class SyncRunsClient:
             "on_completion": on_completion,
             "after_seconds": after_seconds,
             "raise_error": raise_error,
+            "durability": durability,
         }
 
         def on_response(res: httpx.Response):
