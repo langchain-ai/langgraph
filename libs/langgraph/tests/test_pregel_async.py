@@ -9109,6 +9109,7 @@ async def test_subgraph_streaming_async() -> None:
     assert result["num_chunks"] == 9
 
 
+@NEEDS_CONTEXTVARS
 async def test_null_resume_disallowed_with_multiple_interrupts(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:

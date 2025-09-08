@@ -7222,6 +7222,9 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
 
         # get human input and resume
         if len(current_interrupts) > 0:
+            # we resume one at a time to preserve original test behavior,
+            # but we could also resume all at once if we wanted
+            # with a single dict mapping of interrupt ids to resume values
             resume = {current_interrupts[0].id: f"Resume #{invokes}"}
             current_input = Command(resume=resume)
 
@@ -7384,6 +7387,9 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
 
         # get human input and resume
         if len(current_interrupts) > 0:
+            # we resume one at a time to preserve original test behavior,
+            # but we could also resume all at once if we wanted
+            # with a single dict mapping of interrupt ids to resume values
             resume = {current_interrupts[0].id: f"Resume #{invokes}"}
             current_input = Command(resume=resume)
 
