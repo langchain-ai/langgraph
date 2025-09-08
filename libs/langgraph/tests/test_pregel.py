@@ -7222,8 +7222,8 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
 
         # get human input and resume
         if len(current_interrupts) > 0:
-            resume_map = {i.id: f"Resume #{invokes}" for i in current_interrupts}
-            current_input = Command(resume=resume_map)
+            resume = {current_interrupts[0].id: f"Resume #{invokes}"}
+            current_input = Command(resume=resume)
 
         # not more human input required, must be completed
         else:
@@ -7231,8 +7231,8 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
     else:
         assert False, "Detected infinite loop"
 
-    assert invokes == 2
-    assert len(events) == 2
+    assert invokes == 3
+    assert len(events) == 3
 
     assert events[1] == UnsortedSequence(
         {
@@ -7252,9 +7252,36 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
             )
         },
     )
-    assert events[2] == UnsortedSequence(
-        {"child_graph": {"human_inputs": ["Resume #1"]}},
-        {"child_graph": {"human_inputs": ["Resume #1"]}},
+    assert events[2] in (
+        UnsortedSequence(
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="a",
+                        id=AnyStr(),
+                    ),
+                )
+            },
+            {"child_graph": {"human_inputs": ["Resume #1"]}},
+        ),
+        UnsortedSequence(
+            {
+                "__interrupt__": (
+                    Interrupt(
+                        value="b",
+                        id=AnyStr(),
+                    ),
+                )
+            },
+            {"child_graph": {"human_inputs": ["Resume #1"]}},
+        ),
+    )
+    assert events[3] == UnsortedSequence(
+        {
+            "child_graph": {"human_inputs": ["Resume #1"]},
+            "__metadata__": {"cached": True},
+        },
+        {"child_graph": {"human_inputs": ["Resume #2"]}},
         {"cleanup": None},
     )
 
@@ -7357,8 +7384,8 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
 
         # get human input and resume
         if len(current_interrupts) > 0:
-            resume_map = {i.id: f"Resume #{invokes}" for i in current_interrupts}
-            current_input = Command(resume=resume_map)
+            resume = {current_interrupts[0].id: f"Resume #{invokes}"}
+            current_input = Command(resume=resume)
 
         # not more human input required, must be completed
         else:
@@ -7366,8 +7393,8 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
     else:
         assert False, "Detected infinite loop"
 
-    assert invokes == 2
-    assert len(events) == 2
+    assert invokes == 5
+    assert len(events) == 5
 
 
 def test_pregel_loop_refcount():
