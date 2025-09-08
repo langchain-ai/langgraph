@@ -8,6 +8,7 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum
 from ipaddress import IPv4Address
+from typing import Generic, TypeVar
 from zoneinfo import ZoneInfo
 
 import dataclasses_json
@@ -23,6 +24,14 @@ from langgraph.checkpoint.serde.jsonplus import (
     _msgpack_ext_hook_to_json,
 )
 from langgraph.store.base import Item
+
+TInner = TypeVar("TInner", bound=BaseModel)
+
+
+class MyPydanticGeneric(BaseModel, Generic[TInner]):
+    foo: str
+    bar: int
+    inner: TInner
 
 
 class InnerPydantic(BaseModel):
@@ -469,3 +478,25 @@ def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
     result = serde.loads_typed(dumped)
 
     assert result.equals(series)
+
+
+def test_serde_jsonplus_with_pydantic_generic() -> None:
+    instance = MyPydanticGeneric[MyPydanticGeneric[InnerPydantic]](
+        foo="foo",
+        bar=1,
+        inner=MyPydanticGeneric[InnerPydantic](
+            foo="inner-foo", bar=2, inner=InnerPydantic(hello="hello")
+        ),
+    )
+
+    serde = JsonPlusSerializer()
+    dumped = serde.dumps_typed(instance)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert instance == result
+
+    # json mode is not affected by the fix
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+
+    json_result = serde.loads_typed(dumped)
+    assert json_result == instance.model_dump()
