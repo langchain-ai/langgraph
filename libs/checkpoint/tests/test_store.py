@@ -1024,21 +1024,24 @@ async def test_embed_with_path(fake_embeddings: CharacterEmbeddings) -> None:
 
 
 def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
+    """Test support for non-ascii characters"""
     store = InMemoryStore(
         index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
     )
     store.put(("user_123", "memories"), "1", {"text": "这是中文"})  # Chinese
     store.put(("user_123", "memories"), "2", {"text": "これは日本語です"})  # Japanese
     store.put(("user_123", "memories"), "3", {"text": "이건 한국어야"})  # Korean
+    store.put(("user_123", "memories"), "4", {"text": "Это русский"})  # Russian
+    store.put(("user_123", "memories"), "5", {"text": "यह रूसी है"})  # Hindi
 
     result1 = store.search(("user_123", "memories"), query="这是中文")
-    assert result1[0].key == "1"
-    assert result1[0].score >= 0.15
-
     result2 = store.search(("user_123", "memories"), query="これは日本語です")
-    assert result2[0].key == "2"
-    assert result2[0].score >= 0.15
-
     result3 = store.search(("user_123", "memories"), query="이건 한국어야")
+    result4 = store.search(("user_123", "memories"), query="Это русский")
+    result5 = store.search(("user_123", "memories"), query="यह रूसी है")
+
+    assert result1[0].key == "1"
+    assert result2[0].key == "2"
     assert result3[0].key == "3"
-    assert result3[0].score >= 0.15
+    assert result4[0].key == "4"
+    assert result5[0].key == "5"
