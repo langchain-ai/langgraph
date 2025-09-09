@@ -295,7 +295,11 @@ def get_text_at_path(obj: Any, path: str | list[str]) -> list[str]:
                         if isinstance(current_obj, (str, int, float, bool)):
                             results.append(str(current_obj))
                         elif isinstance(current_obj, (list, dict)):
-                            results.append(json.dumps(current_obj, sort_keys=True, ensure_ascii=False))
+                            results.append(
+                                json.dumps(
+                                    current_obj, sort_keys=True, ensure_ascii=False
+                                )
+                            )
 
         # Handle wildcard
         elif token == "*":
