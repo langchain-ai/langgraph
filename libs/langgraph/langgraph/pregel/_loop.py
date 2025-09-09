@@ -603,15 +603,34 @@ class PregelLoop:
                     self.config[CONF][CONFIG_KEY_RESUME_MAP] = resume
                 else:
                     # don't allow null resume with multiple pending interrupts
-                    pending_interrupt_ids = {
-                        w[0]
-                        for w in self.checkpoint_pending_writes
-                        if w[1] == INTERRUPT
+
+                    # mapping of task ids to interrupt ids
+                    pending_interrupts: dict[str, str] = {}
+
+                    # set of resume task ids
+                    pending_resumes: set[str] = set()
+
+                    for task_id, write_type, value in self.checkpoint_pending_writes:
+                        if write_type == INTERRUPT:
+                            # interrupts is always a list, but there should only be one element
+                            pending_interrupts[task_id] = value[0].id
+                        elif write_type == RESUME:
+                            pending_resumes.add(task_id)
+
+                    resumed_interrupt_ids = {
+                        pending_interrupts[task_id]
+                        for task_id in pending_resumes
+                        if task_id in pending_interrupts
                     }
-                    pending_resume_ids = {
-                        w[0] for w in self.checkpoint_pending_writes if w[1] == RESUME
+
+                    # Keep only interrupts whose interrupt_id is not resumed
+                    hanging_interrupts: set[str] = {
+                        interrupt_id
+                        for interrupt_id in pending_interrupts.values()
+                        if interrupt_id not in resumed_interrupt_ids
                     }
-                    if len(pending_interrupt_ids - pending_resume_ids) > 1:
+
+                    if len(hanging_interrupts) > 1:
                         raise RuntimeError(
                             "Cannot use null resume when there are multiple pending interrupts. "
                             "Please instead provide a mapping of interrupt ids to resume values."
