@@ -1205,7 +1205,7 @@ There are many use cases where you may wish for your node to have a custom retry
 To configure a retry policy, pass the `retry_policy` parameter to the [add_node](../reference/graphs.md#langgraph.graph.state.StateGraph.add_node). The `retry_policy` parameter takes in a `RetryPolicy` named tuple object. Below we instantiate a `RetryPolicy` object with the default parameters and associate it with a node:
 
 ```python
-from langgraph.pregel import RetryPolicy
+from langgraph.types import RetryPolicy
 
 builder.add_node(
     "node_name",
@@ -1260,7 +1260,7 @@ By default, the retry policy retries on any exception except for the following:
     from typing_extensions import TypedDict
     from langchain.chat_models import init_chat_model
     from langgraph.graph import END, MessagesState, StateGraph, START
-    from langgraph.pregel import RetryPolicy
+    from langgraph.types import RetryPolicy
     from langchain_community.utilities import SQLDatabase
     from langchain_core.messages import AIMessage
 
@@ -1425,12 +1425,12 @@ const builder = new StateGraph(State)
     LangGraph makes it easy to add an underlying persistence layer to your application.
     This allows state to be checkpointed in between the execution of nodes, so your LangGraph nodes govern:
 
-    - How state updates are [checkpointed](../concepts/persistence.md)
-    - How interruptions are resumed in [human-in-the-loop](../concepts/human_in_the_loop.md) workflows
-    - How we can "rewind" and branch-off executions using LangGraph's [time travel](../concepts/time-travel.md) features
+- How state updates are [checkpointed](../concepts/persistence.md)
+- How interruptions are resumed in [human-in-the-loop](../concepts/human_in_the_loop.md) workflows
+- How we can "rewind" and branch-off executions using LangGraph's [time travel](../concepts/time-travel.md) features
 
-    They also determine how execution steps are [streamed](../concepts/streaming.md), and how your application is visualized
-    and debugged using [LangGraph Studio](../concepts/langgraph_studio.md).
+They also determine how execution steps are [streamed](../concepts/streaming.md), and how your application is visualized
+and debugged using [LangGraph Studio](../concepts/langgraph_studio.md).
 
 Let's demonstrate an end-to-end example. We will create a sequence of three steps:
 
