@@ -218,7 +218,7 @@ def draw_graph(
     if termini:
         for src in sorted(termini):
             add_edge(graph, src, END)
-    elif len(step_sources) == 1:
+    elif len(step_sources) == 1 and not any(d == END for _, d, _, _ in edges):
         for src in sorted(step_sources):
             add_edge(graph, src, END, conditional=True)
     # replace subgraphs
