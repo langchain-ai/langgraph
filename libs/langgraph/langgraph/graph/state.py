@@ -25,7 +25,7 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from pydantic import BaseModel, TypeAdapter
-from typing_extensions import Self, Unpack, is_typeddict
+from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
 from langgraph._internal._constants import (
     INTERRUPT,
@@ -155,7 +155,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         graph = StateGraph(state_schema=State, context_schema=Context)
 
         def node(state: State, runtime: Runtime[Context]) -> dict:
-            r = runtie.context.get("r", 1.0)
+            r = runtime.context.get("r", 1.0)
             x = state["x"][-1]
             next_value = x * r * (1 - x)
             return {"x": next_value}
@@ -1334,6 +1334,12 @@ def _get_channel(
 def _get_channel(
     name: str, annotation: Any, *, allow_managed: bool = True
 ) -> BaseChannel | ManagedValueSpec:
+    # Strip out Required and NotRequired wrappers
+    if hasattr(annotation, "__origin__") and annotation.__origin__ in (
+        Required,
+        NotRequired,
+    ):
+        annotation = annotation.__args__[0]
     if manager := _is_field_managed_value(name, annotation):
         if allow_managed:
             return manager

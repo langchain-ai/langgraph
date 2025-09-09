@@ -1948,7 +1948,7 @@ const llmWithTools = llm.bindTools(tools);
 
 
     # Conditional edge function to route to the tool node or end based upon whether the LLM made a tool call
-    def should_continue(state: MessagesState) -> Literal["environment", END]:
+    def should_continue(state: MessagesState) -> Literal["Action", END]:
         """Decide if we should continue the loop or stop based upon whether the LLM made a tool call"""
 
         messages = state["messages"]
