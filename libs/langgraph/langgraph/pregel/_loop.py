@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import binascii
 import concurrent.futures
+import warnings
 from collections import defaultdict, deque
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import (
@@ -1038,7 +1039,16 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "input"
-        self.step = self.checkpoint_metadata["step"] + 1
+        # 🟢 Guard against missing 'step'
+        step = self.checkpoint_metadata.get("step")
+        if step is None:
+            warnings.warn(
+                "Checkpoint metadata missing 'step'. Initializing step=0. "
+                "This usually means no prior checkpoint exists for this thread_id."
+            )
+            step = 0
+
+        self.step = step + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
         self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
         self.updated_channels = self._first(
