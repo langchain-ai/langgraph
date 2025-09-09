@@ -2333,7 +2333,7 @@ from IPython.display import Image, display
 display(Image(graph.get_graph().draw_mermaid_png()))
 ```
 
-![Simple loop graph](assets/graph_api_image_3.png)
+![Simple loop graph](assets/graph_api_image_7.png)
 :::
 
 :::js
@@ -3272,7 +3272,7 @@ from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeSt
 display(Image(app.get_graph().draw_mermaid_png()))
 ```
 
-![Fractal graph visualization](assets/graph_api_image_5.png)
+![Fractal graph visualization](assets/graph_api_image_10.png)
 
 **Using Mermaid + Pyppeteer**
 
