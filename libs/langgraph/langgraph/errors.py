@@ -91,7 +91,7 @@ class GraphInterrupt(GraphBubbleUp):
 
 @deprecated(
     "NodeInterrupt is deprecated. Please use `langgraph.types.interrupt` instead.",
-    stacklevel=2,
+    category=None,
 )
 class NodeInterrupt(GraphInterrupt):
     """Raised by a node to interrupt execution.

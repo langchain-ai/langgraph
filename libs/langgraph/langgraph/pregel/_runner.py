@@ -30,13 +30,13 @@ from langgraph._internal._constants import (
     RETURN,
 )
 from langgraph._internal._future import chain_future, run_coroutine_threadsafe
+from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import MISSING
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.pregel._algo import Call
 from langgraph.pregel._executor import Submit
 from langgraph.pregel._retry import arun_with_retry, run_with_retry
-from langgraph.pregel._scratchpad import PregelScratchpad
 from langgraph.types import (
     CachePolicy,
     PregelExecutableTask,

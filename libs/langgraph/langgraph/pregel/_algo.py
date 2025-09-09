@@ -53,6 +53,7 @@ from langgraph._internal._constants import (
     RETURN,
     TASKS,
 )
+from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
@@ -69,7 +70,6 @@ from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
-from langgraph.pregel._scratchpad import PregelScratchpad
 from langgraph.runtime import DEFAULT_RUNTIME, Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import (
@@ -194,15 +194,12 @@ def local_read(
         for c, v in task.writes:
             if c in select:
                 updated[c].append(v)
-    if fresh and updated:
+    if fresh:
         # apply writes
         local_channels: dict[str, BaseChannel] = {}
         for k in channels:
-            if k in updated:
-                cc = channels[k].copy()
-                cc.update(updated[k])
-            else:
-                cc = channels[k]
+            cc = channels[k].copy()
+            cc.update(updated[k])
             local_channels[k] = cc
         # read fresh values
         values = read_channels(local_channels, select)

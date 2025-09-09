@@ -11,13 +11,13 @@
 
 ???+ note "Support by deployment type"
 
-    Custom auth is supported for all deployments in the **managed LangGraph Platform**, as well as **Enterprise** self-hosted plans. It is not supported for **Lite** self-hosted plans.
+    Custom auth is supported for all deployments in the **managed LangGraph Platform**, as well as **Enterprise** self-hosted plans.
 
 This guide shows how to add custom authentication to your LangGraph Platform application. This guide applies to both LangGraph Platform and self-hosted deployments. It does not apply to isolated usage of the LangGraph open source library in your own custom server.
 
 !!! note
 
-    Custom auth is supported for all **managed LangGraph Platform** deployments, as well as **Enterprise** self-hosted plans. It is not supported for **Lite** self-hosted plans.
+    Custom auth is supported for all **managed LangGraph Platform** deployments, as well as **Enterprise** self-hosted plans.
 
 ## Add custom authentication to your deployment
 
@@ -145,7 +145,7 @@ def my_node(state, config):
 By default, if you add custom authorization on your resources, this will also apply to interactions made from the Studio. If you want, you can handle logged-in Studio users differently by checking [is_studio_user()](../../reference/functions/sdk_auth.isStudioUser.html).
 
 !!! note
-`is_studio_user` was added in version 0.1.73 of the langgraph-sdk. If you're on an older version, you can still check whether `isinstance(ctx.user, StudioUser)`.
+    `is_studio_user` was added in version 0.1.73 of the langgraph-sdk. If you're on an older version, you can still check whether `isinstance(ctx.user, StudioUser)`.
 
 ```python
 from langgraph_sdk.auth import is_studio_user, Auth

@@ -17,6 +17,9 @@ DEFAULT_PYTHON_VERSION = "3.11"
 DEFAULT_IMAGE_DISTRO = "debian"
 
 
+Distros = Literal["debian", "wolfi", "bullseye", "bookworm"]
+
+
 class TTLConfig(TypedDict, total=False):
     """Configuration for TTL (time-to-live) behavior in the store."""
 
@@ -354,6 +357,8 @@ class HttpConfig(TypedDict, total=False):
 
     You can include or exclude headers as configurable values to condition your
     agent's behavior or permissions on a request's headers."""
+    logging_headers: Optional[ConfigurableHeaderConfig]
+    """Optional. Defines which headers are excluded from logging."""
 
 
 class Config(TypedDict, total=False):
@@ -369,6 +374,13 @@ class Config(TypedDict, total=False):
     Must be >= 20 if provided.
     """
 
+    api_version: Optional[str]
+    """Optional. Which semantic version of the LangGraph API server to use.
+    
+    Defaults to latest. Check the
+    [changelog](https://docs.langchain.com/langgraph-platform/langgraph-server-changelog)
+    for more information."""
+
     _INTERNAL_docker_tag: Optional[str]
     """Optional. Internal use only.
     """
@@ -378,10 +390,11 @@ class Config(TypedDict, total=False):
     
     Defaults to langchain/langgraph-api or langchain/langgraphjs-api."""
 
-    image_distro: Optional[str]
+    image_distro: Optional[Distros]
     """Optional. Linux distribution for the base image.
     
-    Must be either 'debian' or 'wolfi'. If omitted, defaults to 'debian'.
+    Must be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.
+    If omitted, defaults to 'debian' ('latest').
     """
 
     pip_config_file: Optional[str]
@@ -587,13 +600,28 @@ def validate_config(config: Config) -> Config:
     )
 
     image_distro = config.get("image_distro", DEFAULT_IMAGE_DISTRO)
+    internal_docker_tag = config.get("_INTERNAL_docker_tag")
+    api_version = config.get("api_version")
+    if internal_docker_tag:
+        if api_version:
+            raise click.UsageError(
+                "Cannot specify both _INTERNAL_docker_tag and api_version."
+            )
+    if api_version:
+        try:
+            parts = tuple(map(int, api_version.split("-")[0].split(".")))
+            if len(parts) > 3:
+                raise ValueError(
+                    "Version must be major or major.minor or major.minor.patch."
+                )
+        except TypeError:
+            raise click.UsageError(f"Invalid version format: {api_version}") from None
 
     config = {
         "node_version": node_version,
         "python_version": python_version,
         "pip_config_file": config.get("pip_config_file"),
         "pip_installer": config.get("pip_installer", "auto"),
-        "_INTERNAL_docker_tag": config.get("_INTERNAL_docker_tag"),
         "base_image": config.get("base_image"),
         "image_distro": image_distro,
         "dependencies": config.get("dependencies", []),
@@ -608,6 +636,10 @@ def validate_config(config: Config) -> Config:
         "ui_config": config.get("ui_config"),
         "keep_pkg_tools": config.get("keep_pkg_tools"),
     }
+    if internal_docker_tag:
+        config["_INTERNAL_docker_tag"] = internal_docker_tag
+    if api_version:
+        config["api_version"] = api_version
 
     if config.get("node_version"):
         node_version = config["node_version"]
@@ -644,17 +676,17 @@ def validate_config(config: Config) -> Config:
                 "Add at least one dependency to 'dependencies' list."
             )
 
-    if not config["graphs"]:
+    if not config.get("graphs"):
         raise click.UsageError(
             "No graphs found in config. Add at least one graph to 'graphs' dictionary."
         )
 
     # Validate image_distro config
     if image_distro := config.get("image_distro"):
-        if image_distro not in ["debian", "wolfi"]:
+        if image_distro not in Distros.__args__:
             raise click.UsageError(
                 f"Invalid image_distro: '{image_distro}'. "
-                "Must be either 'debian' or 'wolfi'."
+                "Must be one of 'debian', 'bullseye', or 'bookworm'."
             )
 
     if pip_installer := config.get("pip_installer"):
@@ -881,10 +913,10 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
                         "Rename the directory to use it as flat-layout package."
                     )
                 check_reserved(resolved.name, local_dep)
-                container_path = f"/deps/__outer_{resolved.name}/{resolved.name}"
+                container_path = f"/deps/outer-{resolved.name}/{resolved.name}"
             else:
                 # src layout
-                container_path = f"/deps/__outer_{resolved.name}/src"
+                container_path = f"/deps/outer-{resolved.name}/src"
                 for file in files:
                     rfile = resolved / file
                     if (
@@ -1224,7 +1256,7 @@ def python_config_to_docker(
         else:
             pip_installer = "pip"
     if pip_installer == "uv":
-        install_cmd = "uv pip install --system"
+        install_cmd = "uv pip install --system --prerelease=allow"
     elif pip_installer == "pip":
         install_cmd = "pip install"
     else:
@@ -1254,7 +1286,7 @@ def python_config_to_docker(
     if local_deps.pip_reqs:
         pip_reqs_str = os.linesep.join(
             (
-                f"COPY --from=__outer_{reqpath.name} requirements.txt {destpath}"
+                f"COPY --from=outer-{reqpath.name} requirements.txt {destpath}"
                 if reqpath.parent in local_deps.additional_contexts
                 else f"ADD {reqpath.relative_to(config_path.parent)} {destpath}"
             )
@@ -1273,7 +1305,7 @@ def python_config_to_docker(
     faux_pkgs_str = f"{os.linesep}{os.linesep}".join(
         (
             f"""# -- Adding non-package dependency {fullpath.name} --
-COPY --from=__outer_{fullpath.name} . {destpath}"""
+COPY --from=outer-{fullpath.name} . {destpath}"""
             if fullpath in local_deps.additional_contexts
             else f"""# -- Adding non-package dependency {fullpath.name} --
 ADD {relpath} {destpath}"""
@@ -1288,7 +1320,7 @@ RUN set -ex && \\
                 '[build-system]' \\
                 'requires = ["setuptools>=61"]' \\
                 'build-backend = "setuptools.build_meta"'; do \\
-        echo "$line" >> /deps/__outer_{fullpath.name}/pyproject.toml; \\
+        echo "$line" >> /deps/outer-{fullpath.name}/pyproject.toml; \\
     done
 # -- End of non-package dependency {fullpath.name} --"""
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
@@ -1391,7 +1423,7 @@ ADD {relpath} /deps/{name}
         if p in local_deps.real_pkgs:
             name = local_deps.real_pkgs[p][1]
         elif p in local_deps.faux_pkgs:
-            name = f"__outer_{p.name}"
+            name = f"outer-{p.name}"
         else:
             raise RuntimeError(f"Unknown additional context: {p}")
         additional_contexts[name] = str(p)
@@ -1404,9 +1436,28 @@ def node_config_to_docker(
     config: Config,
     base_image: str,
     api_version: Optional[str] = None,
+    install_command: Optional[str] = None,
+    build_command: Optional[str] = None,
+    build_context: Optional[str] = None,
 ) -> tuple[str, dict[str, str]]:
-    faux_path = f"/deps/{config_path.parent.name}"
-    install_cmd = _get_node_pm_install_cmd(config_path, config)
+    # Calculate paths for monorepo support
+    if build_context:
+        relative_workdir = _calculate_relative_workdir(config_path, build_context)
+        container_name = pathlib.Path(build_context).name
+        if relative_workdir:
+            faux_path = f"/deps/{container_name}/{relative_workdir}"
+        else:
+            faux_path = f"/deps/{container_name}"
+    else:
+        # Backward compatibility: use the original behavior
+        faux_path = f"/deps/{config_path.parent.name}"
+
+    # Use custom install command or auto-detect
+    if install_command:
+        install_cmd = install_command
+    else:
+        install_cmd = _get_node_pm_install_cmd(config_path, config)
+
     image_str = docker_tag(config, base_image, api_version)
 
     env_vars: list[str] = []
@@ -1433,20 +1484,35 @@ def node_config_to_docker(
 
     env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
 
+    # For monorepo support, we need to handle install and build commands differently
+    if build_context:
+        # Monorepo case: install from root, build from config directory
+        container_root = f"/deps/{pathlib.Path(build_context).name}"
+        install_step = f"RUN cd {container_root} && {install_cmd}"
+
+        if build_command:
+            build_step = f"RUN cd {faux_path} && {build_command}"
+        else:
+            build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
+    else:
+        # Original behavior: everything happens in the same directory
+        install_step = f"RUN cd {faux_path} && {install_cmd}"
+        build_step = 'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts'
+
     docker_file_contents = [
         f"FROM {image_str}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
-        f"ADD . {faux_path}",
+        f"ADD . {faux_path if not build_context else container_root}",
         "",
-        f"RUN cd {faux_path} && {install_cmd}",
+        install_step,
         "",
         os.linesep.join(env_vars),
         "",
         f"WORKDIR {faux_path}",
         "",
-        'RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts',
+        build_step,
     ]
 
     return os.linesep.join(docker_file_contents), {}
@@ -1465,6 +1531,7 @@ def docker_tag(
     base_image: Optional[str] = None,
     api_version: Optional[str] = None,
 ) -> str:
+    api_version = api_version or config.get("api_version")
     base_image = base_image or default_base_image(config)
 
     image_distro = config.get("image_distro")
@@ -1472,9 +1539,6 @@ def docker_tag(
 
     if config.get("_INTERNAL_docker_tag"):
         return f"{base_image}:{config['_INTERNAL_docker_tag']}"
-
-    if "/langgraph-server" in base_image:
-        return f"{base_image}-py{config['python_version']}"
 
     # Build the standard tag format
     language, version = None, None
@@ -1488,10 +1552,27 @@ def docker_tag(
     # Prepend API version if provided
     if api_version:
         full_tag = f"{api_version}-{language}{version_distro_tag}"
+    elif "/langgraph-server" in base_image and version_distro_tag not in base_image:
+        return f"{base_image}-{language}{version_distro_tag}"
     else:
         full_tag = version_distro_tag
 
     return f"{base_image}:{full_tag}"
+
+
+def _calculate_relative_workdir(config_path: pathlib.Path, build_context: str) -> str:
+    """Calculate the relative path from build context to langgraph.json directory."""
+    config_dir = config_path.parent.resolve()
+    build_context_path = pathlib.Path(build_context).resolve()
+
+    try:
+        relative_path = config_dir.relative_to(build_context_path)
+        return str(relative_path) if str(relative_path) != "." else ""
+    except ValueError as _:
+        raise ValueError(
+            f"Configuration file {config_path} is not under the build context {build_context}. "
+            f"Please run the command from a directory that contains your langgraph.json file, "
+        ) from None
 
 
 def config_to_docker(
@@ -1499,11 +1580,22 @@ def config_to_docker(
     config: Config,
     base_image: Optional[str] = None,
     api_version: Optional[str] = None,
+    install_command: Optional[str] = None,
+    build_command: Optional[str] = None,
+    build_context: Optional[str] = None,
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or default_base_image(config)
 
     if config.get("node_version") and not config.get("python_version"):
-        return node_config_to_docker(config_path, config, base_image, api_version)
+        return node_config_to_docker(
+            config_path,
+            config,
+            base_image,
+            api_version,
+            install_command,
+            build_command,
+            build_context,
+        )
 
     return python_config_to_docker(config_path, config, base_image, api_version)
 

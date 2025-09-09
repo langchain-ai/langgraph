@@ -4,6 +4,7 @@ import asyncio
 import enum
 import inspect
 import sys
+import warnings
 from collections.abc import (
     AsyncIterator,
     Awaitable,
@@ -303,6 +304,16 @@ class RunnableCallable(Runnable):
             if typ != (ANY_TYPE,) and p.annotation not in typ:
                 # A specific type is required, but the function annotation does
                 # not match the expected type.
+
+                # If this is a config parameter with incorrect typing, emit a warning
+                # because we used to support any type but are moving towards more correct typing
+                if kw == "config" and p.annotation != inspect.Parameter.empty:
+                    warnings.warn(
+                        f"The 'config' parameter should be typed as 'RunnableConfig' or "
+                        f"'RunnableConfig | None', not '{p.annotation}'. ",
+                        UserWarning,
+                        stacklevel=4,
+                    )
                 continue
 
             # If the kwarg is accepted by the function, store the key / runtime attribute to inject
