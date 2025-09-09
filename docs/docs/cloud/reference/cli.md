@@ -483,19 +483,19 @@ The LangGraph CLI requires a JSON configuration file that follows this [schema](
 
     RUN PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt langchain_community langchain_anthropic langchain_openai wikipedia scikit-learn
 
-    ADD ./graphs /deps/__outer_graphs/src
+    ADD ./graphs /deps/outer-graphs/src
     RUN set -ex && \
         for line in '[project]' \
                     'name = "graphs"' \
                     'version = "0.1"' \
                     '[tool.setuptools.package-data]' \
                     '"*" = ["**/*"]'; do \
-            echo "$line" >> /deps/__outer_graphs/pyproject.toml; \
+            echo "$line" >> /deps/outer-graphs/pyproject.toml; \
         done
 
     RUN PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
 
-    ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_graphs/src/agent.py:graph", "storm": "/deps/__outer_graphs/src/storm.py:graph"}'
+    ENV LANGSERVE_GRAPHS='{"agent": "/deps/outer-graphs/src/agent.py:graph", "storm": "/deps/outer-graphs/src/storm.py:graph"}'
     ```
 
     ???+ note "Updating your langgraph.json file"

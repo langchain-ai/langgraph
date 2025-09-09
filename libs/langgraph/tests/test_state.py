@@ -10,6 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import NotRequired, Required, TypedDict
 
+from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.graph.state import StateGraph, _get_node_name, _warn_invalid_state_schema
 
 
@@ -137,7 +138,7 @@ def test_state_schema_optional_values(total_: bool):
     class InputState(SomeParentState, total=total_):  # type: ignore
         val1: str
         val2: Optional[str]
-        val3: Required[str]
+        val3: Required[Annotated[dict, operator.or_]]
         val4: NotRequired[dict]
         val5: Annotated[Required[str], "foo"]
         val6: Annotated[NotRequired[str], "bar"]
@@ -158,6 +159,8 @@ def test_state_schema_optional_values(total_: bool):
     builder.add_edge("__start__", "n")
     graph = builder.compile()
     json_schema = graph.get_input_jsonschema()
+
+    assert isinstance(graph.channels["val3"], BinaryOperatorAggregate)
 
     if total_ is False:
         expected_required = set()

@@ -1,0 +1,16 @@
+{
+  "extends": "@tsconfig/recommended",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "declaration": true,
+    "outDir": "./dist"
+  },
+  "include": ["apps/**/*", "libs/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

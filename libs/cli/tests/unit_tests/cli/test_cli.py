@@ -15,7 +15,7 @@ from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Versi
 from langgraph_cli.util import clean_empty_lines
 
 FORMATTED_CLEANUP_LINES = _get_pip_cleanup_lines(
-    install_cmd="uv pip install --system",
+    install_cmd="uv pip install --system --prerelease=allow",
     to_uninstall=("pip", "setuptools", "wheel"),
     pip_installer="uv",
 )
@@ -149,7 +149,7 @@ services:
                 COPY --from=cli_1 . /deps/cli_1
                 # -- End of local package ../../.. --
                 # -- Installing all local dependencies --
-                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
+                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --prerelease=allow --no-cache-dir -c /api/constraints.txt -e /deps/*
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -570,7 +570,7 @@ def test_build_generate_proper_build_context():
                 catch_exceptions=True,
             )
 
-        build_context_pattern = re.compile(r"--build-context\s+(\w+)=([^\s]+)")
+        build_context_pattern = re.compile(r"--build-context\s+([\w-]+)=([^\s]+)")
 
         build_contexts = re.findall(build_context_pattern, result.output)
         assert len(build_contexts) == 2, (

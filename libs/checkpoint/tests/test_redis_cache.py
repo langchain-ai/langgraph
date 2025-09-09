@@ -5,12 +5,13 @@ import time
 import pytest
 import redis
 
+from langgraph.cache.base import FullKey
 from langgraph.cache.redis import RedisCache
 
 
 class TestRedisCache:
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self) -> None:
         """Set up test Redis client and cache."""
         self.client = redis.Redis(
             host="localhost", port=6379, db=0, decode_responses=False
@@ -20,21 +21,21 @@ class TestRedisCache:
         except redis.ConnectionError:
             pytest.skip("Redis server not available")
 
-        self.cache = RedisCache(self.client, prefix="test:cache:")
+        self.cache: RedisCache = RedisCache(self.client, prefix="test:cache:")
 
         # Clean up before each test
         self.client.flushdb()
 
-    def teardown_method(self):
+    def teardown_method(self) -> None:
         """Clean up after each test."""
         try:
             self.client.flushdb()
         except Exception:
             pass
 
-    def test_basic_set_and_get(self):
+    def test_basic_set_and_get(self) -> None:
         """Test basic set and get operations."""
-        keys = [(("graph", "node"), "key1")]
+        keys: list[FullKey] = [(("graph", "node"), "key1")]
         values = {keys[0]: ({"result": 42}, None)}
 
         # Set value
@@ -45,9 +46,9 @@ class TestRedisCache:
         assert len(result) == 1
         assert result[keys[0]] == {"result": 42}
 
-    def test_batch_operations(self):
+    def test_batch_operations(self) -> None:
         """Test batch set and get operations."""
-        keys = [
+        keys: list[FullKey] = [
             (("graph", "node1"), "key1"),
             (("graph", "node2"), "key2"),
             (("other", "node"), "key3"),
@@ -68,9 +69,9 @@ class TestRedisCache:
         assert result[keys[1]] == {"result": 2}
         assert result[keys[2]] == {"result": 3}
 
-    def test_ttl_behavior(self):
+    def test_ttl_behavior(self) -> None:
         """Test TTL (time-to-live) functionality."""
-        key = (("graph", "node"), "ttl_key")
+        key: FullKey = (("graph", "node"), "ttl_key")
         values = {key: ({"data": "expires_soon"}, 1)}  # 1 second TTL
 
         # Set with TTL
@@ -88,10 +89,10 @@ class TestRedisCache:
         result = self.cache.get([key])
         assert len(result) == 0
 
-    def test_namespace_isolation(self):
+    def test_namespace_isolation(self) -> None:
         """Test that different namespaces are isolated."""
-        key1 = (("graph1", "node"), "same_key")
-        key2 = (("graph2", "node"), "same_key")
+        key1: FullKey = (("graph1", "node"), "same_key")
+        key2: FullKey = (("graph2", "node"), "same_key")
 
         values = {key1: ({"graph": 1}, None), key2: ({"graph": 2}, None)}
 
@@ -101,9 +102,12 @@ class TestRedisCache:
         assert result[key1] == {"graph": 1}
         assert result[key2] == {"graph": 2}
 
-    def test_clear_all(self):
+    def test_clear_all(self) -> None:
         """Test clearing all cached values."""
-        keys = [(("graph", "node1"), "key1"), (("graph", "node2"), "key2")]
+        keys: list[FullKey] = [
+            (("graph", "node1"), "key1"),
+            (("graph", "node2"), "key2"),
+        ]
         values = {keys[0]: ({"result": 1}, None), keys[1]: ({"result": 2}, None)}
 
         self.cache.set(values)
@@ -119,9 +123,9 @@ class TestRedisCache:
         result = self.cache.get(keys)
         assert len(result) == 0
 
-    def test_clear_by_namespace(self):
+    def test_clear_by_namespace(self) -> None:
         """Test clearing cached values by namespace."""
-        keys = [
+        keys: list[FullKey] = [
             (("graph1", "node"), "key1"),
             (("graph2", "node"), "key2"),
             (("graph1", "other"), "key3"),
@@ -142,7 +146,7 @@ class TestRedisCache:
         assert len(result) == 1
         assert result[keys[1]] == {"result": 2}
 
-    def test_empty_operations(self):
+    def test_empty_operations(self) -> None:
         """Test behavior with empty keys/values."""
         # Empty get
         result = self.cache.get([])
@@ -151,14 +155,14 @@ class TestRedisCache:
         # Empty set
         self.cache.set({})  # Should not raise error
 
-    def test_nonexistent_keys(self):
+    def test_nonexistent_keys(self) -> None:
         """Test getting keys that don't exist."""
-        keys = [(("graph", "node"), "nonexistent")]
+        keys: list[FullKey] = [(("graph", "node"), "nonexistent")]
         result = self.cache.get(keys)
         assert len(result) == 0
 
     @pytest.mark.asyncio
-    async def test_async_operations(self):
+    async def test_async_operations(self) -> None:
         """Test async set and get operations with sync Redis client."""
         # Create sync Redis client and cache (like main integration tests)
         client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
@@ -167,9 +171,9 @@ class TestRedisCache:
         except Exception:
             pytest.skip("Redis not available")
 
-        cache = RedisCache(client, prefix="test:async:")
+        cache: RedisCache = RedisCache(client, prefix="test:async:")
 
-        keys = [(("graph", "node"), "async_key")]
+        keys: list[FullKey] = [(("graph", "node"), "async_key")]
         values = {keys[0]: ({"async": True}, None)}
 
         # Async set (delegates to sync)
@@ -184,7 +188,7 @@ class TestRedisCache:
         client.flushdb()
 
     @pytest.mark.asyncio
-    async def test_async_clear(self):
+    async def test_async_clear(self) -> None:
         """Test async clear operations with sync Redis client."""
         # Create sync Redis client and cache (like main integration tests)
         client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
@@ -193,9 +197,9 @@ class TestRedisCache:
         except Exception:
             pytest.skip("Redis not available")
 
-        cache = RedisCache(client, prefix="test:async:")
+        cache: RedisCache = RedisCache(client, prefix="test:async:")
 
-        keys = [(("graph", "node"), "key")]
+        keys: list[FullKey] = [(("graph", "node"), "key")]
         values = {keys[0]: ({"data": "test"}, None)}
 
         await cache.aset(values)
@@ -214,44 +218,44 @@ class TestRedisCache:
         # Cleanup
         client.flushdb()
 
-    def test_redis_unavailable_get(self):
+    def test_redis_unavailable_get(self) -> None:
         """Test behavior when Redis is unavailable during get operations."""
         # Create cache with non-existent Redis server
         bad_client = redis.Redis(
             host="nonexistent", port=9999, socket_connect_timeout=0.1
         )
-        cache = RedisCache(bad_client, prefix="test:cache:")
+        cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
 
-        keys = [(("graph", "node"), "key")]
+        keys: list[FullKey] = [(("graph", "node"), "key")]
         result = cache.get(keys)
 
         # Should return empty dict when Redis unavailable
         assert result == {}
 
-    def test_redis_unavailable_set(self):
+    def test_redis_unavailable_set(self) -> None:
         """Test behavior when Redis is unavailable during set operations."""
         # Create cache with non-existent Redis server
         bad_client = redis.Redis(
             host="nonexistent", port=9999, socket_connect_timeout=0.1
         )
-        cache = RedisCache(bad_client, prefix="test:cache:")
+        cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
 
-        keys = [(("graph", "node"), "key")]
+        keys: list[FullKey] = [(("graph", "node"), "key")]
         values = {keys[0]: ({"data": "test"}, None)}
 
         # Should not raise exception when Redis unavailable
         cache.set(values)  # Should silently fail
 
     @pytest.mark.asyncio
-    async def test_redis_unavailable_async(self):
+    async def test_redis_unavailable_async(self) -> None:
         """Test async behavior when Redis is unavailable."""
         # Create sync cache with non-existent Redis server (like main integration tests)
         bad_client = redis.Redis(
             host="nonexistent", port=9999, socket_connect_timeout=0.1
         )
-        cache = RedisCache(bad_client, prefix="test:cache:")
+        cache: RedisCache = RedisCache(bad_client, prefix="test:cache:")
 
-        keys = [(("graph", "node"), "key")]
+        keys: list[FullKey] = [(("graph", "node"), "key")]
         values = {keys[0]: ({"data": "test"}, None)}
 
         # Should return empty dict for get (delegates to sync)
@@ -261,10 +265,10 @@ class TestRedisCache:
         # Should not raise exception for set (delegates to sync)
         await cache.aset(values)  # Should silently fail
 
-    def test_corrupted_data_handling(self):
+    def test_corrupted_data_handling(self) -> None:
         """Test handling of corrupted data in Redis."""
         # Set some valid data first
-        keys = [(("graph", "node"), "valid_key")]
+        keys: list[FullKey] = [(("graph", "node"), "valid_key")]
         values = {keys[0]: ({"data": "valid"}, None)}
         self.cache.set(values)
 
@@ -273,33 +277,36 @@ class TestRedisCache:
         self.client.set(corrupted_key, b"invalid:data:format:too:many:colons")
 
         # Should skip corrupted entry and return only valid ones
-        all_keys = [keys[0], (("graph", "node"), "corrupted_key")]
+        all_keys: list[FullKey] = [keys[0], (("graph", "node"), "corrupted_key")]
         result = self.cache.get(all_keys)
 
         assert len(result) == 1
         assert result[keys[0]] == {"data": "valid"}
 
-    def test_key_parsing_edge_cases(self):
+    def test_key_parsing_edge_cases(self) -> None:
         """Test key parsing with edge cases."""
         # Test empty namespace
-        key1 = ((), "empty_ns")
+        key1: FullKey = ((), "empty_ns")
         values = {key1: ({"data": "empty_ns"}, None)}
         self.cache.set(values)
         result = self.cache.get([key1])
         assert result[key1] == {"data": "empty_ns"}
 
         # Test namespace with special characters
-        key2 = (("graph:with:colons", "node-with-dashes"), "key_with_underscores")
+        key2: FullKey = (
+            ("graph:with:colons", "node-with-dashes"),
+            "key_with_underscores",
+        )
         values = {key2: ({"data": "special_chars"}, None)}
         self.cache.set(values)
         result = self.cache.get([key2])
         assert result[key2] == {"data": "special_chars"}
 
-    def test_large_data_serialization(self):
+    def test_large_data_serialization(self) -> None:
         """Test handling of large data objects."""
         # Create a large data structure
         large_data = {"large_list": list(range(1000)), "nested": {"data": "x" * 1000}}
-        key = (("graph", "node"), "large_key")
+        key: FullKey = (("graph", "node"), "large_key")
         values = {key: (large_data, None)}
 
         self.cache.set(values)
