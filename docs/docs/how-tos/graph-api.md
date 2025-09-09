@@ -1205,7 +1205,7 @@ There are many use cases where you may wish for your node to have a custom retry
 To configure a retry policy, pass the `retry_policy` parameter to the [add_node](../reference/graphs.md#langgraph.graph.state.StateGraph.add_node). The `retry_policy` parameter takes in a `RetryPolicy` named tuple object. Below we instantiate a `RetryPolicy` object with the default parameters and associate it with a node:
 
 ```python
-from langgraph.pregel import RetryPolicy
+from langgraph.types import RetryPolicy
 
 builder.add_node(
     "node_name",
@@ -1260,7 +1260,7 @@ By default, the retry policy retries on any exception except for the following:
     from typing_extensions import TypedDict
     from langchain.chat_models import init_chat_model
     from langgraph.graph import END, MessagesState, StateGraph, START
-    from langgraph.pregel import RetryPolicy
+    from langgraph.types import RetryPolicy
     from langchain_community.utilities import SQLDatabase
     from langchain_core.messages import AIMessage
 
