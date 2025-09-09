@@ -1,6 +1,6 @@
 import re
 import sys
-from typing import Annotated, Union
+from typing import Annotated, Optional, Union
 from unittest.mock import AsyncMock, MagicMock
 
 import langsmith as ls
@@ -1183,7 +1183,10 @@ async def test_remote_graph_stream_messages_tuple(
 @pytest.mark.anyio
 @pytest.mark.parametrize("distributed_tracing", [False, True])
 @pytest.mark.parametrize("stream", [False, True])
-async def test_include_headers(distributed_tracing: bool, stream: bool):
+@pytest.mark.parametrize("headers", [None, {"foo": "bar"}])
+async def test_include_headers(
+    distributed_tracing: bool, stream: bool, headers: Optional[dict[str, str]]
+):
     mock_async_client = MagicMock()
     async_iter = MagicMock()
     return_value = [
@@ -1213,7 +1216,7 @@ async def test_include_headers(distributed_tracing: bool, stream: bool):
                 async for _ in remote_pregel.astream(
                     {"input": {"messages": [{"type": "human", "content": "hello"}]}},
                     config,
-                    headers={"foo": "bar"},
+                    headers=headers,
                 ):
                     pass
 
@@ -1221,12 +1224,14 @@ async def test_include_headers(distributed_tracing: bool, stream: bool):
                 await remote_pregel.ainvoke(
                     {"input": {"messages": [{"type": "human", "content": "hello"}]}},
                     config,
-                    headers={"foo": "bar"},
+                    headers=headers,
                 )
-    expected = {"foo": "bar"}
+    expected = headers.copy() if headers else None
     if distributed_tracing:
+        if expected is None:
+            expected = {}
         expected["langsmith-trace"] = AnyStr()
-        expected["baggage"] = AnyStr()
+        expected["baggage"] = AnyStr("langsmith-metadata=")
 
     assert astream_mock.call_args.kwargs["headers"] == expected
     stream_mock.assert_not_called()
@@ -1237,7 +1242,7 @@ async def test_include_headers(distributed_tracing: bool, stream: bool):
                 for _ in remote_pregel.stream(
                     {"input": {"messages": [{"type": "human", "content": "hello"}]}},
                     config,
-                    headers={"foo": "bar"},
+                    headers=headers,
                 ):
                     pass
 
@@ -1245,6 +1250,6 @@ async def test_include_headers(distributed_tracing: bool, stream: bool):
                 remote_pregel.invoke(
                     {"input": {"messages": [{"type": "human", "content": "hello"}]}},
                     config,
-                    headers={"foo": "bar"},
+                    headers=headers,
                 )
     assert stream_mock.call_args.kwargs["headers"] == expected

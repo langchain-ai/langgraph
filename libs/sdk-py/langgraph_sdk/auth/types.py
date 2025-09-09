@@ -400,6 +400,20 @@ class AuthContext(BaseAuthContext):
     """
 
 
+class ThreadTTL(typing.TypedDict, total=False):
+    """Time-to-live configuration for a thread.
+
+    Matches the OpenAPI schema where TTL is represented as an object with
+    an optional strategy and a time value in minutes.
+    """
+
+    strategy: typing.Literal["delete"]
+    """TTL strategy. Currently only 'delete' is supported."""
+
+    ttl: int
+    """Time-to-live in minutes from now until the thread should be swept."""
+
+
 class ThreadsCreate(typing.TypedDict, total=False):
     """Parameters for creating a new thread.
 
@@ -421,6 +435,9 @@ class ThreadsCreate(typing.TypedDict, total=False):
 
     if_exists: OnConflictBehavior
     """Behavior when a thread with the same ID already exists."""
+
+    ttl: ThreadTTL
+    """Optional TTL configuration for the thread."""
 
 
 class ThreadsRead(typing.TypedDict, total=False):
@@ -488,6 +505,9 @@ class ThreadsSearch(typing.TypedDict, total=False):
 
     offset: int
     """Offset for pagination."""
+
+    ids: Sequence[UUID] | None
+    """typing.Optional list of thread IDs to filter by."""
 
     thread_id: UUID | None
     """typing.Optional thread ID to filter by."""
