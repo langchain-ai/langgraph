@@ -6,7 +6,14 @@
 
 Install the `langchain-mcp-adapters` library to use MCP tools in LangGraph:
 
+:::python
 ```bash
 pip install langchain-mcp-adapters
 ```
+:::
 
+:::js
+```bash
+npm install @langchain/mcp-adapters
+```
+:::

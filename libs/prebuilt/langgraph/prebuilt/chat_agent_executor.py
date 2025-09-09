@@ -481,6 +481,11 @@ def create_react_agent(
         if context_schema is None:
             context_schema = config_schema
 
+    if len(deprecated_kwargs) > 0:
+        raise TypeError(
+            f"create_react_agent() got unexpected keyword arguments: {deprecated_kwargs}"
+        )
+
     if version not in ("v1", "v2"):
         raise ValueError(
             f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
@@ -896,13 +901,13 @@ def create_react_agent(
 
         workflow.add_conditional_edges(
             "post_model_hook",
-            post_model_hook_router,  # type: ignore[arg-type]
+            post_model_hook_router,
             path_map=post_model_hook_paths,
         )
 
     workflow.add_conditional_edges(
         "agent",
-        should_continue,  # type: ignore[arg-type]
+        should_continue,
         path_map=agent_paths,
     )
 

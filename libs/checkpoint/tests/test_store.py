@@ -34,6 +34,42 @@ class MockAsyncBatchedStore(AsyncBatchedBaseStore):
         return self._store.batch(ops)
 
 
+async def test_async_batch_store_resilience() -> None:
+    """Test that AsyncBatchedBaseStore recovers gracefully from task cancellation."""
+    doc = {"foo": "bar"}
+    async_store = MockAsyncBatchedStore()
+
+    await async_store.aput(("foo", "langgraph", "foo"), "bar", doc)
+
+    # Store the original task reference
+    original_task = async_store._task
+    assert original_task is not None
+    assert not original_task.done()
+
+    # Cancel the background task
+    original_task.cancel()
+    await asyncio.sleep(0.01)
+    assert original_task.cancelled()
+
+    # Perform a new operation - this should trigger _ensure_task() to create a new task
+    result = await async_store.asearch(("foo", "langgraph", "foo"))
+    assert len(result) > 0
+    assert result[0].value == doc
+
+    # Verify a new task was created
+    new_task = async_store._task
+    assert new_task is not None
+    assert new_task is not original_task
+    assert not new_task.done()
+
+    # Test that operations continue to work with the new task
+    doc2 = {"baz": "qux"}
+    await async_store.aput(("test", "namespace"), "key", doc2)
+    result2 = await async_store.aget(("test", "namespace"), "key")
+    assert result2 is not None
+    assert result2.value == doc2
+
+
 def test_get_text_at_path() -> None:
     nested_data = {
         "name": "test",
