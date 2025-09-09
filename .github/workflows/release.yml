@@ -62,9 +62,10 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         run: |
           PKG_NAME=$(grep -m 1 "^name = " pyproject.toml | cut -d '"' -f 2)
-          # sdk-py uses dynamic versioning from langgraph_sdk/__init__.py
-          if [ "$PKG_NAME" = "langgraph-sdk" ]; then
-            VERSION=$(grep -m 1 '^__version__' langgraph_sdk/__init__.py | cut -d '"' -f 2)
+          if grep -q 'dynamic.*=.*\[.*"version".*\]' pyproject.toml; then
+            # handle dynamic versioning
+            DIR_NAME=$(echo "$PKG_NAME" | tr '-' '_')
+            VERSION=$(grep -m 1 '^__version__' "${DIR_NAME}/__init__.py" | cut -d '"' -f 2)
           else
             VERSION=$(grep -m 1 "^version = " pyproject.toml | cut -d '"' -f 2)
           fi
