@@ -4805,7 +4805,10 @@ def test_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver):
     assert graph.invoke(Command(resume="bar"), thread1)
 
 
-def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
+@pytest.mark.parametrize("resume_style", ["null", "map"])
+def test_interrupt_multiple(
+    sync_checkpointer: BaseCheckpointSaver, resume_style: Literal["null", "map"]
+):
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
 
@@ -4821,7 +4824,8 @@ def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
     graph = builder.compile(checkpointer=sync_checkpointer)
     thread1 = {"configurable": {"thread_id": "1"}}
 
-    assert [e for e in graph.stream({"my_key": "DE", "market": "DE"}, thread1)] == [
+    result = [e for e in graph.stream({"my_key": "DE", "market": "DE"}, thread1)]
+    assert result == [
         {
             "__interrupt__": (
                 Interrupt(
@@ -4832,12 +4836,19 @@ def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
         }
     ]
 
-    assert [
+    result = [
         event
         for event in graph.stream(
-            Command(resume="answer 1", update={"my_key": " foofoo "}), thread1
+            Command(
+                resume="answer 1"
+                if resume_style == "null"
+                else {result[0]["__interrupt__"][0].id: "answer 1"},
+                update={"my_key": " foofoo "},
+            ),
+            thread1,
         )
-    ] == [
+    ]
+    assert result == [
         {
             "__interrupt__": (
                 Interrupt(
@@ -4851,7 +4862,13 @@ def test_interrupt_multiple(sync_checkpointer: BaseCheckpointSaver):
     assert [
         event
         for event in graph.stream(
-            Command(resume="answer 2"), thread1, stream_mode="values"
+            Command(
+                resume="answer 2"
+                if resume_style == "null"
+                else {result[0]["__interrupt__"][0].id: "answer 2"}
+            ),
+            thread1,
+            stream_mode="values",
         )
     ] == [
         {"my_key": "DE foofoo "},

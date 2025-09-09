@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import (
     Any,
@@ -10,6 +10,7 @@ from typing import (
     NamedTuple,
     Optional,
     TypedDict,
+    Union,
 )
 
 from typing_extensions import TypeAlias
@@ -35,6 +36,14 @@ Represents the status of a thread:
 - "busy": The thread is actively processing a task.
 - "interrupted": The thread's execution was interrupted.
 - "error": An exception occurred during task processing.
+"""
+
+ThreadStreamMode = Literal["run_modes", "lifecycle", "state_update"]
+"""
+Defines the mode of streaming:
+- "run_modes": Stream the same events as the runs on thread, as well as run_done events.
+- "lifecycle": Stream only run start/end events.
+- "state_update": Stream state updates on the thread.
 """
 
 StreamMode = Literal[
@@ -89,6 +98,12 @@ Defines action after completion:
 - "delete": Delete resources after completion.
 - "keep": Retain resources after completion.
 """
+
+Durability = Literal["sync", "async", "exit"]
+"""Durability mode for the graph execution.
+- `"sync"`: Changes are persisted synchronously before the next step starts.
+- `"async"`: Changes are persisted asynchronously while the next step executes.
+- `"exit"`: Changes are persisted only when the graph exits."""
 
 All = Literal["*"]
 """Represents a wildcard or 'all' selector."""
@@ -346,6 +361,72 @@ class Cron(TypedDict):
     """The next run date of the cron."""
     metadata: dict
     """The metadata of the cron."""
+
+
+# Select field aliases for client-side typing of `select` parameters.
+# These mirror the server's allowed field sets.
+
+AssistantSelectField = Literal[
+    "assistant_id",
+    "graph_id",
+    "name",
+    "description",
+    "config",
+    "context",
+    "created_at",
+    "updated_at",
+    "metadata",
+    "version",
+]
+
+ThreadSelectField = Literal[
+    "thread_id",
+    "created_at",
+    "updated_at",
+    "metadata",
+    "config",
+    "context",
+    "status",
+    "values",
+    "interrupts",
+]
+
+RunSelectField = Literal[
+    "run_id",
+    "thread_id",
+    "assistant_id",
+    "created_at",
+    "updated_at",
+    "status",
+    "metadata",
+    "kwargs",
+    "multitask_strategy",
+]
+
+CronSelectField = Literal[
+    "cron_id",
+    "assistant_id",
+    "thread_id",
+    "end_time",
+    "schedule",
+    "created_at",
+    "updated_at",
+    "user_id",
+    "payload",
+    "next_run_date",
+    "metadata",
+    "now",
+]
+
+PrimitiveData = Optional[Union[str, int, float, bool]]
+
+QueryParamTypes = Union[
+    Mapping[str, Union[PrimitiveData, Sequence[PrimitiveData]]],
+    list[tuple[str, PrimitiveData]],
+    tuple[tuple[str, PrimitiveData], ...],
+    str,
+    bytes,
+]
 
 
 class RunCreate(TypedDict):

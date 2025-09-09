@@ -78,6 +78,7 @@ jobs:
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
             "libs/prebuilt",
+            "libs/sdk-py",
           ]
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
     uses: ./.github/workflows/_test.yml
@@ -101,7 +102,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Run check_sdk_methods script

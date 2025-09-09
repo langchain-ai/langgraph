@@ -507,6 +507,7 @@ def interrupt(value: Any) -> Any:
     # find previous resume values
     if scratchpad.resume:
         if idx < len(scratchpad.resume):
+            conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
             return scratchpad.resume[idx]
     # find current resume value
     v = scratchpad.get_null_resume(True)
