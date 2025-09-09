@@ -4,8 +4,9 @@
 # TESTING AND COVERAGE
 ######################
 
+TEST?= "tests/unit_tests"
 test:
-	uv run pytest tests/unit_tests
+	uv run pytest $(TEST)
 test-integration:
 	uv run pytest tests/integration_tests
 

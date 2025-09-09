@@ -90,7 +90,7 @@ graph.invoke( # (1)!
     from langgraph.runtime import Runtime
 
     # highlight-next-line
-    def node(state: State, config: Runtime[ContextSchema]):
+    def node(state: State, runtime: Runtime[ContextSchema]):
         user_name = runtime.context.user_name
         ...
     ```
