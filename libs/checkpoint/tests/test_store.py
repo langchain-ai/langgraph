@@ -1021,3 +1021,24 @@ async def test_embed_with_path(fake_embeddings: CharacterEmbeddings) -> None:
     assert len(results) == 3
     doc5_result = next(r for r in results if r.key == "doc5")
     assert doc5_result.score is None
+
+
+def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
+    store = InMemoryStore(
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+    )
+    store.put(("user_123", "memories"), "1", {"text": "这是中文"})  # Chinese
+    store.put(("user_123", "memories"), "2", {"text": "これは日本語です"})  # Japanese
+    store.put(("user_123", "memories"), "3", {"text": "이건 한국어야"})  # Korean
+
+    result1 = store.search(("user_123", "memories"), query="这是中文")
+    assert result1[0].key == "1"
+    assert result1[0].score >= 0.15
+
+    result2 = store.search(("user_123", "memories"), query="これは日本語です")
+    assert result2[0].key == "2"
+    assert result2[0].score >= 0.15
+
+    result3 = store.search(("user_123", "memories"), query="이건 한국어야")
+    assert result3[0].key == "3"
+    assert result3[0].score >= 0.15

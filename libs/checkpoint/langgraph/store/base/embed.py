@@ -238,7 +238,7 @@ def get_text_at_path(obj: Any, path: str | list[str]) -> list[str]:
         - Nested paths in multi-field: "{field1,nested.field2}"
     """
     if not path or path == "$":
-        return [json.dumps(obj, sort_keys=True)]
+        return [json.dumps(obj, sort_keys=True, ensure_ascii=False)]
 
     tokens = tokenize_path(path) if isinstance(path, str) else path
 
