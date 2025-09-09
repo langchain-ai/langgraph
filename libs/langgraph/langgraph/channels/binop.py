@@ -4,9 +4,11 @@ from typing import Callable, Generic
 
 from typing_extensions import NotRequired, Required, Self
 
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import EmptyChannelError
+
+__all__ = ("BinaryOperatorAggregate",)
 
 
 # Adapted from typing_extensions

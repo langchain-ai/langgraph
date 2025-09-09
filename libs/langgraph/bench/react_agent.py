@@ -68,9 +68,9 @@ if __name__ == "__main__":
 
     import uvloop
 
-    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.checkpoint.memory import InMemorySaver
 
-    graph = react_agent(100, checkpointer=MemorySaver())
+    graph = react_agent(100, checkpointer=InMemorySaver())
     input = {"messages": [HumanMessage("hi?")]}
     config = {"configurable": {"thread_id": "1"}, "recursion_limit": 20000000000}
 

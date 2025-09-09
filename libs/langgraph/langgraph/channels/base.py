@@ -1,18 +1,22 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any, Generic, TypeVar
 
 from typing_extensions import Self
 
-from langgraph.constants import MISSING
-from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph._internal._typing import MISSING
+from langgraph.errors import EmptyChannelError
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
-C = TypeVar("C")
+Checkpoint = TypeVar("Checkpoint")
+
+__all__ = ("BaseChannel",)
 
 
-class BaseChannel(Generic[Value, Update, C], ABC):
+class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
     """Base class for all channels."""
 
     __slots__ = ("key", "typ")
@@ -39,7 +43,7 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         Subclasses can override this method with a more efficient implementation."""
         return self.from_checkpoint(self.checkpoint())
 
-    def checkpoint(self) -> C:
+    def checkpoint(self) -> Checkpoint | Any:
         """Return a serializable representation of the channel's current state.
         Raises EmptyChannelError if the channel is empty (never updated yet),
         or doesn't support checkpoints."""
@@ -49,7 +53,7 @@ class BaseChannel(Generic[Value, Update, C], ABC):
             return MISSING
 
     @abstractmethod
-    def from_checkpoint(self, checkpoint: C) -> Self:
+    def from_checkpoint(self, checkpoint: Checkpoint | Any) -> Self:
         """Return a new identical channel, optionally initialized from a checkpoint.
         If the checkpoint contains complex data structures, they should be copied."""
 
@@ -99,10 +103,3 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         Returns True if the channel was updated, False otherwise.
         """
         return False
-
-
-__all__ = [
-    "BaseChannel",
-    "EmptyChannelError",
-    "InvalidUpdateError",
-]

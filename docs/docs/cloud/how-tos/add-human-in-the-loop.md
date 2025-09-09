@@ -30,9 +30,7 @@ To review, edit, and approve tool calls in an agent or workflow, use LangGraph's
     # > [
     # >     {
     # >         'value': {'text_to_revise': 'original text'},
-    # >         'resumable': True,
-    # >         'ns': ['human_node:fc722478-2f21-0578-c572-d9fc4dd07c3b'],
-    # >         'when': 'during'
+    # >         'id': '...',
     # >     }
     # > ]
 
@@ -203,9 +201,7 @@ To review, edit, and approve tool calls in an agent or workflow, use LangGraph's
         # > [
         # >     {
         # >         'value': {'text_to_revise': 'original text'},
-        # >         'resumable': True,
-        # >         'ns': ['human_node:fc722478-2f21-0578-c572-d9fc4dd07c3b'],
-        # >         'when': 'during'
+        # >         'id': '...',
         # >     }
         # > ]
 

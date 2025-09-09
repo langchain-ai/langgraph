@@ -1,0 +1,27 @@
+{
+  "name": "_codeblocks",
+  "packageManager": "yarn@4.6.0",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:fix": "prettier --write . --fix"
+  },
+  "dependencies": {
+    "@langchain/anthropic": "^0.3.24",
+    "@langchain/core": "^0.3.66",
+    "@langchain/langgraph": "^0.3.11",
+    "@langchain/langgraph-api": "^0.0.52",
+    "@langchain/langgraph-sdk": "^0.0.102",
+    "@langchain/openai": "^0.6.3",
+    "zod": "^4.0.10"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "eslint": "^9.32.0",
+    "globals": "^16.3.0",
+    "jiti": "^2.5.1",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0"
+  }
+}

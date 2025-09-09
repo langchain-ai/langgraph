@@ -400,6 +400,20 @@ class AuthContext(BaseAuthContext):
     """
 
 
+class ThreadTTL(typing.TypedDict, total=False):
+    """Time-to-live configuration for a thread.
+
+    Matches the OpenAPI schema where TTL is represented as an object with
+    an optional strategy and a time value in minutes.
+    """
+
+    strategy: typing.Literal["delete"]
+    """TTL strategy. Currently only 'delete' is supported."""
+
+    ttl: int
+    """Time-to-live in minutes from now until the thread should be swept."""
+
+
 class ThreadsCreate(typing.TypedDict, total=False):
     """Parameters for creating a new thread.
 
@@ -421,6 +435,9 @@ class ThreadsCreate(typing.TypedDict, total=False):
 
     if_exists: OnConflictBehavior
     """Behavior when a thread with the same ID already exists."""
+
+    ttl: ThreadTTL
+    """Optional TTL configuration for the thread."""
 
 
 class ThreadsRead(typing.TypedDict, total=False):
@@ -489,6 +506,9 @@ class ThreadsSearch(typing.TypedDict, total=False):
     offset: int
     """Offset for pagination."""
 
+    ids: Sequence[UUID] | None
+    """typing.Optional list of thread IDs to filter by."""
+
     thread_id: UUID | None
     """typing.Optional thread ID to filter by."""
 
@@ -556,7 +576,8 @@ class AssistantsCreate(typing.TypedDict, total=False):
         create_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
             "graph_id": "graph123",
-            "config": {"key": "value"},
+            "config": {"tags": ["tag1", "tag2"]},
+            "context": {"key": "value"},
             "metadata": {"owner": "user123"},
             "if_exists": "do_nothing",
             "name": "Assistant 1"
@@ -570,8 +591,10 @@ class AssistantsCreate(typing.TypedDict, total=False):
     graph_id: str
     """Graph ID to use for this assistant."""
 
-    config: dict[str, typing.Any] | typing.Any | None
+    config: dict[str, typing.Any]
     """typing.Optional configuration for the assistant."""
+
+    context: dict[str, typing.Any]
 
     metadata: MetadataInput
     """typing.Optional metadata to attach to the assistant."""
@@ -610,7 +633,8 @@ class AssistantsUpdate(typing.TypedDict, total=False):
         update_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
             "graph_id": "graph123",
-            "config": {"key": "value"},
+            "config": {"tags": ["tag1", "tag2"]},
+            "context": {"key": "value"},
             "metadata": {"owner": "user123"},
             "name": "Assistant 1",
             "version": 1
@@ -624,8 +648,11 @@ class AssistantsUpdate(typing.TypedDict, total=False):
     graph_id: str | None
     """typing.Optional graph ID to update."""
 
-    config: dict[str, typing.Any] | typing.Any | None
+    config: dict[str, typing.Any]
     """typing.Optional configuration to update."""
+
+    context: dict[str, typing.Any]
+    """The static context of the assistant."""
 
     metadata: MetadataInput
     """typing.Optional metadata to update."""

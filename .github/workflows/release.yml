@@ -62,7 +62,13 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         run: |
           PKG_NAME=$(grep -m 1 "^name = " pyproject.toml | cut -d '"' -f 2)
-          VERSION=$(grep -m 1 "^version = " pyproject.toml | cut -d '"' -f 2)
+          if grep -q 'dynamic.*=.*\[.*"version".*\]' pyproject.toml; then
+            # handle dynamic versioning
+            DIR_NAME=$(echo "$PKG_NAME" | tr '-' '_')
+            VERSION=$(grep -m 1 '^__version__' "${DIR_NAME}/__init__.py" | cut -d '"' -f 2)
+          else
+            VERSION=$(grep -m 1 "^version = " pyproject.toml | cut -d '"' -f 2)
+          fi
           SHORT_PKG_NAME="$(echo "$PKG_NAME" | sed -e 's/langgraph//g' -e 's/-//g')"
           if [ -z $SHORT_PKG_NAME ]; then
             TAG="$VERSION"
@@ -137,7 +143,9 @@ jobs:
     needs:
       - build
       - release-notes
-    permissions: write-all
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/_test_release.yml
     with:
       working-directory: ${{ inputs.working-directory }}

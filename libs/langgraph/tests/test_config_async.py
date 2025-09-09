@@ -1,7 +1,7 @@
 import pytest
 from langchain_core.callbacks import AsyncCallbackManager
 
-from langgraph.utils.config import get_async_callback_manager_for_config
+from langgraph._internal._config import get_async_callback_manager_for_config
 
 pytestmark = pytest.mark.anyio
 

@@ -81,6 +81,9 @@ class Checkpoint(TypedDict):
     This keeps track of the versions of the channels that each node has seen.
     Used to determine which nodes to execute next.
     """
+    updated_channels: list[str] | None
+    """The channels that were updated in this checkpoint.
+    """
 
 
 def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
@@ -92,6 +95,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         pending_sends=checkpoint.get("pending_sends", []).copy(),
+        updated_channels=checkpoint.get("updated_channels", None),
     )
 
 
@@ -375,10 +379,8 @@ class EmptyChannelError(Exception):
 
 
 def get_checkpoint_id(config: RunnableConfig) -> str | None:
-    """Get checkpoint ID in a backwards-compatible manner (fallback on thread_ts)."""
-    return config["configurable"].get(
-        "checkpoint_id", config["configurable"].get("thread_ts")
-    )
+    """Get checkpoint ID."""
+    return config["configurable"].get("checkpoint_id")
 
 
 def get_checkpoint_metadata(
@@ -413,7 +415,6 @@ WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3, RESUME: -4}
 
 EXCLUDED_METADATA_KEYS = {
     "thread_id",
-    "thread_ts",
     "checkpoint_id",
     "checkpoint_ns",
     "checkpoint_map",
@@ -440,6 +441,7 @@ def empty_checkpoint() -> Checkpoint:
         channel_versions={},
         versions_seen={},
         pending_sends=[],
+        updated_channels=None,
     )
 
 
@@ -473,4 +475,5 @@ def create_checkpoint(
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
         pending_sends=checkpoint.get("pending_sends", []),
+        updated_channels=None,
     )

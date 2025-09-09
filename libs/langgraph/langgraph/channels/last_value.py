@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
 from typing import Any, Generic
 
 from typing_extensions import Self
 
+from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.constants import MISSING
 from langgraph.errors import (
     EmptyChannelError,
     ErrorCode,
@@ -12,11 +14,15 @@ from langgraph.errors import (
     create_error_message,
 )
 
+__all__ = ("LastValue", "LastValueAfterFinish")
+
 
 class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, can receive at most one value per step."""
 
     __slots__ = ("value",)
+
+    value: Value | Any
 
     def __init__(self, typ: Any, key: str = "") -> None:
         super().__init__(typ, key)
@@ -80,6 +86,9 @@ class LastValueAfterFinish(
 
     __slots__ = ("value", "finished")
 
+    value: Value | Any
+    finished: bool
+
     def __init__(self, typ: Any, key: str = "") -> None:
         super().__init__(typ, key)
         self.value = MISSING
@@ -98,19 +107,19 @@ class LastValueAfterFinish(
         """The type of the update received by the channel."""
         return self.typ
 
-    def checkpoint(self) -> tuple[Value, bool]:
+    def checkpoint(self) -> tuple[Value | Any, bool] | Any:
         if self.value is MISSING:
             return MISSING
         return (self.value, self.finished)
 
-    def from_checkpoint(self, checkpoint: tuple[Value, bool]) -> Self:
+    def from_checkpoint(self, checkpoint: tuple[Value | Any, bool] | Any) -> Self:
         empty = self.__class__(self.typ)
         empty.key = self.key
         if checkpoint is not MISSING:
             empty.value, empty.finished = checkpoint
         return empty
 
-    def update(self, values: Sequence[Value]) -> bool:
+    def update(self, values: Sequence[Value | Any]) -> bool:
         if len(values) == 0:
             return False
 

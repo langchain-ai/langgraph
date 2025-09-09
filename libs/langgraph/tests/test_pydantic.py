@@ -21,9 +21,9 @@ from pydantic import (
     model_validator,
 )
 
+from langgraph._internal._pydantic import is_supported_by_pydantic
 from langgraph.constants import END, START
 from langgraph.graph.state import StateGraph
-from langgraph.utils.pydantic import is_supported_by_pydantic
 
 
 def test_is_supported_by_pydantic() -> None:

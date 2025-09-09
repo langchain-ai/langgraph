@@ -44,8 +44,8 @@ This section describes various features of the control plane.
 
 For simplicity, the control plane offers two deployment types with different resource allocations: `Development` and `Production`.
 
-| **Deployment Type** | **CPU/Memory**  | **Scaling**         | **Database**                                                                     |
-|---------------------|-----------------|---------------------|----------------------------------------------------------------------------------|
+| **Deployment Type** | **CPU/Memory**  | **Scaling**       | **Database**                                                                     |
+| ------------------- | --------------- | ----------------- | -------------------------------------------------------------------------------- |
 | Development         | 1 CPU, 1 GB RAM | Up to 1 replica   | 10 GB disk, no backups                                                           |
 | Production          | 2 CPU, 2 GB RAM | Up to 10 replicas | Autoscaling disk, automatic backups, highly available (multi-zone configuration) |
 
@@ -56,7 +56,7 @@ CPU and memory resources are per replica.
     Once a deployment is created, the deployment type cannot be changed.
 
 !!! info "Self-Hosted Deployment"
-    Resources for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments can be fully customized. Deployment types are only applicable for [Cloud SaaS](../concepts/langgraph_cloud.md) deployments.
+Resources for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments can be fully customized. Deployment types are only applicable for [Cloud SaaS](../concepts/langgraph_cloud.md) deployments.
 
 #### Production
 
@@ -69,12 +69,12 @@ Resources for `Production` type deployments can be manually increased on a case-
 `Development` type deployments are suitable development and testing. For example, select `Development` for internal testing environments. `Development` type deployments are not suitable for "production" workloads.
 
 !!! danger "Preemptible Compute Infrastructure"
-    `Development` type deployments (API server, queue server, and database) are provisioned on preemptible compute infrastructure. This means the compute infrastructure **may be terminated at any time without notice**. This may result in intermittent...
+`Development` type deployments (API server, queue server, and database) are provisioned on preemptible compute infrastructure. This means the compute infrastructure **may be terminated at any time without notice**. This may result in intermittent...
 
     - Redis connection timeouts/errors
     - Postgres connection timeouts/errors
     - Failed or retrying background runs
-    
+
     This behavior is expected. Preemptible compute infrastructure **significantly reduces the cost to provision a `Development` type deployment**. By design, LangGraph Server is fault-tolerant. The implementation will automatically attempt to recover from Redis/Postgres connection errors and retry failed background runs.
 
     `Production` type deployments are provisioned on durable compute infrastructure, not preemptible compute infrastructure.
@@ -92,7 +92,7 @@ There is no direct access to the database. All access to the database occurs thr
 The database is never deleted until the deployment itself is deleted.
 
 !!! info
-    A custom Postgres instance can be configured for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
+A custom Postgres instance can be configured for [Self-Hosted Data Plane](../concepts/langgraph_self_hosted_data_plane.md) and [Self-Hosted Control Plane](../concepts/langgraph_self_hosted_control_plane.md) deployments.
 
 ### Asynchronous Deployment
 
@@ -119,6 +119,11 @@ These metrics are displayed as charts in the Control Plane UI.
 
 ### LangSmith Integration
 
-A [LangSmith](https://docs.smith.langchain.com/) tracing project is automatically created for each deployment. The tracing project has the same name as the deployment. When creating a deployment, the `LANGCHAIN_TRACING` and `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY` environment variables do not need to be specified; they are set automatically by the control plane.
+A [LangSmith](https://docs.smith.langchain.com/) tracing project and LangSmith API key are automatically created for each deployment. The deployment uses the API key to automatically send traces to LangSmith.
 
-When a deployment is deleted, the traces and the tracing project are not deleted.
+- The tracing project has the same name as the deployment.
+- The API key has the description `LangGraph Platform: <deployment_name>`.
+- The API key is never revealed and cannot be deleted manually.
+- When creating a deployment, the `LANGCHAIN_TRACING` and `LANGSMITH_API_KEY`/`LANGCHAIN_API_KEY` environment variables do not need to be specified; they are set automatically by the control plane.
+
+When a deployment is deleted, the traces and the tracing project are not deleted. However, the API will be deleted when the deployment is deleted.

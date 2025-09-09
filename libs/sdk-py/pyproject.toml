@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-sdk"
-version = "0.1.73"
+dynamic = ["version"]
 description = "SDK for interacting with LangGraph API"
 authors = []
 requires-python = ">=3.9"
@@ -15,6 +15,9 @@ dependencies = [
     "httpx>=0.25.2",
     "orjson>=3.10.1",
 ]
+
+[tool.hatch.version]
+path = "langgraph_sdk/__init__.py"
 
 [project.urls]
 Repository = "https://www.github.com/langchain-ai/langgraph"
@@ -47,5 +50,6 @@ lint.select = [
   "UP", # pyupgrade
   "B",  # flake8-bugbear
   "I",  # isort
+  "ARG", # flake8-unused-arguments
 ]
 lint.ignore = ["E501", "B008"]

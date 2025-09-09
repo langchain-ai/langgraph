@@ -1,105 +1,4 @@
 # serializer version: 1
-# name: test_conditional_graph[memory]
-  '''
-  {
-    "nodes": [
-      {
-        "id": "agent",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain",
-            "schema",
-            "runnable",
-            "RunnableAssign"
-          ],
-          "name": "agent"
-        }
-      },
-      {
-        "id": "tools",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "runnable",
-            "RunnableCallable"
-          ],
-          "name": "tools"
-        },
-        "metadata": {
-          "parents": {},
-          "version": 2,
-          "variant": "b"
-        }
-      },
-      {
-        "id": "__start__"
-      },
-      {
-        "id": "__end__"
-      }
-    ],
-    "edges": [
-      {
-        "source": "__start__",
-        "target": "agent"
-      },
-      {
-        "source": "agent",
-        "target": "__end__",
-        "data": "exit",
-        "conditional": true
-      },
-      {
-        "source": "agent",
-        "target": "tools",
-        "data": "continue",
-        "conditional": true
-      },
-      {
-        "source": "tools",
-        "target": "agent"
-      }
-    ]
-  }
-  '''
-# ---
-# name: test_conditional_graph[memory].1
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	agent -. &nbsp;exit&nbsp; .-> __end__;
-  	agent -. &nbsp;continue&nbsp; .-> tools;
-  	tools --> agent;
-  
-  '''
-# ---
-# name: test_conditional_graph[memory].2
-  '''
-  ---
-  config:
-    flowchart:
-      curve: linear
-  ---
-  graph TD;
-  	agent(agent)
-  	tools(tools<hr/><small><em>parents = {}
-  version = 2
-  variant = b</em></small>)
-  	__start__([<p>__start__</p>]):::first
-  	__end__([<p>__end__</p>]):::last
-  	__start__ --> agent;
-  	agent -. &nbsp;exit&nbsp; .-> __end__;
-  	agent -. &nbsp;continue&nbsp; .-> tools;
-  	tools --> agent;
-  	classDef default fill:#f2f0ff,line-height:1.2
-  	classDef first fill-opacity:0
-  	classDef last fill:#bfb6fc
-  
-  '''
-# ---
 # name: test_conditional_state_graph[memory]
   '{"$defs": {"AgentAction": {"description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"anyOf": [{"type": "string"}, {"additionalProperties": true, "type": "object"}], "title": "Tool Input"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentAction", "default": "AgentAction", "title": "Type", "type": "string"}}, "required": ["tool", "tool_input", "log"], "title": "AgentAction", "type": "object"}, "AgentFinish": {"description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "properties": {"return_values": {"additionalProperties": true, "title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentFinish", "default": "AgentFinish", "title": "Type", "type": "string"}}, "required": ["return_values", "log"], "title": "AgentFinish", "type": "object"}}, "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"anyOf": [{"$ref": "#/$defs/AgentAction"}, {"$ref": "#/$defs/AgentFinish"}, {"type": "null"}], "title": "Agent Outcome"}, "intermediate_steps": {"items": {"maxItems": 2, "minItems": 2, "prefixItems": [{"$ref": "#/$defs/AgentAction"}, {"type": "string"}], "type": "array"}, "title": "Intermediate Steps", "type": "array"}}, "title": "AgentState", "type": "object"}'
 # ---
@@ -116,8 +15,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "__start__"
@@ -142,8 +41,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -204,8 +103,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "__start__"
@@ -276,10 +175,10 @@
   '''
 # ---
 # name: test_prebuilt_tool_chat
-  '{"$defs": {"BaseMessage": {"additionalProperties": true, "description": "Base abstract message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "properties": {"content": {"anyOf": [{"type": "string"}, {"items": {"anyOf": [{"type": "string"}, {"additionalProperties": true, "type": "object"}]}, "type": "array"}], "title": "Content"}, "additional_kwargs": {"additionalProperties": true, "title": "Additional Kwargs", "type": "object"}, "response_metadata": {"additionalProperties": true, "title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Name"}, "id": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Id"}}, "required": ["content", "type"], "title": "BaseMessage", "type": "object"}}, "description": "The state of the agent.", "properties": {"messages": {"items": {"$ref": "#/$defs/BaseMessage"}, "title": "Messages", "type": "array"}, "is_last_step": {"title": "Is Last Step", "type": "boolean"}, "remaining_steps": {"title": "Remaining Steps", "type": "integer"}}, "required": ["messages", "is_last_step", "remaining_steps"], "title": "AgentState", "type": "object"}'
+  '{"$defs": {"BaseMessage": {"additionalProperties": true, "description": "Base abstract message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "properties": {"content": {"anyOf": [{"type": "string"}, {"items": {"anyOf": [{"type": "string"}, {"additionalProperties": true, "type": "object"}]}, "type": "array"}], "title": "Content"}, "additional_kwargs": {"additionalProperties": true, "title": "Additional Kwargs", "type": "object"}, "response_metadata": {"additionalProperties": true, "title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Name"}, "id": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Id"}}, "required": ["content", "type"], "title": "BaseMessage", "type": "object"}}, "description": "The state of the agent.", "properties": {"messages": {"items": {"$ref": "#/$defs/BaseMessage"}, "title": "Messages", "type": "array"}, "remaining_steps": {"title": "Remaining Steps", "type": "integer"}}, "required": ["messages"], "title": "AgentState", "type": "object"}'
 # ---
 # name: test_prebuilt_tool_chat.1
-  '{"$defs": {"BaseMessage": {"additionalProperties": true, "description": "Base abstract message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "properties": {"content": {"anyOf": [{"type": "string"}, {"items": {"anyOf": [{"type": "string"}, {"additionalProperties": true, "type": "object"}]}, "type": "array"}], "title": "Content"}, "additional_kwargs": {"additionalProperties": true, "title": "Additional Kwargs", "type": "object"}, "response_metadata": {"additionalProperties": true, "title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Name"}, "id": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Id"}}, "required": ["content", "type"], "title": "BaseMessage", "type": "object"}}, "description": "The state of the agent.", "properties": {"messages": {"items": {"$ref": "#/$defs/BaseMessage"}, "title": "Messages", "type": "array"}, "is_last_step": {"title": "Is Last Step", "type": "boolean"}, "remaining_steps": {"title": "Remaining Steps", "type": "integer"}}, "required": ["messages", "is_last_step", "remaining_steps"], "title": "AgentState", "type": "object"}'
+  '{"$defs": {"BaseMessage": {"additionalProperties": true, "description": "Base abstract message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "properties": {"content": {"anyOf": [{"type": "string"}, {"items": {"anyOf": [{"type": "string"}, {"additionalProperties": true, "type": "object"}]}, "type": "array"}], "title": "Content"}, "additional_kwargs": {"additionalProperties": true, "title": "Additional Kwargs", "type": "object"}, "response_metadata": {"additionalProperties": true, "title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Name"}, "id": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": null, "title": "Id"}}, "required": ["content", "type"], "title": "BaseMessage", "type": "object"}}, "description": "The state of the agent.", "properties": {"messages": {"items": {"$ref": "#/$defs/BaseMessage"}, "title": "Messages", "type": "array"}, "remaining_steps": {"title": "Remaining Steps", "type": "integer"}}, "required": ["messages"], "title": "AgentState", "type": "object"}'
 # ---
 # name: test_prebuilt_tool_chat.2
   '''
@@ -291,8 +190,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "__start__"
@@ -304,8 +203,8 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "runnable",
+            "_internal",
+            "_runnable",
             "RunnableCallable"
           ],
           "name": "agent"

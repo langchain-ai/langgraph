@@ -341,12 +341,13 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
+    { name = "redis" },
     { name = "ruff" },
 ]
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.10"
+version = "2.0.11"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },

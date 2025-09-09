@@ -16,7 +16,7 @@ from mkdocs.structure.files import Files, File
 from mkdocs.structure.pages import Page
 
 from _scripts.generate_api_reference_links import update_markdown_with_imports
-from _scripts.link_map import JS_LINK_MAP
+from _scripts.handle_auto_links import _replace_autolinks
 from _scripts.notebook_convert import convert_notebook
 
 logger = logging.getLogger(__name__)
@@ -88,12 +88,12 @@ REDIRECT_MAP = {
     "cloud/how-tos/human_in_the_loop_user_input.md": "cloud/how-tos/add-human-in-the-loop.md",
     "concepts/platform_architecture.md": "concepts/langgraph_cloud#architecture",
     # cloud streaming redirects
-    "cloud/how-tos/stream_values.md": "cloud/how-tos/streaming.md#stream-graph-state",
-    "cloud/how-tos/stream_updates.md": "cloud/how-tos/streaming.md#stream-graph-state",
-    "cloud/how-tos/stream_messages.md": "cloud/how-tos/streaming.md#messages",
-    "cloud/how-tos/stream_events.md": "cloud/how-tos/streaming.md#stream-events",
-    "cloud/how-tos/stream_debug.md": "cloud/how-tos/streaming.md#debug",
-    "cloud/how-tos/stream_multiple.md": "cloud/how-tos/streaming.md#stream-multiple-modes",
+    "cloud/how-tos/stream_values.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/how-tos/stream_updates.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/how-tos/stream_messages.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/how-tos/stream_events.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/how-tos/stream_debug.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/how-tos/stream_multiple.md": "https://docs.langchain.com/langgraph-platform/streaming",
     "cloud/concepts/streaming.md": "concepts/streaming.md",
     "agents/streaming.md": "how-tos/streaming.md",
     # prebuilt redirects
@@ -127,6 +127,85 @@ REDIRECT_MAP = {
     "how-tos/human_in_the_loop/breakpoints.md": "how-tos/human_in_the_loop/add-human-in-the-loop.md",
     "cloud/how-tos/human_in_the_loop_breakpoint.md": "cloud/how-tos/add-human-in-the-loop.md",
     "how-tos/human_in_the_loop/edit-graph-state.ipynb": "how-tos/human_in_the_loop/time-travel.md",
+
+    # LGP mintlify migration redirects
+    "tutorials/auth/getting_started.md": "https://docs.langchain.com/langgraph-platform/auth",
+    "tutorials/auth/resource_auth.md": "https://docs.langchain.com/langgraph-platform/resource-auth",
+    "tutorials/auth/add_auth_server.md": "https://docs.langchain.com/langgraph-platform/add-auth-server",
+    "how-tos/use-remote-graph.md": "https://docs.langchain.com/langgraph-platform/use-remote-graph",
+    "how-tos/autogen-integration.md": "https://docs.langchain.com/langgraph-platform/autogen-integration",
+    "cloud/how-tos/use_stream_react.md": "https://docs.langchain.com/langgraph-platform/use-stream-react",
+    "cloud/how-tos/generative_ui_react.md": "https://docs.langchain.com/langgraph-platform/generative-ui-react",
+    "concepts/langgraph_platform.md": "https://docs.langchain.com/langgraph-platform/index",
+    "concepts/langgraph_components.md": "https://docs.langchain.com/langgraph-platform/components",
+    "concepts/langgraph_server.md": "https://docs.langchain.com/langgraph-platform/langgraph-server",
+    "concepts/langgraph_data_plane.md": "https://docs.langchain.com/langgraph-platform/data-plane",
+    "concepts/langgraph_control_plane.md": "https://docs.langchain.com/langgraph-platform/control-plane",
+    "concepts/langgraph_cli.md": "https://docs.langchain.com/langgraph-platform/langgraph-cli",
+    "concepts/langgraph_studio.md": "https://docs.langchain.com/langgraph-platform/langgraph-studio",
+    "cloud/how-tos/studio/quick_start.md": "https://docs.langchain.com/langgraph-platform/quick-start-studio",
+    "cloud/how-tos/invoke_studio.md": "https://docs.langchain.com/langgraph-platform/invoke-studio",
+    "cloud/how-tos/studio/manage_assistants.md": "https://docs.langchain.com/langgraph-platform/manage-assistants-studio",
+    "cloud/how-tos/threads_studio.md": "https://docs.langchain.com/langgraph-platform/threads-studio",
+    "cloud/how-tos/iterate_graph_studio.md": "https://docs.langchain.com/langgraph-platform/iterate-graph-studio",
+    "cloud/how-tos/studio/run_evals.md": "https://docs.langchain.com/langgraph-platform/run-evals-studio",
+    "cloud/how-tos/clone_traces_studio.md": "https://docs.langchain.com/langgraph-platform/clone-traces-studio",
+    "cloud/how-tos/datasets_studio.md": "https://docs.langchain.com/langgraph-platform/datasets-studio",
+    "concepts/sdk.md": "https://docs.langchain.com/langgraph-platform/sdk",
+    "concepts/plans.md": "https://docs.langchain.com/langgraph-platform/plans",
+    "concepts/application_structure.md": "https://docs.langchain.com/langgraph-platform/application-structure",
+    "concepts/scalability_and_resilience.md": "https://docs.langchain.com/langgraph-platform/scalability-and-resilience",
+    "concepts/auth.md": "https://docs.langchain.com/langgraph-platform/auth",
+    "how-tos/auth/custom_auth.md": "https://docs.langchain.com/langgraph-platform/custom-auth",
+    "how-tos/auth/openapi_security.md": "https://docs.langchain.com/langgraph-platform/openapi-security",
+    "concepts/assistants.md": "https://docs.langchain.com/langgraph-platform/assistants",
+    "cloud/how-tos/configuration_cloud.md": "https://docs.langchain.com/langgraph-platform/configuration-cloud",
+    "cloud/how-tos/use_threads.md": "https://docs.langchain.com/langgraph-platform/use-threads",
+    "cloud/how-tos/background_run.md": "https://docs.langchain.com/langgraph-platform/background-run",
+    "cloud/how-tos/same-thread.md": "https://docs.langchain.com/langgraph-platform/same-thread",
+    "cloud/how-tos/stateless_runs.md": "https://docs.langchain.com/langgraph-platform/stateless-runs",
+    "cloud/how-tos/configurable_headers.md": "https://docs.langchain.com/langgraph-platform/configurable-headers",
+    "concepts/double_texting.md": "https://docs.langchain.com/langgraph-platform/double-texting",
+    "cloud/how-tos/interrupt_concurrent.md": "https://docs.langchain.com/langgraph-platform/interrupt-concurrent",
+    "cloud/how-tos/rollback_concurrent.md": "https://docs.langchain.com/langgraph-platform/rollback-concurrent",
+    "cloud/how-tos/reject_concurrent.md": "https://docs.langchain.com/langgraph-platform/reject-concurrent",
+    "cloud/how-tos/enqueue_concurrent.md": "https://docs.langchain.com/langgraph-platform/enqueue-concurrent",
+    "cloud/concepts/webhooks.md": "https://docs.langchain.com/langgraph-platform/use-webhooks",
+    "cloud/how-tos/webhooks.md": "https://docs.langchain.com/langgraph-platform/use-webhooks",
+    "cloud/concepts/cron_jobs.md": "https://docs.langchain.com/langgraph-platform/cron-jobs",
+    "cloud/how-tos/cron_jobs.md": "https://docs.langchain.com/langgraph-platform/cron-jobs",
+    "how-tos/http/custom_lifespan.md": "https://docs.langchain.com/langgraph-platform/custom-lifespan",
+    "how-tos/http/custom_middleware.md": "https://docs.langchain.com/langgraph-platform/custom-middleware",
+    "how-tos/http/custom_routes.md": "https://docs.langchain.com/langgraph-platform/custom-routes",
+    "cloud/concepts/data_storage_and_privacy.md": "https://docs.langchain.com/langgraph-platform/data-storage-and-privacy",
+    "cloud/deployment/semantic_search.md": "https://docs.langchain.com/langgraph-platform/semantic-search",
+    "how-tos/ttl/configure_ttl.md": "https://docs.langchain.com/langgraph-platform/configure-ttl",
+    "concepts/deployment_options.md": "https://docs.langchain.com/langgraph-platform/deployment-options",
+    "cloud/quick_start.md": "https://docs.langchain.com/langgraph-platform/deployment-quickstart",
+    "cloud/deployment/setup.md": "https://docs.langchain.com/langgraph-platform/setup-app-requirements-txt",
+    "cloud/deployment/setup_pyproject.md": "https://docs.langchain.com/langgraph-platform/setup-pyproject",
+    "cloud/deployment/setup_javascript.md": "https://docs.langchain.com/langgraph-platform/setup-javascript",
+    "cloud/deployment/custom_docker.md": "https://docs.langchain.com/langgraph-platform/custom-docker",
+    "cloud/deployment/graph_rebuild.md": "https://docs.langchain.com/langgraph-platform/graph-rebuild",
+    "concepts/langgraph_cloud.md": "https://docs.langchain.com/langgraph-platform/cloud",
+    "concepts/langgraph_self_hosted_data_plane.md": "https://docs.langchain.com/langgraph-platform/hybrid",
+    "concepts/langgraph_self_hosted_control_plane.md": "https://docs.langchain.com/langgraph-platform/self-hosted",
+    "concepts/langgraph_standalone_container.md": "https://docs.langchain.com/langgraph-platform/self-hosted#standalone-server",
+    "cloud/deployment/cloud.md": "https://docs.langchain.com/langgraph-platform/cloud",
+    "cloud/deployment/self_hosted_data_plane.md": "https://docs.langchain.com/langgraph-platform/deploy-hybrid",
+    "cloud/deployment/self_hosted_control_plane.md": "https://docs.langchain.com/langgraph-platform/deploy-self-hosted-full-platform",
+    "cloud/deployment/standalone_container.md": "https://docs.langchain.com/langgraph-platform/deploy-standalone-server",
+    "concepts/server-mcp.md": "https://docs.langchain.com/langgraph-platform/server-mcp",
+    "cloud/how-tos/human_in_the_loop_time_travel.md": "https://docs.langchain.com/langgraph-platform/human-in-the-loop-time-travel",
+    "cloud/how-tos/add-human-in-the-loop.md": "https://docs.langchain.com/langgraph-platform/add-human-in-the-loop",
+    "cloud/deployment/egress.md": "https://docs.langchain.com/langgraph-platform/env-var",
+    "cloud/how-tos/streaming.md": "https://docs.langchain.com/langgraph-platform/streaming",
+    "cloud/reference/api/api_ref.md": "https://docs.langchain.com/langgraph-platform/server-api-ref",
+    "cloud/reference/langgraph_server_changelog.md": "https://docs.langchain.com/langgraph-platform/langgraph-server-changelog",
+    "cloud/reference/api/api_ref_control_plane.md": "https://docs.langchain.com/langgraph-platform/api-ref-control-plane",
+    "cloud/reference/cli.md": "https://docs.langchain.com/langgraph-platform/cli",
+    "cloud/reference/env_var.md": "https://docs.langchain.com/langgraph-platform/env-var",
+    "troubleshooting/studio.md": "https://docs.langchain.com/langgraph-platform/troubleshooting-studio",
 }
 
 
@@ -176,31 +255,7 @@ def _add_path_to_code_blocks(markdown: str, page: Page) -> str:
     return code_block_pattern.sub(replace_code_block_header, markdown)
 
 
-def _resolve_cross_references(md_text: str, link_map: dict[str, str]) -> str:
-    """Replace [title][identifier] with [title](url) using language-specific link_map.
-
-    Args:
-        md_text: The markdown text to process.
-        link_map: mapping of identifier to URL.
-
-    Returns:
-        The processed markdown text with cross-references resolved.
-    """
-    # Pattern to match [title][identifier]
-    pattern = re.compile(r"\[([^\]]+)\]\[([^\]]+)\]")
-
-    def replace_reference(match: re.Match) -> str:
-        """Replace the matched reference with the corresponding URL."""
-        title, identifier = match.group(1), match.group(2)
-        url = link_map.get(identifier)
-
-        if url:
-            return f"[{title}]({url})"
-        else:
-            # Leave it unchanged if not found
-            return match.group(0)
-
-    return pattern.sub(replace_reference, md_text)
+# Compiled regex patterns for better performance and readability
 
 
 def _apply_conditional_rendering(md_text: str, target_language: str) -> str:
@@ -210,7 +265,7 @@ def _apply_conditional_rendering(md_text: str, target_language: str) -> str:
     pattern = re.compile(
         r"(?P<indent>[ \t]*):::(?P<language>\w+)\s*\n"
         r"(?P<content>((?:.*\n)*?))"  # Capture the content inside the block
-        r"(?P=indent):::"  # Match closing with the same indentation
+        r"(?P=indent)[ \t]*:::"  # Match closing with the same indentation + any additional whitespace
     )
 
     def replace_conditional_blocks(match: re.Match) -> str:
@@ -295,7 +350,7 @@ def _highlight_code_blocks(markdown: str) -> str:
             opening_fence += f" {attributes}"
 
         if highlighted_lines:
-            opening_fence += f" hl_lines=\"{' '.join(highlighted_lines)}\""
+            opening_fence += f' hl_lines="{" ".join(highlighted_lines)}"'
 
         return (
             # The indent and opening fence
@@ -308,6 +363,21 @@ def _highlight_code_blocks(markdown: str) -> str:
     # Replace all code blocks in the markdown
     markdown = code_block_pattern.sub(replace_highlight_comments, markdown)
     return markdown
+
+
+def _save_page_output(markdown: str, output_path: str):
+    """Save markdown content to a file, creating parent directories if needed.
+
+    Args:
+        markdown: The markdown content to save
+        output_path: The file path to save to
+    """
+    # Create parent directories recursively if they don't exist
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    
+    # Write the markdown content to the file
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(markdown)
 
 
 def _on_page_markdown_with_config(
@@ -325,6 +395,14 @@ def _on_page_markdown_with_config(
         # logger.info("Processing Jupyter notebook: %s", page.file.src_path)
         markdown = convert_notebook(page.file.abs_src_path)
 
+    target_language = kwargs.get(
+        "target_language",
+        os.environ.get("TARGET_LANGUAGE", "python")
+    )
+
+    # Apply cross-reference preprocessing to all markdown content
+    markdown = _replace_autolinks(markdown, page.file.src_path, default_scope=target_language)
+
     # Append API reference links to code blocks
     if add_api_references:
         markdown = update_markdown_with_imports(markdown, page.file.abs_src_path)
@@ -332,18 +410,7 @@ def _on_page_markdown_with_config(
     markdown = _highlight_code_blocks(markdown)
 
     # Apply conditional rendering for code blocks
-    target_language = kwargs.get("target_language", "python")
     markdown = _apply_conditional_rendering(markdown, target_language)
-    if target_language == "js":
-        markdown = _resolve_cross_references(markdown, JS_LINK_MAP)
-    elif target_language == "python":
-        # Via a dedicated plugin
-        pass
-    else:
-        raise ValueError(
-            f"Unsupported target language: {target_language}. "
-            "Supported languages are 'python' and 'js'."
-        )
 
     # Add file path as an attribute to code blocks that are executable.
     # This file path is used to associate fixtures with the executable code
@@ -358,15 +425,19 @@ def _on_page_markdown_with_config(
 
 
 def on_page_markdown(markdown: str, page: Page, **kwargs: Dict[str, Any]):
-    finalized_markdown = (
-        _on_page_markdown_with_config(
-            markdown,
-            page,
-            add_api_references=True,
-            **kwargs,
-        )
+    finalized_markdown = _on_page_markdown_with_config(
+        markdown,
+        page,
+        add_api_references=True,
+        **kwargs,
     )
     page.meta["original_markdown"] = finalized_markdown
+
+    output_path = os.environ.get("MD_OUTPUT_PATH")
+    if output_path:
+        file_path = os.path.join(output_path, page.file.src_path)
+        _save_page_output(finalized_markdown, file_path)
+
     return finalized_markdown
 
 
@@ -437,6 +508,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     else:
         return html  # fallback if no <body> found
 
+
 def _inject_markdown_into_html(html: str, page: Page) -> str:
     """Inject the original markdown content into the HTML page as JSON."""
     original_markdown = page.meta.get("original_markdown", "")
@@ -469,6 +541,7 @@ def _inject_markdown_into_html(html: str, page: Page) -> str:
         )
     return html.replace("</head>", f"{script_content}</head>")
 
+
 def on_post_page(html: str, page: Page, config: MkDocsConfig) -> str:
     """Inject Google Tag Manager noscript tag immediately after <body>.
 
@@ -483,20 +556,56 @@ def on_post_page(html: str, page: Page, config: MkDocsConfig) -> str:
     html = _inject_markdown_into_html(html, page)
     return _inject_gtm(html)
 
+
 # Create HTML files for redirects after site dir has been built
 def on_post_build(config):
     use_directory_urls = config.get("use_directory_urls")
     for page_old, page_new in REDIRECT_MAP.items():
+        # Convert .ipynb to .md for path calculation
         page_old = page_old.replace(".ipynb", ".md")
-        page_new = page_new.replace(".ipynb", ".md")
-        page_new_before_hash, hash, suffix = page_new.partition("#")
-        old_html_path = File(page_old, "", "", use_directory_urls).dest_path.replace(
-            os.sep, "/"
-        )
-        new_html_path = File(page_new_before_hash, "", "", True).url
-        new_html_path = (
-            posixpath.relpath(new_html_path, start=posixpath.dirname(old_html_path))
-            + hash
-            + suffix
-        )
-        _write_html(config["site_dir"], old_html_path, new_html_path)
+        
+        # Calculate the HTML path for the old page (whether it exists or not)
+        if use_directory_urls:
+            # With directory URLs: /path/to/page/ becomes /path/to/page/index.html
+            if page_old.endswith(".md"):
+                old_html_path = page_old[:-3] + "/index.html"
+            else:
+                old_html_path = page_old + "/index.html"
+        else:
+            # Without directory URLs: /path/to/page.md becomes /path/to/page.html
+            if page_old.endswith(".md"):
+                old_html_path = page_old[:-3] + ".html"
+            else:
+                old_html_path = page_old + ".html"
+        
+        if isinstance(page_new, str) and page_new.startswith("http"):
+            # Handle external redirects
+            _write_html(config["site_dir"], old_html_path, page_new)
+        else:
+            # Handle internal redirects
+            page_new = page_new.replace(".ipynb", ".md")
+            page_new_before_hash, hash, suffix = page_new.partition("#")
+            
+            # Try to get the new path using File class, but fallback to manual calculation
+            try:
+                new_html_path = File(page_new_before_hash, "", "", True).url
+                new_html_path = (
+                    posixpath.relpath(new_html_path, start=posixpath.dirname(old_html_path))
+                    + hash
+                    + suffix
+                )
+            except:
+                # Fallback: calculate relative path manually
+                if use_directory_urls:
+                    if page_new_before_hash.endswith(".md"):
+                        new_html_path = page_new_before_hash[:-3] + "/"
+                    else:
+                        new_html_path = page_new_before_hash + "/"
+                else:
+                    if page_new_before_hash.endswith(".md"):
+                        new_html_path = page_new_before_hash[:-3] + ".html"
+                    else:
+                        new_html_path = page_new_before_hash + ".html"
+                new_html_path += hash + suffix
+            
+            _write_html(config["site_dir"], old_html_path, new_html_path)

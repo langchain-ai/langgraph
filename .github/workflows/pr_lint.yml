@@ -39,6 +39,7 @@ jobs:
             scheduler-kafka
             sdk-py
             docs
+            ci
           requireScope: false
           ignoreLabels: |
             ignore-lint-pr-title

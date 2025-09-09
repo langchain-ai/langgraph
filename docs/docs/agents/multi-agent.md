@@ -22,6 +22,7 @@ Two of the most popular multi-agent architectures are:
 
 ![Supervisor](./assets/supervisor.png)
 
+:::python
 Use [`langgraph-supervisor`](https://github.com/langchain-ai/langgraph-supervisor-py) library to create a supervisor multi-agent system:
 
 ```bash
@@ -82,10 +83,76 @@ for chunk in supervisor.stream(
     print("\n")
 ```
 
+:::
+
+:::js
+Use [`@langchain/langgraph-supervisor`](https://github.com/langchain-ai/langgraphjs/tree/main/libs/langgraph-supervisor) library to create a supervisor multi-agent system:
+
+```bash
+npm install @langchain/langgraph-supervisor
+```
+
+```typescript
+import { ChatOpenAI } from "@langchain/openai";
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
+// highlight-next-line
+import { createSupervisor } from "langgraph-supervisor";
+
+function bookHotel(hotelName: string) {
+  /**Book a hotel*/
+  return `Successfully booked a stay at ${hotelName}.`;
+}
+
+function bookFlight(fromAirport: string, toAirport: string) {
+  /**Book a flight*/
+  return `Successfully booked a flight from ${fromAirport} to ${toAirport}.`;
+}
+
+const flightAssistant = createReactAgent({
+  llm: "openai:gpt-4o",
+  tools: [bookFlight],
+  stateModifier: "You are a flight booking assistant",
+  // highlight-next-line
+  name: "flight_assistant",
+});
+
+const hotelAssistant = createReactAgent({
+  llm: "openai:gpt-4o",
+  tools: [bookHotel],
+  stateModifier: "You are a hotel booking assistant",
+  // highlight-next-line
+  name: "hotel_assistant",
+});
+
+// highlight-next-line
+const supervisor = createSupervisor({
+  agents: [flightAssistant, hotelAssistant],
+  llm: new ChatOpenAI({ model: "gpt-4o" }),
+  systemPrompt:
+    "You manage a hotel booking assistant and a " +
+    "flight booking assistant. Assign work to them.",
+});
+
+for await (const chunk of supervisor.stream({
+  messages: [
+    {
+      role: "user",
+      content: "book a flight from BOS to JFK and a stay at McKittrick Hotel",
+    },
+  ],
+})) {
+  console.log(chunk);
+  console.log("\n");
+}
+```
+
+:::
+
 ## Swarm
 
 ![Swarm](./assets/swarm.png)
 
+:::python
 Use [`langgraph-swarm`](https://github.com/langchain-ai/langgraph-swarm-py) library to create a swarm multi-agent system:
 
 ```bash
@@ -143,18 +210,82 @@ for chunk in swarm.stream(
     print("\n")
 ```
 
+:::
+
+:::js
+Use [`@langchain/langgraph-swarm`](https://github.com/langchain-ai/langgraphjs/tree/main/libs/langgraph-swarm) library to create a swarm multi-agent system:
+
+```bash
+npm install @langchain/langgraph-swarm
+```
+
+```typescript
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
+// highlight-next-line
+import { createSwarm, createHandoffTool } from "@langchain/langgraph-swarm";
+
+const transferToHotelAssistant = createHandoffTool({
+  agentName: "hotel_assistant",
+  description: "Transfer user to the hotel-booking assistant.",
+});
+
+const transferToFlightAssistant = createHandoffTool({
+  agentName: "flight_assistant",
+  description: "Transfer user to the flight-booking assistant.",
+});
+
+const flightAssistant = createReactAgent({
+  llm: "anthropic:claude-3-5-sonnet-latest",
+  // highlight-next-line
+  tools: [bookFlight, transferToHotelAssistant],
+  stateModifier: "You are a flight booking assistant",
+  // highlight-next-line
+  name: "flight_assistant",
+});
+
+const hotelAssistant = createReactAgent({
+  llm: "anthropic:claude-3-5-sonnet-latest",
+  // highlight-next-line
+  tools: [bookHotel, transferToFlightAssistant],
+  stateModifier: "You are a hotel booking assistant",
+  // highlight-next-line
+  name: "hotel_assistant",
+});
+
+// highlight-next-line
+const swarm = createSwarm({
+  agents: [flightAssistant, hotelAssistant],
+  defaultActiveAgent: "flight_assistant",
+});
+
+for await (const chunk of swarm.stream({
+  messages: [
+    {
+      role: "user",
+      content: "book a flight from BOS to JFK and a stay at McKittrick Hotel",
+    },
+  ],
+})) {
+  console.log(chunk);
+  console.log("\n");
+}
+```
+
+:::
+
 ## Handoffs
 
-A common pattern in multi-agent interactions is **handoffs**, where one agent *hands off* control to another. Handoffs allow you to specify:
+A common pattern in multi-agent interactions is **handoffs**, where one agent _hands off_ control to another. Handoffs allow you to specify:
 
 - **destination**: target agent to navigate to
 - **payload**: information to pass to that agent
 
+:::python
 This is used both by `langgraph-supervisor` (supervisor hands off to individual agents) and `langgraph-swarm` (an individual agent can hand off to other agents).
 
 To implement handoffs with `create_react_agent`, you need to:
 
-1. Create a special tool that can transfer control to a different agent
+1.  Create a special tool that can transfer control to a different agent
 
     ```python
     def transfer_to_bob():
@@ -173,7 +304,7 @@ To implement handoffs with `create_react_agent`, you need to:
         )
     ```
 
-1. Create individual agents that have access to handoff tools:
+2.  Create individual agents that have access to handoff tools:
 
     ```python
     flight_assistant = create_react_agent(
@@ -184,7 +315,7 @@ To implement handoffs with `create_react_agent`, you need to:
     )
     ```
 
-1. Define a parent graph that contains individual agents as nodes:
+3.  Define a parent graph that contains individual agents as nodes:
 
     ```python
     from langgraph.graph import StateGraph, MessagesState
@@ -196,7 +327,59 @@ To implement handoffs with `create_react_agent`, you need to:
     )
     ```
 
+:::
+
+:::js
+This is used both by `@langchain/langgraph-supervisor` (supervisor hands off to individual agents) and `@langchain/langgraph-swarm` (an individual agent can hand off to other agents).
+
+To implement handoffs with `createReactAgent`, you need to:
+
+1.  Create a special tool that can transfer control to a different agent
+
+    ```typescript
+    function transferToBob() {
+      /**Transfer to bob.*/
+      return new Command({
+        // name of the agent (node) to go to
+        // highlight-next-line
+        goto: "bob",
+        // data to send to the agent
+        // highlight-next-line
+        update: { messages: [...] },
+        // indicate to LangGraph that we need to navigate to
+        // agent node in a parent graph
+        // highlight-next-line
+        graph: Command.PARENT,
+      });
+    }
+    ```
+
+2.  Create individual agents that have access to handoff tools:
+
+    ```typescript
+    const flightAssistant = createReactAgent({
+      ..., tools: [bookFlight, transferToHotelAssistant]
+    });
+    const hotelAssistant = createReactAgent({
+      ..., tools: [bookHotel, transferToFlightAssistant]
+    });
+    ```
+
+3.  Define a parent graph that contains individual agents as nodes:
+
+    ```typescript
+    import { StateGraph, MessagesZodState } from "@langchain/langgraph";
+    const multiAgentGraph = new StateGraph(MessagesZodState)
+      .addNode("flight_assistant", flightAssistant)
+      .addNode("hotel_assistant", hotelAssistant)
+      // ...
+    ```
+
+    :::
+
 Putting this together, here is how you can implement a simple multi-agent system with two agents — a flight booking assistant and a hotel booking assistant:
+
+:::python
 
 ```python
 from typing import Annotated
@@ -298,11 +481,158 @@ for chunk in multi_agent_graph.stream(
 3. Name of the agent or node to hand off to.
 4. Take the agent's messages and **add** them to the parent's **state** as part of the handoff. The next agent will see the parent state.
 5. Indicate to LangGraph that we need to navigate to agent node in a **parent** multi-agent graph.
+   :::
+
+:::js
+
+```typescript
+import { tool } from "@langchain/core/tools";
+import { ChatAnthropic } from "@langchain/anthropic";
+import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import {
+  StateGraph,
+  START,
+  MessagesZodState,
+  Command,
+} from "@langchain/langgraph";
+import { z } from "zod";
+
+function createHandoffTool({
+  agentName,
+  description,
+}: {
+  agentName: string;
+  description?: string;
+}) {
+  const name = `transfer_to_${agentName}`;
+  const toolDescription = description || `Transfer to ${agentName}`;
+
+  return tool(
+    async (_, config) => {
+      const toolMessage = {
+        role: "tool" as const,
+        content: `Successfully transferred to ${agentName}`,
+        name: name,
+        tool_call_id: config.toolCall?.id!,
+      };
+      return new Command({
+        // (2)!
+        // highlight-next-line
+        goto: agentName, // (3)!
+        // highlight-next-line
+        update: { messages: [toolMessage] }, // (4)!
+        // highlight-next-line
+        graph: Command.PARENT, // (5)!
+      });
+    },
+    {
+      name,
+      description: toolDescription,
+      schema: z.object({}),
+    }
+  );
+}
+
+// Handoffs
+const transferToHotelAssistant = createHandoffTool({
+  agentName: "hotel_assistant",
+  description: "Transfer user to the hotel-booking assistant.",
+});
+
+const transferToFlightAssistant = createHandoffTool({
+  agentName: "flight_assistant",
+  description: "Transfer user to the flight-booking assistant.",
+});
+
+// Simple agent tools
+const bookHotel = tool(
+  async ({ hotelName }) => {
+    /**Book a hotel*/
+    return `Successfully booked a stay at ${hotelName}.`;
+  },
+  {
+    name: "book_hotel",
+    description: "Book a hotel",
+    schema: z.object({
+      hotelName: z.string().describe("Name of the hotel to book"),
+    }),
+  }
+);
+
+const bookFlight = tool(
+  async ({ fromAirport, toAirport }) => {
+    /**Book a flight*/
+    return `Successfully booked a flight from ${fromAirport} to ${toAirport}.`;
+  },
+  {
+    name: "book_flight",
+    description: "Book a flight",
+    schema: z.object({
+      fromAirport: z.string().describe("Departure airport code"),
+      toAirport: z.string().describe("Arrival airport code"),
+    }),
+  }
+);
+
+// Define agents
+const flightAssistant = createReactAgent({
+  llm: new ChatAnthropic({ model: "anthropic:claude-3-5-sonnet-latest" }),
+  // highlight-next-line
+  tools: [bookFlight, transferToHotelAssistant],
+  stateModifier: "You are a flight booking assistant",
+  // highlight-next-line
+  name: "flight_assistant",
+});
+
+const hotelAssistant = createReactAgent({
+  llm: new ChatAnthropic({ model: "anthropic:claude-3-5-sonnet-latest" }),
+  // highlight-next-line
+  tools: [bookHotel, transferToFlightAssistant],
+  stateModifier: "You are a hotel booking assistant",
+  // highlight-next-line
+  name: "hotel_assistant",
+});
+
+// Define multi-agent graph
+const multiAgentGraph = new StateGraph(MessagesZodState)
+  .addNode("flight_assistant", flightAssistant)
+  .addNode("hotel_assistant", hotelAssistant)
+  .addEdge(START, "flight_assistant")
+  .compile();
+
+// Run the multi-agent graph
+for await (const chunk of multiAgentGraph.stream({
+  messages: [
+    {
+      role: "user",
+      content: "book a flight from BOS to JFK and a stay at McKittrick Hotel",
+    },
+  ],
+})) {
+  console.log(chunk);
+  console.log("\n");
+}
+```
+
+1. Access agent's state
+2. The `Command` primitive allows specifying a state update and a node transition as a single operation, making it useful for implementing handoffs.
+3. Name of the agent or node to hand off to.
+4. Take the agent's messages and **add** them to the parent's **state** as part of the handoff. The next agent will see the parent state.
+5. Indicate to LangGraph that we need to navigate to agent node in a **parent** multi-agent graph.
+
+:::
 
 !!! Note
+
     This handoff implementation assumes that:
 
     - each agent receives overall message history (across all agents) in the multi-agent system as its input
     - each agent outputs its internal messages history to the overall message history of the multi-agent system
 
-    Check out LangGraph [supervisor](https://github.com/langchain-ai/langgraph-supervisor-py#customizing-handoff-tools) and [swarm](https://github.com/langchain-ai/langgraph-swarm-py#customizing-handoff-tools) documentation to learn how to customize handoffs.
+:::python
+Check out LangGraph [supervisor](https://github.com/langchain-ai/langgraph-supervisor-py#customizing-handoff-tools) and [swarm](https://github.com/langchain-ai/langgraph-swarm-py#customizing-handoff-tools) documentation to learn how to customize handoffs.
+:::
+
+:::js
+Check out LangGraph [supervisor](https://github.com/langchain-ai/langgraphjs/tree/main/libs/langgraph-supervisor#customizing-handoff-tools) and [swarm](https://github.com/langchain-ai/langgraphjs/tree/main/libs/langgraph-swarm#customizing-handoff-tools) documentation to learn how to customize handoffs.
+:::

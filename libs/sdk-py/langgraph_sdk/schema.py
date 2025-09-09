@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import (
     Any,
@@ -10,7 +10,10 @@ from typing import (
     NamedTuple,
     Optional,
     TypedDict,
+    Union,
 )
+
+from typing_extensions import TypeAlias
 
 Json = Optional[dict[str, Any]]
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
@@ -33,6 +36,14 @@ Represents the status of a thread:
 - "busy": The thread is actively processing a task.
 - "interrupted": The thread's execution was interrupted.
 - "error": An exception occurred during task processing.
+"""
+
+ThreadStreamMode = Literal["run_modes", "lifecycle", "state_update"]
+"""
+Defines the mode of streaming:
+- "run_modes": Stream the same events as the runs on thread, as well as run_done events.
+- "lifecycle": Stream only run start/end events.
+- "state_update": Stream state updates on the thread.
 """
 
 StreamMode = Literal[
@@ -88,6 +99,12 @@ Defines action after completion:
 - "keep": Retain resources after completion.
 """
 
+Durability = Literal["sync", "async", "exit"]
+"""Durability mode for the graph execution.
+- `"sync"`: Changes are persisted synchronously before the next step starts.
+- `"async"`: Changes are persisted asynchronously while the next step executes.
+- `"exit"`: Changes are persisted only when the graph exits."""
+
 All = Literal["*"]
 """Represents a wildcard or 'all' selector."""
 
@@ -128,6 +145,8 @@ SortOrder = Literal["asc", "desc"]
 """
 The order to sort by.
 """
+
+Context: TypeAlias = dict[str, Any]
 
 
 class Config(TypedDict, total=False):
@@ -183,6 +202,9 @@ class GraphSchema(TypedDict):
     config_schema: dict | None
     """The schema for the graph config.
     Missing if unable to generate JSON schema from graph."""
+    context_schema: dict | None
+    """The schema for the graph context.
+    Missing if unable to generate JSON schema from graph."""
 
 
 Subgraphs = dict[str, GraphSchema]
@@ -197,6 +219,8 @@ class AssistantBase(TypedDict):
     """The ID of the graph."""
     config: Config
     """The assistant config."""
+    context: Context
+    """The static context of the assistant."""
     created_at: datetime
     """The time the assistant was created."""
     metadata: Json
@@ -222,17 +246,13 @@ class Assistant(AssistantBase):
     """The last time the assistant was updated."""
 
 
-class Interrupt(TypedDict, total=False):
+class Interrupt(TypedDict):
     """Represents an interruption in the execution flow."""
 
     value: Any
     """The value associated with the interrupt."""
-    when: Literal["during"]
-    """When the interrupt occurred."""
-    resumable: bool
-    """Whether the interrupt can be resumed."""
-    ns: list[str] | None
-    """Optional namespace for the interrupt."""
+    id: str
+    """The ID of the interrupt. Can be used to resume the interrupt."""
 
 
 class Thread(TypedDict):
@@ -251,7 +271,7 @@ class Thread(TypedDict):
     values: Json
     """The current state of the thread."""
     interrupts: dict[str, list[Interrupt]]
-    """Interrupts which were thrown in this thread"""
+    """Mapping of task ids to interrupts that were raised in that task."""
 
 
 class ThreadTask(TypedDict):
@@ -284,6 +304,8 @@ class ThreadState(TypedDict):
     """The ID of the parent checkpoint. If missing, this is the root checkpoint."""
     tasks: Sequence[ThreadTask]
     """Tasks to execute in this step. If already attempted, may contain an error."""
+    interrupts: list[Interrupt]
+    """Interrupts which were thrown in this thread."""
 
 
 class ThreadUpdateStateResponse(TypedDict):
@@ -341,6 +363,72 @@ class Cron(TypedDict):
     """The metadata of the cron."""
 
 
+# Select field aliases for client-side typing of `select` parameters.
+# These mirror the server's allowed field sets.
+
+AssistantSelectField = Literal[
+    "assistant_id",
+    "graph_id",
+    "name",
+    "description",
+    "config",
+    "context",
+    "created_at",
+    "updated_at",
+    "metadata",
+    "version",
+]
+
+ThreadSelectField = Literal[
+    "thread_id",
+    "created_at",
+    "updated_at",
+    "metadata",
+    "config",
+    "context",
+    "status",
+    "values",
+    "interrupts",
+]
+
+RunSelectField = Literal[
+    "run_id",
+    "thread_id",
+    "assistant_id",
+    "created_at",
+    "updated_at",
+    "status",
+    "metadata",
+    "kwargs",
+    "multitask_strategy",
+]
+
+CronSelectField = Literal[
+    "cron_id",
+    "assistant_id",
+    "thread_id",
+    "end_time",
+    "schedule",
+    "created_at",
+    "updated_at",
+    "user_id",
+    "payload",
+    "next_run_date",
+    "metadata",
+    "now",
+]
+
+PrimitiveData = Optional[Union[str, int, float, bool]]
+
+QueryParamTypes = Union[
+    Mapping[str, Union[PrimitiveData, Sequence[PrimitiveData]]],
+    list[tuple[str, PrimitiveData]],
+    tuple[tuple[str, PrimitiveData], ...],
+    str,
+    bytes,
+]
+
+
 class RunCreate(TypedDict):
     """Defines the parameters for initiating a background run."""
 
@@ -354,6 +442,8 @@ class RunCreate(TypedDict):
     """Additional metadata to associate with the run."""
     config: Config | None
     """Configuration options for the run."""
+    context: Context | None
+    """The static context of the run."""
     checkpoint_id: str | None
     """The identifier of a checkpoint to resume from."""
     interrupt_before: list[str] | None

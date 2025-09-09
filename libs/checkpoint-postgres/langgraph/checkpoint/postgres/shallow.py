@@ -191,7 +191,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
     ) -> None:
         warnings.warn(
             "ShallowPostgresSaver is deprecated as of version 2.0.20 and will be removed in 3.0.0. "
-            "Use PostgresSaver instead, and invoke the graph with `graph.invoke(..., checkpoint_during=False)`.",
+            "Use PostgresSaver instead, and invoke the graph with `graph.invoke(..., durability='exit')`.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -547,7 +547,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
     ) -> None:
         warnings.warn(
             "AsyncShallowPostgresSaver is deprecated as of version 2.0.20 and will be removed in 3.0.0. "
-            "Use AsyncPostgresSaver instead, and invoke the graph with `await graph.ainvoke(..., checkpoint_during=False)`.",
+            "Use AsyncPostgresSaver instead, and invoke the graph with `await graph.ainvoke(..., durability='exit')`.",
             DeprecationWarning,
             stacklevel=2,
         )

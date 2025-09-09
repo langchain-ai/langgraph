@@ -1,10 +1,15 @@
 import ast
 import os
 from itertools import filterfalse
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 ROOT_PATH = os.path.abspath(os.path.join(__file__, "..", "..", ".."))
 CLIENT_PATH = os.path.join(ROOT_PATH, "libs", "sdk-py", "langgraph_sdk", "client.py")
+ASYNC_TO_SYNC_METHOD_MAP: Dict[str, str] = {
+    "aclose": "close",
+    "__aenter__": "__enter__",
+    "__aexit__": "__exit__",
+}
 
 
 def get_class_methods(node: ast.ClassDef) -> List[str]:
@@ -22,7 +27,7 @@ def find_classes(tree: ast.AST) -> List[Tuple[str, List[str]]]:
 
 def compare_sync_async_methods(sync_methods: List[str], async_methods: List[str]) -> List[str]:
     sync_set = set(sync_methods)
-    async_set = set(async_methods)
+    async_set = {ASYNC_TO_SYNC_METHOD_MAP.get(async_method, async_method) for async_method in async_methods}
     missing_in_sync = list(async_set - sync_set)
     missing_in_async = list(sync_set - async_set)
     return missing_in_sync + missing_in_async
