@@ -100,16 +100,25 @@ def task(
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
     cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
-) -> Callable[
-    [Callable[P, Awaitable[T]] | Callable[P, T]],
-    _TaskFunction[P, T],
-]: ...
+) -> Callable[[Callable[P, T]], _TaskFunction[P, T]]: ...
 
 
 @overload
 def task(
-    __func_or_none__: Callable[P, Awaitable[T]] | Callable[P, T],
-) -> _TaskFunction[P, T]: ...
+    *,
+    name: str | None = None,
+    retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
+    **kwargs: Unpack[DeprecatedKwargs],
+) -> Callable[[Callable[P, Awaitable[T]]], _TaskFunction[P, T]]: ...
+
+
+@overload
+def task(__func_or_none__: Callable[P, T]) -> _TaskFunction[P, T]: ...
+
+
+@overload
+def task(__func_or_none__: Callable[P, Awaitable[T]]) -> _TaskFunction[P, T]: ...
 
 
 def task(
@@ -120,7 +129,8 @@ def task(
     cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
     **kwargs: Unpack[DeprecatedKwargs],
 ) -> (
-    Callable[[Callable[P, Awaitable[T]] | Callable[P, T]], _TaskFunction[P, T]]
+    Callable[[Callable[P, T]], _TaskFunction[P, T]]
+    | Callable[[Callable[P, Awaitable[T]]], _TaskFunction[P, T]]
     | _TaskFunction[P, T]
 ):
     """Define a LangGraph task using the `task` decorator.
