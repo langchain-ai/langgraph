@@ -161,9 +161,7 @@ class TestRedisCache:
     async def test_async_operations(self):
         """Test async set and get operations with sync Redis client."""
         # Create sync Redis client and cache (like main integration tests)
-        client = redis.Redis(
-            host="localhost", port=6379, db=1, decode_responses=False
-        )
+        client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
         try:
             client.ping()
         except Exception:
@@ -189,9 +187,7 @@ class TestRedisCache:
     async def test_async_clear(self):
         """Test async clear operations with sync Redis client."""
         # Create sync Redis client and cache (like main integration tests)
-        client = redis.Redis(
-            host="localhost", port=6379, db=1, decode_responses=False
-        )
+        client = redis.Redis(host="localhost", port=6379, db=1, decode_responses=False)
         try:
             client.ping()
         except Exception:
