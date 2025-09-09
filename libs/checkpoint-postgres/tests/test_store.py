@@ -899,12 +899,6 @@ def test_non_ascii(
         result4 = store.search(("user_123", "memories"), query="Это русский")
         result5 = store.search(("user_123", "memories"), query="यह रूसी है")
 
-        print(result1)
-        print(result2)
-        print(result3)
-        print(result4)
-        print(result5)
-
         assert result1[0].key == "1"
         assert result2[0].key == "2"
         assert result3[0].key == "3"
