@@ -37,11 +37,11 @@ coverage:
 		--cov-report xml \
 		--cov-report term-missing:skip-covered
 
-start-postgres:
-	docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait --remove-orphans
+start-services:
+	docker compose -f tests/compose-postgres.yml -f tests/compose-redis.yml up -V --force-recreate --wait --remove-orphans
 
-stop-postgres:
-	docker compose -f tests/compose-postgres.yml down -v
+stop-services:
+	docker compose -f tests/compose-postgres.yml -f tests/compose-redis.yml down -v
 
 start-dev-server:
 	LOG_LEVEL=warning uv run langgraph dev --config tests/example_app/langgraph.json --no-browser & echo "$$!" > .devserver.pid
@@ -60,11 +60,11 @@ NO_DOCKER ?= $(sh command -v docker >/dev/null 2>&1 && echo "false" || echo "tru
 
 test:
 	if [ "$(NO_DOCKER)" = "false" ]; then \
-		make start-postgres &&\
+		make start-services &&\
 		make start-dev-server &&\
 		uv run pytest $(TEST); \
 		EXIT_CODE=$$?; \
-		make stop-postgres; \
+		make stop-services; \
 		make stop-dev-server; \
 		exit $$EXIT_CODE; \
 	else \
@@ -74,11 +74,11 @@ test:
 	fi
 
 test_parallel:
-	make start-postgres &&\
+	make start-services &&\
 	make start-dev-server &&\
 	uv run pytest -n auto --dist worksteal $(TEST); \
 	EXIT_CODE=$$?; \
-	make stop-postgres; \
+	make stop-services; \
 	make stop-dev-server; \
 	exit $$EXIT_CODE
 
@@ -93,11 +93,11 @@ MAXFAIL_ARGS := $(if $(MAXFAIL),--maxfail $(MAXFAIL),)
 XDIST_ARGS := $(if $(WORKERS),-x $(XDIST_ARGS),)
 
 test_watch:
-	make start-postgres &&\
+	make start-services &&\
 	make start-dev-server &&\
 	uv run ptw . -- --ff -vv $(XDIST_ARGS) $(MAXFAIL_ARGS) $(TEST); \
 	EXIT_CODE=$$?; \
-	make stop-postgres; \
+	make stop-services; \
 	make stop-dev-server; \
 	exit $$EXIT_CODE
 

@@ -3,10 +3,12 @@ from collections.abc import AsyncIterator, Iterator
 from uuid import UUID
 
 import pytest
+import redis
 from pytest_mock import MockerFixture
 
 from langgraph.cache.base import BaseCache
 from langgraph.cache.memory import InMemoryCache
+from langgraph.cache.redis import RedisCache
 from langgraph.cache.sqlite import SqliteCache
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
@@ -55,12 +57,34 @@ def durability(request: pytest.FixtureRequest) -> Durability:
     return request.param
 
 
-@pytest.fixture(scope="function", params=["sqlite", "memory"])
+@pytest.fixture(
+    scope="function",
+    params=["sqlite", "memory"] if NO_DOCKER else ["sqlite", "memory", "redis"],
+)
 def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
     if request.param == "sqlite":
         yield SqliteCache(path=":memory:")
     elif request.param == "memory":
         yield InMemoryCache()
+    elif request.param == "redis":
+        # Get worker ID for parallel test isolation
+        worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
+
+        redis_client = redis.Redis(
+            host="localhost", port=6379, db=0, decode_responses=False
+        )
+        # Use worker-specific prefix to avoid cache pollution between parallel tests
+        cache = RedisCache(redis_client, prefix=f"test:cache:{worker_id}:")
+        yield cache
+
+        try:
+            # Only clear keys with our specific prefix
+            pattern = f"test:cache:{worker_id}:*"
+            keys = redis_client.keys(pattern)
+            if keys:
+                redis_client.delete(*keys)
+        except Exception:
+            pass
     else:
         raise ValueError(f"Unknown cache type: {request.param}")
 

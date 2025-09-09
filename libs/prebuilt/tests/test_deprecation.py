@@ -31,3 +31,11 @@ def test_config_schema_deprecation() -> None:
         match="`get_config_jsonschema` is deprecated. Use `get_context_jsonschema` instead.",
     ):
         assert agent.get_config_jsonschema() is not None
+
+
+def test_extra_kwargs_deprecation() -> None:
+    with pytest.raises(
+        TypeError,
+        match="create_react_agent\(\) got unexpected keyword arguments: \{'extra': 'extra'\}",
+    ):
+        create_react_agent(FakeToolCallingModel(), [], extra="extra")

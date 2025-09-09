@@ -22,10 +22,11 @@ from langchain_core.messages import (
     convert_to_messages,
     message_chunk_to_message,
 )
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, deprecated
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, NS_SEP
 from langgraph.graph.state import StateGraph
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 __all__ = (
     "add_messages",
@@ -233,8 +234,15 @@ def add_messages(
     return merged
 
 
+@deprecated(
+    "MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.",
+    category=None,
+)
 class MessageGraph(StateGraph):
     """A StateGraph where every node receives a list of messages as input and returns one or more messages as output.
+
+    !!! warning "Deprecation"
+        MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.
 
     MessageGraph is a subclass of StateGraph whose entire state is a single, append-only* list of messages.
     Each node in a MessageGraph takes a list of messages as input and returns zero or more
@@ -281,6 +289,11 @@ class MessageGraph(StateGraph):
     """
 
     def __init__(self) -> None:
+        warnings.warn(
+            "MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.",
+            category=LangGraphDeprecatedSinceV10,
+            stacklevel=2,
+        )
         super().__init__(Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
 
 

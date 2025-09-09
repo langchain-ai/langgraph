@@ -11,7 +11,7 @@ from typing import (
 )
 
 import pytest
-from langchain_core.messages import ToolCall
+from langchain_core.messages import AnyMessage, ToolCall
 from langchain_core.runnables import RunnableConfig, RunnablePick
 from pytest_mock import MockerFixture
 from typing_extensions import TypedDict
@@ -21,7 +21,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import END, START
-from langgraph.graph.message import MessageGraph, add_messages
+from langgraph.graph.message import add_messages
 from langgraph.graph.state import StateGraph
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
@@ -2117,7 +2117,7 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
             return "continue"
 
     # Define a new graph
-    workflow = MessageGraph()
+    workflow = StateGraph(state_schema=Annotated[list[AnyMessage], add_messages])  # type: ignore[arg-type]
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", model)
@@ -2157,7 +2157,7 @@ async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
     # meaning you can use it as you would any other runnable
     app = workflow.compile()
 
-    assert await app.ainvoke(HumanMessage(content="what is weather in sf")) == [
+    assert await app.ainvoke([HumanMessage(content="what is weather in sf")]) == [
         _AnyIdHumanMessage(
             content="what is weather in sf",
         ),

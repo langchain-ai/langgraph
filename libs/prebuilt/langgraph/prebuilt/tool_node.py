@@ -74,7 +74,6 @@ from typing_extensions import Annotated, get_args, get_origin
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from langgraph.prebuilt._internal import ToolCallWithContext
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
 
@@ -361,8 +360,7 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input)
-        tool_calls = [self.inject_tool_args(call, input, store) for call in tool_calls]
+        tool_calls, input_type = self._parse_input(input, store)
         config_list = get_config_list(config, len(tool_calls))
         input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
@@ -383,8 +381,7 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input)
-        tool_calls = [self.inject_tool_args(call, input, store) for call in tool_calls]
+        tool_calls, input_type = self._parse_input(input, store)
         outputs = await asyncio.gather(
             *(self._arun_one(call, input_type, config) for call in tool_calls)
         )
@@ -502,13 +499,14 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
-            input = {**call, **{"type": "tool_call"}}
-            response = await self.tools_by_name[call["name"]].ainvoke(input, config)
+            call_args = {**call, **{"type": "tool_call"}}
+            response = await self.tools_by_name[call["name"]].ainvoke(call_args, config)
 
         # GraphInterrupt is a special exception that will always be raised.
-        # It can be triggered in the following scenarios:
-        # (1) a NodeInterrupt is raised inside a tool
-        # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
+        # It can be triggered in the following scenarios,
+        # Where GraphInterrupt(GraphBubbleUp) is raised from an `interrupt` invocation most commonly:
+        # (1) a GraphInterrupt is raised inside a tool
+        # (2) a GraphInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         except GraphBubbleUp as e:
@@ -555,6 +553,7 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
+        store: Optional[BaseStore],
     ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         input_type: Literal["list", "dict", "tool_calls"]
         if isinstance(input, list):
@@ -565,15 +564,6 @@ class ToolNode(RunnableCallable):
             else:
                 input_type = "list"
                 messages = input
-        elif (
-            isinstance(input, dict) and input.get("__type") == "tool_call_with_context"
-        ):
-            # mypy will not be able to type narrow correctly since the signature
-            # for input contains dict[str, Any]. We'd need to type dict[str, Any]
-            # before we can apply correct typing.
-            input = cast(ToolCallWithContext, input)  # type: ignore[assignment]
-            input_type = "tool_calls"
-            return [input["tool_call"]], input_type
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
             input_type = "dict"
         elif messages := getattr(input, self.messages_key, []):
@@ -589,7 +579,10 @@ class ToolNode(RunnableCallable):
         except StopIteration:
             raise ValueError("No AIMessage found in input")
 
-        tool_calls = [call for call in latest_ai_message.tool_calls]
+        tool_calls = [
+            self.inject_tool_args(call, input, store)
+            for call in latest_ai_message.tool_calls
+        ]
         return tool_calls, input_type
 
     def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
@@ -632,19 +625,14 @@ class ToolNode(RunnableCallable):
                     err_msg += f" State should contain fields {required_fields_str}."
                 raise ValueError(err_msg)
 
-        if isinstance(input, dict) and input.get("__type") == "tool_call_with_context":
-            state = input["state"]
-        else:
-            state = input
-
-        if isinstance(state, dict):
+        if isinstance(input, dict):
             tool_state_args = {
-                tool_arg: state[state_field] if state_field else state
+                tool_arg: input[state_field] if state_field else input
                 for tool_arg, state_field in state_args.items()
             }
         else:
             tool_state_args = {
-                tool_arg: getattr(state, state_field) if state_field else state
+                tool_arg: getattr(input, state_field) if state_field else input
                 for tool_arg, state_field in state_args.items()
             }
 
@@ -802,7 +790,6 @@ def tools_condition(
 
     Args:
         state: The current graph state to examine for tool calls. Supported formats:
-            - List of messages (for MessageGraph)
             - Dictionary containing a messages key (for StateGraph)
             - BaseModel instance with a messages attribute
         messages_key: The key or attribute name containing the message list in the state.
