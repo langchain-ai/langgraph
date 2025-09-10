@@ -65,6 +65,9 @@ def draw_graph(
     static_seen: set[Any] = set()
     sources: dict[str, set[tuple[str, bool, str | None]]] = {}
     step_sources: dict[str, set[tuple[str, bool, str | None]]] = {}
+    static_declared_writes: dict[str, set[tuple[str, bool, str | None]]] = defaultdict(
+        set
+    )
     # remove node mappers
     nodes = {
         k: v.copy(update={"mapper": None}) if v.mapper is not None else v
@@ -128,17 +131,23 @@ def draw_graph(
                         conditionals.update(
                             {(task.name, t[0], t[1] or None): t[2] for t in writes}
                         )
+                        # record static writes for edge creation
+                        for t in writes:
+                            static_declared_writes[task.name].add((t[0], True, t[2]))
                         task.config[CONF][CONFIG_KEY_SEND]([t[:2] for t in writes])
         # collect sources
         step_sources = {
-            task.name: {
-                (
-                    w[0],
-                    (task.name, w[0], w[1] or None) in conditionals,
-                    conditionals.get((task.name, w[0], w[1] or None)),
-                )
-                for w in task.writes
-            }
+            task.name: (
+                {
+                    (
+                        w[0],
+                        (task.name, w[0], w[1] or None) in conditionals,
+                        conditionals.get((task.name, w[0], w[1] or None)),
+                    )
+                    for w in task.writes
+                }
+                | static_declared_writes.get(task.name, set())
+            )
             for task in tasks.values()
         }
         sources.update(step_sources)
@@ -193,19 +202,6 @@ def draw_graph(
         graph.add_node(None, START)
         for task in start_tasks.values():
             add_edge(graph, START, task.name)
-
-    # add edges from static write declarations
-    for src, node in nodes.items():
-        for w in getattr(node, "writers", ()):
-            if isinstance(w, ChannelWrite):
-                static_writes = ChannelWrite.get_static_writes(w) or ()
-                for t in static_writes:
-                    if t[0] == END:
-                        edges.add((src, END, True, t[2]))
-                    else:
-                        for target in trigger_to_nodes.get(t[0], ()):
-                            edges.add((src, target, True, t[2]))
-
     # add discovered edges
     for src, dest, is_conditional, label in sorted(edges):
         add_edge(
