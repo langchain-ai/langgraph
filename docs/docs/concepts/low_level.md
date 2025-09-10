@@ -1040,7 +1040,7 @@ def node_a(state: State, runtime: Runtime[ContextSchema]):
     ...
 ```
 
-See [this guide](../how-tos/graph-api.ipynb#add-runtime-configuration) for a full breakdown on configuration.
+See [this guide](../how-tos/graph-api.md#add-runtime-configuration) for a full breakdown on configuration.
 :::
 
 :::js

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import concurrent.futures
 import functools
 import inspect
 import warnings
@@ -49,7 +47,7 @@ __all__ = ("task", "entrypoint")
 class _TaskFunction(Generic[P, T]):
     def __init__(
         self,
-        func: Callable[P, T],
+        func: Callable[P, Awaitable[T]] | Callable[P, T],
         *,
         retry_policy: Sequence[RetryPolicy],
         cache_policy: CachePolicy[Callable[P, str | bytes]] | None = None,
@@ -60,7 +58,7 @@ class _TaskFunction(Generic[P, T]):
                 # handle class methods
                 # NOTE: we're modifying the instance method to avoid modifying
                 # the original class method in case it's shared across multiple tasks
-                instance_method = functools.partial(func.__func__, func.__self__)  # type: ignore [attr-defined]
+                instance_method = functools.partial(func.__func__, func.__self__)  # type: ignore [union-attr]
                 instance_method.__name__ = name  # type: ignore [attr-defined]
                 func = instance_method
             else:
@@ -95,6 +93,7 @@ class _TaskFunction(Generic[P, T]):
 
 @overload
 def task(
+    __func_or_none__: None = None,
     *,
     name: str | None = None,
     retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
@@ -107,9 +106,11 @@ def task(
 
 
 @overload
-def task(
-    __func_or_none__: Callable[P, Awaitable[T]] | Callable[P, T],
-) -> _TaskFunction[P, T]: ...
+def task(__func_or_none__: Callable[P, Awaitable[T]]) -> _TaskFunction[P, T]: ...
+
+
+@overload
+def task(__func_or_none__: Callable[P, T]) -> _TaskFunction[P, T]: ...
 
 
 def task(
@@ -200,7 +201,7 @@ def task(
 
     def decorator(
         func: Callable[P, Awaitable[T]] | Callable[P, T],
-    ) -> Callable[P, concurrent.futures.Future[T]] | Callable[P, asyncio.Future[T]]:
+    ) -> Callable[P, SyncAsyncFuture[T]]:
         return _TaskFunction(
             func, retry_policy=retry_policies, cache_policy=cache_policy, name=name
         )

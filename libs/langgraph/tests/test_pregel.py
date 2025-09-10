@@ -7222,7 +7222,11 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
 
         # get human input and resume
         if len(current_interrupts) > 0:
-            current_input = Command(resume=f"Resume #{invokes}")
+            # we resume one at a time to preserve original test behavior,
+            # but we could also resume all at once if we wanted
+            # with a single dict mapping of interrupt ids to resume values
+            resume = {current_interrupts[0].id: f"Resume #{invokes}"}
+            current_input = Command(resume=resume)
 
         # not more human input required, must be completed
         else:
@@ -7383,7 +7387,11 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
 
         # get human input and resume
         if len(current_interrupts) > 0:
-            current_input = Command(resume=f"Resume #{invokes}")
+            # we resume one at a time to preserve original test behavior,
+            # but we could also resume all at once if we wanted
+            # with a single dict mapping of interrupt ids to resume values
+            resume = {current_interrupts[0].id: f"Resume #{invokes}"}
+            current_input = Command(resume=resume)
 
         # not more human input required, must be completed
         else:
@@ -8333,3 +8341,91 @@ def test_subgraph_streaming_sync() -> None:
 
     assert result["last_chunk"].content == "today."
     assert result["num_chunks"] == 9
+
+
+def test_get_graph_nonterminal_last_step_source(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        messages: list[str]
+
+    def chatbot_node(state: State) -> State:
+        return {"messages": state["messages"] + ["chatbot"]}
+
+    def tools_node(state: State) -> State:
+        return {"messages": state["messages"] + ["tools"]}
+
+    def human_node(state: State) -> State:
+        return {"messages": state["messages"] + ["human"]}
+
+    def tools_condition(_: State) -> str:
+        return "tools"
+
+    def end_condition(_: State) -> str:
+        return "chatbot"
+
+    workflow = StateGraph(State)
+    workflow.add_node("chatbot", chatbot_node)
+    workflow.add_node("tools", tools_node)
+    workflow.add_node("human", human_node)
+
+    workflow.add_edge(START, "human")
+    workflow.add_edge("tools", "chatbot")
+
+    workflow.add_conditional_edges(
+        "chatbot", tools_condition, {"tools": "tools", "human": "human"}
+    )
+    workflow.add_conditional_edges(
+        "human", end_condition, {"chatbot": "chatbot", END: END}
+    )
+
+    app = workflow.compile()
+    graph = app.get_graph()
+    graph_json = graph.to_json()
+
+    assert json.dumps(graph_json, indent=2, sort_keys=True) == snapshot
+
+def test_null_resume_disallowed_with_multiple_interrupts(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        text_1: str
+        text_2: str
+
+    def human_node_1(state: State):
+        value = interrupt({"text_to_revise": state["text_1"]})
+        return {"text_1": value}
+
+    def human_node_2(state: State):
+        value = interrupt({"text_to_revise": state["text_2"]})
+        return {"text_2": value}
+
+    graph_builder = StateGraph(State)
+    graph_builder.add_node("human_node_1", human_node_1)
+    graph_builder.add_node("human_node_2", human_node_2)
+
+    # Add both nodes in parallel from START
+    graph_builder.add_edge(START, "human_node_1")
+    graph_builder.add_edge(START, "human_node_2")
+
+    checkpointer = InMemorySaver()
+    graph = graph_builder.compile(checkpointer=checkpointer)
+
+    thread_id = str(uuid.uuid4())
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    graph.invoke(
+        {"text_1": "original text 1", "text_2": "original text 2"}, config=config
+    )
+
+    resume_map = {
+        i.id: f"resume for prompt: {i.value['text_to_revise']}"
+        for i in graph.get_state(config).interrupts
+    }
+    with pytest.raises(
+        RuntimeError,
+        match="When there are multiple pending interrupts, you must specify the interrupt id when resuming.",
+    ):
+        graph.invoke(Command(resume="singular resume"), config=config)
+
+    assert graph.invoke(Command(resume=resume_map), config=config) == {
+        "text_1": "resume for prompt: original text 1",
+        "text_2": "resume for prompt: original text 2",
+    }
