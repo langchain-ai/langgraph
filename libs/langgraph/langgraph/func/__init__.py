@@ -201,7 +201,7 @@ def task(
 
     def decorator(
         func: Callable[P, Awaitable[T]] | Callable[P, T],
-    ) -> SyncAsyncFuture[T]:
+    ) -> Callable[P, SyncAsyncFuture[T]]:
         return _TaskFunction(
             func, retry_policy=retry_policies, cache_policy=cache_policy, name=name
         )
