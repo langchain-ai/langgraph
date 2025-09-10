@@ -1,6 +1,9 @@
 blank_issues_enabled: false
 version: 2.1
 contact_links:
+  - name: Documentation
+    url: https://github.com/langchain-ai/docs/issues/new?template=langgraph.yml
+    about: Report an issue related to the LangGraph documentation
   - name: LangChain Forum
     url:  https://forum.langchain.com/
-    about: General community discussions, support, and feature requests
+    about: General community discussions and support
