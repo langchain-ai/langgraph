@@ -2107,7 +2107,7 @@ builder.add_node("generate_topics", generate_topics)
 builder.add_node("generate_joke", generate_joke)
 builder.add_node("best_joke", best_joke)
 builder.add_edge(START, "generate_topics")
-builder.add_conditional_edges("generate_topics", continue_to_jokes, ["generate_joke"])
+builder.add_conditional_edges("generate_topics", continue_to_jokes)
 builder.add_edge("generate_joke", "best_joke")
 builder.add_edge("best_joke", END)
 graph = builder.compile()
@@ -2875,7 +2875,7 @@ If you are using [subgraphs](../concepts/subgraphs.md), you might want to naviga
 
 :::python
 ```python
-def my_node(state: State) -> Command[Literal["my_other_node"]]:
+def my_node(state: State) -> Command[Literal["other_subgraph"]]:
     return Command(
         update={"foo": "bar"},
         goto="other_subgraph",  # where `other_subgraph` is a node in the parent graph
