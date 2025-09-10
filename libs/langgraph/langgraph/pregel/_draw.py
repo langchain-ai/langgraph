@@ -175,7 +175,6 @@ def draw_graph(
             for trigger in task.triggers:
                 for src, cond, label in sorted(trigger_to_sources[trigger]):
                     edges.add((src, task.name, cond, label))
-                    sources[src].discard((trigger, cond, label))
 
     # assemble the graph
     graph = Graph()
