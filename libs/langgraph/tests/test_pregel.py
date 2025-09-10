@@ -8333,3 +8333,44 @@ def test_subgraph_streaming_sync() -> None:
 
     assert result["last_chunk"].content == "today."
     assert result["num_chunks"] == 9
+
+
+def test_get_graph_nonterminal_last_step_source(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        messages: list[str]
+
+    def chatbot_node(state: State) -> State:
+        return {"messages": state["messages"] + ["chatbot"]}
+
+    def tools_node(state: State) -> State:
+        return {"messages": state["messages"] + ["tools"]}
+
+    def human_node(state: State) -> State:
+        return {"messages": state["messages"] + ["human"]}
+
+    def tools_condition(_: State) -> str:
+        return "tools"
+
+    def end_condition(_: State) -> str:
+        return "chatbot"
+
+    workflow = StateGraph(State)
+    workflow.add_node("chatbot", chatbot_node)
+    workflow.add_node("tools", tools_node)
+    workflow.add_node("human", human_node)
+
+    workflow.add_edge(START, "human")
+    workflow.add_edge("tools", "chatbot")
+
+    workflow.add_conditional_edges(
+        "chatbot", tools_condition, {"tools": "tools", "human": "human"}
+    )
+    workflow.add_conditional_edges(
+        "human", end_condition, {"chatbot": "chatbot", END: END}
+    )
+
+    app = workflow.compile()
+    graph = app.get_graph()
+    graph_json = graph.to_json()
+
+    assert json.dumps(graph_json, indent=2, sort_keys=True) == snapshot
