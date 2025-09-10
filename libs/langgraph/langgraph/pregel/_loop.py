@@ -634,8 +634,8 @@ class PregelLoop:
                 else:
                     if len(self._pending_interrupts()) > 1:
                         raise RuntimeError(
-                            "Cannot use null resume when there are multiple pending interrupts. "
-                            "Please instead provide a mapping of interrupt ids to resume values."
+                            "When there are multiple pending interrupts, you must specify the interrupt id when resuming."
+                            "Docs: https://docs.langchain.com/oss/python/langgraph/add-human-in-the-loop#resume-multiple-interrupts-with-one-invocation."
                         )
 
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
