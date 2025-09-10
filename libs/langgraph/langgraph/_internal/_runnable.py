@@ -336,7 +336,8 @@ class RunnableCallable(Runnable):
                 "\nEither initialize with a synchronous function or invoke"
                 " via the async API (ainvoke, astream, etc.)"
             )
-        config = ensure_config(config)
+        if config is None:
+            config = ensure_config()
         if self.explode_args:
             args, _kwargs = input
             kwargs = {**self.kwargs, **_kwargs, **kwargs}
@@ -344,7 +345,7 @@ class RunnableCallable(Runnable):
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
 
-        runtime = config[CONF].get(CONFIG_KEY_RUNTIME)
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
 
         for kw, (runtime_key, default) in self.func_accepts.items():
             # If the kwarg is already set, use the set value
@@ -407,7 +408,8 @@ class RunnableCallable(Runnable):
     ) -> Any:
         if not self.afunc:
             return self.invoke(input, config)
-        config = ensure_config(config)
+        if config is None:
+            config = ensure_config()
         if self.explode_args:
             args, _kwargs = input
             kwargs = {**self.kwargs, **_kwargs, **kwargs}
@@ -415,7 +417,7 @@ class RunnableCallable(Runnable):
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
 
-        runtime = config[CONF].get(CONFIG_KEY_RUNTIME)
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
 
         for kw, (runtime_key, default) in self.func_accepts.items():
             # If the kwarg has already been set, use the set value
