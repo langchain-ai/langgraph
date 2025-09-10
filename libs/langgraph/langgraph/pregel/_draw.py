@@ -6,10 +6,10 @@ from typing import Any, cast
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph, Node
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, INPUT
 from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import END, START
 from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel._algo import (
@@ -172,19 +172,11 @@ def draw_graph(
         )
         # collect edges
         for task in tasks.values():
-            added = False
             for trigger in task.triggers:
                 for src, cond, label in sorted(trigger_to_sources[trigger]):
                     edges.add((src, task.name, cond, label))
-                    # if the edge is from this step, skip adding the implicit edges
-                    if (trigger, cond, label) in step_sources.get(src, set()):
-                        added = True
-                    else:
-                        sources[src].discard((trigger, cond, label))
-            # if no edges from this step, add implicit edges from all previous tasks
-            if not added:
-                for src in step_sources:
-                    edges.add((src, task.name, True, None))
+                    sources[src].discard((trigger, cond, label))
+
     # assemble the graph
     graph = Graph()
     # add nodes
@@ -202,6 +194,19 @@ def draw_graph(
         graph.add_node(None, START)
         for task in start_tasks.values():
             add_edge(graph, START, task.name)
+
+    # add edges from static write declarations
+    for src, node in nodes.items():
+        for w in getattr(node, "writers", ()):
+            if isinstance(w, ChannelWrite):
+                static_writes = ChannelWrite.get_static_writes(w) or ()
+                for t in static_writes:
+                    if t[0] == END:
+                        edges.add((src, END, True, t[2]))
+                    else:
+                        for target in trigger_to_nodes.get(t[0], ()):
+                            edges.add((src, target, True, t[2]))
+
     # add discovered edges
     for src, dest, is_conditional, label in sorted(edges):
         add_edge(
