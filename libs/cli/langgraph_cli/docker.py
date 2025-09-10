@@ -1,6 +1,5 @@
 import json
 import pathlib
-import re
 import shutil
 from typing import Literal, NamedTuple, Optional
 
@@ -42,7 +41,7 @@ def _parse_version(version: str) -> Version:
     else:
         major, minor, patch = parts
     return Version(
-        int(major.lstrip("v")), int(minor), int(re.split("[\-\+]", patch)[0])
+        int(major.lstrip("v")), int(minor), int(patch.split("-")[0].split("+")[0])
     )
 
 
