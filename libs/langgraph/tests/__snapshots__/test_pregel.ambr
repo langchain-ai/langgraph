@@ -795,7 +795,7 @@
   
   '''
 # ---
-# name: test_no_end_edge_from_nonterminal_step_source
+# name: test_get_graph_nonterminal_last_step_source
   '''
   {
     "edges": [
