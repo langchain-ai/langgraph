@@ -383,11 +383,5 @@ services:
         ("v3.4.5-rc1+build.123", Version(3, 4, 5)),
     ],
 )
-def test__parse_version_comprehensive(input_str, expected):
-    """
-    Test the _parse_version function with comprehensive input cases.
-    """
-    result = _parse_version(input_str)
-    assert result == expected, (
-        f"Failed for {input_str}: got {result}, expected {expected}"
-    )
+def test_parse_version_w_edge_cases(input_str, expected):
+    assert _parse_version(input_str) == expected
