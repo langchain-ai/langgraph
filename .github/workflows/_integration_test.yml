@@ -58,8 +58,20 @@ jobs:
           # Build the image for this example
           langgraph build -t ${{ matrix.example.tag }}
           # Prepare environment file from local or parent example directory
-          if [ -f .env.example ]; then cp .env.example .env; elif [ -f ../.env.example ]; then cp ../.env.example .env; fi
-          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
+          # Check langgraph.json to see where it expects the .env file
+          if [ -f langgraph.json ]; then
+            ENV_PATH=$(python -c "import json; config=json.load(open('langgraph.json')); print(config.get('env', '.env'))" 2>/dev/null || echo ".env")
+          else
+            ENV_PATH=".env"
+          fi
+          
+          # Create .env file in the location expected by the config
+          if [ -f .env.example ]; then 
+            cp .env.example "$ENV_PATH"
+          elif [ -f ../.env.example ]; then 
+            cp ../.env.example "$ENV_PATH"
+          fi
+          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> "$ENV_PATH"; fi
           # Run the integration test using the built tag
           # Compute repo root to reference the shared script robustly
           REPO_ROOT=$(git rev-parse --show-toplevel)
