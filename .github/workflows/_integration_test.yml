@@ -58,7 +58,7 @@ jobs:
           # Build the image for this example
           langgraph build -t ${{ matrix.example.tag }}
           # Prepare environment file from local or parent example directory
-          if [ -f .env.example ]; then cp .env.example .env; elif [ -f ../.env.example ]; then cp ../.env.example .env; fi
+          if [ -f .env.example ]; then cp .env.example .env; elif [ -f ../.env.example ]; then cp ../.env.example .env && cp ../.env.example ../.env; fi
           if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
           # Run the integration test using the built tag
           # Compute repo root to reference the shared script robustly
