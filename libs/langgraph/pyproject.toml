@@ -114,8 +114,9 @@ addopts = "--full-trace --strict-markers --strict-config --durations=5 --snapsho
 ignore-words-list = "infor,thead,stdio,nd,jupyter,lets,lite,uis,deque,langgraph,langchain,pydantic,typing,async,await,coroutine,iterable,iterables,serializable,deserializable,checkpointer,checkpointing,stateful,statefulness,prebuilt,prebuilt,supervisor,supervisory,swarm,swarming,multiactor,multiactors,subgraph,subgraphs,workflow,workflows,streaming,streamable,streamed,streamer,streamers,streaming,streamable,streamed,streamer,streamers"
 
 [tool.setuptools_scm]
-write_to = "langgraph/about.py"
+write_to = "libs/langgraph/langgraph/about.py"
 write_to_template = "__version__ = '{version}'"
+root = "../.."
 
 [tool.setuptools.packages.find]
 where = ["."]

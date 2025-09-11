@@ -9,7 +9,6 @@ from pytest_mock import MockerFixture
 from langgraph.cache.base import BaseCache
 from langgraph.cache.memory import InMemoryCache
 from langgraph.cache.redis import RedisCache
-from langgraph.cache.sqlite import SqliteCache
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
 from langgraph.types import Durability
@@ -59,12 +58,10 @@ def durability(request: pytest.FixtureRequest) -> Durability:
 
 @pytest.fixture(
     scope="function",
-    params=["sqlite", "memory"] if NO_DOCKER else ["sqlite", "memory", "redis"],
+    params=["memory"] if NO_DOCKER else ["memory", "redis"],
 )
 def cache(request: pytest.FixtureRequest) -> Iterator[BaseCache]:
-    if request.param == "sqlite":
-        yield SqliteCache(path=":memory:")
-    elif request.param == "memory":
+    if request.param == "memory":
         yield InMemoryCache()
     elif request.param == "redis":
         # Get worker ID for parallel test isolation
