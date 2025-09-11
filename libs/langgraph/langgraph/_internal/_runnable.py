@@ -345,7 +345,7 @@ class RunnableCallable(Runnable):
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
 
-        runtime = config[CONF].get(CONFIG_KEY_RUNTIME)
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
 
         for kw, (runtime_key, default) in self.func_accepts.items():
             # If the kwarg is already set, use the set value
@@ -417,7 +417,7 @@ class RunnableCallable(Runnable):
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
 
-        runtime = config[CONF].get(CONFIG_KEY_RUNTIME)
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
 
         for kw, (runtime_key, default) in self.func_accepts.items():
             # If the kwarg has already been set, use the set value
