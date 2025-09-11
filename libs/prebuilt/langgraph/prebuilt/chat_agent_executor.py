@@ -798,7 +798,7 @@ def create_react_agent(
                 and last_message.response_metadata.get("finish_reason") == "length"
             ):
                 # if the model stops due to `length`, it can invoke the model again to continue generating automatically
-                return "agent"
+                return entrypoint
             else:
                 return END
         # Otherwise if there is, we continue
@@ -840,7 +840,7 @@ def create_react_agent(
     # This means that this node is the first one called
     workflow.set_entry_point(entrypoint)
 
-    agent_paths = ["agent"]  # call agent again to continue model invocation
+    agent_paths = [entrypoint]  # call model again to continue model invocation
     post_model_hook_paths = [entrypoint, "tools"]
 
     # Add a post model hook node if post_model_hook is provided
