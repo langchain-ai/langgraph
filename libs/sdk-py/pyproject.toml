@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [tool.hatch.version]
-path = "langgraph_sdk/__init__.py"
+source = "uv-dynamic-versioning"
 
 [project.urls]
 Repository = "https://www.github.com/langchain-ai/langgraph"
@@ -53,9 +53,6 @@ lint.select = [
   "ARG", # flake8-unused-arguments
 ]
 lint.ignore = ["E501", "B008"]
-
-[tool.hatch.version]
-source = "uv-dynamic-versioning"
 
 [tool.uv-dynamic-versioning]
 vcs = "git"
