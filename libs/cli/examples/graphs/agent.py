@@ -7,6 +7,7 @@ from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph, add_messages
 from langgraph.prebuilt import ToolNode
+from langgraph.runtime import Runtime
 
 tools = [TavilySearchResults(max_results=1)]
 
@@ -15,6 +16,10 @@ model_oai = ChatOpenAI(temperature=0)
 
 model_anth = model_anth.bind_tools(tools)
 model_oai = model_oai.bind_tools(tools)
+
+
+class AgentContext(TypedDict):
+    model: Literal["anthropic", "openai"]
 
 
 class AgentState(TypedDict):
@@ -34,8 +39,8 @@ def should_continue(state):
 
 
 # Define the function that calls the model
-def call_model(state, config):
-    if config["configurable"].get("model", "anthropic") == "anthropic":
+def call_model(state, runtime: Runtime[AgentContext]):
+    if runtime.context.get("model", "anthropic") == "anthropic":
         model = model_anth
     else:
         model = model_oai
@@ -49,12 +54,8 @@ def call_model(state, config):
 tool_node = ToolNode(tools)
 
 
-class ContextSchema(TypedDict):
-    model: Literal["anthropic", "openai"]
-
-
 # Define a new graph
-workflow = StateGraph(AgentState, context_schema=ContextSchema)
+workflow = StateGraph(AgentState, context_schema=AgentContext)
 
 # Define the two nodes we will cycle between
 workflow.add_node("agent", call_model)

@@ -390,6 +390,14 @@ def create_react_agent(
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
+            !!! Note
+                `remaining_steps` is used to limit the number of steps the react agent can take.
+                Calculated roughly as `recursion_limit` - `total_steps_taken`.
+                If `remaining_steps` is less than 2 and tool calls are present in the response,
+                the react agent will return a final AI Message with
+                the content "Sorry, need more steps to process this request.".
+                No `GraphRecusionError` will be raised in this case.
+
         context_schema: An optional schema for runtime context.
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
