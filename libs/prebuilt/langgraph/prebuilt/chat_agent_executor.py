@@ -797,7 +797,7 @@ def create_react_agent(
                 last_message.response_metadata
                 and last_message.response_metadata.get("finish_reason") == "length"
             ):
-                # if we hit max tokens, we want to call the agent again to continue generating automatically
+                # if the model stops due to `length`, it can invoke the model again to continue generating automatically
                 return "agent"
             else:
                 return END
