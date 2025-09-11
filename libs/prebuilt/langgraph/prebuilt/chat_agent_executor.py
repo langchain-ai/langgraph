@@ -793,6 +793,12 @@ def create_react_agent(
                 return "post_model_hook"
             elif response_format is not None:
                 return "generate_structured_response"
+            elif (
+                last_message.response_metadata
+                and last_message.response_metadata.get("finish_reason") == "length"
+            ):
+                # if we hit max tokens, we want to call the agent again to continue generating automatically
+                return "agent"
             else:
                 return END
         # Otherwise if there is, we continue
@@ -834,7 +840,7 @@ def create_react_agent(
     # This means that this node is the first one called
     workflow.set_entry_point(entrypoint)
 
-    agent_paths = []
+    agent_paths = ["agent"]  # call agent again to continue model invocation
     post_model_hook_paths = [entrypoint, "tools"]
 
     # Add a post model hook node if post_model_hook is provided
