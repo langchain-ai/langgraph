@@ -86,11 +86,54 @@ def map_debug_task_results(
         [stream_keys] if isinstance(stream_keys, str) else stream_keys
     )
     task, writes = task_tup
+    # Format result to match tasks_w_writes format
+    rtn = next((w[1] for w in writes if w[0] == RETURN), MISSING)
+    if rtn is not MISSING:
+        # RETURN values are returned directly
+        result = rtn
+    else:
+        # Check if we have writes to output channels or special channels
+        relevant_writes = [
+            w for w in writes if w[0] in stream_channels_list or w[0] == RETURN
+        ]
+        if relevant_writes:
+            # Special handling for channels that should keep tuple format
+            special_channels = {
+                "__end__",
+                "__start__",
+            }  # Add other special channels as needed
+            has_special_channels = any(
+                w[0] in special_channels for w in relevant_writes
+            )
+
+            if has_special_channels:
+                # Return special channels as list of tuples for backward compatibility
+                result = relevant_writes
+            elif isinstance(stream_keys, str):
+                # Single output key - return the value directly
+                result = next(
+                    (w[1] for w in relevant_writes if w[0] == stream_keys), None
+                )
+            else:
+                # Multiple output keys - return as dict
+                result = {w[0]: w[1] for w in relevant_writes}
+        else:
+            # Check for other writes that should be included (like __end__)
+            # Include writes that are not internal control channels
+            excluded_channels = {ERROR, INTERRUPT, RETURN, "__resume__", "__previous__"}
+            other_writes = [w for w in writes if w[0] not in excluded_channels]
+            if other_writes:
+                # Return as list of tuples for backward compatibility with special channels
+                result = other_writes
+            else:
+                # No relevant writes - return empty list for backward compatibility
+                result = []
+
     yield {
         "id": task.id,
         "name": task.name,
         "error": next((w[1] for w in writes if w[0] == ERROR), None),
-        "result": [w for w in writes if w[0] in stream_channels_list or w[0] == RETURN],
+        "result": result,
         "interrupts": [
             asdict(v)
             for w in writes
