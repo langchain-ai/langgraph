@@ -9107,3 +9107,52 @@ async def test_subgraph_streaming_async() -> None:
 
     assert result["last_chunk"].content == "today."
     assert result["num_chunks"] == 9
+
+
+@NEEDS_CONTEXTVARS
+async def test_null_resume_disallowed_with_multiple_interrupts(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        text_1: str
+        text_2: str
+
+    async def human_node_1(state: State):
+        value = interrupt(state["text_1"])
+        return {"text_1": value}
+
+    async def human_node_2(state: State):
+        value = interrupt(state["text_2"])
+        return {"text_2": value}
+
+    graph_builder = StateGraph(State)
+    graph_builder.add_node("human_node_1", human_node_1)
+    graph_builder.add_node("human_node_2", human_node_2)
+
+    # Add both nodes in parallel from START
+    graph_builder.add_edge(START, "human_node_1")
+    graph_builder.add_edge(START, "human_node_2")
+
+    checkpointer = InMemorySaver()
+    graph = graph_builder.compile(checkpointer=checkpointer)
+
+    thread_id = str(uuid.uuid4())
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    await graph.ainvoke(
+        {"text_1": "original text 1", "text_2": "original text 2"}, config=config
+    )
+
+    resume_map = {
+        i.id: f"resume for prompt: {i.value}"
+        for i in (await graph.aget_state(config)).interrupts
+    }
+    with pytest.raises(
+        RuntimeError,
+        match="When there are multiple pending interrupts, you must specify the interrupt id when resuming.",
+    ):
+        await graph.ainvoke(Command(resume="singular resume"), config=config)
+
+    assert await graph.ainvoke(Command(resume=resume_map), config=config) == {
+        "text_1": "resume for prompt: original text 1",
+        "text_2": "resume for prompt: original text 2",
+    }
