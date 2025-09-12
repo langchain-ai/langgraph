@@ -904,7 +904,11 @@ class PregelLoop:
                         )
                     }
                 ]
-                self._emit("updates", lambda: iter(interrupts))
+                stream_modes = self.stream.modes if self.stream else []
+                if "updates" in stream_modes:
+                    self._emit("updates", lambda: iter(interrupts))
+                elif "values" in stream_modes:
+                    self._emit("values", lambda: iter(interrupts))
             elif writes[0][0] != ERROR:
                 self._emit(
                     "updates",
