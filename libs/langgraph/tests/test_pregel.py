@@ -8383,6 +8383,7 @@ def test_get_graph_nonterminal_last_step_source(snapshot: SnapshotAssertion) -> 
 
     assert json.dumps(graph_json, indent=2, sort_keys=True) == snapshot
 
+
 def test_null_resume_disallowed_with_multiple_interrupts(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
