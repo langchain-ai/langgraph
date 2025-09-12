@@ -1,4 +1,5 @@
 import inspect
+import warnings
 from typing import (
     Any,
     Awaitable,
@@ -12,7 +13,6 @@ from typing import (
     cast,
     get_type_hints,
 )
-from warnings import warn
 
 from langchain_core.language_models import (
     BaseChatModel,
@@ -78,24 +78,38 @@ class AgentStatePydantic(BaseModel):
     remaining_steps: RemainingSteps = 25
 
 
-@deprecated(
-    "AgentStateWithStructuredResponse has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStateWithStructuredResponse'.",
-    category=LangGraphDeprecatedSinceV10,
-)
-class AgentStateWithStructuredResponse(AgentState):
-    """The state of the agent with a structured response."""
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        category=LangGraphDeprecatedSinceV10,
+        message="AgentState has been moved to langchain.agents.*",
+    )
 
-    structured_response: StructuredResponse
+    @deprecated(
+        "AgentStateWithStructuredResponse has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStateWithStructuredResponse'.",
+        category=LangGraphDeprecatedSinceV10,
+    )
+    class AgentStateWithStructuredResponse(AgentState):
+        """The state of the agent with a structured response."""
+
+        structured_response: StructuredResponse
 
 
-@deprecated(
-    "AgentStateWithStructuredResponsePydantic has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStateWithStructuredResponsePydantic'.",
-    category=LangGraphDeprecatedSinceV10,
-)
-class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
-    """The state of the agent with a structured response."""
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        category=LangGraphDeprecatedSinceV10,
+        message="AgentStatePydantic has been moved to langchain.agents.*",
+    )
 
-    structured_response: StructuredResponse
+    @deprecated(
+        "AgentStateWithStructuredResponsePydantic has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStateWithStructuredResponsePydantic'.",
+        category=LangGraphDeprecatedSinceV10,
+    )
+    class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
+        """The state of the agent with a structured response."""
+
+        structured_response: StructuredResponse
 
 
 StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
@@ -480,7 +494,7 @@ def create_react_agent(
     if (
         config_schema := deprecated_kwargs.pop("config_schema", MISSING)
     ) is not MISSING:
-        warn(
+        warnings.warn(
             "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
             category=LangGraphDeprecatedSinceV10,
         )
