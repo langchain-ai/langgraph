@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator, Iterator, Sequence
 from dataclasses import asdict
 from typing import (
@@ -60,6 +61,8 @@ from langgraph.types import (
     StateSnapshot,
     StreamMode,
 )
+
+logger = logging.getLogger(__name__)
 
 __all__ = ("RemoteGraph", "RemoteException")
 
@@ -950,6 +953,7 @@ class RemoteGraph(PregelProtocol):
         try:
             return chunk
         except UnboundLocalError:
+            logger.warning("No events received from remote graph")
             return None
 
     async def ainvoke(
@@ -990,6 +994,7 @@ class RemoteGraph(PregelProtocol):
         try:
             return chunk
         except UnboundLocalError:
+            logger.warning("No events received from remote graph")
             return None
 
 
