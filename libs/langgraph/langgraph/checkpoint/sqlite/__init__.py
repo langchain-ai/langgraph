@@ -1,0 +1,558 @@
+from __future__ import annotations
+
+import random
+import sqlite3
+import threading
+from collections.abc import AsyncIterator, Iterator, Sequence
+from contextlib import closing, contextmanager
+from typing import Any, cast
+
+from langchain_core.runnables import RunnableConfig
+
+from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
+    BaseCheckpointSaver,
+    ChannelVersions,
+    Checkpoint,
+    CheckpointMetadata,
+    CheckpointTuple,
+    SerializerProtocol,
+    get_checkpoint_id,
+    get_checkpoint_metadata,
+)
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.sqlite.utils import search_where
+
+_AIO_ERROR_MSG = (
+    "The SqliteSaver does not support async methods. "
+    "Consider using AsyncSqliteSaver instead.\n"
+    "from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver\n"
+    "Note: AsyncSqliteSaver requires the aiosqlite package to use.\n"
+    "Install with:\n`pip install aiosqlite`\n"
+    "See https://langchain-ai.github.io/langgraph/reference/checkpoints/#langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver"
+    "for more information."
+)
+
+
+class SqliteSaver(BaseCheckpointSaver[str]):
+    """A checkpoint saver that stores checkpoints in a SQLite database.
+
+    Note:
+        This class is meant for lightweight, synchronous use cases
+        (demos and small projects) and does not
+        scale to multiple threads.
+        For a similar sqlite saver with `async` support,
+        consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
+
+    Args:
+        conn (sqlite3.Connection): The SQLite database connection.
+        serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to JsonPlusSerializerCompat.
+
+    Examples:
+
+        >>> import sqlite3
+        >>> from langgraph.checkpoint.sqlite import SqliteSaver
+        >>> from langgraph.graph import StateGraph
+        >>>
+        >>> builder = StateGraph(int)
+        >>> builder.add_node("add_one", lambda x: x + 1)
+        >>> builder.set_entry_point("add_one")
+        >>> builder.set_finish_point("add_one")
+        >>> # Create a new SqliteSaver instance
+        >>> # Note: check_same_thread=False is OK as the implementation uses a lock
+        >>> # to ensure thread safety.
+        >>> conn = sqlite3.connect("checkpoints.sqlite", check_same_thread=False)
+        >>> memory = SqliteSaver(conn)
+        >>> graph = builder.compile(checkpointer=memory)
+        >>> config = {"configurable": {"thread_id": "1"}}
+        >>> graph.get_state(config)
+        >>> result = graph.invoke(3, config)
+        >>> graph.get_state(config)
+        StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '0c62ca34-ac19-445d-bbb0-5b4984975b2a'}}, parent_config=None)
+    """  # noqa
+
+    conn: sqlite3.Connection
+    is_setup: bool
+
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        serde: SerializerProtocol | None = None,
+    ) -> None:
+        super().__init__(serde=serde)
+        self.jsonplus_serde = JsonPlusSerializer()
+        self.conn = conn
+        self.is_setup = False
+        self.lock = threading.Lock()
+
+    @classmethod
+    @contextmanager
+    def from_conn_string(cls, conn_string: str) -> Iterator[SqliteSaver]:
+        """Create a new SqliteSaver instance from a connection string.
+
+        Args:
+            conn_string: The SQLite connection string.
+
+        Yields:
+            SqliteSaver: A new SqliteSaver instance.
+
+        Examples:
+
+            In memory:
+
+                with SqliteSaver.from_conn_string(":memory:") as memory:
+                    ...
+
+            To disk:
+
+                with SqliteSaver.from_conn_string("checkpoints.sqlite") as memory:
+                    ...
+        """
+        with closing(
+            sqlite3.connect(
+                conn_string,
+                # https://ricardoanderegg.com/posts/python-sqlite-thread-safety/
+                check_same_thread=False,
+            )
+        ) as conn:
+            yield cls(conn)
+
+    def setup(self) -> None:
+        """Set up the checkpoint database.
+
+        This method creates the necessary tables in the SQLite database if they don't
+        already exist. It is called automatically when needed and should not be called
+        directly by the user.
+        """
+        if self.is_setup:
+            return
+
+        self.conn.executescript(
+            """
+            PRAGMA journal_mode=WAL;
+            CREATE TABLE IF NOT EXISTS checkpoints (
+                thread_id TEXT NOT NULL,
+                checkpoint_ns TEXT NOT NULL DEFAULT '',
+                checkpoint_id TEXT NOT NULL,
+                parent_checkpoint_id TEXT,
+                type TEXT,
+                checkpoint BLOB,
+                metadata BLOB,
+                PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
+            );
+            CREATE TABLE IF NOT EXISTS writes (
+                thread_id TEXT NOT NULL,
+                checkpoint_ns TEXT NOT NULL DEFAULT '',
+                checkpoint_id TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                idx INTEGER NOT NULL,
+                channel TEXT NOT NULL,
+                type TEXT,
+                value BLOB,
+                PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+            );
+            """
+        )
+
+        self.is_setup = True
+
+    @contextmanager
+    def cursor(self, transaction: bool = True) -> Iterator[sqlite3.Cursor]:
+        """Get a cursor for the SQLite database.
+
+        This method returns a cursor for the SQLite database. It is used internally
+        by the SqliteSaver and should not be called directly by the user.
+
+        Args:
+            transaction (bool): Whether to commit the transaction when the cursor is closed. Defaults to True.
+
+        Yields:
+            sqlite3.Cursor: A cursor for the SQLite database.
+        """
+        with self.lock:
+            self.setup()
+            cur = self.conn.cursor()
+            try:
+                yield cur
+            finally:
+                if transaction:
+                    self.conn.commit()
+                cur.close()
+
+    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
+        """Get a checkpoint tuple from the database.
+
+        This method retrieves a checkpoint tuple from the SQLite database based on the
+        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
+        the matching thread ID and checkpoint ID is retrieved. Otherwise, the latest checkpoint
+        for the given thread ID is retrieved.
+
+        Args:
+            config: The config to use for retrieving the checkpoint.
+
+        Returns:
+            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+
+        Examples:
+
+            Basic:
+            >>> config = {"configurable": {"thread_id": "1"}}
+            >>> checkpoint_tuple = memory.get_tuple(config)
+            >>> print(checkpoint_tuple)
+            CheckpointTuple(...)
+
+            With checkpoint ID:
+
+            >>> config = {
+            ...    "configurable": {
+            ...        "thread_id": "1",
+            ...        "checkpoint_ns": "",
+            ...        "checkpoint_id": "1ef4f797-8335-6428-8001-8a1503f9b875",
+            ...    }
+            ... }
+            >>> checkpoint_tuple = memory.get_tuple(config)
+            >>> print(checkpoint_tuple)
+            CheckpointTuple(...)
+        """  # noqa
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        with self.cursor(transaction=False) as cur:
+            # find the latest checkpoint for the thread_id
+            if checkpoint_id := get_checkpoint_id(config):
+                cur.execute(
+                    "SELECT thread_id, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                    (
+                        str(config["configurable"]["thread_id"]),
+                        checkpoint_ns,
+                        checkpoint_id,
+                    ),
+                )
+            else:
+                cur.execute(
+                    "SELECT thread_id, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND checkpoint_ns = ? ORDER BY checkpoint_id DESC LIMIT 1",
+                    (str(config["configurable"]["thread_id"]), checkpoint_ns),
+                )
+            # if a checkpoint is found, return it
+            if value := cur.fetchone():
+                (
+                    thread_id,
+                    checkpoint_id,
+                    parent_checkpoint_id,
+                    type,
+                    checkpoint,
+                    metadata,
+                ) = value
+                if not get_checkpoint_id(config):
+                    config = {
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": checkpoint_id,
+                        }
+                    }
+                # find any pending writes
+                cur.execute(
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
+                    (
+                        str(config["configurable"]["thread_id"]),
+                        checkpoint_ns,
+                        str(config["configurable"]["checkpoint_id"]),
+                    ),
+                )
+                # deserialize the checkpoint and metadata
+                return CheckpointTuple(
+                    config,
+                    self.serde.loads_typed((type, checkpoint)),
+                    cast(
+                        CheckpointMetadata,
+                        self.jsonplus_serde.loads(metadata)
+                        if metadata is not None
+                        else {},
+                    ),
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": parent_checkpoint_id,
+                            }
+                        }
+                        if parent_checkpoint_id
+                        else None
+                    ),
+                    [
+                        (task_id, channel, self.serde.loads_typed((type, value)))
+                        for task_id, channel, type, value in cur
+                    ],
+                )
+
+    def list(
+        self,
+        config: RunnableConfig | None,
+        *,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
+    ) -> Iterator[CheckpointTuple]:
+        """List checkpoints from the database.
+
+        This method retrieves a list of checkpoint tuples from the SQLite database based
+        on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
+
+        Args:
+            config: The config to use for listing the checkpoints.
+            filter: Additional filtering criteria for metadata. Defaults to None.
+            before: If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
+            limit: The maximum number of checkpoints to return. Defaults to None.
+
+        Yields:
+            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+
+        Examples:
+            >>> from langgraph.checkpoint.sqlite import SqliteSaver
+            >>> with SqliteSaver.from_conn_string(":memory:") as memory:
+            ... # Run a graph, then list the checkpoints
+            >>>     config = {"configurable": {"thread_id": "1"}}
+            >>>     checkpoints = list(memory.list(config, limit=2))
+            >>> print(checkpoints)
+            [CheckpointTuple(...), CheckpointTuple(...)]
+
+            >>> config = {"configurable": {"thread_id": "1"}}
+            >>> before = {"configurable": {"checkpoint_id": "1ef4f797-8335-6428-8001-8a1503f9b875"}}
+            >>> with SqliteSaver.from_conn_string(":memory:") as memory:
+            ... # Run a graph, then list the checkpoints
+            >>>     checkpoints = list(memory.list(config, before=before))
+            >>> print(checkpoints)
+            [CheckpointTuple(...), ...]
+        """
+        where, param_values = search_where(config, filter, before)
+        query = f"""SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata
+        FROM checkpoints
+        {where}
+        ORDER BY checkpoint_id DESC"""
+        if limit:
+            query += f" LIMIT {limit}"
+        with self.cursor(transaction=False) as cur, closing(self.conn.cursor()) as wcur:
+            cur.execute(query, param_values)
+            for (
+                thread_id,
+                checkpoint_ns,
+                checkpoint_id,
+                parent_checkpoint_id,
+                type,
+                checkpoint,
+                metadata,
+            ) in cur:
+                wcur.execute(
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
+                    (thread_id, checkpoint_ns, checkpoint_id),
+                )
+                yield CheckpointTuple(
+                    {
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": checkpoint_id,
+                        }
+                    },
+                    self.serde.loads_typed((type, checkpoint)),
+                    cast(
+                        CheckpointMetadata,
+                        self.jsonplus_serde.loads(metadata)
+                        if metadata is not None
+                        else {},
+                    ),
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": parent_checkpoint_id,
+                            }
+                        }
+                        if parent_checkpoint_id
+                        else None
+                    ),
+                    [
+                        (task_id, channel, self.serde.loads_typed((type, value)))
+                        for task_id, channel, type, value in wcur
+                    ],
+                )
+
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
+    ) -> RunnableConfig:
+        """Save a checkpoint to the database.
+
+        This method saves a checkpoint to the SQLite database. The checkpoint is associated
+        with the provided config and its parent config (if any).
+
+        Args:
+            config: The config to associate with the checkpoint.
+            checkpoint: The checkpoint to save.
+            metadata: Additional metadata to save with the checkpoint.
+            new_versions: New channel versions as of this write.
+
+        Returns:
+            RunnableConfig: Updated configuration after storing the checkpoint.
+
+        Examples:
+
+            >>> from langgraph.checkpoint.sqlite import SqliteSaver
+            >>> with SqliteSaver.from_conn_string(":memory:") as memory:
+            >>>     config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "channel_values": {"key": "value"}}
+            >>>     saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}}, {})
+            >>> print(saved_config)
+            {'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef4f797-8335-6428-8001-8a1503f9b875'}}
+        """
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
+        serialized_metadata = self.jsonplus_serde.dumps(
+            get_checkpoint_metadata(config, metadata)
+        )
+        with self.cursor() as cur:
+            cur.execute(
+                "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    str(config["configurable"]["thread_id"]),
+                    checkpoint_ns,
+                    checkpoint["id"],
+                    config["configurable"].get("checkpoint_id"),
+                    type_,
+                    serialized_checkpoint,
+                    serialized_metadata,
+                ),
+            )
+        return {
+            "configurable": {
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": checkpoint["id"],
+            }
+        }
+
+    def put_writes(
+        self,
+        config: RunnableConfig,
+        writes: Sequence[tuple[str, Any]],
+        task_id: str,
+        task_path: str = "",
+    ) -> None:
+        """Store intermediate writes linked to a checkpoint.
+
+        This method saves intermediate writes associated with a checkpoint to the SQLite database.
+
+        Args:
+            config: Configuration of the related checkpoint.
+            writes: List of writes to store, each as (channel, value) pair.
+            task_id: Identifier for the task creating the writes.
+            task_path: Path of the task creating the writes.
+        """
+        query = (
+            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            if all(w[0] in WRITES_IDX_MAP for w in writes)
+            else "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        with self.cursor() as cur:
+            cur.executemany(
+                query,
+                [
+                    (
+                        str(config["configurable"]["thread_id"]),
+                        str(config["configurable"]["checkpoint_ns"]),
+                        str(config["configurable"]["checkpoint_id"]),
+                        task_id,
+                        WRITES_IDX_MAP.get(channel, idx),
+                        channel,
+                        *self.serde.dumps_typed(value),
+                    )
+                    for idx, (channel, value) in enumerate(writes)
+                ],
+            )
+
+    def delete_thread(self, thread_id: str) -> None:
+        """Delete all checkpoints and writes associated with a thread ID.
+
+        Args:
+            thread_id: The thread ID to delete.
+
+        Returns:
+            None
+        """
+        with self.cursor() as cur:
+            cur.execute(
+                "DELETE FROM checkpoints WHERE thread_id = ?",
+                (str(thread_id),),
+            )
+            cur.execute(
+                "DELETE FROM writes WHERE thread_id = ?",
+                (str(thread_id),),
+            )
+
+    async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
+        """Get a checkpoint tuple from the database asynchronously.
+
+        Note:
+            This async method is not supported by the SqliteSaver class.
+            Use get_tuple() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
+        """
+        raise NotImplementedError(_AIO_ERROR_MSG)
+
+    async def alist(
+        self,
+        config: RunnableConfig | None,
+        *,
+        filter: dict[str, Any] | None = None,
+        before: RunnableConfig | None = None,
+        limit: int | None = None,
+    ) -> AsyncIterator[CheckpointTuple]:
+        """List checkpoints from the database asynchronously.
+
+        Note:
+            This async method is not supported by the SqliteSaver class.
+            Use list() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
+        """
+        raise NotImplementedError(_AIO_ERROR_MSG)
+        yield
+
+    async def aput(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
+    ) -> RunnableConfig:
+        """Save a checkpoint to the database asynchronously.
+
+        Note:
+            This async method is not supported by the SqliteSaver class.
+            Use put() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
+        """
+        raise NotImplementedError(_AIO_ERROR_MSG)
+
+    def get_next_version(self, current: str | None, channel: None) -> str:
+        """Generate the next version ID for a channel.
+
+        This method creates a new version identifier for a channel based on its current version.
+
+        Args:
+            current (Optional[str]): The current version identifier of the channel.
+
+        Returns:
+            str: The next version identifier, which is guaranteed to be monotonically increasing.
+        """
+        if current is None:
+            current_v = 0
+        elif isinstance(current, int):
+            current_v = current
+        else:
+            current_v = int(current.split(".")[0])
+        next_v = current_v + 1
+        next_h = random.random()
+        return f"{next_v:032}.{next_h:016}"
