@@ -72,7 +72,7 @@ def _get_pypi_downloads(package: Package) -> int:
         return sum(entry["downloads"] for entry in sorted_data[:7])
     else:
         return None
-    
+
 def _get_npm_downloads(package: Package) -> int:
     """Retrieve the weekly download count for a package on the npm registry."""
 
@@ -131,7 +131,7 @@ def _get_weekly_downloads(packages: dict[str, list[Package]], fake: bool) -> lis
                 num_downloads = _get_npm_downloads(package)
             else:
                 num_downloads = None
-            
+
             resolved_packages.append(
                 {
                     "name": package["name"],

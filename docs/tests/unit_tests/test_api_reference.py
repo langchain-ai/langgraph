@@ -69,9 +69,9 @@ def test_update_markdown_with_imports() -> None:
 )
 def test_get_imports(code_block: str, expected_imports: list) -> None:
     """Get imports from a code block."""
-    assert (
-        get_imports(code_block, "some_path") == expected_imports
-    ), f"Failed for code_block=`{code_block}`"
+    assert get_imports(code_block, "some_path") == expected_imports, (
+        f"Failed for code_block=`{code_block}`"
+    )
 
 
 @pytest.mark.parametrize(
@@ -89,10 +89,7 @@ def test_get_imports(code_block: str, expected_imports: list) -> None:
         ),
         # Multiple imports
         (
-            (
-                "from langgraph.types import interrupt\n"
-                "from langgraph.func import task"
-            ),
+            ("from langgraph.types import interrupt\nfrom langgraph.func import task"),
             [
                 {
                     "source": "langgraph.types",
