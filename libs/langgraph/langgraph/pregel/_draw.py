@@ -65,6 +65,9 @@ def draw_graph(
     static_seen: set[Any] = set()
     sources: dict[str, set[tuple[str, bool, str | None]]] = {}
     step_sources: dict[str, set[tuple[str, bool, str | None]]] = {}
+    static_declared_writes: dict[str, set[tuple[str, bool, str | None]]] = defaultdict(
+        set
+    )
     # remove node mappers
     nodes = {
         k: v.copy(update={"mapper": None}) if v.mapper is not None else v
@@ -128,17 +131,23 @@ def draw_graph(
                         conditionals.update(
                             {(task.name, t[0], t[1] or None): t[2] for t in writes}
                         )
+                        # record static writes for edge creation
+                        for t in writes:
+                            static_declared_writes[task.name].add((t[0], True, t[2]))
                         task.config[CONF][CONFIG_KEY_SEND]([t[:2] for t in writes])
         # collect sources
         step_sources = {
-            task.name: {
-                (
-                    w[0],
-                    (task.name, w[0], w[1] or None) in conditionals,
-                    conditionals.get((task.name, w[0], w[1] or None)),
-                )
-                for w in task.writes
-            }
+            task.name: (
+                {
+                    (
+                        w[0],
+                        (task.name, w[0], w[1] or None) in conditionals,
+                        conditionals.get((task.name, w[0], w[1] or None)),
+                    )
+                    for w in task.writes
+                }
+                | static_declared_writes.get(task.name, set())
+            )
             for task in tasks.values()
         }
         sources.update(step_sources)
@@ -172,19 +181,10 @@ def draw_graph(
         )
         # collect edges
         for task in tasks.values():
-            added = False
             for trigger in task.triggers:
                 for src, cond, label in sorted(trigger_to_sources[trigger]):
                     edges.add((src, task.name, cond, label))
-                    # if the edge is from this step, skip adding the implicit edges
-                    if (trigger, cond, label) in step_sources.get(src, set()):
-                        added = True
-                    else:
-                        sources[src].discard((trigger, cond, label))
-            # if no edges from this step, add implicit edges from all previous tasks
-            if not added:
-                for src in step_sources:
-                    edges.add((src, task.name, True, None))
+
     # assemble the graph
     graph = Graph()
     # add nodes
