@@ -36,6 +36,7 @@ ddb.create_table(
     AttributeDefinitions=[{"AttributeName":"thread_id_checkpoint_id_checkpoint_ns","AttributeType":"S"},
                           {"AttributeName":"task_id_idx","AttributeType":"S"}],
 )
+```
 
 ### Minimal usage
 
