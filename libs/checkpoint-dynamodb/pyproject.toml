@@ -1,0 +1,19 @@
+[project]
+name = "langgraph-checkpoint-dynamodb"
+version = "0.1.0"
+description = "DynamoDB Checkpointer for LangGraph"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+dependencies = [
+  "boto3>=1.28,<2",
+  "langgraph>=0.2.0",
+  "langchain-core>=0.2.0"
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.4", "moto[dynamodb]>=5,<6"]
+
+[build-system]
+requires = ["setuptools>=67", "wheel"]
+build-backend = "setuptools.build_meta"
