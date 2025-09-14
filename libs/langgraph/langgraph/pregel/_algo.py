@@ -860,6 +860,10 @@ def prepare_single_task(
                         previous=checkpoint["channel_values"].get(PREVIOUS, None),
                         store=store,
                     )
+                    additional_config = {
+                        "metadata": metadata,
+                        "tags": proc.tags,
+                    }
                     return PregelExecutableTask(
                         name,
                         val,
