@@ -13,7 +13,6 @@ from typing import Any, Callable, Literal, NamedTuple, cast
 
 import orjson
 import sqlite_vec  # type: ignore[import-untyped]
-
 from langgraph.store.base import (
     BaseStore,
     GetOp,
