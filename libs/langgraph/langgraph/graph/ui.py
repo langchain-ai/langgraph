@@ -82,6 +82,8 @@ def push_ui_message(
         message: Optional message object to associate with the UI message.
         state_key: Key in the graph state where the UI messages are stored.
             Defaults to "ui".
+        merge: Whether to merge props with existing UI message (True) or replace
+            them (False). Defaults to False.
 
     Returns:
         The created UI message.
