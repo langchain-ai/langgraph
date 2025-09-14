@@ -7,10 +7,6 @@ from uuid import uuid4
 
 import pytest
 from langchain_core.runnables import RunnableConfig
-from psycopg import Connection
-from psycopg.rows import dict_row
-from psycopg_pool import ConnectionPool
-
 from langgraph.checkpoint.base import (
     EXCLUDED_METADATA_KEYS,
     Checkpoint,
@@ -18,8 +14,12 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
 from langgraph.checkpoint.serde.types import TASKS
+from psycopg import Connection
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
+
+from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
