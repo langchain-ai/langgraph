@@ -22,7 +22,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
         with:
           # use minimum supported Python version
-          python-version: "3.9"
+          python-version: "3.10"
           enable-cache: true
           cache-suffix: "uv-lock-upgrade"
           

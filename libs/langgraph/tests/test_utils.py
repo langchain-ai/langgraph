@@ -17,16 +17,13 @@ import langsmith
 import pytest
 from typing_extensions import NotRequired, Required, TypedDict
 
-from langgraph._internal._config import _is_not_empty
+from langgraph._internal._config import _is_not_empty, ensure_config
 from langgraph._internal._fields import (
     _is_optional_type,
     get_enhanced_type_hints,
     get_field_default,
 )
-from langgraph._internal._runnable import (
-    is_async_callable,
-    is_async_generator,
-)
+from langgraph._internal._runnable import is_async_callable, is_async_generator
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -301,3 +298,24 @@ def test_is_not_empty() -> None:
     assert not _is_not_empty([])
     assert not _is_not_empty(())
     assert not _is_not_empty({})
+
+
+def test_configurable_metadata():
+    config = {
+        "configurable": {
+            "a-key": "foo",
+            "somesecretval": "bar",
+            "sometoken": "thetoken",
+            "__dontinclude": "bar",
+            "includeme": "hi",
+            "andme": 42,
+            "nested": {"foo": "bar"},
+            "nooverride": -2,
+        },
+        "metadata": {"nooverride": 18},
+    }
+    expected = {"includeme", "andme", "nooverride"}
+    merged = ensure_config(config)
+    metadata = merged["metadata"]
+    assert metadata.keys() == expected
+    assert metadata["nooverride"] == 18
