@@ -7,6 +7,7 @@ import time
 from collections.abc import Generator
 
 import pytest
+from langgraph.store.base import TTLConfig
 
 from langgraph.store.sqlite import SqliteStore
 from langgraph.store.sqlite.aio import AsyncSqliteStore
@@ -93,9 +94,13 @@ def test_ttl_sweeper(temp_db_file: str) -> None:
     ttl_seconds = 2
     ttl_minutes = ttl_seconds / 60
 
+    ttl_config: TTLConfig = {
+        "default_ttl": ttl_minutes,
+        "sweep_interval_minutes": ttl_minutes / 2,
+    }
     with SqliteStore.from_conn_string(
         temp_db_file,
-        ttl={"default_ttl": ttl_minutes, "sweep_interval_minutes": ttl_minutes / 2},
+        ttl=ttl_config,
     ) as store:
         store.setup()
 
@@ -298,9 +303,14 @@ async def test_async_ttl_sweeper(temp_db_file: str) -> None:
     ttl_seconds = 2
     ttl_minutes = ttl_seconds / 60
 
+    ttl_config: TTLConfig = {
+        "default_ttl": ttl_minutes,
+        "sweep_interval_minutes": ttl_minutes / 2,
+    }
+
     async with AsyncSqliteStore.from_conn_string(
         temp_db_file,
-        ttl={"default_ttl": ttl_minutes, "sweep_interval_minutes": ttl_minutes / 2},
+        ttl=ttl_config,
     ) as store:
         await store.setup()
 
