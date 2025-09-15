@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Generic, cast
 
+from langgraph.store.base import BaseStore
 from typing_extensions import TypedDict, Unpack
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_RUNTIME
 from langgraph.config import get_config
-from langgraph.store.base import BaseStore
 from langgraph.types import _DC_KWARGS, StreamWriter
 from langgraph.typing import ContextT
 

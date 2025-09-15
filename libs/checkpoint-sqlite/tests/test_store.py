@@ -9,7 +9,6 @@ from typing import Any, Literal, Optional, Union, cast
 
 import pytest
 from langchain_core.embeddings import Embeddings
-
 from langgraph.store.base import (
     GetOp,
     Item,
@@ -18,6 +17,7 @@ from langgraph.store.base import (
     PutOp,
     SearchOp,
 )
+
 from langgraph.store.sqlite import SqliteStore
 from langgraph.store.sqlite.base import SqliteIndexConfig
 

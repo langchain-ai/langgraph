@@ -9,8 +9,6 @@ from uuid import uuid4
 
 import pytest
 from langchain_core.embeddings import Embeddings
-from psycopg import Connection
-
 from langgraph.store.base import (
     GetOp,
     Item,
@@ -19,6 +17,8 @@ from langgraph.store.base import (
     PutOp,
     SearchOp,
 )
+from psycopg import Connection
+
 from langgraph.store.postgres import PostgresStore
 from tests.conftest import (
     DEFAULT_URI,
@@ -879,12 +879,7 @@ def test_non_ascii(
     distance_type: str,
 ) -> None:
     """Test support for non-ascii characters"""
-    with _create_vector_store(
-        vector_type,
-        distance_type,
-        fake_embeddings
-    ) as store:
-    
+    with _create_vector_store(vector_type, distance_type, fake_embeddings) as store:
         store.put(("user_123", "memories"), "1", {"text": "这是中文"})  # Chinese
         store.put(
             ("user_123", "memories"), "2", {"text": "これは日本語です"}

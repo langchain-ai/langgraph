@@ -23,18 +23,7 @@ from langchain_core.runnables import (
     RunnablePassthrough,
 )
 from langchain_core.runnables.graph import Edge
-from langsmith import traceable
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from pytest_mock import MockerFixture
-from syrupy import SnapshotAssertion
-from typing_extensions import NotRequired, TypedDict
-
-from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph.cache.base import BaseCache
-from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.ephemeral_value import EphemeralValue
-from langgraph.channels.last_value import LastValue
-from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -42,19 +31,30 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.store.base import BaseStore
+from langsmith import traceable
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pytest_mock import MockerFixture
+from syrupy import SnapshotAssertion
+from typing_extensions import NotRequired, TypedDict
+
+from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
+from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.ephemeral_value import EphemeralValue
+from langgraph.channels.last_value import LastValue
+from langgraph.channels.topic import Topic
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
-from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
     NodeBuilder,
     Pregel,
 )
 from langgraph.pregel._loop import SyncPregelLoop
 from langgraph.pregel._runner import PregelRunner
-from langgraph.store.base import BaseStore
 from langgraph.types import (
     CachePolicy,
     Command,
@@ -8430,3 +8430,22 @@ def test_null_resume_disallowed_with_multiple_interrupts(
         "text_1": "resume for prompt: original text 1",
         "text_2": "resume for prompt: original text 2",
     }
+
+
+def test_interrupt_stream_mode_values():
+    """Test that interrupts are surfaced when steam_mode='values'"""
+
+    class State(TypedDict):
+        human_input: str
+
+    def human_input_node(state: State) -> Command:
+        human_input = interrupt("interrupt")
+        return Command(update={"human_input": human_input})
+
+    builder = StateGraph(State)
+    builder.add_node(human_input_node)
+    builder.add_edge(START, "human_input_node")
+    app = builder.compile()
+
+    result = [*app.stream(State(), stream_mode="values")]
+    assert "__interrupt__" in result[-1]

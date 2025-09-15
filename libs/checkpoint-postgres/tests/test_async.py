@@ -6,10 +6,6 @@ from uuid import uuid4
 
 import pytest
 from langchain_core.runnables import RunnableConfig
-from psycopg import AsyncConnection
-from psycopg.rows import dict_row
-from psycopg_pool import AsyncConnectionPool
-
 from langgraph.checkpoint.base import (
     EXCLUDED_METADATA_KEYS,
     Checkpoint,
@@ -17,11 +13,15 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
     empty_checkpoint,
 )
+from langgraph.checkpoint.serde.types import TASKS
+from psycopg import AsyncConnection
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
+
 from langgraph.checkpoint.postgres.aio import (
     AsyncPostgresSaver,
     AsyncShallowPostgresSaver,
 )
-from langgraph.checkpoint.serde.types import TASKS
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
