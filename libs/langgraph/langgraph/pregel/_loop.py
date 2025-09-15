@@ -25,6 +25,17 @@ from typing import (
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
+from langgraph.cache.base import BaseCache
+from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
+    BaseCheckpointSaver,
+    ChannelVersions,
+    Checkpoint,
+    CheckpointMetadata,
+    CheckpointTuple,
+    PendingWrite,
+)
+from langgraph.store.base import BaseStore
 from typing_extensions import ParamSpec, Self
 
 from langgraph._internal._config import patch_configurable
@@ -50,17 +61,7 @@ from langgraph._internal._constants import (
 )
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
-from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import (
-    WRITES_IDX_MAP,
-    BaseCheckpointSaver,
-    ChannelVersions,
-    Checkpoint,
-    CheckpointMetadata,
-    CheckpointTuple,
-    PendingWrite,
-)
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
@@ -108,7 +109,6 @@ from langgraph.pregel.debug import (
     map_debug_tasks,
 )
 from langgraph.pregel.protocol import StreamChunk, StreamProtocol
-from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     CachePolicy,
@@ -568,6 +568,36 @@ class PregelLoop:
             if task := tasks.get(tid):
                 task.writes.append((k, v))
 
+    def _pending_interrupts(self) -> set[str]:
+        """Return the set of interrupt ids that are pending without corresponding resume values."""
+        # mapping of task ids to interrupt ids
+        pending_interrupts: dict[str, str] = {}
+
+        # set of resume task ids
+        pending_resumes: set[str] = set()
+
+        for task_id, write_type, value in self.checkpoint_pending_writes:
+            if write_type == INTERRUPT:
+                # interrupts is always a list, but there should only be one element
+                pending_interrupts[task_id] = value[0].id
+            elif write_type == RESUME:
+                pending_resumes.add(task_id)
+
+        resumed_interrupt_ids = {
+            pending_interrupts[task_id]
+            for task_id in pending_resumes
+            if task_id in pending_interrupts
+        }
+
+        # Keep only interrupts whose interrupt_id is not resumed
+        hanging_interrupts: set[str] = {
+            interrupt_id
+            for interrupt_id in pending_interrupts.values()
+            if interrupt_id not in resumed_interrupt_ids
+        }
+
+        return hanging_interrupts
+
     def _first(
         self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
     ) -> set[str] | None:
@@ -590,16 +620,24 @@ class PregelLoop:
 
         # map command to writes
         if isinstance(self.input, Command):
-            if resume_is_map := (
-                (resume := self.input.resume) is not None
-                and isinstance(resume, dict)
-                and all(is_xxh3_128_hexdigest(k) for k in resume)
-            ):
-                self.config[CONF][CONFIG_KEY_RESUME_MAP] = self.input.resume
-            if resume is not None and not self.checkpointer:
-                raise RuntimeError(
-                    "Cannot use Command(resume=...) without checkpointer"
-                )
+            if (resume := self.input.resume) is not None:
+                if not self.checkpointer:
+                    raise RuntimeError(
+                        "Cannot use Command(resume=...) without checkpointer"
+                    )
+
+                if resume_is_map := (
+                    isinstance(resume, dict)
+                    and all(is_xxh3_128_hexdigest(k) for k in resume)
+                ):
+                    self.config[CONF][CONFIG_KEY_RESUME_MAP] = resume
+                else:
+                    if len(self._pending_interrupts()) > 1:
+                        raise RuntimeError(
+                            "When there are multiple pending interrupts, you must specify the interrupt id when resuming. "
+                            "Docs: https://docs.langchain.com/oss/python/langgraph/add-human-in-the-loop#resume-multiple-interrupts-with-one-invocation."
+                        )
+
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
             for tid, c, v in map_command(cmd=self.input):
@@ -866,7 +904,11 @@ class PregelLoop:
                         )
                     }
                 ]
-                self._emit("updates", lambda: iter(interrupts))
+                stream_modes = self.stream.modes if self.stream else []
+                if "updates" in stream_modes:
+                    self._emit("updates", lambda: iter(interrupts))
+                elif "values" in stream_modes:
+                    self._emit("values", lambda: iter(interrupts))
             elif writes[0][0] != ERROR:
                 self._emit(
                     "updates",

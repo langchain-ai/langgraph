@@ -1,8 +1,8 @@
 import pytest
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 from typing_extensions import TypedDict
 
 from langgraph.prebuilt import create_react_agent
-from langgraph.warnings import LangGraphDeprecatedSinceV10
 from tests.model import FakeToolCallingModel
 
 

@@ -24,6 +24,9 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from langgraph.cache.base import BaseCache
+from langgraph.checkpoint.base import Checkpoint
+from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
@@ -41,7 +44,6 @@ from langgraph._internal._fields import (
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
-from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
@@ -50,7 +52,6 @@ from langgraph.channels.named_barrier_value import (
     NamedBarrierValue,
     NamedBarrierValueAfterFinish,
 )
-from langgraph.checkpoint.base import Checkpoint
 from langgraph.constants import END, START, TAG_HIDDEN
 from langgraph.errors import (
     ErrorCode,
@@ -71,7 +72,6 @@ from langgraph.pregel._write import (
     ChannelWriteEntry,
     ChannelWriteTupleEntry,
 )
-from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     CachePolicy,
@@ -155,7 +155,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         graph = StateGraph(state_schema=State, context_schema=Context)
 
         def node(state: State, runtime: Runtime[Context]) -> dict:
-            r = runtie.context.get("r", 1.0)
+            r = runtime.context.get("r", 1.0)
             x = state["x"][-1]
             next_value = x * r * (1 - x)
             return {"x": next_value}
