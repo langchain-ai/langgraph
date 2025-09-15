@@ -8430,3 +8430,22 @@ def test_null_resume_disallowed_with_multiple_interrupts(
         "text_1": "resume for prompt: original text 1",
         "text_2": "resume for prompt: original text 2",
     }
+
+
+def test_interrupt_stream_mode_values():
+    """Test that interrupts are surfaced when steam_mode='values'"""
+
+    class State(TypedDict):
+        human_input: str
+
+    def human_input_node(state: State) -> Command:
+        human_input = interrupt("interrupt")
+        return Command(update={"human_input": human_input})
+
+    builder = StateGraph(State)
+    builder.add_node(human_input_node)
+    builder.add_edge(START, "human_input_node")
+    app = builder.compile()
+
+    result = [*app.stream(State(), stream_mode="values")]
+    assert "__interrupt__" in result[-1]
