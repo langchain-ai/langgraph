@@ -61,8 +61,7 @@ def test_converting_cell_magic() -> None:
         nb = nbformat.v4.new_notebook()
         nb.cells = [
             nbformat.v4.new_code_cell(
-                "%%capture --no-stderr\n"
-                "%pip install -U langgraph"
+                "%%capture --no-stderr\n%pip install -U langgraph"
             ),
             nbformat.v4.new_code_cell("print('Hello')"),
         ]
