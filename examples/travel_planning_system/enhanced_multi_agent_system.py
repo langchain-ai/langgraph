@@ -53,6 +53,37 @@ except ImportError:
 
 OpenTelemetryTracer = None
 
+# Agent descriptions to enrich tracing metadata
+AGENT_DESCRIPTIONS: Dict[str, str] = {
+    "coordinator": "Coordinates planning, extracts details, and orchestrates specialist agents",
+    "flight_specialist": "Searches flights and checks weather; returns options and timing recommendations",
+    "hotel_specialist": "Finds hotels tailored to trip type, preferences, and location",
+    "activity_specialist": "Finds activities and builds a balanced itinerary considering weather",
+    "budget_analyst": "Calculates and optimizes budget with a detailed cost breakdown",
+    "plan_synthesizer": "Synthesizes a final plan from all agent results"
+}
+
+
+def _trace_config_for_agent(agent_name: str, session_id: Optional[str]) -> Dict[str, Any]:
+    """Build a consistent tracing config so agent and tool names propagate.
+
+    - Adds callbacks so chain/tool spans are captured
+    - Adds tags including a low-cardinality `agent:<name>` marker
+    - Adds metadata with `agent_name` and `langgraph_node` so tracers can name spans
+    """
+    tracers = setup_tracing()
+    return {
+        "callbacks": tracers,
+        "tags": [f"agent:{agent_name}", agent_name, "enhanced-travel-planning"],
+        "metadata": {
+            "agent_name": agent_name,
+            "agent_type": agent_name,
+            "langgraph_node": agent_name,
+            "session_id": session_id,
+            "thread_id": session_id,
+        },
+    }
+
 
 # State definition
 class TravelPlanState(TypedDict):
@@ -105,20 +136,35 @@ def setup_tracing():
     
     # Azure Application Insights
     if config.tracing.application_insights_connection_string and AzureOpenAITracingCallback:
+        # Use only the synchronous Azure OpenAI tracing callback to avoid
+        # duplicate spans and ensure consistent parent/child relationships.
         azure_tracer = AzureOpenAITracingCallback(
             connection_string=config.tracing.application_insights_connection_string,
-            enable_content_recording=True
+            enable_content_recording=True,
+            name="enhanced_multi_agent_travel_planning",
+            id="enhanced_travel_planner_agent",
+            endpoint="my_fdp_url",
+            scope="Travel planning orchestrator"
         )
         tracers.append(azure_tracer)
-
-    if config.tracing.application_insights_connection_string and AsyncAzureOpenAITracingCallback:
-        async_azure_tracer = AsyncAzureOpenAITracingCallback(
-            connection_string=config.tracing.application_insights_connection_string,
-            enable_content_recording=True
-        )
-        tracers.append(async_azure_tracer)
-        logger.info("Azure tracing enabled")
+        logger.info("Azure tracing (sync) enabled")
     
+    # try:
+    #     from langchain_azure_ai.callbacks.tracers.file_logging_tracer import FileLoggingTracer, AsyncFileLoggingTracer
+    #     file_tracer = FileLoggingTracer(
+    #         log_file="/Users/nagkumar/Documents/msft.nosync/langraph/langgraph/examples/travel_planning_system/sync_callbacks_log2.log",
+    #         overwrite=True
+    #     )
+    #     tracers.append(file_tracer)
+    #     async_file_tracer = AsyncFileLoggingTracer(
+    #         log_file="/Users/nagkumar/Documents/msft.nosync/langraph/langgraph/examples/travel_planning_system/async_callbacks_log2.log",
+    #         overwrite=True
+    #     )
+    #     tracers.append(async_file_tracer)
+    # except Exception as e:
+    #     logger.warning(f"FileLoggingTracer import failed: {e}")
+    #     import pdb; pdb.set_trace()
+        
     # OpenTelemetry
     if OpenTelemetryTracer:
         otel_tracer = OpenTelemetryTracer(
@@ -144,8 +190,13 @@ def _get_otel_tracer() -> Optional[Any]:
     return None
 
 # LLM setup
-def create_llm(agent_type: str = "default") -> Any:
-    """Create LLM instance with proper configuration."""
+def create_llm(
+    agent_type: str = "default",
+    *,
+    system_instructions: Optional[str] = None,
+    session_id: Optional[str] = None,
+) -> Any:
+    """Create LLM instance with proper configuration and rich metadata for tracing."""
     tracers = setup_tracing()
     
     # Temperature based on agent type
@@ -172,8 +223,16 @@ def create_llm(agent_type: str = "default") -> Any:
             metadata={
                 "agent_type": agent_type,
                 "agent_name": agent_type,
+                "agent_description": AGENT_DESCRIPTIONS.get(agent_type, agent_type),
                 "system": "enhanced-travel-planning",
-                "provider": "azure_openai"
+                "system_instructions": system_instructions,
+                "provider": "azure_openai",
+                "ls_provider": "azure",
+                "ls_model_name": config.llm.azure_deployment_name,
+                "ls_model_type": "chat",
+                "ls_temperature": temperature,
+                "thread_id": session_id,
+                "session_id": session_id,
             }
         )
     
@@ -187,8 +246,17 @@ def create_llm(agent_type: str = "default") -> Any:
             tags=[agent_type, "enhanced-travel-planning"],
             metadata={
                 "agent_type": agent_type,
+                "agent_name": agent_type,
+                "agent_description": AGENT_DESCRIPTIONS.get(agent_type, agent_type),
                 "system": "enhanced-travel-planning",
-                "provider": "openai"
+                "system_instructions": system_instructions,
+                "provider": "openai",
+                "ls_provider": "openai",
+                "ls_model_name": config.llm.openai_model,
+                "ls_model_type": "chat",
+                "ls_temperature": temperature,
+                "thread_id": session_id,
+                "session_id": session_id,
             }
         )
     
@@ -408,8 +476,6 @@ def extract_trip_details(user_request: str) -> str:
 # Agent nodes for LangGraph
 def coordinator_node(state: TravelPlanState) -> TravelPlanState:
     """Coordinator agent that manages the overall travel planning process."""
-    llm = create_llm("coordinator")
-    
     system_message = """You are the Travel Planning Coordinator. Your role is to:
     1. Understand the user's travel requirements
     2. Extract key details (destination, dates, travelers, preferences)
@@ -417,18 +483,30 @@ def coordinator_node(state: TravelPlanState) -> TravelPlanState:
     4. Ensure all aspects are covered
     
     Analyze the user request and determine the next steps needed."""
+
+    llm = create_llm(
+        "coordinator",
+        system_instructions=system_message,
+        session_id=state.get("session_id"),
+    )
     
     messages = [SystemMessage(content=system_message)] + state["messages"]
-    response = llm.invoke(messages)
+    response = llm.invoke(
+        messages,
+        config=_trace_config_for_agent("coordinator", state.get("session_id")),
+    )
     
     # Extract trip details if not already done
     if not state.get("destination"):
         tools = [extract_trip_details]
         tool_llm = llm.bind_tools(tools)
-        tool_response = tool_llm.invoke([
-            SystemMessage(content="Extract trip details from the user request."),
-            HumanMessage(content=state["user_request"])
-        ])
+        tool_response = tool_llm.invoke(
+            [
+                SystemMessage(content="Extract trip details from the user request."),
+                HumanMessage(content=state["user_request"]),
+            ],
+            config=_trace_config_for_agent("coordinator", state.get("session_id")),
+        )
         
         if tool_response.tool_calls:
             details_str = extract_trip_details.invoke({"user_request": state["user_request"]})
@@ -457,7 +535,14 @@ def coordinator_node(state: TravelPlanState) -> TravelPlanState:
 
 def flight_specialist_node(state: TravelPlanState) -> TravelPlanState:
     """Flight specialist agent with real flight search capabilities."""
-    llm = create_llm("flight_specialist")
+    system_message = (
+        "You are the Flight Specialist. Find optimal flights and check weather for travel dates."
+    )
+    llm = create_llm(
+        "flight_specialist",
+        system_instructions=system_message,
+        session_id=state.get("session_id"),
+    )
     tools = [search_flights, get_weather_forecast]
     
     agent = create_react_agent(llm, tools)
@@ -469,9 +554,10 @@ def flight_specialist_node(state: TravelPlanState) -> TravelPlanState:
     
     Return detailed flight options with prices and recommendations."""
     
-    result = agent.invoke({
-        "messages": [HumanMessage(content=task)]
-    })
+    result = agent.invoke(
+        {"messages": [HumanMessage(content=task)]},
+        config=_trace_config_for_agent("flight_specialist", state.get("session_id")),
+    )
     
     # Store results
     state["flight_results"] = result.get("messages", [])
@@ -490,7 +576,14 @@ def flight_specialist_node(state: TravelPlanState) -> TravelPlanState:
 
 def hotel_specialist_node(state: TravelPlanState) -> TravelPlanState:
     """Hotel specialist agent with real hotel search capabilities."""
-    llm = create_llm("hotel_specialist")
+    system_message = (
+        "You are the Hotel Specialist. Recommend hotels matched to trip type, location, and budget."
+    )
+    llm = create_llm(
+        "hotel_specialist",
+        system_instructions=system_message,
+        session_id=state.get("session_id"),
+    )
     tools = [search_hotels]
     
     agent = create_react_agent(llm, tools)
@@ -513,9 +606,10 @@ def hotel_specialist_node(state: TravelPlanState) -> TravelPlanState:
     
     Consider location, amenities, and price. Provide detailed recommendations."""
     
-    result = agent.invoke({
-        "messages": [HumanMessage(content=task)]
-    })
+    result = agent.invoke(
+        {"messages": [HumanMessage(content=task)]},
+        config=_trace_config_for_agent("hotel_specialist", state.get("session_id")),
+    )
     
     state["hotel_results"] = result.get("messages", [])
     state["completed_steps"].append("hotel_search")
@@ -532,7 +626,14 @@ def hotel_specialist_node(state: TravelPlanState) -> TravelPlanState:
 
 def activity_specialist_node(state: TravelPlanState) -> TravelPlanState:
     """Activity specialist agent with real activity search capabilities."""
-    llm = create_llm("activity_specialist")
+    system_message = (
+        "You are the Activity Specialist. Curate activities and build a balanced itinerary considering weather."
+    )
+    llm = create_llm(
+        "activity_specialist",
+        system_instructions=system_message,
+        session_id=state.get("session_id"),
+    )
     tools = [search_activities, get_weather_forecast]
     
     agent = create_react_agent(llm, tools)
@@ -564,9 +665,10 @@ def activity_specialist_node(state: TravelPlanState) -> TravelPlanState:
     
     Check weather conditions and create a balanced itinerary with indoor and outdoor options."""
     
-    result = agent.invoke({
-        "messages": [HumanMessage(content=task)]
-    })
+    result = agent.invoke(
+        {"messages": [HumanMessage(content=task)]},
+        config=_trace_config_for_agent("activity_specialist", state.get("session_id")),
+    )
     
     state["activity_results"] = result.get("messages", [])
     state["completed_steps"].append("activity_search")
@@ -583,7 +685,14 @@ def activity_specialist_node(state: TravelPlanState) -> TravelPlanState:
 
 def budget_analyst_node(state: TravelPlanState) -> TravelPlanState:
     """Budget analyst agent with comprehensive cost analysis."""
-    llm = create_llm("budget_analyst")
+    system_message = (
+        "You are the Budget Analyst. Compute a detailed budget and optimization tips for the trip."
+    )
+    llm = create_llm(
+        "budget_analyst",
+        system_instructions=system_message,
+        session_id=state.get("session_id"),
+    )
     tools = [analyze_budget]
     
     agent = create_react_agent(llm, tools)
@@ -610,9 +719,10 @@ def budget_analyst_node(state: TravelPlanState) -> TravelPlanState:
     
     Provide a detailed breakdown and recommendations for cost optimization."""
     
-    result = agent.invoke({
-        "messages": [HumanMessage(content=task)]
-    })
+    result = agent.invoke(
+        {"messages": [HumanMessage(content=task)]},
+        config=_trace_config_for_agent("budget_analyst", state.get("session_id")),
+    )
     
     state["budget_analysis"] = result.get("messages", [])
     state["completed_steps"].append("budget_analysis")
@@ -629,8 +739,6 @@ def budget_analyst_node(state: TravelPlanState) -> TravelPlanState:
 
 def plan_synthesizer_node(state: TravelPlanState) -> TravelPlanState:
     """Plan synthesizer that creates the final comprehensive travel plan."""
-    llm = create_llm("plan_synthesizer")
-    
     system_message = """You are the Plan Synthesizer. Create a comprehensive, well-structured travel plan based on all the specialist reports.
 
     Include:
@@ -644,6 +752,13 @@ def plan_synthesizer_node(state: TravelPlanState) -> TravelPlanState:
     8. Emergency Contacts and Backup Plans
     
     Make it detailed, actionable, and easy to follow."""
+    llm = create_llm(
+        "plan_synthesizer",
+        system_instructions=system_message,
+        session_id=state.get("session_id"),
+    )
+    
+    # System message defined above for tracing consistency
     
     # Compile all agent results
     all_results = []
@@ -694,7 +809,10 @@ def plan_synthesizer_node(state: TravelPlanState) -> TravelPlanState:
         HumanMessage(content=task)
     ]
     
-    response = llm.invoke(messages)
+    response = llm.invoke(
+        messages,
+        config=_trace_config_for_agent("plan_synthesizer", state.get("session_id")),
+    )
     
     state["final_plan"] = response.content
     state["completed_steps"].append("plan_synthesis")
