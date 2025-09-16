@@ -9,6 +9,3 @@ dependencies = [
   "langgraph==1.0.0a2",
   "langchain_community>=0.3.0",
 ]
-
-[tool.uv]
-prerelease = "allow"

@@ -1402,13 +1402,13 @@ ADD {relpath} /deps/{name}
         installs,
         "",
         "# -- Installing all local dependencies --",
-        f'''RUN for dep in /deps/*; do \
+        f"""RUN for dep in /deps/*; do \
             echo "Installing $dep"; \
             if [ -d "$dep" ]; then \
                 echo "Installing $dep"; \
                 (cd "$dep" && {pip_install} .); \
             fi; \
-        done''',
+        done""",
         "# -- End of local dependencies install --",
         os.linesep.join(env_vars),
         "",
