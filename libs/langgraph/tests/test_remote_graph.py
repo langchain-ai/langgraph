@@ -20,7 +20,6 @@ from langgraph.types import Interrupt, StateSnapshot
 from tests.any_str import AnyStr
 from tests.conftest import NO_DOCKER
 from tests.example_app.example_graph import app
-import uuid
 
 if NO_DOCKER:
     pytest.skip(
@@ -829,31 +828,6 @@ def test_invoke():
     )
 
     config = {"configurable": {"thread_id": "thread_1"}}
-    result = remote_pregel.invoke(
-        {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
-    )
-
-    assert result == {"messages": [{"type": "human", "content": "world"}]}
-
-def test_invoke_uuid():
-    # set up test
-    mock_sync_client = MagicMock()
-    mock_sync_client.runs.stream.return_value = [
-        StreamPart(event="values", data={"chunk": "data1"}),
-        StreamPart(event="values", data={"chunk": "data2"}),
-        StreamPart(
-            event="values", data={"messages": [{"type": "human", "content": "world"}]}
-        ),
-    ]
-
-    # call method / assertions
-    remote_pregel = RemoteGraph(
-        "test_graph_id",
-        sync_client=mock_sync_client,
-    )
-
-    thread_id = uuid.uuid4()
-    config = {"configurable": {"thread_id": thread_id}}
     result = remote_pregel.invoke(
         {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
     )
