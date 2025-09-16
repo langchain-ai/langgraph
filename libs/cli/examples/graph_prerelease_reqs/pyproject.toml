@@ -1,0 +1,22 @@
+[project]
+name = "lg-studio"
+version = "0.1.0"
+description = "Sandbox for v1.0 react agent"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "python-dotenv>=1.0.1",
+  "ipykernel>=6.29.5",
+  "openai",
+  "langchain==1.0.0a3",
+  "langchain-core==1.0.0a2",
+  "langchain-openai==1.0.0a2",
+  "langgraph==1.0.0a2",
+  "langgraph-prebuilt",
+  "pytest",
+  "langchain-tests",
+  "agentevals",
+]
+
+[tool.uv]
+prerelease = "allow"

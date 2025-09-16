@@ -1256,14 +1256,14 @@ def python_config_to_docker(
         else:
             pip_installer = "pip"
     if pip_installer == "uv":
-        install_cmd = "uv pip install --system --prerelease=allow"
+        install_cmd = "uv pip install --system"
     elif pip_installer == "pip":
         install_cmd = "pip install"
     else:
         raise ValueError(f"Invalid pip_installer: {pip_installer}")
 
     # configure pip
-    pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
+    pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c ../../api/constraints.txt"
     if config.get("pip_config_file"):
         pip_install = f"PIP_CONFIG_FILE=/pipconfig.txt {pip_install}"
     pip_config_file_str = (
@@ -1402,7 +1402,13 @@ ADD {relpath} /deps/{name}
         installs,
         "",
         "# -- Installing all local dependencies --",
-        f"RUN {pip_install} -e /deps/*",
+        f'''RUN for dep in /deps/*; do \
+            echo "Installing $dep"; \
+            if [ -d "$dep" ]; then \
+                echo "Installing $dep"; \
+                (cd "$dep" && {pip_install} .); \
+            fi; \
+        done''',
         "# -- End of local dependencies install --",
         os.linesep.join(env_vars),
         "",
