@@ -93,7 +93,12 @@ WHERE expires_at IS NOT NULL;
 VECTOR_MIGRATIONS: Sequence[Migration] = [
     Migration(
         """
-CREATE EXTENSION IF NOT EXISTS vector;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+        CREATE EXTENSION vector;
+    END IF;
+END $$;
 """,
     ),
     Migration(
