@@ -483,6 +483,8 @@ class HttpClient:
                 sse = decoder.decode(line=line.rstrip(b"\n"))
                 if sse is not None:
                     yield sse
+            if sse := decoder.decode(b""):
+                yield sse
 
 
 async def _aencode_json(json: Any) -> tuple[dict[str, str], bytes | None]:
@@ -3673,6 +3675,8 @@ class SyncHttpClient:
                 sse = decoder.decode(line.rstrip(b"\n"))
                 if sse is not None:
                     yield sse
+            if sse := decoder.decode(b""):
+                yield sse
 
 
 def _encode_json(json: Any) -> tuple[dict[str, str], bytes]:
