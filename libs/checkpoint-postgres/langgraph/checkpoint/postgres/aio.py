@@ -411,7 +411,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 "channel_values": {
                     **(
                         value["checkpoint"].get("channel_values") or {}
-                    ),  # 'or {}' needed for backwards compat with v3 checkpoints and below, as v4 introduced channel_values key
+                    ),  # 'or {}' needed for backwards compat with checkpoints that do not have a channel_values key
                     **self._load_blobs(value["channel_values"]),
                 },
             },
