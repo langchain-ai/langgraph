@@ -8,6 +8,7 @@ from typing import (
     Literal,
     cast,
 )
+from uuid import UUID
 
 import langsmith as ls
 from langchain_core.runnables import RunnableConfig
@@ -78,7 +79,7 @@ _CONF_DROPLIST = frozenset(
 
 def _sanitize_config_value(v: Any) -> Any:
     """Recursively sanitize a config value to ensure it contains only primitives."""
-    if isinstance(v, (str, int, float, bool)):
+    if isinstance(v, (str, int, float, bool, UUID)):
         return v
     elif isinstance(v, dict):
         sanitized_dict = {}
