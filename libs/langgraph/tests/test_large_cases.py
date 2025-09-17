@@ -9,7 +9,7 @@ import pytest
 from langchain_core.messages import AIMessage, AnyMessage, ToolCall
 from langchain_core.runnables import RunnableConfig, RunnableMap, RunnablePick
 from langchain_core.tools import tool
-from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.base import BaseCheckpointer
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
@@ -49,7 +49,7 @@ from tests.messages import (
 
 
 def test_invoke_two_processes_in_out_interrupt(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
     mocker: MockerFixture,
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
@@ -288,7 +288,7 @@ def test_invoke_two_processes_in_out_interrupt(
 
 
 def test_fork_always_re_runs_nodes(
-    sync_checkpointer: BaseCheckpointSaver, mocker: MockerFixture
+    sync_checkpointer: BaseCheckpointer, mocker: MockerFixture
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda _: 1)
 
@@ -481,7 +481,7 @@ def test_fork_always_re_runs_nodes(
 
 def test_conditional_state_graph(
     snapshot: SnapshotAssertion,
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
@@ -1614,7 +1614,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
 
 def test_state_graph_packets(
-    sync_checkpointer: BaseCheckpointSaver, mocker: MockerFixture
+    sync_checkpointer: BaseCheckpointer, mocker: MockerFixture
 ) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
@@ -2369,7 +2369,7 @@ def test_state_graph_packets(
 def test_message_graph(
     snapshot: SnapshotAssertion,
     deterministic_uuids: MockerFixture,
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     from copy import deepcopy
 
@@ -3087,7 +3087,7 @@ def test_message_graph(
 
 def test_root_graph(
     deterministic_uuids: MockerFixture,
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     from copy import deepcopy
 
@@ -4150,7 +4150,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
 
-def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointer) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -4298,7 +4298,7 @@ def test_dynamic_interrupt(sync_checkpointer: BaseCheckpointSaver) -> None:
     )
 
 
-def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointer) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -4465,7 +4465,7 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
     )
 
 
-def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointer) -> None:
     class SubgraphState(TypedDict):
         my_key: str
         market: str
@@ -4649,7 +4649,7 @@ def test_dynamic_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> N
 
 
 def test_send_dedupe_on_resume(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class InterruptOnce:
         ticks: int = 0
@@ -5014,7 +5014,7 @@ def test_send_dedupe_on_resume(
         assert history[1] == expected_history[2]._replace(parent_config=None)
 
 
-def test_nested_graph_state(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_nested_graph_state(sync_checkpointer: BaseCheckpointer) -> None:
     class InnerState(TypedDict):
         my_key: str
         my_other_key: str
@@ -5287,7 +5287,7 @@ def test_nested_graph_state(sync_checkpointer: BaseCheckpointSaver) -> None:
 
 
 def test_doubly_nested_graph_state(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     class State(TypedDict):
         my_key: str
@@ -5753,7 +5753,7 @@ def test_doubly_nested_graph_state(
     ]
 
 
-def test_send_to_nested_graphs(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_send_to_nested_graphs(sync_checkpointer: BaseCheckpointer) -> None:
     class OverallState(TypedDict):
         subjects: list[str]
         jokes: Annotated[list[str], operator.add]
@@ -5817,7 +5817,7 @@ def test_send_to_nested_graphs(sync_checkpointer: BaseCheckpointSaver) -> None:
 
 
 def test_send_react_interrupt(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
@@ -6208,7 +6208,7 @@ def test_send_react_interrupt(
 
 
 def test_send_react_interrupt_control(
-    sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
+    sync_checkpointer: BaseCheckpointer, snapshot: SnapshotAssertion
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
@@ -6435,7 +6435,7 @@ def test_send_react_interrupt_control(
 
 
 def test_weather_subgraph(
-    sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
+    sync_checkpointer: BaseCheckpointer, snapshot: SnapshotAssertion
 ) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,

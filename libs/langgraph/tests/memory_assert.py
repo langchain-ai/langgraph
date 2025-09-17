@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -26,7 +26,7 @@ class NoopSerializer(SerializerProtocol):
         return "type", obj
 
 
-class MemorySaverNeedsPendingSendsMigration(BaseCheckpointSaver):
+class MemorySaverNeedsPendingSendsMigration(BaseCheckpointer):
     def __init__(self) -> None:
         self.saver = InMemorySaver()
 

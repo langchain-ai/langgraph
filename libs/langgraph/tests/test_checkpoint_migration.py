@@ -5,7 +5,7 @@ from collections import defaultdict
 from typing import Annotated, Literal, Optional, Union
 
 import pytest
-from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointTuple
+from langgraph.checkpoint.base import BaseCheckpointer, CheckpointTuple
 from typing_extensions import TypedDict
 
 from langgraph._internal._config import patch_configurable
@@ -1512,7 +1512,7 @@ def test_migrate_checkpoints(source: str, target: str) -> None:
 
 @NEEDS_CONTEXTVARS
 def test_latest_checkpoint_state_graph(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     builder = make_state_graph()
     app = builder.compile(checkpointer=sync_checkpointer)
@@ -1553,7 +1553,7 @@ def test_latest_checkpoint_state_graph(
 
 @NEEDS_CONTEXTVARS
 async def test_latest_checkpoint_state_graph_async(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     builder = make_state_graph()
     app = builder.compile(checkpointer=async_checkpointer)
@@ -1600,7 +1600,7 @@ async def test_latest_checkpoint_state_graph_async(
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*", "2-quadratic"])
 def test_saved_checkpoint_state_graph(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
     checkpoint_version: str,
 ) -> None:
     builder = make_state_graph()
@@ -1666,7 +1666,7 @@ def test_saved_checkpoint_state_graph(
 @NEEDS_CONTEXTVARS
 @pytest.mark.parametrize("checkpoint_version", ["3", "2-start:*", "2-quadratic"])
 async def test_saved_checkpoint_state_graph_async(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
     checkpoint_version: str,
 ) -> None:
     builder = make_state_graph()

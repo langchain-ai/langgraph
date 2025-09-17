@@ -17,7 +17,7 @@ from typing import (
 )
 
 from langgraph.cache.base import BaseCache
-from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.base import BaseCheckpointer
 from langgraph.store.base import BaseStore
 from typing_extensions import Unpack
 
@@ -394,7 +394,7 @@ class entrypoint(Generic[ContextT]):
 
     def __init__(
         self,
-        checkpointer: BaseCheckpointSaver | None = None,
+        checkpointer: BaseCheckpointer | None = None,
         store: BaseStore | None = None,
         cache: BaseCache | None = None,
         context_schema: type[ContextT] | None = None,

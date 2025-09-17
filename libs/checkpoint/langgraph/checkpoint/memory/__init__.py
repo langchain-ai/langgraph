@@ -15,7 +15,7 @@ from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 class InMemorySaver(
-    BaseCheckpointSaver[str], AbstractContextManager, AbstractAsyncContextManager
+    BaseCheckpointer[str], AbstractContextManager, AbstractAsyncContextManager
 ):
     """An in-memory checkpoint saver.
 

@@ -7,7 +7,7 @@ from typing import Any, Optional, cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     get_checkpoint_id,
 )
@@ -139,7 +139,7 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 """
 
 
-class BasePostgresSaver(BaseCheckpointSaver[str]):
+class BasePostgresSaver(BaseCheckpointer[str]):
     SELECT_SQL = SELECT_SQL
     SELECT_PENDING_SENDS_SQL = SELECT_PENDING_SENDS_SQL
     MIGRATIONS = MIGRATIONS

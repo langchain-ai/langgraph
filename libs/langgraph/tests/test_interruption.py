@@ -1,5 +1,5 @@
 import pytest
-from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.base import BaseCheckpointer
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -9,7 +9,7 @@ pytestmark = pytest.mark.anyio
 
 
 def test_interruption_without_state_updates(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     """Test interruption without state updates. This test confirms that
     interrupting doesn't require a state key having been updated in the prev step"""
@@ -51,7 +51,7 @@ def test_interruption_without_state_updates(
 
 
 async def test_interruption_without_state_updates_async(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     """Test interruption without state updates. This test confirms that
     interrupting doesn't require a state key having been updated in the prev step"""

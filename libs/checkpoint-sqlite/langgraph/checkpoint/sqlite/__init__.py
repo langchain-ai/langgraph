@@ -10,7 +10,7 @@ from typing import Any, cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -34,7 +34,7 @@ _AIO_ERROR_MSG = (
 )
 
 
-class SqliteSaver(BaseCheckpointSaver[str]):
+class SqliteSaver(BaseCheckpointer[str]):
     """A checkpoint saver that stores checkpoints in a SQLite database.
 
     Note:

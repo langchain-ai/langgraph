@@ -62,7 +62,7 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     (["langgraph.types"], "langgraph.types", "StreamWriter", "types"),
     ([], "langgraph.checkpoint.base", "Checkpoint", "checkpoints"),
     ([], "langgraph.checkpoint.base", "CheckpointMetadata", "checkpoints"),
-    ([], "langgraph.checkpoint.base", "BaseCheckpointSaver", "checkpoints"),
+    ([], "langgraph.checkpoint.base", "BaseCheckpointer", "checkpoints"),
     ([], "langgraph.checkpoint.base", "SerializerProtocol", "checkpoints"),
     ([], "langgraph.checkpoint.serde.jsonplus", "JsonPlusSerializer", "checkpoints"),
     ([], "langgraph.checkpoint.memory", "MemorySaver", "checkpoints"),

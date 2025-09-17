@@ -34,7 +34,7 @@ CONFIG_KEY_READ = sys.intern("__pregel_read")
 CONFIG_KEY_CALL = sys.intern("__pregel_call")
 # holds the `call` function that accepts a node/func, args and returns a future
 CONFIG_KEY_CHECKPOINTER = sys.intern("__pregel_checkpointer")
-# holds a `BaseCheckpointSaver` passed from parent graph to child graphs
+# holds a `BaseCheckpointer` passed from parent graph to child graphs
 CONFIG_KEY_STREAM = sys.intern("__pregel_stream")
 # holds a `StreamProtocol` passed from parent graph to child graphs
 CONFIG_KEY_CACHE = sys.intern("__pregel_cache")

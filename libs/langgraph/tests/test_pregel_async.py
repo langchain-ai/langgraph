@@ -25,7 +25,7 @@ from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePas
 from langchain_core.utils.aiter import aclosing
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -566,7 +566,7 @@ async def test_node_cancellation_on_other_node_exception_two() -> None:
 
 
 @NEEDS_CONTEXTVARS
-async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointer) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -718,7 +718,7 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
 
 @NEEDS_CONTEXTVARS
 async def test_dynamic_interrupt_subgraph(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class SubgraphState(TypedDict):
         my_key: str
@@ -893,7 +893,7 @@ async def test_dynamic_interrupt_subgraph(
 
 @NEEDS_CONTEXTVARS
 async def test_partial_pending_checkpoint(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -1066,7 +1066,7 @@ async def test_partial_pending_checkpoint(
 
 @NEEDS_CONTEXTVARS
 async def test_node_not_cancelled_on_other_node_interrupted(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class State(TypedDict):
         hello: Annotated[str, operator.add]
@@ -1167,7 +1167,7 @@ async def test_step_timeout_on_stream_hang(stream_hang_s: float) -> None:
     assert inner_task_cancelled
 
 
-async def test_cancel_graph_astream(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_cancel_graph_astream(async_checkpointer: BaseCheckpointer) -> None:
     class State(TypedDict):
         value: Annotated[int, operator.add]
 
@@ -1235,7 +1235,7 @@ async def test_cancel_graph_astream(async_checkpointer: BaseCheckpointSaver) -> 
 
 
 async def test_cancel_graph_astream_events_v2(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class State(TypedDict):
         value: int
@@ -1697,7 +1697,7 @@ async def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) 
 
 
 async def test_invoke_checkpoint(
-    mocker: MockerFixture, async_checkpointer: BaseCheckpointSaver
+    mocker: MockerFixture, async_checkpointer: BaseCheckpointer
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
     errored_once = False
@@ -1765,7 +1765,7 @@ async def test_invoke_checkpoint(
 
 
 async def test_pending_writes_resume(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class State(TypedDict):
         value: Annotated[int, operator.add]
@@ -2022,7 +2022,7 @@ async def test_pending_writes_resume(
 
 
 async def test_run_from_checkpoint_id_retains_previous_writes(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class MyState(TypedDict):
         myval: Annotated[int, operator.add]
@@ -2174,7 +2174,7 @@ async def test_concurrent_emit_sends() -> None:
     )
 
 
-async def test_send_sequences(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_send_sequences(async_checkpointer: BaseCheckpointer) -> None:
     class Node:
         def __init__(self, name: str):
             self.name = name
@@ -2243,7 +2243,7 @@ async def test_send_sequences(async_checkpointer: BaseCheckpointSaver) -> None:
 
 @NEEDS_CONTEXTVARS
 async def test_imp_task(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     mapper_calls = 0
 
@@ -2296,7 +2296,7 @@ async def test_imp_task(
 
 @NEEDS_CONTEXTVARS
 async def test_imp_nested(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     async def mynode(input: list[str]) -> list[str]:
         return [it + "a" for it in input]
@@ -2360,7 +2360,7 @@ async def test_imp_nested(
 
 @NEEDS_CONTEXTVARS
 async def test_imp_task_cancel(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     mapper_calls = 0
     mapper_cancels = 0
@@ -2411,7 +2411,7 @@ async def test_imp_task_cancel(
 
 @NEEDS_CONTEXTVARS
 async def test_imp_sync_from_async(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     @task()
     def foo(state: dict) -> dict:
@@ -2445,7 +2445,7 @@ async def test_imp_sync_from_async(
 
 @NEEDS_CONTEXTVARS
 async def test_imp_stream_order(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     @task()
     async def foo(state: dict) -> dict:
@@ -2483,7 +2483,7 @@ async def test_imp_stream_order(
     reason="Requires Python 3.11 or higher for context management",
 )
 async def test_send_dedupe_on_resume(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class InterruptOnce:
         ticks: int = 0
@@ -2835,7 +2835,7 @@ async def test_send_dedupe_on_resume(
         assert history[1] == expected_history[2]._replace(parent_config=None)
 
 
-async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_send_react_interrupt(async_checkpointer: BaseCheckpointer) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
     ai_message = AIMessage(
@@ -3225,7 +3225,7 @@ async def test_send_react_interrupt(async_checkpointer: BaseCheckpointSaver) -> 
 
 
 async def test_send_react_interrupt_control(
-    async_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
+    async_checkpointer: BaseCheckpointer, snapshot: SnapshotAssertion
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 
@@ -3446,7 +3446,7 @@ async def test_send_react_interrupt_control(
     assert foo_called == 0
 
 
-async def test_max_concurrency(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_max_concurrency(async_checkpointer: BaseCheckpointer) -> None:
     class Node:
         def __init__(self, name: str):
             self.name = name
@@ -3507,7 +3507,7 @@ async def test_max_concurrency(async_checkpointer: BaseCheckpointSaver) -> None:
     assert await graph.ainvoke(None, thread1) == ["0", "1", *range(100), "3"]
 
 
-async def test_max_concurrency_control(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_max_concurrency_control(async_checkpointer: BaseCheckpointer) -> None:
     async def node1(state) -> Command[Literal["2"]]:
         return Command(update=["1"], goto=[Send("2", idx) for idx in range(100)])
 
@@ -3580,7 +3580,7 @@ graph TD;
 
 
 async def test_invoke_checkpoint_three(
-    mocker: MockerFixture, async_checkpointer: BaseCheckpointSaver
+    mocker: MockerFixture, async_checkpointer: BaseCheckpointer
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
 
@@ -3843,7 +3843,7 @@ async def test_conditional_entrypoint_graph_state() -> None:
 
 
 async def test_in_one_fan_out_state_graph_waiting_edge(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -3932,7 +3932,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge(
 
 @pytest.mark.parametrize("use_waiting_edge", (True, False))
 async def test_in_one_fan_out_state_graph_defer_node(
-    async_checkpointer: BaseCheckpointSaver, use_waiting_edge: bool
+    async_checkpointer: BaseCheckpointer, use_waiting_edge: bool
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -4024,7 +4024,7 @@ async def test_in_one_fan_out_state_graph_defer_node(
 
 
 async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -4239,7 +4239,7 @@ async def test_nested_pydantic_models() -> None:
 
 
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -4392,7 +4392,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
 
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
-    snapshot: SnapshotAssertion, async_checkpointer: BaseCheckpointSaver
+    snapshot: SnapshotAssertion, async_checkpointer: BaseCheckpointer
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -4521,7 +4521,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydant
 
 
 async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -4942,7 +4942,7 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
 
 async def test_subgraph_checkpoint_true(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -5053,7 +5053,7 @@ async def test_subgraph_durability_inherited(
 
 @NEEDS_CONTEXTVARS
 async def test_subgraph_checkpoint_true_interrupt(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     # Define subgraph
     class SubgraphState(TypedDict):
@@ -5112,7 +5112,7 @@ async def test_subgraph_checkpoint_true_interrupt(
 
 
 async def test_stream_subgraphs_during_execution(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -5190,7 +5190,7 @@ async def test_stream_subgraphs_during_execution(
 
 @NEEDS_CONTEXTVARS
 async def test_stream_buffering_single_node(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -5221,7 +5221,7 @@ async def test_stream_buffering_single_node(
 
 
 async def test_nested_graph_interrupts_parallel(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -5402,7 +5402,7 @@ async def test_nested_graph_interrupts_parallel(
 
 
 async def test_doubly_nested_graph_interrupts(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class State(TypedDict):
         my_key: str
@@ -5517,7 +5517,7 @@ async def test_doubly_nested_graph_interrupts(
     ]
 
 
-async def test_checkpoint_metadata(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_checkpoint_metadata(async_checkpointer: BaseCheckpointer) -> None:
     """This test verifies that a run's configurable fields are merged with the
     previous checkpoint config for each step in the run.
     """
@@ -5692,7 +5692,7 @@ async def test_checkpointer_null_pending_writes() -> None:
 
 
 async def test_store_injected_async(
-    async_checkpointer: BaseCheckpointSaver, async_store: BaseStore
+    async_checkpointer: BaseCheckpointer, async_store: BaseStore
 ) -> None:
     class State(TypedDict):
         count: Annotated[int, operator.add]
@@ -5788,7 +5788,7 @@ async def test_store_injected_async(
     )  # still overwriting the same one
 
 
-async def test_debug_retry(async_checkpointer: BaseCheckpointSaver):
+async def test_debug_retry(async_checkpointer: BaseCheckpointer):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
 
@@ -5855,7 +5855,7 @@ async def test_debug_retry(async_checkpointer: BaseCheckpointSaver):
 
 
 async def test_debug_subgraphs(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
@@ -5926,7 +5926,7 @@ async def test_debug_subgraphs(
 
 
 async def test_debug_nested_subgraphs(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     from collections import defaultdict
 
@@ -6043,7 +6043,7 @@ async def test_debug_nested_subgraphs(
 
 @pytest.mark.parametrize("subgraph_persist", [True, False])
 async def test_parent_command(
-    async_checkpointer: BaseCheckpointSaver, subgraph_persist: bool
+    async_checkpointer: BaseCheckpointer, subgraph_persist: bool
 ) -> None:
     from langchain_core.messages import BaseMessage
     from langchain_core.tools import tool
@@ -6113,7 +6113,7 @@ async def test_parent_command(
 
 
 @NEEDS_CONTEXTVARS
-async def test_interrupt_subgraph(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_interrupt_subgraph(async_checkpointer: BaseCheckpointer) -> None:
     class State(TypedDict):
         baz: str
 
@@ -6144,7 +6144,7 @@ async def test_interrupt_subgraph(async_checkpointer: BaseCheckpointSaver) -> No
 
 
 @NEEDS_CONTEXTVARS
-async def test_interrupt_multiple(async_checkpointer: BaseCheckpointSaver):
+async def test_interrupt_multiple(async_checkpointer: BaseCheckpointer):
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
 
@@ -6202,7 +6202,7 @@ async def test_interrupt_multiple(async_checkpointer: BaseCheckpointSaver):
 
 
 @NEEDS_CONTEXTVARS
-async def test_interrupt_loop(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_interrupt_loop(async_checkpointer: BaseCheckpointer) -> None:
     class State(TypedDict):
         age: int
         other: str
@@ -6279,7 +6279,7 @@ async def test_interrupt_loop(async_checkpointer: BaseCheckpointSaver) -> None:
 
 
 @NEEDS_CONTEXTVARS
-async def test_interrupt_functional(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_interrupt_functional(async_checkpointer: BaseCheckpointer) -> None:
     @task
     async def foo(state: dict) -> dict:
         return {"a": state["a"] + "foo"}
@@ -6306,7 +6306,7 @@ async def test_interrupt_functional(async_checkpointer: BaseCheckpointSaver) -> 
 
 @NEEDS_CONTEXTVARS
 async def test_interrupt_task_functional(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     @task
     async def foo(state: dict) -> dict:
@@ -6339,7 +6339,7 @@ async def test_interrupt_task_functional(
 
 
 async def test_command_with_static_breakpoints(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test that we can use Command to resume and update with static breakpoints."""
 
@@ -6373,7 +6373,7 @@ async def test_command_with_static_breakpoints(
     assert result == {"foo": "def|node-1|node-2"}
 
 
-async def test_multistep_plan(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_multistep_plan(async_checkpointer: BaseCheckpointer) -> None:
     from langchain_core.messages import AnyMessage
 
     class State(TypedDict, total=False):
@@ -6433,7 +6433,7 @@ async def test_multistep_plan(async_checkpointer: BaseCheckpointSaver) -> None:
 
 
 async def test_command_goto_with_static_breakpoints(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     """Use Command goto with static breakpoints."""
 
@@ -6503,7 +6503,7 @@ async def test_parallel_node_execution():
 
 @NEEDS_CONTEXTVARS
 async def test_multiple_interrupt_state_persistence(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test that state is preserved correctly across multiple interrupts."""
 
@@ -6577,7 +6577,7 @@ async def test_concurrent_execution():
 
 
 async def test_checkpoint_recovery_async(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     """Test recovery from checkpoints after failures with async nodes."""
 
@@ -6689,7 +6689,7 @@ async def test_multiple_updates() -> None:
 
 
 @NEEDS_CONTEXTVARS
-async def test_falsy_return_from_task(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_falsy_return_from_task(async_checkpointer: BaseCheckpointer) -> None:
     """Test with a falsy return from a task."""
 
     @task
@@ -6709,7 +6709,7 @@ async def test_falsy_return_from_task(async_checkpointer: BaseCheckpointSaver) -
 
 @NEEDS_CONTEXTVARS
 async def test_multiple_interrupts_functional(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test multiple interrupts with functional API."""
     from langgraph.func import entrypoint, task
@@ -6748,7 +6748,7 @@ async def test_multiple_interrupts_functional(
 
 @NEEDS_CONTEXTVARS
 async def test_multiple_interrupts_functional_cache(
-    async_checkpointer: BaseCheckpointSaver, cache: BaseCache
+    async_checkpointer: BaseCheckpointer, cache: BaseCache
 ):
     """Test multiple interrupts with functional API."""
     counter = 0
@@ -6820,7 +6820,7 @@ async def test_multiple_interrupts_functional_cache(
 
 @NEEDS_CONTEXTVARS
 async def test_double_interrupt_subgraph(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class AgentState(TypedDict):
         input: str
@@ -6960,7 +6960,7 @@ async def test_async_streaming_with_functional_api() -> None:
 
 
 @NEEDS_CONTEXTVARS
-async def test_multiple_subgraphs(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_multiple_subgraphs(async_checkpointer: BaseCheckpointer) -> None:
     class State(TypedDict):
         a: int
         b: int
@@ -7034,7 +7034,7 @@ async def test_multiple_subgraphs(async_checkpointer: BaseCheckpointSaver) -> No
 
 @NEEDS_CONTEXTVARS
 async def test_multiple_subgraphs_functional(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     # Define addition subgraph
     @entrypoint()
@@ -7082,7 +7082,7 @@ async def test_multiple_subgraphs_functional(
 
 @NEEDS_CONTEXTVARS
 async def test_multiple_subgraphs_mixed_entrypoint(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test calling multiple StateGraph subgraphs from an entrypoint."""
 
@@ -7145,7 +7145,7 @@ async def test_multiple_subgraphs_mixed_entrypoint(
 
 @NEEDS_CONTEXTVARS
 async def test_multiple_subgraphs_mixed_state_graph(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test calling multiple entrypoint "subgraphs" from a StateGraph."""
 
@@ -7216,7 +7216,7 @@ async def test_multiple_subgraphs_mixed_state_graph(
 
 @NEEDS_CONTEXTVARS
 async def test_multiple_subgraphs_checkpointer(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class SubgraphState(TypedDict):
         sub_counter: Annotated[int, operator.add]
@@ -7348,7 +7348,7 @@ def test_entrypoint_without_checkpointer() -> None:
     assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
 
 
-async def test_entrypoint_stateful(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_entrypoint_stateful(async_checkpointer: BaseCheckpointer) -> None:
     """Test stateful entrypoint invoke."""
 
     # Test invoke
@@ -7393,7 +7393,7 @@ async def test_entrypoint_stateful(async_checkpointer: BaseCheckpointSaver) -> N
 
 
 async def test_entrypoint_stateful_update_state(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test stateful entrypoint invoke."""
 
@@ -7650,7 +7650,7 @@ async def test_stream_messages_dedupe_inputs() -> None:
 
 
 async def test_stream_messages_dedupe_state(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     from langchain_core.messages import AIMessage
 
@@ -7709,7 +7709,7 @@ async def test_stream_messages_dedupe_state(
 
 @NEEDS_CONTEXTVARS
 async def test_interrupt_subgraph_reenter_checkpointer_true(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class SubgraphState(TypedDict):
         foo: str
@@ -7821,7 +7821,7 @@ async def test_interrupt_subgraph_reenter_checkpointer_true(
 
 @NEEDS_CONTEXTVARS
 async def test_handles_multiple_interrupts_from_tasks(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     @task
     async def add_participant(name: str) -> str:
@@ -7882,7 +7882,7 @@ async def test_handles_multiple_interrupts_from_tasks(
 
 @NEEDS_CONTEXTVARS
 async def test_interrupts_in_tasks_surfaced_once(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     @task
     async def add_participant(name: str) -> str:
@@ -7973,7 +7973,7 @@ async def test_pregel_loop_refcount():
         gc.enable()
 
 
-async def test_bulk_state_updates(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_bulk_state_updates(async_checkpointer: BaseCheckpointer) -> None:
     class State(TypedDict):
         foo: str
         baz: str
@@ -8083,7 +8083,7 @@ async def test_bulk_state_updates(async_checkpointer: BaseCheckpointSaver) -> No
 
 
 async def test_update_as_input(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class State(TypedDict):
         foo: str
@@ -8158,7 +8158,7 @@ async def test_update_as_input(
 
 
 async def test_batch_update_as_input(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class State(TypedDict):
         foo: str
@@ -8337,7 +8337,7 @@ async def test_draw_invalid():
 
 @NEEDS_CONTEXTVARS
 async def test_imp_exception(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     @task()
     async def my_task(number: int):
@@ -8636,7 +8636,7 @@ async def test_imp_exception(
 @pytest.mark.parametrize("with_timeout", [False, "inner", "outer", "both"])
 @pytest.mark.parametrize("subgraph_persist", [True, False])
 async def test_parent_command_goto(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
     subgraph_persist: bool,
     with_timeout: Literal[False, "inner", "outer", "both"],
 ) -> None:
@@ -8682,7 +8682,7 @@ async def test_parent_command_goto(
 
 @pytest.mark.parametrize("with_timeout", [True, False])
 async def test_timeout_with_parent_command(
-    async_checkpointer: BaseCheckpointSaver, with_timeout: bool
+    async_checkpointer: BaseCheckpointer, with_timeout: bool
 ) -> None:
     """Test that parent commands are properly propagated during timeouts."""
 
@@ -8709,7 +8709,7 @@ async def test_timeout_with_parent_command(
 
 
 async def test_fork_and_update_task_results(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test forking and updating task results with state history."""
 
@@ -9112,7 +9112,7 @@ async def test_subgraph_streaming_async() -> None:
 
 @NEEDS_CONTEXTVARS
 async def test_null_resume_disallowed_with_multiple_interrupts(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class State(TypedDict):
         text_1: str

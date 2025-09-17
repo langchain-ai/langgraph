@@ -13,7 +13,7 @@ from typing import (
 import pytest
 from langchain_core.messages import AnyMessage, ToolCall
 from langchain_core.runnables import RunnableConfig, RunnablePick
-from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.base import BaseCheckpointer
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
 from pytest_mock import MockerFixture
@@ -42,7 +42,7 @@ pytestmark = pytest.mark.anyio
 
 
 async def test_invoke_two_processes_in_out_interrupt(
-    async_checkpointer: BaseCheckpointSaver, mocker: MockerFixture
+    async_checkpointer: BaseCheckpointer, mocker: MockerFixture
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = NodeBuilder().subscribe_only("input").do(add_one).write_to("inbox")
@@ -285,7 +285,7 @@ async def test_invoke_two_processes_in_out_interrupt(
 
 
 async def test_fork_always_re_runs_nodes(
-    async_checkpointer: BaseCheckpointSaver, mocker: MockerFixture
+    async_checkpointer: BaseCheckpointer, mocker: MockerFixture
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda _: 1)
 
@@ -479,7 +479,7 @@ async def test_fork_always_re_runs_nodes(
     ]
 
 
-async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_conditional_graph_state(async_checkpointer: BaseCheckpointer) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
@@ -1349,7 +1349,7 @@ async def test_prebuilt_tool_chat() -> None:
     ]
 
 
-async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_state_graph_packets(async_checkpointer: BaseCheckpointer) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
@@ -2063,7 +2063,7 @@ async def test_state_graph_packets(async_checkpointer: BaseCheckpointSaver) -> N
     )
 
 
-async def test_message_graph(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_message_graph(async_checkpointer: BaseCheckpointer) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
@@ -2694,7 +2694,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
 
-async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_nested_graph_state(async_checkpointer: BaseCheckpointer) -> None:
     class InnerState(TypedDict):
         my_key: str
         my_other_key: str
@@ -2977,7 +2977,7 @@ async def test_nested_graph_state(async_checkpointer: BaseCheckpointSaver) -> No
 
 
 async def test_doubly_nested_graph_state(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     class State(TypedDict):
         my_key: str
@@ -3451,7 +3451,7 @@ async def test_doubly_nested_graph_state(
     ]
 
 
-async def test_send_to_nested_graphs(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_send_to_nested_graphs(async_checkpointer: BaseCheckpointer) -> None:
     class OverallState(TypedDict):
         subjects: list[str]
         jokes: Annotated[list[str], operator.add]
@@ -3519,7 +3519,7 @@ async def test_send_to_nested_graphs(async_checkpointer: BaseCheckpointSaver) ->
     reason="Python 3.11+ is required for async contextvars support",
 )
 async def test_weather_subgraph(
-    async_checkpointer: BaseCheckpointSaver,
+    async_checkpointer: BaseCheckpointer,
 ) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,

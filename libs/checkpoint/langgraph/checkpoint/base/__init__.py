@@ -109,7 +109,7 @@ class CheckpointTuple(NamedTuple):
     pending_writes: list[PendingWrite] | None = None
 
 
-class BaseCheckpointSaver(Generic[V]):
+class BaseCheckpointer(Generic[V]):
     """Base class for creating a graph checkpointer.
 
     Checkpointers allow LangGraph agents to persist their state
