@@ -242,9 +242,6 @@ class PregelLoop:
         self.interrupt_before = interrupt_before
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
-        # Sources: checkpoint_id from original config (self.config may be patched),
-        # resuming from self.config (current state). Match pending writes on first tick
-        # of nested resume to avoid re-running done tasks.
         self.skip_done_tasks = (CONFIG_KEY_CHECKPOINT_ID not in config[CONF]) or (
             CONFIG_KEY_RESUMING in self.config[CONF] and self.is_nested
         )
