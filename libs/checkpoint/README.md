@@ -32,7 +32,7 @@ When a graph node fails mid-execution at a given superstep, LangGraph stores pen
 
 ## Interface
 
-Each checkpointer should conform to `langgraph.checkpoint.base.BaseCheckpointSaver` interface and must implement the following methods:
+Each checkpointer should conform to `langgraph.checkpoint.base.BaseCheckpointer` interface and must implement the following methods:
 
 - `.put` - Store a checkpoint with its configuration and metadata.
 - `.put_writes` - Store intermediate writes linked to a checkpoint (i.e. pending writes).

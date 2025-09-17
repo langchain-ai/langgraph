@@ -27,7 +27,7 @@ from langchain_core.runnables.config import (
 from langchain_core.runnables.graph import Graph
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     Checkpoint,
     CheckpointTuple,
 )
@@ -625,7 +625,7 @@ class Pregel(
         input_channels: str | Sequence[str],
         step_timeout: float | None = None,
         debug: bool | None = None,
-        checkpointer: BaseCheckpointSaver | None = None,
+        checkpointer: BaseCheckpointer | None = None,
         store: BaseStore | None = None,
         cache: BaseCache | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] = (),
@@ -977,7 +977,7 @@ class Pregel(
         self,
         config: RunnableConfig,
         saved: CheckpointTuple | None,
-        recurse: BaseCheckpointSaver | None = None,
+        recurse: BaseCheckpointer | None = None,
         apply_pending_writes: bool = False,
     ) -> StateSnapshot:
         if not saved:
@@ -1015,7 +1015,7 @@ class Pregel(
             store=self.store,
             checkpointer=(
                 self.checkpointer
-                if isinstance(self.checkpointer, BaseCheckpointSaver)
+                if isinstance(self.checkpointer, BaseCheckpointer)
                 else None
             ),
             manager=None,
@@ -1096,7 +1096,7 @@ class Pregel(
         self,
         config: RunnableConfig,
         saved: CheckpointTuple | None,
-        recurse: BaseCheckpointSaver | None = None,
+        recurse: BaseCheckpointer | None = None,
         apply_pending_writes: bool = False,
     ) -> StateSnapshot:
         if not saved:
@@ -1134,7 +1134,7 @@ class Pregel(
             store=self.store,
             checkpointer=(
                 self.checkpointer
-                if isinstance(self.checkpointer, BaseCheckpointSaver)
+                if isinstance(self.checkpointer, BaseCheckpointer)
                 else None
             ),
             manager=None,
@@ -1216,7 +1216,7 @@ class Pregel(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
         """Get the current state of the graph."""
-        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointer | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1258,7 +1258,7 @@ class Pregel(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
         """Get the current state of the graph."""
-        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointer | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1306,7 +1306,7 @@ class Pregel(
     ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         config = ensure_config(config)
-        checkpointer: BaseCheckpointSaver | None = config[CONF].get(
+        checkpointer: BaseCheckpointer | None = config[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1357,7 +1357,7 @@ class Pregel(
     ) -> AsyncIterator[StateSnapshot]:
         """Asynchronously get the history of the state of the graph."""
         config = ensure_config(config)
-        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointer | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1422,7 +1422,7 @@ class Pregel(
             RunnableConfig: The updated config.
         """
 
-        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointer | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -1881,7 +1881,7 @@ class Pregel(
             RunnableConfig: The updated config.
         """
 
-        checkpointer: BaseCheckpointSaver | None = ensure_config(config)[CONF].get(
+        checkpointer: BaseCheckpointer | None = ensure_config(config)[CONF].get(
             CONFIG_KEY_CHECKPOINTER, self.checkpointer
         )
         if not checkpointer:
@@ -2357,7 +2357,7 @@ class Pregel(
         str | Sequence[str],
         All | Sequence[str],
         All | Sequence[str],
-        BaseCheckpointSaver | None,
+        BaseCheckpointer | None,
         BaseStore | None,
         BaseCache | None,
         Durability,
@@ -2379,7 +2379,7 @@ class Pregel(
         else:
             stream_modes.update(print_mode)
         if self.checkpointer is False:
-            checkpointer: BaseCheckpointSaver | None = None
+            checkpointer: BaseCheckpointer | None = None
         elif CONFIG_KEY_CHECKPOINTER in config.get(CONF, {}):
             checkpointer = config[CONF][CONFIG_KEY_CHECKPOINTER]
         elif self.checkpointer is True:

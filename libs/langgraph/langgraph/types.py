@@ -19,7 +19,7 @@ from typing import (
 from warnings import warn
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from langgraph.checkpoint.base import BaseCheckpointer, CheckpointMetadata
 from typing_extensions import Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
@@ -68,7 +68,7 @@ Durability = Literal["sync", "async", "exit"]
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
-Checkpointer = Union[None, bool, BaseCheckpointSaver]
+Checkpointer = Union[None, bool, BaseCheckpointer]
 """Type of the checkpointer to use for a subgraph.
 - True enables persistent checkpointing for this subgraph.
 - False disables checkpointing, even if the parent graph has a checkpointer.

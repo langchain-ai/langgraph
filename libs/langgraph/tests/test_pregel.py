@@ -25,7 +25,7 @@ from langchain_core.runnables import (
 from langchain_core.runnables.graph import Edge
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -533,7 +533,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
 
 def test_run_from_checkpoint_id_retains_previous_writes(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     class MyState(TypedDict):
         myval: Annotated[int, operator.add]
@@ -758,7 +758,7 @@ def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> Non
 
 
 def test_invoke_checkpoint_two(
-    mocker: MockerFixture, sync_checkpointer: BaseCheckpointSaver
+    mocker: MockerFixture, sync_checkpointer: BaseCheckpointer
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
     errored_once = False
@@ -829,7 +829,7 @@ def test_invoke_checkpoint_two(
 
 
 def test_pending_writes_resume(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class State(TypedDict):
         value: Annotated[int, operator.add]
@@ -1207,7 +1207,7 @@ def test_send_sequences() -> None:
 
 
 def test_imp_task(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     mapper_calls = 0
 
@@ -1268,7 +1268,7 @@ def test_imp_task(
 
 
 def test_imp_nested(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     def mynode(input: list[str]) -> list[str]:
         return [it + "a" for it in input]
@@ -1331,7 +1331,7 @@ def test_imp_nested(
 
 
 def test_imp_stream_order(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     @task()
     def foo(state: dict) -> tuple:
@@ -1369,7 +1369,7 @@ def test_imp_stream_order(
 
 
 def test_invoke_checkpoint_three(
-    mocker: MockerFixture, sync_checkpointer: BaseCheckpointSaver
+    mocker: MockerFixture, sync_checkpointer: BaseCheckpointer
 ) -> None:
     adder = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
 
@@ -1538,7 +1538,7 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
 
 
 def test_invoke_join_then_call_other_pregel(
-    mocker: MockerFixture, sync_checkpointer: BaseCheckpointSaver
+    mocker: MockerFixture, sync_checkpointer: BaseCheckpointer
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
@@ -1890,7 +1890,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
 
 
 def test_in_one_fan_out_state_graph_waiting_edge(
-    snapshot: SnapshotAssertion, sync_checkpointer: BaseCheckpointSaver
+    snapshot: SnapshotAssertion, sync_checkpointer: BaseCheckpointer
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -2028,7 +2028,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
 @pytest.mark.parametrize("use_waiting_edge", (True, False))
 def test_in_one_fan_out_state_graph_defer_node(
     snapshot: SnapshotAssertion,
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
     use_waiting_edge: bool,
 ) -> None:
     def sorted_add(
@@ -2295,7 +2295,7 @@ def test_in_one_fan_out_state_graph_defer_node(
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
-    snapshot: SnapshotAssertion, sync_checkpointer: BaseCheckpointSaver
+    snapshot: SnapshotAssertion, sync_checkpointer: BaseCheckpointer
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -2387,7 +2387,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     snapshot: SnapshotAssertion,
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -2522,7 +2522,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_input(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -2647,7 +2647,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -3172,7 +3172,7 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
 
 def test_subgraph_checkpoint_true(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -3282,7 +3282,7 @@ def test_subgraph_durability_inherited(durability: Durability) -> None:
 
 
 def test_subgraph_checkpoint_true_interrupt(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     # Define subgraph
     class SubgraphState(TypedDict):
@@ -3341,7 +3341,7 @@ def test_subgraph_checkpoint_true_interrupt(
 
 
 def test_stream_subgraphs_during_execution(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -3417,7 +3417,7 @@ def test_stream_subgraphs_during_execution(
     ]
 
 
-def test_stream_buffering_single_node(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_stream_buffering_single_node(sync_checkpointer: BaseCheckpointer) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
 
@@ -3446,7 +3446,7 @@ def test_stream_buffering_single_node(sync_checkpointer: BaseCheckpointSaver) ->
 
 
 def test_nested_graph_interrupts_parallel(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -3585,7 +3585,7 @@ def test_nested_graph_interrupts_parallel(
 
 
 def test_doubly_nested_graph_interrupts(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class State(TypedDict):
         my_key: str
@@ -3733,7 +3733,7 @@ def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
 
-def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointer) -> None:
     """This test verifies that a run's configurable fields are merged with the
     previous checkpoint config for each step in the run.
     """
@@ -3907,7 +3907,7 @@ def test_checkpoint_metadata(sync_checkpointer: BaseCheckpointSaver) -> None:
 
 
 def test_remove_message_via_state_update(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
@@ -4092,7 +4092,7 @@ def test_xray_lance(snapshot: SnapshotAssertion):
     assert graph.get_graph(xray=1).to_json() == snapshot
 
 
-def test_channel_values(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_channel_values(sync_checkpointer: BaseCheckpointer) -> None:
     config = {"configurable": {"thread_id": "1"}}
     chain = NodeBuilder().subscribe_only("input").write_to("output")
     app = Pregel(
@@ -4219,7 +4219,7 @@ def test_multiple_sinks_subgraphs(snapshot: SnapshotAssertion) -> None:
 
 
 def test_store_injected(
-    sync_checkpointer: BaseCheckpointSaver, sync_store: BaseStore
+    sync_checkpointer: BaseCheckpointer, sync_store: BaseStore
 ) -> None:
     class State(TypedDict):
         count: Annotated[int, operator.add]
@@ -4313,7 +4313,7 @@ def test_enum_node_names():
     assert graph.invoke({"foo": "hello"}) == {"foo": "hello", "bar": "hello!"}
 
 
-def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
+def test_debug_retry(sync_checkpointer: BaseCheckpointer):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
 
@@ -4378,7 +4378,7 @@ def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
 
 
 def test_debug_subgraphs(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
@@ -4450,7 +4450,7 @@ def test_debug_subgraphs(
 
 
 def test_debug_nested_subgraphs(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ):
     from collections import defaultdict
 
@@ -4710,7 +4710,7 @@ def test_runnable_passthrough_node_graph() -> None:
 
 @pytest.mark.parametrize("subgraph_persist", [True, False])
 def test_parent_command(
-    sync_checkpointer: BaseCheckpointSaver, subgraph_persist: bool
+    sync_checkpointer: BaseCheckpointer, subgraph_persist: bool
 ) -> None:
     from langchain_core.messages import BaseMessage
     from langchain_core.tools import tool
@@ -4776,7 +4776,7 @@ def test_parent_command(
     )
 
 
-def test_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver):
+def test_interrupt_subgraph(sync_checkpointer: BaseCheckpointer):
     class State(TypedDict):
         baz: str
 
@@ -4807,7 +4807,7 @@ def test_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver):
 
 @pytest.mark.parametrize("resume_style", ["null", "map"])
 def test_interrupt_multiple(
-    sync_checkpointer: BaseCheckpointSaver, resume_style: Literal["null", "map"]
+    sync_checkpointer: BaseCheckpointer, resume_style: Literal["null", "map"]
 ):
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -4876,7 +4876,7 @@ def test_interrupt_multiple(
     ]
 
 
-def test_interrupt_loop(sync_checkpointer: BaseCheckpointSaver):
+def test_interrupt_loop(sync_checkpointer: BaseCheckpointer):
     class State(TypedDict):
         age: int
         other: str
@@ -4953,7 +4953,7 @@ def test_interrupt_loop(sync_checkpointer: BaseCheckpointSaver):
 
 
 def test_interrupt_functional(
-    sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
+    sync_checkpointer: BaseCheckpointer, snapshot: SnapshotAssertion
 ) -> None:
     @task
     def foo(state: dict) -> dict:
@@ -4987,7 +4987,7 @@ def test_interrupt_functional(
 
 
 def test_interrupt_task_functional(
-    sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
+    sync_checkpointer: BaseCheckpointer, snapshot: SnapshotAssertion
 ) -> None:
     @task
     def foo(state: dict) -> dict:
@@ -5098,7 +5098,7 @@ def test_command_pydantic_dataclass() -> None:
 
 
 def test_command_with_static_breakpoints(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test that we can use Command to resume and update with static breakpoints."""
 
@@ -5132,7 +5132,7 @@ def test_command_with_static_breakpoints(
     assert result == {"foo": "abc|node-1|node-2"}
 
 
-def test_multistep_plan(sync_checkpointer: BaseCheckpointSaver):
+def test_multistep_plan(sync_checkpointer: BaseCheckpointer):
     from langchain_core.messages import AnyMessage
 
     class State(TypedDict, total=False):
@@ -5191,7 +5191,7 @@ def test_multistep_plan(sync_checkpointer: BaseCheckpointSaver):
 
 
 def test_command_goto_with_static_breakpoints(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     """Use Command goto with static breakpoints."""
 
@@ -5260,7 +5260,7 @@ def test_parallel_node_execution():
 
 
 def test_multiple_interrupt_state_persistence(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test that state is preserved correctly across multiple interrupts."""
 
@@ -5341,7 +5341,7 @@ def test_concurrent_execution_thread_safety():
 
 
 def test_checkpoint_recovery(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ):
     """Test recovery from checkpoints after failures."""
 
@@ -5454,7 +5454,7 @@ def test_multiple_updates() -> None:
     ]
 
 
-def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
+def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointer):
     """Test with a falsy return from a task."""
 
     @task
@@ -5684,7 +5684,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
     ]
 
 
-def test_multiple_interrupts_functional(sync_checkpointer: BaseCheckpointSaver):
+def test_multiple_interrupts_functional(sync_checkpointer: BaseCheckpointer):
     """Test multiple interrupts with functional API."""
 
     counter = 0
@@ -5720,7 +5720,7 @@ def test_multiple_interrupts_functional(sync_checkpointer: BaseCheckpointSaver):
 
 
 def test_multiple_interrupts_functional_cache(
-    sync_checkpointer: BaseCheckpointSaver, cache: BaseCache
+    sync_checkpointer: BaseCheckpointer, cache: BaseCache
 ):
     """Test multiple interrupts with functional API."""
 
@@ -5792,7 +5792,7 @@ def test_multiple_interrupts_functional_cache(
     assert counter == 6
 
 
-def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointer) -> None:
     class AgentState(TypedDict):
         input: str
 
@@ -5892,7 +5892,7 @@ def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> No
     ]
 
 
-def test_multi_resume(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_multi_resume(sync_checkpointer: BaseCheckpointer) -> None:
     class ChildState(TypedDict):
         prompt: str
         human_input: str
@@ -6026,7 +6026,7 @@ def test_entrypoint_without_checkpointer() -> None:
     assert foo.invoke({"a": "1"}, config) == {"current": {"a": "1"}, "previous": None}
 
 
-def test_entrypoint_stateful(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_entrypoint_stateful(sync_checkpointer: BaseCheckpointer) -> None:
     """Test stateful entrypoint invoke."""
 
     # Test invoke
@@ -6068,7 +6068,7 @@ def test_entrypoint_stateful(sync_checkpointer: BaseCheckpointSaver) -> None:
 
 
 def test_entrypoint_stateful_update_state(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test stateful entrypoint invoke."""
 
@@ -6131,7 +6131,7 @@ def test_entrypoint_from_sync_generator() -> None:
             yield "b"
 
 
-def test_multiple_subgraphs(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_multiple_subgraphs(sync_checkpointer: BaseCheckpointer) -> None:
     class State(TypedDict):
         a: int
         b: int
@@ -6201,7 +6201,7 @@ def test_multiple_subgraphs(sync_checkpointer: BaseCheckpointSaver) -> None:
     }
 
 
-def test_multiple_subgraphs_functional(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_multiple_subgraphs_functional(sync_checkpointer: BaseCheckpointer) -> None:
     # Define addition subgraph
     @entrypoint()
     def add(inputs: tuple[int, int]):
@@ -6247,7 +6247,7 @@ def test_multiple_subgraphs_functional(sync_checkpointer: BaseCheckpointSaver) -
 
 
 def test_multiple_subgraphs_mixed_entrypoint(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test calling multiple StateGraph subgraphs from an entrypoint."""
 
@@ -6309,7 +6309,7 @@ def test_multiple_subgraphs_mixed_entrypoint(
 
 
 def test_multiple_subgraphs_mixed_state_graph(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test calling multiple entrypoint "subgraphs" from a StateGraph."""
 
@@ -6377,7 +6377,7 @@ def test_multiple_subgraphs_mixed_state_graph(
 
 
 def test_multiple_subgraphs_checkpointer(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     class SubgraphState(TypedDict):
         sub_counter: Annotated[int, operator.add]
@@ -6483,7 +6483,7 @@ def test_entrypoint_output_schema_with_return_and_save() -> None:
 
 
 def test_entrypoint_with_return_and_save(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     """Test entrypoint with return and save."""
     previous_ = None
@@ -6916,7 +6916,7 @@ def test_stream_messages_dedupe_inputs() -> None:
     assert chunks[0][1]["langgraph_node"] == "call_model"
 
 
-def test_stream_messages_dedupe_state(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_stream_messages_dedupe_state(sync_checkpointer: BaseCheckpointer) -> None:
     from langchain_core.messages import AIMessage
 
     to_emit = [AIMessage("bye", id="1"), AIMessage("bye again", id="2")]
@@ -6973,7 +6973,7 @@ def test_stream_messages_dedupe_state(sync_checkpointer: BaseCheckpointSaver) ->
 
 
 def test_interrupt_subgraph_reenter_checkpointer_true(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     class SubgraphState(TypedDict):
         foo: str
@@ -7131,7 +7131,7 @@ def test_empty_invoke() -> None:
     }
 
 
-def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_parallel_interrupts(sync_checkpointer: BaseCheckpointer) -> None:
     # --- CHILD GRAPH ---
 
     class ChildState(BaseModel):
@@ -7289,7 +7289,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
     )
 
 
-def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointer) -> None:
     # --- CHILD GRAPH ---
 
     class ChildState(BaseModel):
@@ -7438,7 +7438,7 @@ def test_pregel_loop_refcount():
 
 
 def test_bulk_state_updates(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     class State(TypedDict):
         foo: str
@@ -7569,7 +7569,7 @@ def test_pregel_node_copy() -> None:
 
 
 def test_update_as_input(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class State(TypedDict):
         foo: str
@@ -7644,7 +7644,7 @@ def test_update_as_input(
 
 
 def test_batch_update_as_input(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointer, durability: Durability
 ) -> None:
     class State(TypedDict):
         foo: str
@@ -7844,7 +7844,7 @@ def test_get_graph_root_channel(snapshot: SnapshotAssertion) -> None:
 
 
 def test_imp_exception(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     @task()
     def my_task(number: int):
@@ -7879,7 +7879,7 @@ def test_imp_exception(
 @pytest.mark.parametrize("with_timeout", [False, "inner", "outer", "both"])
 @pytest.mark.parametrize("subgraph_persist", [True, False])
 def test_parent_command_goto(
-    sync_checkpointer: BaseCheckpointSaver, subgraph_persist: bool, with_timeout: bool
+    sync_checkpointer: BaseCheckpointer, subgraph_persist: bool, with_timeout: bool
 ) -> None:
     class State(TypedDict):
         dialog_state: Annotated[list[str], operator.add]
@@ -7923,7 +7923,7 @@ def test_parent_command_goto(
 
 @pytest.mark.parametrize("with_timeout", [True, False])
 def test_timeout_with_parent_command(
-    sync_checkpointer: BaseCheckpointSaver, with_timeout: bool
+    sync_checkpointer: BaseCheckpointer, with_timeout: bool
 ) -> None:
     """Test that parent commands are properly propagated during timeouts."""
 
@@ -7949,7 +7949,7 @@ def test_timeout_with_parent_command(
     assert exc_info.value.args[0].update == {"key": "value"}
 
 
-def test_fork_and_update_task_results(sync_checkpointer: BaseCheckpointSaver) -> None:
+def test_fork_and_update_task_results(sync_checkpointer: BaseCheckpointer) -> None:
     """Test forking and updating task results with state history."""
 
     def checkpoint(values: dict[str, Any]):
@@ -8385,7 +8385,7 @@ def test_get_graph_nonterminal_last_step_source(snapshot: SnapshotAssertion) -> 
 
 
 def test_null_resume_disallowed_with_multiple_interrupts(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     class State(TypedDict):
         text_1: str

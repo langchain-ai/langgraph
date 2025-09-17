@@ -5,7 +5,7 @@
       members:
         - CheckpointMetadata
         - Checkpoint
-        - BaseCheckpointSaver
+        - BaseCheckpointer
         - create_checkpoint
 
 ::: langgraph.checkpoint.serde.base
