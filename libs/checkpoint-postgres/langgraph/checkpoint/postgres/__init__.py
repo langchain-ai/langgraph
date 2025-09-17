@@ -450,9 +450,7 @@ class PostgresSaver(BasePostgresSaver):
             {
                 **value["checkpoint"],
                 "channel_values": {
-                    **(
-                        value["checkpoint"].get("channel_values") or {}
-                    ),  # 'or {}' needed for backwards compat with checkpoints that do not have a channel_values key
+                    **(value["checkpoint"].get("channel_values") or {}),
                     **self._load_blobs(value["channel_values"]),
                 },
             },
