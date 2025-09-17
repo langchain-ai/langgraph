@@ -463,6 +463,8 @@ class HttpClient:
 
         last_event_id: str | None = None
         reconnect_path: str | None = None
+        reconnect_attempts = 0
+        max_reconnect_attempts = 5
 
         while True:
             current_headers = dict(
@@ -518,6 +520,8 @@ class HttpClient:
                             if sse.event or sse.data is not None:
                                 yield sse
                 except httpx.HTTPError:
+                    # httpx.TransportError inherits from HTTPError, so transient
+                    # disconnects during streaming land here.
                     if reconnect_path is None:
                         raise
                     retry = True
@@ -526,8 +530,17 @@ class HttpClient:
                         if decoder.last_event_id is not None:
                             last_event_id = decoder.last_event_id
                         if sse.event or sse.data is not None:
+                            # decoder.decode(b"") flushes the in-flight event and may
+                            # return an empty placeholder when there is no pending
+                            # message. Skip these no-op events so the stream doesn't
+                            # emit a trailing blank item after reconnects.
                             yield sse
             if retry:
+                reconnect_attempts += 1
+                if reconnect_attempts > max_reconnect_attempts:
+                    raise httpx.TransportError(
+                        "Exceeded maximum SSE reconnection attempts"
+                    )
                 continue
             break
 
@@ -3704,6 +3717,8 @@ class SyncHttpClient:
 
         last_event_id: str | None = None
         reconnect_path: str | None = None
+        reconnect_attempts = 0
+        max_reconnect_attempts = 5
 
         while True:
             current_headers = dict(
@@ -3758,6 +3773,8 @@ class SyncHttpClient:
                             if sse.event or sse.data is not None:
                                 yield sse
                 except httpx.HTTPError:
+                    # httpx.TransportError inherits from HTTPError, so transient
+                    # disconnects during streaming land here.
                     if reconnect_path is None:
                         raise
                     retry = True
@@ -3766,8 +3783,15 @@ class SyncHttpClient:
                         if decoder.last_event_id is not None:
                             last_event_id = decoder.last_event_id
                         if sse.event or sse.data is not None:
+                            # See async stream implementation for rationale on
+                            # skipping empty flush events.
                             yield sse
             if retry:
+                reconnect_attempts += 1
+                if reconnect_attempts > max_reconnect_attempts:
+                    raise httpx.TransportError(
+                        "Exceeded maximum SSE reconnection attempts"
+                    )
                 continue
             break
 
