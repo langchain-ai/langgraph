@@ -79,6 +79,101 @@ from tests.messages import (
 
 pytestmark = pytest.mark.anyio
 
+
+def pregel_pretty(data):
+    """Pretty print pregel nodes, channels, or graph with nice formatting."""
+    if not data:
+        return "Empty"
+    
+    # Check if this is a graph object
+    if hasattr(data, 'nodes') and hasattr(data, 'channels'):
+        # This is a graph object, show comprehensive info
+        result = []
+        
+        # Show nodes
+        result.append("="*50)
+        result.append("🔗 GRAPH NODES")
+        result.append("="*50)
+        for name, node in data.nodes.items():
+            node_type = type(node).__name__
+            result.append(f"  📍 {name:<12} → {node_type}")
+        
+        # Show channels
+        result.append("\n" + "="*50)
+        result.append("📡 GRAPH CHANNELS")
+        result.append("="*50)
+        for name, channel in data.channels.items():
+            channel_type = type(channel).__name__
+            if name in ['hello', 'messages']:
+                result.append(f"  🎯 {name:<20} → {channel_type} (user defined)")
+            elif name.startswith('branch:'):
+                result.append(f"  🌿 {name:<20} → {channel_type} (branch)")
+            else:
+                result.append(f"  ⚙️  {name:<20} → {channel_type} (system)")
+        
+        # Show graph structure
+        result.append("\n" + "="*50)
+        result.append("🏗️  GRAPH STRUCTURE")
+        result.append("="*50)
+        try:
+            graph_info = data.get_graph()
+            result.append(f"  Nodes: {len(graph_info.nodes)}")
+            result.append(f"  Edges: {len(graph_info.edges)}")
+            result.append("\n  📊 Execution Flow:")
+            for edge in graph_info.edges:
+                arrow = "  ├─" if edge != graph_info.edges[-1] else "  └─"
+                result.append(f"{arrow} {edge.source} → {edge.target}")
+        except Exception as e:
+            result.append(f"  Could not get graph structure: {e}")
+        
+        result.append("="*50)
+        return "\n".join(result)
+    
+    # Check if this is nodes or channels dict
+    first_key, first_value = next(iter(data.items()))
+    
+    # Detect if this is nodes or channels
+    is_nodes = hasattr(first_value, '__class__') and 'Node' in first_value.__class__.__name__
+    is_channels = hasattr(first_value, '__class__') and ('Channel' in first_value.__class__.__name__ or 
+                                                         'Value' in first_value.__class__.__name__ or
+                                                         'Topic' in first_value.__class__.__name__ or
+                                                         'Aggregate' in first_value.__class__.__name__)
+    
+    result = []
+    
+    if is_nodes:
+        result.append("="*50)
+        result.append("🔗 GRAPH NODES")
+        result.append("="*50)
+        for name, node in data.items():
+            node_type = type(node).__name__
+            result.append(f"  📍 {name:<12} → {node_type}")
+    
+    elif is_channels:
+        result.append("="*50)
+        result.append("📡 GRAPH CHANNELS")
+        result.append("="*50)
+        for name, channel in data.items():
+            channel_type = type(channel).__name__
+            if name in ['hello', 'messages']:
+                result.append(f"  🎯 {name:<20} → {channel_type} (user defined)")
+            elif name.startswith('branch:'):
+                result.append(f"  🌿 {name:<20} → {channel_type} (branch)")
+            else:
+                result.append(f"  ⚙️  {name:<20} → {channel_type} (system)")
+    
+    else:
+        # Fallback for unknown data types
+        result.append("="*50)
+        result.append("🔍 UNKNOWN DATA TYPE")
+        result.append("="*50)
+        for name, item in data.items():
+            item_type = type(item).__name__
+            result.append(f"  ❓ {name:<20} → {item_type}")
+    
+    result.append("="*50)
+    return "\n".join(result)
+
 logger = logging.getLogger(__name__)
 
 
@@ -113,39 +208,7 @@ def test_parallel_nodes() -> None:
     builder.add_edge("d", END)
     graph = builder.compile()
 
-    print("\n" + "="*50)
-    print("🔗 GRAPH NODES")
-    print("="*50)
-    for name, node in graph.nodes.items():
-        node_type = type(node).__name__
-        print(f"  📍 {name:<12} → {node_type}")
-    
-    print("\n" + "="*50)
-    print("📡 GRAPH CHANNELS") 
-    print("="*50)
-    for name, channel in graph.channels.items():
-        channel_type = type(channel).__name__
-        if name in ['hello', 'messages']:
-            print(f"  🎯 {name:<20} → {channel_type} (user defined)")
-        elif name.startswith('branch:'):
-            print(f"  🌿 {name:<20} → {channel_type} (branch)")
-        else:
-            print(f"  ⚙️  {name:<20} → {channel_type} (system)")
-    
-    print("\n" + "="*50)
-    print("🏗️  GRAPH STRUCTURE")
-    print("="*50)
-    try:
-        graph_info = graph.get_graph()
-        print("  Nodes:", len(graph_info.nodes))
-        print("  Edges:", len(graph_info.edges))
-        print("\n  📊 Execution Flow:")
-        for edge in graph_info.edges:
-            arrow = "  ├─" if edge != graph_info.edges[-1] else "  └─"
-            print(f"{arrow} {edge.source} → {edge.target}")
-    except Exception as e:
-        print(f"  Could not get graph structure: {e}")
-    print("="*50)
+    print("\n======COMPLETE GRAPH======\n", pregel_pretty(graph))
 
     result = graph.invoke({"hello": "there"})
     assert result["hello"] == "world-d"
