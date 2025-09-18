@@ -113,8 +113,39 @@ def test_parallel_nodes() -> None:
     builder.add_edge("d", END)
     graph = builder.compile()
 
-    print("\n======nodes======\n", graph.nodes)
-    print("\n======channels======\n", graph.channels)
+    print("\n" + "="*50)
+    print("🔗 GRAPH NODES")
+    print("="*50)
+    for name, node in graph.nodes.items():
+        node_type = type(node).__name__
+        print(f"  📍 {name:<12} → {node_type}")
+    
+    print("\n" + "="*50)
+    print("📡 GRAPH CHANNELS") 
+    print("="*50)
+    for name, channel in graph.channels.items():
+        channel_type = type(channel).__name__
+        if name in ['hello', 'messages']:
+            print(f"  🎯 {name:<20} → {channel_type} (user defined)")
+        elif name.startswith('branch:'):
+            print(f"  🌿 {name:<20} → {channel_type} (branch)")
+        else:
+            print(f"  ⚙️  {name:<20} → {channel_type} (system)")
+    
+    print("\n" + "="*50)
+    print("🏗️  GRAPH STRUCTURE")
+    print("="*50)
+    try:
+        graph_info = graph.get_graph()
+        print("  Nodes:", len(graph_info.nodes))
+        print("  Edges:", len(graph_info.edges))
+        print("\n  📊 Execution Flow:")
+        for edge in graph_info.edges:
+            arrow = "  ├─" if edge != graph_info.edges[-1] else "  └─"
+            print(f"{arrow} {edge.source} → {edge.target}")
+    except Exception as e:
+        print(f"  Could not get graph structure: {e}")
+    print("="*50)
 
     result = graph.invoke({"hello": "there"})
     assert result["hello"] == "world-d"
