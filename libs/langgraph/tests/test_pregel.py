@@ -82,6 +82,47 @@ pytestmark = pytest.mark.anyio
 logger = logging.getLogger(__name__)
 
 
+def test_parallel_nodes() -> None:
+    class State(TypedDict):
+        hello: str
+        messages: Annotated[list[str], add_messages]
+
+    def node_a(state: State) -> State:
+        return {"hello": "world-a", "messages": [_AnyIdHumanMessage(content="hello-a")]}
+
+    def node_b(state: State) -> State:
+        return {"messages": [_AnyIdHumanMessage(content="hello-b")]}
+
+    def node_c(state: State) -> State:
+        return {"messages": [_AnyIdHumanMessage(content="hello-c")]}    
+
+    def node_d(state: State) -> State:
+        return {"hello": "world-d", "messages": [_AnyIdHumanMessage(content="hello-d")]}    
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.add_node("b", node_b)
+    builder.add_node("c", node_c)
+    builder.add_node("d", node_d)
+
+    builder.set_entry_point("a")
+    builder.add_edge("a", "b")
+    builder.add_edge("a", "c")
+    builder.add_edge("b", "d")
+    builder.add_edge("c", "d")
+    builder.add_edge("d", END)
+    graph = builder.compile()
+
+    print(graph.nodes)
+    print(graph.channels)
+
+    result = graph.invoke({"hello": "there"})
+    assert result["hello"] == "world-d"
+    # Only the final message from node_d should be in the result
+    # because each node overwrites the messages field completely
+    assert len(result["messages"]) == 1
+    assert result["messages"][0].content == "hello-d"
+
 def test_graph_validation() -> None:
     class State(TypedDict):
         hello: str
