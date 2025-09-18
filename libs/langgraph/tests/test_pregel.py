@@ -113,8 +113,8 @@ def test_parallel_nodes() -> None:
     builder.add_edge("d", END)
     graph = builder.compile()
 
-    print(graph.nodes)
-    print(graph.channels)
+    print("\n======nodes======\n", graph.nodes)
+    print("\n======channels======\n", graph.channels)
 
     result = graph.invoke({"hello": "there"})
     assert result["hello"] == "world-d"
