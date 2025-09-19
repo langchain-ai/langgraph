@@ -1,0 +1,20 @@
+[project]
+name = "shared"
+version = "0.0.1"
+description = "Shared utilities for the Python monorepo"
+authors = [
+    { name = "Developer", email = "dev@example.com" },
+]
+license = { text = "MIT" }
+requires-python = ">=3.11,<4.0"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["shared"]
+
+[tool.setuptools.package-dir]
+"shared" = "src/shared"

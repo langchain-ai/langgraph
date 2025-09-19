@@ -2,13 +2,13 @@ from typing import Any, cast
 
 import pytest
 from langchain_core.runnables import RunnableConfig
-
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     create_checkpoint,
     empty_checkpoint,
 )
+
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.utils import _metadata_predicate, search_where
 

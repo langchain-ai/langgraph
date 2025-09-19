@@ -6,10 +6,10 @@ from typing import Any, cast
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph, Node
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, INPUT
 from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import END, START
 from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel._algo import (
@@ -215,10 +215,11 @@ def draw_graph(
     termini = {d for _, d, _, _ in edges if d != END}.difference(
         s for s, _, _, _ in edges
     )
+    end_edge_exists = any(d == END for _, d, _, _ in edges)
     if termini:
         for src in sorted(termini):
             add_edge(graph, src, END)
-    elif len(step_sources) == 1:
+    elif len(step_sources) == 1 and not end_edge_exists:
         for src in sorted(step_sources):
             add_edge(graph, src, END, conditional=True)
     # replace subgraphs
