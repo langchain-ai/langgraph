@@ -242,7 +242,9 @@ class PregelLoop:
         self.interrupt_before = interrupt_before
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
-        self.skip_done_tasks = CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
+        self.skip_done_tasks = CONFIG_KEY_CHECKPOINT_ID not in config[CONF] or (
+            CONFIG_KEY_RESUMING in self.config[CONF] and self.is_nested
+        )
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy

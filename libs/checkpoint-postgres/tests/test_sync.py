@@ -332,3 +332,33 @@ def test_pending_sends_migration(saver_name: str) -> None:
             TASKS: ["send-1", "send-2", "send-3"]
         }
         assert TASKS in search_results[0].checkpoint["channel_versions"]
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+def test_get_checkpoint_no_channel_values(
+    monkeypatch, saver_name: str, test_data
+) -> None:
+    """Backwards compatibility test that verifies a checkpoint with no channel_values key can be retrieved without throwing an error."""
+    with _saver(saver_name) as saver:
+        config = {
+            "configurable": {
+                "thread_id": "thread-2",
+                "checkpoint_ns": "",
+                "__super_private_key": "super_private_value",
+            },
+        }
+        chkpnt: Checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+        saver.put(config, chkpnt, {}, {})
+
+        load_checkpoint_tuple = saver._load_checkpoint_tuple
+
+        def patched_load_checkpoint_tuple(value):
+            value["checkpoint"].pop("channel_values", None)
+            return load_checkpoint_tuple(value)
+
+        monkeypatch.setattr(
+            saver, "_load_checkpoint_tuple", patched_load_checkpoint_tuple
+        )
+
+        checkpoint = saver.get_tuple(config)
+        assert checkpoint.checkpoint["channel_values"] == {}

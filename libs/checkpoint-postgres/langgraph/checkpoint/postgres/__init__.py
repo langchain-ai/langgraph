@@ -450,7 +450,7 @@ class PostgresSaver(BasePostgresSaver):
             {
                 **value["checkpoint"],
                 "channel_values": {
-                    **value["checkpoint"].get("channel_values"),
+                    **(value["checkpoint"].get("channel_values") or {}),
                     **self._load_blobs(value["channel_values"]),
                 },
             },
