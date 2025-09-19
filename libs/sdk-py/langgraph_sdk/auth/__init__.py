@@ -728,7 +728,7 @@ def is_studio_user(
     return (
         isinstance(user, types.StudioUser)
         or isinstance(user, dict)
-        and user.get("kind") == "StudioUser"
+        and user.get("kind") == "StudioUser"  # ty: ignore[invalid-argument-type]
     )
 
 
