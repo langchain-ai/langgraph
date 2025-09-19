@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import concurrent
 import concurrent.futures
+import contextlib
 import queue
 import warnings
 import weakref
@@ -2922,9 +2923,33 @@ class Pregel(
                     or "messages" in stream_modes
                     or "custom" in stream_modes
                 ):
+                    # Keep a single waiter task alive; ensure cleanup on exit.
+                    waiter: asyncio.Task[None] | None = None
 
                     def get_waiter() -> asyncio.Task[None]:
-                        return aioloop.create_task(stream.wait())
+                        nonlocal waiter
+                        if waiter is None or waiter.done():
+                            waiter = aioloop.create_task(stream.wait())
+                            def _clear(t: asyncio.Task[None]) -> None:
+                                nonlocal waiter
+                                if waiter is t:
+                                    waiter = None
+                            waiter.add_done_callback(_clear)
+                        return waiter
+
+                    async def _cleanup_waiter() -> None:
+                        """Wake pending waiter and/or cancel+await to avoid pending tasks."""
+                        nonlocal waiter
+                        # Try to wake via semaphore like SyncPregelLoop
+                        with contextlib.suppress(Exception):
+                            if hasattr(stream, "_count"):
+                                stream._count.release()
+                        t = waiter
+                        waiter = None
+                        if t is not None and not t.done():
+                            t.cancel()
+                            with contextlib.suppress(asyncio.CancelledError):
+                                await t
 
                 else:
                     get_waiter = None  # type: ignore[assignment]
@@ -2933,28 +2958,34 @@ class Pregel(
                 # channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
-                while loop.tick():
-                    for task in await loop.amatch_cached_writes():
-                        loop.output_writes(task.id, task.writes, cached=True)
-                    async for _ in runner.atick(
-                        [t for t in loop.tasks.values() if not t.writes],
-                        timeout=self.step_timeout,
-                        get_waiter=get_waiter,
-                        schedule_task=loop.aaccept_push,
-                    ):
-                        # emit output
-                        for o in _output(
-                            stream_mode,
-                            print_mode,
-                            subgraphs,
-                            stream.get_nowait,
-                            asyncio.QueueEmpty,
+                try:
+                    while loop.tick():
+                        for task in await loop.amatch_cached_writes():
+                            loop.output_writes(task.id, task.writes, cached=True)
+                        async for _ in runner.atick(
+                            [t for t in loop.tasks.values() if not t.writes],
+                            timeout=self.step_timeout,
+                            get_waiter=get_waiter,
+                            schedule_task=loop.aaccept_push,
                         ):
-                            yield o
-                    loop.after_tick()
-                    # wait for checkpoint
-                    if durability_ == "sync":
-                        await cast(asyncio.Future, loop._put_checkpoint_fut)
+                            # emit output
+                            for o in _output(
+                                stream_mode,
+                                print_mode,
+                                subgraphs,
+                                stream.get_nowait,
+                                asyncio.QueueEmpty,
+                            ):
+                                yield o
+                        loop.after_tick()
+                        # wait for checkpoint
+                        if durability_ == "sync":
+                            await cast(asyncio.Future, loop._put_checkpoint_fut)
+                finally:
+                    # ensure waiter doesn't remain pending on cancel/shutdown
+                    if "_cleanup_waiter" in locals():
+                        await _cleanup_waiter()
+
             # emit output
             for o in _output(
                 stream_mode,
