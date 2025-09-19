@@ -14,6 +14,7 @@ license-files = ['LICENSE']
 dependencies = [
     "click>=8.1.7",
     "langgraph-sdk>=0.1.0 ; python_version >= '3.11'",
+    "requests>=2.31.0",
 ]
 [tool.hatch.version]
 path = "langgraph_cli/__init__.py"
