@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from typing import (  # noqa: UP035
     Any,
@@ -369,6 +370,21 @@ class BaseCheckpointer(Generic[V]):
             return 1
         else:
             return current + 1
+
+
+# Wrap BaseCheckpointer to issue a deprecation warning
+class _BaseCheckpointSaver(BaseCheckpointer):
+    def __init__(self, *args, **kwargs):
+        warnings.warn(
+            "`BaseCheckpointSaver` is deprecated and will be removed, please use `BaseCheckpointer` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+# For backwards compatibility
+BaseCheckpointSaver = _BaseCheckpointSaver
 
 
 class EmptyChannelError(Exception):
