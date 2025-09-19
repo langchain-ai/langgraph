@@ -1206,9 +1206,7 @@ def test_send_sequences() -> None:
     ]
 
 
-def test_imp_task(
-    sync_checkpointer: BaseCheckpointer, durability: Durability
-) -> None:
+def test_imp_task(sync_checkpointer: BaseCheckpointer, durability: Durability) -> None:
     mapper_calls = 0
 
     class Context(TypedDict):
@@ -3446,7 +3444,7 @@ def test_stream_buffering_single_node(sync_checkpointer: BaseCheckpointer) -> No
 
 
 def test_nested_graph_resume_reuses_cached_task_writes(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
 ) -> None:
     # Reproduces issue where a helper @task inside a nested graph re-executes
     # on resume instead of reusing cached writes. Ensures it runs only once.
@@ -4444,9 +4442,7 @@ def test_debug_retry(sync_checkpointer: BaseCheckpointer):
         assert stream_parent_conf == history_parent_conf
 
 
-def test_debug_subgraphs(
-    sync_checkpointer: BaseCheckpointer, durability: Durability
-):
+def test_debug_subgraphs(sync_checkpointer: BaseCheckpointer, durability: Durability):
     class State(TypedDict):
         messages: Annotated[list[str], operator.add]
 
