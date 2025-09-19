@@ -13,7 +13,7 @@ from typing import (  # noqa: UP035
 )
 
 from langchain_core.runnables import RunnableConfig
-
+from typing_extensions import deprecated
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -372,19 +372,17 @@ class BaseCheckpointer(Generic[V]):
             return current + 1
 
 
-# Wrap BaseCheckpointer to issue a deprecation warning
-class _BaseCheckpointSaver(BaseCheckpointer):
+@deprecated(
+    "`BaseCheckpointSaver` has been renamed. Please use `BaseCheckpointer` instead."
+)
+class BaseCheckpointSaver(BaseCheckpointer):
     def __init__(self, *args, **kwargs):
         warnings.warn(
-            "`BaseCheckpointSaver` is deprecated and will be removed, please use `BaseCheckpointer` instead.",
+            "`BaseCheckpointSaver` has been renamed. Please use `BaseCheckpointer` instead.",
             DeprecationWarning,
             stacklevel=2,
         )
         super().__init__(*args, **kwargs)
-
-
-# For backwards compatibility
-BaseCheckpointSaver = _BaseCheckpointSaver
 
 
 class EmptyChannelError(Exception):
