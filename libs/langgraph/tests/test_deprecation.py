@@ -341,3 +341,17 @@ def test_message_graph_deprecation() -> None:
         match="MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.",
     ):
         MessageGraph()
+
+
+def test_basecheckpointsaver_alias_and_deprecation_warning() -> None:
+    """Test that importing BaseCheckpointSaver raises a deprecation warning and is an alias for BaseCheckpointer."""
+    from langgraph.checkpoint.base import BaseCheckpointSaver, BaseCheckpointer
+
+    assert issubclass(BaseCheckpointSaver, BaseCheckpointer)
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"`BaseCheckpointSaver` has been renamed\. Please use `BaseCheckpointer` instead\.",
+    ):
+
+        BaseCheckpointSaver()
