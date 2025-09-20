@@ -455,34 +455,94 @@ class HttpClient:
         if headers:
             request_headers.update(headers)
 
-        async with self.client.stream(
-            method, path, headers=request_headers, content=content, params=params
-        ) as res:
-            if on_response:
-                on_response(res)
-            # check status
-            try:
-                res.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                body = (await res.aread()).decode()
-                if sys.version_info >= (3, 11):
-                    e.add_note(body)
+        reconnect_headers = {
+            key: value
+            for key, value in request_headers.items()
+            if key.lower() not in {"content-length", "content-type"}
+        }
+
+        last_event_id: str | None = None
+        reconnect_path: str | None = None
+        reconnect_attempts = 0
+        max_reconnect_attempts = 5
+
+        while True:
+            current_headers = dict(
+                request_headers if reconnect_path is None else reconnect_headers
+            )
+            if last_event_id is not None:
+                current_headers["Last-Event-ID"] = last_event_id
+
+            current_method = method if reconnect_path is None else "GET"
+            current_content = content if reconnect_path is None else None
+            current_params = params if reconnect_path is None else None
+
+            retry = False
+            async with self.client.stream(
+                current_method,
+                reconnect_path or path,
+                headers=current_headers,
+                content=current_content,
+                params=current_params,
+            ) as res:
+                if reconnect_path is None and on_response:
+                    on_response(res)
+                # check status
+                try:
+                    res.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    body = (await res.aread()).decode()
+                    if sys.version_info >= (3, 11):
+                        e.add_note(body)
+                    else:
+                        logger.error(f"Error from langgraph-api: {body}", exc_info=e)
+                    raise e
+                # check content type
+                content_type = res.headers.get("content-type", "").partition(";")[0]
+                if "text/event-stream" not in content_type:
+                    raise httpx.TransportError(
+                        "Expected response header Content-Type to contain 'text/event-stream', "
+                        f"got {content_type!r}"
+                    )
+
+                reconnect_location = res.headers.get("location")
+                if reconnect_location:
+                    reconnect_path = reconnect_location
+
+                # parse SSE
+                decoder = SSEDecoder()
+                try:
+                    async for line in aiter_lines_raw(res):
+                        sse = decoder.decode(line=line.rstrip(b"\n"))
+                        if sse is not None:
+                            if decoder.last_event_id is not None:
+                                last_event_id = decoder.last_event_id
+                            if sse.event or sse.data is not None:
+                                yield sse
+                except httpx.HTTPError:
+                    # httpx.TransportError inherits from HTTPError, so transient
+                    # disconnects during streaming land here.
+                    if reconnect_path is None:
+                        raise
+                    retry = True
                 else:
-                    logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-                raise e
-            # check content type
-            content_type = res.headers.get("content-type", "").partition(";")[0]
-            if "text/event-stream" not in content_type:
-                raise httpx.TransportError(
-                    "Expected response header Content-Type to contain 'text/event-stream', "
-                    f"got {content_type!r}"
-                )
-            # parse SSE
-            decoder = SSEDecoder()
-            async for line in aiter_lines_raw(res):
-                sse = decoder.decode(line=line.rstrip(b"\n"))
-                if sse is not None:
-                    yield sse
+                    if sse := decoder.decode(b""):
+                        if decoder.last_event_id is not None:
+                            last_event_id = decoder.last_event_id
+                        if sse.event or sse.data is not None:
+                            # decoder.decode(b"") flushes the in-flight event and may
+                            # return an empty placeholder when there is no pending
+                            # message. Skip these no-op events so the stream doesn't
+                            # emit a trailing blank item after reconnects.
+                            yield sse
+            if retry:
+                reconnect_attempts += 1
+                if reconnect_attempts > max_reconnect_attempts:
+                    raise httpx.TransportError(
+                        "Exceeded maximum SSE reconnection attempts"
+                    )
+                continue
+            break
 
 
 async def _aencode_json(json: Any) -> tuple[dict[str, str], bytes | None]:
@@ -3640,39 +3700,100 @@ class SyncHttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
-        request_headers, content = _encode_json(json)
+        if json is not None:
+            request_headers, content = _encode_json(json)
+        else:
+            request_headers, content = {}, None
         request_headers["Accept"] = "text/event-stream"
         request_headers["Cache-Control"] = "no-store"
         if headers:
             request_headers.update(headers)
-        with self.client.stream(
-            method, path, headers=request_headers, content=content, params=params
-        ) as res:
-            if on_response:
-                on_response(res)
-            # check status
-            try:
-                res.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                body = (res.read()).decode()
-                if sys.version_info >= (3, 11):
-                    e.add_note(body)
+
+        reconnect_headers = {
+            key: value
+            for key, value in request_headers.items()
+            if key.lower() not in {"content-length", "content-type"}
+        }
+
+        last_event_id: str | None = None
+        reconnect_path: str | None = None
+        reconnect_attempts = 0
+        max_reconnect_attempts = 5
+
+        while True:
+            current_headers = dict(
+                request_headers if reconnect_path is None else reconnect_headers
+            )
+            if last_event_id is not None:
+                current_headers["Last-Event-ID"] = last_event_id
+
+            current_method = method if reconnect_path is None else "GET"
+            current_content = content if reconnect_path is None else None
+            current_params = params if reconnect_path is None else None
+
+            retry = False
+            with self.client.stream(
+                current_method,
+                reconnect_path or path,
+                headers=current_headers,
+                content=current_content,
+                params=current_params,
+            ) as res:
+                if reconnect_path is None and on_response:
+                    on_response(res)
+                # check status
+                try:
+                    res.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    body = (res.read()).decode()
+                    if sys.version_info >= (3, 11):
+                        e.add_note(body)
+                    else:
+                        logger.error(f"Error from langgraph-api: {body}", exc_info=e)
+                    raise e
+                # check content type
+                content_type = res.headers.get("content-type", "").partition(";")[0]
+                if "text/event-stream" not in content_type:
+                    raise httpx.TransportError(
+                        "Expected response header Content-Type to contain 'text/event-stream', "
+                        f"got {content_type!r}"
+                    )
+
+                reconnect_location = res.headers.get("location")
+                if reconnect_location:
+                    reconnect_path = reconnect_location
+
+                decoder = SSEDecoder()
+                try:
+                    for line in iter_lines_raw(res):
+                        sse = decoder.decode(line.rstrip(b"\n"))
+                        if sse is not None:
+                            if decoder.last_event_id is not None:
+                                last_event_id = decoder.last_event_id
+                            if sse.event or sse.data is not None:
+                                yield sse
+                except httpx.HTTPError:
+                    # httpx.TransportError inherits from HTTPError, so transient
+                    # disconnects during streaming land here.
+                    if reconnect_path is None:
+                        raise
+                    retry = True
                 else:
-                    logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-                raise e
-            # check content type
-            content_type = res.headers.get("content-type", "").partition(";")[0]
-            if "text/event-stream" not in content_type:
-                raise httpx.TransportError(
-                    "Expected response header Content-Type to contain 'text/event-stream', "
-                    f"got {content_type!r}"
-                )
-            # parse SSE
-            decoder = SSEDecoder()
-            for line in iter_lines_raw(res):
-                sse = decoder.decode(line.rstrip(b"\n"))
-                if sse is not None:
-                    yield sse
+                    if sse := decoder.decode(b""):
+                        if decoder.last_event_id is not None:
+                            last_event_id = decoder.last_event_id
+                        if sse.event or sse.data is not None:
+                            # See async stream implementation for rationale on
+                            # skipping empty flush events.
+                            yield sse
+            if retry:
+                reconnect_attempts += 1
+                if reconnect_attempts > max_reconnect_attempts:
+                    raise httpx.TransportError(
+                        "Exceeded maximum SSE reconnection attempts"
+                    )
+                continue
+            break
 
 
 def _encode_json(json: Any) -> tuple[dict[str, str], bytes]:
