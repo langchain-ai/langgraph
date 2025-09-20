@@ -345,7 +345,7 @@ def test_message_graph_deprecation() -> None:
 
 def test_basecheckpointsaver_alias_and_deprecation_warning() -> None:
     """Test that importing BaseCheckpointSaver raises a deprecation warning and is an alias for BaseCheckpointer."""
-    from langgraph.checkpoint.base import BaseCheckpointSaver, BaseCheckpointer
+    from langgraph.checkpoint.base import BaseCheckpointer, BaseCheckpointSaver
 
     assert issubclass(BaseCheckpointSaver, BaseCheckpointer)
 
@@ -353,5 +353,4 @@ def test_basecheckpointsaver_alias_and_deprecation_warning() -> None:
         DeprecationWarning,
         match=r"`BaseCheckpointSaver` has been renamed\. Please use `BaseCheckpointer` instead\.",
     ):
-
         BaseCheckpointSaver()
