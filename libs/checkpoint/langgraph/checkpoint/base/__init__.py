@@ -14,6 +14,7 @@ from typing import (  # noqa: UP035
 
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import deprecated
+
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -376,7 +377,7 @@ class BaseCheckpointer(Generic[V]):
     "`BaseCheckpointSaver` has been renamed. Please use `BaseCheckpointer` instead."
 )
 class BaseCheckpointSaver(BaseCheckpointer):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         warnings.warn(
             "`BaseCheckpointSaver` has been renamed. Please use `BaseCheckpointer` instead.",
             DeprecationWarning,
