@@ -725,10 +725,9 @@ def _validate_handler(fn: Callable[..., typing.Any]) -> None:
 def is_studio_user(
     user: types.MinimalUser | types.BaseUser | types.MinimalUserDict,
 ) -> bool:
-    return (
-        isinstance(user, types.StudioUser)
-        or isinstance(user, dict)
-        and user.get("kind") == "StudioUser"
+    return isinstance(user, types.StudioUser) or (
+        isinstance(user, dict)
+        and typing.cast(dict[str, typing.Any], user).get("kind") == "StudioUser"
     )
 
 

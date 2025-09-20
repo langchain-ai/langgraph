@@ -102,18 +102,13 @@ class APIError(LangGraphError):
         self.body = body
 
         if isinstance(body, dict):
+            b = cast(dict[str, Any], body)
             # Best-effort extraction of common fields if present
-            self.code = (
-                cast(Any, body.get("code"))
-                if isinstance(body.get("code"), str)
-                else None
-            )
-            self.param = (
-                cast(Any, body.get("param"))
-                if isinstance(body.get("param"), str)
-                else None
-            )
-            t = body.get("type")
+            code_val = b.get("code")
+            self.code = code_val if isinstance(code_val, str) else None
+            param_val = b.get("param")
+            self.param = param_val if isinstance(param_val, str) else None
+            t = b.get("type")
             self.type = t if isinstance(t, str) else None
         else:
             self.code = None
@@ -201,15 +196,17 @@ class InternalServerError(APIStatusError):
 
 def _extract_error_message(body: object | None, fallback: str) -> str:
     if isinstance(body, dict):
+        b = cast(dict[str, Any], body)
         for key in ("message", "detail", "error"):
-            val = body.get(key)
+            val = b.get(key)
             if isinstance(val, str) and val:
                 return val
         # Sometimes errors are structured like {"error": {"message": "..."}}
-        err = body.get("error")
+        err = b.get("error")
         if isinstance(err, dict):
+            e = cast(dict[str, Any], err)
             for key in ("message", "detail"):
-                val = err.get(key)
+                val = e.get(key)
                 if isinstance(val, str) and val:
                     return val
     return fallback
