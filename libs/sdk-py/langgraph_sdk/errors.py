@@ -14,7 +14,7 @@ class LangGraphError(Exception):
     pass
 
 
-class APIError(LangGraphError):
+class APIError(httpx.HTTPStatusError, LangGraphError):
     message: str
     request: httpx.Request
 
@@ -24,10 +24,14 @@ class APIError(LangGraphError):
     type: str | None
 
     def __init__(
-        self, message: str, request: httpx.Request, *, body: object | None
+        self, message: str, response: httpx.Response, *, body: object | None
     ) -> None:
-        super().__init__(message)
-        self.request = request
+        httpx.HTTPStatusError.__init__(
+            self, message, request=response.request, response=response
+        )
+        LangGraphError.__init__(self)
+
+        self.request = response.request
         self.message = message
         self.body = body
 
@@ -59,7 +63,7 @@ class APIResponseValidationError(APIError):
     ) -> None:
         super().__init__(
             message or "Data returned by API invalid for expected schema.",
-            response.request,
+            response,
             body=body,
         )
         self.response = response
@@ -74,7 +78,7 @@ class APIStatusError(APIError):
     def __init__(
         self, message: str, *, response: httpx.Response, body: object | None
     ) -> None:
-        super().__init__(message, response.request, body=body)
+        super().__init__(message, response, body=body)
         self.response = response
         self.status_code = response.status_code
         self.request_id = response.headers.get("x-request-id")
@@ -93,31 +97,31 @@ class APITimeoutError(APIConnectionError):
 
 
 class BadRequestError(APIStatusError):
-    status_code: Literal[400] = 400  # type: ignore[assignment]
+    status_code: Literal[400] = 400
 
 
 class AuthenticationError(APIStatusError):
-    status_code: Literal[401] = 401  # type: ignore[assignment]
+    status_code: Literal[401] = 401
 
 
 class PermissionDeniedError(APIStatusError):
-    status_code: Literal[403] = 403  # type: ignore[assignment]
+    status_code: Literal[403] = 403
 
 
 class NotFoundError(APIStatusError):
-    status_code: Literal[404] = 404  # type: ignore[assignment]
+    status_code: Literal[404] = 404
 
 
 class ConflictError(APIStatusError):
-    status_code: Literal[409] = 409  # type: ignore[assignment]
+    status_code: Literal[409] = 409
 
 
 class UnprocessableEntityError(APIStatusError):
-    status_code: Literal[422] = 422  # type: ignore[assignment]
+    status_code: Literal[422] = 422
 
 
 class RateLimitError(APIStatusError):
-    status_code: Literal[429] = 429  # type: ignore[assignment]
+    status_code: Literal[429] = 429
 
 
 class InternalServerError(APIStatusError):
