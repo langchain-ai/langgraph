@@ -18,7 +18,7 @@ DEFAULT_IMAGE_DISTRO = "debian"
 
 
 Distros = Literal["debian", "wolfi", "bullseye", "bookworm"]
-MiddlewareOrders = Literal["custom_auth_first", "custom_middleware_first"]
+MiddlewareOrders = Literal["auth_first", "middleware_first"]
 
 
 class TTLConfig(TypedDict, total=False):
@@ -364,12 +364,12 @@ class HttpConfig(TypedDict, total=False):
     """Optional. Defines the order in which to apply server customizations.
 
     Choices:
-      - "custom_auth_first": Custom authentication hooks are evaluated
+      - "auth_first": Custom authentication hooks are evaluated
       before custom middleware.
-      - "custom_middleware_first": Custom middleware is evaluated
+      - "middleware_first": Custom middleware is evaluated
       before custom authentication hooks.
 
-    Default is `custom_middleware_first`.
+    Default is `middleware_first`.
     """
 
 
