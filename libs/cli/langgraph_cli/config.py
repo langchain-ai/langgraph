@@ -373,7 +373,6 @@ class HttpConfig(TypedDict, total=False):
     """
 
 
-
 class Config(TypedDict, total=False):
     """Top-level config for langgraph-cli or similar deployment tooling."""
 
