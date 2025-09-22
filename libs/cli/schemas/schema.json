@@ -587,6 +587,20 @@
             }
           ],
           "description": "Optional. Defines which headers are excluded from logging."
+        },
+        "middleware_order": {
+          "anyOf": [
+            {
+              "enum": [
+                "custom_auth_first",
+                "custom_middleware_first"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines the order in which to apply server customizations.\n"
         }
       },
       "required": []
