@@ -364,10 +364,10 @@ class HttpConfig(TypedDict, total=False):
     """Optional. Defines the order in which to apply server customizations.
 
     Choices:
-      - "auth_first": Custom authentication hooks are evaluated
+      - "auth_first": Authentication hooks (custom or default) are evaluated
       before custom middleware.
       - "middleware_first": Custom middleware is evaluated
-      before custom authentication hooks.
+      before authentication hooks (custom or default).
 
     Default is `middleware_first`.
     """
