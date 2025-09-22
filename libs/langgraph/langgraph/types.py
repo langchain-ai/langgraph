@@ -19,6 +19,7 @@ from typing import (
 from warnings import warn
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from typing_extensions import Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
@@ -26,7 +27,6 @@ from langgraph._internal._cache import default_cache_key
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
-from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
 if TYPE_CHECKING:

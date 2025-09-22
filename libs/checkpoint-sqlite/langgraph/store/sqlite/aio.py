@@ -11,7 +11,6 @@ from typing import Any, Callable, cast
 import aiosqlite
 import orjson
 import sqlite_vec  # type: ignore[import-untyped]
-
 from langgraph.store.base import (
     GetOp,
     ListNamespacesOp,
@@ -22,6 +21,7 @@ from langgraph.store.base import (
     TTLConfig,
 )
 from langgraph.store.base.batch import AsyncBatchedBaseStore
+
 from langgraph.store.sqlite.base import (
     _PLACEHOLDER,
     BaseSqliteStore,

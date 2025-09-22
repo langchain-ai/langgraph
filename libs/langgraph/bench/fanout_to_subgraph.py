@@ -114,7 +114,6 @@ if __name__ == "__main__":
     import time
 
     import uvloop
-
     from langgraph.checkpoint.memory import InMemorySaver
 
     graph = fanout_to_subgraph().compile(checkpointer=InMemorySaver())
