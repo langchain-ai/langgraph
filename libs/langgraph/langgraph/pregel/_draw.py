@@ -11,7 +11,6 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, INPUT
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.last_value import LastValueAfterFinish
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import END, START
 from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel._algo import (
@@ -28,6 +27,7 @@ from langgraph.types import All, Checkpointer
 
 Edge = tuple[str, str, bool, str | None]
 TriggerEdge = tuple[str, bool, str | None]
+
 
 def draw_graph(
     config: RunnableConfig,
@@ -69,9 +69,7 @@ def draw_graph(
     static_seen: set[Any] = set()
     sources: dict[str, set[TriggerEdge]] = {}
     step_sources: dict[str, set[TriggerEdge]] = {}
-    static_declared_writes: dict[str, set[TriggerEdge]] = defaultdict(
-        set
-    )
+    static_declared_writes: dict[str, set[TriggerEdge]] = defaultdict(set)
     # remove node mappers
     nodes = {
         k: v.copy(update={"mapper": None}) if v.mapper is not None else v
@@ -184,8 +182,8 @@ def draw_graph(
         edges_to_deferred_nodes: set[Edge] = set()
         for channel, item in channels.items():
             if isinstance(item, LastValueAfterFinish):
-                node = channel.split(":", 2)[-1]
-                deferred_nodes.add(node)
+                deferred_node = channel.split(":", 2)[-1]
+                deferred_nodes.add(deferred_node)
         # collect edges
         for task in tasks.values():
             added = False
