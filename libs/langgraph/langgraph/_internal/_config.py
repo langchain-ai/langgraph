@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import ChainMap
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from os import getenv
 from typing import Any, cast
 
@@ -312,11 +312,22 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         for k, v in config.items():
             if _is_not_empty(v) and k not in CONFIG_KEYS:
                 empty[CONF][k] = v
+    _empty_metadata = empty["metadata"]
     for key, value in empty[CONF].items():
-        if (
-            not key.startswith("__")
-            and isinstance(value, (str, int, float, bool))
-            and key not in empty["metadata"]
-        ):
-            empty["metadata"][key] = value
+        if _exclude_as_metadata(key, value, _empty_metadata):
+            continue
+        _empty_metadata[key] = value
     return empty
+
+
+_OMIT = ("key", "token", "secret", "password", "auth")
+
+
+def _exclude_as_metadata(key: str, value: Any, metadata: Mapping[str, Any]) -> bool:
+    key_lower = key.casefold()
+    return (
+        key.startswith("__")
+        or not isinstance(value, (str, int, float, bool))
+        or key in metadata
+        or any(substr in key_lower for substr in _OMIT)
+    )
