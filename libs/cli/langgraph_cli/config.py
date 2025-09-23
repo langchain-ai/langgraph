@@ -18,6 +18,7 @@ DEFAULT_IMAGE_DISTRO = "debian"
 
 
 Distros = Literal["debian", "wolfi", "bullseye", "bookworm"]
+MiddlewareOrders = Literal["auth_first", "middleware_first"]
 
 
 class TTLConfig(TypedDict, total=False):
@@ -359,6 +360,17 @@ class HttpConfig(TypedDict, total=False):
     agent's behavior or permissions on a request's headers."""
     logging_headers: Optional[ConfigurableHeaderConfig]
     """Optional. Defines which headers are excluded from logging."""
+    middleware_order: Optional[MiddlewareOrders]
+    """Optional. Defines the order in which to apply server customizations.
+
+    Choices:
+      - "auth_first": Authentication hooks (custom or default) are evaluated
+      before custom middleware.
+      - "middleware_first": Custom middleware is evaluated
+      before authentication hooks (custom or default).
+
+    Default is `middleware_first`.
+    """
 
 
 class Config(TypedDict, total=False):
