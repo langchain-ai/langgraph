@@ -527,7 +527,7 @@ class BaseSqliteStore:
 
             # The base_query is now the final_sql, and we pass the refresh flag
             final_sql = base_query
-            final_params = params # type: ignore[assignment]
+            final_params = params
 
             queries.append((final_sql, final_params, needs_ttl_refresh))
 

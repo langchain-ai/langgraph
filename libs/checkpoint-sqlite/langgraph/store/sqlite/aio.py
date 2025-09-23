@@ -507,9 +507,6 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             results: List to store results in.
             cur: Database cursor.
         """
-        # _prepare_batch_search_queries now returns:
-        # list[tuple[str, list[None | str | list[float]], bool]], list[tuple[int, str]]
-        # where bool is needs_ttl_refresh
         prepared_queries, embedding_requests = self._prepare_batch_search_queries(
             search_ops
         )
