@@ -371,7 +371,9 @@ class BaseSqliteStore:
     def _prepare_batch_search_queries(
         self, search_ops: Sequence[tuple[int, SearchOp]]
     ) -> tuple[
-        list[tuple[str, list[None | str | list[float]], bool]],  # queries, params, needs_refresh
+        list[
+            tuple[str, list[None | str | list[float]], bool]
+        ],  # queries, params, needs_refresh
         list[tuple[int, str]],  # idx, query_text pairs to embed
     ]:
         """

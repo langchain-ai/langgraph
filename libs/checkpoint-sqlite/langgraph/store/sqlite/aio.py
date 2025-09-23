@@ -530,7 +530,6 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                         f"Embedding request index {embed_req_idx} out of bounds for prepared_queries."
                     )
 
-
         for (original_op_idx, _), (query, params, needs_refresh) in zip(
             search_ops, prepared_queries
         ):
@@ -565,13 +564,13 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                             )
 
             # Process rows into items
-            if "score" in query: # Vector search query
+            if "score" in query:  # Vector search query
                 items = [
                     _row_to_search_item(
-                        _decode_ns_text(row[0]), # prefix
+                        _decode_ns_text(row[0]),  # prefix
                         {
-                            "key": row[1], # key
-                            "value": row[2], # value
+                            "key": row[1],  # key
+                            "value": row[2],  # value
                             "created_at": row[3],
                             "updated_at": row[4],
                             "expires_at": row[5] if len(row) > 5 else None,
@@ -585,10 +584,10 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             else:  # Regular search query
                 items = [
                     _row_to_search_item(
-                        _decode_ns_text(row[0]), # prefix
+                        _decode_ns_text(row[0]),  # prefix
                         {
-                            "key": row[1], # key
-                            "value": row[2], # value
+                            "key": row[1],  # key
+                            "value": row[2],  # value
                             "created_at": row[3],
                             "updated_at": row[4],
                             "expires_at": row[5] if len(row) > 5 else None,
