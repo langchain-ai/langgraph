@@ -1722,6 +1722,8 @@ You can use [LangGraph Studio](../../concepts/langgraph_studio.md) to debug your
 
 LangGraph Studio is free with [locally deployed applications](../../tutorials/langgraph-platform/local-server.md) using `langgraph dev`.
 
+:::
+
 ## Considerations
 
 When using human-in-the-loop, there are some considerations to keep in mind.
