@@ -8,11 +8,19 @@ import queue
 import warnings
 import weakref
 from collections import defaultdict, deque
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Iterator, Mapping, Sequence
 from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass
-from typing import Any, Callable, Generic, Optional, Union, cast, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Optional,
+    Union,
+    cast,
+    get_type_hints,
+)
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -2613,6 +2621,7 @@ class Pregel(
                 if subgraphs:
                     loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
                 # enable concurrent streaming
+                get_waiter: Callable[[], concurrent.futures.Future[None]] | None = None
                 if (
                     self.stream_eager
                     or subgraphs
@@ -2635,8 +2644,6 @@ class Pregel(
                         else:
                             return waiter
 
-                else:
-                    get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates.
                 # Channel updates from step N are only visible in step N+1
@@ -2917,6 +2924,8 @@ class Pregel(
                         stream_put, stream_modes
                     )
                 # enable concurrent streaming
+                get_waiter: Callable[[], asyncio.Task[None]] | None = None
+                _cleanup_waiter: Callable[[], Awaitable[None]] | None = None
                 if (
                     self.stream_eager
                     or subgraphs
@@ -2930,10 +2939,12 @@ class Pregel(
                         nonlocal waiter
                         if waiter is None or waiter.done():
                             waiter = aioloop.create_task(stream.wait())
+
                             def _clear(t: asyncio.Task[None]) -> None:
                                 nonlocal waiter
                                 if waiter is t:
                                     waiter = None
+
                             waiter.add_done_callback(_clear)
                         return waiter
 
@@ -2951,8 +2962,6 @@ class Pregel(
                             with contextlib.suppress(asyncio.CancelledError):
                                 await t
 
-                else:
-                    get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
@@ -2983,7 +2992,7 @@ class Pregel(
                             await cast(asyncio.Future, loop._put_checkpoint_fut)
                 finally:
                     # ensure waiter doesn't remain pending on cancel/shutdown
-                    if "_cleanup_waiter" in locals():
+                    if _cleanup_waiter is not None:
                         await _cleanup_waiter()
 
             # emit output
