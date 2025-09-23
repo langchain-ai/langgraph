@@ -4,7 +4,7 @@ In this guide, we will show how to create, view, and inspect [threads](../../con
 
 ## Create a thread
 
-To run your graph and the state persisted, you must first create a thread.
+To run your graph and persist the state, you must first create a thread.
 
 ### Empty thread
 
