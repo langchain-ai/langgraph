@@ -4,10 +4,10 @@ from typing import Any, Optional
 
 import pytest
 from langchain_core.runnables.config import RunnableConfig
+from langgraph.store.base import BaseStore
 
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.runtime import Runtime
-from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 
 pytestmark = pytest.mark.anyio

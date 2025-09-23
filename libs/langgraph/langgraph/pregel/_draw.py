@@ -6,6 +6,7 @@ from typing import Any, cast
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph, Node
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, INPUT
 from langgraph.channels.base import BaseChannel

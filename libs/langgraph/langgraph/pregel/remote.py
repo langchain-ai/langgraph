@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator, Iterator, Sequence
 from dataclasses import asdict
 from typing import (
@@ -7,6 +8,7 @@ from typing import (
     Literal,
     cast,
 )
+from uuid import UUID
 
 import langsmith as ls
 from langchain_core.runnables import RunnableConfig
@@ -19,6 +21,7 @@ from langchain_core.runnables.graph import (
 from langchain_core.runnables.graph import (
     Node as DrawableNode,
 )
+from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph_sdk.client import (
     LangGraphClient,
     SyncLangGraphClient,
@@ -49,7 +52,6 @@ from langgraph._internal._constants import (
     INTERRUPT,
     NS_SEP,
 )
-from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.errors import GraphInterrupt, ParentCommand
 from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
 from langgraph.types import (
@@ -60,6 +62,8 @@ from langgraph.types import (
     StateSnapshot,
     StreamMode,
 )
+
+logger = logging.getLogger(__name__)
 
 __all__ = ("RemoteGraph", "RemoteException")
 
@@ -75,7 +79,7 @@ _CONF_DROPLIST = frozenset(
 
 def _sanitize_config_value(v: Any) -> Any:
     """Recursively sanitize a config value to ensure it contains only primitives."""
-    if isinstance(v, (str, int, float, bool)):
+    if isinstance(v, (str, int, float, bool, UUID)):
         return v
     elif isinstance(v, dict):
         sanitized_dict = {}
@@ -950,6 +954,7 @@ class RemoteGraph(PregelProtocol):
         try:
             return chunk
         except UnboundLocalError:
+            logger.warning("No events received from remote graph")
             return None
 
     async def ainvoke(
@@ -990,6 +995,7 @@ class RemoteGraph(PregelProtocol):
         try:
             return chunk
         except UnboundLocalError:
+            logger.warning("No events received from remote graph")
             return None
 
 

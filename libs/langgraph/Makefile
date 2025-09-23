@@ -76,7 +76,7 @@ test:
 test_parallel:
 	make start-services &&\
 	make start-dev-server &&\
-	uv run pytest -n auto --dist worksteal $(TEST); \
+	uv run pytest -n auto --dist worksteal $(TEST) --lf --snapshot-update; \
 	EXIT_CODE=$$?; \
 	make stop-services; \
 	make stop-dev-server; \

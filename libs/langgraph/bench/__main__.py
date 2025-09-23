@@ -2,6 +2,7 @@ import random
 from uuid import uuid4
 
 from langchain_core.messages import HumanMessage
+from langgraph.checkpoint.memory import InMemorySaver
 from pyperf._runner import Runner
 from uvloop import new_event_loop
 
@@ -11,7 +12,6 @@ from bench.react_agent import react_agent
 from bench.sequential import create_sequential
 from bench.wide_dict import wide_dict
 from bench.wide_state import wide_state
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import StateGraph
 from langgraph.pregel import Pregel
 
