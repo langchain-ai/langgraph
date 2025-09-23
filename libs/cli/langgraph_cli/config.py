@@ -1264,7 +1264,7 @@ def python_config_to_docker(
 
     # configure pip
     local_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
-    global_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c ../../api/constraints.txt"
+    global_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
     if config.get("pip_config_file"):
         local_reqs_pip_install = (
             f"PIP_CONFIG_FILE=/pipconfig.txt {local_reqs_pip_install}"
