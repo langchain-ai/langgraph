@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph, Node
@@ -25,8 +25,18 @@ from langgraph.pregel._read import PregelNode
 from langgraph.pregel._write import ChannelWrite
 from langgraph.types import All, Checkpointer
 
-Edge = tuple[str, str, bool, str | None]
-TriggerEdge = tuple[str, bool, str | None]
+
+class Edge(NamedTuple):
+    source: str
+    target: str
+    conditional: bool
+    data: str | None
+
+
+class TriggerEdge(NamedTuple):
+    source: str
+    conditional: bool
+    data: str | None
 
 
 def draw_graph(
@@ -128,20 +138,22 @@ def draw_graph(
                         # END writes are not written, but become edges directly
                         for t in writes:
                             if t[0] == END:
-                                edges.add((task.name, t[0], True, t[2]))
+                                edges.add(Edge(task.name, t[0], True, t[2]))
                         writes = [t for t in writes if t[0] != END]
                         conditionals.update(
                             {(task.name, t[0], t[1] or None): t[2] for t in writes}
                         )
                         # record static writes for edge creation
                         for t in writes:
-                            static_declared_writes[task.name].add((t[0], True, t[2]))
+                            static_declared_writes[task.name].add(
+                                TriggerEdge(t[0], True, t[2])
+                            )
                         task.config[CONF][CONFIG_KEY_SEND]([t[:2] for t in writes])
         # collect sources
         step_sources = {}
         for task in tasks.values():
             task_edges = {
-                (
+                TriggerEdge(
                     w[0],
                     (task.name, w[0], w[1] or None) in conditionals,
                     conditionals.get((task.name, w[0], w[1] or None)),
@@ -155,7 +167,7 @@ def draw_graph(
         trigger_to_sources: dict[str, set[TriggerEdge]] = defaultdict(set)
         for src, triggers in sources.items():
             for trigger, cond, label in triggers:
-                trigger_to_sources[trigger].add((src, cond, label))
+                trigger_to_sources[trigger].add(TriggerEdge(src, cond, label))
         # apply writes
         updated_channels = apply_writes(
             checkpoint, channels, tasks.values(), get_next_version, trigger_to_nodes
@@ -191,17 +203,17 @@ def draw_graph(
                 for src, cond, label in sorted(trigger_to_sources[trigger]):
                     # record edge to be reviewed later
                     if task.name in deferred_nodes:
-                        edges_to_deferred_nodes.add((src, task.name, cond, label))
-                    edges.add((src, task.name, cond, label))
+                        edges_to_deferred_nodes.add(Edge(src, task.name, cond, label))
+                    edges.add(Edge(src, task.name, cond, label))
                     # if the edge is from this step, skip adding the implicit edges
                     if (trigger, cond, label) in step_sources.get(src, set()):
                         added = True
                     else:
-                        sources[src].discard((trigger, cond, label))
+                        sources[src].discard(TriggerEdge(trigger, cond, label))
             # if no edges from this step, add implicit edges from all previous tasks
             if not added:
                 for src in step_sources:
-                    edges.add((src, task.name, True, None))
+                    edges.add(Edge(src, task.name, True, None))
 
     # assemble the graph
     graph = Graph()
