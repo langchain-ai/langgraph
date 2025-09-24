@@ -14,6 +14,7 @@ import functools
 import logging
 import os
 import re
+import sys
 import warnings
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from types import TracebackType
