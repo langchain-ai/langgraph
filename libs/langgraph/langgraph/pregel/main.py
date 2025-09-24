@@ -377,7 +377,7 @@ class Pregel(
 
     However, for **advanced** use cases, Pregel can be used directly. If you're
     not sure whether you need to use Pregel directly, then the answer is probably no
-    – you should use the Graph API or Functional API instead. These are higher-level
+    - you should use the Graph API or Functional API instead. These are higher-level
     interfaces that will compile down to Pregel under the hood.
 
     Here are some examples to give you a sense of how it works:
@@ -479,7 +479,7 @@ class Pregel(
         ```
 
         ```pycon
-        {'c': ['foofoo', 'foofoofoofoo']}
+        {"c": ["foofoo", "foofoofoofoo"]}
         ```
 
     Example: Using a BinaryOperatorAggregate channel
@@ -507,6 +507,7 @@ class Pregel(
             else:
                 return update
 
+
         app = Pregel(
             nodes={"node1": node1, "node2": node2},
             channels={
@@ -515,7 +516,7 @@ class Pregel(
                 "c": BinaryOperatorAggregate(str, operator=reducer),
             },
             input_channels=["a"],
-            output_channels=["c"]
+            output_channels=["c"],
         )
 
         app.invoke({"a": "foo"})
@@ -535,7 +536,8 @@ class Pregel(
         from langgraph.pregel import Pregel, NodeBuilder, ChannelWriteEntry
 
         example_node = (
-            NodeBuilder().subscribe_only("value")
+            NodeBuilder()
+            .subscribe_only("value")
             .do(lambda x: x + x if len(x) < 10 else None)
             .write_to(ChannelWriteEntry(channel="value", skip_none=True))
         )
@@ -546,7 +548,7 @@ class Pregel(
                 "value": EphemeralValue(str),
             },
             input_channels=["value"],
-            output_channels=["value"]
+            output_channels=["value"],
         )
 
         app.invoke({"value": "a"})
