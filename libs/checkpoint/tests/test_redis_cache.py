@@ -331,8 +331,8 @@ class TestRedisCache:
         values = {keys[0]: ({"data": "test"}, None)}
 
         # should handle timeout gracefully during set
-        cache.set(values) # should not raise exception
+        cache.set(values)  # should not raise exception
 
         # should handle timeout gracefully during get
         result = cache.get(keys)
-        assert result == {} # should return empty dict on timeout
+        assert result == {}  # should return empty dict on timeout
