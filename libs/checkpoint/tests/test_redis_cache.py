@@ -314,3 +314,25 @@ class TestRedisCache:
 
         assert len(result) == 1
         assert result[key] == large_data
+
+    def test_network_timeout_scenarios(self) -> None:
+        """Test behavior during various network timeout scenarios."""
+        # Very short socket timeout
+        timeout_client = redis.Redis(
+            host="localhost",
+            port=6379,
+            socket_connect_timeout=0.001,
+            socket_timeout=0.001,
+            decode_responses=False,
+        )
+        cache: RedisCache = RedisCache(timeout_client, prefix="test:timeout:")
+
+        keys: list[FullKey] = [(("graph", "node"), "timeout_key")]
+        values = {keys[0]: ({"data": "test"}, None)}
+
+        # should handle timeout gracefully during set
+        cache.set(values) # should not raise exception
+
+        # should handle timeout gracefully during get
+        result = cache.get(keys)
+        assert result == {} # should return empty dict on timeout
