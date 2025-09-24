@@ -371,6 +371,14 @@ class HttpConfig(TypedDict, total=False):
 
     Default is `middleware_first`.
     """
+    enable_custom_route_auth: bool
+    """Optional. If True, authentication is enabled for custom routes,
+    not just the routes that are protected by default.
+    (Routes protected by default include /assistants, /threads, and /runs).
+
+    Default is False. This flag only affects authentication behavior
+    if `app` is provided and contains custom routes.
+    """
 
 
 class Config(TypedDict, total=False):
