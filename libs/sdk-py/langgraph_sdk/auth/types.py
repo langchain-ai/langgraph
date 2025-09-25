@@ -58,7 +58,7 @@ Values:
 """
 
 FilterType = typing.Union[
-    dict[str, typing.Union[str, dict[typing.Literal["$eq", "$contains"], str]]],
+    dict[str, typing.Union[str, dict[typing.Literal["$eq", "$contains"], str], dict[typing.Literal["$contains"], list[str]]]],
     dict[str, str],
 ]
 """Response type for authorization handlers.
@@ -66,22 +66,28 @@ FilterType = typing.Union[
 Supports exact matches and operators:
     - Exact match shorthand: {"field": "value"}
     - Exact match: {"field": {"$eq": "value"}}
-    - Contains: {"field": {"$contains": "value"}}
+    - Contains (membership): {"field": {"$contains": "value"}}
+    - Contains (subset containment): {"field": {"$contains": ["value1", "value2"]}}
 
 ???+ example "Examples"
     Simple exact match filter for the resource owner:
     ```python
     filter = {"owner": "user-abcd123"}
     ```
-    
+
     Explicit version of the exact match filter:
     ```python
     filter = {"owner": {"$eq": "user-abcd123"}}
     ```
-    
-    Containment:
+ 
+    Containment (membership of a single element):
     ```python
     filter = {"participants": {"$contains": "user-abcd123"}}
+    ```
+
+    Containment (subset containment; all values must be present, but order doesn't matter):
+    ```python
+    filter = {"participants": {"$contains": ["user-abcd123", "user-efgh456"]}}
     ```
 
     Combining filters (treated as a logical `AND`):
