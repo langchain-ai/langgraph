@@ -14,5 +14,3 @@
     options:
       members:
         - get_runtime
-
-

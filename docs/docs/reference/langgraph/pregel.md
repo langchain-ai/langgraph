@@ -1,18 +1,22 @@
-# Graph Definitions
+# Pregel
 
-::: langgraph.graph.state.StateGraph
+::: langgraph.pregel.NodeBuilder
     options:
       show_if_no_docstring: true
       show_root_heading: true
       show_root_full_path: false
       members:
-        - add_node
-        - add_edge
-        - add_conditional_edges
-        - add_sequence
-        - compile
+        - subscribe_only
+        - subscribe_to
+        - read_from
+        - do
+        - write_to
+        - meta
+        - retry
+        - cache
+        - build
 
-::: langgraph.graph.state.CompiledStateGraph
+::: langgraph.pregel.Pregel
     options:
       show_if_no_docstring: true
       show_root_heading: true
@@ -35,8 +39,3 @@
         - get_subgraphs
         - aget_subgraphs
         - with_config
-
-::: langgraph.graph.message
-    options:
-      members:
-        - add_messages
