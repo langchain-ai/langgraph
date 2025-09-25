@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph, Node
@@ -10,6 +10,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from langgraph._internal._constants import CONF, CONFIG_KEY_SEND, INPUT
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.last_value import LastValueAfterFinish
 from langgraph.constants import END, START
 from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel._algo import (
@@ -23,6 +24,19 @@ from langgraph.pregel._io import map_input
 from langgraph.pregel._read import PregelNode
 from langgraph.pregel._write import ChannelWrite
 from langgraph.types import All, Checkpointer
+
+
+class Edge(NamedTuple):
+    source: str
+    target: str
+    conditional: bool
+    data: str | None
+
+
+class TriggerEdge(NamedTuple):
+    source: str
+    conditional: bool
+    data: str | None
 
 
 def draw_graph(
@@ -49,7 +63,7 @@ def draw_graph(
         The graph for this Pregel instance.
     """
     # (src, dest, is_conditional, label)
-    edges: set[tuple[str, str, bool, str | None]] = set()
+    edges: set[Edge] = set()
 
     step = -1
     checkpoint = empty_checkpoint()
@@ -63,8 +77,9 @@ def draw_graph(
         checkpoint,
     )
     static_seen: set[Any] = set()
-    sources: dict[str, set[tuple[str, bool, str | None]]] = {}
-    step_sources: dict[str, set[tuple[str, bool, str | None]]] = {}
+    sources: dict[str, set[TriggerEdge]] = {}
+    step_sources: dict[str, set[TriggerEdge]] = {}
+    static_declared_writes: dict[str, set[TriggerEdge]] = defaultdict(set)
     # remove node mappers
     nodes = {
         k: v.copy(update={"mapper": None}) if v.mapper is not None else v
@@ -123,32 +138,36 @@ def draw_graph(
                         # END writes are not written, but become edges directly
                         for t in writes:
                             if t[0] == END:
-                                edges.add((task.name, t[0], True, t[2]))
+                                edges.add(Edge(task.name, t[0], True, t[2]))
                         writes = [t for t in writes if t[0] != END]
                         conditionals.update(
                             {(task.name, t[0], t[1] or None): t[2] for t in writes}
                         )
+                        # record static writes for edge creation
+                        for t in writes:
+                            static_declared_writes[task.name].add(
+                                TriggerEdge(t[0], True, t[2])
+                            )
                         task.config[CONF][CONFIG_KEY_SEND]([t[:2] for t in writes])
         # collect sources
-        step_sources = {
-            task.name: {
-                (
+        step_sources = {}
+        for task in tasks.values():
+            task_edges = {
+                TriggerEdge(
                     w[0],
                     (task.name, w[0], w[1] or None) in conditionals,
                     conditionals.get((task.name, w[0], w[1] or None)),
                 )
                 for w in task.writes
             }
-            for task in tasks.values()
-        }
+            task_edges |= static_declared_writes.get(task.name, set())
+            step_sources[task.name] = task_edges
         sources.update(step_sources)
         # invert triggers
-        trigger_to_sources: dict[str, set[tuple[str, bool, str | None]]] = defaultdict(
-            set
-        )
+        trigger_to_sources: dict[str, set[TriggerEdge]] = defaultdict(set)
         for src, triggers in sources.items():
             for trigger, cond, label in triggers:
-                trigger_to_sources[trigger].add((src, cond, label))
+                trigger_to_sources[trigger].add(TriggerEdge(src, cond, label))
         # apply writes
         updated_channels = apply_writes(
             checkpoint, channels, tasks.values(), get_next_version, trigger_to_nodes
@@ -170,26 +189,39 @@ def draw_graph(
             trigger_to_nodes=trigger_to_nodes,
             updated_channels=updated_channels,
         )
+        # collect deferred nodes
+        deferred_nodes: set[str] = set()
+        edges_to_deferred_nodes: set[Edge] = set()
+        for channel, item in channels.items():
+            if isinstance(item, LastValueAfterFinish):
+                deferred_node = channel.split(":", 2)[-1]
+                deferred_nodes.add(deferred_node)
         # collect edges
         for task in tasks.values():
             added = False
             for trigger in task.triggers:
                 for src, cond, label in sorted(trigger_to_sources[trigger]):
-                    edges.add((src, task.name, cond, label))
+                    # record edge to be reviewed later
+                    if task.name in deferred_nodes:
+                        edges_to_deferred_nodes.add(Edge(src, task.name, cond, label))
+                    edges.add(Edge(src, task.name, cond, label))
                     # if the edge is from this step, skip adding the implicit edges
                     if (trigger, cond, label) in step_sources.get(src, set()):
                         added = True
                     else:
-                        sources[src].discard((trigger, cond, label))
+                        sources[src].discard(TriggerEdge(trigger, cond, label))
             # if no edges from this step, add implicit edges from all previous tasks
             if not added:
                 for src in step_sources:
-                    edges.add((src, task.name, True, None))
+                    edges.add(Edge(src, task.name, True, None))
+
     # assemble the graph
     graph = Graph()
     # add nodes
     for name, node in nodes.items():
         metadata = dict(node.metadata or {})
+        if name in deferred_nodes:
+            metadata["defer"] = True
         if name in interrupt_before_nodes and name in interrupt_after_nodes:
             metadata["__interrupt"] = "before,after"
         elif name in interrupt_before_nodes:

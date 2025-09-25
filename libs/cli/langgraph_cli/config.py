@@ -1268,16 +1268,22 @@ def python_config_to_docker(
         else:
             pip_installer = "pip"
     if pip_installer == "uv":
-        install_cmd = "uv pip install --system --prerelease=allow"
+        install_cmd = "uv pip install --system"
     elif pip_installer == "pip":
         install_cmd = "pip install"
     else:
         raise ValueError(f"Invalid pip_installer: {pip_installer}")
 
     # configure pip
-    pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
+    local_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
+    global_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
     if config.get("pip_config_file"):
-        pip_install = f"PIP_CONFIG_FILE=/pipconfig.txt {pip_install}"
+        local_reqs_pip_install = (
+            f"PIP_CONFIG_FILE=/pipconfig.txt {local_reqs_pip_install}"
+        )
+        global_reqs_pip_install = (
+            f"PIP_CONFIG_FILE=/pipconfig.txt {global_reqs_pip_install}"
+        )
     pip_config_file_str = (
         f"ADD {config['pip_config_file']} /pipconfig.txt"
         if config.get("pip_config_file")
@@ -1294,7 +1300,9 @@ def python_config_to_docker(
     # Rewrite HTTP app path, so it points to the correct location in the Docker container
     _update_http_app_path(config_path, config, local_deps)
 
-    pip_pkgs_str = f"RUN {pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
+    pip_pkgs_str = (
+        f"RUN {local_reqs_pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
+    )
     if local_deps.pip_reqs:
         pip_reqs_str = os.linesep.join(
             (
@@ -1304,7 +1312,7 @@ def python_config_to_docker(
             )
             for reqpath, destpath in local_deps.pip_reqs
         )
-        pip_reqs_str += f"{os.linesep}RUN {pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}"
+        pip_reqs_str += f"{os.linesep}RUN {local_reqs_pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}"
         pip_reqs_str = f"""# -- Installing local requirements --
 {pip_reqs_str}
 # -- End of local requirements install --"""
@@ -1414,7 +1422,13 @@ ADD {relpath} /deps/{name}
         installs,
         "",
         "# -- Installing all local dependencies --",
-        f"RUN {pip_install} -e /deps/*",
+        f"""RUN for dep in /deps/*; do \
+            echo "Installing $dep"; \
+            if [ -d "$dep" ]; then \
+                echo "Installing $dep"; \
+                (cd "$dep" && {global_reqs_pip_install} .); \
+            fi; \
+        done""",
         "# -- End of local dependencies install --",
         os.linesep.join(env_vars),
         "",
