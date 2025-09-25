@@ -18,32 +18,36 @@ Main documentation files are located in `docs/docs/` and are written in Markdown
 
 ### API Reference
 
-API reference documentation is located in `docs/docs/reference/` and is generated from docstrings in the codebase using the **mkdocstrings** plugin.
-
-The API reference uses manual directives in markdown files that specify which classes/functions to document:
+API reference documentation is defined in `docs/docs/reference/`. Each `.md` file outlines the "template" that each page is built from. Reference content is automatically generated from docstrings in the codebase using the **mkdocstrings** plugin. Once generated, the content is plugged into the corresponding markdown file where it is referenced by using manual directives to specify which classes and/or functions are documented:
 
 ```markdown
 ::: langgraph.graph.state.StateGraph
     options:
+      show_if_no_docstring: true
+      show_root_heading: true
+      show_root_full_path: false
       members:
         - add_node
+        - add_edge
+        - add_conditional_edges
+        - add_sequence
         - compile
 ```
 
-#### Build Process
+## Build Process
 
-The build process follows these steps:
+Docs are built following these steps:
 
-1. **Content Processing Phase:**
+1. **Content Processing:**
    - `_scripts/notebook_hooks.py` - Main processing pipeline that:
-     - Converts Jupyter notebooks to markdown using `notebook_convert.py`
+     - Converts how-tos/tutorial Jupyter notebooks to markdown using `notebook_convert.py`
      - Adds automatic API reference links to code blocks using `generate_api_reference_links.py`
      - Handles conditional rendering for Python/JS versions
      - Processes highlight comments and custom syntax
 
 2. **API Reference Generation:**
    - **mkdocstrings** plugin extracts docstrings from Python source code
-   - Manual `::: module.Class` directives in reference pages specify what to document
+   - Manual `::: module.Class` directives in reference pages (`/docs/docs/*`) specify what to document
    - Cross-references are automatically generated between docs and API
 
 3. **Site Generation:**
@@ -55,7 +59,7 @@ The build process follows these steps:
    - `make build-docs` generates production build (also usable for local testing)
    - Automatic redirects handle URL changes between versions
 
-#### Local Development
+### Local Development
 
 For local development, use the Makefile targets:
 
@@ -76,7 +80,7 @@ The `serve-docs` command:
 - Includes dirty builds for faster iteration
 - Serves on [http://127.0.0.1:8000/langgraph/](http://127.0.0.1:8000/langgraph/)
 
-#### Documentation Standards
+## Standards
 
 **Docstring Format:**
 The API reference uses **Google-style docstrings** with Markdown markup. The `mkdocstrings` plugin processes these to generate documentation.
@@ -113,34 +117,6 @@ def example_function(param1: str, param2: int = 5) -> bool:
 - **MkDocs admonitions**: `!!! warning`, `!!! note`, `!!! version-added`
 - **Code blocks**: Standard markdown ``` syntax
 - **Cross-references**: Automatic linking via `generate_api_reference_links.py`
-
-#### Site Styling and Assets
-
-**Theme and Styling:**
-
-- Uses [**Material for MkDocs**](https://squidfunk.github.io/mkdocs-material/) theme
-- Custom CSS in `docs/stylesheets/` for LangGraph-specific styling:
-  - Brand colors and typography
-  - Custom navigation components
-  - Version admonitions and agent graph widgets
-
-**Static Assets:**
-
-- Logos and favicon in `docs/static/`
-- Custom stylesheets in `docs/stylesheets/`
-
-**Content Processing:**
-
-- Automatic API reference link generation for code examples
-- Jupyter notebook execution with VCR cassettes for reproducible builds
-- Conditional rendering for multi-language support
-- Extensive redirect mapping for URL stability
-
-**Analytics and Integration:**
-
-- Google Tag Manager integration via custom hooks
-- GitHub integration (edit buttons, source links)
-- Automatic cross-referencing between documentation sections
 
 ## Execute notebooks
 
