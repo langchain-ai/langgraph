@@ -472,22 +472,16 @@ class PregelLoop:
             cache_policy=self.cache_policy,
         )
 
-        pending_ids = self._pending_interrupts()
         resume_map = self.config.get(CONF, {}).get(CONFIG_KEY_RESUME_MAP, {})
-        task_ids_to_block: set[str] = set()
-
         if resume_map:
-            # collect interrupts that should not run this tick
-            blocked_ids = pending_ids - set(resume_map.keys())
-
-            for task_id, write_type, value in self.checkpoint_pending_writes:
-                if write_type != INTERRUPT:
-                    continue
-                interrupt_id = value[0].id
-                if interrupt_id in blocked_ids:
-                    task_ids_to_block.add(task_id)
-
-        self.task_ids_to_block = task_ids_to_block
+            blocked_ids = self._pending_interrupts() - set(resume_map)
+            self.task_ids_to_block = {
+                task_id
+                for task_id, write_type, value in self.checkpoint_pending_writes
+                if write_type == INTERRUPT and value[0].id in blocked_ids
+            }
+        else:
+            self.task_ids_to_block = set()
 
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
@@ -534,29 +528,30 @@ class PregelLoop:
             if task.writes:
                 self.output_writes(task.id, task.writes, cached=True)
 
-        subtractor = set()
-        for task_id in self.task_ids_to_block:
-            if self.tasks[task_id].writes:
-                subtractor.add(task_id)
-        self.task_ids_to_block = self.task_ids_to_block - subtractor
-
-        for task_id, write_type, value in self.checkpoint_pending_writes:
-            if task_id in self.task_ids_to_block:
-                self.output_writes(task_id, [(write_type, value)])
+        if self.task_ids_to_block:
+            # remove tasks with writes that may have been matched from previous loop
+            self.task_ids_to_block = {
+                task_id
+                for task_id in self.task_ids_to_block
+                if not self.tasks[task_id].writes
+            }
+            # output writes for blocked tasts so they are still visible in the stream
+            for task_id, write_type, value in self.checkpoint_pending_writes:
+                if task_id in self.task_ids_to_block:
+                    self.output_writes(task_id, [(write_type, value)])
 
         return True
 
     def after_tick(self) -> None:
         if self.task_ids_to_block:
-            raise GraphInterrupt(
-                tuple(
-                    value[0]
-                    for (_, write_type, value) in self.checkpoint_pending_writes
-                    if write_type == INTERRUPT
-                )
+            interrupts = tuple(
+                value[0]
+                for _, write_type, value in self.checkpoint_pending_writes
+                if write_type == INTERRUPT
             )
+            raise GraphInterrupt(interrupts)
 
-        self.task_ids_to_block = set()
+        self.task_ids_to_block.clear()
         # finish superstep
         writes = [w for t in self.tasks.values() for w in t.writes]
         # all tasks have finished
