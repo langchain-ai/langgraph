@@ -250,6 +250,7 @@ class PregelLoop:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
+        self.task_ids_to_block: set[str] = set()
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -357,7 +358,9 @@ class PregelLoop:
                 )
         # output writes
         if hasattr(self, "tasks"):
+            print("OUTPUT WRITES CALL POS 0")
             self.output_writes(task_id, writes)
+            print("^^^")
 
     def _put_pending_writes(self) -> None:
         if self.checkpointer_put_writes is None:
@@ -448,6 +451,8 @@ class PregelLoop:
             True if more iterations are needed.
         """
 
+        print(f"----!!!! TICK: {self.step}")
+
         # check if iteration limit is reached
         if self.step > self.stop:
             self.status = "out_of_steps"
@@ -472,6 +477,24 @@ class PregelLoop:
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
         )
+
+        pending_ids = self._pending_interrupts()
+        resume_map = self.config.get(CONF, {}).get(CONFIG_KEY_RESUME_MAP, {})
+        task_ids_to_block: set[str] = set()
+
+        if resume_map:
+            # collect interrupts that should not run this tick
+            blocked_ids = pending_ids - set(resume_map.keys())
+
+            for task_id, write_type, value in self.checkpoint_pending_writes:
+                if write_type != INTERRUPT:
+                    continue
+                interrupt_id = value[0].id
+                if interrupt_id in blocked_ids:
+                    task_ids_to_block.add(task_id)
+
+        self.task_ids_to_block = task_ids_to_block
+        print("FIRST GO: self.task_ids_to_block: ", self.task_ids_to_block)
 
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
@@ -501,7 +524,9 @@ class PregelLoop:
 
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:
+            print(">>Wrapper")
             self._match_writes(self.tasks)
+            print(">>Wrapper done")
 
         # before execution, check if we should interrupt
         if self.interrupt_before and should_interrupt(
@@ -516,11 +541,38 @@ class PregelLoop:
         # print output for any tasks we applied previous writes to
         for task in self.tasks.values():
             if task.writes:
+                print("OUTPUT WRITES CALL POS 1")
                 self.output_writes(task.id, task.writes, cached=True)
+                print("^^^")
+
+        subtractor = set()
+        for task_id in self.task_ids_to_block:
+            if self.tasks[task_id].writes:
+                subtractor.add(task_id)
+        self.task_ids_to_block = self.task_ids_to_block - subtractor
+
+        print("SECOND GO: self.task_ids_to_block: ", self.task_ids_to_block)
+
+        for task_id, write_type, value in self.checkpoint_pending_writes:
+            if task_id in self.task_ids_to_block:
+                print("OUTPUT WRITES CALL POS 2")
+                self.output_writes(task_id, [(write_type, value)])
+                print("^^^")
 
         return True
 
     def after_tick(self) -> None:
+        if self.task_ids_to_block:
+            print(f"THIRD GO: self.task_ids_to_block: {self.task_ids_to_block}")
+            raise GraphInterrupt(
+                tuple(
+                    value[0]
+                    for (_, write_type, value) in self.checkpoint_pending_writes
+                    if write_type == INTERRUPT
+                )
+            )
+
+        self.task_ids_to_block = set()
         # finish superstep
         writes = [w for t in self.tasks.values() for w in t.writes]
         # all tasks have finished
@@ -906,6 +958,7 @@ class PregelLoop:
                         )
                     }
                 ]
+                print("Outputting interrupts: ", interrupts)
                 stream_modes = self.stream.modes if self.stream else []
                 if "updates" in stream_modes:
                     self._emit("updates", lambda: iter(interrupts))
@@ -1023,7 +1076,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     ) -> PregelExecutableTask | None:
         if pushed := super().accept_push(task, write_idx, call):
             for task in self.match_cached_writes():
+                print("OUTPUT WRITES CALL POS 3")
                 self.output_writes(task.id, task.writes, cached=True)
+                print("^^^")
         return pushed
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
@@ -1199,7 +1254,9 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     ) -> PregelExecutableTask | None:
         if pushed := super().accept_push(task, write_idx, call):
             for task in await self.amatch_cached_writes():
+                print("OUTPUT WRITES CALL POS 4")
                 self.output_writes(task.id, task.writes, cached=True)
+                print("^^^")
         return pushed
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
