@@ -48,7 +48,7 @@ class CheckpointTask(TypedDict):
     name: str
     error: str | None
     interrupts: list[dict]
-    state: StateSnapshot |RunnableConfig | None
+    state: StateSnapshot | RunnableConfig | None
 
 
 class CheckpointPayload(TypedDict):
