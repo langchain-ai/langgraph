@@ -76,6 +76,9 @@ Supports exact matches and operators:
     - Contains (membership): {"field": {"$contains": "value"}}
     - Contains (subset containment): {"field": {"$contains": ["value1", "value2"]}}
 
+Subset containment is only supported by newer versions of the LangGraph dev server;
+install langgraph-runtime-inmem >= 0.14.1 to use this filter variant.
+
 ???+ example "Examples"
     Simple exact match filter for the resource owner:
     ```python
