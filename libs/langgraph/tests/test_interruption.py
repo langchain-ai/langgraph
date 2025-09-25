@@ -167,6 +167,80 @@ def test_interrupt_with_send_payloads(sync_checkpointer: BaseCheckpointSaver) ->
     assert node_counter["map_node"] == 5
 
 
+async def test_interrupt_with_send_payloads_async(
+    async_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    """Test interruption in map node with Send payloads and human-in-the-loop resume."""
+
+    # Global counter to track node executions
+    node_counter = {"entry": 0, "map_node": 0}
+
+    class State(TypedDict):
+        items: list[str]
+        processed: Annotated[list[str], operator.add]
+
+    def entry_node(state: State):
+        node_counter["entry"] += 1
+        return {}  # No state updates in entry node
+
+    def send_to_map(state: State):
+        return [Send("map_node", {"item": item}) for item in state["items"]]
+
+    def map_node(state: State):
+        node_counter["map_node"] += 1
+        if "dangerous" in state["item"]:
+            value = interrupt({"processing": state["item"]})
+            return {"processed": [f"processed_{value}"]}
+        else:
+            return {"processed": [f"processed_{state['item']}_auto"]}
+
+    builder = StateGraph(State)
+    builder.add_node("entry", entry_node)
+    builder.add_node("map_node", map_node)
+    builder.add_edge(START, "entry")
+    builder.add_conditional_edges("entry", send_to_map, ["map_node"])
+    builder.add_edge("map_node", END)
+
+    graph = builder.compile(checkpointer=async_checkpointer)
+
+    config = {"configurable": {"thread_id": "test_interrupt_send"}}
+
+    # Run until interrupts
+    result = await graph.ainvoke(
+        {"items": ["item1", "dangerous_item1", "dangerous_item2"]}, config=config
+    )
+
+    # Verify we have interrupts (only one for dangerous_item)
+    interrupts = result.get("__interrupt__", [])
+    assert len(interrupts) == 2
+    assert "dangerous_item" in interrupts[0].value["processing"]
+
+    # Resume with mapping of interrupt IDs to values
+    resume_map = {
+        i.interrupt_id: f"human_input_{i.value['processing']}" for i in interrupts
+    }
+
+    final_result = await graph.ainvoke(Command(resume=resume_map), config=config)
+
+    # Verify final result contains processed items
+    assert "processed" in final_result
+    processed_items = final_result["processed"]
+    assert len(processed_items) == 3
+    assert "processed_item1_auto" in processed_items  # item1 processed automatically
+    assert any(
+        "processed_human_input_dangerous_item1" in item for item in processed_items
+    )  # dangerous_item1 processed after interrupt
+    assert any(
+        "processed_human_input_dangerous_item2" in item for item in processed_items
+    )  # dangerous_item2 processed after interrupt
+
+    # Verify node execution counts
+    assert node_counter["entry"] == 1  # Entry node runs once
+    # Map node runs 3 times initially (item1 completes, 2 dangerous_items interrupt),
+    # then 2 times on resume
+    assert node_counter["map_node"] == 5
+
+
 def test_interrupt_with_send_payloads_sequential_resume(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -254,81 +328,57 @@ def test_interrupt_with_send_payloads_sequential_resume(
     assert node_counter["map_node"] == 5
 
 
-async def test_interrupt_with_send_payloads_async(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+@pytest.mark.xfail(reason="Node resumes after partial interrupt resume", strict=False)
+def test_node_with_multiple_interrupts_requires_full_resume(
+    sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Test interruption in map node with Send payloads and human-in-the-loop resume."""
-
-    # Global counter to track node executions
-    node_counter = {"entry": 0, "map_node": 0}
+    node_counter = {"double_interrupt": 0}
 
     class State(TypedDict):
-        items: list[str]
-        processed: Annotated[list[str], operator.add]
+        input: str
 
-    def entry_node(state: State):
-        node_counter["entry"] += 1
-        return {}  # No state updates in entry node
-
-    def send_to_map(state: State):
-        return [Send("map_node", {"item": item}) for item in state["items"]]
-
-    def map_node(state: State):
-        node_counter["map_node"] += 1
-        if "dangerous" in state["item"]:
-            value = interrupt({"processing": state["item"]})
-            return {"processed": [f"processed_{value}"]}
-        else:
-            return {"processed": [f"processed_{state['item']}_auto"]}
+    def double_interrupt_node(state: State):
+        node_counter["double_interrupt"] += 1
+        first = interrupt({"step": "first"})
+        second = interrupt({"step": "second"})
+        return {"input": f"{first}-{second}"}
 
     builder = StateGraph(State)
-    builder.add_node("entry", entry_node)
-    builder.add_node("map_node", map_node)
-    builder.add_edge(START, "entry")
-    builder.add_conditional_edges("entry", send_to_map, ["map_node"])
-    builder.add_edge("map_node", END)
+    builder.add_node("double_interrupt", double_interrupt_node)
+    builder.add_edge(START, "double_interrupt")
+    builder.add_edge("double_interrupt", END)
 
-    graph = builder.compile(checkpointer=async_checkpointer)
+    graph = builder.compile(checkpointer=sync_checkpointer)
 
-    config = {"configurable": {"thread_id": "test_interrupt_send"}}
+    config = {"configurable": {"thread_id": "test_double_interrupt_sync"}}
 
-    # Run until interrupts
-    result = await graph.ainvoke(
-        {"items": ["item1", "dangerous_item1", "dangerous_item2"]}, config=config
+    result = graph.invoke({"input": "start"}, config=config)
+
+    interrupts = result.get("__interrupt__", [])
+    assert len(interrupts) == 1
+    first_interrupt = interrupts[0]
+    assert node_counter["double_interrupt"] == 1
+
+    partial = graph.invoke(
+        Command(resume={first_interrupt.id: "human_first"}), config=config
     )
 
-    # Verify we have interrupts (only one for dangerous_item)
-    interrupts = result.get("__interrupt__", [])
-    assert len(interrupts) == 2
-    assert "dangerous_item" in interrupts[0].value["processing"]
+    # Expected behavior: node should not execute again until all resume values are provided
+    assert node_counter["double_interrupt"] == 1
 
-    # Resume with mapping of interrupt IDs to values
-    resume_map = {
-        i.interrupt_id: f"human_input_{i.value['processing']}" for i in interrupts
-    }
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    second_interrupt = remaining_interrupts[0]
 
-    final_result = await graph.ainvoke(Command(resume=resume_map), config=config)
+    final_result = graph.invoke(
+        Command(resume={second_interrupt.id: "human_second"}), config=config
+    )
 
-    # Verify final result contains processed items
-    assert "processed" in final_result
-    processed_items = final_result["processed"]
-    assert len(processed_items) == 3
-    assert "processed_item1_auto" in processed_items  # item1 processed automatically
-    assert any(
-        "processed_human_input_dangerous_item1" in item for item in processed_items
-    )  # dangerous_item1 processed after interrupt
-    assert any(
-        "processed_human_input_dangerous_item2" in item for item in processed_items
-    )  # dangerous_item2 processed after interrupt
-
-    # Verify node execution counts
-    assert node_counter["entry"] == 1  # Entry node runs once
-    # Map node runs 3 times initially (item1 completes, 2 dangerous_items interrupt),
-    # then 2 times on resume
-    assert node_counter["map_node"] == 5
+    assert node_counter["double_interrupt"] == 2
+    assert "input" in final_result
+    assert final_result["input"] == "human_first-human_second"
 
 
-# @pytest.mark.xfail(reason="Duplicate interrupts written, still debugging this")
 async def test_interrupt_with_send_payloads_sequential_resume_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
