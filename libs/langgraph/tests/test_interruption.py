@@ -328,9 +328,9 @@ async def test_interrupt_with_send_payloads_async(
     assert node_counter["map_node"] == 5
 
 
-@pytest.mark.xfail(reason="Duplicate interrupts written, still debugging this")
+# @pytest.mark.xfail(reason="Duplicate interrupts written, still debugging this")
 async def test_interrupt_with_send_payloads_sequential_resume_async(
-    async_checkpointer: BaseCheckpointSaver, durability: Durability
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Test interruption in map node with Send payloads and sequential resume."""
 
