@@ -58,7 +58,14 @@ Values:
 """
 
 FilterType = typing.Union[
-    dict[str, typing.Union[str, dict[typing.Literal["$eq", "$contains"], str], dict[typing.Literal["$contains"], list[str]]]],
+    dict[
+        str,
+        typing.Union[
+            str,
+            dict[typing.Literal["$eq", "$contains"], str],
+            dict[typing.Literal["$contains"], list[str]],
+        ],
+    ],
     dict[str, str],
 ]
 """Response type for authorization handlers.
