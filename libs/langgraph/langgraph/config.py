@@ -66,13 +66,16 @@ def get_store() -> BaseStore:
         store = InMemoryStore()
         store.put(("values",), "foo", {"bar": 2})
 
+
         class State(TypedDict):
             foo: int
+
 
         def my_node(state: State):
             my_store = get_store()
             stored_value = my_store.get(("values",), "foo").value["bar"]
             return {"foo": stored_value + 1}
+
 
         graph = (
             StateGraph(State)
@@ -85,7 +88,7 @@ def get_store() -> BaseStore:
         ```
 
         ```pycon
-        {'foo': 3}
+        {"foo": 3}
         ```
 
     Example: Using with functional API
@@ -97,15 +100,18 @@ def get_store() -> BaseStore:
         store = InMemoryStore()
         store.put(("values",), "foo", {"bar": 2})
 
+
         @task
         def my_task(value: int):
             my_store = get_store()
             stored_value = my_store.get(("values",), "foo").value["bar"]
             return stored_value + 1
 
+
         @entrypoint(store=store)
         def workflow(value: int):
             return my_task(value).result()
+
 
         workflow.invoke(1)
         ```
@@ -134,13 +140,16 @@ def get_stream_writer() -> StreamWriter:
         from langgraph.graph import StateGraph, START
         from langgraph.config import get_stream_writer
 
+
         class State(TypedDict):
             foo: int
+
 
         def my_node(state: State):
             my_stream_writer = get_stream_writer()
             my_stream_writer({"custom_data": "Hello!"})
             return {"foo": state["foo"] + 1}
+
 
         graph = (
             StateGraph(State)
@@ -154,7 +163,7 @@ def get_stream_writer() -> StreamWriter:
         ```
 
         ```pycon
-        {'custom_data': 'Hello!'}
+        {"custom_data": "Hello!"}
         ```
 
     Example: Using with functional API
@@ -162,22 +171,25 @@ def get_stream_writer() -> StreamWriter:
         from langgraph.func import entrypoint, task
         from langgraph.config import get_stream_writer
 
+
         @task
         def my_task(value: int):
             my_stream_writer = get_stream_writer()
             my_stream_writer({"custom_data": "Hello!"})
             return value + 1
 
+
         @entrypoint(store=store)
         def workflow(value: int):
             return my_task(value).result()
+
 
         for chunk in workflow.stream(1, stream_mode="custom"):
             print(chunk)
         ```
 
         ```pycon
-        {'custom_data': 'Hello!'}
+        {"custom_data": "Hello!"}
         ```
     """
     runtime = get_config()[CONF][CONFIG_KEY_RUNTIME]
