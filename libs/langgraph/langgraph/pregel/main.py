@@ -2995,7 +2995,11 @@ class Pregel(
                         for task in await loop.amatch_cached_writes():
                             loop.output_writes(task.id, task.writes, cached=True)
                         async for _ in runner.atick(
-                            [t for t in loop.tasks.values() if not t.writes],
+                            [
+                                t
+                                for t in loop.tasks.values()
+                                if not t.writes and t.id not in loop.task_ids_to_block
+                            ],
                             timeout=self.step_timeout,
                             get_waiter=get_waiter,
                             schedule_task=loop.aaccept_push,
