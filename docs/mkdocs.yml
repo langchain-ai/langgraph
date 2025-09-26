@@ -167,7 +167,7 @@ plugins:
             allow_inspection: true
             heading_level: 2
             show_bases: true
-            show_source: false 
+            show_source: false
             summary: true
             inherited_members: true
             selection:
@@ -187,126 +187,129 @@ plugins:
 
 nav:
   - Get started:
-    - index.md
-    - Quickstarts:
-      - Start with a prebuilt agent: agents/agents.md
-      - Build a custom workflow:
-          -  concepts/why-langgraph.md
-          -  1. Build a basic chatbot: tutorials/get-started/1-build-basic-chatbot.md
-          -  2. Add tools: tutorials/get-started/2-add-tools.md
-          -  3. Add memory: tutorials/get-started/3-add-memory.md
-          -  4. Add human-in-the-loop: tutorials/get-started/4-human-in-the-loop.md
-          -  5. Customize state: tutorials/get-started/5-customize-state.md
-          -  6. Time travel: tutorials/get-started/6-time-travel.md
-      - Run a local server: tutorials/langgraph-platform/local-server.md
-    - General concepts:
-      - Workflows & agents: tutorials/workflows.md
-      - Agent architectures: concepts/agentic_concepts.md
+      - index.md
+      - Quickstarts:
+          - Start with a prebuilt agent: agents/agents.md
+          - Build a custom workflow:
+              - concepts/why-langgraph.md
+              - 1. Build a basic chatbot: tutorials/get-started/1-build-basic-chatbot.md
+              - 2. Add tools: tutorials/get-started/2-add-tools.md
+              - 3. Add memory: tutorials/get-started/3-add-memory.md
+              - 4. Add human-in-the-loop: tutorials/get-started/4-human-in-the-loop.md
+              - 5. Customize state: tutorials/get-started/5-customize-state.md
+              - 6. Time travel: tutorials/get-started/6-time-travel.md
+          - Run a local server: tutorials/langgraph-platform/local-server.md
+      - General concepts:
+          - Workflows & agents: tutorials/workflows.md
+          - Agent architectures: concepts/agentic_concepts.md
 
   - Guides:
-    - guides/index.md
-    - Agent development:
-      - Overview: agents/overview.md
-      - Run an agent: agents/run_agents.md
-    - LangGraph APIs:
-      - Graph API:
-          - Overview: concepts/low_level.md
-          - Use the Graph API: how-tos/graph-api.md
-      - Functional API:
-          - Overview: concepts/functional_api.md
-          - Use the Functional API: how-tos/use-functional-api.md
-      - Runtime: concepts/pregel.md
-    - Core capabilities:
-      - Streaming:
-          - Overview: concepts/streaming.md
-          - Stream outputs: how-tos/streaming.md
-      - Persistence:
-          - Overview: concepts/persistence.md
-      - Durable execution:
-          - Overview: concepts/durable_execution.md
-      - Memory:
-          - Overview: concepts/memory.md
-          - Add memory: how-tos/memory/add-memory.md
-      - Context:
-          - Add context: agents/context.md
-      - Models:
-          - Configure model: agents/models.md
-      - Tools:
-          - Overview: concepts/tools.md
-          - Call tools: how-tos/tool-calling.md
-      - Human-in-the-loop:
-          - Overview: concepts/human_in_the_loop.md
-          - Add human intervention: how-tos/human_in_the_loop/add-human-in-the-loop.md
-      - Time travel:
-          - Overview: concepts/time-travel.md
-          - Use time travel: how-tos/human_in_the_loop/time-travel.md
-      - Subgraphs:
-          - Overview: concepts/subgraphs.md
-          - Use subgraphs: how-tos/subgraph.md
-      - Multi-agent:
-          - Overview: concepts/multi_agent.md
-          - Prebuilt implementation: agents/multi-agent.md
-          - Custom implementation: how-tos/multi_agent.md
-      - MCP:
-          - Overview: concepts/mcp.md
-          - Use MCP: agents/mcp.md
-      - Tracing:
-          - Overview: concepts/tracing.md
-          - Enable tracing: how-tos/enable-tracing.md
-          - Evaluate performance: agents/evals.md
+      - guides/index.md
+      - Agent development:
+          - Overview: agents/overview.md
+          - Run an agent: agents/run_agents.md
+      - LangGraph APIs:
+          - Graph API:
+              - Overview: concepts/low_level.md
+              - Use the Graph API: how-tos/graph-api.md
+          - Functional API:
+              - Overview: concepts/functional_api.md
+              - Use the Functional API: how-tos/use-functional-api.md
+          - Runtime: concepts/pregel.md
+      - Core capabilities:
+          - Streaming:
+              - Overview: concepts/streaming.md
+              - Stream outputs: how-tos/streaming.md
+          - Persistence:
+              - Overview: concepts/persistence.md
+          - Durable execution:
+              - Overview: concepts/durable_execution.md
+          - Memory:
+              - Overview: concepts/memory.md
+              - Add memory: how-tos/memory/add-memory.md
+          - Context:
+              - Add context: agents/context.md
+          - Models:
+              - Configure model: agents/models.md
+          - Tools:
+              - Overview: concepts/tools.md
+              - Call tools: how-tos/tool-calling.md
+          - Human-in-the-loop:
+              - Overview: concepts/human_in_the_loop.md
+              - Add human intervention: how-tos/human_in_the_loop/add-human-in-the-loop.md
+          - Time travel:
+              - Overview: concepts/time-travel.md
+              - Use time travel: how-tos/human_in_the_loop/time-travel.md
+          - Subgraphs:
+              - Overview: concepts/subgraphs.md
+              - Use subgraphs: how-tos/subgraph.md
+          - Multi-agent:
+              - Overview: concepts/multi_agent.md
+              - Prebuilt implementation: agents/multi-agent.md
+              - Custom implementation: how-tos/multi_agent.md
+          - MCP:
+              - Overview: concepts/mcp.md
+              - Use MCP: agents/mcp.md
+          - Tracing:
+              - Overview: concepts/tracing.md
+              - Enable tracing: how-tos/enable-tracing.md
+              - Evaluate performance: agents/evals.md
 
   - Reference:
-    - reference/index.md
-    - LangGraph:
-      - Graphs: reference/graphs.md
-      - Functional API: reference/func.md
-      - Pregel: reference/pregel.md
-      - Checkpointing: reference/checkpoints.md
-      - Storage: reference/store.md
-      - Caching: reference/cache.md
-      - Types: reference/types.md
-      - Runtime: reference/runtime.md
-      - Config: reference/config.md
-      - Errors: reference/errors.md
-      - Constants: reference/constants.md
-      - Channels: reference/channels.md
-    - Prebuilt:
-      - Agents: reference/agents.md
-      - Supervisor: reference/supervisor.md
-      - Swarm: reference/swarm.md
-      - MCP Adapters: reference/mcp.md
-    - LangGraph Platform:
-      - SDK (Python): cloud/reference/sdk/python_sdk_ref.md
-      - SDK (JS/TS): https://langchain-ai.github.io/langgraphjs/reference/modules/sdk.html
-      - RemoteGraph: reference/remote_graph.md
+      - reference/index.md
+      - LangGraph:
+          - Overview: reference/langgraph/index.md
+          - Graphs: reference/langgraph/graphs.md
+          - Functional API: reference/langgraph/func.md
+          - Pregel: reference/langgraph/pregel.md
+          - Checkpointing: reference/langgraph/checkpoints.md
+          - Storage: reference/langgraph/store.md
+          - Caching: reference/langgraph/cache.md
+          - Types: reference/langgraph/types.md
+          - Runtime: reference/langgraph/runtime.md
+          - Config: reference/langgraph/config.md
+          - Errors: reference/langgraph/errors.md
+          - Constants: reference/langgraph/constants.md
+          - Channels: reference/langgraph/channels.md
+      - LangChain Core:
+          - Overview: reference/langchain_core/index.md
+          - Language Models: reference/langchain_core/language-models.md
+      - Prebuilt:
+          - Agents: reference/agents.md
+          - Supervisor: reference/supervisor.md
+          - Swarm: reference/swarm.md
+          - MCP Adapters: reference/mcp.md
+      - LangGraph Platform:
+          - SDK (Python): cloud/reference/sdk/python_sdk_ref.md
+          - SDK (JS/TS): https://langchain-ai.github.io/langgraphjs/reference/modules/sdk.html
+          - RemoteGraph: reference/remote_graph.md
 
   - Examples:
-    - examples/index.md
-    - Template applications: concepts/template_applications.md  # TODO: make tutorial
-    - Agentic RAG: tutorials/rag/langgraph_agentic_rag.md
-    - Agent Supervisor: tutorials/multi_agent/agent_supervisor.md
-    - SQL agent: tutorials/sql/sql-agent.md
-    - Prebuilt chat UI: agents/ui.md
-    - Graph runs in LangSmith: how-tos/run-id-langsmith.md
+      - examples/index.md
+      - Template applications: concepts/template_applications.md # TODO: make tutorial
+      - Agentic RAG: tutorials/rag/langgraph_agentic_rag.md
+      - Agent Supervisor: tutorials/multi_agent/agent_supervisor.md
+      - SQL agent: tutorials/sql/sql-agent.md
+      - Prebuilt chat UI: agents/ui.md
+      - Graph runs in LangSmith: how-tos/run-id-langsmith.md
 
   - Additional resources:
-    - additional-resources/index.md
-    - agents/prebuilt.md # NOTE: prebuilt.md is auto-generated by `make build-prebuilt`
-    - LangGraph Academy course: https://academy.langchain.com/courses/intro-to-langgraph
-    - Case studies: adopters.md
-    - concepts/faq.md
-    - llms.txt: llms-txt-overview.md
-    - LangChain Forum: https://forum.langchain.com/
-    - Troubleshooting:
-        - Errors:
-          - troubleshooting/errors/index.md
-          - troubleshooting/errors/GRAPH_RECURSION_LIMIT.md
-          - troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.md
-          - troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md
-          - troubleshooting/errors/MULTIPLE_SUBGRAPHS.md
-          - troubleshooting/errors/INVALID_CHAT_HISTORY.md
-          - troubleshooting/errors/INVALID_LICENSE.md
-    
+      - additional-resources/index.md
+      - agents/prebuilt.md # NOTE: prebuilt.md is auto-generated by `make build-prebuilt`
+      - LangGraph Academy course: https://academy.langchain.com/courses/intro-to-langgraph
+      - Case studies: adopters.md
+      - concepts/faq.md
+      - llms.txt: llms-txt-overview.md
+      - LangChain Forum: https://forum.langchain.com/
+      - Troubleshooting:
+          - Errors:
+              - troubleshooting/errors/index.md
+              - troubleshooting/errors/GRAPH_RECURSION_LIMIT.md
+              - troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE.md
+              - troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE.md
+              - troubleshooting/errors/MULTIPLE_SUBGRAPHS.md
+              - troubleshooting/errors/INVALID_CHAT_HISTORY.md
+              - troubleshooting/errors/INVALID_LICENSE.md
 
 markdown_extensions:
   - abbr
@@ -371,7 +374,7 @@ extra:
 validation:
   # https://www.mkdocs.org/user-guide/configuration/
   # We are still raising for omitted files because they determine the breadcrumbs for pages.
-  omitted_files: info 
+  omitted_files: info
   absolute_links: warn
   unrecognized_links: warn
   anchors: warn
