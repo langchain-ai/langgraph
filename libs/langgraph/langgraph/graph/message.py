@@ -34,7 +34,7 @@ __all__ = (
     "MessageGraph",
 )
 
-Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
+Messages = Union[Sequence[MessageLikeRepresentation], MessageLikeRepresentation]
 
 REMOVE_ALL_MESSAGES = "__remove_all__"
 
