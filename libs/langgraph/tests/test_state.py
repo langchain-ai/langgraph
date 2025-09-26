@@ -338,27 +338,6 @@ def test_private_input_schema_conditional_edge():
     assert graph.invoke({"foo": 0}) == {"foo": 2, "bar": "meow"}
 
 
-def test_is_field_channel_basic_detection():
-    """Test basic channel detection with single channel annotations."""
-    # Test with EphemeralValue class
-    typ = Annotated[int, EphemeralValue]
-    result = _is_field_channel(typ)
-    assert isinstance(result, EphemeralValue)
-    assert result.typ is int
-
-    # Test with LastValue class
-    typ = Annotated[str, LastValue]
-    result = _is_field_channel(typ)
-    assert isinstance(result, LastValue)
-    assert result.typ is str
-
-    # Test with UntrackedValue class
-    typ = Annotated[list, UntrackedValue]
-    result = _is_field_channel(typ)
-    assert isinstance(result, UntrackedValue)
-    assert result.typ is list
-
-
 def test_is_field_channel() -> None:
     """Test channel detection across all scenarios."""
     # Basic detection
