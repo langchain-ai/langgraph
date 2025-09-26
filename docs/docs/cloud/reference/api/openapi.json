@@ -3268,7 +3268,7 @@
                                       "required": ["kind", "text"]
                                     },
                                     {
-                                      "title": "Data Part", 
+                                      "title": "Data Part",
                                       "type": "object",
                                       "properties": {
                                         "kind": {
@@ -4393,6 +4393,24 @@
           }
         }
       },
+      "Interrupt": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value": {
+            "type": "object"
+          }
+        },
+        "title": "Interrupt",
+        "required": [
+          "value"
+        ]
+      },
       "RunCreateStateful": {
         "properties": {
           "assistant_id": {
@@ -4950,7 +4968,7 @@
               "type": "string",
               "enum": [
                 "assistant_id",
-                "graph_id", 
+                "graph_id",
                 "name",
                 "description",
                 "config",
@@ -5835,22 +5853,14 @@
         }
       },
       "Interrupt": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "value": {
-            "type": "object"
+        "description": "An interrupt to be applied to a thread.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Interrupt"
+            }
           }
-        },
-        "title": "Interrupt",
-        "required": [
-          "value"
-        ]
+        }
       }
     }
   }
