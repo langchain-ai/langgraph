@@ -1369,10 +1369,14 @@ def _get_channel(
 def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
-        if len(meta) >= 1 and isinstance(meta[-1], BaseChannel):
-            return meta[-1]
-        elif len(meta) >= 1 and isclass(meta[-1]) and issubclass(meta[-1], BaseChannel):
-            return meta[-1](typ.__origin__ if hasattr(typ, "__origin__") else typ)
+        # Search through all annotated medata to find channel annotations
+        for item in meta:
+            if isinstance(item, BaseChannel):
+                return item
+            elif isclass(item) and issubclass(item, BaseChannel):
+                # ex, Annotated[int, EphemeralValue, SomeOtherAnnotation]
+                # would return EphemeralValue(int)
+                return item(typ.__origin__ if hasattr(typ, "__origin__") else typ)
     return None
 
 
