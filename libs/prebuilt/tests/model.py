@@ -30,6 +30,7 @@ class FakeToolCallingModel(BaseChatModel):
     structured_response: Optional[StructuredResponse] = None
     index: int = 0
     tool_style: Literal["openai", "anthropic"] = "openai"
+    last_bind_kwargs: Optional[Dict[str, Any]] = None
 
     def _generate(
         self,
@@ -68,6 +69,7 @@ class FakeToolCallingModel(BaseChatModel):
         tools: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
+        self.last_bind_kwargs = dict(kwargs)
         if len(tools) == 0:
             raise ValueError("Must provide at least one tool")
 

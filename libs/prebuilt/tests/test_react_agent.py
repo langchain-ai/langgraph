@@ -183,6 +183,36 @@ def test_runnable_prompt():
     assert response == expected_response
 
 
+def test_tool_bind_kwargs_strict_true():
+    model = FakeToolCallingModel()
+
+    @dec_tool
+    def some_tool() -> str:
+        """Return a static value."""
+        return "bar"
+
+    create_react_agent(
+        model,
+        [some_tool],
+        tool_bind_kwargs={"strict": True},
+    )
+
+    assert model.last_bind_kwargs == {"strict": True}
+
+
+def test_tool_bind_kwargs_defaults_to_model_behavior():
+    model = FakeToolCallingModel()
+
+    @dec_tool
+    def some_tool() -> str:
+        """Return a static value."""
+        return "bar"
+
+    create_react_agent(model, [some_tool])
+
+    assert model.last_bind_kwargs == {}
+
+
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_prompt_with_store(version: str):
     def add(a: int, b: int):
