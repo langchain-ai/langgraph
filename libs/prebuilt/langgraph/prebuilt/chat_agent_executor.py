@@ -275,6 +275,7 @@ def create_react_agent(
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
+    tool_bind_kwargs: Optional[dict[str, Any]] = None,
     name: Optional[str] = None,
     **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
@@ -422,6 +423,9 @@ def create_react_agent(
         name: An optional name for the CompiledStateGraph.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
+        tool_bind_kwargs: Additional keyword arguments to forward to
+            `model.bind_tools()` when tools are automatically bound. Has no
+            effect when the model instance is already configured with tools.
 
     !!! warning "`config_schema` Deprecated"
         The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
@@ -539,8 +543,10 @@ def create_react_agent(
             _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
             and len(tool_classes + llm_builtin_tools) > 0
         ):
+            bind_kwargs = dict(tool_bind_kwargs or {})
             model = cast(BaseChatModel, model).bind_tools(
-                tool_classes + llm_builtin_tools  # type: ignore[operator]
+                tool_classes + llm_builtin_tools,  # type: ignore[operator]
+                **bind_kwargs,
             )
 
         static_model: Optional[Runnable] = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
