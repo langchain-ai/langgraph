@@ -188,7 +188,7 @@ def ui_message_reducer(
 
         messages = ui_message_reducer(
             [{"type": "ui", "id": "1", "name": "Chat", "props": {}}],
-            {"type": "remove-ui", "id": "1"}
+            {"type": "remove-ui", "id": "1"},
         )
 
     """

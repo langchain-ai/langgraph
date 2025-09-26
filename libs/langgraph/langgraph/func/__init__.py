@@ -150,15 +150,18 @@ def task(
         ```python
         from langgraph.func import entrypoint, task
 
+
         @task
         def add_one(a: int) -> int:
             return a + 1
+
 
         @entrypoint()
         def add_one(numbers: list[int]) -> list[int]:
             futures = [add_one(n) for n in numbers]
             results = [f.result() for f in futures]
             return results
+
 
         # Call the entrypoint
         add_one.invoke([1, 2, 3])  # Returns [2, 3, 4]
@@ -169,14 +172,17 @@ def task(
         import asyncio
         from langgraph.func import entrypoint, task
 
+
         @task
         async def add_one(a: int) -> int:
             return a + 1
+
 
         @entrypoint()
         async def add_one(numbers: list[int]) -> list[int]:
             futures = [add_one(n) for n in numbers]
             return asyncio.gather(*futures)
+
 
         # Call the entrypoint
         await add_one.ainvoke([1, 2, 3])  # Returns [2, 3, 4]
@@ -342,15 +348,13 @@ class entrypoint(Generic[ContextT]):
 
         from langgraph.func import entrypoint
 
+
         @entrypoint(checkpointer=InMemorySaver())
         def my_workflow(input_data: str, previous: Optional[str] = None) -> str:
             return "world"
 
-        config = {
-            "configurable": {
-                "thread_id": "some_thread"
-            }
-        }
+
+        config = {"configurable": {"thread_id": "some_thread"}}
         my_workflow.invoke("hello", config)
         ```
 
@@ -367,19 +371,21 @@ class entrypoint(Generic[ContextT]):
 
         from langgraph.func import entrypoint
 
+
         @entrypoint(checkpointer=InMemorySaver())
-        def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
+        def my_workflow(
+            number: int,
+            *,
+            previous: Any = None,
+        ) -> entrypoint.final[int, int]:
             previous = previous or 0
             # This will return the previous value to the caller, saving
             # 2 * number to the checkpoint, which will be used in the next invocation
             # for the `previous` parameter.
             return entrypoint.final(value=previous, save=2 * number)
 
-        config = {
-            "configurable": {
-                "thread_id": "some_thread"
-            }
-        }
+
+        config = {"configurable": {"thread_id": "some_thread"}}
 
         my_workflow.invoke(3, config)  # 0 (previous was None)
         my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocation)
@@ -434,19 +440,21 @@ class entrypoint(Generic[ContextT]):
             from langgraph.checkpoint.memory import InMemorySaver
             from langgraph.func import entrypoint
 
+
             @entrypoint(checkpointer=InMemorySaver())
-            def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
+            def my_workflow(
+                number: int,
+                *,
+                previous: Any = None,
+            ) -> entrypoint.final[int, int]:
                 previous = previous or 0
                 # This will return the previous value to the caller, saving
                 # 2 * number to the checkpoint, which will be used in the next invocation
                 # for the `previous` parameter.
                 return entrypoint.final(value=previous, save=2 * number)
 
-            config = {
-                "configurable": {
-                    "thread_id": "1"
-                }
-            }
+
+            config = {"configurable": {"thread_id": "1"}}
 
             my_workflow.invoke(3, config)  # 0 (previous was None)
             my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocation)

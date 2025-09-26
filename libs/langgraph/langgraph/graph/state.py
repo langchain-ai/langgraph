@@ -141,24 +141,30 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         from langgraph.graph import StateGraph
         from langgraph.runtime import Runtime
 
+
         def reducer(a: list, b: int | None) -> list:
             if b is not None:
                 return a + [b]
             return a
 
+
         class State(TypedDict):
             x: Annotated[list, reducer]
+
 
         class Context(TypedDict):
             r: float
 
+
         graph = StateGraph(state_schema=State, context_schema=Context)
+
 
         def node(state: State, runtime: Runtime[Context]) -> dict:
             r = runtime.context.get("r", 1.0)
             x = state["x"][-1]
             next_value = x * r * (1 - x)
             return {"x": next_value}
+
 
         graph.add_node("A", node)
         graph.set_entry_point("A")
@@ -385,11 +391,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             from langchain_core.runnables import RunnableConfig
             from langgraph.graph import START, StateGraph
 
+
             class State(TypedDict):
                 x: int
 
+
             def my_node(state: State, config: RunnableConfig) -> State:
                 return {"x": state["x"] + 1}
+
 
             builder = StateGraph(State)
             builder.add_node(my_node)  # node name will be 'my_node'

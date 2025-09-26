@@ -31,6 +31,7 @@ import httpx
 import orjson
 
 import langgraph_sdk
+from langgraph_sdk.errors import _araise_for_status_typed, _raise_for_status_typed
 from langgraph_sdk.schema import (
     All,
     Assistant,
@@ -310,15 +311,7 @@ class HttpClient:
         r = await self.client.get(path, params=params, headers=headers)
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = (await r.aread()).decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        await _araise_for_status_typed(r)
         return await _adecode_json(r)
 
     async def post(
@@ -343,15 +336,7 @@ class HttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = (await r.aread()).decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        await _araise_for_status_typed(r)
         return await _adecode_json(r)
 
     async def put(
@@ -372,15 +357,7 @@ class HttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = (await r.aread()).decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        await _araise_for_status_typed(r)
         return await _adecode_json(r)
 
     async def patch(
@@ -401,15 +378,7 @@ class HttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = (await r.aread()).decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        await _araise_for_status_typed(r)
         return await _adecode_json(r)
 
     async def delete(
@@ -427,15 +396,7 @@ class HttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = (await r.aread()).decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        await _araise_for_status_typed(r)
 
     async def request_reconnect(
         self,
@@ -536,15 +497,7 @@ class HttpClient:
                 if reconnect_path is None and on_response:
                     on_response(res)
                 # check status
-                try:
-                    res.raise_for_status()
-                except httpx.HTTPStatusError as e:
-                    body = (await res.aread()).decode()
-                    if sys.version_info >= (3, 11):
-                        e.add_note(body)
-                    else:
-                        logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-                    raise e
+                await _araise_for_status_typed(res)
                 # check content type
                 content_type = res.headers.get("content-type", "").partition(";")[0]
                 if "text/event-stream" not in content_type:
@@ -3622,15 +3575,7 @@ class SyncHttpClient:
         r = self.client.get(path, params=params, headers=headers)
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = r.read().decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        _raise_for_status_typed(r)
         return _decode_json(r)
 
     def post(
@@ -3654,15 +3599,7 @@ class SyncHttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = r.read().decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        _raise_for_status_typed(r)
         return _decode_json(r)
 
     def put(
@@ -3684,15 +3621,7 @@ class SyncHttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = r.read().decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        _raise_for_status_typed(r)
         return _decode_json(r)
 
     def patch(
@@ -3713,15 +3642,7 @@ class SyncHttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = r.read().decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        _raise_for_status_typed(r)
         return _decode_json(r)
 
     def delete(
@@ -3739,15 +3660,7 @@ class SyncHttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = r.read().decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        _raise_for_status_typed(r)
 
     def request_reconnect(
         self,
@@ -3850,15 +3763,7 @@ class SyncHttpClient:
                 if reconnect_path is None and on_response:
                     on_response(res)
                 # check status
-                try:
-                    res.raise_for_status()
-                except httpx.HTTPStatusError as e:
-                    body = (res.read()).decode()
-                    if sys.version_info >= (3, 11):
-                        e.add_note(body)
-                    else:
-                        logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-                    raise e
+                _raise_for_status_typed(res)
                 # check content type
                 content_type = res.headers.get("content-type", "").partition(";")[0]
                 if "text/event-stream" not in content_type:
