@@ -9211,3 +9211,58 @@ async def test_astream_waiter_cleanup_on_cancel(
     assert recorded_tasks, "expected stream.wait() task to be created"
     assert set(finished_tasks) == set(recorded_tasks)
     assert all(t.done() for t in recorded_tasks)
+
+
+async def test_supersteps_populate_task_results(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        num: int
+        text: str
+
+    def double(state: State) -> State:
+        return {"num": state["num"] * 2, "text": state["text"] * 2}
+
+    graph = (
+        StateGraph(State)
+        .add_node("double", double)
+        .add_edge(START, "double")
+        .add_edge("double", END)
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    # reference run with ainvoke
+    ref_cfg = {"configurable": {"thread_id": "ref"}}
+    await graph.ainvoke({"num": 1, "text": "one"}, ref_cfg)
+    ref_history = [h async for h in graph.aget_state_history(ref_cfg)]
+
+    # Helper: pull first task result for a node name from history
+    def first_task_result(history: list[StateSnapshot], node: str) -> Any:
+        for s in history:
+            for t in s.tasks:
+                if t.name == node:
+                    return t.result
+        return None
+
+    ref_start_result = first_task_result(ref_history, "__start__")
+    ref_double_result = first_task_result(ref_history, "double")
+    assert ref_start_result == {"num": 1, "text": "one"}
+    assert ref_double_result == {"num": 2, "text": "oneone"}
+
+    # using supersteps
+    bulk_cfg = {"configurable": {"thread_id": "bulk"}}
+    await graph.abulk_update_state(
+        bulk_cfg,
+        [
+            [StateUpdate(values={}, as_node="__input__")],
+            [StateUpdate(values={"num": 1, "text": "one"}, as_node="__start__")],
+            [StateUpdate(values={"num": 2, "text": "oneone"}, as_node="double")],
+        ],
+    )
+    bulk_history = [h async for h in graph.aget_state_history(bulk_cfg)]
+
+    bulk_start_result = first_task_result(bulk_history, "__start__")
+    bulk_double_result = first_task_result(bulk_history, "double")
+
+    assert bulk_start_result == ref_start_result == {"num": 1, "text": "one"}
+    assert bulk_double_result == ref_double_result == {"num": 2, "text": "oneone"}

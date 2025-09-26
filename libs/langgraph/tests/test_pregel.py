@@ -8516,3 +8516,57 @@ def test_interrupt_stream_mode_values():
 
     result = [*app.stream(State(), stream_mode="values")]
     assert "__interrupt__" in result[-1]
+
+
+def test_supersteps_populate_task_results(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        num: int
+        text: str
+
+    def double(state: State) -> State:
+        return {"num": state["num"] * 2, "text": state["text"] * 2}
+
+    graph = (
+        StateGraph(State)
+        .add_node("double", double)
+        .add_edge(START, "double")
+        .add_edge("double", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    def first_task_result(history: list[StateSnapshot], node: str) -> Any:
+        for s in history:
+            for t in s.tasks:
+                if t.name == node:
+                    return t.result
+        return None
+
+    # reference run with invoke
+    ref_cfg = {"configurable": {"thread_id": "ref"}}
+    graph.invoke({"num": 1, "text": "one"}, ref_cfg)
+    ref_history = list(graph.get_state_history(ref_cfg))
+
+    ref_start_result = first_task_result(ref_history, "__start__")
+    ref_double_result = first_task_result(ref_history, "double")
+    assert ref_start_result == {"num": 1, "text": "one"}
+    assert ref_double_result == {"num": 2, "text": "oneone"}
+
+    # using supersteps
+    bulk_cfg = {"configurable": {"thread_id": "bulk"}}
+    graph.bulk_update_state(
+        bulk_cfg,
+        [
+            [StateUpdate(values={}, as_node="__input__")],
+            [StateUpdate(values={"num": 1, "text": "one"}, as_node="__start__")],
+            [StateUpdate(values={"num": 2, "text": "oneone"}, as_node="double")],
+        ],
+    )
+    bulk_history = list(graph.get_state_history(bulk_cfg))
+
+    bulk_start_result = first_task_result(bulk_history, "__start__")
+    bulk_double_result = first_task_result(bulk_history, "double")
+
+    assert bulk_start_result == ref_start_result == {"num": 1, "text": "one"}
+    assert bulk_double_result == ref_double_result == {"num": 2, "text": "oneone"}

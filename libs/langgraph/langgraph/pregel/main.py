@@ -1695,12 +1695,10 @@ class Pregel(
 
                 return patch_checkpoint_map(next_config, saved.metadata)
 
-            # apply pending writes, if not on specific checkpoint
-            if (
-                CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
-                and saved is not None
-                and saved.pending_writes
-            ):
+            # get next tasks by node
+            tasks_by_node: dict[str, list[str]] = defaultdict(list)
+            use_idx: dict[str, int] = defaultdict(int)
+            if saved is not None and saved.pending_writes is not None:
                 # tasks for this checkpoint
                 next_tasks = prepare_next_tasks(
                     checkpoint,
@@ -1716,6 +1714,10 @@ class Pregel(
                     checkpointer=checkpointer,
                     manager=None,
                 )
+                # collect task ids to reuse so we can properly attach task results
+                for t in next_tasks.values():
+                    tasks_by_node[t.name].append(t.id)
+
                 # apply null writes
                 if null_writes := [
                     w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
@@ -1792,13 +1794,16 @@ class Pregel(
 
             for as_node, values, provided_task_id in valid_updates:
                 # create task to run all writers of the chosen node
+                reuse = tasks_by_node.get(as_node, [])
                 writers = self.nodes[as_node].flat_writers
                 if not writers:
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 writes: deque[tuple[str, Any]] = deque()
                 task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
                 task_id = provided_task_id or str(
-                    uuid5(UUID(checkpoint["id"]), INTERRUPT)
+                    reuse[use_idx[as_node]]
+                    if use_idx[as_node] < len(reuse)
+                    else uuid5(UUID(checkpoint["id"]), INTERRUPT)
                 )
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
@@ -2151,12 +2156,11 @@ class Pregel(
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
-            # apply pending writes, if not on specific checkpoint
-            if (
-                CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
-                and saved is not None
-                and saved.pending_writes
-            ):
+
+            # get next tasks by node
+            tasks_by_node: dict[str, list[str]] = defaultdict(list)
+            use_idx: dict[str, int] = defaultdict(int)
+            if saved is not None and saved.pending_writes is not None:
                 # tasks for this checkpoint
                 next_tasks = prepare_next_tasks(
                     checkpoint,
@@ -2172,6 +2176,10 @@ class Pregel(
                     checkpointer=checkpointer,
                     manager=None,
                 )
+                # collect task ids to reuse so we can properly attach task results
+                for t in next_tasks.values():
+                    tasks_by_node[t.name].append(t.id)
+
                 # apply null writes
                 if null_writes := [
                     w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
@@ -2243,14 +2251,18 @@ class Pregel(
 
             for as_node, values, provided_task_id in valid_updates:
                 # create task to run all writers of the chosen node
+                reuse = tasks_by_node.get(as_node, [])
                 writers = self.nodes[as_node].flat_writers
                 if not writers:
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 writes: deque[tuple[str, Any]] = deque()
                 task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
                 task_id = provided_task_id or str(
-                    uuid5(UUID(checkpoint["id"]), INTERRUPT)
+                    reuse[use_idx[as_node]]
+                    if use_idx[as_node] < len(reuse)
+                    else uuid5(UUID(checkpoint["id"]), INTERRUPT)
                 )
+                use_idx[as_node] += 1
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
                 run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
