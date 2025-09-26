@@ -27,14 +27,18 @@ from langchain_core.messages import (
 from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langchain_core.tools import InjectedToolCallId, ToolException
 from langchain_core.tools import tool as dec_tool
+from langgraph.checkpoint.base import BaseCheckpointer
+from langgraph.config import get_stream_writer
+from langgraph.graph import START, MessagesState, StateGraph, add_messages
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.runtime import Runtime
+from langgraph.store.base import BaseStore
+from langgraph.store.memory import InMemoryStore
+from langgraph.types import Command, Interrupt, interrupt
 from pydantic import BaseModel, Field
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
 
-from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.config import get_stream_writer
-from langgraph.graph import START, MessagesState, StateGraph, add_messages
-from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.prebuilt import (
     ToolNode,
     create_react_agent,
@@ -54,10 +58,6 @@ from langgraph.prebuilt.tool_node import (
     _get_state_args,
     _infer_handled_types,
 )
-from langgraph.runtime import Runtime
-from langgraph.store.base import BaseStore
-from langgraph.store.memory import InMemoryStore
-from langgraph.types import Command, Interrupt, interrupt
 from tests.any_str import AnyStr
 from tests.messages import _AnyIdHumanMessage, _AnyIdToolMessage
 from tests.model import FakeToolCallingModel
@@ -68,7 +68,7 @@ REACT_TOOL_CALL_VERSIONS = ["v1", "v2"]
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
-def test_no_prompt(sync_checkpointer: BaseCheckpointSaver, version: str) -> None:
+def test_no_prompt(sync_checkpointer: BaseCheckpointer, version: str) -> None:
     model = FakeToolCallingModel()
 
     agent = create_react_agent(
@@ -99,7 +99,7 @@ def test_no_prompt(sync_checkpointer: BaseCheckpointSaver, version: str) -> None
     assert saved.pending_writes == []
 
 
-async def test_no_prompt_async(async_checkpointer: BaseCheckpointSaver) -> None:
+async def test_no_prompt_async(async_checkpointer: BaseCheckpointer) -> None:
     model = FakeToolCallingModel()
 
     agent = create_react_agent(model, [], checkpointer=async_checkpointer)
@@ -512,7 +512,7 @@ class CustomStatePydantic(AgentStatePydantic):
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 @pytest.mark.parametrize("state_schema", [CustomState, CustomStatePydantic])
 def test_react_agent_update_state(
-    sync_checkpointer: BaseCheckpointSaver,
+    sync_checkpointer: BaseCheckpointer,
     version: Literal["v1", "v2"],
     state_schema: StateSchemaType,
 ) -> None:
@@ -576,7 +576,7 @@ def test_react_agent_update_state(
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_react_agent_parallel_tool_calls(
-    sync_checkpointer: BaseCheckpointSaver, version: str
+    sync_checkpointer: BaseCheckpointer, version: str
 ) -> None:
     human_assistance_execution_count = 0
 
@@ -1095,7 +1095,7 @@ def test_inspect_react() -> None:
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_react_with_subgraph_tools(
-    sync_checkpointer: BaseCheckpointSaver, version: Literal["v1", "v2"]
+    sync_checkpointer: BaseCheckpointer, version: Literal["v1", "v2"]
 ) -> None:
     class State(TypedDict):
         a: int
@@ -1422,7 +1422,7 @@ async def test_react_agent_subgraph_streaming(version: Literal["v1", "v2"]) -> N
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_tool_node_node_interrupt(
-    sync_checkpointer: BaseCheckpointSaver, version: str
+    sync_checkpointer: BaseCheckpointer, version: str
 ) -> None:
     def tool_normal(some_val: int) -> str:
         """Tool docstring."""

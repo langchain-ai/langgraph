@@ -577,6 +577,10 @@
           "type": "boolean",
           "description": "Optional. If True, /threads routes are removed.\n\nDefault is False.\n"
         },
+        "enable_custom_route_auth": {
+          "type": "boolean",
+          "description": "Optional. If True, authentication is enabled for custom routes,\nnot just the routes that are protected by default.\n(Routes protected by default include /assistants, /threads, and /runs).\n\nDefault is False. This flag only affects authentication behavior\nif `app` is provided and contains custom routes.\n"
+        },
         "logging_headers": {
           "anyOf": [
             {
@@ -587,6 +591,20 @@
             }
           ],
           "description": "Optional. Defines which headers are excluded from logging."
+        },
+        "middleware_order": {
+          "anyOf": [
+            {
+              "enum": [
+                "auth_first",
+                "middleware_first"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines the order in which to apply server customizations.\n"
         }
       },
       "required": []

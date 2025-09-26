@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from typing import (  # noqa: UP035
     Any,
@@ -12,6 +13,7 @@ from typing import (  # noqa: UP035
 )
 
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import deprecated
 
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
@@ -109,7 +111,7 @@ class CheckpointTuple(NamedTuple):
     pending_writes: list[PendingWrite] | None = None
 
 
-class BaseCheckpointSaver(Generic[V]):
+class BaseCheckpointer(Generic[V]):
     """Base class for creating a graph checkpointer.
 
     Checkpointers allow LangGraph agents to persist their state
@@ -369,6 +371,19 @@ class BaseCheckpointSaver(Generic[V]):
             return 1
         else:
             return current + 1
+
+
+@deprecated(
+    "`BaseCheckpointSaver` has been renamed. Please use `BaseCheckpointer` instead."
+)
+class BaseCheckpointSaver(BaseCheckpointer):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "`BaseCheckpointSaver` has been renamed. Please use `BaseCheckpointer` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
 
 
 class EmptyChannelError(Exception):

@@ -7,10 +7,10 @@ import textwrap
 from typing import Any, Callable
 
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
+from langgraph.checkpoint.base import ChannelVersions
 from typing_extensions import override
 
 from langgraph._internal._runnable import RunnableCallable, RunnableSeq
-from langgraph.checkpoint.base import ChannelVersions
 from langgraph.pregel.protocol import PregelProtocol
 
 

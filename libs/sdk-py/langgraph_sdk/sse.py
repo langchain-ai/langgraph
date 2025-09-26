@@ -81,6 +81,12 @@ class SSEDecoder:
         self._last_event_id = ""
         self._retry: int | None = None
 
+    @property
+    def last_event_id(self) -> str | None:
+        """Return the last event identifier that was seen."""
+
+        return self._last_event_id or None
+
     def decode(self, line: bytes) -> StreamPart | None:
         # See: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation  # noqa: E501
 

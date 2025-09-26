@@ -29,6 +29,7 @@ from langchain_core.runnables import (
 from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool, create_schema_from_function
 from langchain_core.utils.pydantic import is_basemodel_subclass
+from langgraph._internal._runnable import RunnableCallable
 from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1

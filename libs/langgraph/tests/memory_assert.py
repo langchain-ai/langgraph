@@ -5,9 +5,8 @@ from functools import partial
 from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
-
 from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -15,6 +14,7 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
 )
 from langgraph.checkpoint.memory import InMemorySaver, PersistentDict
+
 from langgraph.constants import TASKS
 
 
@@ -26,7 +26,7 @@ class NoopSerializer(SerializerProtocol):
         return "type", obj
 
 
-class MemorySaverNeedsPendingSendsMigration(BaseCheckpointSaver):
+class MemorySaverNeedsPendingSendsMigration(BaseCheckpointer):
     def __init__(self) -> None:
         self.saver = InMemorySaver()
 

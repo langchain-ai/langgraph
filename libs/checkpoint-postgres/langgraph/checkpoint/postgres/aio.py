@@ -7,11 +7,6 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
-from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
-from psycopg.rows import DictRow, dict_row
-from psycopg.types.json import Jsonb
-from psycopg_pool import AsyncConnectionPool
-
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     ChannelVersions,
@@ -21,10 +16,15 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
     get_checkpoint_metadata,
 )
+from langgraph.checkpoint.serde.base import SerializerProtocol
+from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
+from psycopg.rows import DictRow, dict_row
+from psycopg.types.json import Jsonb
+from psycopg_pool import AsyncConnectionPool
+
 from langgraph.checkpoint.postgres import _ainternal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
-from langgraph.checkpoint.serde.base import SerializerProtocol
 
 Conn = _ainternal.Conn  # For backward compatibility
 
@@ -409,7 +409,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             {
                 **value["checkpoint"],
                 "channel_values": {
-                    **value["checkpoint"].get("channel_values"),
+                    **(value["checkpoint"].get("channel_values") or {}),
                     **self._load_blobs(value["channel_values"]),
                 },
             },

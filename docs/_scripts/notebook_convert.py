@@ -1,3 +1,5 @@
+"""Convert Jupyter notebooks to markdown with custom processing."""
+
 import ast
 import os
 import re

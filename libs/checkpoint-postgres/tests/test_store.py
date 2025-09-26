@@ -9,8 +9,6 @@ from uuid import uuid4
 
 import pytest
 from langchain_core.embeddings import Embeddings
-from psycopg import Connection
-
 from langgraph.store.base import (
     GetOp,
     Item,
@@ -19,6 +17,8 @@ from langgraph.store.base import (
     PutOp,
     SearchOp,
 )
+from psycopg import Connection
+
 from langgraph.store.postgres import PostgresStore
 from tests.conftest import (
     DEFAULT_URI,
@@ -861,3 +861,41 @@ def test_store_ttl(store):
     # Now has been (TTL_SECONDS-2)*2 > TTL_SECONDS + TTL_SECONDS/2
     res = store.search(ns, query="bar", refresh_ttl=False)
     assert len(res) == 0
+
+
+@pytest.mark.parametrize(
+    "vector_type,distance_type",
+    [
+        ("vector", "cosine"),
+        ("vector", "inner_product"),
+        ("halfvec", "cosine"),
+        ("halfvec", "inner_product"),
+    ],
+)
+def test_non_ascii(
+    request: Any,
+    fake_embeddings: CharacterEmbeddings,
+    vector_type: str,
+    distance_type: str,
+) -> None:
+    """Test support for non-ascii characters"""
+    with _create_vector_store(vector_type, distance_type, fake_embeddings) as store:
+        store.put(("user_123", "memories"), "1", {"text": "这是中文"})  # Chinese
+        store.put(
+            ("user_123", "memories"), "2", {"text": "これは日本語です"}
+        )  # Japanese
+        store.put(("user_123", "memories"), "3", {"text": "이건 한국어야"})  # Korean
+        store.put(("user_123", "memories"), "4", {"text": "Это русский"})  # Russian
+        store.put(("user_123", "memories"), "5", {"text": "यह रूसी है"})  # Hindi
+
+        result1 = store.search(("user_123", "memories"), query="这是中文")
+        result2 = store.search(("user_123", "memories"), query="これは日本語です")
+        result3 = store.search(("user_123", "memories"), query="이건 한국어야")
+        result4 = store.search(("user_123", "memories"), query="Это русский")
+        result5 = store.search(("user_123", "memories"), query="यह रूसी है")
+
+        assert result1[0].key == "1"
+        assert result2[0].key == "2"
+        assert result3[0].key == "3"
+        assert result4[0].key == "4"
+        assert result5[0].key == "5"

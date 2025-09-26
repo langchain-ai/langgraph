@@ -9,7 +9,6 @@ from typing import Any, Literal, Optional, Union, cast
 
 import pytest
 from langchain_core.embeddings import Embeddings
-
 from langgraph.store.base import (
     GetOp,
     Item,
@@ -18,6 +17,7 @@ from langgraph.store.base import (
     PutOp,
     SearchOp,
 )
+
 from langgraph.store.sqlite import SqliteStore
 from langgraph.store.sqlite.base import SqliteIndexConfig
 
@@ -1067,3 +1067,31 @@ def test_sql_injection_vulnerability(store: SqliteStore) -> None:
 
     with pytest.raises(ValueError, match="Invalid filter key"):
         store.search(("docs",), filter={malicious_key: "dummy"})
+
+
+@pytest.mark.parametrize("distance_type", VECTOR_TYPES)
+def test_non_ascii(
+    fake_embeddings: CharacterEmbeddings,
+    distance_type: str,
+) -> None:
+    """Test support for non-ascii characters"""
+    with create_vector_store(fake_embeddings, distance_type=distance_type) as store:
+        store.put(("user_123", "memories"), "1", {"text": "这是中文"})  # Chinese
+        store.put(
+            ("user_123", "memories"), "2", {"text": "これは日本語です"}
+        )  # Japanese
+        store.put(("user_123", "memories"), "3", {"text": "이건 한국어야"})  # Korean
+        store.put(("user_123", "memories"), "4", {"text": "Это русский"})  # Russian
+        store.put(("user_123", "memories"), "5", {"text": "यह रूसी है"})  # Hindi
+
+        result1 = store.search(("user_123", "memories"), query="这是中文")
+        result2 = store.search(("user_123", "memories"), query="これは日本語です")
+        result3 = store.search(("user_123", "memories"), query="이건 한국어야")
+        result4 = store.search(("user_123", "memories"), query="Это русский")
+        result5 = store.search(("user_123", "memories"), query="यह रूसी है")
+
+        assert result1[0].key == "1"
+        assert result2[0].key == "2"
+        assert result3[0].key == "3"
+        assert result4[0].key == "4"
+        assert result5[0].key == "5"

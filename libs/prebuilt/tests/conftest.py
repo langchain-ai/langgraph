@@ -3,10 +3,10 @@ from collections.abc import AsyncIterator, Iterator
 from uuid import UUID
 
 import pytest
+from langgraph.checkpoint.base import BaseCheckpointer
+from langgraph.store.base import BaseStore
 from pytest_mock import MockerFixture
 
-from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.store.base import BaseStore
 from tests.conftest_checkpointer import (
     _checkpointer_memory,
     _checkpointer_postgres,
@@ -150,7 +150,7 @@ async def async_store(request: pytest.FixtureRequest) -> AsyncIterator[BaseStore
 )
 def sync_checkpointer(
     request: pytest.FixtureRequest,
-) -> Iterator[BaseCheckpointSaver]:
+) -> Iterator[BaseCheckpointer]:
     checkpointer_name = request.param
     if checkpointer_name == "memory":
         with _checkpointer_memory() as checkpointer:
@@ -177,7 +177,7 @@ def sync_checkpointer(
 )
 async def async_checkpointer(
     request: pytest.FixtureRequest,
-) -> AsyncIterator[BaseCheckpointSaver]:
+) -> AsyncIterator[BaseCheckpointer]:
     checkpointer_name = request.param
     if checkpointer_name == "memory":
         with _checkpointer_memory() as checkpointer:

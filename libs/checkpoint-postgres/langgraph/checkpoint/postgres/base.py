@@ -5,15 +5,14 @@ from collections.abc import Sequence
 from typing import Any, Optional, cast
 
 from langchain_core.runnables import RunnableConfig
-from psycopg.types.json import Jsonb
-
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS
+from psycopg.types.json import Jsonb
 
 MetadataInput = Optional[dict[str, Any]]
 
@@ -140,7 +139,7 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 """
 
 
-class BasePostgresSaver(BaseCheckpointSaver[str]):
+class BasePostgresSaver(BaseCheckpointer[str]):
     SELECT_SQL = SELECT_SQL
     SELECT_PENDING_SENDS_SQL = SELECT_PENDING_SENDS_SQL
     MIGRATIONS = MIGRATIONS

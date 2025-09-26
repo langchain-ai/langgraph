@@ -3,10 +3,9 @@ from contextlib import asynccontextmanager, contextmanager
 from uuid import uuid4
 
 import pytest
-from psycopg import AsyncConnection, Connection
-
 from langgraph.store.memory import InMemoryStore
 from langgraph.store.postgres import AsyncPostgresStore, PostgresStore
+from psycopg import AsyncConnection, Connection
 
 DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
 

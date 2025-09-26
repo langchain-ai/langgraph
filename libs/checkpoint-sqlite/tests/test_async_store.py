@@ -8,7 +8,6 @@ from contextlib import asynccontextmanager
 from typing import Optional, Union, cast
 
 import pytest
-
 from langgraph.store.base import (
     GetOp,
     Item,
@@ -16,6 +15,7 @@ from langgraph.store.base import (
     PutOp,
     SearchOp,
 )
+
 from langgraph.store.sqlite import AsyncSqliteStore
 from langgraph.store.sqlite.base import SqliteIndexConfig
 from tests.test_store import CharacterEmbeddings

@@ -5,7 +5,6 @@ from collections.abc import Sequence
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
-
 from langgraph.checkpoint.base import get_checkpoint_id
 
 

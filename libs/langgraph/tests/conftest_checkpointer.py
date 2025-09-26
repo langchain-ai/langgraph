@@ -3,14 +3,13 @@ from contextlib import asynccontextmanager, contextmanager
 from uuid import uuid4
 
 import pytest
-from psycopg import AsyncConnection, Connection
-from psycopg_pool import AsyncConnectionPool, ConnectionPool
-
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from psycopg import AsyncConnection, Connection
+from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
 pytest.register_assert_rewrite("tests.memory_assert")
 

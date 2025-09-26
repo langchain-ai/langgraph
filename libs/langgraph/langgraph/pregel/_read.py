@@ -231,9 +231,10 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Any:
+        self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         return self.bound.invoke(
             input,
-            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            merge_configs(self_config, config),
             **kwargs,
         )
 
@@ -243,9 +244,10 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Any:
+        self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         return await self.bound.ainvoke(
             input,
-            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            merge_configs(self_config, config),
             **kwargs,
         )
 
@@ -255,9 +257,10 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Iterator[Any]:
+        self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         yield from self.bound.stream(
             input,
-            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            merge_configs(self_config, config),
             **kwargs,
         )
 
@@ -267,9 +270,10 @@ class PregelNode:
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> AsyncIterator[Any]:
+        self_config: RunnableConfig = {"metadata": self.metadata, "tags": self.tags}
         async for item in self.bound.astream(
             input,
-            merge_configs({"metadata": self.metadata, "tags": self.tags}, config),
+            merge_configs(self_config, config),
             **kwargs,
         ):
             yield item

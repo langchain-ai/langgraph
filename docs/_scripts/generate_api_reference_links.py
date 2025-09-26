@@ -1,3 +1,5 @@
+"""Generate API reference links for imports in Python code blocks within markdown files."""
+
 import ast
 import importlib
 import logging
@@ -60,7 +62,7 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     (["langgraph.types"], "langgraph.types", "StreamWriter", "types"),
     ([], "langgraph.checkpoint.base", "Checkpoint", "checkpoints"),
     ([], "langgraph.checkpoint.base", "CheckpointMetadata", "checkpoints"),
-    ([], "langgraph.checkpoint.base", "BaseCheckpointSaver", "checkpoints"),
+    ([], "langgraph.checkpoint.base", "BaseCheckpointer", "checkpoints"),
     ([], "langgraph.checkpoint.base", "SerializerProtocol", "checkpoints"),
     ([], "langgraph.checkpoint.serde.jsonplus", "JsonPlusSerializer", "checkpoints"),
     ([], "langgraph.checkpoint.memory", "MemorySaver", "checkpoints"),
@@ -70,8 +72,18 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     ([], "langgraph.checkpoint.postgres.aio", "AsyncPostgresSaver", "checkpoints"),
     ([], "langgraph.checkpoint.postgres", "PostgresSaver", "checkpoints"),
     # other prebuilts
-    (["langgraph_supervisor"], "langgraph_supervisor.supervisor", "create_supervisor", "supervisor"),
-    (["langgraph_supervisor"], "langgraph_supervisor.handoff", "create_handoff_tool", "supervisor"),
+    (
+        ["langgraph_supervisor"],
+        "langgraph_supervisor.supervisor",
+        "create_supervisor",
+        "supervisor",
+    ),
+    (
+        ["langgraph_supervisor"],
+        "langgraph_supervisor.handoff",
+        "create_handoff_tool",
+        "supervisor",
+    ),
     ([], "langgraph_supervisor.handoff", "create_forward_message_tool", "supervisor"),
     (["langgraph_swarm"], "langgraph_swarm.swarm", "create_swarm", "swarm"),
     (["langgraph_swarm"], "langgraph_swarm.swarm", "add_active_agent_router", "swarm"),

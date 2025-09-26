@@ -868,9 +868,9 @@ async def test_ainvoke():
 )
 @pytest.mark.anyio
 async def test_langgraph_cloud_integration():
+    from langgraph.checkpoint.memory import InMemorySaver
     from langgraph_sdk.client import get_client, get_sync_client
 
-    from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.graph import END, START, MessagesState, StateGraph
 
     # create RemotePregel instance

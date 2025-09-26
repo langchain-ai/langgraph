@@ -2,13 +2,13 @@ from typing import Any
 
 import pytest
 from langchain_core.runnables import RunnableConfig
-
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     create_checkpoint,
     empty_checkpoint,
 )
+
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 

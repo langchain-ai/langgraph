@@ -12,8 +12,6 @@ from typing import Any
 
 import pytest
 from langchain_core.embeddings import Embeddings
-from psycopg import AsyncConnection
-
 from langgraph.store.base import (
     GetOp,
     Item,
@@ -21,6 +19,8 @@ from langgraph.store.base import (
     PutOp,
     SearchOp,
 )
+from psycopg import AsyncConnection
+
 from langgraph.store.postgres import AsyncPostgresStore
 from tests.conftest import (
     DEFAULT_URI,

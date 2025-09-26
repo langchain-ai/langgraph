@@ -8,10 +8,9 @@ from typing import Any, Callable, TypeVar, cast
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
-
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -21,12 +20,13 @@ from langgraph.checkpoint.base import (
     get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
 from langgraph.checkpoint.sqlite.utils import search_where
 
 T = TypeVar("T", bound=Callable)
 
 
-class AsyncSqliteSaver(BaseCheckpointSaver[str]):
+class AsyncSqliteSaver(BaseCheckpointer[str]):
     """An asynchronous checkpoint saver that stores checkpoints in a SQLite database.
 
     This class provides an asynchronous interface for saving and retrieving checkpoints

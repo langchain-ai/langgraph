@@ -6,6 +6,16 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
+    ChannelVersions,
+    Checkpoint,
+    CheckpointMetadata,
+    CheckpointTuple,
+    get_checkpoint_metadata,
+)
+from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.types import TASKS
 from psycopg import (
     AsyncConnection,
     AsyncCursor,
@@ -19,18 +29,8 @@ from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
-from langgraph.checkpoint.base import (
-    WRITES_IDX_MAP,
-    ChannelVersions,
-    Checkpoint,
-    CheckpointMetadata,
-    CheckpointTuple,
-    get_checkpoint_metadata,
-)
 from langgraph.checkpoint.postgres import _ainternal, _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
-from langgraph.checkpoint.serde.base import SerializerProtocol
-from langgraph.checkpoint.serde.types import TASKS
 
 """
 To add a new migration, add a new string to the MIGRATIONS list.
