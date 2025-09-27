@@ -1101,6 +1101,7 @@ def add_human_in_the_loop(
             "allow_accept": True,
             "allow_edit": True,
             "allow_respond": True,
+            "allow_ignore": True,
         }
 
     @create_tool(  # (1)!
@@ -1130,6 +1131,9 @@ def add_human_in_the_loop(
         elif response["type"] == "response":
             user_feedback = response["args"]
             tool_response = user_feedback
+        # ignore the tool call
+        elif response["type"] == "ignore":
+            tool_response = "Tool call ignored by user."
         else:
             raise ValueError(f"Unsupported interrupt response type: {response['type']}")
 
