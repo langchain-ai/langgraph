@@ -248,7 +248,7 @@ class PregelLoop:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
-        self.task_ids_to_block: set[str] = set()
+        self.skipped_task_ids: set[str] = set()
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -474,14 +474,14 @@ class PregelLoop:
 
         resume_map = self.config.get(CONF, {}).get(CONFIG_KEY_RESUME_MAP, {})
         if resume_map:
-            blocked_ids = self._pending_interrupts() - set(resume_map)
-            self.task_ids_to_block = {
+            skipped_interrupt_ids = self._pending_interrupts() - set(resume_map)
+            self.skipped_task_ids = {
                 task_id
                 for task_id, write_type, value in self.checkpoint_pending_writes
-                if write_type == INTERRUPT and value[0].id in blocked_ids
+                if write_type == INTERRUPT and value[0].id in skipped_interrupt_ids
             }
         else:
-            self.task_ids_to_block = set()
+            self.skipped_task_ids = set()
 
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
@@ -528,22 +528,26 @@ class PregelLoop:
             if task.writes:
                 self.output_writes(task.id, task.writes, cached=True)
 
-        if self.task_ids_to_block:
+        if self.skipped_task_ids:
             # remove tasks with writes that may have been matched from previous loop
-            self.task_ids_to_block = {
+            self.skipped_task_ids = {
                 task_id
-                for task_id in self.task_ids_to_block
+                for task_id in self.skipped_task_ids
                 if not self.tasks[task_id].writes
             }
             # output writes for blocked tasts so they are still visible in the stream
             for task_id, write_type, value in self.checkpoint_pending_writes:
-                if task_id in self.task_ids_to_block:
+                if task_id in self.skipped_task_ids:
                     self.output_writes(task_id, [(write_type, value)])
 
         return True
 
     def after_tick(self) -> None:
-        if self.task_ids_to_block:
+        if self.skipped_task_ids:
+            # raise an early interrupt for skipped tasks.
+            # this would ordinarily be raised after the PUSH task is executed,
+            # but since we know there are no resumes for these tasks, we can
+            # prevent unecessary node re-execution by raising in this tick.
             interrupts = tuple(
                 value[0]
                 for _, write_type, value in self.checkpoint_pending_writes
@@ -551,7 +555,7 @@ class PregelLoop:
             )
             raise GraphInterrupt(interrupts)
 
-        self.task_ids_to_block.clear()
+        self.skipped_task_ids.clear()
         # finish superstep
         writes = [w for t in self.tasks.values() for w in t.writes]
         # all tasks have finished
