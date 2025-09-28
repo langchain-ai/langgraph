@@ -74,14 +74,6 @@ target-version = "py39"
 [tool.ruff.lint.per-file-ignores]
 "tests/bench/*" = ["UP006", "UP007"]
 
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
-docstring-code-format = false
-docstring-code-line-length = "dynamic"
-
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "typing.TypedDict".msg = "Use typing_extensions.TypedDict instead."
 

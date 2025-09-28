@@ -296,12 +296,10 @@ class Send:
         >>> class OverallState(TypedDict):
         ...     subjects: list[str]
         ...     jokes: Annotated[list[str], operator.add]
-        ...
         >>> from langgraph.types import Send
         >>> from langgraph.graph import END, START
         >>> def continue_to_jokes(state: OverallState):
-        ...     return [Send("generate_joke", {"subject": s}) for s in state['subjects']]
-        ...
+        ...     return [Send("generate_joke", {"subject": s}) for s in state["subjects"]]
         >>> from langgraph.graph import StateGraph
         >>> builder = StateGraph(OverallState)
         >>> builder.add_node("generate_joke", lambda state: {"jokes": [f"Joke about {state['subject']}"]})
