@@ -15,7 +15,7 @@ from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Versi
 from langgraph_cli.util import clean_empty_lines
 
 FORMATTED_CLEANUP_LINES = _get_pip_cleanup_lines(
-    install_cmd="uv pip install --system --prerelease=allow",
+    install_cmd="uv pip install --system",
     to_uninstall=("pip", "setuptools", "wheel"),
     pip_installer="uv",
 )
@@ -149,7 +149,7 @@ services:
                 COPY --from=cli_1 . /deps/cli_1
                 # -- End of local package ../../.. --
                 # -- Installing all local dependencies --
-                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --prerelease=allow --no-cache-dir -c /api/constraints.txt -e /deps/*
+                RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}

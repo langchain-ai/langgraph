@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "1.0.0a3"
+version = "1.0.0a4"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.10"
@@ -74,14 +74,6 @@ target-version = "py39"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/bench/*" = ["UP006", "UP007"]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
-docstring-code-format = false
-docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "typing.TypedDict".msg = "Use typing_extensions.TypedDict instead."

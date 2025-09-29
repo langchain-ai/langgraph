@@ -68,15 +68,14 @@ from langchain_core.tools.base import (
     TOOL_MESSAGE_BLOCK_TYPES,
     get_all_basemodel_annotations,
 )
-from pydantic import BaseModel
-from typing_extensions import Annotated, deprecated, get_args, get_origin
-
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
 from langgraph.warnings import LangGraphDeprecatedSinceV10
+from pydantic import BaseModel
+from typing_extensions import Annotated, deprecated, get_args, get_origin
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."

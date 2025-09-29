@@ -92,6 +92,7 @@ def add_messages(
     Example:
         ```python title="Basic usage"
         from langchain_core.messages import AIMessage, HumanMessage
+
         msgs1 = [HumanMessage(content="Hello", id="1")]
         msgs2 = [AIMessage(content="Hi there!", id="2")]
         add_messages(msgs1, msgs2)
@@ -110,8 +111,10 @@ def add_messages(
         from typing_extensions import TypedDict
         from langgraph.graph import StateGraph
 
+
         class State(TypedDict):
             messages: Annotated[list, add_messages]
+
 
         builder = StateGraph(State)
         builder.add_node("chatbot", lambda state: {"messages": [("assistant", "Hello")]})
@@ -127,30 +130,35 @@ def add_messages(
         from typing_extensions import TypedDict
         from langgraph.graph import StateGraph, add_messages
 
+
         class State(TypedDict):
-            messages: Annotated[list, add_messages(format='langchain-openai')]
+            messages: Annotated[list, add_messages(format="langchain-openai")]
+
 
         def chatbot_node(state: State) -> list:
-            return {"messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Here's an image:",
-                            "cache_control": {"type": "ephemeral"},
-                        },
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/jpeg",
-                                "data": "1234",
+            return {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Here's an image:",
+                                "cache_control": {"type": "ephemeral"},
                             },
-                        },
-                    ]
-                },
-            ]}
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": "1234",
+                                },
+                            },
+                        ],
+                    },
+                ]
+            }
+
 
         builder = StateGraph(State)
         builder.add_node("chatbot", chatbot_node)

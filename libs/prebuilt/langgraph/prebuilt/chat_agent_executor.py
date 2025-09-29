@@ -33,9 +33,6 @@ from langchain_core.runnables import (
     RunnableSequence,
 )
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel
-from typing_extensions import Annotated, NotRequired, TypedDict, deprecated
-
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
 from langgraph.errors import ErrorCode, create_error_message
@@ -43,12 +40,15 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import RemainingSteps
-from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
 from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
+from pydantic import BaseModel
+from typing_extensions import Annotated, NotRequired, TypedDict, deprecated
+
+from langgraph.prebuilt.tool_node import ToolNode
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
@@ -419,6 +419,14 @@ def create_react_agent(
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
+            !!! Note
+                `remaining_steps` is used to limit the number of steps the react agent can take.
+                Calculated roughly as `recursion_limit` - `total_steps_taken`.
+                If `remaining_steps` is less than 2 and tool calls are present in the response,
+                the react agent will return a final AI Message with
+                the content "Sorry, need more steps to process this request.".
+                No `GraphRecusionError` will be raised in this case.
+
         context_schema: An optional schema for runtime context.
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).

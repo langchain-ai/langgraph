@@ -8,9 +8,9 @@ from langchain_core.language_models.fake_chat_models import (
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import StructuredTool
-
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
+
 from langgraph.pregel import Pregel
 
 
@@ -67,7 +67,6 @@ if __name__ == "__main__":
     import asyncio
 
     import uvloop
-
     from langgraph.checkpoint.memory import InMemorySaver
 
     graph = react_agent(100, checkpointer=InMemorySaver())

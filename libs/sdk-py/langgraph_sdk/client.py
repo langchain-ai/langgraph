@@ -31,6 +31,7 @@ import httpx
 import orjson
 
 import langgraph_sdk
+from langgraph_sdk.errors import _araise_for_status_typed, _raise_for_status_typed
 from langgraph_sdk.schema import (
     All,
     Assistant,
@@ -310,15 +311,7 @@ class HttpClient:
         r = await self.client.get(path, params=params, headers=headers)
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = (await r.aread()).decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        await _araise_for_status_typed(r)
         return await _adecode_json(r)
 
     async def post(
@@ -343,15 +336,7 @@ class HttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = (await r.aread()).decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        await _araise_for_status_typed(r)
         return await _adecode_json(r)
 
     async def put(
@@ -372,15 +357,7 @@ class HttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = (await r.aread()).decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        await _araise_for_status_typed(r)
         return await _adecode_json(r)
 
     async def patch(
@@ -401,15 +378,7 @@ class HttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = (await r.aread()).decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        await _araise_for_status_typed(r)
         return await _adecode_json(r)
 
     async def delete(
@@ -427,15 +396,55 @@ class HttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = (await r.aread()).decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        await _araise_for_status_typed(r)
+
+    async def request_reconnect(
+        self,
+        path: str,
+        method: str,
+        *,
+        json: dict[str, Any] | None = None,
+        params: QueryParamTypes | None = None,
+        headers: Mapping[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
+        reconnect_limit: int = 5,
+    ) -> Any:
+        """Send a request that automatically reconnects to Location header."""
+        request_headers, content = await _aencode_json(json)
+        if headers:
+            request_headers.update(headers)
+        async with self.client.stream(
+            method, path, headers=request_headers, content=content, params=params
+        ) as r:
+            if on_response:
+                on_response(r)
+            try:
+                r.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                body = (await r.aread()).decode()
+                if sys.version_info >= (3, 11):
+                    e.add_note(body)
+                else:
+                    logger.error(f"Error from langgraph-api: {body}", exc_info=e)
+                raise e
+            loc = r.headers.get("location")
+            if reconnect_limit <= 0 or not loc:
+                return await _adecode_json(r)
+            try:
+                return await _adecode_json(r)
+            except httpx.HTTPError:
+                warnings.warn(
+                    f"Request failed, attempting reconnect to Location: {loc}",
+                    stacklevel=2,
+                )
+                await r.aclose()
+                return await self.request_reconnect(
+                    loc,
+                    "GET",
+                    headers=request_headers,
+                    # don't pass on_response so it's only called once
+                    reconnect_limit=reconnect_limit - 1,
+                )
 
     async def stream(
         self,
@@ -455,34 +464,86 @@ class HttpClient:
         if headers:
             request_headers.update(headers)
 
-        async with self.client.stream(
-            method, path, headers=request_headers, content=content, params=params
-        ) as res:
-            if on_response:
-                on_response(res)
-            # check status
-            try:
-                res.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                body = (await res.aread()).decode()
-                if sys.version_info >= (3, 11):
-                    e.add_note(body)
+        reconnect_headers = {
+            key: value
+            for key, value in request_headers.items()
+            if key.lower() not in {"content-length", "content-type"}
+        }
+
+        last_event_id: str | None = None
+        reconnect_path: str | None = None
+        reconnect_attempts = 0
+        max_reconnect_attempts = 5
+
+        while True:
+            current_headers = dict(
+                request_headers if reconnect_path is None else reconnect_headers
+            )
+            if last_event_id is not None:
+                current_headers["Last-Event-ID"] = last_event_id
+
+            current_method = method if reconnect_path is None else "GET"
+            current_content = content if reconnect_path is None else None
+            current_params = params if reconnect_path is None else None
+
+            retry = False
+            async with self.client.stream(
+                current_method,
+                reconnect_path or path,
+                headers=current_headers,
+                content=current_content,
+                params=current_params,
+            ) as res:
+                if reconnect_path is None and on_response:
+                    on_response(res)
+                # check status
+                await _araise_for_status_typed(res)
+                # check content type
+                content_type = res.headers.get("content-type", "").partition(";")[0]
+                if "text/event-stream" not in content_type:
+                    raise httpx.TransportError(
+                        "Expected response header Content-Type to contain 'text/event-stream', "
+                        f"got {content_type!r}"
+                    )
+
+                reconnect_location = res.headers.get("location")
+                if reconnect_location:
+                    reconnect_path = reconnect_location
+
+                # parse SSE
+                decoder = SSEDecoder()
+                try:
+                    async for line in aiter_lines_raw(res):
+                        sse = decoder.decode(line=line.rstrip(b"\n"))
+                        if sse is not None:
+                            if decoder.last_event_id is not None:
+                                last_event_id = decoder.last_event_id
+                            if sse.event or sse.data is not None:
+                                yield sse
+                except httpx.HTTPError:
+                    # httpx.TransportError inherits from HTTPError, so transient
+                    # disconnects during streaming land here.
+                    if reconnect_path is None:
+                        raise
+                    retry = True
                 else:
-                    logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-                raise e
-            # check content type
-            content_type = res.headers.get("content-type", "").partition(";")[0]
-            if "text/event-stream" not in content_type:
-                raise httpx.TransportError(
-                    "Expected response header Content-Type to contain 'text/event-stream', "
-                    f"got {content_type!r}"
-                )
-            # parse SSE
-            decoder = SSEDecoder()
-            async for line in aiter_lines_raw(res):
-                sse = decoder.decode(line=line.rstrip(b"\n"))
-                if sse is not None:
-                    yield sse
+                    if sse := decoder.decode(b""):
+                        if decoder.last_event_id is not None:
+                            last_event_id = decoder.last_event_id
+                        if sse.event or sse.data is not None:
+                            # decoder.decode(b"") flushes the in-flight event and may
+                            # return an empty placeholder when there is no pending
+                            # message. Skip these no-op events so the stream doesn't
+                            # emit a trailing blank item after reconnects.
+                            yield sse
+            if retry:
+                reconnect_attempts += 1
+                if reconnect_attempts > max_reconnect_attempts:
+                    raise httpx.TransportError(
+                        "Exceeded maximum SSE reconnection attempts"
+                    )
+                continue
+            break
 
 
 async def _aencode_json(json: Any) -> tuple[dict[str, str], bytes | None]:
@@ -2473,8 +2534,9 @@ class RunsClient:
             if on_run_created and (metadata := _get_run_metadata_from_response(res)):
                 on_run_created(metadata)
 
-        response = await self.http.post(
+        response = await self.http.request_reconnect(
             endpoint,
+            "POST",
             json={k: v for k, v in payload.items() if v is not None},
             params=params,
             headers=headers,
@@ -2619,12 +2681,20 @@ class RunsClient:
         }
         if params:
             query_params.update(params)
-        return await self.http.post(
-            f"/threads/{thread_id}/runs/{run_id}/cancel",
-            json=None,
-            params=query_params,
-            headers=headers,
-        )
+        if wait:
+            return await self.http.request_reconnect(
+                f"/threads/{thread_id}/runs/{run_id}/cancel",
+                "POST",
+                params=query_params,
+                headers=headers,
+            )
+        else:
+            return await self.http.post(
+                f"/threads/{thread_id}/runs/{run_id}/cancel",
+                json=None,
+                params=query_params,
+                headers=headers,
+            )
 
     async def join(
         self,
@@ -2656,8 +2726,11 @@ class RunsClient:
             ```
 
         """  # noqa: E501
-        return await self.http.get(
-            f"/threads/{thread_id}/runs/{run_id}/join", headers=headers, params=params
+        return await self.http.request_reconnect(
+            f"/threads/{thread_id}/runs/{run_id}/join",
+            "GET",
+            headers=headers,
+            params=params,
         )
 
     def join_stream(
@@ -3502,15 +3575,7 @@ class SyncHttpClient:
         r = self.client.get(path, params=params, headers=headers)
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = r.read().decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        _raise_for_status_typed(r)
         return _decode_json(r)
 
     def post(
@@ -3534,15 +3599,7 @@ class SyncHttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = r.read().decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        _raise_for_status_typed(r)
         return _decode_json(r)
 
     def put(
@@ -3564,15 +3621,7 @@ class SyncHttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = r.read().decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        _raise_for_status_typed(r)
         return _decode_json(r)
 
     def patch(
@@ -3593,15 +3642,7 @@ class SyncHttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = r.read().decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        _raise_for_status_typed(r)
         return _decode_json(r)
 
     def delete(
@@ -3619,15 +3660,55 @@ class SyncHttpClient:
         )
         if on_response:
             on_response(r)
-        try:
-            r.raise_for_status()
-        except httpx.HTTPStatusError as e:
-            body = r.read().decode()
-            if sys.version_info >= (3, 11):
-                e.add_note(body)
-            else:
-                logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-            raise e
+        _raise_for_status_typed(r)
+
+    def request_reconnect(
+        self,
+        path: str,
+        method: str,
+        *,
+        json: dict[str, Any] | None = None,
+        params: QueryParamTypes | None = None,
+        headers: Mapping[str, str] | None = None,
+        on_response: Callable[[httpx.Response], None] | None = None,
+        reconnect_limit: int = 5,
+    ) -> Any:
+        """Send a request that automatically reconnects to Location header."""
+        request_headers, content = _encode_json(json)
+        if headers:
+            request_headers.update(headers)
+        with self.client.stream(
+            method, path, headers=request_headers, content=content, params=params
+        ) as r:
+            if on_response:
+                on_response(r)
+            try:
+                r.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                body = r.read().decode()
+                if sys.version_info >= (3, 11):
+                    e.add_note(body)
+                else:
+                    logger.error(f"Error from langgraph-api: {body}", exc_info=e)
+                raise e
+            loc = r.headers.get("location")
+            if reconnect_limit <= 0 or not loc:
+                return _decode_json(r)
+            try:
+                return _decode_json(r)
+            except httpx.HTTPError:
+                warnings.warn(
+                    f"Request failed, attempting reconnect to Location: {loc}",
+                    stacklevel=2,
+                )
+                r.close()
+                return self.request_reconnect(
+                    loc,
+                    "GET",
+                    headers=request_headers,
+                    # don't pass on_response so it's only called once
+                    reconnect_limit=reconnect_limit - 1,
+                )
 
     def stream(
         self,
@@ -3640,39 +3721,92 @@ class SyncHttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Iterator[StreamPart]:
         """Stream the results of a request using SSE."""
-        request_headers, content = _encode_json(json)
+        if json is not None:
+            request_headers, content = _encode_json(json)
+        else:
+            request_headers, content = {}, None
         request_headers["Accept"] = "text/event-stream"
         request_headers["Cache-Control"] = "no-store"
         if headers:
             request_headers.update(headers)
-        with self.client.stream(
-            method, path, headers=request_headers, content=content, params=params
-        ) as res:
-            if on_response:
-                on_response(res)
-            # check status
-            try:
-                res.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                body = (res.read()).decode()
-                if sys.version_info >= (3, 11):
-                    e.add_note(body)
+
+        reconnect_headers = {
+            key: value
+            for key, value in request_headers.items()
+            if key.lower() not in {"content-length", "content-type"}
+        }
+
+        last_event_id: str | None = None
+        reconnect_path: str | None = None
+        reconnect_attempts = 0
+        max_reconnect_attempts = 5
+
+        while True:
+            current_headers = dict(
+                request_headers if reconnect_path is None else reconnect_headers
+            )
+            if last_event_id is not None:
+                current_headers["Last-Event-ID"] = last_event_id
+
+            current_method = method if reconnect_path is None else "GET"
+            current_content = content if reconnect_path is None else None
+            current_params = params if reconnect_path is None else None
+
+            retry = False
+            with self.client.stream(
+                current_method,
+                reconnect_path or path,
+                headers=current_headers,
+                content=current_content,
+                params=current_params,
+            ) as res:
+                if reconnect_path is None and on_response:
+                    on_response(res)
+                # check status
+                _raise_for_status_typed(res)
+                # check content type
+                content_type = res.headers.get("content-type", "").partition(";")[0]
+                if "text/event-stream" not in content_type:
+                    raise httpx.TransportError(
+                        "Expected response header Content-Type to contain 'text/event-stream', "
+                        f"got {content_type!r}"
+                    )
+
+                reconnect_location = res.headers.get("location")
+                if reconnect_location:
+                    reconnect_path = reconnect_location
+
+                decoder = SSEDecoder()
+                try:
+                    for line in iter_lines_raw(res):
+                        sse = decoder.decode(line.rstrip(b"\n"))
+                        if sse is not None:
+                            if decoder.last_event_id is not None:
+                                last_event_id = decoder.last_event_id
+                            if sse.event or sse.data is not None:
+                                yield sse
+                except httpx.HTTPError:
+                    # httpx.TransportError inherits from HTTPError, so transient
+                    # disconnects during streaming land here.
+                    if reconnect_path is None:
+                        raise
+                    retry = True
                 else:
-                    logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-                raise e
-            # check content type
-            content_type = res.headers.get("content-type", "").partition(";")[0]
-            if "text/event-stream" not in content_type:
-                raise httpx.TransportError(
-                    "Expected response header Content-Type to contain 'text/event-stream', "
-                    f"got {content_type!r}"
-                )
-            # parse SSE
-            decoder = SSEDecoder()
-            for line in iter_lines_raw(res):
-                sse = decoder.decode(line.rstrip(b"\n"))
-                if sse is not None:
-                    yield sse
+                    if sse := decoder.decode(b""):
+                        if decoder.last_event_id is not None:
+                            last_event_id = decoder.last_event_id
+                        if sse.event or sse.data is not None:
+                            # See async stream implementation for rationale on
+                            # skipping empty flush events.
+                            yield sse
+            if retry:
+                reconnect_attempts += 1
+                if reconnect_attempts > max_reconnect_attempts:
+                    raise httpx.TransportError(
+                        "Exceeded maximum SSE reconnection attempts"
+                    )
+                continue
+            break
 
 
 def _encode_json(json: Any) -> tuple[dict[str, str], bytes]:
@@ -5633,8 +5767,9 @@ class SyncRunsClient:
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
         )
-        return self.http.post(
+        return self.http.request_reconnect(
             endpoint,
+            "POST",
             json={k: v for k, v in payload.items() if v is not None},
             params=params,
             headers=headers,
@@ -5757,11 +5892,25 @@ class SyncRunsClient:
             ```
 
         """  # noqa: E501
+        query_params = {
+            "wait": 1 if wait else 0,
+            "action": action,
+        }
+        if params:
+            query_params.update(params)
+        if wait:
+            return self.http.request_reconnect(
+                f"/threads/{thread_id}/runs/{run_id}/cancel",
+                "POST",
+                json=None,
+                params=query_params,
+                headers=headers,
+            )
         return self.http.post(
-            f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}&action={action}",
+            f"/threads/{thread_id}/runs/{run_id}/cancel",
             json=None,
+            params=query_params,
             headers=headers,
-            params=params,
         )
 
     def join(
@@ -5794,8 +5943,11 @@ class SyncRunsClient:
             ```
 
         """  # noqa: E501
-        return self.http.get(
-            f"/threads/{thread_id}/runs/{run_id}/join", headers=headers, params=params
+        return self.http.request_reconnect(
+            f"/threads/{thread_id}/runs/{run_id}/join",
+            "GET",
+            headers=headers,
+            params=params,
         )
 
     def join_stream(
