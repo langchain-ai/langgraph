@@ -41,6 +41,7 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.utils import Input, Output
 from langchain_core.tracers.langchain import LangChainTracer
+from langgraph.store.base import BaseStore
 from typing_extensions import TypeGuard
 
 from langgraph._internal._config import (
@@ -54,7 +55,6 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
 )
 from langgraph._internal._typing import MISSING
-from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 
 try:
