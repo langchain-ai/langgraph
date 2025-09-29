@@ -4393,24 +4393,6 @@
           }
         }
       },
-      "Interrupt": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "value": {
-            "type": "object"
-          }
-        },
-        "title": "Interrupt",
-        "required": [
-          "value"
-        ]
-      },
       "RunCreateStateful": {
         "properties": {
           "assistant_id": {
@@ -5853,15 +5835,23 @@
         }
       },
       "Interrupt": {
-        "description": "An interrupt to be applied to a thread.",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/Interrupt"
-            }
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value": {
+            "type": "object"
           }
+        },
+        "title": "Interrupt",
+        "required": [
+          "value"
+        ]
         }
       }
     }
   }
-}
