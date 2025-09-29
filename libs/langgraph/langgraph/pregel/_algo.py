@@ -715,13 +715,17 @@ def prepare_single_task(
             runtime = runtime.override(
                 store=store, previous=checkpoint["channel_values"].get(PREVIOUS, None)
             )
+            additional_config: RunnableConfig = {
+                "metadata": metadata,
+                "tags": proc.tags,
+            }
             return PregelExecutableTask(
                 packet.node,
                 packet.arg,
                 proc_node,
                 writes,
                 patch_config(
-                    merge_configs(config, {"metadata": metadata, "tags": proc.tags}),
+                    merge_configs(config, additional_config),
                     run_name=packet.node,
                     callbacks=(
                         manager.get_child(f"graph:step:{step}") if manager else None
@@ -856,15 +860,17 @@ def prepare_single_task(
                         previous=checkpoint["channel_values"].get(PREVIOUS, None),
                         store=store,
                     )
+                    additional_config = {
+                        "metadata": metadata,
+                        "tags": proc.tags,
+                    }
                     return PregelExecutableTask(
                         name,
                         val,
                         node,
                         writes,
                         patch_config(
-                            merge_configs(
-                                config, {"metadata": metadata, "tags": proc.tags}
-                            ),
+                            merge_configs(config, additional_config),
                             run_name=name,
                             callbacks=(
                                 manager.get_child(f"graph:step:{step}")
