@@ -5,10 +5,10 @@ from enum import Enum
 from typing import Any
 from warnings import warn
 
-from typing_extensions import deprecated
-
 # EmptyChannelError is re-exported from langgraph.channels.base
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
+from typing_extensions import deprecated
+
 from langgraph.types import Command, Interrupt
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 

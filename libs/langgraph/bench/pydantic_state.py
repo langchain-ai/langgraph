@@ -303,7 +303,6 @@ if __name__ == "__main__":
     import asyncio
 
     import uvloop
-
     from langgraph.checkpoint.memory import InMemorySaver
 
     graph = pydantic_state(1000).compile(checkpointer=InMemorySaver())

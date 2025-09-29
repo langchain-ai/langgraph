@@ -1,8 +1,7 @@
 from typing import Literal, Optional, Union
 
-from typing_extensions import TypedDict, deprecated
-
 from langgraph.warnings import LangGraphDeprecatedSinceV10
+from typing_extensions import TypedDict, deprecated
 
 
 @deprecated(

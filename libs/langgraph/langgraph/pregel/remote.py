@@ -19,6 +19,7 @@ from langchain_core.runnables.graph import (
 from langchain_core.runnables.graph import (
     Node as DrawableNode,
 )
+from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph_sdk.client import (
     LangGraphClient,
     SyncLangGraphClient,
@@ -49,7 +50,6 @@ from langgraph._internal._constants import (
     INTERRUPT,
     NS_SEP,
 )
-from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.errors import GraphInterrupt, ParentCommand
 from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
 from langgraph.types import (
