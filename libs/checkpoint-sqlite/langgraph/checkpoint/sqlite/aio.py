@@ -8,7 +8,6 @@ from typing import Any, Callable, TypeVar, cast
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
-
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
@@ -21,6 +20,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
 from langgraph.checkpoint.sqlite.utils import search_where
 
 T = TypeVar("T", bound=Callable)

@@ -3,15 +3,24 @@ from __future__ import annotations
 import asyncio
 import concurrent
 import concurrent.futures
+import contextlib
 import queue
 import warnings
 import weakref
 from collections import defaultdict, deque
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Iterator, Mapping, Sequence
 from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass
-from typing import Any, Callable, Generic, Optional, Union, cast, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Optional,
+    Union,
+    cast,
+    get_type_hints,
+)
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -377,7 +386,7 @@ class Pregel(
 
     However, for **advanced** use cases, Pregel can be used directly. If you're
     not sure whether you need to use Pregel directly, then the answer is probably no
-    – you should use the Graph API or Functional API instead. These are higher-level
+    - you should use the Graph API or Functional API instead. These are higher-level
     interfaces that will compile down to Pregel under the hood.
 
     Here are some examples to give you a sense of how it works:
@@ -479,7 +488,7 @@ class Pregel(
         ```
 
         ```pycon
-        {'c': ['foofoo', 'foofoofoofoo']}
+        {"c": ["foofoo", "foofoofoofoo"]}
         ```
 
     Example: Using a BinaryOperatorAggregate channel
@@ -507,6 +516,7 @@ class Pregel(
             else:
                 return update
 
+
         app = Pregel(
             nodes={"node1": node1, "node2": node2},
             channels={
@@ -515,7 +525,7 @@ class Pregel(
                 "c": BinaryOperatorAggregate(str, operator=reducer),
             },
             input_channels=["a"],
-            output_channels=["c"]
+            output_channels=["c"],
         )
 
         app.invoke({"a": "foo"})
@@ -535,7 +545,8 @@ class Pregel(
         from langgraph.pregel import Pregel, NodeBuilder, ChannelWriteEntry
 
         example_node = (
-            NodeBuilder().subscribe_only("value")
+            NodeBuilder()
+            .subscribe_only("value")
             .do(lambda x: x + x if len(x) < 10 else None)
             .write_to(ChannelWriteEntry(channel="value", skip_none=True))
         )
@@ -546,7 +557,7 @@ class Pregel(
                 "value": EphemeralValue(str),
             },
             input_channels=["value"],
-            output_channels=["value"]
+            output_channels=["value"],
         )
 
         app.invoke({"value": "a"})
@@ -2612,6 +2623,7 @@ class Pregel(
                 if subgraphs:
                     loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
                 # enable concurrent streaming
+                get_waiter: Callable[[], concurrent.futures.Future[None]] | None = None
                 if (
                     self.stream_eager
                     or subgraphs
@@ -2634,8 +2646,6 @@ class Pregel(
                         else:
                             return waiter
 
-                else:
-                    get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates.
                 # Channel updates from step N are only visible in step N+1
@@ -2916,45 +2926,77 @@ class Pregel(
                         stream_put, stream_modes
                     )
                 # enable concurrent streaming
+                get_waiter: Callable[[], asyncio.Task[None]] | None = None
+                _cleanup_waiter: Callable[[], Awaitable[None]] | None = None
                 if (
                     self.stream_eager
                     or subgraphs
                     or "messages" in stream_modes
                     or "custom" in stream_modes
                 ):
+                    # Keep a single waiter task alive; ensure cleanup on exit.
+                    waiter: asyncio.Task[None] | None = None
 
                     def get_waiter() -> asyncio.Task[None]:
-                        return aioloop.create_task(stream.wait())
+                        nonlocal waiter
+                        if waiter is None or waiter.done():
+                            waiter = aioloop.create_task(stream.wait())
 
-                else:
-                    get_waiter = None  # type: ignore[assignment]
+                            def _clear(t: asyncio.Task[None]) -> None:
+                                nonlocal waiter
+                                if waiter is t:
+                                    waiter = None
+
+                            waiter.add_done_callback(_clear)
+                        return waiter
+
+                    async def _cleanup_waiter() -> None:
+                        """Wake pending waiter and/or cancel+await to avoid pending tasks."""
+                        nonlocal waiter
+                        # Try to wake via semaphore like SyncPregelLoop
+                        with contextlib.suppress(Exception):
+                            if hasattr(stream, "_count"):
+                                stream._count.release()
+                        t = waiter
+                        waiter = None
+                        if t is not None and not t.done():
+                            t.cancel()
+                            with contextlib.suppress(asyncio.CancelledError):
+                                await t
+
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
-                while loop.tick():
-                    for task in await loop.amatch_cached_writes():
-                        loop.output_writes(task.id, task.writes, cached=True)
-                    async for _ in runner.atick(
-                        [t for t in loop.tasks.values() if not t.writes],
-                        timeout=self.step_timeout,
-                        get_waiter=get_waiter,
-                        schedule_task=loop.aaccept_push,
-                    ):
-                        # emit output
-                        for o in _output(
-                            stream_mode,
-                            print_mode,
-                            subgraphs,
-                            stream.get_nowait,
-                            asyncio.QueueEmpty,
+                try:
+                    while loop.tick():
+                        for task in await loop.amatch_cached_writes():
+                            loop.output_writes(task.id, task.writes, cached=True)
+                        async for _ in runner.atick(
+                            [t for t in loop.tasks.values() if not t.writes],
+                            timeout=self.step_timeout,
+                            get_waiter=get_waiter,
+                            schedule_task=loop.aaccept_push,
                         ):
-                            yield o
-                    loop.after_tick()
-                    # wait for checkpoint
-                    if durability_ == "sync":
-                        await cast(asyncio.Future, loop._put_checkpoint_fut)
+                            # emit output
+                            for o in _output(
+                                stream_mode,
+                                print_mode,
+                                subgraphs,
+                                stream.get_nowait,
+                                asyncio.QueueEmpty,
+                            ):
+                                yield o
+                        loop.after_tick()
+                        # wait for checkpoint
+                        if durability_ == "sync":
+                            await cast(asyncio.Future, loop._put_checkpoint_fut)
+                finally:
+                    # ensure waiter doesn't remain pending on cancel/shutdown
+                    if _cleanup_waiter is not None:
+                        await _cleanup_waiter()
+
             # emit output
             for o in _output(
                 stream_mode,

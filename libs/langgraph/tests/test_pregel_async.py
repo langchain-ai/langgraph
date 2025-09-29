@@ -41,6 +41,7 @@ from syrupy import SnapshotAssertion
 from typing_extensions import NotRequired, TypedDict
 
 from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
+from langgraph._internal._queue import AsyncQueue
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
@@ -9107,3 +9108,106 @@ async def test_subgraph_streaming_async() -> None:
 
     assert result["last_chunk"].content == "today."
     assert result["num_chunks"] == 9
+
+
+@NEEDS_CONTEXTVARS
+async def test_null_resume_disallowed_with_multiple_interrupts(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        text_1: str
+        text_2: str
+
+    async def human_node_1(state: State):
+        value = interrupt(state["text_1"])
+        return {"text_1": value}
+
+    async def human_node_2(state: State):
+        value = interrupt(state["text_2"])
+        return {"text_2": value}
+
+    graph_builder = StateGraph(State)
+    graph_builder.add_node("human_node_1", human_node_1)
+    graph_builder.add_node("human_node_2", human_node_2)
+
+    # Add both nodes in parallel from START
+    graph_builder.add_edge(START, "human_node_1")
+    graph_builder.add_edge(START, "human_node_2")
+
+    checkpointer = InMemorySaver()
+    graph = graph_builder.compile(checkpointer=checkpointer)
+
+    thread_id = str(uuid.uuid4())
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    await graph.ainvoke(
+        {"text_1": "original text 1", "text_2": "original text 2"}, config=config
+    )
+
+    resume_map = {
+        i.id: f"resume for prompt: {i.value}"
+        for i in (await graph.aget_state(config)).interrupts
+    }
+    with pytest.raises(
+        RuntimeError,
+        match="When there are multiple pending interrupts, you must specify the interrupt id when resuming.",
+    ):
+        await graph.ainvoke(Command(resume="singular resume"), config=config)
+
+    assert await graph.ainvoke(Command(resume=resume_map), config=config) == {
+        "text_1": "resume for prompt: original text 1",
+        "text_2": "resume for prompt: original text 2",
+    }
+
+
+async def test_astream_waiter_cleanup_on_cancel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that AsyncPregelLoop cleans up waiter tasks after cancellation."""
+
+    recorded_tasks: list[asyncio.Task[None]] = []
+    finished_tasks: list[asyncio.Task[None]] = []
+
+    original_wait = AsyncQueue.wait
+
+    async def tracked_wait(self: AsyncQueue) -> None:
+        task = asyncio.current_task()
+        assert task is not None
+        recorded_tasks.append(task)
+        try:
+            await original_wait(self)
+        finally:
+            finished_tasks.append(task)
+
+    monkeypatch.setattr(AsyncQueue, "wait", tracked_wait)
+
+    class State(TypedDict, total=False):
+        count: int
+
+    async def slow_node(state: State) -> State:
+        await asyncio.sleep(0.05)
+        state = dict(state)
+        state["count"] = state.get("count", 0) + 1
+        await asyncio.sleep(0.1)
+        return state
+
+    builder = StateGraph(State)
+    builder.add_node("slow", slow_node)
+    builder.add_edge(START, "slow")
+    builder.add_edge("slow", END)
+    graph = builder.compile()
+
+    async def consumer() -> None:
+        async for _ in graph.astream({"msg": "hi"}, stream_mode="messages"):
+            await asyncio.sleep(0.01)
+
+    task = asyncio.create_task(consumer())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    await asyncio.sleep(0.05)
+
+    assert recorded_tasks, "expected stream.wait() task to be created"
+    assert set(finished_tasks) == set(recorded_tasks)
+    assert all(t.done() for t in recorded_tasks)
