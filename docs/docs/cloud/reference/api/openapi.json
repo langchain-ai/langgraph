@@ -3268,7 +3268,7 @@
                                       "required": ["kind", "text"]
                                     },
                                     {
-                                      "title": "Data Part",
+                                      "title": "Data Part", 
                                       "type": "object",
                                       "properties": {
                                         "kind": {
@@ -4950,7 +4950,7 @@
               "type": "string",
               "enum": [
                 "assistant_id",
-                "graph_id",
+                "graph_id", 
                 "name",
                 "description",
                 "config",
@@ -5851,7 +5851,7 @@
         "required": [
           "value"
         ]
-        }
       }
     }
   }
+}
