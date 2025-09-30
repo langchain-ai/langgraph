@@ -244,7 +244,7 @@ output = agent.invoke(
 print(output["messages"][-1].text())
 ```
 
-!!! version-added "New in langgraph>=0.6"
+!!! version-added "Added in version 0.6.0"
 
 :::
 

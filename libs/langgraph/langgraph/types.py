@@ -106,7 +106,7 @@ else:
 class RetryPolicy(NamedTuple):
     """Configuration for retrying nodes.
 
-    !!! version-added "Added in version 0.2.24."
+    !!! version-added "Added in version 0.2.24"
     """
 
     initial_interval: float = 0.5
@@ -148,7 +148,7 @@ _DEFAULT_INTERRUPT_ID = "placeholder-id"
 class Interrupt:
     """Information about an interrupt that occurred in a node.
 
-    !!! version-added "Added in version 0.2.24."
+    !!! version-added "Added in version 0.2.24"
 
     !!! version-changed "Changed in version v0.4.0"
         * `interrupt_id` was introduced as a property
@@ -349,7 +349,7 @@ N = TypeVar("N", bound=Hashable)
 class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
-    !!! version-added "Added in version 0.2.24."
+    !!! version-added "Added in version 0.2.24"
 
     Args:
         graph: graph to send the command to. Supported values are:
