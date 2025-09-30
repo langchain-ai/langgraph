@@ -417,6 +417,7 @@ def prepare_next_tasks(
     # Consume pending tasks
     tasks_channel = cast(Optional[Topic[Send]], channels.get(TASKS))
     if tasks_channel and tasks_channel.is_available():
+        print("TASKS CHANNEL IS AVAILABLE")
         for idx, _ in enumerate(tasks_channel.get()):
             if task := prepare_single_task(
                 (PUSH, idx),
@@ -456,10 +457,13 @@ def prepare_next_tasks(
                 triggered_nodes.update(node_ids)
         # Sort the nodes to ensure deterministic order
         candidate_nodes: Iterable[str] = sorted(triggered_nodes)
+        print("TRIGGERED", candidate_nodes)
     elif not checkpoint["channel_versions"]:
         candidate_nodes = ()
+        print("NO CHANNEL VERSIONS", candidate_nodes)
     else:
         candidate_nodes = processes.keys()
+        print("DEFAULT", candidate_nodes)
 
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
@@ -486,6 +490,8 @@ def prepare_next_tasks(
             retry_policy=retry_policy,
         ):
             tasks.append(task)
+        else:
+            print("NO TASK", name)
     return {t.id: t for t in tasks}
 
 
