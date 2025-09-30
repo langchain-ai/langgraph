@@ -8564,7 +8564,7 @@ def test_subgraph_resume_reexecutes_from_valid_checkpoint(
 
     outer_model_calls = 0
 
-    def outer_model(state: OuterState) -> Command | None:
+    def outer_model(state: OuterState) -> Optional[Command]:
         nonlocal outer_model_calls
         outer_model_calls += 1
         if "output" in state:
