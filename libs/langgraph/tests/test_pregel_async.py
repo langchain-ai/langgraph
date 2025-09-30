@@ -9314,7 +9314,7 @@ async def test_subgraph_resume_reexecutes_from_valid_checkpoint(
     # resume from model
     resume_state = history[2]
 
-    result = graph.invoke(Command(resume="resume"), resume_state.config)
+    result = await graph.ainvoke(Command(resume="resume"), resume_state.config)
 
     assert result["output"] == "subgraph result: inner 3"
     assert inner_tool_calls == 3
