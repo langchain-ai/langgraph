@@ -1048,7 +1048,35 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
     def __enter__(self) -> Self:
         if self.checkpointer:
-            saved = self.checkpointer.get_tuple(self.checkpoint_config)
+            if not self.is_nested:
+                saved = self.checkpointer.get_tuple(self.checkpoint_config)
+            else:
+                # when rewinding into a nested graph, ignore checkpoints newer than the
+                # boundary id so the subgraph reruns instead of replaying future state.
+                boundary_checkpoint_id = self.checkpoint_config["metadata"].get(
+                    "checkpoint_id"
+                )
+                checkpoint_ns: str = self.checkpoint_config["configurable"].get(
+                    "checkpoint_ns", ""
+                )
+
+                config = self.checkpoint_config.copy()
+                config["configurable"]["checkpoint_ns"] = checkpoint_ns
+
+                checkpoints = self.checkpointer.list(config)
+
+                # find the first checkpoint where checkpoint id <= boundary id.
+                # if boundary_checkpoint_id=None, e.g. when not time-traveling,
+                # stop at the first (max) checkpoint in the namespace.
+                saved = None
+                for checkpoint in checkpoints:
+                    if (
+                        boundary_checkpoint_id
+                        and checkpoint.checkpoint["id"] > boundary_checkpoint_id
+                    ):
+                        continue
+                    saved = checkpoint
+                    break
         else:
             saved = None
         if saved is None:
@@ -1227,7 +1255,35 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
 
     async def __aenter__(self) -> Self:
         if self.checkpointer:
-            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+            if not self.is_nested:
+                saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+            else:
+                # when rewinding into a nested graph, ignore checkpoints newer than the
+                # boundary id so the subgraph reruns instead of replaying future state.
+                boundary_checkpoint_id = self.checkpoint_config["metadata"].get(
+                    "checkpoint_id"
+                )
+                checkpoint_ns: str = self.checkpoint_config["configurable"].get(
+                    "checkpoint_ns", ""
+                )
+
+                config = self.checkpoint_config.copy()
+                config["configurable"]["checkpoint_ns"] = checkpoint_ns
+
+                checkpoints = self.checkpointer.alist(config)
+
+                # find the first checkpoint where checkpoint id <= boundary id.
+                # if boundary_checkpoint_id=None, e.g. when not time-traveling,
+                # stop at the first (max) checkpoint in the namespace.
+                saved = None
+                async for checkpoint in checkpoints:
+                    if (
+                        boundary_checkpoint_id
+                        and checkpoint.checkpoint["id"] > boundary_checkpoint_id
+                    ):
+                        continue
+                    saved = checkpoint
+                    break
         else:
             saved = None
         if saved is None:

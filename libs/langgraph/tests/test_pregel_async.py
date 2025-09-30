@@ -9211,3 +9211,94 @@ async def test_astream_waiter_cleanup_on_cancel(
     assert recorded_tasks, "expected stream.wait() task to be created"
     assert set(finished_tasks) == set(recorded_tasks)
     assert all(t.done() for t in recorded_tasks)
+
+
+async def test_subgraph_resume_reexecutes_from_valid_checkpoint(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class InnerState(TypedDict, total=False):
+        input: str
+        output: str
+
+    class OuterState(TypedDict, total=False):
+        input: str
+        output: str
+
+    inner_model_calls = 0
+    inner_tool_calls = 0
+    outer_tool_calls = 0
+
+    async def inner_model(state: InnerState) -> None:
+        nonlocal inner_model_calls
+        inner_model_calls += 1
+
+    async def inner_tool(state: InnerState) -> dict[str, str]:
+        nonlocal inner_tool_calls
+        inner_tool_calls += 1
+        return {"output": f"inner {inner_tool_calls}"}
+
+    def should_continue_inner(state: InnerState) -> str:
+        return END if "output" in state else "inner_tool"
+
+    subgraph_builder = StateGraph(state_schema=InnerState)
+    subgraph_builder.add_node("model", inner_model)
+    subgraph_builder.add_node("inner_tool", inner_tool)
+    subgraph_builder.add_edge("inner_tool", "model")
+    subgraph_builder.add_conditional_edges(
+        "model",
+        should_continue_inner,
+        path_map=["inner_tool", END],
+    )
+    subgraph_builder.set_entry_point("model")
+    subgraph = subgraph_builder.compile(checkpointer=True)
+
+    outer_model_calls = 0
+
+    async def outer_model(state: OuterState) -> Command | None:
+        nonlocal outer_model_calls
+        outer_model_calls += 1
+        if "output" in state:
+            return Command(goto=END)
+        return None
+
+    async def outer_tool(state: OuterState) -> dict[str, str]:
+        nonlocal outer_tool_calls
+        outer_tool_calls += 1
+        result = await subgraph.ainvoke(state)
+        return {"output": f"subgraph result: {result['output']}"}
+
+    def should_continue(state: OuterState) -> str:
+        return END if "output" in state else "tools"
+
+    graph_builder = StateGraph(state_schema=OuterState)
+    graph_builder.add_node("model", outer_model)
+    graph_builder.add_node("tools", outer_tool)
+    graph_builder.add_edge("tools", "model")
+    graph_builder.add_conditional_edges(
+        "model",
+        should_continue,
+        path_map=["tools", END],
+    )
+    graph_builder.set_entry_point("model")
+    graph = graph_builder.compile(checkpointer=async_checkpointer)
+
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+    await graph.ainvoke({"input": "hello"}, config=config, interrupt_after=["tools"])
+
+    assert inner_tool_calls == 1
+    assert outer_tool_calls == 1
+
+    history = [state async for state in graph.aget_state_history(config)]
+    resume_state = next(
+        state
+        for state in history
+        if state.next == ("model",) and "output" not in state.values
+    )
+
+    result = await graph.ainvoke(Command(resume="resume"), resume_state.config)
+
+    assert result["output"] == "subgraph result: inner 2"
+    assert inner_tool_calls == 2
+    assert outer_tool_calls == 2
+    assert outer_model_calls >= 3
