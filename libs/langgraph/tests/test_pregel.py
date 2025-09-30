@@ -8521,6 +8521,11 @@ def test_interrupt_stream_mode_values():
 def test_subgraph_resume_reexecutes_from_valid_checkpoint(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
+    """Verify that a resumed subgraph doesn't replay future state during a time-jump.
+
+    After rewinding to a pre-tool checkpoint, the entire subgraph should execute again rather than replaying state from the previous execution.
+    """
+
     class InnerState(TypedDict, total=False):
         input: str
         output: str
@@ -8595,15 +8600,28 @@ def test_subgraph_resume_reexecutes_from_valid_checkpoint(
     assert outer_tool_calls == 1
 
     history = list(graph.get_state_history(config))
-    resume_state = next(
-        state
-        for state in history
-        if state.next == ("model",) and "output" not in state.values
-    )
+    # i: history[i].next, history[i].values:
+    # 0: ('model',) {'input': 'hello', 'output': 'subgraph result: inner 1'}
+    # 1: ('tools',) {'input': 'hello'}
+    # 2: ('model',) {'input': 'hello'}
+    # 3: ('__start__',) {}
+
+    # resume from tools (node that executes subgraph)
+    resume_state = history[1]
 
     result = graph.invoke(Command(resume="resume"), resume_state.config)
 
     assert result["output"] == "subgraph result: inner 2"
     assert inner_tool_calls == 2
     assert outer_tool_calls == 2
-    assert outer_model_calls == 3
+    assert outer_model_calls == 2
+
+    # resume from model
+    resume_state = history[2]
+
+    result = graph.invoke(Command(resume="resume"), resume_state.config)
+
+    assert result["output"] == "subgraph result: inner 3"
+    assert inner_tool_calls == 3
+    assert outer_tool_calls == 3
+    assert outer_model_calls == 4
