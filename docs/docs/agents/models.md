@@ -211,7 +211,7 @@ output = agent.invoke(
 print(output["messages"][-1].text())
 ```
 
-!!! version-added "New in LangGraph v0.6"
+!!! version-added "Added in version 0.6.0"
 
 :::
 
@@ -351,11 +351,13 @@ If your desired LLM isn't officially supported by LangChain, consider these opti
 :::python
 
 1. **Implement a custom LangChain chat model**: Create a model conforming to the [LangChain chat model interface](https://python.langchain.com/docs/how_to/custom_chat_model/). This enables full compatibility with LangGraph's agents and workflows but requires understanding of the LangChain framework.
+
    :::
 
 :::js
 
 1. **Implement a custom LangChain chat model**: Create a model conforming to the [LangChain chat model interface](https://js.langchain.com/docs/how_to/custom_chat/). This enables full compatibility with LangGraph's agents and workflows but requires understanding of the LangChain framework.
+
    :::
 
 2. **Direct invocation with custom streaming**: Use your model directly by [adding custom streaming logic](../how-tos/streaming.md#use-with-any-llm) with `StreamWriter`.
@@ -371,6 +373,7 @@ If your desired LLM isn't officially supported by LangChain, consider these opti
 - [Force model to call a specific tool](https://python.langchain.com/docs/how_to/tool_choice/)
 - [All chat model how-to guides](https://python.langchain.com/docs/how_to/#chat-models)
 - [Chat model integrations](https://python.langchain.com/docs/integrations/chat/)
+
   :::
 
 :::js
@@ -381,4 +384,5 @@ If your desired LLM isn't officially supported by LangChain, consider these opti
 - [Force model to call a specific tool](https://js.langchain.com/docs/how_to/tool_choice/)
 - [All chat model how-to guides](https://js.langchain.com/docs/how_to/#chat-models)
 - [Chat model integrations](https://js.langchain.com/docs/integrations/chat/)
+
   :::
