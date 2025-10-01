@@ -5,7 +5,7 @@ from typing_extensions import TypedDict, deprecated
 
 
 @deprecated(
-    "HumanInterruptConfig has been moved to langchain.agents.interrupt. Please update your import to 'from langchain.agents.interrupt import HumanInterruptConfig'.",
+    "HumanInterruptConfig has been moved to `langchain.agents.interrupt`. Please update your import to `from langchain.agents.interrupt import HumanInterruptConfig`.",
     category=LangGraphDeprecatedSinceV10,
 )
 class HumanInterruptConfig(TypedDict):
@@ -27,7 +27,7 @@ class HumanInterruptConfig(TypedDict):
 
 
 @deprecated(
-    "ActionRequest has been moved to langchain.agents.interrupt. Please update your import to 'from langchain.agents.interrupt import ActionRequest'.",
+    "ActionRequest has been moved to `langchain.agents.interrupt`. Please update your import to `from langchain.agents.interrupt import ActionRequest`.",
     category=LangGraphDeprecatedSinceV10,
 )
 class ActionRequest(TypedDict):
@@ -45,7 +45,7 @@ class ActionRequest(TypedDict):
 
 
 @deprecated(
-    "HumanInterrupt has been moved to langchain.agents.interrupt. Please update your import to 'from langchain.agents.interrupt import HumanInterrupt'.",
+    "HumanInterrupt has been moved to `langchain.agents.interrupt`. Please update your import to `from langchain.agents.interrupt import HumanInterrupt`.",
     category=LangGraphDeprecatedSinceV10,
 )
 class HumanInterrupt(TypedDict):

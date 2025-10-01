@@ -47,7 +47,7 @@ def _default_format_error(
 
 
 @deprecated(
-    "ValidationNode is deprecated. Please use create_react_agent from langchain.agents with custom tool error handling.",
+    "ValidationNode is deprecated. Please use `create_agent` from `langchain.agents` with custom tool error handling.",
     category=LangGraphDeprecatedSinceV10,
 )
 class ValidationNode(RunnableCallable):
