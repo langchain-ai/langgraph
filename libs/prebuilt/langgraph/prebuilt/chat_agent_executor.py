@@ -55,7 +55,7 @@ StructuredResponseSchema = Union[dict, type[BaseModel]]
 
 
 @deprecated(
-    "AgentState has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentState'.",
+    "AgentState has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentState`.",
     category=LangGraphDeprecatedSinceV10,
 )
 class AgentState(TypedDict):
@@ -67,7 +67,7 @@ class AgentState(TypedDict):
 
 
 @deprecated(
-    "AgentStatePydantic has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStatePydantic'.",
+    "AgentStatePydantic has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStatePydantic`.",
     category=LangGraphDeprecatedSinceV10,
 )
 class AgentStatePydantic(BaseModel):
@@ -86,7 +86,7 @@ with warnings.catch_warnings():
     )
 
     @deprecated(
-        "AgentStateWithStructuredResponse has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStateWithStructuredResponse'.",
+        "AgentStateWithStructuredResponse has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStateWithStructuredResponse`.",
         category=LangGraphDeprecatedSinceV10,
     )
     class AgentStateWithStructuredResponse(AgentState):
@@ -103,7 +103,7 @@ with warnings.catch_warnings():
     )
 
     @deprecated(
-        "AgentStateWithStructuredResponsePydantic has been moved to langchain.agents. Please update your import to 'from langchain.agents import AgentStateWithStructuredResponsePydantic'.",
+        "AgentStateWithStructuredResponsePydantic has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStateWithStructuredResponsePydantic`.",
         category=LangGraphDeprecatedSinceV10,
     )
     class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
@@ -271,7 +271,7 @@ def _validate_chat_history(
 
 
 @deprecated(
-    "create_react_agent has been moved to langchain.agents. Please update your import to 'from langchain.agents import create_agent'.",
+    "create_react_agent has been moved to `langchain.agents`. Please update your import to `from langchain.agents import create_agent`.",
     category=LangGraphDeprecatedSinceV10,
 )
 def create_react_agent(

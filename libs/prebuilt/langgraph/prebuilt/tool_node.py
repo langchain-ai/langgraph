@@ -237,7 +237,7 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
 
 
 @deprecated(
-    "ToolNode has been moved to langchain.agents.tool_node. Please update your import to 'from langchain.agents.tool_node import ToolNode'.",
+    "ToolNode has been moved to `langchain.agents.tool_node`. Please update your import to `from langchain.agents.tool_node import ToolNode`.",
     category=LangGraphDeprecatedSinceV10,
 )
 class ToolNode(RunnableCallable):
@@ -856,7 +856,7 @@ def tools_condition(
 
 
 @deprecated(
-    "InjectedState has been moved to langchain.agents.tool_node. Please update your import to 'from langchain.agents.tool_node import InjectedState'.",
+    "InjectedState has been moved to `langchain.agents.tool_node`. Please update your import to `from langchain.agents.tool_node import InjectedState`.",
     category=LangGraphDeprecatedSinceV10,
 )
 class InjectedState(InjectedToolArg):
@@ -934,7 +934,7 @@ class InjectedState(InjectedToolArg):
 
 
 @deprecated(
-    "InjectedStore has been moved to langchain.agents.tool_node. Please update your import to 'from langchain.agents.tool_node import InjectedStore'.",
+    "InjectedStore has been moved to `langchain.agents.tool_node`. Please update your import to `from langchain.agents.tool_node import InjectedStore`.",
     category=LangGraphDeprecatedSinceV10,
 )
 class InjectedStore(InjectedToolArg):

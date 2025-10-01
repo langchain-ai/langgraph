@@ -243,14 +243,11 @@ def add_messages(
 
 
 @deprecated(
-    "MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.",
+    "MessageGraph is deprecated in langgraph 1.0.0, to be removed in 2.0.0. Please use StateGraph with a `messages` key instead.",
     category=None,
 )
 class MessageGraph(StateGraph):
     """A StateGraph where every node receives a list of messages as input and returns one or more messages as output.
-
-    !!! warning "Deprecation"
-        MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.
 
     MessageGraph is a subclass of StateGraph whose entire state is a single, append-only* list of messages.
     Each node in a MessageGraph takes a list of messages as input and returns zero or more
