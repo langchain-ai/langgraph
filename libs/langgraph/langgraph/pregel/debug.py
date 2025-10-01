@@ -40,7 +40,7 @@ class TaskResultPayload(TypedDict):
     name: str
     error: str | None
     interrupts: list[dict]
-    result: list[tuple[str, Any]]
+    result: dict[str, Any]
 
 
 class CheckpointTask(TypedDict):
@@ -77,6 +77,37 @@ def map_debug_tasks(tasks: Iterable[PregelExecutableTask]) -> Iterator[TaskPaylo
         }
 
 
+def is_multiple_channel_write(value: Any) -> bool:
+    """Return True if the payload already wraps multiple writes from the same channel."""
+    return (
+        isinstance(value, dict)
+        and "$writes" in value
+        and isinstance(value["$writes"], list)
+    )
+
+
+def map_task_result_writes(writes: Sequence[tuple[str, Any]]) -> dict[str, Any]:
+    """Merge multiple channel writes into the `$writes` structure."""
+    result: dict[str, Any] = {}
+
+    for channel, value in writes:
+        existing = result.get(channel)
+
+        if existing is not None:
+            channel_writes = (
+                existing["$writes"]
+                if is_multiple_channel_write(existing)
+                else [existing]
+            )
+
+            channel_writes.append(value)
+            result[channel] = {"$writes": channel_writes}
+        else:
+            result[channel] = value
+
+    return result
+
+
 def map_debug_task_results(
     task_tup: tuple[PregelExecutableTask, Sequence[tuple[str, Any]]],
     stream_keys: str | Sequence[str],
@@ -90,7 +121,9 @@ def map_debug_task_results(
         "id": task.id,
         "name": task.name,
         "error": next((w[1] for w in writes if w[0] == ERROR), None),
-        "result": [w for w in writes if w[0] in stream_channels_list or w[0] == RETURN],
+        "result": map_task_result_writes(
+            [w for w in writes if w[0] in stream_channels_list or w[0] == RETURN]
+        ),
         "interrupts": [
             asdict(v)
             for w in writes
@@ -196,54 +229,51 @@ def tasks_w_writes(
             ),
             MISSING,
         )
+        task_error = next(
+            (exc for tid, n, exc in pending_writes if tid == task.id and n == ERROR),
+            None,
+        )
+        task_interrupts = tuple(
+            v
+            for tid, n, vv in pending_writes
+            if tid == task.id and n == INTERRUPT
+            for v in (vv if isinstance(vv, Sequence) else [vv])
+        )
+
+        task_writes = [
+            (chan, val)
+            for tid, chan, val in pending_writes
+            if tid == task.id and chan not in (ERROR, INTERRUPT, RETURN)
+        ]
+
+        if rtn is not MISSING:
+            task_result = rtn
+        elif isinstance(output_keys, str):
+            filtered_writes = [
+                (chan, val) for chan, val in task_writes if chan == output_keys
+            ]
+            mapped_writes = map_task_result_writes(filtered_writes)
+            task_result = mapped_writes.get(str(output_keys)) if mapped_writes else None
+        else:
+            filtered_writes = [
+                (chan, val) for chan, val in task_writes if chan in output_keys
+            ]
+            mapped_writes = map_task_result_writes(filtered_writes)
+            task_result = mapped_writes if filtered_writes else {}
+
+        has_writes = rtn is not MISSING or any(
+            w[0] == task.id and w[1] not in (ERROR, INTERRUPT) for w in pending_writes
+        )
+
         out.append(
             PregelTask(
                 task.id,
                 task.name,
                 task.path,
-                next(
-                    (
-                        exc
-                        for tid, n, exc in pending_writes
-                        if tid == task.id and n == ERROR
-                    ),
-                    None,
-                ),
-                tuple(
-                    v
-                    for tid, n, vv in pending_writes
-                    if tid == task.id and n == INTERRUPT
-                    for v in (vv if isinstance(vv, Sequence) else [vv])
-                ),
+                task_error,
+                task_interrupts,
                 states.get(task.id) if states else None,
-                (
-                    rtn
-                    if rtn is not MISSING
-                    else next(
-                        (
-                            val
-                            for tid, chan, val in pending_writes
-                            if tid == task.id and chan == output_keys
-                        ),
-                        None,
-                    )
-                    if isinstance(output_keys, str)
-                    else {
-                        chan: val
-                        for tid, chan, val in pending_writes
-                        if tid == task.id
-                        and (
-                            chan == output_keys
-                            if isinstance(output_keys, str)
-                            else chan in output_keys
-                        )
-                    }
-                )
-                if any(
-                    w[0] == task.id and w[1] not in (ERROR, INTERRUPT)
-                    for w in pending_writes
-                )
-                else None,
+                task_result if has_writes else None,
             )
         )
     return tuple(out)
