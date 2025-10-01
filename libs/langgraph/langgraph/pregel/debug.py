@@ -249,6 +249,13 @@ def tasks_w_writes(
 
         if rtn is not MISSING:
             task_result = rtn
+        elif isinstance(output_keys, str):
+            # unwrap single channel writes to just the write value
+            filtered_writes = [
+                (chan, val) for chan, val in task_writes if chan == output_keys
+            ]
+            mapped_writes = map_task_result_writes(filtered_writes)
+            task_result = mapped_writes.get(str(output_keys)) if mapped_writes else None
         else:
             if isinstance(output_keys, str):
                 output_keys = [output_keys]
