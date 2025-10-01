@@ -87,7 +87,8 @@ def is_multiple_channel_write(value: Any) -> bool:
 
 
 def map_task_result_writes(writes: Sequence[tuple[str, Any]]) -> dict[str, Any]:
-    """Merge multiple channel writes into the `$writes` structure."""
+    """Folds task writes into a result dict and aggregates repeated-channel writes."""
+    # channel_name -> write | {'$writes': [write1, write2, ...]}
     result: dict[str, Any] = {}
 
     for channel, value in writes:
@@ -248,13 +249,11 @@ def tasks_w_writes(
 
         if rtn is not MISSING:
             task_result = rtn
-        elif isinstance(output_keys, str):
-            filtered_writes = [
-                (chan, val) for chan, val in task_writes if chan == output_keys
-            ]
-            mapped_writes = map_task_result_writes(filtered_writes)
-            task_result = mapped_writes.get(str(output_keys)) if mapped_writes else None
         else:
+            if isinstance(output_keys, str):
+                output_keys = [output_keys]
+            # map task result writes to the desired output channels
+            # repeateed writes to the same channel are aggregated into: {'$writes': [write1, write2, ...]}
             filtered_writes = [
                 (chan, val) for chan, val in task_writes if chan in output_keys
             ]

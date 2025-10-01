@@ -8512,6 +8512,8 @@ def test_supersteps_populate_task_results(
 def test_multiple_writes_same_channel_from_same_node(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
+    """Test that a node can write multiple times to the same channel and that writes are ordered, reduced, and reflected in streamed events and state history."""
+
     class State(TypedDict):
         foo: Annotated[str, lambda a, b: ", ".join([x for x in [a, b] if x])]
 
