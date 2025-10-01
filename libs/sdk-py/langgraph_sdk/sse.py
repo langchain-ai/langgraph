@@ -81,6 +81,12 @@ class SSEDecoder:
         self._last_event_id = ""
         self._retry: int | None = None
 
+    @property
+    def last_event_id(self) -> str | None:
+        """Return the last event identifier that was seen."""
+
+        return self._last_event_id or None
+
     def decode(self, line: bytes) -> StreamPart | None:
         # See: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation  # noqa: E501
 
@@ -95,7 +101,7 @@ class SSEDecoder:
 
             sse = StreamPart(
                 event=self._event,
-                data=orjson.loads(self._data) if self._data else None,
+                data=orjson.loads(self._data) if self._data else None,  # type: ignore[invalid-argument-type]
             )
 
             # NOTE: as per the SSE spec, do not reset last_event_id.

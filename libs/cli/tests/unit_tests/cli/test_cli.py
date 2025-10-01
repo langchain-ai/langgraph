@@ -149,7 +149,7 @@ services:
                 COPY --from=cli_1 . /deps/cli_1
                 # -- End of local package ../../.. --
                 # -- Installing all local dependencies --
-                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e /deps/*
+                RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -381,7 +381,9 @@ def test_dockerfile_command_with_base_image() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert re.match("FROM langchain/langgraph-server:0.2-py3.*", dockerfile)
+            assert re.match("FROM langchain/langgraph-server:0.2-py3.*", dockerfile), (
+                "\n".join(dockerfile.splitlines()[:3])
+            )
 
 
 def test_dockerfile_command_with_docker_compose() -> None:
@@ -568,7 +570,7 @@ def test_build_generate_proper_build_context():
                 catch_exceptions=True,
             )
 
-        build_context_pattern = re.compile(r"--build-context\s+(\w+)=([^\s]+)")
+        build_context_pattern = re.compile(r"--build-context\s+([\w-]+)=([^\s]+)")
 
         build_contexts = re.findall(build_context_pattern, result.output)
         assert len(build_contexts) == 2, (

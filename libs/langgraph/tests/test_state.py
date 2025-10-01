@@ -2,7 +2,7 @@ import inspect
 import operator
 import warnings
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Optional, Union
 from typing import Annotated as Annotated2
 
 import pytest
@@ -10,7 +10,14 @@ from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from typing_extensions import NotRequired, Required, TypedDict
 
-from langgraph.graph.state import StateGraph, _get_node_name, _warn_invalid_state_schema
+from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.ephemeral_value import EphemeralValue
+from langgraph.graph.state import (
+    StateGraph,
+    _get_node_name,
+    _is_field_channel,
+    _warn_invalid_state_schema,
+)
 
 
 class State(BaseModel):
@@ -137,7 +144,7 @@ def test_state_schema_optional_values(total_: bool):
     class InputState(SomeParentState, total=total_):  # type: ignore
         val1: str
         val2: Optional[str]
-        val3: Required[str]
+        val3: Required[Annotated[dict, operator.or_]]
         val4: NotRequired[dict]
         val5: Annotated[Required[str], "foo"]
         val6: Annotated[NotRequired[str], "bar"]
@@ -158,6 +165,8 @@ def test_state_schema_optional_values(total_: bool):
     builder.add_edge("__start__", "n")
     graph = builder.compile()
     json_schema = graph.get_input_jsonschema()
+
+    assert isinstance(graph.channels["val3"], BinaryOperatorAggregate)
 
     if total_ is False:
         expected_required = set()
@@ -332,3 +341,33 @@ def test_private_input_schema_conditional_edge():
     builder.add_edge("__start__", "node_1")
     graph = builder.compile()
     assert graph.invoke({"foo": 0}) == {"foo": 2, "bar": "meow"}
+
+
+def test_is_field_channel() -> None:
+    """Test channel detection across all scenarios."""
+    # Basic detection
+    result = _is_field_channel(Annotated[int, EphemeralValue])
+    assert isinstance(result, EphemeralValue) and result.typ is int
+
+    # Main fix: handles extraneous annotations
+    result = _is_field_channel(Annotated[str, "metadata", EphemeralValue, "more"])
+    assert isinstance(result, EphemeralValue) and result.typ is str
+
+    # Complex types work
+    union_type = Union[int, str]
+    result = _is_field_channel(Annotated[union_type, EphemeralValue])
+    assert isinstance(result, EphemeralValue) and result.typ is union_type
+
+    # Pre-instantiated channels
+    instantiated = EphemeralValue(int)
+    result = _is_field_channel(Annotated[int, instantiated])
+    assert result is instantiated
+
+    # Pre-instantiated channels with multiple annotations
+    instantiated = EphemeralValue(int)
+    result = _is_field_channel(Annotated[int, "metadata", instantiated, "more"])
+    assert result is instantiated
+
+    # No channel cases
+    assert _is_field_channel(int) is None
+    assert _is_field_channel(Annotated[int, "just_metadata"]) is None

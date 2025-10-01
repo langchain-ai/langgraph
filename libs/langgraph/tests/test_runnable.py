@@ -4,10 +4,10 @@ from typing import Any, Optional
 
 import pytest
 from langchain_core.runnables.config import RunnableConfig
+from langgraph.store.base import BaseStore
 
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.runtime import Runtime
-from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 
 pytestmark = pytest.mark.anyio
@@ -394,3 +394,21 @@ def test_config_injection() -> None:
     assert RunnableCallable(func_untyped).invoke(
         "test", config={"tags": ["test"], "configurable": {}}
     ) == ["test"]
+
+
+def test_config_ensured() -> None:
+    def func(input: str, config: RunnableConfig) -> None:
+        assert input == "test"
+        assert config is not None
+        assert config.get("configurable") is not None
+
+    RunnableCallable(func).invoke("test")
+
+
+async def test_config_ensured_async() -> None:
+    async def func(input: str, config: RunnableConfig) -> None:
+        assert input == "test"
+        assert config is not None
+        assert config.get("configurable") is not None
+
+    await RunnableCallable(func).ainvoke("test")

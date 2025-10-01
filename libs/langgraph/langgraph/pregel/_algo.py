@@ -23,6 +23,14 @@ from typing import (
 from langchain_core.callbacks import Callbacks
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables.config import RunnableConfig
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    ChannelVersions,
+    Checkpoint,
+    PendingWrite,
+    V,
+)
+from langgraph.store.base import BaseStore
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._config import merge_configs, patch_config
@@ -57,13 +65,6 @@ from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
-from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
-    ChannelVersions,
-    Checkpoint,
-    PendingWrite,
-    V,
-)
 from langgraph.constants import TAG_HIDDEN
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
@@ -71,7 +72,6 @@ from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
 from langgraph.runtime import DEFAULT_RUNTIME, Runtime
-from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     CacheKey,
@@ -194,15 +194,12 @@ def local_read(
         for c, v in task.writes:
             if c in select:
                 updated[c].append(v)
-    if fresh and updated:
+    if fresh:
         # apply writes
         local_channels: dict[str, BaseChannel] = {}
         for k in channels:
-            if k in updated:
-                cc = channels[k].copy()
-                cc.update(updated[k])
-            else:
-                cc = channels[k]
+            cc = channels[k].copy()
+            cc.update(updated[k])
             local_channels[k] = cc
         # read fresh values
         values = read_channels(local_channels, select)
@@ -718,13 +715,17 @@ def prepare_single_task(
             runtime = runtime.override(
                 store=store, previous=checkpoint["channel_values"].get(PREVIOUS, None)
             )
+            additional_config: RunnableConfig = {
+                "metadata": metadata,
+                "tags": proc.tags,
+            }
             return PregelExecutableTask(
                 packet.node,
                 packet.arg,
                 proc_node,
                 writes,
                 patch_config(
-                    merge_configs(config, {"metadata": metadata, "tags": proc.tags}),
+                    merge_configs(config, additional_config),
                     run_name=packet.node,
                     callbacks=(
                         manager.get_child(f"graph:step:{step}") if manager else None
@@ -859,15 +860,17 @@ def prepare_single_task(
                         previous=checkpoint["channel_values"].get(PREVIOUS, None),
                         store=store,
                     )
+                    additional_config = {
+                        "metadata": metadata,
+                        "tags": proc.tags,
+                    }
                     return PregelExecutableTask(
                         name,
                         val,
                         node,
                         writes,
                         patch_config(
-                            merge_configs(
-                                config, {"metadata": metadata, "tags": proc.tags}
-                            ),
+                            merge_configs(config, additional_config),
                             run_name=name,
                             callbacks=(
                                 manager.get_child(f"graph:step:{step}")

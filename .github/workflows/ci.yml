@@ -27,7 +27,7 @@ jobs:
       python: ${{ steps.filter.outputs.python }}
       deps: ${{ steps.filter.outputs.deps }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -78,6 +78,7 @@ jobs:
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
             "libs/prebuilt",
+            "libs/sdk-py",
           ]
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
     uses: ./.github/workflows/_test.yml
@@ -99,9 +100,9 @@ jobs:
     name: "Check SDK methods matching"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
       - name: Run check_sdk_methods script
@@ -117,7 +118,7 @@ jobs:
         python-version:
           - "3.11"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python ${{ matrix.python-version }}
         uses: astral-sh/setup-uv@v6
         with:

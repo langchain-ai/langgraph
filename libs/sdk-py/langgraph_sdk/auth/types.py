@@ -58,7 +58,14 @@ Values:
 """
 
 FilterType = typing.Union[
-    dict[str, typing.Union[str, dict[typing.Literal["$eq", "$contains"], str]]],
+    dict[
+        str,
+        typing.Union[
+            str,
+            dict[typing.Literal["$eq", "$contains"], str],
+            dict[typing.Literal["$contains"], list[str]],
+        ],
+    ],
     dict[str, str],
 ]
 """Response type for authorization handlers.
@@ -66,22 +73,31 @@ FilterType = typing.Union[
 Supports exact matches and operators:
     - Exact match shorthand: {"field": "value"}
     - Exact match: {"field": {"$eq": "value"}}
-    - Contains: {"field": {"$contains": "value"}}
+    - Contains (membership): {"field": {"$contains": "value"}}
+    - Contains (subset containment): {"field": {"$contains": ["value1", "value2"]}}
+
+Subset containment is only supported by newer versions of the LangGraph dev server;
+install langgraph-runtime-inmem >= 0.14.1 to use this filter variant.
 
 ???+ example "Examples"
     Simple exact match filter for the resource owner:
     ```python
     filter = {"owner": "user-abcd123"}
     ```
-    
+
     Explicit version of the exact match filter:
     ```python
     filter = {"owner": {"$eq": "user-abcd123"}}
     ```
-    
-    Containment:
+ 
+    Containment (membership of a single element):
     ```python
     filter = {"participants": {"$contains": "user-abcd123"}}
+    ```
+
+    Containment (subset containment; all values must be present, but order doesn't matter):
+    ```python
+    filter = {"participants": {"$contains": ["user-abcd123", "user-efgh456"]}}
     ```
 
     Combining filters (treated as a logical `AND`):
@@ -400,6 +416,20 @@ class AuthContext(BaseAuthContext):
     """
 
 
+class ThreadTTL(typing.TypedDict, total=False):
+    """Time-to-live configuration for a thread.
+
+    Matches the OpenAPI schema where TTL is represented as an object with
+    an optional strategy and a time value in minutes.
+    """
+
+    strategy: typing.Literal["delete"]
+    """TTL strategy. Currently only 'delete' is supported."""
+
+    ttl: int
+    """Time-to-live in minutes from now until the thread should be swept."""
+
+
 class ThreadsCreate(typing.TypedDict, total=False):
     """Parameters for creating a new thread.
 
@@ -421,6 +451,9 @@ class ThreadsCreate(typing.TypedDict, total=False):
 
     if_exists: OnConflictBehavior
     """Behavior when a thread with the same ID already exists."""
+
+    ttl: ThreadTTL
+    """Optional TTL configuration for the thread."""
 
 
 class ThreadsRead(typing.TypedDict, total=False):
@@ -488,6 +521,9 @@ class ThreadsSearch(typing.TypedDict, total=False):
 
     offset: int
     """Offset for pagination."""
+
+    ids: Sequence[UUID] | None
+    """typing.Optional list of thread IDs to filter by."""
 
     thread_id: UUID | None
     """typing.Optional thread ID to filter by."""
