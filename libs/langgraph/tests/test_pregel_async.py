@@ -25,6 +25,7 @@ from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePas
 from langchain_core.utils.aiter import aclosing
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
     BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
