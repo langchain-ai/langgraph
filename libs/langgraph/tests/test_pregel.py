@@ -8542,7 +8542,6 @@ def test_multiple_writes_same_channel_from_same_node(
         )
     ]
 
-    print("EVENTS", events)
     assert events == [
         (
             "tasks",
@@ -8594,7 +8593,6 @@ def test_multiple_writes_same_channel_from_same_node(
 
     history = [map_snapshot(s) for s in graph.get_state_history(config)]
 
-    print("HISTORY", history)
     assert history == [
         {
             "tasks": [],

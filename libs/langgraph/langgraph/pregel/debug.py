@@ -87,10 +87,12 @@ def is_multiple_channel_write(value: Any) -> bool:
 
 
 def map_task_result_writes(writes: Sequence[tuple[str, Any]]) -> dict[str, Any]:
-    """Folds task writes into a result dict and aggregates repeated-channel writes."""
-    # channel_name -> write | {'$writes': [write1, write2, ...]}
-    result: dict[str, Any] = {}
+    """Folds task writes into a result dict and aggregates multiple writes to the same channel.
 
+    If the channel contains a single write, we record the write in the result dict as `{channel: write}`
+    If the channel contains multiple writes, we record the writes in the result dict as `{channel: {'$writes': [write1, write2, ...]}}`"""
+
+    result: dict[str, Any] = {}
     for channel, value in writes:
         existing = result.get(channel)
 
@@ -100,12 +102,10 @@ def map_task_result_writes(writes: Sequence[tuple[str, Any]]) -> dict[str, Any]:
                 if is_multiple_channel_write(existing)
                 else [existing]
             )
-
             channel_writes.append(value)
             result[channel] = {"$writes": channel_writes}
         else:
             result[channel] = value
-
     return result
 
 
