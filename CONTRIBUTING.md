@@ -277,9 +277,9 @@ def my_function(arg1: int, arg2: str) -> float:
     Examples:
         This is a section for examples of how to use the function.
 
-        .. code-block:: python
-
-            my_function(1, "hello")
+        ```python
+        my_function(1, "hello")
+        \```
 
     Args:
         arg1: This is a description of arg1. We do not need to specify the type since
