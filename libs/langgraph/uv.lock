@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1352,7 +1352,7 @@ requires-dist = [
 dev = [
     { name = "httpx" },
     { name = "jupyter" },
-    { name = "langchain-core", specifier = "==1.0.0a1" },
+    { name = "langchain-core", specifier = ">=1.0.0a1,<2.0.0" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
