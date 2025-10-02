@@ -89,13 +89,12 @@ def push_ui_message(
         The created UI message.
 
     Example:
-
-    .. code-block:: python
-
+        ```python
         push_ui_message(
             name="component-name",
             props={"content": "Hello world"},
         )
+        ```
 
     """
     from langgraph._internal._constants import CONFIG_KEY_SEND
@@ -146,10 +145,9 @@ def delete_ui_message(id: str, *, state_key: str = "ui") -> RemoveUIMessage:
         The remove UI message.
 
     Example:
-
-    .. code-block:: python
-
+        ```python
         delete_ui_message("message-123")
+        ```
 
     """
     from langgraph._internal._constants import CONFIG_KEY_SEND
@@ -183,13 +181,12 @@ def ui_message_reducer(
         Combined list of UI messages with removals applied.
 
     Example:
-
-    .. code-block:: python
-
+        ```python
         messages = ui_message_reducer(
             [{"type": "ui", "id": "1", "name": "Chat", "props": {}}],
             {"type": "remove-ui", "id": "1"},
         )
+        ```
 
     """
     if not isinstance(left, list):
