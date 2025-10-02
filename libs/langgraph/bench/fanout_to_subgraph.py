@@ -114,9 +114,9 @@ if __name__ == "__main__":
     import time
 
     import uvloop
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
-    graph = fanout_to_subgraph().compile(checkpointer=InMemorySaver())
+    graph = fanout_to_subgraph().compile(checkpointer=InMemoryCheckpointer())
     input = {
         "subjects": [
             random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(1000)

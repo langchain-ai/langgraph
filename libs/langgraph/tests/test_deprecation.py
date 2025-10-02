@@ -354,3 +354,16 @@ def test_basecheckpointsaver_alias_and_deprecation_warning() -> None:
         match=r"`BaseCheckpointSaver` has been renamed\. Please use `BaseCheckpointer` instead\.",
     ):
         BaseCheckpointSaver()
+
+
+def test_inmemorysaver_alias_and_deprecation_warning() -> None:
+    """Test that importing InMemorySaver raises a deprecation warning and is an alias for InMemoryCheckpointer."""
+    from langgraph.checkpoint.base import InMemoryCheckpointer, InMemorySaver
+
+    assert issubclass(InMemorySaver, InMemoryCheckpointer)
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"`InMemorySaver` has been renamed\. Please use `InMemoryCheckpointer` instead\.",
+    ):
+        InMemorySaver()

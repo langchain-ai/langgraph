@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage, AnyMessage, ToolCall
 from langchain_core.runnables import RunnableConfig, RunnableMap, RunnablePick
 from langchain_core.tools import tool
 from langgraph.checkpoint.base import BaseCheckpointer
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_node import ToolNode
 from pytest_mock import MockerFixture
@@ -569,7 +569,7 @@ def test_conditional_state_graph(
 
     app = workflow.compile()
 
-    if isinstance(sync_checkpointer, InMemorySaver):
+    if isinstance(sync_checkpointer, InMemoryCheckpointer):
         assert json.dumps(app.get_input_jsonschema()) == snapshot
         assert json.dumps(app.get_output_jsonschema()) == snapshot
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
@@ -2486,7 +2486,7 @@ def test_message_graph(
     # meaning you can use it as you would any other runnable
     app = workflow.compile()
 
-    if isinstance(sync_checkpointer, InMemorySaver):
+    if isinstance(sync_checkpointer, InMemoryCheckpointer):
         assert json.dumps(app.get_input_jsonschema()) == snapshot
         assert json.dumps(app.get_output_jsonschema()) == snapshot
         assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
@@ -6237,7 +6237,7 @@ def test_send_react_interrupt_control(
     builder.add_edge(START, "agent")
     graph = builder.compile()
 
-    if isinstance(sync_checkpointer, InMemorySaver):
+    if isinstance(sync_checkpointer, InMemoryCheckpointer):
         assert graph.get_graph().draw_mermaid() == snapshot
 
     assert graph.invoke({"messages": [HumanMessage("hello")]}) == {
@@ -6537,7 +6537,7 @@ def test_weather_subgraph(
     graph.add_edge("weather_graph", END)
     graph = graph.compile(checkpointer=sync_checkpointer)
 
-    if isinstance(sync_checkpointer, InMemorySaver):
+    if isinstance(sync_checkpointer, InMemoryCheckpointer):
         assert graph.get_graph(xray=1).draw_mermaid() == snapshot
 
     config = {"configurable": {"thread_id": "1"}}

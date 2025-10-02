@@ -13,11 +13,11 @@ AI applications need [memory](../../concepts/memory.md) to share context across 
 
 ```python
 # highlight-next-line
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.graph import StateGraph
 
 # highlight-next-line
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 
 builder = StateGraph(...)
 # highlight-next-line
@@ -473,7 +473,7 @@ If your graph contains [subgraphs](../../concepts/subgraphs.md), you only need t
 
 ```python
 from langgraph.graph import START, StateGraph
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from typing import TypedDict
 
 class State(TypedDict):
@@ -497,7 +497,7 @@ builder = StateGraph(State)
 builder.add_node("node_1", subgraph)
 builder.add_edge(START, "node_1")
 
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 # highlight-next-line
 graph = builder.compile(checkpointer=checkpointer)
 ```
@@ -1751,7 +1751,7 @@ Most LLMs have a maximum supported context window (denominated in tokens). One w
         # highlight-next-line
         return {"llm_input_messages": trimmed_messages}
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     agent = create_react_agent(
         model,
         tools,
@@ -1877,7 +1877,7 @@ Most LLMs have a maximum supported context window (denominated in tokens). One w
         response = model.invoke(messages)
         return {"messages": [response]}
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     builder = StateGraph(MessagesState)
     builder.add_node(call_model)
     builder.add_edge(START, "call_model")
@@ -2025,7 +2025,7 @@ const deleteMessages = (state) => {
     builder.add_sequence([call_model, delete_messages])
     builder.add_edge(START, "call_model")
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     app = builder.compile(checkpointer=checkpointer)
 
     for event in app.stream(
@@ -2127,7 +2127,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
     from langchain_core.messages.utils import count_tokens_approximately
     from langgraph.prebuilt import create_react_agent
     from langgraph.prebuilt.chat_agent_executor import AgentState
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     from typing import Any
 
     model = ChatAnthropic(model="claude-3-7-sonnet-latest")
@@ -2147,7 +2147,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
         context: dict[str, RunningSummary]  # (2)!
 
 
-    checkpointer = InMemorySaver() # (3)!
+    checkpointer = InMemoryCheckpointer() # (3)!
 
     agent = create_react_agent(
         model=model,
@@ -2160,7 +2160,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
     )
     ```
 
-    1. The `InMemorySaver` is a checkpointer that stores the agent's state in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [checkpointer documentation](../../reference/checkpoints.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready checkpointer for you.
+    1. The `InMemoryCheckpointer` is a checkpointer that stores the agent's state in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [checkpointer documentation](../../reference/checkpoints.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready checkpointer for you.
     2. The `context` key is added to the agent's state. The key contains book-keeping information for the summarization node. It is used to keep track of the last summary information and ensure that the agent doesn't summarize on every LLM call, which can be inefficient.
     3. The `checkpointer` is passed to the agent. This enables the agent to persist its state across invocations.
     4. The `pre_model_hook` is set to the `SummarizationNode`. This node will summarize the message history before sending it to the LLM. The summarization node will automatically handle the summarization process and update the agent's state with the new summary. You can replace this with a custom implementation if you prefer. Please see the @[create_react_agent][create_react_agent] API reference for more details.
@@ -2270,7 +2270,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
     from langchain_core.messages import AnyMessage
     from langchain_core.messages.utils import count_tokens_approximately
     from langgraph.graph import StateGraph, START, MessagesState
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     # highlight-next-line
     from langmem.short_term import SummarizationNode, RunningSummary
 
@@ -2299,7 +2299,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
         response = model.invoke(state["summarized_messages"])
         return {"messages": [response]}
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     builder = StateGraph(State)
     builder.add_node(call_model)
     # highlight-next-line

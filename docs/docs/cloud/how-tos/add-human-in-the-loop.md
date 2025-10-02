@@ -139,7 +139,7 @@ To review, edit, and approve tool calls in an agent or workflow, use LangGraph's
     from typing import TypedDict
     import uuid
 
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     from langgraph.constants import START
     from langgraph.graph import StateGraph
     # highlight-next-line

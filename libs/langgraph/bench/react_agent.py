@@ -67,9 +67,9 @@ if __name__ == "__main__":
     import asyncio
 
     import uvloop
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
-    graph = react_agent(100, checkpointer=InMemorySaver())
+    graph = react_agent(100, checkpointer=InMemoryCheckpointer())
     input = {"messages": [HumanMessage("hi?")]}
     config = {"configurable": {"thread_id": "1"}, "recursion_limit": 20000000000}
 

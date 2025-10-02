@@ -49,7 +49,7 @@ Below we demonstrate a simple application that writes an essay and [interrupts](
 :::python
 
 ```python
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.func import entrypoint, task
 from langgraph.types import interrupt
 
@@ -59,7 +59,7 @@ def write_essay(topic: str) -> str:
     time.sleep(1) # A placeholder for a long-running task.
     return f"An essay about topic: {topic}"
 
-@entrypoint(checkpointer=InMemorySaver())
+@entrypoint(checkpointer=InMemoryCheckpointer())
 def workflow(topic: str) -> dict:
     """A simple workflow that writes an essay and asks for a review."""
     essay = write_essay("cat").result()
@@ -128,7 +128,7 @@ const workflow = entrypoint(
     import uuid
     from langgraph.func import entrypoint, task
     from langgraph.types import interrupt
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
 
     @task
@@ -137,7 +137,7 @@ const workflow = entrypoint(
         time.sleep(1)  # This is a placeholder for a long-running task.
         return f"An essay about topic: {topic}"
 
-    @entrypoint(checkpointer=InMemorySaver())
+    @entrypoint(checkpointer=InMemoryCheckpointer())
     def workflow(topic: str) -> dict:
         """A simple workflow that writes an essay and asks for a review."""
         essay = write_essay("cat").result()

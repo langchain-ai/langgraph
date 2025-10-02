@@ -32,7 +32,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
 )
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
@@ -91,11 +91,11 @@ NEEDS_CONTEXTVARS = pytest.mark.skipif(
 
 
 async def test_checkpoint_errors() -> None:
-    class FaultyGetCheckpointer(InMemorySaver):
+    class FaultyGetCheckpointer(InMemoryCheckpointer):
         async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
             raise ValueError("Faulty get_tuple")
 
-    class FaultyPutCheckpointer(InMemorySaver):
+    class FaultyPutCheckpointer(InMemoryCheckpointer):
         async def aput(
             self,
             config: RunnableConfig,
@@ -105,13 +105,13 @@ async def test_checkpoint_errors() -> None:
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 
-    class FaultyPutWritesCheckpointer(InMemorySaver):
+    class FaultyPutWritesCheckpointer(InMemoryCheckpointer):
         async def aput_writes(
             self, config: RunnableConfig, writes: list[tuple[str, Any]], task_id: str
         ) -> RunnableConfig:
             raise ValueError("Faulty put_writes")
 
-    class FaultyVersionCheckpointer(InMemorySaver):
+    class FaultyVersionCheckpointer(InMemoryCheckpointer):
         def get_next_version(self, current: Optional[int], channel: None) -> int:
             raise ValueError("Faulty get_next_version")
 
@@ -126,7 +126,7 @@ async def test_checkpoint_errors() -> None:
     builder.add_node("agent", logic)
     builder.add_edge(START, "agent")
 
-    graph = builder.compile(checkpointer=InMemorySaver(serde=FaultySerializer()))
+    graph = builder.compile(checkpointer=InMemoryCheckpointer(serde=FaultySerializer()))
     with pytest.raises(ValueError, match="Faulty serializer"):
         await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
     with pytest.raises(ValueError, match="Faulty serializer"):
@@ -202,7 +202,7 @@ async def test_checkpoint_errors() -> None:
     builder = StateGraph(Annotated[str, faulty_reducer])
     builder.add_node("agent", logic)
     builder.add_edge(START, "agent")
-    graph = builder.compile(checkpointer=InMemorySaver())
+    graph = builder.compile(checkpointer=InMemoryCheckpointer())
 
     with pytest.raises(ValueError, match="Faulty reducer"):
         await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
@@ -278,7 +278,7 @@ async def test_py_async_with_cancel_behavior() -> None:
 async def test_checkpoint_put_after_cancellation() -> None:
     logs: list[str] = []
 
-    class LongPutCheckpointer(InMemorySaver):
+    class LongPutCheckpointer(InMemoryCheckpointer):
         async def aput(
             self,
             config: RunnableConfig,
@@ -346,7 +346,7 @@ async def test_checkpoint_put_after_cancellation() -> None:
 async def test_checkpoint_put_after_cancellation_stream_anext() -> None:
     logs: list[str] = []
 
-    class LongPutCheckpointer(InMemorySaver):
+    class LongPutCheckpointer(InMemoryCheckpointer):
         async def aput(
             self,
             config: RunnableConfig,
@@ -413,7 +413,7 @@ async def test_checkpoint_put_after_cancellation_stream_anext() -> None:
 async def test_checkpoint_put_after_cancellation_stream_events_anext() -> None:
     logs: list[str] = []
 
-    class LongPutCheckpointer(InMemorySaver):
+    class LongPutCheckpointer(InMemoryCheckpointer):
         async def aput(
             self,
             config: RunnableConfig,
@@ -3254,7 +3254,7 @@ async def test_send_react_interrupt_control(
     builder.add_node(foo)
     builder.add_edge(START, "agent")
     graph = builder.compile()
-    if isinstance(async_checkpointer, InMemorySaver):
+    if isinstance(async_checkpointer, InMemoryCheckpointer):
         assert graph.get_graph().draw_mermaid() == snapshot
 
     assert await graph.ainvoke({"messages": [HumanMessage("hello")]}) == {
@@ -3535,7 +3535,7 @@ async def test_max_concurrency_control(async_checkpointer: BaseCheckpointer) -> 
     builder.add_edge(START, "1")
     graph = builder.compile()
 
-    if isinstance(async_checkpointer, InMemorySaver):
+    if isinstance(async_checkpointer, InMemoryCheckpointer):
         assert (
             graph.get_graph().draw_mermaid()
             == """---
@@ -4457,7 +4457,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydant
 
     app = workflow.compile()
 
-    if isinstance(async_checkpointer, InMemorySaver):
+    if isinstance(async_checkpointer, InMemoryCheckpointer):
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
         assert app.get_input_jsonschema() == snapshot
         assert app.get_output_jsonschema() == snapshot
@@ -5011,7 +5011,7 @@ async def test_subgraph_checkpoint_true(
 async def test_subgraph_durability_inherited(
     durability: Durability,
 ) -> None:
-    async_checkpointer = InMemorySaver()
+    async_checkpointer = InMemoryCheckpointer()
 
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -9135,7 +9135,7 @@ async def test_null_resume_disallowed_with_multiple_interrupts(
     graph_builder.add_edge(START, "human_node_1")
     graph_builder.add_edge(START, "human_node_2")
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     graph = graph_builder.compile(checkpointer=checkpointer)
 
     thread_id = str(uuid.uuid4())

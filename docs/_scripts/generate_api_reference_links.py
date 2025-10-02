@@ -66,7 +66,7 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     ([], "langgraph.checkpoint.base", "SerializerProtocol", "checkpoints"),
     ([], "langgraph.checkpoint.serde.jsonplus", "JsonPlusSerializer", "checkpoints"),
     ([], "langgraph.checkpoint.memory", "MemorySaver", "checkpoints"),
-    ([], "langgraph.checkpoint.memory", "InMemorySaver", "checkpoints"),
+    ([], "langgraph.checkpoint.memory", "InMemoryCheckpointer", "checkpoints"),
     ([], "langgraph.checkpoint.sqlite.aio", "AsyncSqliteSaver", "checkpoints"),
     ([], "langgraph.checkpoint.sqlite", "SqliteSaver", "checkpoints"),
     ([], "langgraph.checkpoint.postgres.aio", "AsyncPostgresSaver", "checkpoints"),

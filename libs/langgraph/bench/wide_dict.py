@@ -129,9 +129,9 @@ if __name__ == "__main__":
     import asyncio
 
     import uvloop
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
-    graph = wide_dict(1000).compile(checkpointer=InMemorySaver())
+    graph = wide_dict(1000).compile(checkpointer=InMemoryCheckpointer())
     input = {
         "messages": [
             {

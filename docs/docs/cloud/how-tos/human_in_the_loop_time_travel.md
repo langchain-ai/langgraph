@@ -18,7 +18,7 @@ To time travel using the LangGraph Server API (via the LangGraph SDK):
     from typing_extensions import TypedDict, NotRequired
     from langgraph.graph import StateGraph, START, END
     from langchain.chat_models import init_chat_model
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
     class State(TypedDict):
         topic: NotRequired[str]

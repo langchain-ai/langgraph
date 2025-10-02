@@ -49,7 +49,7 @@ await myWorkflow.invoke({ value: 1, anotherValue: 2 });
     ```python
     import uuid
     from langgraph.func import entrypoint, task
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
     # Task that checks if a number is even
     @task
@@ -62,7 +62,7 @@ await myWorkflow.invoke({ value: 1, anotherValue: 2 });
         return "The number is even." if is_even else "The number is odd."
 
     # Create a checkpointer for persistence
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
 
     @entrypoint(checkpointer=checkpointer)
     def workflow(inputs: dict) -> str:
@@ -122,7 +122,7 @@ await myWorkflow.invoke({ value: 1, anotherValue: 2 });
     import uuid
     from langchain.chat_models import init_chat_model
     from langgraph.func import entrypoint, task
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
     llm = init_chat_model('openai:gpt-3.5-turbo')
 
@@ -136,7 +136,7 @@ await myWorkflow.invoke({ value: 1, anotherValue: 2 });
         ]).content
 
     # Create a checkpointer for persistence
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
 
     @entrypoint(checkpointer=checkpointer)
     def workflow(topic: str) -> str:
@@ -231,7 +231,7 @@ const graph = entrypoint(
     import uuid
     from langchain.chat_models import init_chat_model
     from langgraph.func import entrypoint, task
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
     # Initialize the LLM model
     llm = init_chat_model("openai:gpt-3.5-turbo")
@@ -246,7 +246,7 @@ const graph = entrypoint(
         return response.content
 
     # Create a checkpointer for persistence
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
 
     @entrypoint(checkpointer=checkpointer)
     def workflow(topics: list[str]) -> str:
@@ -363,7 +363,7 @@ const someWorkflow = entrypoint(
     import uuid
     from typing import TypedDict
     from langgraph.func import entrypoint
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     from langgraph.graph import StateGraph
 
     # Define the shared state type
@@ -381,7 +381,7 @@ const someWorkflow = entrypoint(
     graph = builder.compile()
 
     # Define the functional API workflow
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
 
     @entrypoint(checkpointer=checkpointer)
     def workflow(x: int) -> dict:
@@ -478,10 +478,10 @@ const myWorkflow = entrypoint(
     ```python
     import uuid
     from langgraph.func import entrypoint
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
     # Initialize a checkpointer
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
 
     # A reusable sub-workflow that multiplies a number
     @entrypoint()
@@ -542,10 +542,10 @@ Example of using the streaming API to stream both updates and custom data.
 
 ```python
 from langgraph.func import entrypoint
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.config import get_stream_writer # (1)!
 
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 
 @entrypoint(checkpointer=checkpointer)
 def main(inputs: dict) -> int:
@@ -652,7 +652,7 @@ updates: {"main": 5}
 :::python
 
 ```python
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.func import entrypoint, task
 from langgraph.types import RetryPolicy
 
@@ -673,7 +673,7 @@ def get_info():
         raise ValueError('Failure')
     return "OK"
 
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 
 @entrypoint(checkpointer=checkpointer)
 def main(inputs, writer):
@@ -837,7 +837,7 @@ for await (const chunk of await main.stream(
 
 ```python
 import time
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.func import entrypoint, task
 from langgraph.types import StreamWriter
 
@@ -859,7 +859,7 @@ def get_info():
     return "OK"
 
 # Initialize an in-memory checkpointer for persistence
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 
 @task
 def slow_task():
@@ -1060,9 +1060,9 @@ We can now compose these tasks in an [entrypoint](../concepts/functional_api.md#
 :::python
 
 ```python
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 
 
 @entrypoint(checkpointer=checkpointer)
@@ -1234,12 +1234,12 @@ We can now update our [entrypoint](../concepts/functional_api.md#entrypoint) to 
 :::python
 
 ```python
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.graph.message import add_messages
 from langgraph.types import Command, interrupt
 
 
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 
 
 @entrypoint(checkpointer=checkpointer)
@@ -1584,9 +1584,9 @@ Use `entrypoint.final` to decouple what is returned to the caller from what is p
 ```python
 from typing import Optional
 from langgraph.func import entrypoint
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 
 @entrypoint(checkpointer=checkpointer)
 def accumulate(n: int, *, previous: Optional[int]) -> entrypoint.final[int, int]:
@@ -1632,7 +1632,7 @@ console.log(await accumulate.invoke(3, config)); // 3
 
 ### Chatbot example
 
-An example of a simple chatbot using the functional API and the `InMemorySaver` checkpointer.
+An example of a simple chatbot using the functional API and the `InMemoryCheckpointer` checkpointer.
 The bot is able to remember the previous conversation and continue from where it left off.
 
 :::python
@@ -1641,7 +1641,7 @@ The bot is able to remember the previous conversation and continue from where it
 from langchain_core.messages import BaseMessage
 from langgraph.graph import add_messages
 from langgraph.func import entrypoint, task
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langchain_anthropic import ChatAnthropic
 
 model = ChatAnthropic(model="claude-3-5-sonnet-latest")
@@ -1651,7 +1651,7 @@ def call_model(messages: list[BaseMessage]):
     response = model.invoke(messages)
     return response
 
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 
 @entrypoint(checkpointer=checkpointer)
 def workflow(inputs: list[BaseMessage], *, previous: list[BaseMessage]):

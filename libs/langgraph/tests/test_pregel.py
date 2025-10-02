@@ -31,7 +31,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
 )
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.store.base import BaseStore
 from langsmith import traceable
@@ -139,11 +139,11 @@ def test_graph_validation_with_command() -> None:
 
 
 def test_checkpoint_errors() -> None:
-    class FaultyGetCheckpointer(InMemorySaver):
+    class FaultyGetCheckpointer(InMemoryCheckpointer):
         def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
             raise ValueError("Faulty get_tuple")
 
-    class FaultyPutCheckpointer(InMemorySaver):
+    class FaultyPutCheckpointer(InMemoryCheckpointer):
         def put(
             self,
             config: RunnableConfig,
@@ -153,13 +153,13 @@ def test_checkpoint_errors() -> None:
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 
-    class FaultyPutWritesCheckpointer(InMemorySaver):
+    class FaultyPutWritesCheckpointer(InMemoryCheckpointer):
         def put_writes(
             self, config: RunnableConfig, writes: list[tuple[str, Any]], task_id: str
         ) -> RunnableConfig:
             raise ValueError("Faulty put_writes")
 
-    class FaultyVersionCheckpointer(InMemorySaver):
+    class FaultyVersionCheckpointer(InMemoryCheckpointer):
         def get_next_version(self, current: Optional[int], channel: None) -> int:
             raise ValueError("Faulty get_next_version")
 
@@ -1938,7 +1938,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
 
     app = workflow.compile()
 
-    if isinstance(sync_checkpointer, InMemorySaver):
+    if isinstance(sync_checkpointer, InMemoryCheckpointer):
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}) == {
@@ -2081,7 +2081,7 @@ def test_in_one_fan_out_state_graph_defer_node(
 
     app = workflow.compile()
 
-    if isinstance(sync_checkpointer, InMemorySaver):
+    if isinstance(sync_checkpointer, InMemoryCheckpointer):
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}) == {
@@ -2346,7 +2346,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
     app = workflow.compile()
 
-    if isinstance(sync_checkpointer, InMemorySaver):
+    if isinstance(sync_checkpointer, InMemoryCheckpointer):
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}, debug=True) == {
@@ -2465,7 +2465,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
     app = workflow.compile()
 
-    if isinstance(sync_checkpointer, InMemorySaver):
+    if isinstance(sync_checkpointer, InMemoryCheckpointer):
         assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
         assert app.get_input_jsonschema() == snapshot
         assert app.get_output_jsonschema() == snapshot
@@ -3239,7 +3239,7 @@ def test_subgraph_checkpoint_true(
 
 
 def test_subgraph_durability_inherited(durability: Durability) -> None:
-    sync_checkpointer = InMemorySaver()
+    sync_checkpointer = InMemoryCheckpointer()
 
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
@@ -8404,7 +8404,7 @@ def test_null_resume_disallowed_with_multiple_interrupts(
     graph_builder.add_edge(START, "human_node_1")
     graph_builder.add_edge(START, "human_node_2")
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     graph = graph_builder.compile(checkpointer=checkpointer)
 
     thread_id = str(uuid.uuid4())

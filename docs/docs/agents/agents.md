@@ -300,10 +300,10 @@ To allow multi-turn conversations with an agent, you need to enable [persistence
 
 ```python
 from langgraph.prebuilt import create_react_agent
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 
 # highlight-next-line
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 
 agent = create_react_agent(
     model="anthropic:claude-3-7-sonnet-latest",
@@ -367,7 +367,7 @@ const nyResponse = await agent.invoke(
    :::
 
 :::python
-When you enable the checkpointer, it stores agent state at every step in the provided checkpointer database (or in memory, if using `InMemorySaver`).
+When you enable the checkpointer, it stores agent state at every step in the provided checkpointer database (or in memory, if using `InMemoryCheckpointer`).
 :::
 
 :::js
