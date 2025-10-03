@@ -9,7 +9,9 @@ from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
+    CheckpointMetadata,
     get_checkpoint_id,
+    get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
@@ -299,3 +301,15 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             "WHERE " + " AND ".join(wheres) if wheres else "",
             param_values,
         )
+
+    def get_serializable_checkpoint_metadata(
+        self, config: RunnableConfig, metadata: CheckpointMetadata
+    ) -> CheckpointMetadata:
+        """Get checkpoint metadata in a backwards-compatible manner."""
+        checkpoint_metadata = get_checkpoint_metadata(config, metadata)
+        # Jsonb() cannot serialize BaseMessage objects, so we use our internal serde instead
+        if "writes" in checkpoint_metadata:
+            checkpoint_metadata["writes"] = self.serde.dumps_typed(
+                checkpoint_metadata["writes"]
+            )
+        return checkpoint_metadata
