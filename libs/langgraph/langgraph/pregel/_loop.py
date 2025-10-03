@@ -319,35 +319,36 @@ class PregelLoop:
             ] + list(writes)
             self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         else:
-            writes_to_save: WritesT = []
-            for channel, value in writes:
-                # 
-                if channel == INTERRUPT: 
-                    new_interrupts = list(value) if isinstance(value, (list, tuple)) else [value]
-                    # aggregate existing interrupts for this task
-                    existing = next(
-                        (v for tid, ch, v in self.checkpoint_pending_writes
-                        if tid == task_id and ch == INTERRUPT),
-                        None
-                    )
-                    if existing is not None:
-                        # backwards compat: support resuming tasks where saved interrupt value is not a list
-                        existing_interrupts = list(existing) if isinstance(existing, (list, tuple)) else [existing]
-                        # append if same interrupt id (multiple interrupt() calls in same task execution),
-                        # otherwise replace (different PUSH tasks, each with unique interrupt id - see tests/test_pregel.py::test_interrupt_task_functional)
-                        value = (
-                            existing_interrupts + new_interrupts
-                            if existing_interrupts[0].id == new_interrupts[0].id
-                            else new_interrupts
-                        )
-                    else:
-                        value = new_interrupts
-                writes_to_save.append((channel, value))
-            # remove existing writes for this task
+
+            def _merge_interrupts(task_id: str, value: tuple[str, Any]) -> WritesT:
+                """
+                Normalize to list and merge with any existing INTERRUPT writes
+                for the same task_id. If the interrupt id matches, append; else replace.
+                """
+                new = value if isinstance(value, list) else list(value)
+                existing = next(
+                    (
+                        v
+                        for tid, ch, v in self.checkpoint_pending_writes
+                        if tid == task_id and ch == INTERRUPT
+                    ),
+                    None,
+                )
+                if existing is None:
+                    return new
+                old = existing if isinstance(existing, list) else list(existing)
+                return old + new if old and new and old[0].id == new[0].id else new
+
+            writes_to_save = [
+                # aggregate existing interrupts for this task
+                (ch, _merge_interrupts(task_id, v) if ch == INTERRUPT else v)
+                for ch, v in writes
+            ]
+
+            # replace all writes for this task_id in one shot
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[0] != task_id
-            ]
-            self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes_to_save)
+            ] + [(task_id, c, v) for c, v in writes_to_save]
 
         if self.durability != "exit" and self.checkpointer_put_writes is not None:
             config = patch_configurable(
@@ -505,7 +506,7 @@ class PregelLoop:
                 if channel == INTERRUPT
                 # interrupts within a task are uncovered sequentially as resumes are provided,
                 # so we only need to check the last interrupt id
-                and (list(value) if isinstance(value, (list, tuple)) else [value])[-1].id in skipped_interrupt_ids
+                and value[-1].id in skipped_interrupt_ids
             }
         else:
             self.skipped_task_ids = set()
@@ -567,28 +568,29 @@ class PregelLoop:
                 if task_id in self.skipped_task_ids and channel == INTERRUPT:
                     # find resume count for this task
                     resumes = next(
-                        (v for tid, ch, v in self.checkpoint_pending_writes
-                        if tid == task_id and ch == RESUME),
-                        None
+                        (
+                            v
+                            for tid, ch, v in self.checkpoint_pending_writes
+                            if tid == task_id and ch == RESUME
+                        ),
+                        None,
                     )
                     resume_count = len(resumes) if resumes is not None else 0
-                    interrupt_list = list(value) if isinstance(value, (list, tuple)) else [value]
                     # only output unresumed interrupts
-                    if resume_count < len(interrupt_list):
-                        self.output_writes(task_id, [(INTERRUPT, interrupt_list[resume_count:])])
+                    if resume_count < len(value):
+                        self.output_writes(task_id, [(INTERRUPT, value[resume_count:])])
 
         return True
 
     def after_tick(self) -> None:
         if self.skipped_task_ids:
             # raise early GraphInterrupt for skipped tasks.
-            # since we know len(resumes) != len(interrupts) for these tasks, we 
+            # since we know len(resumes) != len(interrupts) for these tasks, we
             # can prevent unecessary node re-execution by raising preemptively
             interrupts = []
             for task_id, channel, value in self.checkpoint_pending_writes:
                 if channel == INTERRUPT and task_id in self.skipped_task_ids:
-                    interrupt_list = list(value) if isinstance(value, (list, tuple)) else [value]
-                    interrupts.extend(interrupt_list)
+                    interrupts.extend(value)
             if interrupts:
                 raise GraphInterrupt(interrupts)
 
@@ -651,10 +653,11 @@ class PregelLoop:
 
         for task_id, channel, value in self.checkpoint_pending_writes:
             if channel == INTERRUPT:
-                interrupt_list = list(value) if isinstance(value, (list, tuple)) else [value]
-                pending_interrupts[task_id] = (interrupt_list[0].id, len(interrupt_list))
+                pending_interrupts[task_id] = (
+                    value[0].id,
+                    len(value),
+                )
             elif channel == RESUME:
-                # count resume values for this task
                 resume_list = value if isinstance(value, list) else [value]
                 pending_resumes[task_id] = len(resume_list)
 
@@ -1095,7 +1098,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
-        
+
         super().put_writes(task_id, writes)
         if not writes or self.cache is None or not hasattr(self, "tasks"):
             return
