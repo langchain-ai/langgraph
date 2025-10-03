@@ -328,57 +328,6 @@ def test_interrupt_with_send_payloads_sequential_resume(
     assert node_counter["map_node"] == 5
 
 
-@pytest.mark.xfail(reason="Node resumes after partial interrupt resume", strict=False)
-def test_node_with_multiple_interrupts_requires_full_resume(
-    sync_checkpointer: BaseCheckpointSaver,
-) -> None:
-    node_counter = {"double_interrupt": 0}
-
-    class State(TypedDict):
-        input: str
-
-    def double_interrupt_node(state: State):
-        node_counter["double_interrupt"] += 1
-        first = interrupt({"step": "first"})
-        second = interrupt({"step": "second"})
-        return {"input": f"{first}-{second}"}
-
-    builder = StateGraph(State)
-    builder.add_node("double_interrupt", double_interrupt_node)
-    builder.add_edge(START, "double_interrupt")
-    builder.add_edge("double_interrupt", END)
-
-    graph = builder.compile(checkpointer=sync_checkpointer)
-
-    config = {"configurable": {"thread_id": "test_double_interrupt_sync"}}
-
-    result = graph.invoke({"input": "start"}, config=config)
-
-    interrupts = result.get("__interrupt__", [])
-    assert len(interrupts) == 1
-    first_interrupt = interrupts[0]
-    assert node_counter["double_interrupt"] == 1
-
-    partial = graph.invoke(
-        Command(resume={first_interrupt.id: "human_first"}), config=config
-    )
-
-    # Expected behavior: node should not execute again until all resume values are provided
-    assert node_counter["double_interrupt"] == 1
-
-    remaining_interrupts = partial.get("__interrupt__", [])
-    assert len(remaining_interrupts) == 1
-    second_interrupt = remaining_interrupts[0]
-
-    final_result = graph.invoke(
-        Command(resume={second_interrupt.id: "human_second"}), config=config
-    )
-
-    assert node_counter["double_interrupt"] == 2
-    assert "input" in final_result
-    assert final_result["input"] == "human_first-human_second"
-
-
 async def test_interrupt_with_send_payloads_sequential_resume_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -466,3 +415,175 @@ async def test_interrupt_with_send_payloads_sequential_resume_async(
     # Map node runs 3 times initially (item1 completes, 2 dangerous_items interrupt),
     # then 1 time on first resume, then 1 time on second resume
     assert node_counter["map_node"] == 5
+
+
+def test_node_with_multiple_interrupts_requires_full_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test a number of different resume patterns for a node with multiple interrupts,
+
+    Ensures that a node is not re-executed until valid resume values have been provided to all
+    discovered interrupts"""
+
+    node_counter = 0
+
+    class State(TypedDict):
+        input: str
+
+    def double_interrupt_node(state: State):
+        nonlocal node_counter
+        node_counter += 1
+        first = interrupt("first")
+        second = interrupt("second")
+        third = interrupt("third")
+        return {"input": f"{first}-{second}-{third}"}
+
+    builder = StateGraph(State)
+    builder.add_node("double_interrupt", double_interrupt_node)
+    builder.add_edge(START, "double_interrupt")
+    builder.add_edge("double_interrupt", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+
+    config = {"configurable": {"thread_id": "test_double_interrupt"}}
+
+    result = graph.invoke({"input": "start"}, config=config)
+
+    interrupts = result.get("__interrupt__", [])
+    assert len(interrupts) == 1
+    first_interrupt = interrupts[0]
+    assert node_counter == 1
+
+    # invoke with an interrupt map that matches double_interrupt_node.
+    # this should execute the node
+    partial = graph.invoke(
+        Command(resume={first_interrupt.id: "human_first"}), config=config
+    )
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    assert remaining_interrupts[0].value == "second"
+    assert node_counter == 2
+
+    # invoke with an interrupt map that DOES NOT match double_interrupt_node.
+    # this should not execute the node because the optimization kicks in
+    partial = graph.invoke(
+        Command(resume={"00000000000000000000000000000000": "nothing_burger"}), config=config
+    )
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    assert remaining_interrupts[0].value == "second"
+    assert node_counter == 2
+
+    # invoke with None resume. this should execute the node
+    partial = graph.invoke(
+        None, config=config
+    )
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    assert remaining_interrupts[0].value == "second"
+    assert node_counter == 3
+
+    # invoke with nonspecific resume. this should execute the node
+    partial = graph.invoke(
+        Command(resume="human_second"), config=config
+    )
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    print("REMAINING INTERRUPTS: ", remaining_interrupts)
+    assert remaining_interrupts[0].value == "third"
+    assert node_counter == 4
+
+    # finally, invoke with an interrupt map that matches double_interrupt_node.
+    # this should execute the node and all interrupts should be resolved
+    final_result = graph.invoke(
+        Command(resume="human_third"), config=config
+    )
+    assert "input" in final_result
+    assert final_result["input"] == "human_first-human_second-human_third"
+    assert node_counter == 5
+
+
+async def test_node_with_multiple_interrupts_requires_full_resume_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test a number of different resume patterns for a node with multiple interrupts,
+
+    Ensures that a node is not re-executed until valid resume values have been provided to all
+    discovered interrupts"""
+    
+    node_counter = 0
+
+    class State(TypedDict):
+        input: str
+
+    def double_interrupt_node(state: State):
+        nonlocal node_counter
+        node_counter += 1
+        first = interrupt("first")
+        second = interrupt("second")
+        third = interrupt("third")
+        return {"input": f"{first}-{second}-{third}"}
+
+    builder = StateGraph(State)
+    builder.add_node("double_interrupt", double_interrupt_node)
+    builder.add_edge(START, "double_interrupt")
+    builder.add_edge("double_interrupt", END)
+
+    graph = builder.compile(checkpointer=async_checkpointer)
+
+    config = {"configurable": {"thread_id": "test_double_interrupt"}}
+
+    result = await graph.ainvoke({"input": "start"}, config=config)
+
+    interrupts = result.get("__interrupt__", [])
+    assert len(interrupts) == 1
+    first_interrupt = interrupts[0]
+    assert node_counter == 1
+
+    # invoke with an interrupt map that matches double_interrupt_node.
+    # this should execute the node
+    partial = await graph.ainvoke(
+        Command(resume={first_interrupt.id: "human_first"}), config=config
+    )
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    assert remaining_interrupts[0].value == "second"
+    assert node_counter == 2
+
+    # invoke with an interrupt map that DOES NOT match double_interrupt_node.
+    # this should not execute the node because the optimization kicks in
+    partial = await graph.ainvoke(
+        Command(resume={"00000000000000000000000000000000": "nothing_burger"}), config=config
+    )
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    assert remaining_interrupts[0].value == "second"
+    assert node_counter == 2
+
+    # invoke with None resume. this should execute the node
+    partial = await graph.ainvoke(
+        None, config=config
+    )
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    assert remaining_interrupts[0].value == "second"
+    assert node_counter == 3
+
+    # invoke with nonspecific resume. this should execute the node
+    partial = await graph.ainvoke(
+        Command(resume="human_second"), config=config
+    )
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    print("REMAINING INTERRUPTS: ", remaining_interrupts)
+    assert remaining_interrupts[0].value == "third"
+    assert node_counter == 4
+
+    # finally, invoke with an interrupt map that matches double_interrupt_node.
+    # this should execute the node and all interrupts should be resolved
+    final_result = await graph.ainvoke(
+        Command(resume="human_third"), config=config
+    )
+    assert "input" in final_result
+    assert final_result["input"] == "human_first-human_second-human_third"
+    assert node_counter == 5
