@@ -10,7 +10,6 @@ LangGraph's [persistence](../../concepts/persistence.md) layer supports **human-
 
 :::js
 `interrupt` is ergonomically similar to Node.js's built-in `readline.question()` function, [with some caveats](../../how-tos/human_in_the_loop/add-human-in-the-loop.md).
-`interrupt` is ergonomically similar to Node.js's built-in `readline.question()` function, [with some caveats](../../how-tos/human_in_the_loop/add-human-in-the-loop.md).
 :::
 
 !!! note
@@ -125,20 +124,14 @@ const humanAssistance = tool(
 );
 
 const searchTool = new TavilySearch({ maxResults: 2 });
-const searchTool = new TavilySearch({ maxResults: 2 });
 const tools = [searchTool, humanAssistance];
 
 const llmWithTools = new ChatAnthropic({
   model: "claude-3-5-sonnet-latest",
 }).bindTools(tools);
-const llmWithTools = new ChatAnthropic({
-  model: "claude-3-5-sonnet-latest",
-}).bindTools(tools);
 
-async function chatbot(state: z.infer<typeof MessagesZodState>) {
 async function chatbot(state: z.infer<typeof MessagesZodState>) {
   const message = await llmWithTools.invoke(state.messages);
-
 
   // Because we will be interrupting during tool execution,
   // we disable parallel tool calling to avoid repeating any
@@ -218,15 +211,11 @@ except Exception:
 
 ```typescript
 import * as fs from "node:fs/promises";
-import * as fs from "node:fs/promises";
 
-const drawableGraph = await graph.getGraphAsync();
 const drawableGraph = await graph.getGraphAsync();
 const image = await drawableGraph.drawMermaidPng();
 const imageBuffer = new Uint8Array(await image.arrayBuffer());
-const imageBuffer = new Uint8Array(await image.arrayBuffer());
 
-await fs.writeFile("chatbot-with-tools.png", imageBuffer);
 await fs.writeFile("chatbot-with-tools.png", imageBuffer);
 ```
 
@@ -281,19 +270,10 @@ const userInput =
 const events = await graph.stream(
   { messages: [{ role: "user", content: userInput }] },
   { configurable: { thread_id: "1" }, streamMode: "values" }
-  { configurable: { thread_id: "1" }, streamMode: "values" }
 );
 
 for await (const event of events) {
   if ("messages" in event) {
-    const lastMessage = event.messages.at(-1);
-    console.log(`[${lastMessage?.getType()}]: ${lastMessage?.text}`);
-
-    if (
-      lastMessage &&
-      isAIMessage(lastMessage) &&
-      lastMessage.tool_calls?.length
-    ) {
     const lastMessage = event.messages.at(-1);
     console.log(`[${lastMessage?.getType()}]: ${lastMessage?.text}`);
 
@@ -311,16 +291,12 @@ for await (const event of events) {
 ```
 [human]: I need some expert guidance for building an AI agent. Could you request assistance for me?
 [ai]: I'll help you request human assistance for guidance on building an AI agent.
-[ai]: I'll help you request human assistance for guidance on building an AI agent.
 Tool calls: [
   {
     name: 'humanAssistance',
     args: {
       query: 'I would like expert guidance on building an AI agent. Could you please provide assistance with this topic?'
-      query: 'I would like expert guidance on building an AI agent. Could you please provide assistance with this topic?'
     },
-    id: 'toolu_01Bpxc8rFVMhSaRosS6b85Ts',
-    type: 'tool_call'
     id: 'toolu_01Bpxc8rFVMhSaRosS6b85Ts',
     type: 'tool_call'
   }
@@ -629,38 +605,16 @@ const humanAssistance = tool(
     }),
   }
 );
-const humanAssistance = tool(
-  async ({ query }) => {
-    const humanResponse = interrupt({ query });
-    return humanResponse.data;
-  },
-  {
-    name: "humanAssistance",
-    description: "Request assistance from a human.",
-    schema: z.object({
-      query: z.string().describe("Human readable question for the human"),
-    }),
-  }
-);
 
-const searchTool = new TavilySearch({ maxResults: 2 });
 const searchTool = new TavilySearch({ maxResults: 2 });
 const tools = [searchTool, humanAssistance];
 
 const llmWithTools = new ChatAnthropic({
   model: "claude-3-5-sonnet-latest",
 }).bindTools(tools);
-const llmWithTools = new ChatAnthropic({
-  model: "claude-3-5-sonnet-latest",
-}).bindTools(tools);
 
-const chatbot = async (state: z.infer<typeof MessagesZodState>) => {
 const chatbot = async (state: z.infer<typeof MessagesZodState>) => {
   const message = await llmWithTools.invoke(state.messages);
-
-  // Because we will be interrupting during tool execution,
-  // we disable parallel tool calling to avoid repeating any
-  // tool invocations when we resume.
 
   // Because we will be interrupting during tool execution,
   // we disable parallel tool calling to avoid repeating any
@@ -670,19 +624,9 @@ const chatbot = async (state: z.infer<typeof MessagesZodState>) => {
   }
 
   return { messages: message };
-
-  return { messages: message };
 };
 
 const memory = new MemorySaver();
-
-const graph = new StateGraph(MessagesZodState)
-  .addNode("chatbot", chatbot)
-  .addNode("tools", new ToolNode(tools))
-  .addConditionalEdges("chatbot", toolsCondition, ["tools", END])
-  .addEdge("tools", "chatbot")
-  .addEdge(START, "chatbot")
-  .compile({ checkpointer: memory });
 
 const graph = new StateGraph(MessagesZodState)
   .addNode("chatbot", chatbot)
