@@ -12,7 +12,7 @@ By default `langgraph-checkpoint-postgres` installs `psycopg` (Psycopg 3) withou
 > When using Postgres checkpointers for the first time, make sure to call `.setup()` method on them to create required tables. See example below.
 
 > [!IMPORTANT]
-> When manually creating Postgres connections and passing them to `PostgresSaver` or `AsyncPostgresSaver`, make sure to include `autocommit=True` and `row_factory=dict_row` (`from psycopg.rows import dict_row`). See a full example in this [how-to guide](https://langchain-ai.github.io/langgraph/how-tos/persistence_postgres/).
+> When manually creating Postgres connections and passing them to `PostgresSaver` or `AsyncPostgresCheckpointer`, make sure to include `autocommit=True` and `row_factory=dict_row` (`from psycopg.rows import dict_row`). See a full example in this [how-to guide](https://langchain-ai.github.io/langgraph/how-tos/persistence_postgres/).
 >
 > **Why these parameters are required:**
 > - `autocommit=True`: Required for the `.setup()` method to properly commit the checkpoint tables to the database. Without this, table creation may not be persisted.
@@ -76,9 +76,9 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
 ### Async
 
 ```python
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresCheckpointer
 
-async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
+async with AsyncPostgresCheckpointer.from_conn_string(DB_URI) as checkpointer:
     checkpoint = {
         "v": 4,
         "ts": "2024-07-31T20:14:19.804150+00:00",

@@ -38,4 +38,4 @@
 ::: langgraph.checkpoint.postgres.aio
     options:
       members:
-        - AsyncPostgresSaver
+        - AsyncPostgresCheckpointer

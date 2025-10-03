@@ -149,13 +149,13 @@ const graph = builder.compile({ checkpointer });
         from langchain.chat_models import init_chat_model
         from langgraph.graph import StateGraph, MessagesState, START
         # highlight-next-line
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresCheckpointer
 
         model = init_chat_model(model="anthropic:claude-3-5-haiku-latest")
 
         DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable"
         # highlight-next-line
-        async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
+        async with AsyncPostgresCheckpointer.from_conn_string(DB_URI) as checkpointer:
             # await checkpointer.setup()
 
             async def call_model(state: MessagesState):
@@ -940,7 +940,7 @@ const graph = builder.compile({ store });
         from langchain_core.runnables import RunnableConfig
         from langchain.chat_models import init_chat_model
         from langgraph.graph import StateGraph, MessagesState, START
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresCheckpointer
         # highlight-next-line
         from langgraph.store.postgres.aio import AsyncPostgresStore
         from langgraph.store.base import BaseStore
@@ -952,7 +952,7 @@ const graph = builder.compile({ store });
         async with (
             # highlight-next-line
             AsyncPostgresStore.from_conn_string(DB_URI) as store,
-            AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer,
+            AsyncPostgresCheckpointer.from_conn_string(DB_URI) as checkpointer,
         ):
             # await store.setup()
             # await checkpointer.setup()

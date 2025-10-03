@@ -26,7 +26,7 @@ from langgraph.checkpoint.sqlite.utils import search_where
 T = TypeVar("T", bound=Callable)
 
 
-class AsyncSqliteSaver(BaseCheckpointer[str]):
+class AsyncSqliteCheckpointer(BaseCheckpointer[str]):
     """An asynchronous checkpoint saver that stores checkpoints in a SQLite database.
 
     This class provides an asynchronous interface for saving and retrieving checkpoints
@@ -54,7 +54,7 @@ class AsyncSqliteSaver(BaseCheckpointer[str]):
         The easiest way is to use the `async with` statement as shown in the examples.
 
         ```python
-        async with AsyncSqliteSaver.from_conn_string("checkpoints.sqlite") as saver:
+        async with AsyncSqliteCheckpointer.from_conn_string("checkpoints.sqlite") as saver:
             # Your code here
             graph = builder.compile(checkpointer=saver)
             config = {"configurable": {"thread_id": "thread-1"}}
@@ -68,7 +68,7 @@ class AsyncSqliteSaver(BaseCheckpointer[str]):
         ```pycon
         >>> import asyncio
         >>>
-        >>> from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+        >>> from langgraph.checkpoint.sqlite.aio import AsyncSqliteCheckpointer
         >>> from langgraph.graph import StateGraph
         >>>
         >>> async def main():
@@ -76,7 +76,7 @@ class AsyncSqliteSaver(BaseCheckpointer[str]):
         >>>     builder.add_node("add_one", lambda x: x + 1)
         >>>     builder.set_entry_point("add_one")
         >>>     builder.set_finish_point("add_one")
-        >>>     async with AsyncSqliteSaver.from_conn_string("checkpoints.db") as memory:
+        >>>     async with AsyncSqliteCheckpointer.from_conn_string("checkpoints.db") as memory:
         >>>         graph = builder.compile(checkpointer=memory)
         >>>         coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
         >>>         print(await asyncio.gather(coro))
@@ -89,11 +89,11 @@ class AsyncSqliteSaver(BaseCheckpointer[str]):
         ```pycon
         >>> import asyncio
         >>> import aiosqlite
-        >>> from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+        >>> from langgraph.checkpoint.sqlite.aio import AsyncSqliteCheckpointer
         >>>
         >>> async def main():
         >>>     async with aiosqlite.connect("checkpoints.db") as conn:
-        ...         saver = AsyncSqliteSaver(conn)
+        ...         saver = AsyncSqliteCheckpointer(conn)
         ...         config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
         ...         checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}, "id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}
         ...         saved_config = await saver.aput(config, checkpoint, {}, {})
@@ -123,14 +123,14 @@ class AsyncSqliteSaver(BaseCheckpointer[str]):
     @asynccontextmanager
     async def from_conn_string(
         cls, conn_string: str
-    ) -> AsyncIterator[AsyncSqliteSaver]:
-        """Create a new AsyncSqliteSaver instance from a connection string.
+    ) -> AsyncIterator[AsyncSqliteCheckpointer]:
+        """Create a new AsyncSqliteCheckpointer instance from a connection string.
 
         Args:
             conn_string: The SQLite connection string.
 
         Yields:
-            AsyncSqliteSaver: A new AsyncSqliteSaver instance.
+            AsyncSqliteCheckpointer: A new AsyncSqliteCheckpointer instance.
         """
         async with aiosqlite.connect(conn_string) as conn:
             yield cls(conn)
@@ -154,7 +154,7 @@ class AsyncSqliteSaver(BaseCheckpointer[str]):
             # we don't check in other methods to avoid the overhead
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
+                    "Synchronous calls to AsyncSqliteCheckpointer are only allowed from a "
                     "different thread. From the main thread, use the async interface. "
                     "For example, use `await checkpointer.aget_tuple(...)` or `await "
                     "graph.ainvoke(...)`."
@@ -192,7 +192,7 @@ class AsyncSqliteSaver(BaseCheckpointer[str]):
             # we don't check in other methods to avoid the overhead
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
+                    "Synchronous calls to AsyncSqliteCheckpointer are only allowed from a "
                     "different thread. From the main thread, use the async interface. "
                     "For example, use `checkpointer.alist(...)` or `await "
                     "graph.ainvoke(...)`."
@@ -259,7 +259,7 @@ class AsyncSqliteSaver(BaseCheckpointer[str]):
             # we don't check in other methods to avoid the overhead
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncSqliteSaver are only allowed from a "
+                    "Synchronous calls to AsyncSqliteCheckpointer are only allowed from a "
                     "different thread. From the main thread, use the async interface. "
                     "For example, use `checkpointer.alist(...)` or `await "
                     "graph.ainvoke(...)`."
@@ -611,3 +611,16 @@ class AsyncSqliteSaver(BaseCheckpointer[str]):
         next_v = current_v + 1
         next_h = random.random()
         return f"{next_v:032}.{next_h:016}"
+
+
+@deprecated(
+    "`AsyncSqliteSaver` has been renamed. Please use `AsyncSqliteCheckpointer` instead."
+)
+class AsyncSqliteSaver(AsyncSqliteCheckpointer):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "`AsyncSqliteSaver` has been renamed. Please use `AsyncSqliteCheckpointer` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)

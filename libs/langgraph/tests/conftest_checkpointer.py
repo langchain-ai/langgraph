@@ -4,10 +4,10 @@ from uuid import uuid4
 
 import pytest
 from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresCheckpointer
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
-from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.sqlite import SqliteCheckpointer
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteCheckpointer
 from psycopg import AsyncConnection, Connection
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
@@ -33,13 +33,13 @@ def _checkpointer_memory_migrate_sends():
 
 @contextmanager
 def _checkpointer_sqlite():
-    with SqliteSaver.from_conn_string(":memory:") as checkpointer:
+    with SqliteCheckpointer.from_conn_string(":memory:") as checkpointer:
         yield checkpointer
 
 
 @contextmanager
 def _checkpointer_sqlite_aes():
-    with SqliteSaver.from_conn_string(":memory:") as checkpointer:
+    with SqliteCheckpointer.from_conn_string(":memory:") as checkpointer:
         checkpointer.serde = EncryptedSerializer.from_pycryptodome_aes(
             key=b"1234567890123456"
         )
@@ -109,7 +109,7 @@ def _checkpointer_postgres_pool():
 
 @asynccontextmanager
 async def _checkpointer_sqlite_aio():
-    async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
+    async with AsyncSqliteCheckpointer.from_conn_string(":memory:") as checkpointer:
         yield checkpointer
 
 
@@ -125,7 +125,7 @@ async def _checkpointer_postgres_aio():
         await conn.execute(f"CREATE DATABASE {database}")
     try:
         # yield checkpointer
-        async with AsyncPostgresSaver.from_conn_string(
+        async with AsyncPostgresCheckpointer.from_conn_string(
             DEFAULT_POSTGRES_URI + database
         ) as checkpointer:
             await checkpointer.setup()
@@ -150,7 +150,7 @@ async def _checkpointer_postgres_aio_pipe():
         await conn.execute(f"CREATE DATABASE {database}")
     try:
         # yield checkpointer
-        async with AsyncPostgresSaver.from_conn_string(
+        async with AsyncPostgresCheckpointer.from_conn_string(
             DEFAULT_POSTGRES_URI + database
         ) as checkpointer:
             await checkpointer.setup()
@@ -181,7 +181,7 @@ async def _checkpointer_postgres_aio_pool():
         async with AsyncConnectionPool(
             DEFAULT_POSTGRES_URI + database, max_size=10, kwargs={"autocommit": True}
         ) as pool:
-            checkpointer = AsyncPostgresSaver(pool)
+            checkpointer = AsyncPostgresCheckpointer(pool)
             await checkpointer.setup()
             yield checkpointer
     finally:

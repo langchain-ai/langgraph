@@ -1153,15 +1153,15 @@ Under the hood, checkpointing is powered by checkpointer objects that conform to
 :::python
 
 - `langgraph-checkpoint`: The base interface for checkpointer savers (@[BaseCheckpointer]) and serialization/deserialization interface (@[SerializerProtocol][SerializerProtocol]). Includes in-memory checkpointer implementation (@[InMemoryCheckpointer][InMemoryCheckpointer]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
-- `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database (@[SqliteSaver][SqliteSaver] / @[AsyncSqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
-- `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresSaver][PostgresSaver] / @[AsyncPostgresSaver]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
+- `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database (@[SqliteCheckpointer][SqliteCheckpointer] / @[AsyncSqliteCheckpointer]). Ideal for experimentation and local workflows. Needs to be installed separately.
+- `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresSaver][PostgresSaver] / @[AsyncPostgresCheckpointer]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
 
 :::
 
 :::js
 
 - `@langchain/langgraph-checkpoint`: The base interface for checkpointer savers (@[BaseCheckpointer][BaseCheckpointer]) and serialization/deserialization interface (@[SerializerProtocol][SerializerProtocol]). Includes in-memory checkpointer implementation (@[MemorySaver]) for experimentation. LangGraph comes with `@langchain/langgraph-checkpoint` included.
-- `@langchain/langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database (@[SqliteSaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
+- `@langchain/langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database (@[SqliteCheckpointer]). Ideal for experimentation and local workflows. Needs to be installed separately.
 - `@langchain/langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresSaver]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
 
 :::
@@ -1180,7 +1180,7 @@ If the checkpointer is used with asynchronous graph execution (i.e. executing th
 
 !!! note
 
-    For running your graph asynchronously, you can use `InMemoryCheckpointer`, or async versions of Sqlite/Postgres checkpointers -- `AsyncSqliteSaver` / `AsyncPostgresSaver` checkpointers.
+    For running your graph asynchronously, you can use `InMemoryCheckpointer`, or async versions of Sqlite/Postgres checkpointers -- `AsyncSqliteCheckpointer` / `AsyncPostgresCheckpointer` checkpointers.
 
 :::
 
@@ -1225,10 +1225,10 @@ Checkpointers can optionally encrypt all persisted state. To enable this, pass a
 import sqlite3
 
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite import SqliteCheckpointer
 
 serde = EncryptedSerializer.from_pycryptodome_aes()  # reads LANGGRAPH_AES_KEY
-checkpointer = SqliteSaver(sqlite3.connect("checkpoint.db"), serde=serde)
+checkpointer = SqliteCheckpointer(sqlite3.connect("checkpoint.db"), serde=serde)
 ```
 
 ```python
