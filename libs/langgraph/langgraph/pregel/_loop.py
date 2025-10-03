@@ -317,14 +317,38 @@ class PregelLoop:
             writes_to_save: WritesT = [
                 w[1:] for w in self.checkpoint_pending_writes if w[0] == task_id
             ] + list(writes)
+            self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         else:
+            writes_to_save: WritesT = []
+            for channel, value in writes:
+                # 
+                if channel == INTERRUPT: 
+                    new_interrupts = list(value) if isinstance(value, (list, tuple)) else [value]
+                    # aggregate existing interrupts for this task
+                    existing = next(
+                        (v for tid, ch, v in self.checkpoint_pending_writes
+                        if tid == task_id and ch == INTERRUPT),
+                        None
+                    )
+                    if existing is not None:
+                        # backwards compat: support resuming tasks where saved interrupt value is not a list
+                        existing_interrupts = list(existing) if isinstance(existing, (list, tuple)) else [existing]
+                        # append if same interrupt id (multiple interrupt() calls in same task execution),
+                        # otherwise replace (different PUSH tasks, each with unique interrupt id - see tests/test_pregel.py::test_interrupt_task_functional)
+                        value = (
+                            existing_interrupts + new_interrupts
+                            if existing_interrupts[0].id == new_interrupts[0].id
+                            else new_interrupts
+                        )
+                    else:
+                        value = new_interrupts
+                writes_to_save.append((channel, value))
             # remove existing writes for this task
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[0] != task_id
             ]
-            writes_to_save = writes
-        # save writes
-        self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
+            self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes_to_save)
+
         if self.durability != "exit" and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
@@ -477,8 +501,11 @@ class PregelLoop:
             skipped_interrupt_ids = self._pending_interrupts() - set(resume_map)
             self.skipped_task_ids = {
                 task_id
-                for task_id, write_type, value in self.checkpoint_pending_writes
-                if write_type == INTERRUPT and value[0].id in skipped_interrupt_ids
+                for task_id, channel, value in self.checkpoint_pending_writes
+                if channel == INTERRUPT
+                # interrupts within a task are uncovered sequentially as resumes are provided,
+                # so we only need to check the last interrupt id
+                and (list(value) if isinstance(value, (list, tuple)) else [value])[-1].id in skipped_interrupt_ids
             }
         else:
             self.skipped_task_ids = set()
@@ -535,25 +562,35 @@ class PregelLoop:
                 for task_id in self.skipped_task_ids
                 if not self.tasks[task_id].writes
             }
-            # output writes for blocked tasts so they are still visible in the stream
-            for task_id, write_type, value in self.checkpoint_pending_writes:
-                if task_id in self.skipped_task_ids:
-                    self.output_writes(task_id, [(write_type, value)])
+            # output interrupt writes for blocked tasks so they are still visible in the stream
+            for task_id, channel, value in self.checkpoint_pending_writes:
+                if task_id in self.skipped_task_ids and channel == INTERRUPT:
+                    # find resume count for this task
+                    resumes = next(
+                        (v for tid, ch, v in self.checkpoint_pending_writes
+                        if tid == task_id and ch == RESUME),
+                        None
+                    )
+                    resume_count = len(resumes) if resumes is not None else 0
+                    interrupt_list = list(value) if isinstance(value, (list, tuple)) else [value]
+                    # only output unresumed interrupts
+                    if resume_count < len(interrupt_list):
+                        self.output_writes(task_id, [(INTERRUPT, interrupt_list[resume_count:])])
 
         return True
 
     def after_tick(self) -> None:
         if self.skipped_task_ids:
-            # raise an early interrupt for skipped tasks.
-            # this would ordinarily be raised after the PUSH task is executed,
-            # but since we know there are no resumes for these tasks, we can
-            # prevent unecessary node re-execution by raising in this tick.
-            interrupts = tuple(
-                value[0]
-                for _, write_type, value in self.checkpoint_pending_writes
-                if write_type == INTERRUPT
-            )
-            raise GraphInterrupt(interrupts)
+            # raise early GraphInterrupt for skipped tasks.
+            # since we know len(resumes) != len(interrupts) for these tasks, we 
+            # can prevent unecessary node re-execution by raising preemptively
+            interrupts = []
+            for task_id, channel, value in self.checkpoint_pending_writes:
+                if channel == INTERRUPT and task_id in self.skipped_task_ids:
+                    interrupt_list = list(value) if isinstance(value, (list, tuple)) else [value]
+                    interrupts.extend(interrupt_list)
+            if interrupts:
+                raise GraphInterrupt(interrupts)
 
         self.skipped_task_ids.clear()
         # finish superstep
@@ -607,30 +644,25 @@ class PregelLoop:
 
     def _pending_interrupts(self) -> set[str]:
         """Return the set of interrupt ids that are pending without corresponding resume values."""
-        # mapping of task ids to interrupt ids
-        pending_interrupts: dict[str, str] = {}
+        # mapping of task ids to (interrupt_id, interrupt_count)
+        pending_interrupts: dict[str, tuple[str, int]] = {}
+        # mapping of task ids to resume count
+        pending_resumes: dict[str, int] = {}
 
-        # set of resume task ids
-        pending_resumes: set[str] = set()
+        for task_id, channel, value in self.checkpoint_pending_writes:
+            if channel == INTERRUPT:
+                interrupt_list = list(value) if isinstance(value, (list, tuple)) else [value]
+                pending_interrupts[task_id] = (interrupt_list[0].id, len(interrupt_list))
+            elif channel == RESUME:
+                # count resume values for this task
+                resume_list = value if isinstance(value, list) else [value]
+                pending_resumes[task_id] = len(resume_list)
 
-        for task_id, write_type, value in self.checkpoint_pending_writes:
-            if write_type == INTERRUPT:
-                # interrupts is always a list, but there should only be one element
-                pending_interrupts[task_id] = value[0].id
-            elif write_type == RESUME:
-                pending_resumes.add(task_id)
-
-        resumed_interrupt_ids = {
-            pending_interrupts[task_id]
-            for task_id in pending_resumes
-            if task_id in pending_interrupts
-        }
-
-        # Keep only interrupts whose interrupt_id is not resumed
+        # keep only interrupt ids where resume_count < interrupt_count
         hanging_interrupts: set[str] = {
             interrupt_id
-            for interrupt_id in pending_interrupts.values()
-            if interrupt_id not in resumed_interrupt_ids
+            for task_id, (interrupt_id, interrupt_count) in pending_interrupts.items()
+            if pending_resumes.get(task_id, 0) < interrupt_count
         }
 
         return hanging_interrupts
@@ -1063,6 +1095,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
+        
         super().put_writes(task_id, writes)
         if not writes or self.cache is None or not hasattr(self, "tasks"):
             return
