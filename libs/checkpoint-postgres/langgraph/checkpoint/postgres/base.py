@@ -307,9 +307,6 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
     ) -> CheckpointMetadata:
         """Get checkpoint metadata in a backwards-compatible manner."""
         checkpoint_metadata = get_checkpoint_metadata(config, metadata)
-        # Jsonb() cannot serialize BaseMessage objects, so we use our internal serde instead
         if "writes" in checkpoint_metadata:
-            checkpoint_metadata["writes"] = self.serde.dumps_typed(
-                checkpoint_metadata["writes"]
-            )
+            checkpoint_metadata.pop("writes")
         return checkpoint_metadata
