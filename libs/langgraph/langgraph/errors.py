@@ -90,14 +90,11 @@ class GraphInterrupt(GraphBubbleUp):
 
 
 @deprecated(
-    "NodeInterrupt is deprecated. Please use `langgraph.types.interrupt` instead.",
+    "NodeInterrupt is deprecated. Please use [`interrupt`][langgraph.types.interrupt] instead.",
     category=None,
 )
 class NodeInterrupt(GraphInterrupt):
-    """Raised by a node to interrupt execution.
-
-    Deprecated in V1.0.0 in favor of [`interrupt`][langgraph.types.interrupt].
-    """
+    """Raised by a node to interrupt execution."""
 
     def __init__(self, value: Any, id: str | None = None) -> None:
         warn(
