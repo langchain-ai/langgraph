@@ -114,6 +114,7 @@ from langgraph.types import (
     CachePolicy,
     Command,
     Durability,
+    Interrupt,
     PregelExecutableTask,
     RetryPolicy,
     StreamMode,
@@ -133,7 +134,7 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
                 stream(value)
 
     return StreamProtocol(__call__, {mode for s in streams for mode in s.modes})
-
+        
 
 class PregelLoop:
     config: RunnableConfig
@@ -319,29 +320,9 @@ class PregelLoop:
             ] + list(writes)
             self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         else:
-
-            def _merge_interrupts(task_id: str, value: tuple[str, Any]) -> WritesT:
-                """
-                Normalize to list and merge with any existing INTERRUPT writes
-                for the same task_id. If the interrupt id matches, append; else replace.
-                """
-                new = value if isinstance(value, list) else list(value)
-                existing = next(
-                    (
-                        v
-                        for tid, ch, v in self.checkpoint_pending_writes
-                        if tid == task_id and ch == INTERRUPT
-                    ),
-                    None,
-                )
-                if existing is None:
-                    return new
-                old = existing if isinstance(existing, list) else list(existing)
-                return old + new if old and new and old[0].id == new[0].id else new
-
             writes_to_save = [
                 # aggregate existing interrupts for this task
-                (ch, _merge_interrupts(task_id, v) if ch == INTERRUPT else v)
+                (ch, self._merge_interrupts(task_id, v) if ch == INTERRUPT else v)
                 for ch, v in writes
             ]
 
@@ -669,6 +650,30 @@ class PregelLoop:
         }
 
         return hanging_interrupts
+
+    def _merge_interrupts(
+        self,
+        task_id: str, value: Sequence[Interrupt]
+    ) -> Sequence[Interrupt]:
+        """Normalize interrupt value to list and merge with existing interrupts.
+
+        If the interrupt ID matches existing, append; otherwise replace.
+
+        Returns list of Interrupt objects for this task.
+        """
+        new = value if isinstance(value, list) else list(value)
+        existing = next(
+            (
+                v
+                for tid, ch, v in self.checkpoint_pending_writes
+                if tid == task_id and ch == INTERRUPT
+            ),
+            None,
+        )
+        if existing is None:
+            return new
+        old = existing if isinstance(existing, list) else list(existing)
+        return old + new if old and new and old[0].id == new[0].id else new
 
     def _first(
         self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
