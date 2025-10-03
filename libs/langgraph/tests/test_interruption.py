@@ -467,7 +467,8 @@ def test_node_with_multiple_interrupts_requires_full_resume(
     # invoke with an interrupt map that DOES NOT match double_interrupt_node.
     # this should not execute the node because the optimization kicks in
     partial = graph.invoke(
-        Command(resume={"00000000000000000000000000000000": "nothing_burger"}), config=config
+        Command(resume={"00000000000000000000000000000000": "nothing_burger"}),
+        config=config,
     )
     remaining_interrupts = partial.get("__interrupt__", [])
     assert len(remaining_interrupts) == 1
@@ -475,18 +476,14 @@ def test_node_with_multiple_interrupts_requires_full_resume(
     assert node_counter == 2
 
     # invoke with None resume. this should execute the node
-    partial = graph.invoke(
-        None, config=config
-    )
+    partial = graph.invoke(None, config=config)
     remaining_interrupts = partial.get("__interrupt__", [])
     assert len(remaining_interrupts) == 1
     assert remaining_interrupts[0].value == "second"
     assert node_counter == 3
 
     # invoke with nonspecific resume. this should execute the node
-    partial = graph.invoke(
-        Command(resume="human_second"), config=config
-    )
+    partial = graph.invoke(Command(resume="human_second"), config=config)
     remaining_interrupts = partial.get("__interrupt__", [])
     assert len(remaining_interrupts) == 1
     print("REMAINING INTERRUPTS: ", remaining_interrupts)
@@ -495,9 +492,7 @@ def test_node_with_multiple_interrupts_requires_full_resume(
 
     # finally, invoke with an interrupt map that matches double_interrupt_node.
     # this should execute the node and all interrupts should be resolved
-    final_result = graph.invoke(
-        Command(resume="human_third"), config=config
-    )
+    final_result = graph.invoke(Command(resume="human_third"), config=config)
     assert "input" in final_result
     assert final_result["input"] == "human_first-human_second-human_third"
     assert node_counter == 5
@@ -510,7 +505,7 @@ async def test_node_with_multiple_interrupts_requires_full_resume_async(
 
     Ensures that a node is not re-executed until valid resume values have been provided to all
     discovered interrupts"""
-    
+
     node_counter = 0
 
     class State(TypedDict):
@@ -553,7 +548,8 @@ async def test_node_with_multiple_interrupts_requires_full_resume_async(
     # invoke with an interrupt map that DOES NOT match double_interrupt_node.
     # this should not execute the node because the optimization kicks in
     partial = await graph.ainvoke(
-        Command(resume={"00000000000000000000000000000000": "nothing_burger"}), config=config
+        Command(resume={"00000000000000000000000000000000": "nothing_burger"}),
+        config=config,
     )
     remaining_interrupts = partial.get("__interrupt__", [])
     assert len(remaining_interrupts) == 1
@@ -561,18 +557,14 @@ async def test_node_with_multiple_interrupts_requires_full_resume_async(
     assert node_counter == 2
 
     # invoke with None resume. this should execute the node
-    partial = await graph.ainvoke(
-        None, config=config
-    )
+    partial = await graph.ainvoke(None, config=config)
     remaining_interrupts = partial.get("__interrupt__", [])
     assert len(remaining_interrupts) == 1
     assert remaining_interrupts[0].value == "second"
     assert node_counter == 3
 
     # invoke with nonspecific resume. this should execute the node
-    partial = await graph.ainvoke(
-        Command(resume="human_second"), config=config
-    )
+    partial = await graph.ainvoke(Command(resume="human_second"), config=config)
     remaining_interrupts = partial.get("__interrupt__", [])
     assert len(remaining_interrupts) == 1
     print("REMAINING INTERRUPTS: ", remaining_interrupts)
@@ -581,9 +573,7 @@ async def test_node_with_multiple_interrupts_requires_full_resume_async(
 
     # finally, invoke with an interrupt map that matches double_interrupt_node.
     # this should execute the node and all interrupts should be resolved
-    final_result = await graph.ainvoke(
-        Command(resume="human_third"), config=config
-    )
+    final_result = await graph.ainvoke(Command(resume="human_third"), config=config)
     assert "input" in final_result
     assert final_result["input"] == "human_first-human_second-human_third"
     assert node_counter == 5
