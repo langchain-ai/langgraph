@@ -14,7 +14,6 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     get_checkpoint_id,
-    get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
@@ -283,7 +282,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     checkpoint["id"],
                     checkpoint_id,
                     Jsonb(copy),
-                    Jsonb(get_checkpoint_metadata(config, metadata)),
+                    Jsonb(self.get_serializable_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
