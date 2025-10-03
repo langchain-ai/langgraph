@@ -57,11 +57,11 @@ In production, use a checkpointer backed by a database:
 :::python
 
 ```python
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres import PostgresCheckpointer
 
 DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable"
 # highlight-next-line
-with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+with PostgresCheckpointer.from_conn_string(DB_URI) as checkpointer:
     builder = StateGraph(...)
     # highlight-next-line
     graph = builder.compile(checkpointer=checkpointer)
@@ -72,10 +72,10 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
 :::js
 
 ```typescript
-import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
+import { PostgresCheckpointer } from "@langchain/langgraph-checkpoint-postgres";
 
 const DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable";
-const checkpointer = PostgresSaver.fromConnString(DB_URI);
+const checkpointer = PostgresCheckpointer.fromConnString(DB_URI);
 
 const builder = new StateGraph(...);
 const graph = builder.compile({ checkpointer });
@@ -99,13 +99,13 @@ const graph = builder.compile({ checkpointer });
         from langchain.chat_models import init_chat_model
         from langgraph.graph import StateGraph, MessagesState, START
         # highlight-next-line
-        from langgraph.checkpoint.postgres import PostgresSaver
+        from langgraph.checkpoint.postgres import PostgresCheckpointer
 
         model = init_chat_model(model="anthropic:claude-3-5-haiku-latest")
 
         DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable"
         # highlight-next-line
-        with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+        with PostgresCheckpointer.from_conn_string(DB_URI) as checkpointer:
             # checkpointer.setup()
 
             def call_model(state: MessagesState):
@@ -205,12 +205,12 @@ const graph = builder.compile({ checkpointer });
     ```typescript
     import { ChatAnthropic } from "@langchain/anthropic";
     import { StateGraph, MessagesZodState, START } from "@langchain/langgraph";
-    import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
+    import { PostgresCheckpointer } from "@langchain/langgraph-checkpoint-postgres";
 
     const model = new ChatAnthropic({ model: "claude-3-5-haiku-20241022" });
 
     const DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable";
-    const checkpointer = PostgresSaver.fromConnString(DB_URI);
+    const checkpointer = PostgresCheckpointer.fromConnString(DB_URI);
     // await checkpointer.setup();
 
     const builder = new StateGraph(MessagesZodState)
@@ -848,7 +848,7 @@ const graph = builder.compile({ store });
         from langchain_core.runnables import RunnableConfig
         from langchain.chat_models import init_chat_model
         from langgraph.graph import StateGraph, MessagesState, START
-        from langgraph.checkpoint.postgres import PostgresSaver
+        from langgraph.checkpoint.postgres import PostgresCheckpointer
         # highlight-next-line
         from langgraph.store.postgres import PostgresStore
         from langgraph.store.base import BaseStore
@@ -860,7 +860,7 @@ const graph = builder.compile({ store });
         with (
             # highlight-next-line
             PostgresStore.from_conn_string(DB_URI) as store,
-            PostgresSaver.from_conn_string(DB_URI) as checkpointer,
+            PostgresCheckpointer.from_conn_string(DB_URI) as checkpointer,
         ):
             # store.setup()
             # checkpointer.setup()
@@ -1038,7 +1038,7 @@ const graph = builder.compile({ store });
     ```typescript
     import { ChatAnthropic } from "@langchain/anthropic";
     import { StateGraph, MessagesZodState, START, LangGraphRunnableConfig } from "@langchain/langgraph";
-    import { PostgresSaver, PostgresStore } from "@langchain/langgraph-checkpoint-postgres";
+    import { PostgresCheckpointer, PostgresStore } from "@langchain/langgraph-checkpoint-postgres";
     import { z } from "zod";
     import { v4 as uuidv4 } from "uuid";
 
@@ -1047,7 +1047,7 @@ const graph = builder.compile({ store });
     const DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable";
 
     const store = PostgresStore.fromConnString(DB_URI);
-    const checkpointer = PostgresSaver.fromConnString(DB_URI);
+    const checkpointer = PostgresCheckpointer.fromConnString(DB_URI);
     // await store.setup();
     // await checkpointer.setup();
 

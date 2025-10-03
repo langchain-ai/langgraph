@@ -19,7 +19,7 @@ from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from langgraph.checkpoint.postgres import PostgresSaver, ShallowPostgresSaver
+from langgraph.checkpoint.postgres import PostgresCheckpointer, ShallowPostgresSaver
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
@@ -41,7 +41,7 @@ def _pool_saver():
             max_size=10,
             kwargs={"autocommit": True, "row_factory": dict_row},
         ) as pool:
-            checkpointer = PostgresSaver(pool)
+            checkpointer = PostgresCheckpointer(pool)
             checkpointer.setup()
             yield checkpointer
     finally:
@@ -64,10 +64,10 @@ def _pipe_saver():
             prepare_threshold=0,
             row_factory=dict_row,
         ) as conn:
-            checkpointer = PostgresSaver(conn)
+            checkpointer = PostgresCheckpointer(conn)
             checkpointer.setup()
             with conn.pipeline() as pipe:
-                checkpointer = PostgresSaver(conn, pipe=pipe)
+                checkpointer = PostgresCheckpointer(conn, pipe=pipe)
                 yield checkpointer
     finally:
         # drop unique db
@@ -89,7 +89,7 @@ def _base_saver():
             prepare_threshold=0,
             row_factory=dict_row,
         ) as conn:
-            checkpointer = PostgresSaver(conn)
+            checkpointer = PostgresCheckpointer(conn)
             checkpointer.setup()
             yield checkpointer
     finally:
@@ -280,7 +280,7 @@ def test_null_chars(saver_name: str, test_data) -> None:
 
 def test_nonnull_migrations() -> None:
     _leading_comment_remover = re.compile(r"^/\*.*?\*/")
-    for migration in PostgresSaver.MIGRATIONS:
+    for migration in PostgresCheckpointer.MIGRATIONS:
         statement = _leading_comment_remover.sub("", migration).split()[0]
         assert statement.strip()
 

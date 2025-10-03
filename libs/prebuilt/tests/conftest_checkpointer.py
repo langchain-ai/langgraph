@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager, contextmanager
 from uuid import uuid4
 
 import pytest
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres import PostgresCheckpointer
 from langgraph.checkpoint.postgres.aio import AsyncPostgresCheckpointer
 from langgraph.checkpoint.sqlite import SqliteCheckpointer
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteCheckpointer
@@ -34,7 +34,7 @@ def _checkpointer_postgres():
         conn.execute(f"CREATE DATABASE {database}")
     try:
         # yield checkpointer
-        with PostgresSaver.from_conn_string(
+        with PostgresCheckpointer.from_conn_string(
             DEFAULT_POSTGRES_URI + database
         ) as checkpointer:
             checkpointer.setup()
@@ -53,7 +53,7 @@ def _checkpointer_postgres_pipe():
         conn.execute(f"CREATE DATABASE {database}")
     try:
         # yield checkpointer
-        with PostgresSaver.from_conn_string(
+        with PostgresCheckpointer.from_conn_string(
             DEFAULT_POSTGRES_URI + database
         ) as checkpointer:
             checkpointer.setup()
@@ -78,7 +78,7 @@ def _checkpointer_postgres_pool():
         with ConnectionPool(
             DEFAULT_POSTGRES_URI + database, max_size=10, kwargs={"autocommit": True}
         ) as pool:
-            checkpointer = PostgresSaver(pool)
+            checkpointer = PostgresCheckpointer(pool)
             checkpointer.setup()
             yield checkpointer
     finally:

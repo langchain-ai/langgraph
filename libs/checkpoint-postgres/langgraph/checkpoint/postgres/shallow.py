@@ -170,7 +170,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
     """A checkpoint saver that uses Postgres to store checkpoints.
 
     This checkpointer ONLY stores the most recent checkpoint and does NOT retain any history.
-    It is meant to be a light-weight drop-in replacement for the PostgresSaver that
+    It is meant to be a light-weight drop-in replacement for the PostgresCheckpointer that
     supports most of the LangGraph persistence functionality with the exception of time travel.
     """
 
@@ -191,7 +191,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
     ) -> None:
         warnings.warn(
             "ShallowPostgresSaver is deprecated as of version 2.0.20 and will be removed in 3.0.0. "
-            "Use PostgresSaver instead, and invoke the graph with `graph.invoke(..., durability='exit')`.",
+            "Use PostgresCheckpointer instead, and invoke the graph with `graph.invoke(..., durability='exit')`.",
             DeprecationWarning,
             stacklevel=2,
         )

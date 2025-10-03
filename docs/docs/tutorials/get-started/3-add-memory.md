@@ -34,7 +34,7 @@ const memory = new MemorySaver();
 
 :::
 
-This is in-memory checkpointer, which is convenient for the tutorial. However, in a production application, you would likely change this to use `SqliteCheckpointer` or `PostgresSaver` and connect a database.
+This is in-memory checkpointer, which is convenient for the tutorial. However, in a production application, you would likely change this to use `SqliteCheckpointer` or `PostgresCheckpointer` and connect a database.
 
 ## 2. Compile the graph
 

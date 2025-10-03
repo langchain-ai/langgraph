@@ -1154,7 +1154,7 @@ Under the hood, checkpointing is powered by checkpointer objects that conform to
 
 - `langgraph-checkpoint`: The base interface for checkpointer savers (@[BaseCheckpointer]) and serialization/deserialization interface (@[SerializerProtocol][SerializerProtocol]). Includes in-memory checkpointer implementation (@[InMemoryCheckpointer][InMemoryCheckpointer]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
 - `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database (@[SqliteCheckpointer][SqliteCheckpointer] / @[AsyncSqliteCheckpointer]). Ideal for experimentation and local workflows. Needs to be installed separately.
-- `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresSaver][PostgresSaver] / @[AsyncPostgresCheckpointer]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
+- `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresCheckpointer][PostgresCheckpointer] / @[AsyncPostgresCheckpointer]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
 
 :::
 
@@ -1162,7 +1162,7 @@ Under the hood, checkpointing is powered by checkpointer objects that conform to
 
 - `@langchain/langgraph-checkpoint`: The base interface for checkpointer savers (@[BaseCheckpointer][BaseCheckpointer]) and serialization/deserialization interface (@[SerializerProtocol][SerializerProtocol]). Includes in-memory checkpointer implementation (@[MemorySaver]) for experimentation. LangGraph comes with `@langchain/langgraph-checkpoint` included.
 - `@langchain/langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database (@[SqliteCheckpointer]). Ideal for experimentation and local workflows. Needs to be installed separately.
-- `@langchain/langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresSaver]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
+- `@langchain/langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (@[PostgresCheckpointer]), used in LangGraph Platform. Ideal for using in production. Needs to be installed separately.
 
 :::
 
@@ -1233,10 +1233,10 @@ checkpointer = SqliteCheckpointer(sqlite3.connect("checkpoint.db"), serde=serde)
 
 ```python
 from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres import PostgresCheckpointer
 
 serde = EncryptedSerializer.from_pycryptodome_aes()
-checkpointer = PostgresSaver.from_conn_string("postgresql://...", serde=serde)
+checkpointer = PostgresCheckpointer.from_conn_string("postgresql://...", serde=serde)
 checkpointer.setup()
 ```
 

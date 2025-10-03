@@ -406,3 +406,16 @@ def test_asyncpostgressaver_alias_and_deprecation_warning() -> None:
         match=r"`AsyncPostgresSaver` has been renamed\. Please use `AsyncPostgresCheckpointer` instead\.",
     ):
         AsyncPostgresSaver()
+
+
+def test_postgressaver_alias_and_deprecation_warning() -> None:
+    """Test that importing PostgresSaver raises a deprecation warning and is an alias for PostgresCheckpointer."""
+    from langgraph.checkpoint.base import PostgresCheckpointer, PostgresSaver
+
+    assert issubclass(PostgresSaver, PostgresCheckpointer)
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"`PostgresSaver` has been renamed\. Please use `PostgresCheckpointer` instead\.",
+    ):
+        PostgresSaver()

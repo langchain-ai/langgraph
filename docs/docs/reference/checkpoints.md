@@ -33,7 +33,7 @@
 ::: langgraph.checkpoint.postgres
     options:
       members:
-        - PostgresSaver
+        - PostgresCheckpointer
 
 ::: langgraph.checkpoint.postgres.aio
     options:

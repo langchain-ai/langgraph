@@ -70,7 +70,7 @@ MANUAL_API_REFERENCES_LANGGRAPH = [
     ([], "langgraph.checkpoint.sqlite.aio", "AsyncSqliteCheckpointer", "checkpoints"),
     ([], "langgraph.checkpoint.sqlite", "SqliteCheckpointer", "checkpoints"),
     ([], "langgraph.checkpoint.postgres.aio", "AsyncPostgresCheckpointer", "checkpoints"),
-    ([], "langgraph.checkpoint.postgres", "PostgresSaver", "checkpoints"),
+    ([], "langgraph.checkpoint.postgres", "PostgresCheckpointer", "checkpoints"),
     # other prebuilts
     (
         ["langgraph_supervisor"],
