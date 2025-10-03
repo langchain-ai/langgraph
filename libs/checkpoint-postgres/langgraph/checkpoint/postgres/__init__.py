@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import warnings
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -21,15 +22,16 @@ from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
+from typing_extensions import deprecated
 
 from langgraph.checkpoint.postgres import _internal
-from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.base import BasePostgresCheckpointer
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
 Conn = _internal.Conn  # For backward compatibility
 
 
-class PostgresCheckpointer(BasePostgresSaver):
+class PostgresCheckpointer(BasePostgresCheckpointer):
     """Checkpointer that stores checkpoints in a Postgres database."""
 
     lock: threading.Lock
@@ -483,4 +485,9 @@ class PostgresSaver(PostgresCheckpointer):
         super().__init__(*args, **kwargs)
 
 
-__all__ = ["PostgresCheckpointer", "BasePostgresSaver", "ShallowPostgresSaver", "Conn"]
+__all__ = [
+    "PostgresCheckpointer",
+    "BasePostgresCheckpointer",
+    "ShallowPostgresSaver",
+    "Conn",
+]

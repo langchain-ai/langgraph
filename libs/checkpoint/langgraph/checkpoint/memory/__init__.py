@@ -5,6 +5,7 @@ import os
 import pickle
 import random
 import shutil
+import warnings
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
@@ -12,6 +13,7 @@ from types import TracebackType
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import deprecated
 
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
@@ -522,6 +524,7 @@ class InMemoryCheckpointer(
         next_v = current_v + 1
         next_h = random.random()
         return f"{next_v:032}.{next_h:016}"
+
 
 @deprecated(
     "`InMemorySaver` has been renamed. Please use `InMemoryCheckpointer` instead."

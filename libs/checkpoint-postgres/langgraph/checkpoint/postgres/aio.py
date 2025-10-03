@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import warnings
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
@@ -21,15 +22,16 @@ from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
+from typing_extensions import deprecated
 
 from langgraph.checkpoint.postgres import _ainternal
-from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.base import BasePostgresCheckpointer
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 
 Conn = _ainternal.Conn  # For backward compatibility
 
 
-class AsyncPostgresCheckpointer(AsyncPostgresSaver):
+class AsyncPostgresCheckpointer(BasePostgresCheckpointer):
     """Asynchronous checkpointer that stores checkpoints in a Postgres database."""
 
     lock: asyncio.Lock

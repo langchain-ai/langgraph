@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import sqlite3
 import threading
+import warnings
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import closing, contextmanager
 from typing import Any, cast
@@ -20,6 +21,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from typing_extensions import deprecated
 
 from langgraph.checkpoint.sqlite.utils import search_where
 
@@ -558,9 +560,7 @@ class SqliteCheckpointer(BaseCheckpointer[str]):
         return f"{next_v:032}.{next_h:016}"
 
 
-@deprecated(
-    "`SqliteSaver` has been renamed. Please use `SqliteCheckpointer` instead."
-)
+@deprecated("`SqliteSaver` has been renamed. Please use `SqliteCheckpointer` instead.")
 class SqliteSaver(SqliteCheckpointer):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         warnings.warn(

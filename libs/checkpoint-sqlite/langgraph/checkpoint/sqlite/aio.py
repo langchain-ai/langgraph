@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import warnings
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
 from typing import Any, Callable, TypeVar, cast
@@ -20,6 +21,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from typing_extensions import deprecated
 
 from langgraph.checkpoint.sqlite.utils import search_where
 

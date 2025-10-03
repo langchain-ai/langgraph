@@ -30,7 +30,7 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
 from langgraph.checkpoint.postgres import _ainternal, _internal
-from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.base import BasePostgresCheckpointer
 
 """
 To add a new migration, add a new string to the MIGRATIONS list.
@@ -166,7 +166,7 @@ def _dump_blobs(
     ]
 
 
-class ShallowPostgresSaver(BasePostgresSaver):
+class ShallowPostgresSaver(BasePostgresCheckpointer):
     """A checkpoint saver that uses Postgres to store checkpoints.
 
     This checkpointer ONLY stores the most recent checkpoint and does NOT retain any history.
@@ -523,7 +523,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     yield cur
 
 
-class AsyncShallowPostgresSaver(BasePostgresSaver):
+class AsyncShallowPostgresSaver(BasePostgresCheckpointer):
     """A checkpoint saver that uses Postgres to store checkpoints asynchronously.
 
     This checkpointer ONLY stores the most recent checkpoint and does NOT retain any history.
