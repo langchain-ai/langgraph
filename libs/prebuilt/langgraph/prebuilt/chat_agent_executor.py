@@ -274,7 +274,7 @@ def create_react_agent(
     interrupt_before: Optional[list[str]] = None,
     interrupt_after: Optional[list[str]] = None,
     debug: bool = False,
-    version: Literal["v1", "v2"] = "v2",
+    version: Literal["v1", "v2", "v3"] = "v2",
     name: Optional[str] = None,
     **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
@@ -486,9 +486,9 @@ def create_react_agent(
             f"create_react_agent() got unexpected keyword arguments: {deprecated_kwargs}"
         )
 
-    if version not in ("v1", "v2"):
+    if version not in ("v1", "v2", "v3"):
         raise ValueError(
-            f"Invalid version {version}. Supported versions are 'v1' and 'v2'."
+            f"Invalid version {version}. Supported versions are 'v1', 'v2', and 'v3'."
         )
 
     if state_schema is not None:
@@ -807,6 +807,14 @@ def create_react_agent(
                     for call in last_message.tool_calls
                 ]
                 return [Send("tools", [tool_call]) for tool_call in tool_calls]
+            elif version == "v3":
+                if post_model_hook is not None:
+                    return "post_model_hook"
+                tool_calls = [
+                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    for call in last_message.tool_calls
+                ]
+                return [Send("tools", tool_calls)]
 
     # Define a new graph
     workflow = StateGraph(
