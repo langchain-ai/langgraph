@@ -24,7 +24,7 @@ from langchain_core.callbacks import Callbacks
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
     PendingWrite,
@@ -356,7 +356,7 @@ def prepare_next_tasks(
     *,
     for_execution: Literal[True],
     store: BaseStore | None,
-    checkpointer: BaseCheckpointSaver | None,
+    checkpointer: BaseCheckpointer | None,
     manager: None | ParentRunManager | AsyncParentRunManager,
     trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
     updated_channels: set[str] | None = None,
@@ -377,7 +377,7 @@ def prepare_next_tasks(
     *,
     for_execution: bool,
     store: BaseStore | None = None,
-    checkpointer: BaseCheckpointSaver | None = None,
+    checkpointer: BaseCheckpointer | None = None,
     manager: None | ParentRunManager | AsyncParentRunManager = None,
     trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
     updated_channels: set[str] | None = None,
@@ -508,7 +508,7 @@ def prepare_single_task(
     stop: int,
     for_execution: bool,
     store: BaseStore | None = None,
-    checkpointer: BaseCheckpointSaver | None = None,
+    checkpointer: BaseCheckpointer | None = None,
     manager: None | ParentRunManager | AsyncParentRunManager = None,
     input_cache: dict[INPUT_CACHE_KEY_TYPE, Any] | None = None,
     cache_policy: CachePolicy | None = None,

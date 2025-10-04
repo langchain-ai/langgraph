@@ -10,11 +10,11 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     SerializerProtocol,
 )
-from langgraph.checkpoint.memory import InMemorySaver, PersistentDict
+from langgraph.checkpoint.memory import InMemoryCheckpointer, PersistentDict
 from langgraph.pregel._checkpoint import copy_checkpoint
 
 
-class MemorySaverAssertImmutable(InMemorySaver):
+class MemorySaverAssertImmutable(InMemoryCheckpointer):
     storage_for_copies: defaultdict[str, dict[str, dict[str, Checkpoint]]]
 
     def __init__(

@@ -5,7 +5,7 @@
       members:
         - CheckpointMetadata
         - Checkpoint
-        - BaseCheckpointSaver
+        - BaseCheckpointer
         - create_checkpoint
 
 ::: langgraph.checkpoint.serde.base
@@ -33,9 +33,9 @@
 ::: langgraph.checkpoint.postgres
     options:
       members:
-        - PostgresSaver
+        - PostgresCheckpointer
 
 ::: langgraph.checkpoint.postgres.aio
     options:
       members:
-        - AsyncPostgresSaver
+        - AsyncPostgresCheckpointer

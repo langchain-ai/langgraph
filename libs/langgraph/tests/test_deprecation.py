@@ -341,3 +341,81 @@ def test_message_graph_deprecation() -> None:
         match="MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.",
     ):
         MessageGraph()
+
+
+def test_basecheckpointsaver_alias_and_deprecation_warning() -> None:
+    """Test that importing BaseCheckpointSaver raises a deprecation warning and is an alias for BaseCheckpointer."""
+    from langgraph.checkpoint.base import BaseCheckpointer, BaseCheckpointSaver
+
+    assert issubclass(BaseCheckpointSaver, BaseCheckpointer)
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"`BaseCheckpointSaver` has been renamed\. Please use `BaseCheckpointer` instead\.",
+    ):
+        BaseCheckpointSaver()
+
+
+def test_inmemorysaver_alias_and_deprecation_warning() -> None:
+    """Test that importing InMemorySaver raises a deprecation warning and is an alias for InMemoryCheckpointer."""
+    from langgraph.checkpoint.memory import InMemoryCheckpointer, InMemorySaver
+
+    assert issubclass(InMemorySaver, InMemoryCheckpointer)
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"`InMemorySaver` has been renamed\. Please use `InMemoryCheckpointer` instead\.",
+    ):
+        InMemorySaver()
+
+
+def test_asyncsqlitesaver_alias_and_deprecation_warning() -> None:
+    """Test that importing AsyncSqliteSaver raises a deprecation warning and is an alias for AsyncSqliteCheckpointer."""
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteCheckpointer, AsyncSqliteSaver
+
+    assert issubclass(AsyncSqliteSaver, AsyncSqliteCheckpointer)
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"`AsyncSqliteSaver` has been renamed\. Please use `AsyncSqliteCheckpointer` instead\.",
+    ):
+        AsyncSqliteSaver()
+
+
+def test_sqlitesaver_alias_and_deprecation_warning() -> None:
+    """Test that importing SqliteSaver raises a deprecation warning and is an alias for SqliteCheckpointer."""
+    from langgraph.checkpoint.sqlite import SqliteCheckpointer, SqliteSaver
+
+    assert issubclass(SqliteSaver, SqliteCheckpointer)
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"`SqliteSaver` has been renamed\. Please use `SqliteCheckpointer` instead\.",
+    ):
+        SqliteSaver()
+
+
+def test_asyncpostgressaver_alias_and_deprecation_warning() -> None:
+    """Test that importing AsyncPostgresSaver raises a deprecation warning and is an alias for AsyncPostgresCheckpointer."""
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresCheckpointer, AsyncPostgresSaver
+
+    assert issubclass(AsyncPostgresSaver, AsyncPostgresCheckpointer)
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"`AsyncPostgresSaver` has been renamed\. Please use `AsyncPostgresCheckpointer` instead\.",
+    ):
+        AsyncPostgresSaver()
+
+
+def test_postgressaver_alias_and_deprecation_warning() -> None:
+    """Test that importing PostgresSaver raises a deprecation warning and is an alias for PostgresCheckpointer."""
+    from langgraph.checkpoint.postgres import PostgresCheckpointer, PostgresSaver
+
+    assert issubclass(PostgresSaver, PostgresCheckpointer)
+
+    with pytest.warns(
+        DeprecationWarning,
+        match=r"`PostgresSaver` has been renamed\. Please use `PostgresCheckpointer` instead\.",
+    ):
+        PostgresSaver()

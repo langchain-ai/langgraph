@@ -9,7 +9,7 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite import SqliteCheckpointer
 from langgraph.checkpoint.sqlite.utils import _metadata_predicate, search_where
 
 
@@ -59,7 +59,7 @@ class TestSqliteSaver:
         self.metadata_3: CheckpointMetadata = {}
 
     def test_combined_metadata(self) -> None:
-        with SqliteSaver.from_conn_string(":memory:") as saver:
+        with SqliteCheckpointer.from_conn_string(":memory:") as saver:
             config: RunnableConfig = {
                 "configurable": {
                     "thread_id": "thread-2",
@@ -76,7 +76,7 @@ class TestSqliteSaver:
             }
 
     def test_search(self) -> None:
-        with SqliteSaver.from_conn_string(":memory:") as saver:
+        with SqliteCheckpointer.from_conn_string(":memory:") as saver:
             # set up test
             # save checkpoints
             saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
@@ -173,12 +173,12 @@ class TestSqliteSaver:
         )
 
     async def test_informative_async_errors(self) -> None:
-        with SqliteSaver.from_conn_string(":memory:") as saver:
+        with SqliteCheckpointer.from_conn_string(":memory:") as saver:
             # call method / assertions
-            with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
+            with pytest.raises(NotImplementedError, match="AsyncSqliteCheckpointer"):
                 await saver.aget(self.config_1)
-            with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
+            with pytest.raises(NotImplementedError, match="AsyncSqliteCheckpointer"):
                 await saver.aget_tuple(self.config_1)
-            with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
+            with pytest.raises(NotImplementedError, match="AsyncSqliteCheckpointer"):
                 async for _ in saver.alist(self.config_1):
                     pass

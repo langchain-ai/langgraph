@@ -791,7 +791,7 @@ function agent(state: MessagesState): Command {
     from langgraph.graph import MessagesState, StateGraph, START
     from langgraph.prebuilt import create_react_agent, InjectedState
     from langgraph.types import Command, interrupt
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     
     
     model = ChatAnthropic(model="claude-3-5-sonnet-latest")
@@ -883,7 +883,7 @@ function agent(state: MessagesState): Command {
     builder.add_edge(START, "travel_advisor")
     
     
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     graph = builder.compile(checkpointer=checkpointer)
     ```
     

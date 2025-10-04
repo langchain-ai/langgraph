@@ -17,9 +17,9 @@ Create a `MemorySaver` checkpointer:
 :::python
 
 ```python
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 
-memory = InMemorySaver()
+memory = InMemoryCheckpointer()
 ```
 
 :::
@@ -34,7 +34,7 @@ const memory = new MemorySaver();
 
 :::
 
-This is in-memory checkpointer, which is convenient for the tutorial. However, in a production application, you would likely change this to use `SqliteSaver` or `PostgresSaver` and connect a database.
+This is in-memory checkpointer, which is convenient for the tutorial. However, in a production application, you would likely change this to use `SqliteCheckpointer` or `PostgresCheckpointer` and connect a database.
 
 ## 2. Compile the graph
 
@@ -375,7 +375,7 @@ from langchain_tavily import TavilySearch
 from langchain_core.messages import BaseMessage
 from typing_extensions import TypedDict
 
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -403,7 +403,7 @@ graph_builder.add_conditional_edges(
 )
 graph_builder.add_edge("tools", "chatbot")
 graph_builder.set_entry_point("chatbot")
-memory = InMemorySaver()
+memory = InMemoryCheckpointer()
 graph = graph_builder.compile(checkpointer=memory)
 ```
 

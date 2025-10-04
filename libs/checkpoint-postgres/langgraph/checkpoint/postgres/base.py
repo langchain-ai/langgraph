@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import random
+import warnings
 from collections.abc import Sequence
 from typing import Any, Optional, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
+from typing_extensions import deprecated
 
 MetadataInput = Optional[dict[str, Any]]
 
@@ -139,7 +141,7 @@ INSERT_CHECKPOINT_WRITES_SQL = """
 """
 
 
-class BasePostgresSaver(BaseCheckpointSaver[str]):
+class BasePostgresCheckpointer(BaseCheckpointer[str]):
     SELECT_SQL = SELECT_SQL
     SELECT_PENDING_SENDS_SQL = SELECT_PENDING_SENDS_SQL
     MIGRATIONS = MIGRATIONS
@@ -299,3 +301,16 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             "WHERE " + " AND ".join(wheres) if wheres else "",
             param_values,
         )
+
+
+@deprecated(
+    "`BasePostgresSaver` has been renamed. Please use `BasePostgresCheckpointer` instead."
+)
+class BasePostgresSaver(BasePostgresCheckpointer):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "`BasePostgresSaver` has been renamed. Please use `BasePostgresCheckpointer` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)

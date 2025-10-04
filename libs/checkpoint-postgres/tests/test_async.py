@@ -19,7 +19,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from langgraph.checkpoint.postgres.aio import (
-    AsyncPostgresSaver,
+    AsyncPostgresCheckpointer,
     AsyncShallowPostgresSaver,
 )
 from tests.conftest import DEFAULT_POSTGRES_URI
@@ -45,7 +45,7 @@ async def _pool_saver():
             max_size=10,
             kwargs={"autocommit": True, "row_factory": dict_row},
         ) as pool:
-            checkpointer = AsyncPostgresSaver(pool)
+            checkpointer = AsyncPostgresCheckpointer(pool)
             await checkpointer.setup()
             yield checkpointer
     finally:
@@ -72,10 +72,10 @@ async def _pipe_saver():
             prepare_threshold=0,
             row_factory=dict_row,
         ) as conn:
-            checkpointer = AsyncPostgresSaver(conn)
+            checkpointer = AsyncPostgresCheckpointer(conn)
             await checkpointer.setup()
             async with conn.pipeline() as pipe:
-                checkpointer = AsyncPostgresSaver(conn, pipe=pipe)
+                checkpointer = AsyncPostgresCheckpointer(conn, pipe=pipe)
                 yield checkpointer
     finally:
         # drop unique db
@@ -101,7 +101,7 @@ async def _base_saver():
             prepare_threshold=0,
             row_factory=dict_row,
         ) as conn:
-            checkpointer = AsyncPostgresSaver(conn)
+            checkpointer = AsyncPostgresCheckpointer(conn)
             await checkpointer.setup()
             yield checkpointer
     finally:

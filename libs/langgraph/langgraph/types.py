@@ -19,7 +19,7 @@ from typing import (
 from warnings import warn
 
 from langchain_core.runnables import Runnable, RunnableConfig
-from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
+from langgraph.checkpoint.base import BaseCheckpointer, CheckpointMetadata
 from typing_extensions import Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
@@ -68,7 +68,7 @@ Durability = Literal["sync", "async", "exit"]
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
-Checkpointer = Union[None, bool, BaseCheckpointSaver]
+Checkpointer = Union[None, bool, BaseCheckpointer]
 """Type of the checkpointer to use for a subgraph.
 - True enables persistent checkpointing for this subgraph.
 - False disables checkpointing, even if the parent graph has a checkpointer.
@@ -428,7 +428,7 @@ def interrupt(value: Any) -> Any:
         from typing import Optional
         from typing_extensions import TypedDict
 
-        from langgraph.checkpoint.memory import InMemorySaver
+        from langgraph.checkpoint.memory import InMemoryCheckpointer
         from langgraph.constants import START
         from langgraph.graph import StateGraph
         from langgraph.types import interrupt, Command
@@ -457,7 +457,7 @@ def interrupt(value: Any) -> Any:
         builder.add_edge(START, \"node\")
 
         # A checkpointer must be enabled for interrupts to work!
-        checkpointer = InMemorySaver()
+        checkpointer = InMemoryCheckpointer()
         graph = builder.compile(checkpointer=checkpointer)
 
         config = {

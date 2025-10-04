@@ -114,7 +114,7 @@ If a [node](./low_level.md#nodes) contains multiple operations, you may find it 
     from typing_extensions import TypedDict
     import uuid
 
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     from langgraph.graph import StateGraph, START, END
     import requests
 
@@ -140,7 +140,7 @@ If a [node](./low_level.md#nodes) contains multiple operations, you may find it 
     builder.add_edge("call_api", END)
 
     # Specify a checkpointer
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
 
     # Compile the graph with the checkpointer
     graph = builder.compile(checkpointer=checkpointer)
@@ -160,7 +160,7 @@ If a [node](./low_level.md#nodes) contains multiple operations, you may find it 
     from typing_extensions import TypedDict
     import uuid
 
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     from langgraph.func import task
     from langgraph.graph import StateGraph, START, END
     import requests
@@ -195,7 +195,7 @@ If a [node](./low_level.md#nodes) contains multiple operations, you may find it 
     builder.add_edge("call_api", END)
 
     # Specify a checkpointer
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
 
     # Compile the graph with the checkpointer
     graph = builder.compile(checkpointer=checkpointer)

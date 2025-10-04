@@ -600,7 +600,7 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
     ```python
     from typing import TypedDict, Optional
 
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     from langgraph.func import entrypoint
 
     class Essay(TypedDict):
@@ -609,7 +609,7 @@ LangGraph provides two high-level APIs for creating a Pregel application: the [S
         score: Optional[float]
 
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
 
     @entrypoint(checkpointer=checkpointer)
     def write_essay(essay: Essay):

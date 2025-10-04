@@ -13,11 +13,11 @@ AI applications need [memory](../../concepts/memory.md) to share context across 
 
 ```python
 # highlight-next-line
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.graph import StateGraph
 
 # highlight-next-line
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 
 builder = StateGraph(...)
 # highlight-next-line
@@ -57,11 +57,11 @@ In production, use a checkpointer backed by a database:
 :::python
 
 ```python
-from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres import PostgresCheckpointer
 
 DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable"
 # highlight-next-line
-with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+with PostgresCheckpointer.from_conn_string(DB_URI) as checkpointer:
     builder = StateGraph(...)
     # highlight-next-line
     graph = builder.compile(checkpointer=checkpointer)
@@ -72,10 +72,10 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
 :::js
 
 ```typescript
-import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
+import { PostgresCheckpointer } from "@langchain/langgraph-checkpoint-postgres";
 
 const DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable";
-const checkpointer = PostgresSaver.fromConnString(DB_URI);
+const checkpointer = PostgresCheckpointer.fromConnString(DB_URI);
 
 const builder = new StateGraph(...);
 const graph = builder.compile({ checkpointer });
@@ -99,13 +99,13 @@ const graph = builder.compile({ checkpointer });
         from langchain.chat_models import init_chat_model
         from langgraph.graph import StateGraph, MessagesState, START
         # highlight-next-line
-        from langgraph.checkpoint.postgres import PostgresSaver
+        from langgraph.checkpoint.postgres import PostgresCheckpointer
 
         model = init_chat_model(model="anthropic:claude-3-5-haiku-latest")
 
         DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable"
         # highlight-next-line
-        with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+        with PostgresCheckpointer.from_conn_string(DB_URI) as checkpointer:
             # checkpointer.setup()
 
             def call_model(state: MessagesState):
@@ -149,13 +149,13 @@ const graph = builder.compile({ checkpointer });
         from langchain.chat_models import init_chat_model
         from langgraph.graph import StateGraph, MessagesState, START
         # highlight-next-line
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresCheckpointer
 
         model = init_chat_model(model="anthropic:claude-3-5-haiku-latest")
 
         DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable"
         # highlight-next-line
-        async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
+        async with AsyncPostgresCheckpointer.from_conn_string(DB_URI) as checkpointer:
             # await checkpointer.setup()
 
             async def call_model(state: MessagesState):
@@ -205,12 +205,12 @@ const graph = builder.compile({ checkpointer });
     ```typescript
     import { ChatAnthropic } from "@langchain/anthropic";
     import { StateGraph, MessagesZodState, START } from "@langchain/langgraph";
-    import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
+    import { PostgresCheckpointer } from "@langchain/langgraph-checkpoint-postgres";
 
     const model = new ChatAnthropic({ model: "claude-3-5-haiku-20241022" });
 
     const DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable";
-    const checkpointer = PostgresSaver.fromConnString(DB_URI);
+    const checkpointer = PostgresCheckpointer.fromConnString(DB_URI);
     // await checkpointer.setup();
 
     const builder = new StateGraph(MessagesZodState)
@@ -473,7 +473,7 @@ If your graph contains [subgraphs](../../concepts/subgraphs.md), you only need t
 
 ```python
 from langgraph.graph import START, StateGraph
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from typing import TypedDict
 
 class State(TypedDict):
@@ -497,7 +497,7 @@ builder = StateGraph(State)
 builder.add_node("node_1", subgraph)
 builder.add_edge(START, "node_1")
 
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 # highlight-next-line
 graph = builder.compile(checkpointer=checkpointer)
 ```
@@ -848,7 +848,7 @@ const graph = builder.compile({ store });
         from langchain_core.runnables import RunnableConfig
         from langchain.chat_models import init_chat_model
         from langgraph.graph import StateGraph, MessagesState, START
-        from langgraph.checkpoint.postgres import PostgresSaver
+        from langgraph.checkpoint.postgres import PostgresCheckpointer
         # highlight-next-line
         from langgraph.store.postgres import PostgresStore
         from langgraph.store.base import BaseStore
@@ -860,7 +860,7 @@ const graph = builder.compile({ store });
         with (
             # highlight-next-line
             PostgresStore.from_conn_string(DB_URI) as store,
-            PostgresSaver.from_conn_string(DB_URI) as checkpointer,
+            PostgresCheckpointer.from_conn_string(DB_URI) as checkpointer,
         ):
             # store.setup()
             # checkpointer.setup()
@@ -940,7 +940,7 @@ const graph = builder.compile({ store });
         from langchain_core.runnables import RunnableConfig
         from langchain.chat_models import init_chat_model
         from langgraph.graph import StateGraph, MessagesState, START
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresCheckpointer
         # highlight-next-line
         from langgraph.store.postgres.aio import AsyncPostgresStore
         from langgraph.store.base import BaseStore
@@ -952,7 +952,7 @@ const graph = builder.compile({ store });
         async with (
             # highlight-next-line
             AsyncPostgresStore.from_conn_string(DB_URI) as store,
-            AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer,
+            AsyncPostgresCheckpointer.from_conn_string(DB_URI) as checkpointer,
         ):
             # await store.setup()
             # await checkpointer.setup()
@@ -1038,7 +1038,7 @@ const graph = builder.compile({ store });
     ```typescript
     import { ChatAnthropic } from "@langchain/anthropic";
     import { StateGraph, MessagesZodState, START, LangGraphRunnableConfig } from "@langchain/langgraph";
-    import { PostgresSaver, PostgresStore } from "@langchain/langgraph-checkpoint-postgres";
+    import { PostgresCheckpointer, PostgresStore } from "@langchain/langgraph-checkpoint-postgres";
     import { z } from "zod";
     import { v4 as uuidv4 } from "uuid";
 
@@ -1047,7 +1047,7 @@ const graph = builder.compile({ store });
     const DB_URI = "postgresql://postgres:postgres@localhost:5442/postgres?sslmode=disable";
 
     const store = PostgresStore.fromConnString(DB_URI);
-    const checkpointer = PostgresSaver.fromConnString(DB_URI);
+    const checkpointer = PostgresCheckpointer.fromConnString(DB_URI);
     // await store.setup();
     // await checkpointer.setup();
 
@@ -1751,7 +1751,7 @@ Most LLMs have a maximum supported context window (denominated in tokens). One w
         # highlight-next-line
         return {"llm_input_messages": trimmed_messages}
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     agent = create_react_agent(
         model,
         tools,
@@ -1877,7 +1877,7 @@ Most LLMs have a maximum supported context window (denominated in tokens). One w
         response = model.invoke(messages)
         return {"messages": [response]}
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     builder = StateGraph(MessagesState)
     builder.add_node(call_model)
     builder.add_edge(START, "call_model")
@@ -2025,7 +2025,7 @@ const deleteMessages = (state) => {
     builder.add_sequence([call_model, delete_messages])
     builder.add_edge(START, "call_model")
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     app = builder.compile(checkpointer=checkpointer)
 
     for event in app.stream(
@@ -2127,7 +2127,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
     from langchain_core.messages.utils import count_tokens_approximately
     from langgraph.prebuilt import create_react_agent
     from langgraph.prebuilt.chat_agent_executor import AgentState
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     from typing import Any
 
     model = ChatAnthropic(model="claude-3-7-sonnet-latest")
@@ -2147,7 +2147,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
         context: dict[str, RunningSummary]  # (2)!
 
 
-    checkpointer = InMemorySaver() # (3)!
+    checkpointer = InMemoryCheckpointer() # (3)!
 
     agent = create_react_agent(
         model=model,
@@ -2160,7 +2160,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
     )
     ```
 
-    1. The `InMemorySaver` is a checkpointer that stores the agent's state in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [checkpointer documentation](../../reference/checkpoints.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready checkpointer for you.
+    1. The `InMemoryCheckpointer` is a checkpointer that stores the agent's state in memory. In a production setting, you would typically use a database or other persistent storage. Please review the [checkpointer documentation](../../reference/checkpoints.md) for more options. If you're deploying with **LangGraph Platform**, the platform will provide a production-ready checkpointer for you.
     2. The `context` key is added to the agent's state. The key contains book-keeping information for the summarization node. It is used to keep track of the last summary information and ensure that the agent doesn't summarize on every LLM call, which can be inefficient.
     3. The `checkpointer` is passed to the agent. This enables the agent to persist its state across invocations.
     4. The `pre_model_hook` is set to the `SummarizationNode`. This node will summarize the message history before sending it to the LLM. The summarization node will automatically handle the summarization process and update the agent's state with the new summary. You can replace this with a custom implementation if you prefer. Please see the @[create_react_agent][create_react_agent] API reference for more details.
@@ -2270,7 +2270,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
     from langchain_core.messages import AnyMessage
     from langchain_core.messages.utils import count_tokens_approximately
     from langgraph.graph import StateGraph, START, MessagesState
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     # highlight-next-line
     from langmem.short_term import SummarizationNode, RunningSummary
 
@@ -2299,7 +2299,7 @@ The problem with trimming or removing messages, as shown above, is that you may 
         response = model.invoke(state["summarized_messages"])
         return {"messages": [response]}
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     builder = StateGraph(State)
     builder.add_node(call_model)
     # highlight-next-line

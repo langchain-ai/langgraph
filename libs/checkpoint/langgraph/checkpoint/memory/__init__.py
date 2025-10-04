@@ -5,6 +5,7 @@ import os
 import pickle
 import random
 import shutil
+import warnings
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
@@ -12,10 +13,11 @@ from types import TracebackType
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import deprecated
 
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -28,16 +30,16 @@ from langgraph.checkpoint.base import (
 logger = logging.getLogger(__name__)
 
 
-class InMemorySaver(
-    BaseCheckpointSaver[str], AbstractContextManager, AbstractAsyncContextManager
+class InMemoryCheckpointer(
+    BaseCheckpointer[str], AbstractContextManager, AbstractAsyncContextManager
 ):
     """An in-memory checkpoint saver.
 
     This checkpoint saver stores checkpoints in memory using a defaultdict.
 
     Note:
-        Only use `InMemorySaver` for debugging or testing purposes.
-        For production use cases we recommend installing [langgraph-checkpoint-postgres](https://pypi.org/project/langgraph-checkpoint-postgres/) and using `PostgresSaver` / `AsyncPostgresSaver`.
+        Only use `InMemoryCheckpointer` for debugging or testing purposes.
+        For production use cases we recommend installing [langgraph-checkpoint-postgres](https://pypi.org/project/langgraph-checkpoint-postgres/) and using `PostgresCheckpointer` / `AsyncPostgresCheckpointer`.
 
         If you are using the LangGraph Platform, no checkpointer needs to be specified. The correct managed checkpointer will be used automatically.
 
@@ -48,7 +50,7 @@ class InMemorySaver(
 
             import asyncio
 
-            from langgraph.checkpoint.memory import InMemorySaver
+            from langgraph.checkpoint.memory import InMemoryCheckpointer
             from langgraph.graph import StateGraph
 
             builder = StateGraph(int)
@@ -56,7 +58,7 @@ class InMemorySaver(
             builder.set_entry_point("add_one")
             builder.set_finish_point("add_one")
 
-            memory = InMemorySaver()
+            memory = InMemoryCheckpointer()
             graph = builder.compile(checkpointer=memory)
             coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
             asyncio.run(coro)  # Output: 2
@@ -95,7 +97,7 @@ class InMemorySaver(
             self.stack.enter_context(self.writes)  # type: ignore[arg-type]
             self.stack.enter_context(self.blobs)  # type: ignore[arg-type]
 
-    def __enter__(self) -> InMemorySaver:
+    def __enter__(self) -> InMemoryCheckpointer:
         return self.stack.__enter__()
 
     def __exit__(
@@ -106,7 +108,7 @@ class InMemorySaver(
     ) -> bool | None:
         return self.stack.__exit__(exc_type, exc_value, traceback)
 
-    async def __aenter__(self) -> InMemorySaver:
+    async def __aenter__(self) -> InMemoryCheckpointer:
         return self.stack.__enter__()
 
     async def __aexit__(
@@ -524,7 +526,20 @@ class InMemorySaver(
         return f"{next_v:032}.{next_h:016}"
 
 
-MemorySaver = InMemorySaver  # Kept for backwards compatibility
+@deprecated(
+    "`InMemorySaver` has been renamed. Please use `InMemoryCheckpointer` instead."
+)
+class InMemorySaver(InMemoryCheckpointer):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "`InMemorySaver` has been renamed. Please use `InMemoryCheckpointer` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+MemorySaver = InMemoryCheckpointer  # Kept for backwards compatibility
 
 
 class PersistentDict(defaultdict):

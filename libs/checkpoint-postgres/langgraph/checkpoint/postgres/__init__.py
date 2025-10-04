@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import warnings
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -21,15 +22,16 @@ from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
+from typing_extensions import deprecated
 
 from langgraph.checkpoint.postgres import _internal
-from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.base import BasePostgresCheckpointer
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
 Conn = _internal.Conn  # For backward compatibility
 
 
-class PostgresSaver(BasePostgresSaver):
+class PostgresCheckpointer(BasePostgresCheckpointer):
     """Checkpointer that stores checkpoints in a Postgres database."""
 
     lock: threading.Lock
@@ -55,15 +57,15 @@ class PostgresSaver(BasePostgresSaver):
     @contextmanager
     def from_conn_string(
         cls, conn_string: str, *, pipeline: bool = False
-    ) -> Iterator[PostgresSaver]:
-        """Create a new PostgresSaver instance from a connection string.
+    ) -> Iterator[PostgresCheckpointer]:
+        """Create a new PostgresCheckpointer instance from a connection string.
 
         Args:
             conn_string: The Postgres connection info string.
             pipeline: whether to use Pipeline
 
         Returns:
-            PostgresSaver: A new PostgresSaver instance.
+            PostgresCheckpointer: A new PostgresCheckpointer instance.
         """
         with Connection.connect(
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
@@ -123,9 +125,9 @@ class PostgresSaver(BasePostgresSaver):
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
 
         Examples:
-            >>> from langgraph.checkpoint.postgres import PostgresSaver
+            >>> from langgraph.checkpoint.postgres import PostgresCheckpointer
             >>> DB_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
-            >>> with PostgresSaver.from_conn_string(DB_URI) as memory:
+            >>> with PostgresCheckpointer.from_conn_string(DB_URI) as memory:
             ... # Run a graph, then list the checkpoints
             >>>     config = {"configurable": {"thread_id": "1"}}
             >>>     checkpoints = list(memory.list(config, limit=2))
@@ -134,7 +136,7 @@ class PostgresSaver(BasePostgresSaver):
 
             >>> config = {"configurable": {"thread_id": "1"}}
             >>> before = {"configurable": {"checkpoint_id": "1ef4f797-8335-6428-8001-8a1503f9b875"}}
-            >>> with PostgresSaver.from_conn_string(DB_URI) as memory:
+            >>> with PostgresCheckpointer.from_conn_string(DB_URI) as memory:
             ... # Run a graph, then list the checkpoints
             >>>     checkpoints = list(memory.list(config, before=before))
             >>> print(checkpoints)
@@ -272,9 +274,9 @@ class PostgresSaver(BasePostgresSaver):
 
         Examples:
 
-            >>> from langgraph.checkpoint.postgres import PostgresSaver
+            >>> from langgraph.checkpoint.postgres import PostgresCheckpointer
             >>> DB_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
-            >>> with PostgresSaver.from_conn_string(DB_URI) as memory:
+            >>> with PostgresCheckpointer.from_conn_string(DB_URI) as memory:
             >>>     config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
             >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "channel_values": {"key": "value"}}
             >>>     saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}}, {})
@@ -393,7 +395,7 @@ class PostgresSaver(BasePostgresSaver):
 
         Args:
             pipeline: whether to use pipeline for the DB operations inside the context manager.
-                Will be applied regardless of whether the PostgresSaver instance was initialized with a pipeline.
+                Will be applied regardless of whether the PostgresCheckpointer instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
         with self.lock, _internal.get_connection(self.conn) as conn:
@@ -470,4 +472,24 @@ class PostgresSaver(BasePostgresSaver):
         )
 
 
-__all__ = ["PostgresSaver", "BasePostgresSaver", "ShallowPostgresSaver", "Conn"]
+@deprecated(
+    "`PostgresSaver` has been renamed. Please use `PostgresCheckpointer` instead."
+)
+class PostgresSaver(PostgresCheckpointer):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "`PostgresSaver` has been renamed. Please use `PostgresCheckpointer` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = [
+    "PostgresSaver",
+    "PostgresCheckpointer",
+    "BasePostgresSaver",
+    "BasePostgresCheckpointer",
+    "ShallowPostgresSaver",
+    "Conn",
+]

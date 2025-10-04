@@ -5,12 +5,12 @@ Implementation of LangGraph CheckpointSaver that uses SQLite DB (both sync and a
 ## Usage
 
 ```python
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite import SqliteCheckpointer
 
 write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
 read_config = {"configurable": {"thread_id": "1"}}
 
-with SqliteSaver.from_conn_string(":memory:") as checkpointer:
+with SqliteCheckpointer.from_conn_string(":memory:") as checkpointer:
     checkpoint = {
         "v": 4,
         "ts": "2024-07-31T20:14:19.804150+00:00",
@@ -49,9 +49,9 @@ with SqliteSaver.from_conn_string(":memory:") as checkpointer:
 ### Async
 
 ```python
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteCheckpointer
 
-async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
+async with AsyncSqliteCheckpointer.from_conn_string(":memory:") as checkpointer:
     checkpoint = {
         "v": 4,
         "ts": "2024-07-31T20:14:19.804150+00:00",

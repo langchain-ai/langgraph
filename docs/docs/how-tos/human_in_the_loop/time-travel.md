@@ -91,7 +91,7 @@ import uuid
 from typing_extensions import TypedDict, NotRequired
 from langgraph.graph import StateGraph, START, END
 from langchain.chat_models import init_chat_model
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 
 
 class State(TypedDict):
@@ -130,7 +130,7 @@ workflow.add_edge("generate_topic", "write_joke")
 workflow.add_edge("write_joke", END)
 
 # Compile
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 graph = workflow.compile(checkpointer=checkpointer)
 graph
 ```

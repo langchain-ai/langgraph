@@ -30,7 +30,7 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
 from langgraph.checkpoint.postgres import _ainternal, _internal
-from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.base import BasePostgresCheckpointer
 
 """
 To add a new migration, add a new string to the MIGRATIONS list.
@@ -166,11 +166,11 @@ def _dump_blobs(
     ]
 
 
-class ShallowPostgresSaver(BasePostgresSaver):
+class ShallowPostgresSaver(BasePostgresCheckpointer):
     """A checkpoint saver that uses Postgres to store checkpoints.
 
     This checkpointer ONLY stores the most recent checkpoint and does NOT retain any history.
-    It is meant to be a light-weight drop-in replacement for the PostgresSaver that
+    It is meant to be a light-weight drop-in replacement for the PostgresCheckpointer that
     supports most of the LangGraph persistence functionality with the exception of time travel.
     """
 
@@ -191,7 +191,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
     ) -> None:
         warnings.warn(
             "ShallowPostgresSaver is deprecated as of version 2.0.20 and will be removed in 3.0.0. "
-            "Use PostgresSaver instead, and invoke the graph with `graph.invoke(..., durability='exit')`.",
+            "Use PostgresCheckpointer instead, and invoke the graph with `graph.invoke(..., durability='exit')`.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -523,11 +523,11 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     yield cur
 
 
-class AsyncShallowPostgresSaver(BasePostgresSaver):
+class AsyncShallowPostgresSaver(BasePostgresCheckpointer):
     """A checkpoint saver that uses Postgres to store checkpoints asynchronously.
 
     This checkpointer ONLY stores the most recent checkpoint and does NOT retain any history.
-    It is meant to be a light-weight drop-in replacement for the AsyncPostgresSaver that
+    It is meant to be a light-weight drop-in replacement for the AsyncPostgresCheckpointer that
     supports most of the LangGraph persistence functionality with the exception of time travel.
     """
 
@@ -547,7 +547,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
     ) -> None:
         warnings.warn(
             "AsyncShallowPostgresSaver is deprecated as of version 2.0.20 and will be removed in 3.0.0. "
-            "Use AsyncPostgresSaver instead, and invoke the graph with `await graph.ainvoke(..., durability='exit')`.",
+            "Use AsyncPostgresCheckpointer instead, and invoke the graph with `await graph.ainvoke(..., durability='exit')`.",
             DeprecationWarning,
             stacklevel=2,
         )

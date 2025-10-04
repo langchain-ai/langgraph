@@ -28,7 +28,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -144,7 +144,7 @@ class PregelLoop:
 
     input: Any | None
     cache: BaseCache[WritesT] | None
-    checkpointer: BaseCheckpointSaver | None
+    checkpointer: BaseCheckpointer | None
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, BaseChannel | ManagedValueSpec]
     input_keys: str | Sequence[str]
@@ -210,7 +210,7 @@ class PregelLoop:
         config: RunnableConfig,
         store: BaseStore | None,
         cache: BaseCache | None,
-        checkpointer: BaseCheckpointSaver | None,
+        checkpointer: BaseCheckpointer | None,
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, BaseChannel | ManagedValueSpec],
         input_keys: str | Sequence[str],
@@ -935,7 +935,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         config: RunnableConfig,
         store: BaseStore | None,
         cache: BaseCache | None,
-        checkpointer: BaseCheckpointSaver | None,
+        checkpointer: BaseCheckpointer | None,
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, BaseChannel | ManagedValueSpec],
         trigger_to_nodes: Mapping[str, Sequence[str]],
@@ -997,7 +997,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if prev is not None:
                 prev.result()
         finally:
-            cast(BaseCheckpointSaver, self.checkpointer).put(
+            cast(BaseCheckpointer, self.checkpointer).put(
                 config, checkpoint, metadata, new_versions
             )
 
@@ -1111,7 +1111,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         config: RunnableConfig,
         store: BaseStore | None,
         cache: BaseCache | None,
-        checkpointer: BaseCheckpointSaver | None,
+        checkpointer: BaseCheckpointer | None,
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, BaseChannel | ManagedValueSpec],
         trigger_to_nodes: Mapping[str, Sequence[str]],
@@ -1173,7 +1173,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if prev is not None:
                 await prev
         finally:
-            await cast(BaseCheckpointSaver, self.checkpointer).aput(
+            await cast(BaseCheckpointer, self.checkpointer).aput(
                 config, checkpoint, metadata, new_versions
             )
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import sqlite3
 import threading
+import warnings
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import closing, contextmanager
 from typing import Any, cast
@@ -10,7 +11,7 @@ from typing import Any, cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -20,21 +21,22 @@ from langgraph.checkpoint.base import (
     get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from typing_extensions import deprecated
 
 from langgraph.checkpoint.sqlite.utils import search_where
 
 _AIO_ERROR_MSG = (
-    "The SqliteSaver does not support async methods. "
-    "Consider using AsyncSqliteSaver instead.\n"
-    "from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver\n"
-    "Note: AsyncSqliteSaver requires the aiosqlite package to use.\n"
+    "The SqliteCheckpointer does not support async methods. "
+    "Consider using AsyncSqliteCheckpointer instead.\n"
+    "from langgraph.checkpoint.sqlite.aio import AsyncSqliteCheckpointer\n"
+    "Note: AsyncSqliteCheckpointer requires the aiosqlite package to use.\n"
     "Install with:\n`pip install aiosqlite`\n"
-    "See https://langchain-ai.github.io/langgraph/reference/checkpoints/#langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver"
+    "See https://langchain-ai.github.io/langgraph/reference/checkpoints/#langgraph.checkpoint.sqlite.aio.AsyncSqliteCheckpointer"
     "for more information."
 )
 
 
-class SqliteSaver(BaseCheckpointSaver[str]):
+class SqliteCheckpointer(BaseCheckpointer[str]):
     """A checkpoint saver that stores checkpoints in a SQLite database.
 
     Note:
@@ -42,7 +44,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         (demos and small projects) and does not
         scale to multiple threads.
         For a similar sqlite saver with `async` support,
-        consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
+        consider using [AsyncSqliteCheckpointer][langgraph.checkpoint.sqlite.aio.AsyncSqliteCheckpointer].
 
     Args:
         conn (sqlite3.Connection): The SQLite database connection.
@@ -51,18 +53,18 @@ class SqliteSaver(BaseCheckpointSaver[str]):
     Examples:
 
         >>> import sqlite3
-        >>> from langgraph.checkpoint.sqlite import SqliteSaver
+        >>> from langgraph.checkpoint.sqlite import SqliteCheckpointer
         >>> from langgraph.graph import StateGraph
         >>>
         >>> builder = StateGraph(int)
         >>> builder.add_node("add_one", lambda x: x + 1)
         >>> builder.set_entry_point("add_one")
         >>> builder.set_finish_point("add_one")
-        >>> # Create a new SqliteSaver instance
+        >>> # Create a new SqliteCheckpointer instance
         >>> # Note: check_same_thread=False is OK as the implementation uses a lock
         >>> # to ensure thread safety.
         >>> conn = sqlite3.connect("checkpoints.sqlite", check_same_thread=False)
-        >>> memory = SqliteSaver(conn)
+        >>> memory = SqliteCheckpointer(conn)
         >>> graph = builder.compile(checkpointer=memory)
         >>> config = {"configurable": {"thread_id": "1"}}
         >>> graph.get_state(config)
@@ -88,25 +90,25 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
     @classmethod
     @contextmanager
-    def from_conn_string(cls, conn_string: str) -> Iterator[SqliteSaver]:
-        """Create a new SqliteSaver instance from a connection string.
+    def from_conn_string(cls, conn_string: str) -> Iterator[SqliteCheckpointer]:
+        """Create a new SqliteCheckpointer instance from a connection string.
 
         Args:
             conn_string: The SQLite connection string.
 
         Yields:
-            SqliteSaver: A new SqliteSaver instance.
+            SqliteCheckpointer: A new SqliteCheckpointer instance.
 
         Examples:
 
             In memory:
 
-                with SqliteSaver.from_conn_string(":memory:") as memory:
+                with SqliteCheckpointer.from_conn_string(":memory:") as memory:
                     ...
 
             To disk:
 
-                with SqliteSaver.from_conn_string("checkpoints.sqlite") as memory:
+                with SqliteCheckpointer.from_conn_string("checkpoints.sqlite") as memory:
                     ...
         """
         with closing(
@@ -162,7 +164,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         """Get a cursor for the SQLite database.
 
         This method returns a cursor for the SQLite database. It is used internally
-        by the SqliteSaver and should not be called directly by the user.
+        by the SqliteCheckpointer and should not be called directly by the user.
 
         Args:
             transaction (bool): Whether to commit the transaction when the cursor is closed. Defaults to True.
@@ -309,8 +311,8 @@ class SqliteSaver(BaseCheckpointSaver[str]):
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
 
         Examples:
-            >>> from langgraph.checkpoint.sqlite import SqliteSaver
-            >>> with SqliteSaver.from_conn_string(":memory:") as memory:
+            >>> from langgraph.checkpoint.sqlite import SqliteCheckpointer
+            >>> with SqliteCheckpointer.from_conn_string(":memory:") as memory:
             ... # Run a graph, then list the checkpoints
             >>>     config = {"configurable": {"thread_id": "1"}}
             >>>     checkpoints = list(memory.list(config, limit=2))
@@ -319,7 +321,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
             >>> config = {"configurable": {"thread_id": "1"}}
             >>> before = {"configurable": {"checkpoint_id": "1ef4f797-8335-6428-8001-8a1503f9b875"}}
-            >>> with SqliteSaver.from_conn_string(":memory:") as memory:
+            >>> with SqliteCheckpointer.from_conn_string(":memory:") as memory:
             ... # Run a graph, then list the checkpoints
             >>>     checkpoints = list(memory.list(config, before=before))
             >>> print(checkpoints)
@@ -402,8 +404,8 @@ class SqliteSaver(BaseCheckpointSaver[str]):
 
         Examples:
 
-            >>> from langgraph.checkpoint.sqlite import SqliteSaver
-            >>> with SqliteSaver.from_conn_string(":memory:") as memory:
+            >>> from langgraph.checkpoint.sqlite import SqliteCheckpointer
+            >>> with SqliteCheckpointer.from_conn_string(":memory:") as memory:
             >>>     config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
             >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "channel_values": {"key": "value"}}
             >>>     saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}}, {})
@@ -499,8 +501,8 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         """Get a checkpoint tuple from the database asynchronously.
 
         Note:
-            This async method is not supported by the SqliteSaver class.
-            Use get_tuple() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
+            This async method is not supported by the SqliteCheckpointer class.
+            Use get_tuple() instead, or consider using [AsyncSqliteCheckpointer][langgraph.checkpoint.sqlite.aio.AsyncSqliteCheckpointer].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
@@ -515,8 +517,8 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         """List checkpoints from the database asynchronously.
 
         Note:
-            This async method is not supported by the SqliteSaver class.
-            Use list() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
+            This async method is not supported by the SqliteCheckpointer class.
+            Use list() instead, or consider using [AsyncSqliteCheckpointer][langgraph.checkpoint.sqlite.aio.AsyncSqliteCheckpointer].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
         yield
@@ -531,8 +533,8 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         """Save a checkpoint to the database asynchronously.
 
         Note:
-            This async method is not supported by the SqliteSaver class.
-            Use put() instead, or consider using [AsyncSqliteSaver][langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver].
+            This async method is not supported by the SqliteCheckpointer class.
+            Use put() instead, or consider using [AsyncSqliteCheckpointer][langgraph.checkpoint.sqlite.aio.AsyncSqliteCheckpointer].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
@@ -556,3 +558,14 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         next_v = current_v + 1
         next_h = random.random()
         return f"{next_v:032}.{next_h:016}"
+
+
+@deprecated("`SqliteSaver` has been renamed. Please use `SqliteCheckpointer` instead.")
+class SqliteSaver(SqliteCheckpointer):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "`SqliteSaver` has been renamed. Please use `SqliteCheckpointer` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)

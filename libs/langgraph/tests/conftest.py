@@ -8,7 +8,7 @@ from langgraph.cache.base import BaseCache
 from langgraph.cache.memory import InMemoryCache
 from langgraph.cache.redis import RedisCache
 from langgraph.cache.sqlite import SqliteCache
-from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.base import BaseCheckpointer
 from langgraph.store.base import BaseStore
 from pytest_mock import MockerFixture
 
@@ -161,7 +161,7 @@ async def async_store(request: pytest.FixtureRequest) -> AsyncIterator[BaseStore
 )
 def sync_checkpointer(
     request: pytest.FixtureRequest,
-) -> Iterator[BaseCheckpointSaver]:
+) -> Iterator[BaseCheckpointer]:
     checkpointer_name = request.param
     if checkpointer_name == "memory":
         with _checkpointer_memory() as checkpointer:
@@ -205,7 +205,7 @@ def sync_checkpointer(
 )
 async def async_checkpointer(
     request: pytest.FixtureRequest,
-) -> AsyncIterator[BaseCheckpointSaver]:
+) -> AsyncIterator[BaseCheckpointer]:
     checkpointer_name = request.param
     if checkpointer_name == "memory":
         with _checkpointer_memory() as checkpointer:

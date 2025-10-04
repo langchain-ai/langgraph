@@ -6,14 +6,14 @@ from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
+    BaseCheckpointer,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
 )
-from langgraph.checkpoint.memory import InMemorySaver, PersistentDict
+from langgraph.checkpoint.memory import InMemoryCheckpointer, PersistentDict
 
 from langgraph.constants import TASKS
 
@@ -26,9 +26,9 @@ class NoopSerializer(SerializerProtocol):
         return "type", obj
 
 
-class MemorySaverNeedsPendingSendsMigration(BaseCheckpointSaver):
+class MemorySaverNeedsPendingSendsMigration(BaseCheckpointer):
     def __init__(self) -> None:
-        self.saver = InMemorySaver()
+        self.saver = InMemoryCheckpointer()
 
     def __getattribute__(self, name):
         if name in ("saver", "__class__", "get_tuple"):
@@ -48,7 +48,7 @@ class MemorySaverNeedsPendingSendsMigration(BaseCheckpointSaver):
         return tup
 
 
-class MemorySaverAssertImmutable(InMemorySaver):
+class MemorySaverAssertImmutable(InMemoryCheckpointer):
     storage_for_copies: defaultdict[str, dict[str, dict[str, Checkpoint]]]
 
     def __init__(
@@ -93,7 +93,7 @@ class MemorySaverAssertImmutable(InMemorySaver):
         return super().put(config, checkpoint, metadata, new_versions)
 
 
-class MemorySaverNoPending(InMemorySaver):
+class MemorySaverNoPending(InMemoryCheckpointer):
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         result = super().get_tuple(config)
         if result:

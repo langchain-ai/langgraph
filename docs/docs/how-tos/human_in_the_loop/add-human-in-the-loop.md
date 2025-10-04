@@ -140,7 +140,7 @@ console.log(await graph.invoke(new Command({ resume: "Edited text" }), config));
     ```python
     from typing import TypedDict
     import uuid
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     from langgraph.constants import START
     from langgraph.graph import StateGraph
 
@@ -168,7 +168,7 @@ console.log(await graph.invoke(new Command({ resume: "Edited text" }), config));
     graph_builder = StateGraph(State)
     graph_builder.add_node("human_node", human_node)
     graph_builder.add_edge(START, "human_node")
-    checkpointer = InMemorySaver()  # (4)!
+    checkpointer = InMemoryCheckpointer()  # (4)!
     graph = graph_builder.compile(checkpointer=checkpointer)
     # Pass a thread ID to the graph to run it.
     config = {"configurable": {"thread_id": uuid.uuid4()}}
@@ -326,7 +326,7 @@ Once your graph has been interrupted and is stalled, you can resume all the inte
 from typing import TypedDict
 import uuid
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.constants import START
 from langgraph.graph import StateGraph
 from langgraph.types import interrupt, Command
@@ -355,7 +355,7 @@ graph_builder.add_node("human_node_2", human_node_2)
 graph_builder.add_edge(START, "human_node_1")
 graph_builder.add_edge(START, "human_node_2")
 
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 graph = graph_builder.compile(checkpointer=checkpointer)
 
 thread_id = str(uuid.uuid4())
@@ -479,7 +479,7 @@ await graph.invoke(new Command({ resume: true }), threadConfig);
     from langgraph.constants import START, END
     from langgraph.graph import StateGraph
     from langgraph.types import interrupt, Command
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
     # Define the shared graph state
     class State(TypedDict):
@@ -524,7 +524,7 @@ await graph.invoke(new Command({ resume: true }), threadConfig);
     builder.add_edge("approved_path", END)
     builder.add_edge("rejected_path", END)
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     graph = builder.compile(checkpointer=checkpointer)
 
     # Run until interrupt
@@ -728,7 +728,7 @@ await graph.invoke(
     from langgraph.constants import START, END
     from langgraph.graph import StateGraph
     from langgraph.types import interrupt, Command
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
     # Define the graph state
     class State(TypedDict):
@@ -767,7 +767,7 @@ await graph.invoke(
     builder.add_edge("downstream_use", END)
 
     # Set up in-memory checkpointing for interrupt support
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     graph = builder.compile(checkpointer=checkpointer)
 
     # Invoke the graph until it hits the interrupt
@@ -896,7 +896,7 @@ To add a human approval step to a tool:
 :::python
 
 ```python
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.types import interrupt
 from langgraph.prebuilt import create_react_agent
 
@@ -917,7 +917,7 @@ def book_hotel(hotel_name: str):
     return f"Successfully booked a stay at {hotel_name}."
 
 # highlight-next-line
-checkpointer = InMemorySaver() # (2)!
+checkpointer = InMemoryCheckpointer() # (2)!
 
 agent = create_react_agent(
     model="anthropic:claude-3-5-sonnet-latest",
@@ -928,7 +928,7 @@ agent = create_react_agent(
 ```
 
 1. The @[`interrupt` function][interrupt] pauses the agent graph at a specific node. In this case, we call `interrupt()` at the beginning of the tool function, which pauses the graph at the node that executes the tool. The information inside `interrupt()` (e.g., tool calls) can be presented to a human, and the graph can be resumed with the user input (tool call approval, edit or feedback).
-2. The `InMemorySaver` is used to store the agent state at every step in the tool calling loop. This enables [short-term memory](../memory/add-memory.md#add-short-term-memory) and [human-in-the-loop](../../concepts/human_in_the_loop.md) capabilities. In this example, we use `InMemorySaver` to store the agent state in memory. In a production application, the agent state will be stored in a database.
+2. The `InMemoryCheckpointer` is used to store the agent state at every step in the tool calling loop. This enables [short-term memory](../memory/add-memory.md#add-short-term-memory) and [human-in-the-loop](../../concepts/human_in_the_loop.md) capabilities. In this example, we use `InMemoryCheckpointer` to store the agent state in memory. In a production application, the agent state will be stored in a database.
 3. Initialize the agent with the `checkpointer`.
    :::
 
@@ -1224,11 +1224,11 @@ You can use the wrapper to add `interrupt()` to any tool without having to add i
 :::python
 
 ```python
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from langgraph.prebuilt import create_react_agent
 
 # highlight-next-line
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 
 def book_hotel(hotel_name: str):
    """Book a hotel"""
@@ -1428,7 +1428,7 @@ graphBuilder.addNode("humanNode", (state) => {
     from langgraph.constants import START, END
     from langgraph.graph import StateGraph
     from langgraph.types import interrupt, Command
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
     # Define graph state
     class State(TypedDict):
@@ -1467,7 +1467,7 @@ graphBuilder.addNode("humanNode", (state) => {
     builder.add_edge("report_age", END)
 
     # Create the graph with a memory checkpointer
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     graph = builder.compile(checkpointer=checkpointer)
 
     # Run the graph until the first interrupt
@@ -1651,7 +1651,7 @@ To debug and test a graph, use [static interrupts](../../concepts/human_in_the_l
     from IPython.display import Image, display
     from typing_extensions import TypedDict
 
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     from langgraph.graph import StateGraph, START, END
 
 
@@ -1684,7 +1684,7 @@ To debug and test a graph, use [static interrupts](../../concepts/human_in_the_l
     builder.add_edge("step_3", END)
 
     # Set up a checkpointer
-    checkpointer = InMemorySaver() # (1)!
+    checkpointer = InMemoryCheckpointer() # (1)!
 
     graph = builder.compile(
         checkpointer=checkpointer, # (2)!
@@ -1809,7 +1809,7 @@ To debug and test a graph, use [static interrupts](../../concepts/human_in_the_l
     from IPython.display import Image, display
     from typing_extensions import TypedDict
 
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
     from langgraph.graph import StateGraph, START, END
 
 
@@ -1842,7 +1842,7 @@ To debug and test a graph, use [static interrupts](../../concepts/human_in_the_l
     builder.add_edge("step_3", END)
 
     # Set up a checkpointer
-    checkpointer = InMemorySaver() # (1)!
+    checkpointer = InMemoryCheckpointer() # (1)!
 
     graph = builder.compile(
         checkpointer=checkpointer, # (2)!
@@ -2017,7 +2017,7 @@ async function nodeInParentGraph(state: z.infer<typeof StateAnnotation>) {
     from langgraph.graph import StateGraph
     from langgraph.constants import START
     from langgraph.types import interrupt, Command
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
 
     class State(TypedDict):
@@ -2043,7 +2043,7 @@ async function nodeInParentGraph(state: z.infer<typeof StateAnnotation>) {
         print(f"Got an answer of {answer}")
 
 
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
 
     subgraph_builder = StateGraph(State)
     subgraph_builder.add_node("some_node", node_in_subgraph)
@@ -2074,7 +2074,7 @@ async function nodeInParentGraph(state: z.infer<typeof StateAnnotation>) {
     builder.add_edge(START, "parent_node")
 
     # A checkpointer must be enabled for interrupts to work!
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     graph = builder.compile(checkpointer=checkpointer)
 
     config = {
@@ -2225,7 +2225,7 @@ To avoid issues, refrain from dynamically changing the node's structure between 
     from langgraph.graph import StateGraph
     from langgraph.constants import START
     from langgraph.types import interrupt, Command
-    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer
 
 
     class State(TypedDict):
@@ -2259,7 +2259,7 @@ To avoid issues, refrain from dynamically changing the node's structure between 
     builder.add_edge(START, "human_node")
 
     # A checkpointer must be enabled for interrupts to work!
-    checkpointer = InMemorySaver()
+    checkpointer = InMemoryCheckpointer()
     graph = builder.compile(checkpointer=checkpointer)
 
     config = {

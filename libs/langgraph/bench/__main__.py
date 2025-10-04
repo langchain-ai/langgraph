@@ -2,7 +2,7 @@ import random
 from uuid import uuid4
 
 from langchain_core.messages import HumanMessage
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 from pyperf._runner import Runner
 from uvloop import new_event_loop
 
@@ -108,8 +108,8 @@ benchmarks = (
     ),
     (
         "fanout_to_subgraph_10x_checkpoint",
-        fanout_to_subgraph().compile(checkpointer=InMemorySaver()),
-        fanout_to_subgraph_sync().compile(checkpointer=InMemorySaver()),
+        fanout_to_subgraph().compile(checkpointer=InMemoryCheckpointer()),
+        fanout_to_subgraph_sync().compile(checkpointer=InMemoryCheckpointer()),
         {
             "subjects": [
                 random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(10)
@@ -128,8 +128,8 @@ benchmarks = (
     ),
     (
         "fanout_to_subgraph_100x_checkpoint",
-        fanout_to_subgraph().compile(checkpointer=InMemorySaver()),
-        fanout_to_subgraph_sync().compile(checkpointer=InMemorySaver()),
+        fanout_to_subgraph().compile(checkpointer=InMemoryCheckpointer()),
+        fanout_to_subgraph_sync().compile(checkpointer=InMemoryCheckpointer()),
         {
             "subjects": [
                 random.choices("abcdefghijklmnopqrstuvwxyz", k=1000) for _ in range(100)
@@ -144,8 +144,8 @@ benchmarks = (
     ),
     (
         "react_agent_10x_checkpoint",
-        react_agent(10, checkpointer=InMemorySaver()),
-        react_agent(10, checkpointer=InMemorySaver()),
+        react_agent(10, checkpointer=InMemoryCheckpointer()),
+        react_agent(10, checkpointer=InMemoryCheckpointer()),
         {"messages": [HumanMessage("hi?")]},
     ),
     (
@@ -156,8 +156,8 @@ benchmarks = (
     ),
     (
         "react_agent_100x_checkpoint",
-        react_agent(100, checkpointer=InMemorySaver()),
-        react_agent(100, checkpointer=InMemorySaver()),
+        react_agent(100, checkpointer=InMemoryCheckpointer()),
+        react_agent(100, checkpointer=InMemoryCheckpointer()),
         {"messages": [HumanMessage("hi?")]},
     ),
     (
@@ -178,8 +178,8 @@ benchmarks = (
     ),
     (
         "wide_state_25x300_checkpoint",
-        wide_state(300).compile(checkpointer=InMemorySaver()),
-        wide_state(300).compile(checkpointer=InMemorySaver()),
+        wide_state(300).compile(checkpointer=InMemoryCheckpointer()),
+        wide_state(300).compile(checkpointer=InMemoryCheckpointer()),
         {
             "messages": [
                 {
@@ -210,8 +210,8 @@ benchmarks = (
     ),
     (
         "wide_state_15x600_checkpoint",
-        wide_state(600).compile(checkpointer=InMemorySaver()),
-        wide_state(600).compile(checkpointer=InMemorySaver()),
+        wide_state(600).compile(checkpointer=InMemoryCheckpointer()),
+        wide_state(600).compile(checkpointer=InMemoryCheckpointer()),
         {
             "messages": [
                 {
@@ -242,8 +242,8 @@ benchmarks = (
     ),
     (
         "wide_state_9x1200_checkpoint",
-        wide_state(1200).compile(checkpointer=InMemorySaver()),
-        wide_state(1200).compile(checkpointer=InMemorySaver()),
+        wide_state(1200).compile(checkpointer=InMemoryCheckpointer()),
+        wide_state(1200).compile(checkpointer=InMemoryCheckpointer()),
         {
             "messages": [
                 {
@@ -274,8 +274,8 @@ benchmarks = (
     ),
     (
         "wide_dict_25x300_checkpoint",
-        wide_dict(300).compile(checkpointer=InMemorySaver()),
-        wide_dict(300).compile(checkpointer=InMemorySaver()),
+        wide_dict(300).compile(checkpointer=InMemoryCheckpointer()),
+        wide_dict(300).compile(checkpointer=InMemoryCheckpointer()),
         {
             "messages": [
                 {
@@ -306,8 +306,8 @@ benchmarks = (
     ),
     (
         "wide_dict_15x600_checkpoint",
-        wide_dict(600).compile(checkpointer=InMemorySaver()),
-        wide_dict(600).compile(checkpointer=InMemorySaver()),
+        wide_dict(600).compile(checkpointer=InMemoryCheckpointer()),
+        wide_dict(600).compile(checkpointer=InMemoryCheckpointer()),
         {
             "messages": [
                 {
@@ -338,8 +338,8 @@ benchmarks = (
     ),
     (
         "wide_dict_9x1200_checkpoint",
-        wide_dict(1200).compile(checkpointer=InMemorySaver()),
-        wide_dict(1200).compile(checkpointer=InMemorySaver()),
+        wide_dict(1200).compile(checkpointer=InMemoryCheckpointer()),
+        wide_dict(1200).compile(checkpointer=InMemoryCheckpointer()),
         {
             "messages": [
                 {
@@ -382,8 +382,8 @@ benchmarks = (
     ),
     (
         "pydantic_state_25x300_checkpoint",
-        pydantic_state(300).compile(checkpointer=InMemorySaver()),
-        pydantic_state(300).compile(checkpointer=InMemorySaver()),
+        pydantic_state(300).compile(checkpointer=InMemoryCheckpointer()),
+        pydantic_state(300).compile(checkpointer=InMemoryCheckpointer()),
         {
             "messages": [
                 {
@@ -414,8 +414,8 @@ benchmarks = (
     ),
     (
         "pydantic_state_15x600_checkpoint",
-        pydantic_state(600).compile(checkpointer=InMemorySaver()),
-        pydantic_state(600).compile(checkpointer=InMemorySaver()),
+        pydantic_state(600).compile(checkpointer=InMemoryCheckpointer()),
+        pydantic_state(600).compile(checkpointer=InMemoryCheckpointer()),
         {
             "messages": [
                 {
@@ -446,8 +446,8 @@ benchmarks = (
     ),
     (
         "pydantic_state_9x1200_checkpoint",
-        pydantic_state(1200).compile(checkpointer=InMemorySaver()),
-        pydantic_state(1200).compile(checkpointer=InMemorySaver()),
+        pydantic_state(1200).compile(checkpointer=InMemoryCheckpointer()),
+        pydantic_state(1200).compile(checkpointer=InMemoryCheckpointer()),
         {
             "messages": [
                 {

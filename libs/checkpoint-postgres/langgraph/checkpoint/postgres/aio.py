@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import warnings
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
@@ -21,15 +22,16 @@ from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
+from typing_extensions import deprecated
 
 from langgraph.checkpoint.postgres import _ainternal
-from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.base import BasePostgresCheckpointer
 from langgraph.checkpoint.postgres.shallow import AsyncShallowPostgresSaver
 
 Conn = _ainternal.Conn  # For backward compatibility
 
 
-class AsyncPostgresSaver(BasePostgresSaver):
+class AsyncPostgresCheckpointer(BasePostgresCheckpointer):
     """Asynchronous checkpointer that stores checkpoints in a Postgres database."""
 
     lock: asyncio.Lock
@@ -60,15 +62,15 @@ class AsyncPostgresSaver(BasePostgresSaver):
         *,
         pipeline: bool = False,
         serde: SerializerProtocol | None = None,
-    ) -> AsyncIterator[AsyncPostgresSaver]:
-        """Create a new AsyncPostgresSaver instance from a connection string.
+    ) -> AsyncIterator[AsyncPostgresCheckpointer]:
+        """Create a new AsyncPostgresCheckpointer instance from a connection string.
 
         Args:
             conn_string: The Postgres connection info string.
             pipeline: whether to use AsyncPipeline
 
         Returns:
-            AsyncPostgresSaver: A new AsyncPostgresSaver instance.
+            AsyncPostgresCheckpointer: A new AsyncPostgresCheckpointer instance.
         """
         async with await AsyncConnection.connect(
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
@@ -352,7 +354,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
         Args:
             pipeline: whether to use pipeline for the DB operations inside the context manager.
-                Will be applied regardless of whether the AsyncPostgresSaver instance was initialized with a pipeline.
+                Will be applied regardless of whether the AsyncPostgresCheckpointer instance was initialized with a pipeline.
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
         async with self.lock, _ainternal.get_connection(self.conn) as conn:
@@ -455,7 +457,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             # we don't check in other methods to avoid the overhead
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncPostgresSaver are only allowed from a "
+                    "Synchronous calls to AsyncPostgresCheckpointer are only allowed from a "
                     "different thread. From the main thread, use the async interface. "
                     "For example, use `checkpointer.alist(...)` or `await "
                     "graph.ainvoke(...)`."
@@ -491,7 +493,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             # we don't check in other methods to avoid the overhead
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncPostgresSaver are only allowed from a "
+                    "Synchronous calls to AsyncPostgresCheckpointer are only allowed from a "
                     "different thread. From the main thread, use the async interface. "
                     "For example, use `await checkpointer.aget_tuple(...)` or `await "
                     "graph.ainvoke(...)`."
@@ -562,7 +564,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             # we don't check in other methods to avoid the overhead
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncPostgresSaver are only allowed from a "
+                    "Synchronous calls to AsyncPostgresCheckpointer are only allowed from a "
                     "different thread. From the main thread, use the async interface. "
                     "For example, use `await checkpointer.aget_tuple(...)` or `await "
                     "graph.ainvoke(...)`."
@@ -574,4 +576,17 @@ class AsyncPostgresSaver(BasePostgresSaver):
         ).result()
 
 
-__all__ = ["AsyncPostgresSaver", "AsyncShallowPostgresSaver", "Conn"]
+@deprecated(
+    "`AsyncPostgresSaver` has been renamed. Please use `AsyncPostgresCheckpointer` instead."
+)
+class AsyncPostgresSaver(AsyncPostgresCheckpointer):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        warnings.warn(
+            "`AsyncPostgresSaver` has been renamed. Please use `AsyncPostgresCheckpointer` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = ["AsyncPostgresSaver" ,"AsyncPostgresCheckpointer", "AsyncShallowPostgresSaver", "Conn"]

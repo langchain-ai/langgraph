@@ -32,7 +32,7 @@ When a graph node fails mid-execution at a given superstep, LangGraph stores pen
 
 ## Interface
 
-Each checkpointer should conform to `langgraph.checkpoint.base.BaseCheckpointSaver` interface and must implement the following methods:
+Each checkpointer should conform to `langgraph.checkpoint.base.BaseCheckpointer` interface and must implement the following methods:
 
 - `.put` - Store a checkpoint with its configuration and metadata.
 - `.put_writes` - Store intermediate writes linked to a checkpoint (i.e. pending writes).
@@ -44,12 +44,12 @@ If the checkpointer will be used with asynchronous graph execution (i.e. executi
 ## Usage
 
 ```python
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.memory import InMemoryCheckpointer
 
 write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
 read_config = {"configurable": {"thread_id": "1"}}
 
-checkpointer = InMemorySaver()
+checkpointer = InMemoryCheckpointer()
 checkpoint = {
     "v": 4,
     "ts": "2024-07-31T20:14:19.804150+00:00",
