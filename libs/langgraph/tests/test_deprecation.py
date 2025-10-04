@@ -358,7 +358,7 @@ def test_basecheckpointsaver_alias_and_deprecation_warning() -> None:
 
 def test_inmemorysaver_alias_and_deprecation_warning() -> None:
     """Test that importing InMemorySaver raises a deprecation warning and is an alias for InMemoryCheckpointer."""
-    from langgraph.checkpoint.base import InMemoryCheckpointer, InMemorySaver
+    from langgraph.checkpoint.memory import InMemoryCheckpointer, InMemorySaver
 
     assert issubclass(InMemorySaver, InMemoryCheckpointer)
 
@@ -371,7 +371,7 @@ def test_inmemorysaver_alias_and_deprecation_warning() -> None:
 
 def test_asyncsqlitesaver_alias_and_deprecation_warning() -> None:
     """Test that importing AsyncSqliteSaver raises a deprecation warning and is an alias for AsyncSqliteCheckpointer."""
-    from langgraph.checkpoint.base import AsyncSqliteCheckpointer, AsyncSqliteSaver
+    from langgraph.checkpoint.sqlite.aio import AsyncSqliteCheckpointer, AsyncSqliteSaver
 
     assert issubclass(AsyncSqliteSaver, AsyncSqliteCheckpointer)
 
@@ -384,7 +384,7 @@ def test_asyncsqlitesaver_alias_and_deprecation_warning() -> None:
 
 def test_sqlitesaver_alias_and_deprecation_warning() -> None:
     """Test that importing SqliteSaver raises a deprecation warning and is an alias for SqliteCheckpointer."""
-    from langgraph.checkpoint.base import SqliteCheckpointer, SqliteSaver
+    from langgraph.checkpoint.sqlite import SqliteCheckpointer, SqliteSaver
 
     assert issubclass(SqliteSaver, SqliteCheckpointer)
 
@@ -397,7 +397,7 @@ def test_sqlitesaver_alias_and_deprecation_warning() -> None:
 
 def test_asyncpostgressaver_alias_and_deprecation_warning() -> None:
     """Test that importing AsyncPostgresSaver raises a deprecation warning and is an alias for AsyncPostgresCheckpointer."""
-    from langgraph.checkpoint.base import AsyncPostgresCheckpointer, AsyncPostgresSaver
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresCheckpointer, AsyncPostgresSaver
 
     assert issubclass(AsyncPostgresSaver, AsyncPostgresCheckpointer)
 
@@ -410,7 +410,7 @@ def test_asyncpostgressaver_alias_and_deprecation_warning() -> None:
 
 def test_postgressaver_alias_and_deprecation_warning() -> None:
     """Test that importing PostgresSaver raises a deprecation warning and is an alias for PostgresCheckpointer."""
-    from langgraph.checkpoint.base import PostgresCheckpointer, PostgresSaver
+    from langgraph.checkpoint.postgres import PostgresCheckpointer, PostgresSaver
 
     assert issubclass(PostgresSaver, PostgresCheckpointer)
 
