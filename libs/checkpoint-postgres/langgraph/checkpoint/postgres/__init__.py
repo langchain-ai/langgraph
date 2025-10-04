@@ -486,7 +486,9 @@ class PostgresSaver(PostgresCheckpointer):
 
 
 __all__ = [
+    "PostgresSaver",
     "PostgresCheckpointer",
+    "BasePostgresSaver",
     "BasePostgresCheckpointer",
     "ShallowPostgresSaver",
     "Conn",
