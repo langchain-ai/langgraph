@@ -209,6 +209,13 @@ def test_parallel_nodes() -> None:
     graph = builder.compile()
 
     print("\n======COMPLETE GRAPH======\n", pregel_pretty(graph))
+    
+    print(f"\n🔍 CHANNEL CONFIGURATION:")
+    print(f"  📤 output_channels: {graph.output_channels}")
+    print(f"  📡 stream_channels: {graph.stream_channels}")
+    print(f"  📥 input_channels: {graph.input_channels}")
+    print(f"  🌊 stream_channels_asis: {graph.stream_channels_asis}")
+    print(f"  📋 stream_channels_list: {graph.stream_channels_list}")
 
     result = graph.invoke({"hello": "there"})
     assert result["hello"] == "world-d"
