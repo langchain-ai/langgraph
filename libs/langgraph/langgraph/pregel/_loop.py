@@ -134,7 +134,7 @@ def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
                 stream(value)
 
     return StreamProtocol(__call__, {mode for s in streams for mode in s.modes})
-        
+
 
 class PregelLoop:
     config: RunnableConfig
@@ -652,8 +652,7 @@ class PregelLoop:
         return hanging_interrupts
 
     def _merge_interrupts(
-        self,
-        task_id: str, value: Sequence[Interrupt]
+        self, task_id: str, value: Sequence[Interrupt]
     ) -> Sequence[Interrupt]:
         """Normalize interrupt value to list and merge with existing interrupts.
 
