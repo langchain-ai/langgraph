@@ -330,6 +330,7 @@ def test_interrupt_with_send_payloads_sequential_resume(
     assert node_counter["map_node"] == 5
 
 
+@NEEDS_CONTEXTVARS
 async def test_interrupt_with_send_payloads_sequential_resume_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
