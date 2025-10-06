@@ -171,6 +171,7 @@ def test_interrupt_with_send_payloads(sync_checkpointer: BaseCheckpointSaver) ->
     assert node_counter["map_node"] == 5
 
 
+@NEEDS_CONTEXTVARS
 async def test_interrupt_with_send_payloads_async(
     async_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
