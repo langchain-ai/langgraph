@@ -12,6 +12,7 @@ from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    get_serializable_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import TASKS
@@ -440,7 +441,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     Jsonb(copy),
-                    Jsonb(self.get_serializable_checkpoint_metadata(config, metadata)),
+                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -773,7 +774,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     Jsonb(copy),
-                    Jsonb(self.get_serializable_checkpoint_metadata(config, metadata)),
+                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config

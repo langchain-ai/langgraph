@@ -11,9 +11,7 @@ from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
-    CheckpointMetadata,
     get_checkpoint_id,
-    get_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
@@ -24,8 +22,7 @@ try:
     major, minor = get_version("langgraph").split(".")[:2]
     if int(major) == 0 and int(minor) < 5:
         warnings.warn(
-            "LangGraph versions < 0.5.x may have compatibility issues with this version of checkpoint-postgres. "
-            "Please upgrade langgraph to avoid unexpected behavior.",
+            "You're using incompatible versions of langgraph and checkpoint-postgres. Please upgrade langgraph to avoid unexpected behavior.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -316,12 +313,3 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             "WHERE " + " AND ".join(wheres) if wheres else "",
             param_values,
         )
-
-    def get_serializable_checkpoint_metadata(
-        self, config: RunnableConfig, metadata: CheckpointMetadata
-    ) -> CheckpointMetadata:
-        """Get checkpoint metadata in a backwards-compatible manner."""
-        checkpoint_metadata = get_checkpoint_metadata(config, metadata)
-        if "writes" in checkpoint_metadata:
-            checkpoint_metadata.pop("writes")
-        return checkpoint_metadata
