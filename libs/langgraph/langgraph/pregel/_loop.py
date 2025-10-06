@@ -567,7 +567,7 @@ class PregelLoop:
         if self.skipped_task_ids:
             # raise early GraphInterrupt for skipped tasks.
             # since we know len(resumes) != len(interrupts) for these tasks, we
-            # can prevent unecessary node re-execution by raising preemptively
+            # can prevent unnecessary node re-execution by raising preemptively
             interrupts = []
             for task_id, channel, value in self.checkpoint_pending_writes:
                 if channel == INTERRUPT and task_id in self.skipped_task_ids:
