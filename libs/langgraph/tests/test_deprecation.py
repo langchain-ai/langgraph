@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import warnings
 from typing import Any, Optional
+from unittest.mock import Mock
 
 import pytest
 from langchain_core.runnables import RunnableConfig
@@ -371,7 +372,10 @@ def test_inmemorysaver_alias_and_deprecation_warning() -> None:
 
 def test_asyncsqlitesaver_alias_and_deprecation_warning() -> None:
     """Test that importing AsyncSqliteSaver raises a deprecation warning and is an alias for AsyncSqliteCheckpointer."""
-    from langgraph.checkpoint.sqlite.aio import AsyncSqliteCheckpointer, AsyncSqliteSaver
+    from langgraph.checkpoint.sqlite.aio import (
+        AsyncSqliteCheckpointer,
+        AsyncSqliteSaver,
+    )
 
     assert issubclass(AsyncSqliteSaver, AsyncSqliteCheckpointer)
 
@@ -379,7 +383,7 @@ def test_asyncsqlitesaver_alias_and_deprecation_warning() -> None:
         DeprecationWarning,
         match=r"`AsyncSqliteSaver` has been renamed\. Please use `AsyncSqliteCheckpointer` instead\.",
     ):
-        AsyncSqliteSaver()
+        AsyncSqliteSaver(Mock())
 
 
 def test_sqlitesaver_alias_and_deprecation_warning() -> None:
@@ -392,12 +396,15 @@ def test_sqlitesaver_alias_and_deprecation_warning() -> None:
         DeprecationWarning,
         match=r"`SqliteSaver` has been renamed\. Please use `SqliteCheckpointer` instead\.",
     ):
-        SqliteSaver()
+        SqliteSaver(Mock())
 
 
 def test_asyncpostgressaver_alias_and_deprecation_warning() -> None:
     """Test that importing AsyncPostgresSaver raises a deprecation warning and is an alias for AsyncPostgresCheckpointer."""
-    from langgraph.checkpoint.postgres.aio import AsyncPostgresCheckpointer, AsyncPostgresSaver
+    from langgraph.checkpoint.postgres.aio import (
+        AsyncPostgresCheckpointer,
+        AsyncPostgresSaver,
+    )
 
     assert issubclass(AsyncPostgresSaver, AsyncPostgresCheckpointer)
 
@@ -405,7 +412,7 @@ def test_asyncpostgressaver_alias_and_deprecation_warning() -> None:
         DeprecationWarning,
         match=r"`AsyncPostgresSaver` has been renamed\. Please use `AsyncPostgresCheckpointer` instead\.",
     ):
-        AsyncPostgresSaver()
+        AsyncPostgresSaver(Mock())
 
 
 def test_postgressaver_alias_and_deprecation_warning() -> None:
@@ -418,4 +425,4 @@ def test_postgressaver_alias_and_deprecation_warning() -> None:
         DeprecationWarning,
         match=r"`PostgresSaver` has been renamed\. Please use `PostgresCheckpointer` instead\.",
     ):
-        PostgresSaver()
+        PostgresSaver(Mock())
