@@ -1,4 +1,5 @@
 import operator
+import sys
 from typing import Annotated
 
 import pytest
@@ -9,6 +10,11 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, Durability, Send, interrupt
 
 pytestmark = pytest.mark.anyio
+
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 
 def test_interruption_without_state_updates(
@@ -142,9 +148,7 @@ def test_interrupt_with_send_payloads(sync_checkpointer: BaseCheckpointSaver) ->
     assert "dangerous_item" in interrupts[0].value["processing"]
 
     # Resume with mapping of interrupt IDs to values
-    resume_map = {
-        i.interrupt_id: f"human_input_{i.value['processing']}" for i in interrupts
-    }
+    resume_map = {i.id: f"human_input_{i.value['processing']}" for i in interrupts}
 
     final_result = graph.invoke(Command(resume=resume_map), config=config)
 
@@ -216,9 +220,7 @@ async def test_interrupt_with_send_payloads_async(
     assert "dangerous_item" in interrupts[0].value["processing"]
 
     # Resume with mapping of interrupt IDs to values
-    resume_map = {
-        i.interrupt_id: f"human_input_{i.value['processing']}" for i in interrupts
-    }
+    resume_map = {i.id: f"human_input_{i.value['processing']}" for i in interrupts}
 
     final_result = await graph.ainvoke(Command(resume=resume_map), config=config)
 
@@ -498,6 +500,7 @@ def test_node_with_multiple_interrupts_requires_full_resume(
     assert node_counter == 5
 
 
+@NEEDS_CONTEXTVARS
 async def test_node_with_multiple_interrupts_requires_full_resume_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
