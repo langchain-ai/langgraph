@@ -159,7 +159,7 @@ class SecurityConfig(TypedDict, total=False):
     """
 
     securitySchemes: dict[str, dict[str, Any]]
-    """Required. Dict describing each security scheme recognized by your OpenAPI spec.
+    """Describe each security scheme recognized by your OpenAPI spec.
     
     Keys are scheme names (e.g. "OAuth2", "ApiKeyAuth") and values are their definitions.
     Example:
@@ -176,7 +176,7 @@ class SecurityConfig(TypedDict, total=False):
         }
     """
     security: list[dict[str, list[str]]]
-    """Optional. Global security requirements across all endpoints.
+    """Global security requirements across all endpoints.
     
     Each element in the list maps a security scheme (e.g. "OAuth2") to a list of scopes (e.g. ["read", "write"]).
     Example:
@@ -187,7 +187,7 @@ class SecurityConfig(TypedDict, total=False):
     """
     # path => {method => security}
     paths: dict[str, dict[str, list[dict[str, list[str]]]]]
-    """Optional. Path-specific security overrides.
+    """Path-specific security overrides.
     
     Keys are path templates (e.g., "/items/{item_id}"), mapping to:
       - Keys that are HTTP methods (e.g., "GET", "POST"),
@@ -219,7 +219,7 @@ class AuthConfig(TypedDict, total=False):
     authentication logic, regardless of origin of the request.
     """
     openapi: SecurityConfig
-    """Required. Detailed security configuration that merges into your deployment's OpenAPI spec.
+    """The security configuration to include in your server's OpenAPI spec.
     
     Example (OAuth2):
         {
