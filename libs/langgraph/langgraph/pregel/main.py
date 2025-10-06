@@ -2998,7 +2998,7 @@ class Pregel(
                             [
                                 t
                                 for t in loop.tasks.values()
-                                if not t.writes and t.id not in loop.task_ids_to_block
+                                if not t.writes and t.id not in loop.skipped_task_ids
                             ],
                             timeout=self.step_timeout,
                             get_waiter=get_waiter,
