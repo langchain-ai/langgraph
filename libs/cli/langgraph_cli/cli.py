@@ -659,6 +659,12 @@ def dockerfile(
     help="URL of the LangSmith Debugger instance to connect to. Defaults to https://smith.langchain.com",
 )
 @click.option(
+    "--studio-url",
+    type=str,
+    default=None,
+    help="(Deprecated: use --debugger-url instead) URL of the LangSmith Debugger instance to connect to.",
+)
+@click.option(
     "--allow-blocking",
     is_flag=True,
     help="Don't raise errors for synchronous I/O blocking operations in your code.",
@@ -693,11 +699,20 @@ def dev(
     debug_port: Optional[int],
     wait_for_client: bool,
     debugger_url: Optional[str],
+    studio_url: Optional[str],
     allow_blocking: bool,
     tunnel: bool,
     server_log_level: str,
 ):
     """CLI entrypoint for running the LangGraph API server."""
+    if studio_url is not None:
+        click.secho(
+            "Warning: --studio-url is deprecated and will be removed in a future version. "
+            "Please use --debugger-url instead.",
+            fg="yellow",
+        )
+        if debugger_url is None:
+            debugger_url = studio_url
     try:
         from langgraph_api.cli import run_server  # type: ignore
     except ImportError:
