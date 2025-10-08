@@ -114,7 +114,6 @@ from langgraph.types import (
     CachePolicy,
     Command,
     Durability,
-    Interrupt,
     PregelExecutableTask,
     RetryPolicy,
     StreamMode,
@@ -320,11 +319,30 @@ class PregelLoop:
             ] + list(writes)
             self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         else:
-            writes_to_save = [
-                # aggregate existing interrupts for this task
-                (ch, self._merge_interrupts(task_id, v) if ch == INTERRUPT else v)
-                for ch, v in writes
-            ]
+            # build map of existing interrupts by interrupt id for this task
+            existing_interrupts_by_id = {  # interrupt id -> list of interrupts
+                v[0].id: v
+                for tid, ch, v in self.checkpoint_pending_writes
+                if tid == task_id and ch == INTERRUPT
+            }
+            # check if a resume write exists
+            has_resume = any(ch == RESUME for ch, _ in writes)
+
+            writes_to_save = []
+            for ch, v in writes:
+                if ch == INTERRUPT:
+                    # merge with existing interrupts if same interrupt id
+                    new_interrupts = v if isinstance(v, list) else list(v)
+                    if new_interrupts and (
+                        existing := existing_interrupts_by_id.get(new_interrupts[0].id)
+                    ):
+                        # found existing interrupts with same interrupt id
+                        # if a resume write exists, it means this is a new interrupt
+                        # so we are safe to merge it into the existing interrupt writes
+                        v = existing + new_interrupts if has_resume else existing
+                    writes_to_save.append((ch, v))
+                else:
+                    writes_to_save.append((ch, v))
 
             # replace all writes for this task_id in one shot
             self.checkpoint_pending_writes = [
@@ -566,7 +584,7 @@ class PregelLoop:
     def after_tick(self) -> None:
         if self.skipped_task_ids:
             # raise early GraphInterrupt for skipped tasks.
-            # since we know len(resumes) != len(interrupts) for these tasks, we
+            # since we know len(resumes) < len(interrupts) for these tasks, we
             # can prevent unnecessary node re-execution by raising preemptively
             interrupts = []
             for task_id, channel, value in self.checkpoint_pending_writes:
@@ -650,29 +668,6 @@ class PregelLoop:
         }
 
         return hanging_interrupts
-
-    def _merge_interrupts(
-        self, task_id: str, value: Sequence[Interrupt]
-    ) -> Sequence[Interrupt]:
-        """Normalize interrupt value to list and merge with existing interrupts.
-
-        If the interrupt ID matches existing, append; otherwise replace.
-
-        Returns list of Interrupt objects for this task.
-        """
-        new = value if isinstance(value, list) else list(value)
-        existing = next(
-            (
-                v
-                for tid, ch, v in self.checkpoint_pending_writes
-                if tid == task_id and ch == INTERRUPT
-            ),
-            None,
-        )
-        if existing is None:
-            return new
-        old = existing if isinstance(existing, list) else list(existing)
-        return old + new if old and new and old[0].id == new[0].id else new
 
     def _first(
         self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
