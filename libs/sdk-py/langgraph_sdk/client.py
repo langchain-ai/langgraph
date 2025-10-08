@@ -873,7 +873,7 @@ class AssistantsClient:
             config: Configuration to use for the graph.
             metadata: Metadata to add to assistant.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             assistant_id: Assistant ID to use, will default to a random UUID if not provided.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing assistant).
@@ -944,7 +944,7 @@ class AssistantsClient:
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
             headers: Optional custom headers to include with the request.
@@ -1964,7 +1964,7 @@ class RunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -2174,7 +2174,7 @@ class RunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -2422,7 +2422,7 @@ class RunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -2883,7 +2883,7 @@ class CronClient:
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
 
@@ -2965,7 +2965,7 @@ class CronClient:
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
@@ -4131,7 +4131,7 @@ class SyncAssistantsClient:
             graph_id: The ID of the graph the assistant should use. The graph ID is normally set in your langgraph.json configuration.
             config: Configuration to use for the graph.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             metadata: Metadata to add to assistant.
             assistant_id: Assistant ID to use, will default to a random UUID if not provided.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
@@ -4203,7 +4203,7 @@ class SyncAssistantsClient:
                 The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             metadata: Metadata to merge with existing assistant metadata.
             name: The new name for the assistant.
             headers: Optional custom headers to include with the request.
@@ -5198,7 +5198,7 @@ class SyncRunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -5404,7 +5404,7 @@ class SyncRunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -5652,7 +5652,7 @@ class SyncRunsClient:
             metadata: Metadata to assign to the run.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             checkpoint: The checkpoint to resume from.
             checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
@@ -6093,7 +6093,7 @@ class SyncCronClient:
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
@@ -6171,7 +6171,7 @@ class SyncCronClient:
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
-                !!! version-added "Supported with langgraph>=0.6.0"
+                !!! version-added "Added in version 0.6.0"
             checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.

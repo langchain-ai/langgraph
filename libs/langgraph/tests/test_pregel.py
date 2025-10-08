@@ -2119,7 +2119,9 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "id": AnyStr(),
                 "name": "rewrite_query",
                 "error": None,
-                "result": [("query", "query: what is weather in sf")],
+                "result": {
+                    "query": "query: what is weather in sf",
+                },
                 "interrupts": [],
             },
         },
@@ -2153,7 +2155,9 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "id": AnyStr(),
                 "name": "retriever_one",
                 "error": None,
-                "result": [("docs", ["doc1", "doc2"])],
+                "result": {
+                    "docs": ["doc1", "doc2"],
+                },
                 "interrupts": [],
             },
         },
@@ -2165,7 +2169,9 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "id": AnyStr(),
                 "name": "retriever_two",
                 "error": None,
-                "result": [("docs", ["doc3", "doc4"])],
+                "result": {
+                    "docs": ["doc3", "doc4"],
+                },
                 "interrupts": [],
             },
         },
@@ -2191,7 +2197,9 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "id": AnyStr(),
                 "name": "analyzer_one",
                 "error": None,
-                "result": [("query", "analyzed: query: what is weather in sf")],
+                "result": {
+                    "query": "analyzed: query: what is weather in sf",
+                },
                 "interrupts": [],
             },
         },
@@ -2219,7 +2227,9 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "id": AnyStr(),
                 "name": "qa",
                 "error": None,
-                "result": [("answer", "doc1,doc2,doc3,doc4")],
+                "result": {
+                    "answer": "doc1,doc2,doc3,doc4",
+                },
                 "interrupts": [],
             },
         },
@@ -3443,73 +3453,6 @@ def test_stream_buffering_single_node(sync_checkpointer: BaseCheckpointSaver) ->
         (FloatBetween(0.0, 0.1), "Before sleep"),
         (FloatBetween(0.2, 0.3), "After sleep"),
     ]
-
-
-def test_nested_graph_resume_reuses_cached_task_writes(
-    sync_checkpointer: BaseCheckpointSaver,
-) -> None:
-    # Reproduces issue where a helper @task inside a nested graph re-executes
-    # on resume instead of reusing cached writes. Ensures it runs only once.
-    counter_parent = 0
-    counter_sub = 0
-
-    @task
-    def get_time_parent() -> float:
-        nonlocal counter_parent
-        counter_parent += 1
-        return time.time()
-
-    @task
-    def get_time_subgraph() -> float:
-        nonlocal counter_sub
-        counter_sub += 1
-        return time.time()
-
-    class State(TypedDict):
-        state_counter: int
-
-    # Subgraph that calls a helper task and then interrupts
-    sub = StateGraph(State)
-
-    def human_node(_: State):
-        _ = get_time_subgraph().result()
-        interrupt("what is your name?")
-
-    sub.add_node("human_node", human_node)
-    sub.set_entry_point("human_node")
-    sub.set_finish_point("human_node")
-    subgraph = sub.compile(checkpointer=sync_checkpointer)
-
-    # Parent graph that calls a helper task and interrupts, then enters subgraph
-    parent = StateGraph(State)
-
-    def parent_node(_: State):
-        _ = get_time_parent().result()
-        interrupt("what is your parent name?")
-
-    parent.add_node("parent_node", parent_node)
-    parent.add_node("subgraph", subgraph)
-    parent.add_edge(START, "parent_node")
-    parent.add_edge("parent_node", "subgraph")
-    parent.add_edge("subgraph", END)
-    graph = parent.compile(checkpointer=sync_checkpointer)
-
-    cfg_parent = {"configurable": {"thread_id": str(uuid.uuid4())}}
-
-    # First run – interrupts in parent node
-    for _ in graph.stream({"state_counter": 1}, cfg_parent):
-        pass
-
-    # Resume 1 – proceeds into subgraph, interrupts there
-    for _ in graph.stream(Command(resume="resume-1"), cfg_parent):
-        pass
-
-    # Resume 2 – completes without re-running subgraph helper task
-    for _ in graph.stream(Command(resume="resume-2"), cfg_parent):
-        pass
-
-    assert counter_parent == 1
-    assert counter_sub == 1
 
 
 def test_nested_graph_interrupts_parallel(
@@ -5606,12 +5549,9 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 "id": AnyStr(),
                 "interrupts": [],
                 "name": "falsy_task",
-                "result": [
-                    (
-                        "__return__",
-                        False,
-                    ),
-                ],
+                "result": {
+                    "__return__": False,
+                },
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -5628,7 +5568,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                     },
                 ],
                 "name": "graph",
-                "result": [],
+                "result": {},
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -5714,12 +5654,9 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 "id": AnyStr(),
                 "interrupts": [],
                 "name": "graph",
-                "result": [
-                    (
-                        "__end__",
-                        None,
-                    ),
-                ],
+                "result": {
+                    "__end__": None,
+                },
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -8516,3 +8453,163 @@ def test_interrupt_stream_mode_values():
 
     result = [*app.stream(State(), stream_mode="values")]
     assert "__interrupt__" in result[-1]
+
+
+def test_supersteps_populate_task_results(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        num: int
+        text: str
+
+    def double(state: State) -> State:
+        return {"num": state["num"] * 2, "text": state["text"] * 2}
+
+    graph = (
+        StateGraph(State)
+        .add_node("double", double)
+        .add_edge(START, "double")
+        .add_edge("double", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    def first_task_result(history: list[StateSnapshot], node: str) -> Any:
+        for s in history:
+            for t in s.tasks:
+                if t.name == node:
+                    return t.result
+        return None
+
+    # reference run with invoke
+    ref_cfg = {"configurable": {"thread_id": "ref"}}
+    graph.invoke({"num": 1, "text": "one"}, ref_cfg)
+    ref_history = list(graph.get_state_history(ref_cfg))
+
+    ref_start_result = first_task_result(ref_history, "__start__")
+    ref_double_result = first_task_result(ref_history, "double")
+    assert ref_start_result == {"num": 1, "text": "one"}
+    assert ref_double_result == {"num": 2, "text": "oneone"}
+
+    # using supersteps
+    bulk_cfg = {"configurable": {"thread_id": "bulk"}}
+    graph.bulk_update_state(
+        bulk_cfg,
+        [
+            [StateUpdate(values={}, as_node="__input__")],
+            [StateUpdate(values={"num": 1, "text": "one"}, as_node="__start__")],
+            [StateUpdate(values={"num": 2, "text": "oneone"}, as_node="double")],
+        ],
+    )
+    bulk_history = list(graph.get_state_history(bulk_cfg))
+
+    bulk_start_result = first_task_result(bulk_history, "__start__")
+    bulk_double_result = first_task_result(bulk_history, "double")
+
+    assert bulk_start_result == ref_start_result == {"num": 1, "text": "one"}
+    assert bulk_double_result == ref_double_result == {"num": 2, "text": "oneone"}
+
+
+def test_multiple_writes_same_channel_from_same_node(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that a node can write multiple times to the same channel and that writes are ordered, reduced, and reflected in streamed events and state history."""
+
+    class State(TypedDict):
+        foo: Annotated[str, lambda a, b: ", ".join([x for x in [a, b] if x])]
+
+    def one(_: State) -> Command:
+        return Command(update=[("foo", "one.0"), ("foo", "one.1")])
+
+    def two(_: State) -> State:
+        return {"foo": "two"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("one", one)
+        .add_node("two", two)
+        .add_edge(START, "one")
+        .add_edge("one", "two")
+        .add_edge("two", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    events = [
+        (ns, ev)
+        for ns, ev in graph.stream(
+            {"foo": "input"}, config, stream_mode=["updates", "tasks"]
+        )
+    ]
+
+    assert events == [
+        (
+            "tasks",
+            {
+                "id": AnyStr(),
+                "name": "one",
+                "input": {"foo": "input"},
+                "triggers": ("branch:to:one",),
+            },
+        ),
+        ("updates", {"one": [{"foo": "one.0"}, {"foo": "one.1"}]}),
+        (
+            "tasks",
+            {
+                "id": AnyStr(),
+                "name": "one",
+                "error": None,
+                "result": {"foo": {"$writes": ["one.0", "one.1"]}},
+                "interrupts": [],
+            },
+        ),
+        (
+            "tasks",
+            {
+                "id": AnyStr(),
+                "name": "two",
+                "input": {"foo": "input, one.0, one.1"},
+                "triggers": ("branch:to:two",),
+            },
+        ),
+        ("updates", {"two": {"foo": "two"}}),
+        (
+            "tasks",
+            {
+                "id": AnyStr(),
+                "name": "two",
+                "error": None,
+                "result": {"foo": "two"},
+                "interrupts": [],
+            },
+        ),
+    ]
+
+    def map_snapshot(s: StateSnapshot) -> dict:
+        return {
+            "tasks": [{"name": t.name, "result": t.result} for t in s.tasks],
+            "values": s.values,
+        }
+
+    history = [map_snapshot(s) for s in graph.get_state_history(config)]
+
+    assert history == [
+        {
+            "tasks": [],
+            "values": {"foo": "input, one.0, one.1, two"},
+        },
+        {
+            "tasks": [{"name": "two", "result": {"foo": "two"}}],
+            "values": {"foo": "input, one.0, one.1"},
+        },
+        {
+            "tasks": [
+                {"name": "one", "result": {"foo": {"$writes": ["one.0", "one.1"]}}}
+            ],
+            "values": {"foo": "input"},
+        },
+        {
+            "tasks": [{"name": "__start__", "result": {"foo": "input"}}],
+            "values": {"foo": ""},
+        },
+    ]

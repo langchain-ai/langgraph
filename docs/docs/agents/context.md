@@ -33,7 +33,7 @@ LangGraph provides three ways to manage context, which combines the mutability a
 
 **Static runtime context** represents immutable data like user metadata, tools, and database connections that are passed to an application at the start of a run via the `context` argument to `invoke`/`stream`. This data does not change during execution.
 
-!!! version-added "New in LangGraph v0.6: `context` replaces `config['configurable']`"
+!!! version-added "Added in version 0.6.0: `context` replaces `config['configurable']`"
 
     Runtime context is now passed to the `context` argument of `invoke`/`stream`,
     which replaces the previous pattern of passing application configuration to `config['configurable']`.
