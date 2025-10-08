@@ -414,7 +414,9 @@ def prepare_next_tasks(
     checkpoint_id_bytes = binascii.unhexlify(checkpoint["id"].replace("-", ""))
     null_version = checkpoint_null_version(checkpoint)
     tasks: list[PregelTask | PregelExecutableTask] = []
-    # Consume pending tasks
+    has_push_tasks = False
+    
+    # Consume pending tasks (PUSH tasks from Send/goto commands)
     tasks_channel = cast(Optional[Topic[Send]], channels.get(TASKS))
     if tasks_channel and tasks_channel.is_available():
         for idx, _ in enumerate(tasks_channel.get()):
@@ -440,52 +442,56 @@ def prepare_next_tasks(
                 retry_policy=retry_policy,
             ):
                 tasks.append(task)
+                has_push_tasks = True
 
-    # This section is an optimization that allows which nodes will be active
-    # during the next step.
-    # When there's information about:
-    # 1. Which channels were updated in the previous step
-    # 2. Which nodes are triggered by which channels
-    # Then we can determine which nodes should be triggered in the next step
-    # without having to cycle through all nodes.
-    if updated_channels and trigger_to_nodes:
-        triggered_nodes: set[str] = set()
-        # Get all nodes that have triggers associated with an updated channel
-        for channel in updated_channels:
-            if node_ids := trigger_to_nodes.get(channel):
-                triggered_nodes.update(node_ids)
-        # Sort the nodes to ensure deterministic order
-        candidate_nodes: Iterable[str] = sorted(triggered_nodes)
-    elif not checkpoint["channel_versions"]:
-        candidate_nodes = ()
-    else:
-        candidate_nodes = processes.keys()
+    # Only prepare PULL tasks if there are no PUSH tasks
+    # This ensures Command(goto=...) overrides normal graph flow execution
+    if not has_push_tasks:
+        # This section is an optimization that allows which nodes will be active
+        # during the next step.
+        # When there's information about:
+        # 1. Which channels were updated in the previous step
+        # 2. Which nodes are triggered by which channels
+        # Then we can determine which nodes should be triggered in the next step
+        # without having to cycle through all nodes.
+        if updated_channels and trigger_to_nodes:
+            triggered_nodes: set[str] = set()
+            # Get all nodes that have triggers associated with an updated channel
+            for channel in updated_channels:
+                if node_ids := trigger_to_nodes.get(channel):
+                    triggered_nodes.update(node_ids)
+            # Sort the nodes to ensure deterministic order
+            candidate_nodes: Iterable[str] = sorted(triggered_nodes)
+        elif not checkpoint["channel_versions"]:
+            candidate_nodes = ()
+        else:
+            candidate_nodes = processes.keys()
 
-    # Check if any processes should be run in next step
-    # If so, prepare the values to be passed to them
-    for name in candidate_nodes:
-        if task := prepare_single_task(
-            (PULL, name),
-            None,
-            checkpoint=checkpoint,
-            checkpoint_id_bytes=checkpoint_id_bytes,
-            checkpoint_null_version=null_version,
-            pending_writes=pending_writes,
-            processes=processes,
-            channels=channels,
-            managed=managed,
-            config=config,
-            step=step,
-            stop=stop,
-            for_execution=for_execution,
-            store=store,
-            checkpointer=checkpointer,
-            manager=manager,
-            input_cache=input_cache,
-            cache_policy=cache_policy,
-            retry_policy=retry_policy,
-        ):
-            tasks.append(task)
+        # Check if any processes should be run in next step
+        # If so, prepare the values to be passed to them
+        for name in candidate_nodes:
+            if task := prepare_single_task(
+                (PULL, name),
+                None,
+                checkpoint=checkpoint,
+                checkpoint_id_bytes=checkpoint_id_bytes,
+                checkpoint_null_version=null_version,
+                pending_writes=pending_writes,
+                processes=processes,
+                channels=channels,
+                managed=managed,
+                config=config,
+                step=step,
+                stop=stop,
+                for_execution=for_execution,
+                store=store,
+                checkpointer=checkpointer,
+                manager=manager,
+                input_cache=input_cache,
+                cache_policy=cache_policy,
+                retry_policy=retry_policy,
+            ):
+                tasks.append(task)
     return {t.id: t for t in tasks}
 
 
