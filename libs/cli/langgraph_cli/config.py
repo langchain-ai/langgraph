@@ -851,6 +851,47 @@ class LocalDeps(NamedTuple):
     additional_contexts: list[pathlib.Path] = None
 
 
+def _get_package_metadata_files(package_path: pathlib.Path) -> list[str]:
+    """Return list of metadata files that exist in package_path.
+    
+    These files are needed for dependency resolution and should be copied
+    before source code to optimize Docker layer caching.
+    """
+    metadata_files = [
+        # Core build files
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
+        "requirements.txt",
+        
+        # Referenced in pyproject.toml
+        "README.md",
+        "README.rst",
+        "README.txt",
+        "LICENSE",
+        "LICENSE.txt",
+        "MANIFEST.in",
+        
+        # Lock files for reproducible builds
+        "uv.lock",
+        "poetry.lock",
+        "Pipfile.lock",
+        "pdm.lock",
+        
+        # Version files
+        "VERSION",
+        "_version.py",
+        "__version__.py",
+    ]
+    
+    existing_files = []
+    for file in metadata_files:
+        if (package_path / file).exists():
+            existing_files.append(file)
+    
+    return existing_files
+
+
 def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps:
     config_path = config_path.resolve()
     # ensure reserved package names are not used
@@ -1354,18 +1395,73 @@ RUN set -ex && \\
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
     )
 
-    local_pkgs_str = os.linesep.join(
-        (
-            f"""# -- Adding local package {relpath} --
+    # Optimized two-stage copy for better Docker layer caching:
+    # Stage 1: Copy only metadata files (rarely change)
+    # Stage 2: Install dependencies (cached until metadata changes)
+    # Stage 3: Copy full source code (changes frequently)
+    # Stage 4: Quick reinstall without dependency resolution (fast)
+    
+    local_pkgs_metadata_str_parts = []
+    local_pkgs_install_str_parts = []
+    local_pkgs_source_str_parts = []
+    local_pkgs_reinstall_str_parts = []
+    
+    for fullpath, (relpath, name) in local_deps.real_pkgs.items():
+        metadata_files = _get_package_metadata_files(fullpath)
+        
+        if fullpath in local_deps.additional_contexts:
+            # For additional contexts, use COPY --from
+            if metadata_files:
+                copy_commands = "\n".join(
+                    f"COPY --from={name} {f} /deps/{name}/{f}"
+                    for f in metadata_files
+                )
+                local_pkgs_metadata_str_parts.append(
+                    f"""# -- Adding package metadata for {name} --
+RUN mkdir -p /deps/{name}
+{copy_commands}
+# -- End of package metadata for {name} --"""
+                )
+            
+            local_pkgs_source_str_parts.append(
+                f"""# -- Adding full source for {relpath} --
 COPY --from={name} . /deps/{name}
-# -- End of local package {relpath} --"""
-            if fullpath in local_deps.additional_contexts
-            else f"""# -- Adding local package {relpath} --
+# -- End of full source for {relpath} --"""
+            )
+        else:
+            # For local paths, use ADD
+            if metadata_files:
+                copy_commands = "\n".join(
+                    f"ADD {relpath}/{f} /deps/{name}/{f}"
+                    for f in metadata_files
+                )
+                local_pkgs_metadata_str_parts.append(
+                    f"""# -- Adding package metadata for {name} --
+RUN mkdir -p /deps/{name}
+{copy_commands}
+# -- End of package metadata for {name} --"""
+                )
+            
+            local_pkgs_source_str_parts.append(
+                f"""# -- Adding full source for {relpath} --
 ADD {relpath} /deps/{name}
-# -- End of local package {relpath} --"""
+# -- End of full source for {relpath} --"""
+            )
+        
+        # Install with dependency resolution (cached if metadata unchanged)
+        local_pkgs_install_str_parts.append(
+            f"RUN cd /deps/{name} && {global_reqs_pip_install} ."
         )
-        for fullpath, (relpath, name) in local_deps.real_pkgs.items()
-    )
+        
+        # Quick reinstall without dependency resolution (fast, after source changes)
+        local_pkgs_reinstall_str_parts.append(
+            f"RUN cd /deps/{name} && {global_reqs_pip_install} --no-deps ."
+        )
+    
+    local_pkgs_metadata_str = os.linesep.join(local_pkgs_metadata_str_parts)
+    local_pkgs_install_str = os.linesep.join(local_pkgs_install_str_parts)
+    local_pkgs_source_str = os.linesep.join(local_pkgs_source_str_parts)
+    local_pkgs_reinstall_str = os.linesep.join(local_pkgs_reinstall_str_parts)
 
     install_node_str: str = (
         "RUN /storage/install-node.sh"
@@ -1381,8 +1477,11 @@ ADD {relpath} /deps/{name}
                 pip_config_file_str,
                 pip_pkgs_str,
                 pip_reqs_str,
-                local_pkgs_str,
+                local_pkgs_metadata_str,  # Metadata first for caching
                 faux_pkgs_str,
+                local_pkgs_install_str,   # Install with deps (cached layer)
+                local_pkgs_source_str,    # Source code after dependencies
+                local_pkgs_reinstall_str, # Quick reinstall without deps
             ],
         )
     )
@@ -1429,15 +1528,8 @@ ADD {relpath} /deps/{name}
         "",
         installs,
         "",
-        "# -- Installing all local dependencies --",
-        f"""RUN for dep in /deps/*; do \
-            echo "Installing $dep"; \
-            if [ -d "$dep" ]; then \
-                echo "Installing $dep"; \
-                (cd "$dep" && {global_reqs_pip_install} .); \
-            fi; \
-        done""",
-        "# -- End of local dependencies install --",
+        # Note: Individual package installs are now in 'installs' above
+        # This optimizes caching by separating metadata from source code
         os.linesep.join(env_vars),
         "",
         js_inst_str,
