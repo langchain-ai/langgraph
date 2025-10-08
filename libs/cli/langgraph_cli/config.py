@@ -1523,6 +1523,7 @@ ADD {relpath} /deps/{name}
     image_str = docker_tag(config, base_image, api_version)
     docker_file_contents = [
         f"FROM {image_str}",
+        "# -- making use of two-stage-cache-optimizations --",
         "",
         os.linesep.join(config["dockerfile_lines"]),
         "",
