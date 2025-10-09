@@ -271,7 +271,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
                     f"""Ready!
 - API: http://localhost:{port}
 - Docs: http://localhost:{port}/docs
-- LangGraph Studio: {debugger_origin}/studio/?baseUrl={debugger_base_url_query}
+- LangSmith Debugger: {debugger_origin}/studio/?baseUrl={debugger_base_url_query}
 """
                 )
                 sys.stdout.flush()
@@ -653,10 +653,16 @@ def dockerfile(
     default=False,
 )
 @click.option(
+    "--debugger-url",
+    type=str,
+    default=None,
+    help="URL of the LangSmith Debugger instance to connect to. Defaults to https://smith.langchain.com",
+)
+@click.option(
     "--studio-url",
     type=str,
     default=None,
-    help="URL of the LangGraph Studio instance to connect to. Defaults to https://smith.langchain.com",
+    help="(Deprecated: use --debugger-url instead) URL of the LangSmith Debugger instance to connect to.",
 )
 @click.option(
     "--allow-blocking",
@@ -692,12 +698,21 @@ def dev(
     no_browser: bool,
     debug_port: Optional[int],
     wait_for_client: bool,
+    debugger_url: Optional[str],
     studio_url: Optional[str],
     allow_blocking: bool,
     tunnel: bool,
     server_log_level: str,
 ):
     """CLI entrypoint for running the LangGraph API server."""
+    if studio_url is not None:
+        click.secho(
+            "Warning: --studio-url is deprecated and will be removed in a future version. "
+            "Please use --debugger-url instead.",
+            fg="yellow",
+        )
+        if debugger_url is None:
+            debugger_url = studio_url
     try:
         from langgraph_api.cli import run_server  # type: ignore
     except ImportError:
@@ -761,7 +776,7 @@ def dev(
         http=config_json.get("http"),
         ui=config_json.get("ui"),
         ui_config=config_json.get("ui_config"),
-        studio_url=studio_url,
+        studio_url=debugger_url,
         allow_blocking=allow_blocking,
         tunnel=tunnel,
         server_level=server_log_level,
