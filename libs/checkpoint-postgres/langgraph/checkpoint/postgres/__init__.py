@@ -115,12 +115,12 @@ class PostgresSaver(BasePostgresSaver):
 
         Args:
             config: The config to use for listing the checkpoints.
-            filter: Additional filtering criteria for metadata. Defaults to None.
-            before: If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
-            limit: The maximum number of checkpoints to return. Defaults to None.
+            filter: Additional filtering criteria for metadata.
+            before: If provided, only checkpoints before the specified checkpoint ID are returned.
+            limit: The maximum number of checkpoints to return.
 
         Yields:
-            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+            An iterator of checkpoint tuples.
 
         Examples:
             >>> from langgraph.checkpoint.postgres import PostgresSaver
@@ -182,7 +182,7 @@ class PostgresSaver(BasePostgresSaver):
         """Get a checkpoint tuple from the database.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the
-        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
+        provided config. If the config contains a `checkpoint_id` key, the checkpoint with
         the matching thread ID and timestamp is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
 
@@ -190,7 +190,7 @@ class PostgresSaver(BasePostgresSaver):
             config: The config to use for retrieving the checkpoint.
 
         Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
 
         Examples:
 

@@ -534,9 +534,9 @@ def coerce_to_runnable(
 
 
 class RunnableSeq(Runnable):
-    """Sequence of Runnables, where the output of each is the input of the next.
+    """Sequence of `Runnable`, where the output of each is the input of the next.
 
-    RunnableSeq is a simpler version of RunnableSequence that is internal to
+    `RunnableSeq` is a simpler version of `RunnableSequence` that is internal to
     LangGraph.
     """
 
@@ -550,7 +550,7 @@ class RunnableSeq(Runnable):
 
         Args:
             steps: The steps to include in the sequence.
-            name: The name of the Runnable. Defaults to None.
+            name: The name of the `Runnable`.
 
         Raises:
             ValueError: If the sequence has less than 2 steps.

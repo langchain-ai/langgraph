@@ -57,7 +57,7 @@ class Item:
         key: Unique identifier within the namespace.
         namespace: Hierarchical path defining the collection in which this document resides.
             Represented as a tuple of strings, allowing for nested categorization.
-            For example: ("documents", 'user123')
+            For example: `("documents", 'user123')`
         created_at: Timestamp of item creation.
         updated_at: Timestamp of last update.
     """
@@ -249,12 +249,12 @@ class SearchOp(NamedTuple):
     The filter supports both exact matches and operator-based comparisons.
 
     Supported Operators:
-        - $eq: Equal to (same as direct value comparison)
-        - $ne: Not equal to
-        - $gt: Greater than
-        - $gte: Greater than or equal to
-        - $lt: Less than
-        - $lte: Less than or equal to
+        - `$eq`: Equal to (same as direct value comparison)
+        - `$ne`: Not equal to
+        - `$gt`: Greater than
+        - `$gte`: Greater than or equal to
+        - `$lt`: Less than
+        - `$lte`: Less than or equal to
 
     ???+ example "Examples"
         Simple exact match:
@@ -480,12 +480,12 @@ class PutOp(NamedTuple):
     vector similarity search (if supported by the store implementation).
 
     Path Syntax:
-        - Simple field access: "field"
-        - Nested fields: "parent.child.grandchild"
+        - Simple field access: `"field"`
+        - Nested fields: `"parent.child.grandchild"`
         - Array indexing:
-          - Specific index: "array[0]"
-          - Last element: "array[-1]"
-          - All elements (each individually): "array[*]"
+            - Specific index: `"array[0]"`
+            - Last element: `"array[-1]"`
+            - All elements (each individually): `"array[*]"`
 
     ???+ example "Examples"
         - None - Use store defaults (whole item)
@@ -509,7 +509,7 @@ class PutOp(NamedTuple):
     will expire this many minutes after it was last accessed. The expiration timer
     refreshes on both read operations (get/search) and write operations (put/update).
     When the TTL expires, the item will be scheduled for deletion on a best-effort basis.
-    Defaults to None (no expiration).
+    Defaults to `None` (no expiration).
     """
 
 
@@ -525,18 +525,18 @@ class TTLConfig(TypedDict, total=False):
     """Configuration for TTL (time-to-live) behavior in the store."""
 
     refresh_on_read: bool
-    """Default behavior for refreshing TTLs on read operations (GET and SEARCH).
+    """Default behavior for refreshing TTLs on read operations (`GET` and `SEARCH`).
     
-    If True, TTLs will be refreshed on read operations (get/search) by default.
-    This can be overridden per-operation by explicitly setting refresh_ttl.
-    Defaults to True if not configured.
+    If `True`, TTLs will be refreshed on read operations (get/search) by default.
+    This can be overridden per-operation by explicitly setting `refresh_ttl`.
+    Defaults to `True` if not configured.
     """
     default_ttl: float | None
     """Default TTL (time-to-live) in minutes for new items.
     
     If provided, new items will expire after this many minutes after their last access.
     The expiration timer refreshes on both read and write operations.
-    Defaults to None (no expiration).
+    Defaults to `None` (no expiration).
     """
     sweep_interval_minutes: int | None
     """Interval in minutes between TTL sweep operations.
@@ -550,20 +550,20 @@ class IndexConfig(TypedDict, total=False):
     """Configuration for indexing documents for semantic search in the store.
 
     If not provided to the store, the store will not support vector search.
-    In that case, all `index` arguments to put() and `aput()` operations will be ignored.
+    In that case, all `index` arguments to `put()` and `aput()` operations will be ignored.
     """
 
     dims: int
     """Number of dimensions in the embedding vectors.
     
     Common embedding models have the following dimensions:
-        - openai:text-embedding-3-large: 3072
-        - openai:text-embedding-3-small: 1536
-        - openai:text-embedding-ada-002: 1536
-        - cohere:embed-english-v3.0: 1024
-        - cohere:embed-english-light-v3.0: 384
-        - cohere:embed-multilingual-v3.0: 1024
-        - cohere:embed-multilingual-light-v3.0: 384
+        - `openai:text-embedding-3-large`: `3072`
+        - `openai:text-embedding-3-small`: `1536`
+        - `openai:text-embedding-ada-002`: `1536`
+        - `cohere:embed-english-v3.0`: `1024`
+        - `cohere:embed-english-light-v3.0`: `384`
+        - `cohere:embed-multilingual-v3.0`: `1024`
+        - `cohere:embed-multilingual-light-v3.0`: `384`
     """
 
     embed: Embeddings | EmbeddingsFunc | AEmbeddingsFunc | str
@@ -571,12 +571,12 @@ class IndexConfig(TypedDict, total=False):
     
     Can be specified in three ways:
         1. A LangChain Embeddings instance
-        2. A synchronous embedding function (EmbeddingsFunc)
-        3. An asynchronous embedding function (AEmbeddingsFunc)
-        4. A provider string (e.g., "openai:text-embedding-3-small")
+        2. A synchronous embedding function (`EmbeddingsFunc`)
+        3. An asynchronous embedding function (`AEmbeddingsFunc`)
+        4. A provider string (e.g., `"openai:text-embedding-3-small"`)
     
     ???+ example "Examples"
-        Using LangChain's initialization with InMemoryStore:
+        Using LangChain's initialization with `InMemoryStore`:
         ```python
         from langchain.embeddings import init_embeddings
         from langgraph.store.memory import InMemoryStore
@@ -589,7 +589,7 @@ class IndexConfig(TypedDict, total=False):
         )
         ```
         
-        Using a custom embedding function with InMemoryStore:
+        Using a custom embedding function with `InMemoryStore`:
         ```python
         from openai import OpenAI
         from langgraph.store.memory import InMemoryStore
@@ -611,7 +611,7 @@ class IndexConfig(TypedDict, total=False):
         )
         ```
         
-        Using an asynchronous embedding function with InMemoryStore:
+        Using an asynchronous embedding function with `InMemoryStore`:
         ```python
         from openai import AsyncOpenAI
         from langgraph.store.memory import InMemoryStore
@@ -639,10 +639,10 @@ class IndexConfig(TypedDict, total=False):
     
     Controls which parts of stored items are embedded for semantic search. Follows JSON path syntax:
 
-        - ["$"]: Embeds the entire JSON object as one vector  (default)
-        - ["field1", "field2"]: Embeds specific top-level fields
-        - ["parent.child"]: Embeds nested fields using dot notation
-        - ["array[*].field"]: Embeds field from each array element separately
+    - `["$"]`: Embeds the entire JSON object as one vector  (default)
+    - `["field1", "field2"]`: Embeds specific top-level fields
+    - `["parent.child"]`: Embeds nested fields using dot notation
+    - `["array[*].field"]`: Embeds field from each array element separately
     
     Note:
         You can always override this behavior when storing an item using the
@@ -667,7 +667,7 @@ class IndexConfig(TypedDict, total=False):
     Note:
         - Fields missing from a document are skipped
         - Array notation creates separate embeddings for each element
-        - Complex nested paths are supported (e.g., "a.b[*].c.d")
+        - Complex nested paths are supported (e.g., `"a.b[*].c.d"`)
     """
 
 
@@ -732,11 +732,11 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
             refresh_ttl: Whether to refresh TTLs for the returned item.
-                If None (default), uses the store's default refresh_ttl setting.
+                If `None`, uses the store's default refresh_ttl setting.
                 If no TTL is specified, this argument is ignored.
 
         Returns:
-            The retrieved item or None if not found.
+            The retrieved item or `None` if not found.
         """
         return self.batch(
             [GetOp(namespace, str(key), _ensure_refresh(self.ttl_config, refresh_ttl))]
@@ -966,7 +966,7 @@ class BaseStore(ABC):
             key: Unique identifier within the namespace.
 
         Returns:
-            The retrieved item or None if not found.
+            The retrieved item or `None` if not found.
         """
         return (
             await self.abatch(
@@ -1000,7 +1000,7 @@ class BaseStore(ABC):
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
             refresh_ttl: Whether to refresh TTLs for the returned items.
-                If None (default), uses the store's TTLConfig.refresh_default setting.
+                If `None`, uses the store's TTLConfig.refresh_default setting.
                 If TTLConfig is not provided or no TTL is specified, this argument is ignored.
 
         Returns:

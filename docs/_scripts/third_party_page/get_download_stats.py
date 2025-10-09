@@ -20,15 +20,18 @@ class Package(TypedDict):
     description: str
     """A brief description of what the package does."""
 
+
 class ResolvedPackage(Package):
     weekly_downloads: int | None
     """The weekly download count of the package."""
     language: str
     """The language of the package. (either 'python' or 'js')"""
 
+
 HERE = pathlib.Path(__file__).parent
 PACKAGES_FILE = HERE / "packages.yml"
 PACKAGES = yaml.safe_load(PACKAGES_FILE.read_text())["packages"]
+
 
 def _get_pypi_downloads(package: Package) -> int:
     """Retrieve the weekly download count for a package from PyPIStats."""
@@ -72,7 +75,8 @@ def _get_pypi_downloads(package: Package) -> int:
         return sum(entry["downloads"] for entry in sorted_data[:7])
     else:
         return None
-    
+
+
 def _get_npm_downloads(package: Package) -> int:
     """Retrieve the weekly download count for a package on the npm registry."""
 
@@ -82,14 +86,18 @@ def _get_npm_downloads(package: Package) -> int:
         npm_response = requests.get(npm_url)
         npm_response.raise_for_status()
     except requests.exceptions.HTTPError:
-        raise AssertionError(f"Package {package['name']} does not exist on npm registry")
+        raise AssertionError(
+            f"Package {package['name']} does not exist on npm registry"
+        )
 
     npm_data = npm_response.json()
 
     # Retrieve the first publish date using the 'created' timestamp from the 'time' field.
     created_str = npm_data.get("time", {}).get("created")
     if created_str is None:
-        raise AssertionError(f"Package {package['name']} has no creation time in registry data")
+        raise AssertionError(
+            f"Package {package['name']} has no creation time in registry data"
+        )
     # Remove the trailing 'Z' if present and parse the ISO format timestamp
     first_publish_date = datetime.fromisoformat(created_str.rstrip("Z"))
 
@@ -103,7 +111,10 @@ def _get_npm_downloads(package: Package) -> int:
     else:
         return None
 
-def _get_weekly_downloads(packages: dict[str, list[Package]], fake: bool) -> list[ResolvedPackage]:
+
+def _get_weekly_downloads(
+    packages: dict[str, list[Package]], fake: bool
+) -> list[ResolvedPackage]:
     """Retrieve the weekly download count for a dictionary of python or js packages."""
     resolved_packages: list[ResolvedPackage] = []
 
@@ -131,7 +142,7 @@ def _get_weekly_downloads(packages: dict[str, list[Package]], fake: bool) -> lis
                 num_downloads = _get_npm_downloads(package)
             else:
                 num_downloads = None
-            
+
             resolved_packages.append(
                 {
                     "name": package["name"],
@@ -145,12 +156,13 @@ def _get_weekly_downloads(packages: dict[str, list[Package]], fake: bool) -> lis
 
     return resolved_packages
 
+
 def main(output_file: str, fake: bool) -> None:
     """Main function to generate package download information.
 
     Args:
         output_file: Path to the output YAML file.
-        fake: If True, use fake download counts for testing purposes.
+        fake: If `True`, use fake download counts for testing purposes.
     """
     resolved_packages: list[ResolvedPackage] = _get_weekly_downloads(PACKAGES, fake)
 

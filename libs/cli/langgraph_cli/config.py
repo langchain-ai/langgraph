@@ -25,11 +25,11 @@ class TTLConfig(TypedDict, total=False):
     """Configuration for TTL (time-to-live) behavior in the store."""
 
     refresh_on_read: bool
-    """Default behavior for refreshing TTLs on read operations (GET and SEARCH).
+    """Default behavior for refreshing TTLs on read operations (`GET` and `SEARCH`).
     
-    If True, TTLs will be refreshed on read operations (get/search) by default.
-    This can be overridden per-operation by explicitly setting refresh_ttl.
-    Defaults to True if not configured.
+    If `True`, TTLs will be refreshed on read operations (get/search) by default.
+    This can be overridden per-operation by explicitly setting `refresh_ttl`.
+    Defaults to `True` if not configured.
     """
     default_ttl: Optional[float]
     """Optional. Default TTL (time-to-live) in minutes for new items.
@@ -215,7 +215,7 @@ class AuthConfig(TypedDict, total=False):
     """Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio. 
     
     Defaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header
-    value is a valid API key for the deployment's workspace. If True, all requests will go through your custom
+    value is a valid API key for the deployment's workspace. If `True`, all requests will go through your custom
     authentication logic, regardless of origin of the request.
     """
     openapi: SecurityConfig
@@ -262,7 +262,7 @@ class CorsConfig(TypedDict, total=False):
     allow_headers: list[str]
     """Optional. HTTP headers that can be used in cross-origin requests (e.g. ["Content-Type", "Authorization"])."""
     allow_credentials: bool
-    """Optional. If True, cross-origin requests can include credentials (cookies, auth headers).
+    """Optional. If `True`, cross-origin requests can include credentials (cookies, auth headers).
     
     Default False to avoid accidentally exposing secured endpoints to untrusted sites.
     """
@@ -317,27 +317,27 @@ class HttpConfig(TypedDict, total=False):
     If provided, it can override or extend the default routes.
     """
     disable_assistants: bool
-    """Optional. If True, /assistants routes are removed from the server.
+    """Optional. If `True`, /assistants routes are removed from the server.
     
     Default is False (meaning /assistants is enabled).
     """
     disable_threads: bool
-    """Optional. If True, /threads routes are removed.
+    """Optional. If `True`, /threads routes are removed.
     
     Default is False.
     """
     disable_runs: bool
-    """Optional. If True, /runs routes are removed.
+    """Optional. If `True`, /runs routes are removed.
     
     Default is False.
     """
     disable_store: bool
-    """Optional. If True, /store routes are removed, disabling direct store interactions via HTTP.
+    """Optional. If `True`, /store routes are removed, disabling direct store interactions via HTTP.
     
     Default is False.
     """
     disable_mcp: bool
-    """Optional. If True, /mcp routes are removed, disabling the MCP server.
+    """Optional. If `True`, /mcp routes are removed, disabling the MCP server.
     
     Default is False.
     """
@@ -372,7 +372,7 @@ class HttpConfig(TypedDict, total=False):
     Default is `middleware_first`.
     """
     enable_custom_route_auth: bool
-    """Optional. If True, authentication is enabled for custom routes,
+    """Optional. If `True`, authentication is enabled for custom routes,
     not just the routes that are protected by default.
     (Routes protected by default include /assistants, /threads, and /runs).
 

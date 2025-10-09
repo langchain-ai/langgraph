@@ -141,7 +141,7 @@ def _handle_tool_error(
     Args:
         e: The exception that occurred during tool execution.
         flag: Configuration for how to handle the error. Can be:
-            - bool: If True, use default error template
+            - bool: If `True`, use default error template
             - str: Use this string as the error message
             - Callable: Call this function with the exception to get error message
             - tuple: Not used in this context (handled by caller)
@@ -314,9 +314,9 @@ class ToolNode(RunnableCallable):
             tools: A sequence of tools that can be invoked by this node. Tools can be
                 BaseTool instances or plain functions that will be converted to tools.
             name: The name identifier for this node in the graph. Used for debugging
-                and visualization. Defaults to "tools".
+                and visualization.
             tags: Optional metadata tags to associate with the node for filtering
-                and organization. Defaults to None.
+                and organization.
             handle_tool_errors: Configuration for error handling during tool execution.
                 Defaults to True. Supports multiple strategies:
 
@@ -330,7 +330,7 @@ class ToolNode(RunnableCallable):
                     and return the string result of calling it with the exception.
                 - False: Disable error handling entirely, allowing exceptions to propagate.
             messages_key: The key in the state dictionary that contains the message list.
-                This same key will be used for the output ToolMessages. Defaults to "messages".
+                This same key will be used for the output ToolMessages.
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: dict[str, BaseTool] = {}
@@ -919,7 +919,7 @@ class InjectedState(InjectedToolArg):
         """Initialize InjectedState annotation.
 
         Args:
-            field: Optional key to extract from the state dictionary. If None, the entire
+            field: Optional key to extract from the state dictionary. If `None`, the entire
                 state is injected. If specified, only that field's value is injected.
                 This allows tools to request specific state components rather than
                 processing the full state structure.
