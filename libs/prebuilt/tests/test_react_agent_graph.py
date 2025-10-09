@@ -25,6 +25,16 @@ def post_model_hook() -> None:
     ...
 
 
+def pre_structured_response_hook() -> None:
+    """Pre-structured response hook."""
+    ...
+
+
+def post_structured_response_hook() -> None:
+    """Post-structured response hook."""
+    ...
+
+
 class ResponseFormat(BaseModel):
     """Response format for the agent."""
 
@@ -34,19 +44,25 @@ class ResponseFormat(BaseModel):
 @pytest.mark.parametrize("tools", [[], [tool]])
 @pytest.mark.parametrize("pre_model_hook", [None, pre_model_hook])
 @pytest.mark.parametrize("post_model_hook", [None, post_model_hook])
+@pytest.mark.parametrize("pre_structured_response_hook", [None, pre_structured_response_hook])
+@pytest.mark.parametrize("post_structured_response_hook", [None, post_structured_response_hook])
 @pytest.mark.parametrize("response_format", [None, ResponseFormat])
 def test_react_agent_graph_structure(
-    snapshot: SnapshotAssertion,
-    tools: list[Callable],
-    pre_model_hook: Union[Callable, None],
-    post_model_hook: Union[Callable, None],
-    response_format: Union[type[BaseModel], None],
+        snapshot: SnapshotAssertion,
+        tools: list[Callable],
+        pre_model_hook: Union[Callable, None],
+        post_model_hook: Union[Callable, None],
+        pre_structured_response_hook: Union[Callable, None],
+        post_structured_response_hook: Union[Callable, None],
+        response_format: Union[type[BaseModel], None],
 ) -> None:
     agent = create_react_agent(
         model,
         tools=tools,
         pre_model_hook=pre_model_hook,
         post_model_hook=post_model_hook,
+        pre_structured_response_hook=pre_structured_response_hook,
+        post_structured_response_hook=post_structured_response_hook,
         response_format=response_format,
     )
     assert agent.get_graph().draw_mermaid(with_styles=False) == snapshot

@@ -267,6 +267,8 @@ def create_react_agent(
     ] = None,
     pre_model_hook: Optional[RunnableLike] = None,
     post_model_hook: Optional[RunnableLike] = None,
+    pre_structured_response_hook: Optional[RunnableLike] = None,
+    post_structured_response_hook: Optional[RunnableLike] = None,
     state_schema: Optional[StateSchemaType] = None,
     context_schema: Optional[Type[Any]] = None,
     checkpointer: Optional[Checkpointer] = None,
@@ -770,9 +772,32 @@ def create_react_agent(
                 ),
             )
             if post_model_hook is not None:
-                workflow.add_edge("post_model_hook", "generate_structured_response")
+                if pre_structured_response_hook is not None:
+                    workflow.add_node("pre_structured_response_hook", pre_structured_response_hook)
+                    workflow.add_edge("post_model_hook", "pre_structured_response_hook")
+                    workflow.add_edge("pre_structured_response_hook", "generate_structured_response")
+                else:
+                    workflow.add_edge("post_model_hook", "generate_structured_response")
+
+                if post_structured_response_hook is not None:
+                    workflow.add_node("post_structured_response_hook", post_structured_response_hook)
+                    workflow.add_edge("generate_structured_response", "post_structured_response_hook")
             else:
-                workflow.add_edge("agent", "generate_structured_response")
+                if pre_structured_response_hook is not None:
+                    workflow.add_node("pre_structured_response_hook", pre_structured_response_hook)
+                    workflow.add_edge("agent", "pre_structured_response_hook")
+                    workflow.add_edge("pre_structured_response_hook", "generate_structured_response")
+                else:
+                    workflow.add_edge("agent", "generate_structured_response")
+
+                if post_structured_response_hook is not None:
+                    workflow.add_node("post_structured_response_hook", post_structured_response_hook)
+                    workflow.add_edge("generate_structured_response", "post_structured_response_hook")
+
+            if post_structured_response_hook is not None:
+                workflow.add_edge("post_structured_response_hook", END)
+            else:
+                workflow.add_edge("generate_structured_response", END)
 
         return workflow.compile(
             checkpointer=checkpointer,
@@ -792,11 +817,17 @@ def create_react_agent(
             if post_model_hook is not None:
                 return "post_model_hook"
             elif response_format is not None:
+                if pre_structured_response_hook is not None:
+                    return "pre_structured_response_hook"
                 return "generate_structured_response"
             else:
                 return END
         # Otherwise if there is, we continue
         else:
+            # If a post_model_hook is configured, always go there first (v1 and v2).
+            if post_model_hook is not None:
+                return "post_model_hook"
+
             if version == "v1":
                 return "tools"
             elif version == "v2":
@@ -855,9 +886,32 @@ def create_react_agent(
             ),
         )
         if post_model_hook is not None:
-            post_model_hook_paths.append("generate_structured_response")
+            if pre_structured_response_hook is not None:
+                workflow.add_node("pre_structured_response_hook",pre_structured_response_hook)
+                workflow.add_edge("pre_structured_response_hook", "generate_structured_response")
+                post_model_hook_paths.append("pre_structured_response_hook")
+            else:
+                post_model_hook_paths.append("generate_structured_response")
+
+            if post_structured_response_hook is not None:
+                workflow.add_node("post_structured_response_hook",post_structured_response_hook)
+                workflow.add_edge("generate_structured_response", "post_structured_response_hook")
         else:
-            agent_paths.append("generate_structured_response")
+            if pre_structured_response_hook is not None:
+                workflow.add_node("pre_structured_response_hook",pre_structured_response_hook)
+                workflow.add_edge("pre_structured_response_hook", "generate_structured_response")
+                agent_paths.append("pre_structured_response_hook")
+            else:
+                agent_paths.append("generate_structured_response")
+
+            if post_structured_response_hook is not None:
+                workflow.add_node("post_structured_response_hook",post_structured_response_hook)
+                workflow.add_edge("generate_structured_response", "post_structured_response_hook")
+
+        if post_structured_response_hook is not None:
+            workflow.add_edge("post_structured_response_hook", END)
+        else:
+            workflow.add_edge("generate_structured_response", END)
     else:
         if post_model_hook is not None:
             post_model_hook_paths.append(END)
@@ -895,6 +949,8 @@ def create_react_agent(
             elif isinstance(messages[-1], ToolMessage):
                 return entrypoint
             elif response_format is not None:
+                if pre_structured_response_hook is not None:
+                    return "pre_structured_response_hook"
                 return "generate_structured_response"
             else:
                 return END

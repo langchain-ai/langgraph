@@ -2157,3 +2157,199 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_pre_structured_response_hook_no_tools(version: str) -> None:
+    class WeatherResponse(BaseModel):
+        temperature: float = Field(description="The temperature in fahrenheit")
+
+    # Model returns structured response; no tool calls
+    expected_structured = WeatherResponse(temperature=75.0)
+    model = FakeToolCallingModel(tool_calls=[], structured_response=expected_structured)
+
+    # State with flag + structured_response
+    class State(AgentState):
+        pre_hit: bool
+        structured_response: WeatherResponse
+
+    # Hook proves it ran before structured gen
+    def pre_structured_response_hook(state: State) -> dict:
+        return {"pre_hit": True}
+
+    agent = create_react_agent(
+        model,
+        tools=[],
+        response_format=WeatherResponse,
+        pre_structured_response_hook=pre_structured_response_hook,
+        state_schema=State,
+        version=version,
+    )
+
+    result = agent.invoke(
+        {"messages": [HumanMessage("What's the weather?")], "pre_hit": False}
+    )
+    assert result["pre_hit"] is True
+    assert result["structured_response"] == expected_structured
+
+    # Order check in stream: pre_structured_response_hook before generate_structured_response
+    events = list(
+        agent.stream({"messages": [HumanMessage("What's the weather?")], "pre_hit": False})
+    )
+    names = [list(e.keys())[0] for e in events]
+    assert "pre_structured_response_hook" in names
+    assert "generate_structured_response" in names
+    assert names.index("pre_structured_response_hook") < names.index("generate_structured_response")
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_post_structured_response_hook_no_tools(version: str) -> None:
+    class WeatherResponse(BaseModel):
+        temperature: float = Field(description="The temperature in fahrenheit")
+
+    expected_structured = WeatherResponse(temperature=75.0)
+    model = FakeToolCallingModel(tool_calls=[], structured_response=expected_structured)
+
+    class State(AgentState):
+        post_hit: bool
+        structured_response: WeatherResponse
+
+    def post_structured_response_hook(state: State) -> dict:
+        return {"post_hit": True}
+
+    agent = create_react_agent(
+        model,
+        tools=[],
+        response_format=WeatherResponse,
+        post_structured_response_hook=post_structured_response_hook,
+        state_schema=State,
+        version=version,
+    )
+
+    result = agent.invoke(
+        {"messages": [HumanMessage("What's the weather?")], "post_hit": False}
+    )
+    assert result["post_hit"] is True
+    assert result["structured_response"] == expected_structured
+
+    # Order check in stream: generate_structured_response before post_structured_response_hook
+    events = list(
+        agent.stream({"messages": [HumanMessage("What's the weather?")], "post_hit": False})
+    )
+    names = [list(e.keys())[0] for e in events]
+    assert "generate_structured_response" in names
+    assert "post_structured_response_hook" in names
+    assert names.index("generate_structured_response") < names.index("post_structured_response_hook")
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_pre_and_post_structured_hooks_with_tools_and_post_model_hook(
+    version: str
+) -> None:
+    @dec_tool
+    def get_weather() -> str:
+        """Get the weather"""
+        return "The weather is sunny and 75°F."
+
+    class WeatherResponse(BaseModel):
+        temperature: float = Field(description="The temperature in fahrenheit")
+
+    expected_structured = WeatherResponse(temperature=75.0)
+    model = FakeToolCallingModel(
+        tool_calls=[[{"args": {}, "id": "1", "name": "get_weather"}], []],
+        structured_response=expected_structured,
+    )
+
+    class State(AgentState):
+        pmh_count: int
+        pre_hit: bool
+        post_hit: bool
+        structured_response: WeatherResponse
+
+    def post_model_hook(state: State) -> dict:
+        # Runs after each agent (LLM) node
+        return {"pmh_count": state.get("pmh_count", 0) + 1}
+
+    def pre_structured_response_hook(state: State) -> dict:
+        return {"pre_hit": True}
+
+    def post_structured_response_hook(state: State) -> dict:
+        return {"post_hit": True}
+
+    agent = create_react_agent(
+        model,
+        tools=[get_weather],
+        response_format=WeatherResponse,
+        post_model_hook=post_model_hook,
+        pre_structured_response_hook=pre_structured_response_hook,
+        post_structured_response_hook=post_structured_response_hook,
+        state_schema=State,
+        version=version,
+    )
+
+    result = agent.invoke(
+        {
+            "messages": [HumanMessage("What's the weather?")],
+            "pmh_count": 0,
+            "pre_hit": False,
+            "post_hit": False,
+        }
+    )
+    # post_model_hook hit twice (after both agent calls)
+    assert result["pmh_count"] == 2
+    # structured hooks hit
+    assert result["pre_hit"] is True
+    assert result["post_hit"] is True
+    # tool executed & structured present
+    assert result["messages"][-2].content == "The weather is sunny and 75°F."
+    assert result["structured_response"] == expected_structured
+
+    # Ordering
+    events = list(
+        agent.stream(
+            {
+                "messages": [HumanMessage("What's the weather?")],
+                "pmh_count": 0,
+                "pre_hit": False,
+                "post_hit": False,
+            }
+        )
+    )
+    names = [list(e.keys())[0] for e in events]
+    assert names.count("post_model_hook") >= 2
+    assert names.index("pre_structured_response_hook") < names.index("generate_structured_response")
+    assert names.index("generate_structured_response") < names.index("post_structured_response_hook")
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_structured_hooks_with_tuple_response_format(version: str) -> None:
+    class WeatherResponse(BaseModel):
+        temperature: float = Field(description="The temperature in fahrenheit")
+
+    expected_structured = WeatherResponse(temperature=75.0)
+    model = FakeToolCallingModel(tool_calls=[], structured_response=expected_structured)
+
+    class State(AgentState):
+        pre_hit: bool
+        post_hit: bool
+        structured_response: WeatherResponse
+
+    def pre_structured_response_hook(state: State) -> dict:
+        return {"pre_hit": True}
+
+    def post_structured_response_hook(state: State) -> dict:
+        return {"post_hit": True}
+
+    agent = create_react_agent(
+        model,
+        tools=[],
+        response_format=("Use this system prompt for structured output", WeatherResponse),
+        pre_structured_response_hook=pre_structured_response_hook,
+        post_structured_response_hook=post_structured_response_hook,
+        state_schema=State,
+        version=version,
+    )
+
+    res = agent.invoke({"messages": [HumanMessage("go")], "pre_hit": False, "post_hit": False})
+    assert res["structured_response"] == expected_structured
+    assert res["pre_hit"] is True
+    assert res["post_hit"] is True
