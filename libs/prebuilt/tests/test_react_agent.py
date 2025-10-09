@@ -2158,6 +2158,7 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
     ]
     assert result["foo"] == 2
 
+
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_pre_structured_response_hook_no_tools(version: str) -> None:
     class WeatherResponse(BaseModel):
@@ -2193,12 +2194,16 @@ def test_pre_structured_response_hook_no_tools(version: str) -> None:
 
     # Order check in stream: pre_structured_response_hook before generate_structured_response
     events = list(
-        agent.stream({"messages": [HumanMessage("What's the weather?")], "pre_hit": False})
+        agent.stream(
+            {"messages": [HumanMessage("What's the weather?")], "pre_hit": False}
+        )
     )
     names = [list(e.keys())[0] for e in events]
     assert "pre_structured_response_hook" in names
     assert "generate_structured_response" in names
-    assert names.index("pre_structured_response_hook") < names.index("generate_structured_response")
+    assert names.index("pre_structured_response_hook") < names.index(
+        "generate_structured_response"
+    )
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
@@ -2233,17 +2238,21 @@ def test_post_structured_response_hook_no_tools(version: str) -> None:
 
     # Order check in stream: generate_structured_response before post_structured_response_hook
     events = list(
-        agent.stream({"messages": [HumanMessage("What's the weather?")], "post_hit": False})
+        agent.stream(
+            {"messages": [HumanMessage("What's the weather?")], "post_hit": False}
+        )
     )
     names = [list(e.keys())[0] for e in events]
     assert "generate_structured_response" in names
     assert "post_structured_response_hook" in names
-    assert names.index("generate_structured_response") < names.index("post_structured_response_hook")
+    assert names.index("generate_structured_response") < names.index(
+        "post_structured_response_hook"
+    )
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_pre_and_post_structured_hooks_with_tools_and_post_model_hook(
-    version: str
+    version: str,
 ) -> None:
     @dec_tool
     def get_weather() -> str:
@@ -2316,8 +2325,12 @@ def test_pre_and_post_structured_hooks_with_tools_and_post_model_hook(
     )
     names = [list(e.keys())[0] for e in events]
     assert names.count("post_model_hook") >= 2
-    assert names.index("pre_structured_response_hook") < names.index("generate_structured_response")
-    assert names.index("generate_structured_response") < names.index("post_structured_response_hook")
+    assert names.index("pre_structured_response_hook") < names.index(
+        "generate_structured_response"
+    )
+    assert names.index("generate_structured_response") < names.index(
+        "post_structured_response_hook"
+    )
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
@@ -2342,14 +2355,19 @@ def test_structured_hooks_with_tuple_response_format(version: str) -> None:
     agent = create_react_agent(
         model,
         tools=[],
-        response_format=("Use this system prompt for structured output", WeatherResponse),
+        response_format=(
+            "Use this system prompt for structured output",
+            WeatherResponse,
+        ),
         pre_structured_response_hook=pre_structured_response_hook,
         post_structured_response_hook=post_structured_response_hook,
         state_schema=State,
         version=version,
     )
 
-    res = agent.invoke({"messages": [HumanMessage("go")], "pre_hit": False, "post_hit": False})
+    res = agent.invoke(
+        {"messages": [HumanMessage("go")], "pre_hit": False, "post_hit": False}
+    )
     assert res["structured_response"] == expected_structured
     assert res["pre_hit"] is True
     assert res["post_hit"] is True
