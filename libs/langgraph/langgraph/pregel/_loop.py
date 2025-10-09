@@ -316,9 +316,7 @@ class PregelLoop:
             ]
             writes_to_save: WritesT = [
                 w[1:] for w in self.checkpoint_pending_writes if w[0] == task_id
-            ] + [
-                (c, v) for c, v in writes if c != RESUME
-            ]
+            ] + [(c, v) for c, v in writes if c != RESUME]
             self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         else:
             # build map of existing interrupts for this task for quick lookup
@@ -331,7 +329,7 @@ class PregelLoop:
             for ch, v in writes:
                 if ch == INTERRUPT:
                     # we merge new interrupt writes with existing interrupts writes if they
-                    # occured within the same task (which means they have the same interrupt id)
+                    # occurred within the same task (which means they have the same interrupt id)
                     new_interrupts = v if isinstance(v, list) else list(v)
                     if new_interrupts and (
                         existing := existing_interrupts_by_id.get(new_interrupts[0].id)
@@ -339,7 +337,11 @@ class PregelLoop:
                         # if the graph is invoked with None, we will hit the same interrupt
                         # that was raised before, in this case we don't want to duplicate its write
                         # so we just keep the existing checkpoint writes
-                        v = existing + new_interrupts if self.input is not None else existing
+                        v = (
+                            existing + new_interrupts
+                            if self.input is not None
+                            else existing
+                        )
                     writes_to_save.append((ch, v))
                 else:
                     # we add non-interrupt writes as-is

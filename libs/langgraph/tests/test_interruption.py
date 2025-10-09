@@ -583,6 +583,7 @@ async def test_node_with_multiple_interrupts_requires_full_resume_async(
     assert final_result["input"] == "human_first-human_second-human_third"
     assert node_counter == 5
 
+
 def test_invoke_interrupted_graph_with_none(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -617,9 +618,7 @@ def test_invoke_interrupted_graph_with_none(
 
     # invoke with None. this should execute the node and the history should
     # look the same as the first run
-    partial = graph.invoke(
-        None, config=config
-    )
+    partial = graph.invoke(None, config=config)
     second_history = list(graph.get_state_history(config))
     remaining_interrupts = partial.get("__interrupt__", [])
     assert len(remaining_interrupts) == 1
@@ -635,21 +634,17 @@ def test_invoke_interrupted_graph_with_none(
     assert first_history[0].tasks == second_history[0].tasks
 
     # now resume the first interrupt with some value
-    partial = graph.invoke(
-        Command(resume="weet"), config=config
-    )
+    partial = graph.invoke(Command(resume="weet"), config=config)
     print("partial 3", partial)
     third_history = list(graph.get_state_history(config))
     remaining_interrupts = partial.get("__interrupt__", [])
     assert len(remaining_interrupts) == 1
     assert remaining_interrupts[0].value == "second"
     assert node_counter == 3
-    
+
     # invoke with None again. the history should look the same as
     # the third run
-    partial = graph.invoke(
-        None, config=config
-    )
+    partial = graph.invoke(None, config=config)
     print("partial 4", partial)
     fourth_history = list(graph.get_state_history(config))
     remaining_interrupts = partial.get("__interrupt__", [])
@@ -664,9 +659,7 @@ def test_invoke_interrupted_graph_with_none(
     assert third_history[0].tasks == fourth_history[0].tasks
 
     # resume the graph once more with a real value
-    partial = graph.invoke(
-        Command(resume="bix"), config=config
-    )
+    partial = graph.invoke(Command(resume="bix"), config=config)
     remaining_interrupts = partial.get("__interrupt__", [])
     assert len(remaining_interrupts) == 0
     assert node_counter == 5
