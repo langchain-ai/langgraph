@@ -582,3 +582,91 @@ async def test_node_with_multiple_interrupts_requires_full_resume_async(
     assert "input" in final_result
     assert final_result["input"] == "human_first-human_second-human_third"
     assert node_counter == 5
+
+def test_invoke_interrupted_graph_with_none(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that invoking an interrupted graph with None does not duplicate interrupt writes"""
+
+    node_counter = 0
+
+    class State(TypedDict):
+        input: str
+
+    def double_interrupt_node(state: State):
+        nonlocal node_counter
+        node_counter += 1
+        first = interrupt("first")
+        second = interrupt("second")
+        return {"input": f"{first}-{second}"}
+
+    builder = StateGraph(State)
+    builder.add_node("double_interrupt", double_interrupt_node)
+    builder.add_edge(START, "double_interrupt")
+    builder.add_edge("double_interrupt", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+
+    config = {"configurable": {"thread_id": "test_none_resume"}}
+
+    result = graph.invoke({"input": "start"}, config=config)
+    first_history = list(graph.get_state_history(config))
+    interrupts = result.get("__interrupt__", [])
+    assert len(interrupts) == 1
+    assert node_counter == 1
+
+    # invoke with None. this should execute the node and the history should
+    # look the same as the first run
+    partial = graph.invoke(
+        None, config=config
+    )
+    second_history = list(graph.get_state_history(config))
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    assert remaining_interrupts[0].value == "first"
+    assert node_counter == 2
+
+    # history should look the same for tasks and interrupts
+    print("first_history[0].interrupts: ", first_history[0].interrupts)
+    print("second_history[0].interrupts: ", second_history[0].interrupts)
+    print("first_history[0].tasks: ", first_history[0].tasks)
+    print("second_history[0].tasks: ", second_history[0].tasks)
+    assert first_history[0].interrupts == second_history[0].interrupts
+    assert first_history[0].tasks == second_history[0].tasks
+
+    # now resume the first interrupt with some value
+    partial = graph.invoke(
+        Command(resume="weet"), config=config
+    )
+    print("partial 3", partial)
+    third_history = list(graph.get_state_history(config))
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    assert remaining_interrupts[0].value == "second"
+    assert node_counter == 3
+    
+    # invoke with None again. the history should look the same as
+    # the third run
+    partial = graph.invoke(
+        None, config=config
+    )
+    print("partial 4", partial)
+    fourth_history = list(graph.get_state_history(config))
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 1
+    assert node_counter == 4
+
+    print("\nthird_history[0].interrupts: ", third_history[0].interrupts)
+    print("fourth_history[0].interrupts: ", fourth_history[0].interrupts)
+    print("third_history[0].tasks: ", third_history[0].tasks)
+    print("fourth_history[0].tasks: ", fourth_history[0].tasks)
+    assert third_history[0].interrupts == fourth_history[0].interrupts
+    assert third_history[0].tasks == fourth_history[0].tasks
+
+    # resume the graph once more with a real value
+    partial = graph.invoke(
+        Command(resume="bix"), config=config
+    )
+    remaining_interrupts = partial.get("__interrupt__", [])
+    assert len(remaining_interrupts) == 0
+    assert node_counter == 5

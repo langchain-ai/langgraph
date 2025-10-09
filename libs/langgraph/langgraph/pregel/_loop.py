@@ -316,35 +316,36 @@ class PregelLoop:
             ]
             writes_to_save: WritesT = [
                 w[1:] for w in self.checkpoint_pending_writes if w[0] == task_id
-            ] + list(writes)
+            ] + [
+                (c, v) for c, v in writes if c != RESUME
+            ]
             self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         else:
-            # build map of existing interrupts by interrupt id for this task
+            # build map of existing interrupts for this task for quick lookup
             existing_interrupts_by_id = {  # interrupt id -> list of interrupts
                 v[0].id: v
                 for tid, ch, v in self.checkpoint_pending_writes
                 if tid == task_id and ch == INTERRUPT
             }
-            # check if a resume write exists
-            has_resume = any(ch == RESUME for ch, _ in writes)
-
             writes_to_save = []
             for ch, v in writes:
                 if ch == INTERRUPT:
-                    # merge with existing interrupts if same interrupt id
+                    # we merge new interrupt writes with existing interrupts writes if they
+                    # occured within the same task (which means they have the same interrupt id)
                     new_interrupts = v if isinstance(v, list) else list(v)
                     if new_interrupts and (
                         existing := existing_interrupts_by_id.get(new_interrupts[0].id)
                     ):
-                        # found existing interrupts with same interrupt id
-                        # if a resume write exists, it means this is a new interrupt
-                        # so we are safe to merge it into the existing interrupt writes
-                        v = existing + new_interrupts if has_resume else existing
+                        # if the graph is invoked with None, we will hit the same interrupt
+                        # that was raised before, in this case we don't want to duplicate its write
+                        # so we just keep the existing checkpoint writes
+                        v = existing + new_interrupts if self.input is not None else existing
                     writes_to_save.append((ch, v))
                 else:
+                    # we add non-interrupt writes as-is
                     writes_to_save.append((ch, v))
 
-            # replace all writes for this task_id in one shot
+            # replace all writes for this task_id with the merged writes
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[0] != task_id
             ] + [(task_id, c, v) for c, v in writes_to_save]
@@ -477,6 +478,8 @@ class PregelLoop:
             return False
 
         # prepare next tasks
+        print("checkpoint_pending_writes before: ", self.checkpoint_pending_writes)
+
         self.tasks = prepare_next_tasks(
             self.checkpoint,
             self.checkpoint_pending_writes,
@@ -495,6 +498,8 @@ class PregelLoop:
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
         )
+
+        print("checkpoint_pending_writes after: ", self.checkpoint_pending_writes)
 
         resume_map = self.config.get(CONF, {}).get(CONFIG_KEY_RESUME_MAP, {})
         if resume_map:
