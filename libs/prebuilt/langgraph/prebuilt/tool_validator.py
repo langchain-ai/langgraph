@@ -62,18 +62,6 @@ class ValidationNode(RunnableCallable):
         structured output that conforms to a complex schema without losing the original
         messages and tool IDs (for use in multi-turn conversations).
 
-    Args:
-        schemas: A list of schemas to validate the tool calls with. These can be
-            any of the following:
-            - A pydantic BaseModel class
-            - A BaseTool instance (the args_schema will be used)
-            - A function (a schema will be created from the function signature)
-        format_error: A function that takes an exception, a ToolCall, and a schema
-            and returns a formatted error string. By default, it returns the
-            exception repr and a message to respond after fixing validation errors.
-        name: The name of the node.
-        tags: A list of tags to add to the node.
-
     Returns:
         (Union[Dict[str, List[ToolMessage]], Sequence[ToolMessage]]): A list of ToolMessages with the validated content or error messages.
 
@@ -140,6 +128,20 @@ class ValidationNode(RunnableCallable):
         name: str = "validation",
         tags: Optional[list[str]] = None,
     ) -> None:
+        """Initialize the ValidationNode.
+
+        Args:
+            schemas: A list of schemas to validate the tool calls with. These can be
+                any of the following:
+                - A pydantic BaseModel class
+                - A BaseTool instance (the args_schema will be used)
+                - A function (a schema will be created from the function signature)
+            format_error: A function that takes an exception, a ToolCall, and a schema
+                and returns a formatted error string. By default, it returns the
+                exception repr and a message to respond after fixing validation errors.
+            name: The name of the node.
+            tags: A list of tags to add to the node.
+        """
         super().__init__(self._func, None, name=name, tags=tags, trace=False)
         self._format_error = format_error or _default_format_error
         self.schemas_by_name: Dict[str, Type[BaseModel]] = {}
