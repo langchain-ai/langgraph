@@ -4,6 +4,7 @@ import dataclasses
 import decimal
 import importlib
 import json
+import logging
 import pathlib
 import pickle
 import re
@@ -35,18 +36,31 @@ from langgraph.store.base import Item
 
 LC_REVIVER = Reviver()
 EMPTY_BYTES = b""
+logger = logging.getLogger(__name__)
 
 
 class JsonPlusSerializer(SerializerProtocol):
-    """Serializer that uses ormsgpack, with a fallback to extended JSON serializer."""
+    """Serializer that uses ormsgpack, with optional fallbacks.
+
+    Security note: this serializer is intended for use within the BaseCheckpointSaver
+    class and called within the Pregel loop. It should not be used on untrusted
+    python objects. If an attacker can write directly to your checkpoint database,
+    they may be able to trigger code execution when data is deserialized.
+    """
 
     def __init__(
         self,
         *,
         pickle_fallback: bool = False,
+        allowed_json_modules: Sequence[tuple[str, ...]] | None = None,
         __unpack_ext_hook__: Callable[[int, bytes], Any] | None = None,
     ) -> None:
         self.pickle_fallback = pickle_fallback
+        self._allowed_modules = (
+            {mod_and_name for mod_and_name in allowed_json_modules}
+            if allowed_json_modules
+            else None
+        )
         self._unpack_ext_hook = (
             __unpack_ext_hook__
             if __unpack_ext_hook__ is not None
@@ -155,54 +169,62 @@ class JsonPlusSerializer(SerializerProtocol):
             )
 
     def _reviver(self, value: dict[str, Any]) -> Any:
-        if (
+        if self._allowed_modules and (
             value.get("lc", None) == 2
             and value.get("type", None) == "constructor"
             and value.get("id", None) is not None
         ):
             try:
-                # Get module and class name
-                [*module, name] = value["id"]
-                # Import module
-                mod = importlib.import_module(".".join(module))
-                # Import class
-                cls = getattr(mod, name)
-                # Instantiate class
-                method = value.get("method")
-                if isinstance(method, str):
-                    methods = [getattr(cls, method)]
-                elif isinstance(method, list):
-                    methods = [
-                        cls if method is None else getattr(cls, method)
-                        for method in method
-                    ]
-                else:
-                    methods = [cls]
-                args = value.get("args")
-                kwargs = value.get("kwargs")
-                for method in methods:
-                    try:
-                        if isclass(method) and issubclass(method, BaseException):
-                            return None
-                        if args and kwargs:
-                            return method(*args, **kwargs)
-                        elif args:
-                            return method(*args)
-                        elif kwargs:
-                            return method(**kwargs)
-                        else:
-                            return method()
-                    except Exception:
-                        continue
-            except Exception:
-                return None
+                return self._revive_lc2(value)
+            except InvalidModuleError:
+                logger.warning(f"Invalid module: {value['id']}")
 
         return LC_REVIVER(value)
 
+    def _revive_lc2(self, value) -> Any:
+        if not self._allowed_modules:
+            raise InvalidModuleError("No allowed modules specified")
+        try:
+            # Get module and class name
+            [*module, name] = value["id"]
+            if tuple(value["id"]) not in self._allowed_modules:
+                raise InvalidModuleError(f"Module {value['id']} not allowed")
+
+            # Import module
+            mod = importlib.import_module(".".join(module))
+            # Import class
+            cls = getattr(mod, name)
+            # Instantiate class
+            method = value.get("method")
+            if isinstance(method, str):
+                methods = [getattr(cls, method)]
+            elif isinstance(method, list):
+                methods = [
+                    cls if method is None else getattr(cls, method) for method in method
+                ]
+            else:
+                methods = [cls]
+            args = value.get("args")
+            kwargs = value.get("kwargs")
+            for method in methods:
+                try:
+                    if isclass(method) and issubclass(method, BaseException):
+                        return None
+                    if args and kwargs:
+                        return method(*args, **kwargs)
+                    elif args:
+                        return method(*args)
+                    elif kwargs:
+                        return method(**kwargs)
+                    else:
+                        return method()
+                except Exception:
+                    continue
+        except Exception:
+            return None
+
     def dumps(self, obj: Any) -> bytes:
-        return json.dumps(obj, default=self._default, ensure_ascii=False).encode(
-            "utf-8", "ignore"
-        )
+        return self.dumps_typed(obj)[1]
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         if obj is None:
@@ -215,14 +237,12 @@ class JsonPlusSerializer(SerializerProtocol):
             try:
                 return "msgpack", _msgpack_enc(obj)
             except ormsgpack.MsgpackEncodeError as exc:
-                if "valid UTF-8" in str(exc):
-                    return "json", self.dumps(obj)
-                elif self.pickle_fallback:
+                if self.pickle_fallback:
                     return "pickle", pickle.dumps(obj)
                 raise exc
 
     def loads(self, data: bytes) -> Any:
-        return json.loads(data, object_hook=self._reviver)
+        return self.loads_typed(("msgpack", data))
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
         type_, data_ = data
@@ -233,7 +253,7 @@ class JsonPlusSerializer(SerializerProtocol):
         elif type_ == "bytearray":
             return bytearray(data_)
         elif type_ == "json":
-            return self.loads(data_)
+            return json.loads(data_, object_hook=self._reviver)
         elif type_ == "msgpack":
             return ormsgpack.unpackb(
                 data_, ext_hook=self._unpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
@@ -661,6 +681,10 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             return arr.reshape(shape, order=order).tolist()
         except Exception:
             return
+
+
+class InvalidModuleError(Exception):
+    pass
 
 
 _option = (
