@@ -480,8 +480,6 @@ class PregelLoop:
             return False
 
         # prepare next tasks
-        print("checkpoint_pending_writes before: ", self.checkpoint_pending_writes)
-
         self.tasks = prepare_next_tasks(
             self.checkpoint,
             self.checkpoint_pending_writes,
@@ -500,8 +498,6 @@ class PregelLoop:
             retry_policy=self.retry_policy,
             cache_policy=self.cache_policy,
         )
-
-        print("checkpoint_pending_writes after: ", self.checkpoint_pending_writes)
 
         resume_map = self.config.get(CONF, {}).get(CONFIG_KEY_RESUME_MAP, {})
         if resume_map:
@@ -592,7 +588,7 @@ class PregelLoop:
         if self.skipped_task_ids:
             # raise early GraphInterrupt for skipped tasks.
             # since we know len(resumes) < len(interrupts) for these tasks, we
-            # can prevent unnecessary node re-execution by raising preemptively
+            # can prevent unnecessary node re-execution by raising early
             interrupts = []
             for task_id, channel, value in self.checkpoint_pending_writes:
                 if channel == INTERRUPT and task_id in self.skipped_task_ids:
