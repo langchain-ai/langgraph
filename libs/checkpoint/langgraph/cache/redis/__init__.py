@@ -177,7 +177,7 @@ class RedisCache(BaseCache[ValueT]):
         else:
             # Clear specific namespaces
             for ns in namespaces:
-                ns_str = ":":join(ns) if ns else ""
+                ns_str = ":".join(ns) if ns else ""
                 pattern = (
                     f"{self.prefix}{ns_str}:*" if ns_str else f"{self.prefix}*"
                 )
@@ -214,7 +214,7 @@ class RedisCache(BaseCache[ValueT]):
                 else:
                     # Clear specific namespaces
                     for ns in namespaces:
-                        ns_str = ":":join(ns) if ns else ""
+                        ns_str = ":".join(ns) if ns else ""
                         pattern = (
                             f"{self.prefix}{ns_str}:*" if ns_str else f"{self.prefix}*"
                         )
