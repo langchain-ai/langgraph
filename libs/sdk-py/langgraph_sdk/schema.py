@@ -523,7 +523,7 @@ class Send(TypedDict):
     input: dict[str, Any] | None
     """Optional dictionary containing the input data to be passed to the node.
 
-    If `None`, the node will be called with no input."""
+    If None, the node will be called with no input."""
 
 
 class Command(TypedDict, total=False):
