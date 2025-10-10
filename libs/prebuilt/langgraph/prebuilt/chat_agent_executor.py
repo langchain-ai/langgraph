@@ -389,6 +389,22 @@ def create_react_agent(
 
             !!! Note
                 Only available with `version="v2"`.
+        pre_structured_response_hook: An optional node to add before the structured response generation.
+            This hook runs only when `response_format` is provided and after the main agent loop has completed.
+            Useful for pre-processing or validating the state before generating the final structured output.
+            Pre-structured response hook must be a callable or a runnable that takes in current graph state and returns a state update.
+
+            !!! Note
+                This hook is only executed when `response_format` is provided. It allows for state modifications
+                or validation before the structured response generation step.
+        post_structured_response_hook: An optional node to add after the structured response generation.
+            This hook runs only when `response_format` is provided and after the structured response has been generated.
+            Useful for post-processing, validation, or additional transformations of the final structured output.
+            Post-structured response hook must be a callable or a runnable that takes in current graph state and returns a state update.
+
+            !!! Note
+                This hook is only executed when `response_format` is provided. It provides access to the generated
+                structured response in the state for additional processing before the agent completes.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
