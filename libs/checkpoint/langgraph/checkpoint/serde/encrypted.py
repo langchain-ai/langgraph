@@ -14,12 +14,6 @@ class EncryptedSerializer(SerializerProtocol):
         self.cipher = cipher
         self.serde = serde
 
-    def dumps(self, obj: Any) -> bytes:
-        return self.serde.dumps(obj)
-
-    def loads(self, data: bytes) -> Any:
-        return self.serde.loads(data)
-
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         """Serialize an object to a tuple (type, bytes) and encrypt the bytes."""
         # serialize data

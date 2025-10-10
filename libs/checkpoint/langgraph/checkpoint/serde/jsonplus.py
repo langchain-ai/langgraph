@@ -181,7 +181,7 @@ class JsonPlusSerializer(SerializerProtocol):
 
         return LC_REVIVER(value)
 
-    def _revive_lc2(self, value) -> Any:
+    def _revive_lc2(self, value: dict[str, Any]) -> Any:
         if not self._allowed_modules:
             raise InvalidModuleError("No allowed modules specified")
         try:
@@ -223,9 +223,6 @@ class JsonPlusSerializer(SerializerProtocol):
         except Exception:
             return None
 
-    def dumps(self, obj: Any) -> bytes:
-        return self.dumps_typed(obj)[1]
-
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         if obj is None:
             return "null", EMPTY_BYTES
@@ -240,9 +237,6 @@ class JsonPlusSerializer(SerializerProtocol):
                 if self.pickle_fallback:
                     return "pickle", pickle.dumps(obj)
                 raise exc
-
-    def loads(self, data: bytes) -> Any:
-        return self.loads_typed(("msgpack", data))
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
         type_, data_ = data
