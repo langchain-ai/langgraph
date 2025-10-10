@@ -1707,7 +1707,7 @@ To debug and test a graph, use [static interrupts](../../concepts/human_in_the_l
 
     # This will run until the breakpoint
     # You can get the state of the graph at this point
-    print(graph.get_state(config))
+    print(graph.get_state(thread))
 
     # You can continue the graph execution by passing in `None` for the input
     for event in graph.stream(None, thread, stream_mode="values"):
@@ -1865,7 +1865,7 @@ To debug and test a graph, use [static interrupts](../../concepts/human_in_the_l
 
     # This will run until the breakpoint
     # You can get the state of the graph at this point
-    print(graph.get_state(config))
+    print(graph.get_state(thread))
 
     # You can continue the graph execution by passing in `None` for the input
     for event in graph.stream(None, thread, stream_mode="values"):
