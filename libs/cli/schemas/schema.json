@@ -774,7 +774,7 @@
         },
         "refresh_on_read": {
           "type": "boolean",
-          "description": "Default behavior for refreshing TTLs on read operations (GET and SEARCH).\n\nIf True, TTLs will be refreshed on read operations (get/search) by default.\nThis can be overridden per-operation by explicitly setting refresh_ttl.\nDefaults to `True` if not configured.\n"
+          "description": "Default behavior for refreshing TTLs on read operations (GET and SEARCH).\n\nIf True, TTLs will be refreshed on read operations (get/search) by default.\nThis can be overridden per-operation by explicitly setting refresh_ttl.\nDefaults to True if not configured.\n"
         },
         "sweep_interval_minutes": {
           "anyOf": [
