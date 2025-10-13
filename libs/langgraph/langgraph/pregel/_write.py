@@ -26,6 +26,32 @@ SKIP_WRITE = object()
 PASSTHROUGH = object()
 
 
+class _Overwrite:
+    """Marker wrapper indicating a direct channel overwrite.
+
+    Use via `overwrite(channel, value)` or `Overwrite(value)`.
+    """
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: Any):
+        self.value = value
+
+
+def Overwrite(value: Any) -> _Overwrite:
+    """Wrap a value to force overwrite a channel, bypassing reducers."""
+    return _Overwrite(value)
+
+
+def overwrite(channel: str, value: Any) -> ChannelWriteEntry:
+    """Convenience factory for a write that overwrites the target channel.
+
+    Example:
+        NodeBuilder().write_to(overwrite("foo", 123))
+    """
+    return ChannelWriteEntry(channel, Overwrite(value))
+
+
 class ChannelWriteEntry(NamedTuple):
     channel: str
     """Channel name to write to."""

@@ -71,6 +71,7 @@ from langgraph.pregel._call import get_runnable_for_task, identifier
 from langgraph.pregel._io import read_channels
 from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
+from langgraph.pregel._write import _Overwrite
 from langgraph.runtime import DEFAULT_RUNTIME, Runtime
 from langgraph.types import (
     All,
@@ -198,8 +199,16 @@ def local_read(
         # apply writes
         local_channels: dict[str, BaseChannel] = {}
         for k in channels:
-            cc = channels[k].copy()
-            cc.update(updated[k])
+            if updated[k]:
+                # If any overwrite is present for this channel, reflect it directly
+                ow = next((v for v in updated[k] if isinstance(v, _Overwrite)), None)
+                if ow is not None:
+                    cc = channels[k].from_checkpoint(ow.value)
+                else:
+                    cc = channels[k].copy()
+                    cc.update(updated[k])
+            else:
+                cc = channels[k].copy()
             local_channels[k] = cc
         # read fresh values
         values = read_channels(local_channels, select)
@@ -277,12 +286,16 @@ def apply_writes(
 
     # Group writes by channel
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
+    overwrite_by_channel: dict[str, Any] = {}
     for task in tasks:
         for chan, val in task.writes:
             if chan in (NO_WRITES, PUSH, RESUME, INTERRUPT, RETURN, ERROR):
-                pass
-            elif chan in channels:
-                pending_writes_by_channel[chan].append(val)
+                continue
+            if chan in channels:
+                if isinstance(val, _Overwrite):
+                    overwrite_by_channel[chan] = val.value
+                else:
+                    pending_writes_by_channel[chan].append(val)
             else:
                 logger.warning(
                     f"Task {task.name} with path {task.path} wrote to unknown channel {chan}, ignoring it."
@@ -290,13 +303,26 @@ def apply_writes(
 
     # Apply writes to channels
     updated_channels: set[str] = set()
-    for chan, vals in pending_writes_by_channel.items():
+    for chan in set(pending_writes_by_channel.keys()) | set(
+        overwrite_by_channel.keys()
+    ):
         if chan in channels:
-            if channels[chan].update(vals) and next_version is not None:
-                checkpoint["channel_versions"][chan] = next_version
-                # unavailable channels can't trigger tasks, so don't add them
+            if chan in overwrite_by_channel:
+                # Overwrite the entire channel value, bypassing reducers.
+                channels[chan] = channels[chan].from_checkpoint(
+                    overwrite_by_channel[chan]
+                )
+                if next_version is not None:
+                    checkpoint["channel_versions"][chan] = next_version
                 if channels[chan].is_available():
                     updated_channels.add(chan)
+            else:
+                vals = pending_writes_by_channel.get(chan, [])
+                if channels[chan].update(vals) and next_version is not None:
+                    checkpoint["channel_versions"][chan] = next_version
+                    # unavailable channels can't trigger tasks, so don't add them
+                    if channels[chan].is_available():
+                        updated_channels.add(chan)
 
     # Channels that weren't updated in this step are notified of a new step
     if bump_step:
