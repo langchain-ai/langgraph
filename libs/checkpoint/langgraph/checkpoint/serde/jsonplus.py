@@ -253,6 +253,8 @@ EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
+EXT_PANDAS_DATAFRAME = 7
+EXT_PANDAS_SERIES = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -476,6 +478,94 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             meta = (obj.dtype.str, obj.shape, order, buf)
             return ormsgpack.Ext(EXT_NUMPY_ARRAY, _msgpack_enc(meta))
 
+    elif (pd_mod := sys.modules.get("pandas")) is not None and isinstance(
+        obj, pd_mod.DataFrame
+    ):
+        # Check if PyArrow is available
+        pa_mod = sys.modules.get("pyarrow")
+        if pa_mod is None:
+            try:
+                import pyarrow as pa  # type: ignore[import-untyped]
+
+                pa_mod = pa
+            except ImportError:
+                pa_mod = None
+
+        if pa_mod is not None:
+            try:
+                # Serialize with PyArrow IPC format
+                table = pa_mod.Table.from_pandas(obj, preserve_index=True)
+                sink = pa_mod.BufferOutputStream()
+                with pa_mod.ipc.new_stream(sink, table.schema) as writer:
+                    writer.write_table(table)
+                buf = sink.getvalue().to_pybytes()
+
+                # Store metadata for better reconstruction
+                metadata = {
+                    "columns_name": (
+                        obj.columns.name if hasattr(obj.columns, "name") else None
+                    ),
+                    "index_name": (
+                        obj.index.name if hasattr(obj.index, "name") else None
+                    ),
+                }
+
+                return ormsgpack.Ext(
+                    EXT_PANDAS_DATAFRAME, _msgpack_enc((buf, metadata))
+                )
+            except Exception:
+                # PyArrow can't handle this DataFrame (e.g., complex object types)
+                # Raise TypeError to trigger pickle_fallback
+                raise TypeError(
+                    f"DataFrame of type {obj.__class__.__name__} cannot be serialized with PyArrow"
+                ) from None
+        # If PyArrow not available, fall through to raise error or pickle
+        raise TypeError(
+            f"DataFrame of type {obj.__class__.__name__} requires PyArrow for serialization"
+        )
+
+    elif (pd_mod := sys.modules.get("pandas")) is not None and isinstance(
+        obj, pd_mod.Series
+    ):
+        pa_mod = sys.modules.get("pyarrow")
+        if pa_mod is None:
+            try:
+                import pyarrow as pa
+
+                pa_mod = pa
+            except ImportError:
+                pa_mod = None
+
+        if pa_mod is not None:
+            try:
+                # Convert Series to DataFrame for consistent Arrow handling
+                df = obj.to_frame()
+                table = pa_mod.Table.from_pandas(df, preserve_index=True)
+
+                sink = pa_mod.BufferOutputStream()
+                with pa_mod.ipc.new_stream(sink, table.schema) as writer:
+                    writer.write_table(table)
+                buf = sink.getvalue().to_pybytes()
+
+                # Store series metadata
+                metadata = {
+                    "name": obj.name,
+                    "index_name": (
+                        obj.index.name if hasattr(obj.index, "name") else None
+                    ),
+                }
+
+                return ormsgpack.Ext(EXT_PANDAS_SERIES, _msgpack_enc((buf, metadata)))
+            except Exception:
+                # Raise TypeError to trigger pickle_fallback
+                raise TypeError(
+                    f"Series of type {obj.__class__.__name__} cannot be serialized with PyArrow"
+                ) from None
+        # If PyArrow not available, fall through to raise error or pickle
+        raise TypeError(
+            f"Series of type {obj.__class__.__name__} requires PyArrow for serialization"
+        )
+
     elif isinstance(obj, BaseException):
         return repr(obj)
     else:
@@ -568,6 +658,91 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return arr.reshape(shape, order=order)
         except Exception:
             return
+    elif code == EXT_PANDAS_DATAFRAME:
+        # Deserialize pandas DataFrame from PyArrow IPC format
+        try:
+            # Lazy import pandas and pyarrow
+            _pd = sys.modules.get("pandas")
+            if _pd is None:
+                try:
+                    import pandas as _pd
+                except ImportError:
+                    return  # Fall back if pandas is not available
+
+            _pa = sys.modules.get("pyarrow")
+            if _pa is None:
+                try:
+                    import pyarrow as _pa  # type: ignore[no-redef]
+                except ImportError:
+                    return  # Fall back if pyarrow is not available
+
+            # Unpack the arrow bytes and metadata (ORDER MATTERS: matches serialization)
+            arrow_bytes, metadata = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+
+            # Read Arrow table from IPC bytes
+            reader = _pa.ipc.open_stream(arrow_bytes)  # type: ignore[union-attr]
+            table = reader.read_all()
+
+            # Convert to pandas DataFrame
+            df = table.to_pandas()
+
+            # Restore column names if they were a MultiIndex
+            if metadata.get("columns_name") is not None:
+                df.columns.name = metadata["columns_name"]
+
+            # Restore index name if it was set
+            if metadata.get("index_name") is not None:
+                df.index.name = metadata["index_name"]
+
+            return df
+        except Exception:
+            return  # Fall back on error
+    elif code == EXT_PANDAS_SERIES:
+        # Deserialize pandas Series from PyArrow IPC format
+        try:
+            # Lazy import pandas and pyarrow
+            _pd = sys.modules.get("pandas")
+            if _pd is None:
+                try:
+                    import pandas as _pd
+                except ImportError:
+                    return  # Fall back if pandas is not available
+
+            _pa = sys.modules.get("pyarrow")
+            if _pa is None:
+                try:
+                    import pyarrow as _pa  # type: ignore[no-redef]
+                except ImportError:
+                    return  # Fall back if pyarrow is not available
+
+            # Unpack the arrow bytes and metadata (ORDER MATTERS: matches serialization)
+            arrow_bytes, metadata = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+
+            # Read Arrow table from IPC bytes
+            reader = _pa.ipc.open_stream(arrow_bytes)  # type: ignore[union-attr]
+            table = reader.read_all()
+
+            # Convert to pandas DataFrame first
+            df = table.to_pandas()
+
+            # Extract the Series from the first column
+            series = df.iloc[:, 0]
+
+            # Restore series name
+            if metadata.get("name") is not None:
+                series.name = metadata["name"]
+
+            # Restore index name if it was set
+            if metadata.get("index_name") is not None:
+                series.index.name = metadata["index_name"]
+
+            return series
+        except Exception:
+            return  # Fall back on error
 
 
 def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
@@ -661,6 +836,79 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             return arr.reshape(shape, order=order).tolist()
         except Exception:
             return
+    elif code == EXT_PANDAS_DATAFRAME:
+        # Convert pandas DataFrame to JSON-compatible format
+        try:
+            # Lazy import pandas and pyarrow
+            _pd = sys.modules.get("pandas")
+            if _pd is None:
+                try:
+                    import pandas as _pd
+                except ImportError:
+                    return  # Fall back if pandas is not available
+
+            _pa = sys.modules.get("pyarrow")
+            if _pa is None:
+                try:
+                    import pyarrow as _pa  # type: ignore[no-redef]
+                except ImportError:
+                    return  # Fall back if pyarrow is not available
+
+            # Unpack the arrow bytes and metadata (ORDER MATTERS: matches serialization)
+            arrow_bytes, metadata = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+
+            # Read Arrow table from IPC bytes
+            reader = _pa.ipc.open_stream(arrow_bytes)  # type: ignore[union-attr]
+            table = reader.read_all()
+
+            # Convert to pandas DataFrame
+            df = table.to_pandas()
+
+            # Convert to JSON-compatible dict
+            return df.to_dict(orient="list")
+        except Exception:
+            return  # Fall back on error
+    elif code == EXT_PANDAS_SERIES:
+        # Convert pandas Series to JSON-compatible format
+        try:
+            # Lazy import pandas and pyarrow
+            _pd = sys.modules.get("pandas")
+            if _pd is None:
+                try:
+                    import pandas as _pd
+                except ImportError:
+                    return  # Fall back if pandas is not available
+
+            _pa = sys.modules.get("pyarrow")
+            if _pa is None:
+                try:
+                    import pyarrow as _pa  # type: ignore[no-redef]
+                except ImportError:
+                    return  # Fall back if pyarrow is not available
+
+            # Unpack the arrow bytes and metadata (ORDER MATTERS: matches serialization)
+            arrow_bytes, metadata = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+
+            # Read Arrow table from IPC bytes
+            reader = _pa.ipc.open_stream(arrow_bytes)  # type: ignore[union-attr]
+            table = reader.read_all()
+
+            # Convert to pandas DataFrame first, then extract Series
+            df = table.to_pandas()
+            series = df.iloc[:, 0]
+
+            # Convert to JSON-compatible list
+            return series.tolist()
+        except Exception:
+            return  # Fall back on error
 
 
 _option = (

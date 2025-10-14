@@ -16,6 +16,11 @@ dependencies = [
     "ormsgpack>=1.10.0",
 ]
 
+[project.optional-dependencies]
+arrow = [
+    "pyarrow>=14.0.0",
+]
+
 [project.urls]
 Repository = "https://www.github.com/langchain-ai/langgraph"
 
@@ -32,6 +37,7 @@ dev = [
   "numpy",
   "pandas",
   "pandas-stubs>=2.2.2.240807",
+  "pyarrow>=14.0.0",
   "redis",
 ]
 
