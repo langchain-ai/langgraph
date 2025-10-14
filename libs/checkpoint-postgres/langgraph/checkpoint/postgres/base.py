@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import random
+import warnings
 from collections.abc import Sequence
+from importlib.metadata import version as get_version
 from typing import Any, Optional, cast
 
 from langchain_core.runnables import RunnableConfig
@@ -15,6 +17,18 @@ from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
 
 MetadataInput = Optional[dict[str, Any]]
+
+try:
+    major, minor = get_version("langgraph").split(".")[:2]
+    if int(major) == 0 and int(minor) < 5:
+        warnings.warn(
+            "You're using incompatible versions of langgraph and checkpoint-postgres. Please upgrade langgraph to avoid unexpected behavior.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+except Exception:
+    # skip version check if running from source
+    pass
 
 """
 To add a new migration, add a new string to the MIGRATIONS list.
