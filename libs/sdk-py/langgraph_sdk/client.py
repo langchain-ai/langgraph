@@ -160,7 +160,7 @@ def get_client(
 ) -> LangGraphClient:
     """Create and configure a LangGraphClient.
 
-    The client provides programmatic access to a LangGraph Platform deployment. It supports
+    The client provides programmatic access to LangSmith Deployment. It supports
     both remote servers and local in-process connections (when running inside a LangGraph server).
 
     Args:
