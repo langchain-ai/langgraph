@@ -16,9 +16,14 @@ from typing import (
 )
 from warnings import warn
 
+from langchain_core.load.serializable import Serializable
 from langchain_core.runnables import Runnable, RunnableConfig
-from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from typing_extensions import Unpack, deprecated
+
+# Avoid importing checkpoint modules at runtime to prevent circular imports
+# with serde implementations that import from langgraph.types.
+if TYPE_CHECKING:  # pragma: no cover
+    from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
@@ -516,3 +521,23 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
+
+
+class Overwrite(Serializable):
+    value: Any
+    """The value to overwrite the channel with."""
+
+    def __init__(self, value: Any):
+        """Create an Overwrite.
+
+        Args:
+            value: The value to overwrite the channel with.
+        """
+        super().__init__(value=value)
+
+    @classmethod
+    def is_lc_serializable(cls) -> bool:
+        return True
+
+    def to_json(self) -> dict[str, Any]:
+        return {"__overwrite__": self.value}

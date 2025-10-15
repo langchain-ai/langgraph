@@ -60,6 +60,7 @@ from langgraph.types import (
     Command,
     Durability,
     Interrupt,
+    Overwrite,
     PregelTask,
     RetryPolicy,
     Send,
@@ -8597,3 +8598,77 @@ def test_multiple_writes_same_channel_from_same_node(
             "values": {"foo": ""},
         },
     ]
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_overwrite_basic(sync_checkpointer: BaseCheckpointSaver, as_json: bool) -> None:
+    """Test that a node can use Overwrite to bypass a reducer and write a value directly to the channel."""
+
+    class State(TypedDict):
+        messages: Annotated[list, operator.add]
+
+    def _ow(val: list[str]):
+        return {"__overwrite__": val} if as_json else Overwrite(value=val)
+
+    def node_a(state: State):
+        return {"messages": ["a"]}
+
+    def node_b(state: State):
+        return {"messages": ["b"]}
+
+    def node_c(state: State):
+        return {"messages": _ow(["c"])}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_node("node_c", node_c)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_a", "node_c")
+    builder.add_edge("node_b", END)
+    builder.add_edge("node_c", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"messages": ["START"]}, config)
+    assert result == {"messages": ["c"]}
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_overwrite_concurrent_overwrites_error(
+    sync_checkpointer: BaseCheckpointSaver, as_json: bool
+) -> None:
+    """Test that an error is raised when multiple Overwrite values are encountered in a single step."""
+
+    class State(TypedDict):
+        messages: Annotated[list, operator.add]
+
+    def _ow(val: list[str]):
+        return {"__overwrite__": val} if as_json else Overwrite(value=val)
+
+    def node_a(state: State):
+        return {"messages": ["a"]}
+
+    def node_b(state: State):
+        return {"messages": _ow(["b"])}
+
+    def node_c(state: State):
+        return {"messages": _ow(["c"])}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_node("node_c", node_c)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_a", "node_c")
+    builder.add_edge("node_b", END)
+    builder.add_edge("node_c", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    with pytest.raises(
+        InvalidUpdateError, match="Can receive only one Overwrite value per step."
+    ):
+        graph.invoke({"messages": ["START"]}, config)

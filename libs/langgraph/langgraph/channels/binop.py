@@ -1,12 +1,18 @@
 import collections.abc
-from collections.abc import Callable, Sequence
-from typing import Generic
+from collections.abc import Sequence, Callable
+from typing import Any, Generic
 
 from typing_extensions import NotRequired, Required, Self
 
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
-from langgraph.errors import EmptyChannelError
+from langgraph.errors import (
+    EmptyChannelError,
+    ErrorCode,
+    InvalidUpdateError,
+    create_error_message,
+)
+from langgraph.types import Overwrite
 
 __all__ = ("BinaryOperatorAggregate",)
 
@@ -20,6 +26,14 @@ def _strip_extras(t):  # type: ignore[no-untyped-def]
         return _strip_extras(t.__args__[0])
 
     return t
+
+
+def get_overwrite(value: Any) -> tuple[bool, Any]:
+    if isinstance(value, Overwrite):
+        return True, value.value
+    if isinstance(value, dict) and set(value.keys()) == {"__overwrite__"}:
+        return True, value["__overwrite__"]
+    return False, None
 
 
 class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
@@ -89,7 +103,19 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         if self.value is MISSING:
             self.value = values[0]
             values = values[1:]
+        seen_overwrite: bool = False
         for value in values:
+            is_ow, ow_value = get_overwrite(value)
+            if is_ow:
+                if seen_overwrite:
+                    msg = create_error_message(
+                        message="Can receive only one Overwrite value per step.",
+                        error_code=ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE,
+                    )
+                    raise InvalidUpdateError(msg)
+                self.value = ow_value
+                seen_overwrite = True
+                continue
             self.value = self.operator(self.value, value)
         return True
 
