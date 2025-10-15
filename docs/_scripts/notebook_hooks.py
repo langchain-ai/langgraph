@@ -795,10 +795,16 @@ def on_post_page(html: str, page: Page, config: MkDocsConfig) -> str:
 # Create HTML files for redirects after site dir has been built
 def on_post_build(config):
     use_directory_urls = config.get("use_directory_urls")
+    site_dir = config["site_dir"]
+
+    # Track which paths have explicit redirects
+    redirected_paths = set()
+
+    # Process explicit redirects from REDIRECT_MAP
     for page_old, page_new in REDIRECT_MAP.items():
         # Convert .ipynb to .md for path calculation
         page_old = page_old.replace(".ipynb", ".md")
-        
+
         # Calculate the HTML path for the old page (whether it exists or not)
         if use_directory_urls:
             # With directory URLs: /path/to/page/ becomes /path/to/page/index.html
@@ -812,15 +818,18 @@ def on_post_build(config):
                 old_html_path = page_old[:-3] + ".html"
             else:
                 old_html_path = page_old + ".html"
-        
+
+        # Track this path as redirected
+        redirected_paths.add(old_html_path)
+
         if isinstance(page_new, str) and page_new.startswith("http"):
             # Handle external redirects
-            _write_html(config["site_dir"], old_html_path, page_new)
+            _write_html(site_dir, old_html_path, page_new)
         else:
             # Handle internal redirects
             page_new = page_new.replace(".ipynb", ".md")
             page_new_before_hash, hash, suffix = page_new.partition("#")
-            
+
             # Try to get the new path using File class, but fallback to manual calculation
             try:
                 new_html_path = File(page_new_before_hash, "", "", True).url
@@ -842,5 +851,19 @@ def on_post_build(config):
                     else:
                         new_html_path = page_new_before_hash + ".html"
                 new_html_path += hash + suffix
-            
-            _write_html(config["site_dir"], old_html_path, new_html_path)
+
+            _write_html(site_dir, old_html_path, new_html_path)
+
+    # Create server-side catch-all redirect file for Netlify/Cloudflare Pages
+    # This handles any pages not explicitly mapped in REDIRECT_MAP
+    redirects_content = """# Netlify/Cloudflare Pages redirect rules
+# Specific redirects are handled by individual HTML redirect pages
+# This is the catch-all for any unmapped pages
+
+# Catch-all: redirect any page not explicitly mapped
+/*  https://docs.langchain.com/oss/python/langgraph/overview  301
+"""
+
+    redirects_path = os.path.join(site_dir, "_redirects")
+    with open(redirects_path, "w", encoding="utf-8") as f:
+        f.write(redirects_content)
