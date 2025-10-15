@@ -8640,7 +8640,6 @@ def test_overwrite_basic(sync_checkpointer: BaseCheckpointSaver, as_json: bool) 
     assert result == {"messages": ["b", "d"]}
 
 
-
 @pytest.mark.parametrize("as_json", [False, True])
 def test_overwrite_concurrent_overwrites_error(
     sync_checkpointer: BaseCheckpointSaver, as_json: bool
