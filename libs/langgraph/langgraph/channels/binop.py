@@ -29,6 +29,7 @@ def _strip_extras(t):  # type: ignore[no-untyped-def]
 
 
 def get_overwrite(value: Any) -> tuple[bool, Any]:
+    """Inspects the given value and returns (is_overwrite, overwrite_value)."""
     if isinstance(value, Overwrite):
         return True, value.value
     if isinstance(value, dict) and set(value.keys()) == {"__overwrite__"}:
