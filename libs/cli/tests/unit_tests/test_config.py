@@ -429,7 +429,8 @@ RUN cd '/deps/examples' && uv pip compile pyproject.toml -o 'requirements.txt' -
 # -- End of requirements.txt generation --
 # -- Installing from requirements.txt files --
 COPY --from=outer-graphs_reqs_a requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
-RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/examples/requirements.txt' -r '/deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt'
+RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/examples/requirements.txt'
+RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt'
 # -- End of requirements.txt install --
 # -- Adding local package ../../examples --
 COPY --from=examples . /deps/examples

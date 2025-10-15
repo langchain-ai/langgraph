@@ -1523,9 +1523,11 @@ def python_config_to_docker(
     if all_req_paths:
         # Stabilize order
         all_req_paths = sorted(set(all_req_paths))
+        # Install each requirements.txt sequentially. This mimics the previous sequential solver behavior
+        # which allows to adjust/downgrade packages between installs, so no conflict is raised.
         pip_reqs_str = f"""# -- Installing from requirements.txt files --
 {os.linesep.join(copy_lines)}
-RUN {local_reqs_pip_install} {" ".join("-r '" + p + "'" for p in all_req_paths)}
+{os.linesep.join(f"RUN {local_reqs_pip_install} -r '{p}'" for p in all_req_paths)}
 # -- End of requirements.txt install --"""
 
     # generate lock file if real package and lock file missing

@@ -154,7 +154,8 @@ services:
                 RUN cd '/deps/cli_1' && uv export --no-hashes --no-dev -o 'requirements.txt'
                 # -- End of requirements.txt generation --
                 # -- Installing from requirements.txt files --
-                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/cli/requirements.txt' -r '/deps/cli_1/requirements.txt'
+                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/cli/requirements.txt'
+                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/cli_1/requirements.txt'
                 # -- End of requirements.txt install --
                 # -- Adding local package . --
                 ADD . /deps/cli
