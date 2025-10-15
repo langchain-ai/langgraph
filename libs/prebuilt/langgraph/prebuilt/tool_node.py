@@ -325,6 +325,7 @@ class ToolNode(RunnableCallable):
             bool, str, Callable[..., str], tuple[type[Exception], ...]
         ] = True,
         messages_key: str = "messages",
+        handoff_prefix: str = "transfer_to",
     ) -> None:
         """Initialize the ToolNode with the provided tools and configuration.
 
@@ -341,6 +342,7 @@ class ToolNode(RunnableCallable):
         self.tool_to_store_arg: dict[str, Optional[str]] = {}
         self.handle_tool_errors = handle_tool_errors
         self.messages_key = messages_key
+        self.handoff_prefix = handoff_prefix
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
                 tool_ = create_tool(tool_)
@@ -360,12 +362,45 @@ class ToolNode(RunnableCallable):
         store: Optional[BaseStore],
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
-        config_list = get_config_list(config, len(tool_calls))
-        input_types = [input_type] * len(tool_calls)
-        with get_executor_for_config(config) as executor:
-            outputs = [
-                *executor.map(self._run_one, tool_calls, input_types, config_list)
-            ]
+
+        # 1. Separate handoff and non-handoff tool calls
+        handoff_calls = []
+        non_handoff_calls = []
+        for call in tool_calls:
+            if call["name"].startswith(self.handoff_prefix):
+                handoff_calls.append(call)
+            else:
+                non_handoff_calls.append(call)
+
+        outputs = []
+
+        # 2. Execute non-handoff calls in parallel
+        if non_handoff_calls:
+            config_list = get_config_list(config, len(non_handoff_calls))
+            input_types = [input_type] * len(non_handoff_calls)
+            with get_executor_for_config(config) as executor:
+                non_handoff_outputs = [
+                    *executor.map(
+                        self._run_one, non_handoff_calls, input_types, config_list
+                    )
+                ]
+            outputs.extend(non_handoff_outputs)
+
+        # 3. Only process the first handoff; ignore the rest
+        if handoff_calls:
+            for call in handoff_calls[1:]:
+                outputs.append(
+                    ToolMessage(
+                        content="Multiple handoffs detected, ignoring this one.",
+                        name=call["name"],
+                        tool_call_id=call["id"],
+                        status="error",
+                    )
+                )
+            first = handoff_calls[0]
+            if first.get("args", {}).get("state", {}).get("messages"):
+                first["args"]["state"]["messages"].extend(outputs)
+            outputs.append(self._run_one(first, input_type, config))
 
         return self._combine_tool_outputs(outputs, input_type)
 
@@ -381,9 +416,38 @@ class ToolNode(RunnableCallable):
         store: Optional[BaseStore],
     ) -> Any:
         tool_calls, input_type = self._parse_input(input, store)
-        outputs = await asyncio.gather(
-            *(self._arun_one(call, input_type, config) for call in tool_calls)
+
+        # 1. Separate handoff and non-handoff tool calls
+        handoff_calls = []
+        non_handoff_calls = []
+        for call in tool_calls:
+            if call["name"].startswith(self.handoff_prefix):
+                handoff_calls.append(call)
+            else:
+                non_handoff_calls.append(call)
+
+        outputs = []
+        # 2. Execute non-handoff calls in parallel
+        non_handoff_outputs = await asyncio.gather(
+            *(self._arun_one(call, input_type, config) for call in non_handoff_calls)
         )
+        outputs.extend(non_handoff_outputs)
+
+        # 3. Only process the first handoff; ignore the rest
+        if handoff_calls:
+            for call in handoff_calls[1:]:
+                outputs.append(
+                    ToolMessage(
+                        content="Multiple handoffs detected, ignoring this one.",
+                        name=call["name"],
+                        tool_call_id=call["id"],
+                        status="error",
+                    )
+                )
+            if handoff_calls[0].get("args", {}).get("state", {}).get("messages"):
+                handoff_calls[0]["args"]["state"]["messages"].extend(outputs)
+
+            outputs.append(await self._arun_one(handoff_calls[0], input_type, config))
 
         return self._combine_tool_outputs(outputs, input_type)
 
