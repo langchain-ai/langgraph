@@ -136,7 +136,7 @@ REDIRECT_MAP = {
     "how-tos/autogen-integration.md": "https://docs.langchain.com/langsmith/autogen-integration",
     "cloud/how-tos/use_stream_react.md": "https://docs.langchain.com/langsmith/use-stream-react",
     "cloud/how-tos/generative_ui_react.md": "https://docs.langchain.com/langsmith/generative-ui-react",
-    "concepts/langgraph_platform.md": "https://docs.langchain.com/langsmith/home",
+    "concepts/langgraph_platform.md": "https://docs.langchain.com/langsmith/deployments",
     "concepts/langgraph_components.md": "https://docs.langchain.com/langsmith/components",
     "concepts/langgraph_server.md": "https://docs.langchain.com/langsmith/langgraph-server",
     "concepts/langgraph_data_plane.md": "https://docs.langchain.com/langsmith/data-plane",
