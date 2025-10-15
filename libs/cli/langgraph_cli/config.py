@@ -1331,7 +1331,7 @@ def _metadata_files(spec: ReqGenSpec) -> list[str]:
 
 def _get_reqs_gen_cmd(spec: ReqGenSpec) -> str:
     if spec.package_type == "pyproject" and spec.has_uv_lock:
-        return "uv export --no-hashes --no-dev -o 'requirements.txt'"
+        return "uv export --no-hashes --no-dev --no-emit-local -o 'requirements.txt'"
     if spec.package_type == "pyproject":
         return f"uv pip compile pyproject.toml -o 'requirements.txt' --constraint {CONSTRAINTS_PATH}"
     return (
