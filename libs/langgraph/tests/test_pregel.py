@@ -8614,25 +8614,31 @@ def test_overwrite_basic(sync_checkpointer: BaseCheckpointSaver, as_json: bool) 
         return {"messages": ["a"]}
 
     def node_b(state: State):
-        return {"messages": ["b"]}
+        return {"messages": _ow(["b"])}
 
     def node_c(state: State):
-        return {"messages": _ow(["c"])}
+        return {"messages": ["c"]}
+
+    def node_d(state: State):
+        return {"messages": ["d"]}
 
     builder = StateGraph(State)
     builder.add_node("node_a", node_a)
     builder.add_node("node_b", node_b)
     builder.add_node("node_c", node_c)
+    builder.add_node("node_d", node_d)
     builder.add_edge(START, "node_a")
     builder.add_edge("node_a", "node_b")
     builder.add_edge("node_a", "node_c")
-    builder.add_edge("node_b", END)
-    builder.add_edge("node_c", END)
+    builder.add_edge("node_b", "node_d")
+    builder.add_edge("node_c", "node_d")
 
     graph = builder.compile(checkpointer=sync_checkpointer)
     config = {"configurable": {"thread_id": "1"}}
     result = graph.invoke({"messages": ["START"]}, config)
-    assert result == {"messages": ["c"]}
+    # a, c are overwritten by b, then d is written
+    assert result == {"messages": ["b", "d"]}
+
 
 
 @pytest.mark.parametrize("as_json", [False, True])
