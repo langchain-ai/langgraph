@@ -10,8 +10,6 @@ Note:
 
 from __future__ import annotations
 
-import functools
-import sys
 import typing
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -140,15 +138,6 @@ HandlerResult = None | bool | FilterType
 Handler = Callable[..., Awaitable[HandlerResult]]
 
 T = typing.TypeVar("T")
-
-
-def _slotify(fn: T) -> T:
-    if sys.version_info >= (3, 10):  # noqa: UP036
-        return functools.partial(fn, slots=True)  # type: ignore
-    return fn
-
-
-dataclass = _slotify(dataclass)
 
 
 @typing.runtime_checkable
@@ -362,7 +351,7 @@ Parameters:
 """
 
 
-@dataclass
+@dataclass(slots=True)
 class BaseAuthContext:
     """Base class for authentication context.
 
@@ -378,7 +367,7 @@ class BaseAuthContext:
 
 
 @typing.final
-@dataclass
+@dataclass(slots=True)
 class AuthContext(BaseAuthContext):
     """Complete authentication context with resource and action information.
 

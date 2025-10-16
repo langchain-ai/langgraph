@@ -93,7 +93,6 @@ StreamWriter = Callable[[Any], None]
 Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using `stream_mode="custom"`."""
 
-_DC_SLOTS = {"slots": True}
 _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 
 
@@ -138,7 +137,7 @@ _DEFAULT_INTERRUPT_ID = "placeholder-id"
 
 
 @final
-@dataclass(init=False, **_DC_SLOTS)
+@dataclass(init=False, slots=True)
 class Interrupt:
     """Information about an interrupt that occurred in a node.
 
