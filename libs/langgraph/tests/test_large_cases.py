@@ -4026,7 +4026,9 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": AnyStr(),
                     "name": "rewrite_query",
-                    "result": [("query", "query: what is weather in sf")],
+                    "result": {
+                        "query": "query: what is weather in sf",
+                    },
                     "error": None,
                     "interrupts": [],
                 },
@@ -4074,7 +4076,9 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": AnyStr(),
                     "name": "retriever_two",
-                    "result": [("docs", ["doc3", "doc4"])],
+                    "result": {
+                        "docs": ["doc3", "doc4"],
+                    },
                     "error": None,
                     "interrupts": [],
                 },
@@ -4093,7 +4097,9 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": AnyStr(),
                     "name": "retriever_one",
-                    "result": [("docs", ["doc1", "doc2"])],
+                    "result": {
+                        "docs": ["doc1", "doc2"],
+                    },
                     "error": None,
                     "interrupts": [],
                 },
@@ -4133,7 +4139,9 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": AnyStr(),
                     "name": "qa",
-                    "result": [("answer", "doc1,doc2,doc3,doc4")],
+                    "result": {
+                        "answer": "doc1,doc2,doc3,doc4",
+                    },
                     "error": None,
                     "interrupts": [],
                 },

@@ -404,6 +404,16 @@ def get_checkpoint_metadata(
     return metadata
 
 
+def get_serializable_checkpoint_metadata(
+    config: RunnableConfig, metadata: CheckpointMetadata
+) -> CheckpointMetadata:
+    """Get checkpoint metadata in a backwards-compatible manner."""
+    checkpoint_metadata = get_checkpoint_metadata(config, metadata)
+    if "writes" in checkpoint_metadata:
+        checkpoint_metadata.pop("writes")
+    return checkpoint_metadata
+
+
 """
 Mapping from error type to error index.
 Regular writes just map to their index in the list of writes being saved.

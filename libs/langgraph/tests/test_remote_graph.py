@@ -864,7 +864,7 @@ async def test_ainvoke():
 
 
 @pytest.mark.skip(
-    "Unskip this test to manually test the LangGraph Platform integration"
+    "Unskip this test to manually test the LangSmith Deployment integration"
 )
 @pytest.mark.anyio
 async def test_langgraph_cloud_integration():
