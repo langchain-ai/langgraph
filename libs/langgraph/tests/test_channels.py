@@ -1,6 +1,5 @@
 import operator
 from collections.abc import Sequence
-from typing import Union
 
 import pytest
 
