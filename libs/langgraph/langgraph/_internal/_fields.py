@@ -15,6 +15,12 @@ from langgraph._internal._typing import MISSING
 def _is_optional_type(type_: Any) -> bool:
     """Check if a type is Optional."""
 
+    # Handle new union syntax (PEP 604): str | None
+    if isinstance(type_, types.UnionType):
+        return any(
+            arg is type(None) or _is_optional_type(arg) for arg in type_.__args__
+        )
+
     if hasattr(type_, "__origin__") and hasattr(type_, "__args__"):
         origin = get_origin(type_)
         if origin is Optional:
