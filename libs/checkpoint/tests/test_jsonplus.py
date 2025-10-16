@@ -416,7 +416,15 @@ def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
     serde = JsonPlusSerializer(pickle_fallback=True)
 
     dumped = serde.dumps_typed(df)
-    assert dumped[0] == "pickle"
+    # DataFrames with complex object types (mixed: list, dict, etc.) fall back to pickle
+    # All other types can be serialized efficiently with msgpack via PyArrow
+    has_mixed_objects = any(
+        df[col].dtype == object and any(isinstance(v, (list, dict)) for v in df[col])
+        for col in df.columns
+        if col in df.columns
+    )
+    expected_format = "pickle" if has_mixed_objects else "msgpack"
+    assert dumped[0] == expected_format
     result = serde.loads_typed(dumped)
     assert result.equals(df)
 
@@ -465,7 +473,13 @@ def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
     serde = JsonPlusSerializer(pickle_fallback=True)
     dumped = serde.dumps_typed(series)
 
-    assert dumped[0] == "pickle"
+    # Series with complex object types (mixed: list, dict, etc.) fall back to pickle
+    # All other types can be serialized efficiently with msgpack via PyArrow
+    has_mixed_objects = series.dtype == object and any(
+        isinstance(v, (list, dict)) for v in series
+    )
+    expected_format = "pickle" if has_mixed_objects else "msgpack"
+    assert dumped[0] == expected_format
     result = serde.loads_typed(dumped)
 
     assert result.equals(series)

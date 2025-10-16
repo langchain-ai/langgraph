@@ -182,3 +182,4 @@ Chinook.db
 .turbo
 .editorconfig
 .scratch
+.venv-pandas-dev/
