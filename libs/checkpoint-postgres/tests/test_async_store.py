@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import itertools
-import sys
 import uuid
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
