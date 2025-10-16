@@ -2545,7 +2545,7 @@ async def test_send_dedupe_on_resume(
     assert builder.nodes["2"].runnable.func.ticks == 3
     assert builder.nodes["flaky"].runnable.func.ticks == 1
     # resume execution
-    assert await graph.ainvoke(None, thread1, durability=durability) == [
+    assert await graph.ainvoke(Command(resume=""), thread1, durability=durability) == [
         "0",
         "1",
         "3.1",

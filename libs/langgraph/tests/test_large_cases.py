@@ -4726,7 +4726,7 @@ def test_send_dedupe_on_resume(
     assert len(history) == (4 if durability != "exit" else 1)
 
     # resume execution
-    assert graph.invoke(None, thread1, durability=durability) == [
+    assert graph.invoke(Command(resume=""), thread1, durability=durability) == [
         "0",
         "1",
         "3.1",

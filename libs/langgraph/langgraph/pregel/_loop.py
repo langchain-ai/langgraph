@@ -500,7 +500,7 @@ class PregelLoop:
         )
 
         resume_map = self.config.get(CONF, {}).get(CONFIG_KEY_RESUME_MAP, {})
-        if resume_map:
+        if resume_map or self.input is None:
             skipped_interrupt_ids = self._pending_interrupts() - set(resume_map)
             self.skipped_task_ids = {
                 task_id
