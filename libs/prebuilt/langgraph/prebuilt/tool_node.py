@@ -34,6 +34,7 @@ Typical Usage:
 import asyncio
 import inspect
 import json
+import types
 from collections.abc import Callable, Sequence
 from copy import copy, deepcopy
 from dataclasses import replace
@@ -200,7 +201,8 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
         type_hints = get_type_hints(handler)
         if first_param.name in type_hints:
             origin = get_origin(first_param.annotation)
-            if origin is Union:
+            # Handle both typing.Union and types.UnionType (Python 3.10+ X | Y syntax)
+            if origin is Union or origin is types.UnionType:
                 args = get_args(first_param.annotation)
                 if all(issubclass(arg, Exception) for arg in args):
                     return tuple(args)
