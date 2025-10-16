@@ -320,7 +320,7 @@ class PregelLoop:
             self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         else:
             # build map of existing interrupts for this task: interrupt id -> list of interrupts
-            existing_interrupts_by_id: dict[str, list[Interrupt]] = {
+            existing_interrupts_by_id: dict[str, list[Any]] = {
                 v[0].id: v
                 for tid, ch, v in self.checkpoint_pending_writes
                 if tid == task_id and ch == INTERRUPT
