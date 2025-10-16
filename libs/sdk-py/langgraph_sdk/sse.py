@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
-from typing import Union
 
 import httpx
 import orjson
 
 from langgraph_sdk.schema import StreamPart
 
-BytesLike = Union[bytes, bytearray, memoryview]
+BytesLike = bytes | bytearray | memoryview
 
 
 class BytesLineDecoder:

@@ -8,16 +8,20 @@ import queue
 import warnings
 import weakref
 from collections import defaultdict, deque
-from collections.abc import AsyncIterator, Awaitable, Iterator, Mapping, Sequence
+from collections.abc import (
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Iterator,
+    Mapping,
+    Sequence,
+)
 from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass
 from typing import (
     Any,
-    Callable,
     Generic,
-    Optional,
-    Union,
     cast,
     get_type_hints,
 )
@@ -149,7 +153,7 @@ except ImportError:
 
 __all__ = ("NodeBuilder", "Pregel")
 
-_WriteValue = Union[Callable[[Input], Output], Any]
+_WriteValue = Callable[[Input], Output] | Any
 
 
 class NodeBuilder:
@@ -2561,7 +2565,7 @@ class Pregel(
                 config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
-                ns_ = cast(Optional[str], config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(
                         stream.put,
@@ -2846,7 +2850,7 @@ class Pregel(
             # set up messages stream mode
             if "messages" in stream_modes:
                 # namespace can be None in a root level graph?
-                ns_ = cast(Optional[str], config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(
                         stream_put,

@@ -4,7 +4,8 @@ import ast
 import inspect
 import re
 import textwrap
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from langchain_core.runnables import Runnable, RunnableLambda, RunnableSequence
 from langgraph.checkpoint.base import ChannelVersions

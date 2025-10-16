@@ -5,9 +5,9 @@ import logging
 import random
 import sys
 import time
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
-from typing import Any, Callable
+from typing import Any
 
 from langgraph._internal._config import patch_configurable
 from langgraph._internal._constants import (

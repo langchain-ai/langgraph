@@ -3,11 +3,10 @@ from __future__ import annotations
 import functools
 import inspect
 import warnings
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import (
     Any,
-    Callable,
     Generic,
     TypeVar,
     cast,

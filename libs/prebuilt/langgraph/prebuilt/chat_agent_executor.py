@@ -1,15 +1,11 @@
 import inspect
 import warnings
+from collections.abc import Awaitable, Callable, Sequence
 from typing import (
+    Annotated,
     Any,
-    Awaitable,
-    Callable,
     Literal,
-    Optional,
-    Sequence,
-    Type,
     TypeVar,
-    Union,
     cast,
     get_type_hints,
 )
@@ -46,12 +42,12 @@ from langgraph.types import Checkpointer, Send
 from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 from pydantic import BaseModel
-from typing_extensions import Annotated, NotRequired, TypedDict, deprecated
+from typing_extensions import NotRequired, TypedDict, deprecated
 
 from langgraph.prebuilt.tool_node import ToolNode
 
-StructuredResponse = Union[dict, BaseModel]
-StructuredResponseSchema = Union[dict, type[BaseModel]]
+StructuredResponse = dict | BaseModel
+StructuredResponseSchema = dict | type[BaseModel]
 
 
 @deprecated(
@@ -112,17 +108,17 @@ with warnings.catch_warnings():
         structured_response: StructuredResponse
 
 
-StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
-StateSchemaType = Type[StateSchema]
+StateSchema = TypeVar("StateSchema", bound=AgentState | AgentStatePydantic)
+StateSchemaType = type[StateSchema]
 
 PROMPT_RUNNABLE_NAME = "Prompt"
 
-Prompt = Union[
-    SystemMessage,
-    str,
-    Callable[[StateSchema], LanguageModelInput],
-    Runnable[StateSchema, LanguageModelInput],
-]
+Prompt = (
+    SystemMessage
+    | str
+    | Callable[[StateSchema], LanguageModelInput]
+    | Runnable[StateSchema, LanguageModelInput]
+)
 
 
 def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
@@ -133,7 +129,7 @@ def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
     )
 
 
-def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
+def _get_prompt_runnable(prompt: Prompt | None) -> Runnable:
     prompt_runnable: Runnable
     if prompt is None:
         prompt_runnable = RunnableCallable(
@@ -275,36 +271,34 @@ def _validate_chat_history(
     category=LangGraphDeprecatedSinceV10,
 )
 def create_react_agent(
-    model: Union[
-        str,
-        LanguageModelLike,
-        Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
-        Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
-        Callable[
-            [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]
-        ],
-        Callable[
-            [StateSchema, Runtime[ContextT]],
-            Awaitable[Runnable[LanguageModelInput, BaseMessage]],
-        ],
+    model: str
+    | LanguageModelLike
+    | Callable[[StateSchema, Runtime[ContextT]], BaseChatModel]
+    | Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]]
+    | Callable[
+        [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]
+    ]
+    | Callable[
+        [StateSchema, Runtime[ContextT]],
+        Awaitable[Runnable[LanguageModelInput, BaseMessage]],
     ],
-    tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
+    tools: Sequence[BaseTool | Callable | dict[str, Any]] | ToolNode,
     *,
-    prompt: Optional[Prompt] = None,
-    response_format: Optional[
-        Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
-    ] = None,
-    pre_model_hook: Optional[RunnableLike] = None,
-    post_model_hook: Optional[RunnableLike] = None,
-    state_schema: Optional[StateSchemaType] = None,
-    context_schema: Optional[Type[Any]] = None,
-    checkpointer: Optional[Checkpointer] = None,
-    store: Optional[BaseStore] = None,
-    interrupt_before: Optional[list[str]] = None,
-    interrupt_after: Optional[list[str]] = None,
+    prompt: Prompt | None = None,
+    response_format: StructuredResponseSchema
+    | tuple[str, StructuredResponseSchema]
+    | None = None,
+    pre_model_hook: RunnableLike | None = None,
+    post_model_hook: RunnableLike | None = None,
+    state_schema: StateSchemaType | None = None,
+    context_schema: type[Any] | None = None,
+    checkpointer: Checkpointer | None = None,
+    store: BaseStore | None = None,
+    interrupt_before: list[str] | None = None,
+    interrupt_after: list[str] | None = None,
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
-    name: Optional[str] = None,
+    name: str | None = None,
     **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
@@ -572,7 +566,7 @@ def create_react_agent(
                 tool_classes + llm_builtin_tools  # type: ignore[operator]
             )
 
-        static_model: Optional[Runnable] = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
+        static_model: Runnable | None = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
     else:
         # For dynamic models, we'll create the runnable at runtime
         static_model = None
@@ -813,7 +807,7 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: StateSchema) -> Union[str, list[Send]]:
+    def should_continue(state: StateSchema) -> str | list[Send]:
         messages = _get_state_value(state, "messages")
         last_message = messages[-1]
         # If there is no function call, then we finish
@@ -895,7 +889,7 @@ def create_react_agent(
 
     if post_model_hook is not None:
 
-        def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
+        def post_model_hook_router(state: StateSchema) -> str | list[Send]:
             """Route to the next node after post_model_hook.
 
             Routes to one of:

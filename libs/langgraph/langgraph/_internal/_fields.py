@@ -4,10 +4,10 @@ import dataclasses
 import types
 import weakref
 from collections.abc import Generator, Sequence
-from typing import Annotated, Any, Optional, Union, get_type_hints
+from typing import Annotated, Any, Optional, Union, get_origin, get_type_hints
 
 from pydantic import BaseModel
-from typing_extensions import NotRequired, ReadOnly, Required, get_origin
+from typing_extensions import NotRequired, ReadOnly, Required
 
 from langgraph._internal._typing import MISSING
 

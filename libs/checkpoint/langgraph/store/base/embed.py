@@ -11,8 +11,8 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
-from collections.abc import Awaitable, Sequence
-from typing import Any, Callable
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Any
 
 from langchain_core.embeddings import Embeddings
 

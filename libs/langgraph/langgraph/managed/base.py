@@ -3,10 +3,9 @@ from inspect import isclass
 from typing import (
     Any,
     Generic,
+    TypeGuard,
     TypeVar,
 )
-
-from typing_extensions import TypeGuard
 
 from langgraph._internal._scratchpad import PregelScratchpad
 

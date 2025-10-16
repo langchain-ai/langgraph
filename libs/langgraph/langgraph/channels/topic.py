@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from typing import Any, Generic, Union
+from typing import Any, Generic
 
 from typing_extensions import Self
 
@@ -22,7 +22,7 @@ def _flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:
 
 class Topic(
     Generic[Value],
-    BaseChannel[Sequence[Value], Union[Value, list[Value]], list[Value]],
+    BaseChannel[Sequence[Value], Value | list[Value], list[Value]],
 ):
     """A configurable PubSub Topic.
 
@@ -51,7 +51,7 @@ class Topic(
     @property
     def UpdateType(self) -> Any:
         """The type of the update received by the channel."""
-        return Union[self.typ, list[self.typ]]  # type: ignore[name-defined]
+        return self.typ | list[self.typ]  # type: ignore[name-defined]
 
     def copy(self) -> Self:
         """Return a copy of the channel."""

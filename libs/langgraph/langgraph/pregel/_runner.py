@@ -5,15 +5,19 @@ import concurrent.futures
 import threading
 import time
 import weakref
-from collections.abc import AsyncIterator, Awaitable, Iterable, Iterator, Sequence
+from collections.abc import (
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Iterable,
+    Iterator,
+    Sequence,
+)
 from functools import partial
 from typing import (
     Any,
-    Callable,
     Generic,
-    Optional,
     TypeVar,
-    Union,
     cast,
 )
 
@@ -63,7 +67,7 @@ SKIP_RERAISE_SET: weakref.WeakSet[concurrent.futures.Future | asyncio.Future] = 
 )
 
 
-class FuturesDict(Generic[F, E], dict[F, Optional[PregelExecutableTask]]):
+class FuturesDict(Generic[F, E], dict[F, PregelExecutableTask | None]):
     event: E
     callback: weakref.ref[Callable[[PregelExecutableTask, BaseException | None], None]]
     counter: int
@@ -602,7 +606,7 @@ def _call(
             # so we should not re-raise at the end of the tick
             SKIP_RERAISE_SET.add(fut)
             futures()[fut] = next_task  # type: ignore[index]
-    fut = cast(Union[asyncio.Future, concurrent.futures.Future], fut)
+    fut = cast(asyncio.Future | concurrent.futures.Future, fut)
     # return a chained future to ensure commit() callback is called
     # before the returned future is resolved, to ensure stream order etc
     return chain_future(fut, concurrent.futures.Future())

@@ -57,17 +57,15 @@ Values:
     - reject: Reject the operation
 """
 
-FilterType = typing.Union[
+FilterType = (
     dict[
         str,
-        typing.Union[
-            str,
-            dict[typing.Literal["$eq", "$contains"], str],
-            dict[typing.Literal["$contains"], list[str]],
-        ],
-    ],
-    dict[str, str],
-]
+        str
+        | dict[typing.Literal["$eq", "$contains"], str]
+        | dict[typing.Literal["$contains"], list[str]],
+    ]
+    | dict[str, str]
+)
 """Response type for authorization handlers.
 
 Supports exact matches and operators:
@@ -132,7 +130,7 @@ Keys must be strings, values can be any JSON-serializable type.
     ```
 """
 
-HandlerResult = typing.Union[None, bool, FilterType]
+HandlerResult = None | bool | FilterType
 """The result of a handler can be:
     * None | True: accept the request.
     * False: reject the request with a 403 error
@@ -275,9 +273,11 @@ class StudioUser:
 Authenticator = Callable[
     ...,
     Awaitable[
-        typing.Union[
-            MinimalUser, str, BaseUser, MinimalUserDict, typing.Mapping[str, typing.Any]
-        ],
+        MinimalUser
+        | str
+        | BaseUser
+        | MinimalUserDict
+        | typing.Mapping[str, typing.Any],
     ],
 ]
 """Type for authentication functions.
@@ -948,9 +948,9 @@ class on:
     class threads:
         """Types for thread-related operations."""
 
-        value = typing.Union[
-            ThreadsCreate, ThreadsRead, ThreadsUpdate, ThreadsDelete, ThreadsSearch
-        ]
+        value = (
+            ThreadsCreate | ThreadsRead | ThreadsUpdate | ThreadsDelete | ThreadsSearch
+        )
 
         class create:
             """Type for thread creation parameters."""
@@ -985,13 +985,13 @@ class on:
     class assistants:
         """Types for assistant-related operations."""
 
-        value = typing.Union[
-            AssistantsCreate,
-            AssistantsRead,
-            AssistantsUpdate,
-            AssistantsDelete,
-            AssistantsSearch,
-        ]
+        value = (
+            AssistantsCreate
+            | AssistantsRead
+            | AssistantsUpdate
+            | AssistantsDelete
+            | AssistantsSearch
+        )
 
         class create:
             """Type for assistant creation parameters."""
@@ -1021,9 +1021,7 @@ class on:
     class crons:
         """Types for cron-related operations."""
 
-        value = typing.Union[
-            CronsCreate, CronsRead, CronsUpdate, CronsDelete, CronsSearch
-        ]
+        value = CronsCreate | CronsRead | CronsUpdate | CronsDelete | CronsSearch
 
         class create:
             """Type for cron creation parameters."""
@@ -1053,9 +1051,7 @@ class on:
     class store:
         """Types for store-related operations."""
 
-        value = typing.Union[
-            StoreGet, StoreSearch, StoreListNamespaces, StorePut, StoreDelete
-        ]
+        value = StoreGet | StoreSearch | StoreListNamespaces | StorePut | StoreDelete
 
         class put:
             """Type for store put parameters."""

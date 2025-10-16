@@ -1,10 +1,10 @@
 import functools
 import sys
 import uuid
+from collections.abc import Callable
 from typing import (
     Annotated,
     Any,
-    Callable,
     ForwardRef,
     Literal,
     Optional,
@@ -27,6 +27,8 @@ from langgraph._internal._runnable import is_async_callable, is_async_generator
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
+
+# ruff: noqa: UP045, UP007
 
 pytestmark = pytest.mark.anyio
 
@@ -151,14 +153,10 @@ def test_is_optional_type():
     assert not _is_optional_type(Literal[1, 2, 3])
     assert _is_optional_type(Optional[list[int]])
     assert _is_optional_type(Optional[dict[str, int]])
-    assert not _is_optional_type(list[Optional[int]])
-    assert _is_optional_type(Union[Optional[str], Optional[int]])
-    assert _is_optional_type(
-        Union[
-            Union[Optional[str], Optional[int]], Union[Optional[float], Optional[dict]]
-        ]
-    )
-    assert not _is_optional_type(Union[Union[str, int], Union[float, dict]])
+    assert not _is_optional_type(list[int | None])
+    assert _is_optional_type(Union[str | None, int | None])
+    assert _is_optional_type(Union[str | None | int | None, float | None | dict | None])
+    assert not _is_optional_type(Union[str | int, float | dict])
 
     assert _is_optional_type(Union[int, None])
     assert _is_optional_type(Union[str, None, int])
@@ -176,31 +174,31 @@ def test_is_optional_type():
     assert _is_optional_type(Optional[ForwardRef("MyClass")])
     assert not _is_optional_type(ForwardRef("MyClass"))
 
-    assert _is_optional_type(Optional[Union[list[int], dict[str, Optional[int]]]])
-    assert not _is_optional_type(Union[list[int], dict[str, Optional[int]]])
+    assert _is_optional_type(Optional[list[int] | dict[str, int | None]])
+    assert not _is_optional_type(Union[list[int], dict[str, int | None]])
 
     assert _is_optional_type(Optional[Callable[[int], str]])
-    assert not _is_optional_type(Callable[[int], Optional[str]])
+    assert not _is_optional_type(Callable[[int], str | None])
 
     T = TypeVar("T")
     assert _is_optional_type(Optional[T])
     assert not _is_optional_type(T)
 
-    U = TypeVar("U", bound=Optional[T])  # type: ignore
+    U = TypeVar("U", bound=T | None)  # type: ignore
     assert _is_optional_type(U)
 
 
 def test_is_required():
     class MyBaseTypedDict(TypedDict):
-        val_1: Required[Optional[str]]
+        val_1: Required[str | None]
         val_2: Required[str]
         val_3: NotRequired[str]
-        val_4: NotRequired[Optional[str]]
+        val_4: NotRequired[str | None]
         val_5: Annotated[NotRequired[int], "foo"]
         val_6: NotRequired[Annotated[int, "foo"]]
         val_7: Annotated[Required[int], "foo"]
         val_8: Required[Annotated[int, "foo"]]
-        val_9: Optional[str]
+        val_9: str | None
         val_10: str
 
     annos = MyBaseTypedDict.__annotations__
@@ -218,8 +216,8 @@ def test_is_required():
 
     class MyChildDict(MyBaseTypedDict):
         val_11: int
-        val_11b: Optional[int]
-        val_11c: Union[int, None, str]
+        val_11b: int | None
+        val_11c: int | None | str
 
     class MyGrandChildDict(MyChildDict, total=False):
         val_12: int

@@ -19,7 +19,6 @@ from typing import (
     Literal,
     NamedTuple,
     TypedDict,
-    Union,
     cast,
 )
 
@@ -302,7 +301,7 @@ class SearchOp(NamedTuple):
 
 
 # Type representing a namespace path that can include wildcards
-NamespacePath = tuple[Union[str, Literal["*"]], ...]
+NamespacePath = tuple[str | Literal["*"], ...]
 """A tuple representing a namespace path that can include wildcards.
 
 ???+ example "Examples"
@@ -513,8 +512,8 @@ class PutOp(NamedTuple):
     """
 
 
-Op = Union[GetOp, SearchOp, PutOp, ListNamespacesOp]
-Result = Union[Item, list[Item], list[SearchItem], list[tuple[str, ...]], None]
+Op = GetOp | SearchOp | PutOp | ListNamespacesOp
+Result = Item | list[Item] | list[SearchItem] | list[tuple[str, ...]] | None
 
 
 class InvalidNamespaceError(ValueError):
