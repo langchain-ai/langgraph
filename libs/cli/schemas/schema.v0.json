@@ -407,7 +407,7 @@
       "properties": {
         "disable_studio_auth": {
           "type": "boolean",
-          "description": "Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio.\n\nDefaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header\nvalue is a valid API key for the deployment's workspace. If True, all requests will go through your custom\nauthentication logic, regardless of origin of the request.\n"
+          "description": "Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio.\n\nDefaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header\nvalue is a valid API key for the deployment's workspace. If `True`, all requests will go through your custom\nauthentication logic, regardless of origin of the request.\n"
         },
         "openapi": {
           "$ref": "#/$defs/SecurityConfig",
@@ -555,11 +555,11 @@
         },
         "disable_assistants": {
           "type": "boolean",
-          "description": "Optional. If True, /assistants routes are removed from the server.\n\nDefault is False (meaning /assistants is enabled).\n"
+          "description": "Optional. If `True`, /assistants routes are removed from the server.\n\nDefault is False (meaning /assistants is enabled).\n"
         },
         "disable_mcp": {
           "type": "boolean",
-          "description": "Optional. If True, /mcp routes are removed, disabling the MCP server.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /mcp routes are removed, disabling the MCP server.\n\nDefault is False.\n"
         },
         "disable_meta": {
           "type": "boolean",
@@ -567,19 +567,19 @@
         },
         "disable_runs": {
           "type": "boolean",
-          "description": "Optional. If True, /runs routes are removed.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /runs routes are removed.\n\nDefault is False.\n"
         },
         "disable_store": {
           "type": "boolean",
-          "description": "Optional. If True, /store routes are removed, disabling direct store interactions via HTTP.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /store routes are removed, disabling direct store interactions via HTTP.\n\nDefault is False.\n"
         },
         "disable_threads": {
           "type": "boolean",
-          "description": "Optional. If True, /threads routes are removed.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /threads routes are removed.\n\nDefault is False.\n"
         },
         "enable_custom_route_auth": {
           "type": "boolean",
-          "description": "Optional. If True, authentication is enabled for custom routes,\nnot just the routes that are protected by default.\n(Routes protected by default include /assistants, /threads, and /runs).\n\nDefault is False. This flag only affects authentication behavior\nif `app` is provided and contains custom routes.\n"
+          "description": "Optional. If `True`, authentication is enabled for custom routes,\nnot just the routes that are protected by default.\n(Routes protected by default include /assistants, /threads, and /runs).\n\nDefault is False. This flag only affects authentication behavior\nif `app` is provided and contains custom routes.\n"
         },
         "logging_headers": {
           "anyOf": [
@@ -655,7 +655,7 @@
       "properties": {
         "allow_credentials": {
           "type": "boolean",
-          "description": "Optional. If True, cross-origin requests can include credentials (cookies, auth headers).\n\nDefault False to avoid accidentally exposing secured endpoints to untrusted sites.\n"
+          "description": "Optional. If `True`, cross-origin requests can include credentials (cookies, auth headers).\n\nDefault False to avoid accidentally exposing secured endpoints to untrusted sites.\n"
         },
         "allow_headers": {
           "type": "array",
@@ -774,7 +774,7 @@
         },
         "refresh_on_read": {
           "type": "boolean",
-          "description": "Default behavior for refreshing TTLs on read operations (GET and SEARCH).\n\nIf True, TTLs will be refreshed on read operations (get/search) by default.\nThis can be overridden per-operation by explicitly setting refresh_ttl.\nDefaults to True if not configured.\n"
+          "description": "Default behavior for refreshing TTLs on read operations (`GET` and `SEARCH`).\n\nIf `True`, TTLs will be refreshed on read operations (get/search) by default.\nThis can be overridden per-operation by explicitly setting `refresh_ttl`.\nDefaults to `True` if not configured.\n"
         },
         "sweep_interval_minutes": {
           "anyOf": [
