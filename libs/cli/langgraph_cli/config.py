@@ -1434,7 +1434,7 @@ ADD {relpath} /deps/{name}
             echo "Installing $dep"; \
             if [ -d "$dep" ]; then \
                 echo "Installing $dep"; \
-                (cd "$dep" && {global_reqs_pip_install} .); \
+                (cd "$dep" && {global_reqs_pip_install} -e .); \
             fi; \
         done""",
         "# -- End of local dependencies install --",
