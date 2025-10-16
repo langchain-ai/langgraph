@@ -319,8 +319,8 @@ class PregelLoop:
             ] + [(c, v) for c, v in writes if c != RESUME]
             self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         else:
-            # build map of existing interrupts for this task for quick lookup
-            existing_interrupts_by_id = {  # interrupt id -> list of interrupts
+            # build map of existing interrupts for this task: interrupt id -> list of interrupts
+            existing_interrupts_by_id: dict[str, list[Interrupt]] = {
                 v[0].id: v
                 for tid, ch, v in self.checkpoint_pending_writes
                 if tid == task_id and ch == INTERRUPT
@@ -334,14 +334,7 @@ class PregelLoop:
                     if new_interrupts and (
                         existing := existing_interrupts_by_id.get(new_interrupts[0].id)
                     ):
-                        # if the graph is invoked with None, we will hit the same interrupt
-                        # that was raised before, in this case we don't want to duplicate its write
-                        # so we just keep the existing checkpoint writes
-                        v = (
-                            existing + new_interrupts
-                            if self.input is not None
-                            else existing
-                        )
+                        v = existing + new_interrupts
                     writes_to_save.append((ch, v))
                 else:
                     # we add non-interrupt writes as-is
@@ -501,6 +494,8 @@ class PregelLoop:
 
         resume_map = self.config.get(CONF, {}).get(CONFIG_KEY_RESUME_MAP, {})
         if resume_map or self.input is None:
+            # do not re-execute tasks that have unresumable interrupts
+            # i.e. when the graph is invoked with None, or the interrupt id is not in the resume map
             skipped_interrupt_ids = self._pending_interrupts() - set(resume_map)
             self.skipped_task_ids = {
                 task_id
@@ -559,7 +554,7 @@ class PregelLoop:
                 self.output_writes(task.id, task.writes, cached=True)
 
         if self.skipped_task_ids:
-            # remove tasks with writes that may have been matched from previous loop
+            # remove tasks with writes that have been matched with previous pending writes
             self.skipped_task_ids = {
                 task_id
                 for task_id in self.skipped_task_ids
