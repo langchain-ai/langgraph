@@ -249,29 +249,6 @@ class ToolNode(RunnableCallable):
 
     Tool calls can also be passed directly as a list of `ToolCall` dicts.
 
-    Args:
-        tools: A sequence of tools that can be invoked by this node. Tools can be
-            BaseTool instances or plain functions that will be converted to tools.
-        name: The name identifier for this node in the graph. Used for debugging
-            and visualization. Defaults to "tools".
-        tags: Optional metadata tags to associate with the node for filtering
-            and organization. Defaults to None.
-        handle_tool_errors: Configuration for error handling during tool execution.
-            Defaults to True. Supports multiple strategies:
-
-            - True: Catch all errors and return a ToolMessage with the default
-              error template containing the exception details.
-            - str: Catch all errors and return a ToolMessage with this custom
-              error message string.
-            - tuple[type[Exception], ...]: Only catch exceptions of the specified
-              types and return default error messages for them.
-            - Callable[..., str]: Catch exceptions matching the callable's signature
-              and return the string result of calling it with the exception.
-            - False: Disable error handling entirely, allowing exceptions to propagate.
-
-        messages_key: The key in the state dictionary that contains the message list.
-            This same key will be used for the output ToolMessages. Defaults to "messages".
-
     Example:
         Basic usage with simple tools:
 
@@ -334,11 +311,26 @@ class ToolNode(RunnableCallable):
         """Initialize the ToolNode with the provided tools and configuration.
 
         Args:
-            tools: Sequence of tools to make available for execution.
-            name: Node name for graph identification.
-            tags: Optional metadata tags.
-            handle_tool_errors: Error handling configuration.
-            messages_key: State key containing messages.
+            tools: A sequence of tools that can be invoked by this node. Tools can be
+                BaseTool instances or plain functions that will be converted to tools.
+            name: The name identifier for this node in the graph. Used for debugging
+                and visualization. Defaults to "tools".
+            tags: Optional metadata tags to associate with the node for filtering
+                and organization. Defaults to None.
+            handle_tool_errors: Configuration for error handling during tool execution.
+                Defaults to True. Supports multiple strategies:
+
+                - True: Catch all errors and return a ToolMessage with the default
+                    error template containing the exception details.
+                - str: Catch all errors and return a ToolMessage with this custom
+                    error message string.
+                - tuple[type[Exception], ...]: Only catch exceptions of the specified
+                    types and return default error messages for them.
+                - Callable[..., str]: Catch exceptions matching the callable's signature
+                    and return the string result of calling it with the exception.
+                - False: Disable error handling entirely, allowing exceptions to propagate.
+            messages_key: The key in the state dictionary that contains the message list.
+                This same key will be used for the output ToolMessages. Defaults to "messages".
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: dict[str, BaseTool] = {}
@@ -867,12 +859,6 @@ class InjectedState(InjectedToolArg):
     receive state data automatically during execution while remaining invisible
     to the model's tool-calling interface.
 
-    Args:
-        field: Optional key to extract from the state dictionary. If None, the entire
-            state is injected. If specified, only that field's value is injected.
-            This allows tools to request specific state components rather than
-            processing the full state structure.
-
     Example:
         ```python
         from typing import List
@@ -930,6 +916,14 @@ class InjectedState(InjectedToolArg):
     """  # noqa: E501
 
     def __init__(self, field: Optional[str] = None) -> None:
+        """Initialize InjectedState annotation.
+
+        Args:
+            field: Optional key to extract from the state dictionary. If None, the entire
+                state is injected. If specified, only that field's value is injected.
+                This allows tools to request specific state components rather than
+                processing the full state structure.
+        """
         self.field = field
 
 
