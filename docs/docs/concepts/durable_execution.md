@@ -21,12 +21,16 @@ To leverage durable execution in LangGraph, you need to:
 1. Enable [persistence](./persistence.md) in your workflow by specifying a [checkpointer](./persistence.md#checkpointer-libraries) that will save workflow progress.
 2. Specify a [thread identifier](./persistence.md#threads) when executing a workflow. This will track the execution history for a particular instance of the workflow.
 
-:::python 
+:::python
+
 3. Wrap any non-deterministic operations (e.g., random number generation) or operations with side effects (e.g., file writes, API calls) inside @[tasks][task] to ensure that when a workflow is resumed, these operations are not repeated for the particular run, and instead their results are retrieved from the persistence layer. For more information, see [Determinism and Consistent Replay](#determinism-and-consistent-replay).
+
 :::
 
-:::js 
+:::js
+
 3. Wrap any non-deterministic operations (e.g., random number generation) or operations with side effects (e.g., file writes, API calls) inside @[tasks][task] to ensure that when a workflow is resumed, these operations are not repeated for the particular run, and instead their results are retrieved from the persistence layer. For more information, see [Determinism and Consistent Replay](#determinism-and-consistent-replay).
+
 :::
 
 ## Determinism and Consistent Replay
@@ -61,7 +65,7 @@ LangGraph supports three durability modes that allow you to balance performance 
 
 A higher durability mode add more overhead to the workflow execution.
 
-!!! version-added "Added in v0.6.0"
+!!! version-added "Added in version 0.6.0"
 
     Use the `durability` parameter instead of `checkpoint_during` (deprecated in v0.6.0) for persistence policy management:
     
@@ -73,14 +77,16 @@ A higher durability mode add more overhead to the workflow execution.
     * `checkpoint_during=True` -> `durability="async"`
     * `checkpoint_during=False` -> `durability="exit"`
 
-
 ### `"exit"`
+
 Changes are persisted only when graph execution completes (either successfully or with an error). This provides the best performance for long-running graphs but means intermediate state is not saved, so you cannot recover from mid-execution failures or interrupt the graph execution.
 
 ### `"async"`
+
 Changes are persisted asynchronously while the next step executes. This provides good performance and durability, but there's a small risk that checkpoints might not be written if the process crashes during execution.
 
 ### `"sync"`
+
 Changes are persisted synchronously before the next step starts. This ensures that every checkpoint is written before continuing execution, providing high durability at the cost of some performance overhead.
 
 You can specify the durability mode when calling any graph execution method:
@@ -310,12 +316,14 @@ Once you have enabled durable execution in your workflow, you can resume executi
 
 - **Pausing and Resuming Workflows:** Use the @[interrupt][interrupt] function to pause a workflow at specific points and the @[Command] primitive to resume it with updated state. See [**Human-in-the-Loop**](./human_in_the_loop.md) for more details.
 - **Recovering from Failures:** Automatically resume workflows from the last successful checkpoint after an exception (e.g., LLM provider outage). This involves executing the workflow with the same thread identifier by providing it with a `None` as the input value (see this [example](../how-tos/use-functional-api.md#resuming-after-an-error) with the functional API).
+
   :::
 
 :::js
 
 - **Pausing and Resuming Workflows:** Use the @[interrupt][interrupt] function to pause a workflow at specific points and the @[Command] primitive to resume it with updated state. See [**Human-in-the-Loop**](./human_in_the_loop.md) for more details.
 - **Recovering from Failures:** Automatically resume workflows from the last successful checkpoint after an exception (e.g., LLM provider outage). This involves executing the workflow with the same thread identifier by providing it with a `null` as the input value (see this [example](../how-tos/use-functional-api.md#resuming-after-an-error) with the functional API).
+
   :::
 
 ## Starting Points for Resuming Workflows
@@ -326,6 +334,7 @@ Once you have enabled durable execution in your workflow, you can resume executi
 - If you're making a subgraph call inside a node, the starting point will be the **parent** node that called the subgraph that was halted.
   Inside the subgraph, the starting point will be the specific [**node**](./low_level.md#nodes) where execution stopped.
 - If you're using the Functional API, the starting point is the beginning of the [**entrypoint**](./functional_api.md#entrypoint) where execution stopped.
+
   :::
 
 :::js
@@ -334,4 +343,5 @@ Once you have enabled durable execution in your workflow, you can resume executi
 - If you're making a subgraph call inside a node, the starting point will be the **parent** node that called the subgraph that was halted.
   Inside the subgraph, the starting point will be the specific [**node**](./low_level.md#nodes) where execution stopped.
 - If you're using the Functional API, the starting point is the beginning of the [**entrypoint**](./functional_api.md#entrypoint) where execution stopped.
+
   :::

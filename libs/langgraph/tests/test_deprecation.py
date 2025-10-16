@@ -12,6 +12,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.errors import NodeInterrupt
 from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
+from langgraph.graph.message import MessageGraph
 from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.types import Interrupt, RetryPolicy
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
@@ -332,3 +333,11 @@ def test_config_parameter_incorrect_typing() -> None:
 
         builder.add_node(async_node_with_untyped_config)
         assert len(w) == 0
+
+
+def test_message_graph_deprecation() -> None:
+    with pytest.warns(
+        LangGraphDeprecatedSinceV10,
+        match="MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.",
+    ):
+        MessageGraph()

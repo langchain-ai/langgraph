@@ -5,10 +5,10 @@ from collections import defaultdict
 from typing import Annotated, Literal, Optional, Union
 
 import pytest
+from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointTuple
 from typing_extensions import TypedDict
 
 from langgraph._internal._config import patch_configurable
-from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointTuple
 from langgraph.graph.state import StateGraph
 from langgraph.pregel._checkpoint import copy_checkpoint
 from langgraph.types import Command, Interrupt, PregelTask, StateSnapshot, interrupt
@@ -330,6 +330,7 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "answer": "doc1,doc2,doc3,doc4",
                 },
+                "updated_channels": None,
             },
             metadata={
                 "source": "loop",
@@ -390,6 +391,7 @@ SAVED_CHECKPOINTS = {
                     "docs": ["doc1", "doc2", "doc3", "doc4"],
                     "branch:to:qa": None,
                 },
+                "updated_channels": None,
             },
             metadata={
                 "source": "loop",
@@ -465,6 +467,7 @@ SAVED_CHECKPOINTS = {
                     "branch:to:retriever_one": None,
                     "docs": ["doc3", "doc4"],
                 },
+                "updated_channels": None,
             },
             metadata={
                 "source": "loop",
@@ -516,6 +519,7 @@ SAVED_CHECKPOINTS = {
                     "branch:to:analyzer_one": None,
                     "branch:to:retriever_two": None,
                 },
+                "updated_channels": None,
             },
             metadata={
                 "source": "loop",
@@ -570,6 +574,7 @@ SAVED_CHECKPOINTS = {
                     "query": "what is weather in sf",
                     "branch:to:rewrite_query": None,
                 },
+                "updated_channels": None,
             },
             metadata={
                 "source": "loop",
@@ -618,6 +623,7 @@ SAVED_CHECKPOINTS = {
                 },
                 "versions_seen": {"__input__": {}},
                 "channel_values": {"__start__": {"query": "what is weather in sf"}},
+                "updated_channels": None,
             },
             metadata={
                 "source": "input",

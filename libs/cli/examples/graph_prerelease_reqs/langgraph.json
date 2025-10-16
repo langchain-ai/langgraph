@@ -1,0 +1,13 @@
+{
+    "python_version": "3.12",
+    "dependencies": [
+      ".",
+      "./deps/additional_deps",
+      "./deps/zuper_deps"
+    ],
+    "graphs": {
+      "agent": "./agent.py:graph"
+    },
+    "env": "../.env"
+  }
+  

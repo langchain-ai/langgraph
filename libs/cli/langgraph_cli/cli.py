@@ -216,7 +216,7 @@ def up(
 ):
     click.secho("Starting LangGraph API server...", fg="green")
     click.secho(
-        """For local dev, requires env var LANGSMITH_API_KEY with access to LangGraph Platform.
+        """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Deployment.
 For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.""",
     )
     with Runner() as runner, Progress(message="Pulling...") as set:
@@ -303,6 +303,8 @@ def _build(
     pull: bool,
     tag: str,
     passthrough: Sequence[str] = (),
+    install_command: Optional[str] = None,
+    build_command: Optional[str] = None,
 ):
     # pull latest images
     if pull:
@@ -322,22 +324,38 @@ def _build(
         "-t",
         tag,
     ]
+    # determine build context: use current directory for JS projects, config parent for Python
+    is_js_project = config_json.get("node_version") and not config_json.get(
+        "python_version"
+    )
+    # build/install commands only apply to JS projects for now
+    # without install/build command, JS projects will follow the old behavior
+    if is_js_project and (build_command or install_command):
+        build_context = str(pathlib.Path.cwd())
+    else:
+        build_context = str(config.parent)
+
     # apply config
     stdin, additional_contexts = langgraph_cli.config.config_to_docker(
-        config, config_json, base_image, api_version
+        config,
+        config_json,
+        base_image,
+        api_version,
+        install_command,
+        build_command,
+        build_context,
     )
     # add additional_contexts
     if additional_contexts:
         for k, v in additional_contexts.items():
             args.extend(["--build-context", f"{k}={v}"])
-    # run docker build
     runner.run(
         subp_exec(
             "docker",
             "build",
             *args,
             *passthrough,
-            str(config.parent),
+            build_context,
             input=stdin,
             verbose=True,
         )
@@ -366,6 +384,14 @@ def _build(
     "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
 @OPT_API_VERSION
+@click.option(
+    "--install-command",
+    help="Custom install command to run from the build context root. If not provided, auto-detects based on package manager files.",
+)
+@click.option(
+    "--build-command",
+    help="Custom build command to run from the langgraph.json directory. If not provided, uses default build process.",
+)
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(
     help="📦 Build LangGraph API server Docker image.",
@@ -381,6 +407,8 @@ def build(
     api_version: Optional[str],
     pull: bool,
     tag: str,
+    install_command: Optional[str],
+    build_command: Optional[str],
 ):
     with Runner() as runner, Progress(message="Pulling...") as set:
         if shutil.which("docker") is None:
@@ -397,6 +425,8 @@ def build(
             pull,
             tag,
             docker_build_args,
+            install_command,
+            build_command,
         )
 
 
@@ -554,7 +584,7 @@ def dockerfile(
                         "\n",
                         "# LANGSMITH_API_KEY=your-api-key",
                         "\n",
-                        "# Or if you have a LangGraph Platform license key, "
+                        "# Or if you have a LangSmith Deployment license key, "
                         "then uncomment the following line: ",
                         "\n",
                         "# LANGGRAPH_CLOUD_LICENSE_KEY=your-license-key",

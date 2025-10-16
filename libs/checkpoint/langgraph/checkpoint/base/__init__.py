@@ -35,17 +35,17 @@ class CheckpointMetadata(TypedDict, total=False):
     source: Literal["input", "loop", "update", "fork"]
     """The source of the checkpoint.
 
-    - "input": The checkpoint was created from an input to invoke/stream/batch.
-    - "loop": The checkpoint was created from inside the pregel loop.
-    - "update": The checkpoint was created from a manual state update.
-    - "fork": The checkpoint was created as a copy of another checkpoint.
+    - `"input"`: The checkpoint was created from an input to invoke/stream/batch.
+    - `"loop"`: The checkpoint was created from inside the pregel loop.
+    - `"update"`: The checkpoint was created from a manual state update.
+    - `"fork"`: The checkpoint was created as a copy of another checkpoint.
     """
     step: int
     """The step number of the checkpoint.
 
-    -1 for the first "input" checkpoint.
-    0 for the first "loop" checkpoint.
-    ... for the nth checkpoint afterwards.
+    `-1` for the first `"input"` checkpoint.
+    `0` for the first `"loop"` checkpoint.
+    `...` for the `nth` checkpoint afterwards.
     """
     parents: dict[str, str]
     """The IDs of the parent checkpoints.
@@ -81,6 +81,9 @@ class Checkpoint(TypedDict):
     This keeps track of the versions of the channels that each node has seen.
     Used to determine which nodes to execute next.
     """
+    updated_channels: list[str] | None
+    """The channels that were updated in this checkpoint.
+    """
 
 
 def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
@@ -92,6 +95,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         pending_sends=checkpoint.get("pending_sends", []).copy(),
+        updated_channels=checkpoint.get("updated_channels", None),
     )
 
 
@@ -144,7 +148,7 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            Optional[Checkpoint]: The requested checkpoint, or None if not found.
+            The requested checkpoint, or `None` if not found.
         """
         if value := self.get_tuple(config):
             return value.checkpoint
@@ -156,7 +160,7 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
+            The requested checkpoint tuple, or `None` if not found.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -180,7 +184,7 @@ class BaseCheckpointSaver(Generic[V]):
             limit: Maximum number of checkpoints to return.
 
         Returns:
-            Iterator[CheckpointTuple]: Iterator of matching checkpoint tuples.
+            Iterator of matching checkpoint tuples.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -248,7 +252,7 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            Optional[Checkpoint]: The requested checkpoint, or None if not found.
+            The requested checkpoint, or `None` if not found.
         """
         if value := await self.aget_tuple(config):
             return value.checkpoint
@@ -260,7 +264,7 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
+            The requested checkpoint tuple, or `None` if not found.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -284,7 +288,7 @@ class BaseCheckpointSaver(Generic[V]):
             limit: Maximum number of checkpoints to return.
 
         Returns:
-            AsyncIterator[CheckpointTuple]: Async iterator of matching checkpoint tuples.
+            Async iterator of matching checkpoint tuples.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -400,6 +404,16 @@ def get_checkpoint_metadata(
     return metadata
 
 
+def get_serializable_checkpoint_metadata(
+    config: RunnableConfig, metadata: CheckpointMetadata
+) -> CheckpointMetadata:
+    """Get checkpoint metadata in a backwards-compatible manner."""
+    checkpoint_metadata = get_checkpoint_metadata(config, metadata)
+    if "writes" in checkpoint_metadata:
+        checkpoint_metadata.pop("writes")
+    return checkpoint_metadata
+
+
 """
 Mapping from error type to error index.
 Regular writes just map to their index in the list of writes being saved.
@@ -437,6 +451,7 @@ def empty_checkpoint() -> Checkpoint:
         channel_versions={},
         versions_seen={},
         pending_sends=[],
+        updated_channels=None,
     )
 
 
@@ -470,4 +485,5 @@ def create_checkpoint(
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
         pending_sends=checkpoint.get("pending_sends", []),
+        updated_channels=None,
     )

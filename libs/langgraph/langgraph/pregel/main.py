@@ -3,15 +3,24 @@ from __future__ import annotations
 import asyncio
 import concurrent
 import concurrent.futures
+import contextlib
 import queue
 import warnings
 import weakref
 from collections import defaultdict, deque
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Iterator, Mapping, Sequence
 from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass
-from typing import Any, Callable, Generic, Union, cast, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Optional,
+    Union,
+    cast,
+    get_type_hints,
+)
 from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
@@ -25,6 +34,13 @@ from langchain_core.runnables.config import (
     get_callback_manager_for_config,
 )
 from langchain_core.runnables.graph import Graph
+from langgraph.cache.base import BaseCache
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    Checkpoint,
+    CheckpointTuple,
+)
+from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import Self, Unpack, deprecated, is_typeddict
 
@@ -73,14 +89,8 @@ from langgraph._internal._runnable import (
     coerce_to_runnable,
 )
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
-from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
-from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
-    Checkpoint,
-    CheckpointTuple,
-)
 from langgraph.config import get_config
 from langgraph.constants import END
 from langgraph.errors import (
@@ -117,7 +127,6 @@ from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
 from langgraph.runtime import DEFAULT_RUNTIME, Runtime
-from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     CachePolicy,
@@ -202,7 +211,7 @@ class NodeBuilder:
 
         Args:
             channels: Channel name(s) to subscribe to
-            read: If True, the channels will be included in the input to the node.
+            read: If `True`, the channels will be included in the input to the node.
                 Otherwise, they will trigger the node without being sent in input.
 
         Returns:
@@ -377,7 +386,7 @@ class Pregel(
 
     However, for **advanced** use cases, Pregel can be used directly. If you're
     not sure whether you need to use Pregel directly, then the answer is probably no
-    – you should use the Graph API or Functional API instead. These are higher-level
+    - you should use the Graph API or Functional API instead. These are higher-level
     interfaces that will compile down to Pregel under the hood.
 
     Here are some examples to give you a sense of how it works:
@@ -479,7 +488,7 @@ class Pregel(
         ```
 
         ```pycon
-        {'c': ['foofoo', 'foofoofoofoo']}
+        {"c": ["foofoo", "foofoofoofoo"]}
         ```
 
     Example: Using a BinaryOperatorAggregate channel
@@ -507,6 +516,7 @@ class Pregel(
             else:
                 return update
 
+
         app = Pregel(
             nodes={"node1": node1, "node2": node2},
             channels={
@@ -515,7 +525,7 @@ class Pregel(
                 "c": BinaryOperatorAggregate(str, operator=reducer),
             },
             input_channels=["a"],
-            output_channels=["c"]
+            output_channels=["c"],
         )
 
         app.invoke({"a": "foo"})
@@ -535,7 +545,8 @@ class Pregel(
         from langgraph.pregel import Pregel, NodeBuilder, ChannelWriteEntry
 
         example_node = (
-            NodeBuilder().subscribe_only("value")
+            NodeBuilder()
+            .subscribe_only("value")
             .do(lambda x: x + x if len(x) < 10 else None)
             .write_to(ChannelWriteEntry(channel="value", skip_none=True))
         )
@@ -546,7 +557,7 @@ class Pregel(
                 "value": EphemeralValue(str),
             },
             input_channels=["value"],
-            output_channels=["value"]
+            output_channels=["value"],
         )
 
         app.invoke({"value": "a"})
@@ -580,26 +591,25 @@ class Pregel(
     input_channels: str | Sequence[str]
 
     step_timeout: float | None = None
-    """Maximum time to wait for a step to complete, in seconds. Defaults to None."""
+    """Maximum time to wait for a step to complete, in seconds."""
 
     debug: bool
-    """Whether to print debug information during execution. Defaults to False."""
+    """Whether to print debug information during execution."""
 
     checkpointer: Checkpointer = None
-    """Checkpointer used to save and load graph state. Defaults to None."""
+    """`Checkpointer` used to save and load graph state."""
 
     store: BaseStore | None = None
-    """Memory store to use for SharedValues. Defaults to None."""
+    """Memory store to use for SharedValues."""
 
     cache: BaseCache | None = None
-    """Cache to use for storing node results. Defaults to None."""
+    """Cache to use for storing node results."""
 
     retry_policy: Sequence[RetryPolicy] = ()
     """Retry policies to use when running tasks. Empty set disables retries."""
 
     cache_policy: CachePolicy | None = None
-    """Cache policy to use for all nodes. Can be overridden by individual nodes.
-    Defaults to None."""
+    """Cache policy to use for all nodes. Can be overridden by individual nodes."""
 
     context_schema: type[ContextT] | None = None
     """Specifies the schema for the context object that will be passed to the workflow."""
@@ -917,10 +927,10 @@ class Pregel(
         Args:
             namespace: The namespace to filter the subgraphs by.
             recurse: Whether to recurse into the subgraphs.
-                If False, only the immediate subgraphs will be returned.
+                If `False`, only the immediate subgraphs will be returned.
 
         Returns:
-            Iterator[tuple[str, PregelProtocol]]: An iterator of the (namespace, subgraph) pairs.
+            An iterator of the (namespace, subgraph) pairs.
         """
         for name, node in self.nodes.items():
             # filter by prefix
@@ -956,10 +966,10 @@ class Pregel(
         Args:
             namespace: The namespace to filter the subgraphs by.
             recurse: Whether to recurse into the subgraphs.
-                If False, only the immediate subgraphs will be returned.
+                If `False`, only the immediate subgraphs will be returned.
 
         Returns:
-            AsyncIterator[tuple[str, PregelProtocol]]: An iterator of the (namespace, subgraph) pairs.
+            An iterator of the (namespace, subgraph) pairs.
         """
         for name, node in self.get_subgraphs(namespace=namespace, recurse=recurse):
             yield name, node
@@ -1412,7 +1422,7 @@ class Pregel(
         Args:
             config: The config to apply the updates to.
             supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
-                        Each update is a tuple of the form `(values, as_node, task_id)` where task_id is optional.
+                        Each update is a tuple of the form `(values, as_node, task_id)` where `task_id` is optional.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -1684,12 +1694,10 @@ class Pregel(
 
                 return patch_checkpoint_map(next_config, saved.metadata)
 
-            # apply pending writes, if not on specific checkpoint
-            if (
-                CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
-                and saved is not None
-                and saved.pending_writes
-            ):
+            # task ids can be provided in the StateUpdate, but if not,
+            # we use the task id generated by prepare_next_tasks
+            node_to_task_ids: dict[str, deque[str]] = defaultdict(deque)
+            if saved is not None and saved.pending_writes is not None:
                 # tasks for this checkpoint
                 next_tasks = prepare_next_tasks(
                     checkpoint,
@@ -1705,6 +1713,10 @@ class Pregel(
                     checkpointer=checkpointer,
                     manager=None,
                 )
+                # collect task ids to reuse so we can properly attach task results
+                for t in next_tasks.values():
+                    node_to_task_ids[t.name].append(t.id)
+
                 # apply null writes
                 if null_writes := [
                     w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
@@ -1786,8 +1798,14 @@ class Pregel(
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 writes: deque[tuple[str, Any]] = deque()
                 task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
-                task_id = provided_task_id or str(
-                    uuid5(UUID(checkpoint["id"]), INTERRUPT)
+                # get the task ids that were prepared for this node
+                # if a task id was provided in the StateUpdate, we use it
+                # otherwise, we use the next available task id
+                prepared_task_ids = node_to_task_ids.get(as_node, deque())
+                task_id = provided_task_id or (
+                    prepared_task_ids.popleft()
+                    if prepared_task_ids
+                    else str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
                 )
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
@@ -1871,7 +1889,7 @@ class Pregel(
         Args:
             config: The config to apply the updates to.
             supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
-                        Each update is a tuple of the form `(values, as_node, task_id)` where task_id is optional.
+                        Each update is a tuple of the form `(values, as_node, task_id)` where `task_id` is optional.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -2140,12 +2158,11 @@ class Pregel(
                 return patch_checkpoint_map(
                     next_config, saved.metadata if saved else None
                 )
-            # apply pending writes, if not on specific checkpoint
-            if (
-                CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
-                and saved is not None
-                and saved.pending_writes
-            ):
+
+            # task ids can be provided in the StateUpdate, but if not,
+            # we use the task id generated by prepare_next_tasks
+            node_to_task_ids: dict[str, deque[str]] = defaultdict(deque)
+            if saved is not None and saved.pending_writes is not None:
                 # tasks for this checkpoint
                 next_tasks = prepare_next_tasks(
                     checkpoint,
@@ -2161,6 +2178,10 @@ class Pregel(
                     checkpointer=checkpointer,
                     manager=None,
                 )
+                # collect task ids to reuse so we can properly attach task results
+                for t in next_tasks.values():
+                    node_to_task_ids[t.name].append(t.id)
+
                 # apply null writes
                 if null_writes := [
                     w[1:] for w in saved.pending_writes or [] if w[0] == NULL_TASK_ID
@@ -2237,8 +2258,14 @@ class Pregel(
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 writes: deque[tuple[str, Any]] = deque()
                 task = PregelTaskWrites((), as_node, writes, [INTERRUPT])
-                task_id = provided_task_id or str(
-                    uuid5(UUID(checkpoint["id"]), INTERRUPT)
+                # get the task ids that were prepared for this node
+                # if a task id was provided in the StateUpdate, we use it
+                # otherwise, we use the next available task id
+                prepared_task_ids = node_to_task_ids.get(as_node, deque())
+                task_id = provided_task_id or (
+                    prepared_task_ids.popleft()
+                    if prepared_task_ids
+                    else str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
                 )
                 run_tasks.append(task)
                 run_task_ids.append(task_id)
@@ -2434,7 +2461,7 @@ class Pregel(
             input: The input to the graph.
             config: The configuration to use for the run.
             context: The static context to use for the run.
-                !!! version-added "Added in version 0.6.0."
+                !!! version-added "Added in version 0.6.0"
             stream_mode: The mode to stream output, defaults to `self.stream_mode`.
                 Options are:
 
@@ -2445,7 +2472,7 @@ class Pregel(
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
                     Will be emitted as 2-tuples `(LLM token, metadata)`.
-                - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by get_state().
+                - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
                 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
 
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
@@ -2456,12 +2483,12 @@ class Pregel(
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
-            durability: The durability mode for the graph execution, defaults to "async". Options are:
+            durability: The durability mode for the graph execution, defaults to `"async"`. Options are:
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
             subgraphs: Whether to stream events from inside subgraphs, defaults to False.
-                If True, the events will be emitted as tuples `(namespace, data)`,
+                If `True`, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
                 where `namespace` is a tuple with the path to the node where a subgraph is invoked,
                 e.g. `("parent_node:<task_id>", "child_node:<task_id>")`.
@@ -2469,7 +2496,7 @@ class Pregel(
                 See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
 
         Yields:
-            The output of each step in the graph. The output shape depends on the stream_mode.
+            The output of each step in the graph. The output shape depends on the `stream_mode`.
         """
         if (checkpoint_during := kwargs.get("checkpoint_during")) is not None:
             warnings.warn(
@@ -2534,8 +2561,13 @@ class Pregel(
                 config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
+                ns_ = cast(Optional[str], config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(stream.put, subgraphs)
+                    StreamMessagesHandler(
+                        stream.put,
+                        subgraphs,
+                        parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
+                    )
                 )
 
             # set up custom stream mode
@@ -2607,6 +2639,7 @@ class Pregel(
                 if subgraphs:
                     loop.config[CONF][CONFIG_KEY_STREAM] = loop.stream
                 # enable concurrent streaming
+                get_waiter: Callable[[], concurrent.futures.Future[None]] | None = None
                 if (
                     self.stream_eager
                     or subgraphs
@@ -2629,8 +2662,6 @@ class Pregel(
                         else:
                             return waiter
 
-                else:
-                    get_waiter = None  # type: ignore[assignment]
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates.
                 # Channel updates from step N are only visible in step N+1
@@ -2696,7 +2727,7 @@ class Pregel(
             input: The input to the graph.
             config: The configuration to use for the run.
             context: The static context to use for the run.
-                !!! version-added "Added in version 0.6.0."
+                !!! version-added "Added in version 0.6.0"
             stream_mode: The mode to stream output, defaults to `self.stream_mode`.
                 Options are:
 
@@ -2717,12 +2748,12 @@ class Pregel(
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
-            durability: The durability mode for the graph execution, defaults to "async". Options are:
+            durability: The durability mode for the graph execution, defaults to `"async"`. Options are:
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
             subgraphs: Whether to stream events from inside subgraphs, defaults to False.
-                If True, the events will be emitted as tuples `(namespace, data)`,
+                If `True`, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
                 where `namespace` is a tuple with the path to the node where a subgraph is invoked,
                 e.g. `("parent_node:<task_id>", "child_node:<task_id>")`.
@@ -2730,7 +2761,7 @@ class Pregel(
                 See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
 
         Yields:
-            The output of each step in the graph. The output shape depends on the stream_mode.
+            The output of each step in the graph. The output shape depends on the `stream_mode`.
         """
         if (checkpoint_during := kwargs.get("checkpoint_during")) is not None:
             warnings.warn(
@@ -2814,8 +2845,14 @@ class Pregel(
                 config[CONF][CONFIG_KEY_CHECKPOINT_NS] = recast_checkpoint_ns(ns)
             # set up messages stream mode
             if "messages" in stream_modes:
+                # namespace can be None in a root level graph?
+                ns_ = cast(Optional[str], config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
                 run_manager.inheritable_handlers.append(
-                    StreamMessagesHandler(stream_put, subgraphs)
+                    StreamMessagesHandler(
+                        stream_put,
+                        subgraphs,
+                        parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
+                    )
                 )
 
             # set up custom stream mode
@@ -2905,45 +2942,77 @@ class Pregel(
                         stream_put, stream_modes
                     )
                 # enable concurrent streaming
+                get_waiter: Callable[[], asyncio.Task[None]] | None = None
+                _cleanup_waiter: Callable[[], Awaitable[None]] | None = None
                 if (
                     self.stream_eager
                     or subgraphs
                     or "messages" in stream_modes
                     or "custom" in stream_modes
                 ):
+                    # Keep a single waiter task alive; ensure cleanup on exit.
+                    waiter: asyncio.Task[None] | None = None
 
                     def get_waiter() -> asyncio.Task[None]:
-                        return aioloop.create_task(stream.wait())
+                        nonlocal waiter
+                        if waiter is None or waiter.done():
+                            waiter = aioloop.create_task(stream.wait())
 
-                else:
-                    get_waiter = None  # type: ignore[assignment]
+                            def _clear(t: asyncio.Task[None]) -> None:
+                                nonlocal waiter
+                                if waiter is t:
+                                    waiter = None
+
+                            waiter.add_done_callback(_clear)
+                        return waiter
+
+                    async def _cleanup_waiter() -> None:
+                        """Wake pending waiter and/or cancel+await to avoid pending tasks."""
+                        nonlocal waiter
+                        # Try to wake via semaphore like SyncPregelLoop
+                        with contextlib.suppress(Exception):
+                            if hasattr(stream, "_count"):
+                                stream._count.release()
+                        t = waiter
+                        waiter = None
+                        if t is not None and not t.done():
+                            t.cancel()
+                            with contextlib.suppress(asyncio.CancelledError):
+                                await t
+
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
-                while loop.tick():
-                    for task in await loop.amatch_cached_writes():
-                        loop.output_writes(task.id, task.writes, cached=True)
-                    async for _ in runner.atick(
-                        [t for t in loop.tasks.values() if not t.writes],
-                        timeout=self.step_timeout,
-                        get_waiter=get_waiter,
-                        schedule_task=loop.aaccept_push,
-                    ):
-                        # emit output
-                        for o in _output(
-                            stream_mode,
-                            print_mode,
-                            subgraphs,
-                            stream.get_nowait,
-                            asyncio.QueueEmpty,
+                try:
+                    while loop.tick():
+                        for task in await loop.amatch_cached_writes():
+                            loop.output_writes(task.id, task.writes, cached=True)
+                        async for _ in runner.atick(
+                            [t for t in loop.tasks.values() if not t.writes],
+                            timeout=self.step_timeout,
+                            get_waiter=get_waiter,
+                            schedule_task=loop.aaccept_push,
                         ):
-                            yield o
-                    loop.after_tick()
-                    # wait for checkpoint
-                    if durability_ == "sync":
-                        await cast(asyncio.Future, loop._put_checkpoint_fut)
+                            # emit output
+                            for o in _output(
+                                stream_mode,
+                                print_mode,
+                                subgraphs,
+                                stream.get_nowait,
+                                asyncio.QueueEmpty,
+                            ):
+                                yield o
+                        loop.after_tick()
+                        # wait for checkpoint
+                        if durability_ == "sync":
+                            await cast(asyncio.Future, loop._put_checkpoint_fut)
+                finally:
+                    # ensure waiter doesn't remain pending on cancel/shutdown
+                    if _cleanup_waiter is not None:
+                        await _cleanup_waiter()
+
             # emit output
             for o in _output(
                 stream_mode,
@@ -2988,23 +3057,23 @@ class Pregel(
 
         Args:
             input: The input data for the graph. It can be a dictionary or any other type.
-            config: Optional. The configuration for the graph run.
+            config: The configuration for the graph run.
             context: The static context to use for the run.
-                !!! version-added "Added in version 0.6.0."
-            stream_mode: Optional[str]. The stream mode for the graph run. Default is "values".
+                !!! version-added "Added in version 0.6.0"
+            stream_mode: The stream mode for the graph run.
             print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
-            output_keys: Optional. The output keys to retrieve from the graph run.
-            interrupt_before: Optional. The nodes to interrupt the graph run before.
-            interrupt_after: Optional. The nodes to interrupt the graph run after.
-            durability: The durability mode for the graph execution, defaults to "async". Options are:
+            output_keys: The output keys to retrieve from the graph run.
+            interrupt_before: The nodes to interrupt the graph run before.
+            interrupt_after: The nodes to interrupt the graph run after.
+            durability: The durability mode for the graph execution, defaults to `"async"`. Options are:
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
-            The output of the graph run. If stream_mode is "values", it returns the latest output.
-            If stream_mode is not "values", it returns a list of output chunks.
+            The output of the graph run. If `stream_mode` is `"values"`, it returns the latest output.
+            If `stream_mode` is not `"values"`, it returns a list of output chunks.
         """
         output_keys = output_keys if output_keys is not None else self.output_channels
 
@@ -3073,23 +3142,23 @@ class Pregel(
 
         Args:
             input: The input data for the computation. It can be a dictionary or any other type.
-            config: Optional. The configuration for the computation.
+            config: The configuration for the computation.
             context: The static context to use for the run.
-                !!! version-added "Added in version 0.6.0."
-            stream_mode: Optional. The stream mode for the computation. Default is "values".
+                !!! version-added "Added in version 0.6.0"
+            stream_mode: The stream mode for the computation.
             print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
-            output_keys: Optional. The output keys to include in the result. Default is None.
-            interrupt_before: Optional. The nodes to interrupt before. Default is None.
-            interrupt_after: Optional. The nodes to interrupt after. Default is None.
-            durability: The durability mode for the graph execution, defaults to "async". Options are:
+            output_keys: The output keys to include in the result.
+            interrupt_before: The nodes to interrupt before.
+            interrupt_after: The nodes to interrupt after.
+            durability: The durability mode for the graph execution, defaults to `"async"`. Options are:
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
             **kwargs: Additional keyword arguments.
 
         Returns:
-            The result of the computation. If stream_mode is "values", it returns the latest value.
-            If stream_mode is "chunks", it returns a list of chunks.
+            The result of the computation. If `stream_mode` is `"values"`, it returns the latest value.
+            If `stream_mode` is `"chunks"`, it returns a list of chunks.
         """
 
         output_keys = output_keys if output_keys is not None else self.output_channels

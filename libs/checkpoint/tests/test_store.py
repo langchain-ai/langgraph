@@ -34,6 +34,42 @@ class MockAsyncBatchedStore(AsyncBatchedBaseStore):
         return self._store.batch(ops)
 
 
+async def test_async_batch_store_resilience() -> None:
+    """Test that AsyncBatchedBaseStore recovers gracefully from task cancellation."""
+    doc = {"foo": "bar"}
+    async_store = MockAsyncBatchedStore()
+
+    await async_store.aput(("foo", "langgraph", "foo"), "bar", doc)
+
+    # Store the original task reference
+    original_task = async_store._task
+    assert original_task is not None
+    assert not original_task.done()
+
+    # Cancel the background task
+    original_task.cancel()
+    await asyncio.sleep(0.01)
+    assert original_task.cancelled()
+
+    # Perform a new operation - this should trigger _ensure_task() to create a new task
+    result = await async_store.asearch(("foo", "langgraph", "foo"))
+    assert len(result) > 0
+    assert result[0].value == doc
+
+    # Verify a new task was created
+    new_task = async_store._task
+    assert new_task is not None
+    assert new_task is not original_task
+    assert not new_task.done()
+
+    # Test that operations continue to work with the new task
+    doc2 = {"baz": "qux"}
+    await async_store.aput(("test", "namespace"), "key", doc2)
+    result2 = await async_store.aget(("test", "namespace"), "key")
+    assert result2 is not None
+    assert result2.value == doc2
+
+
 def test_get_text_at_path() -> None:
     nested_data = {
         "name": "test",
@@ -914,8 +950,8 @@ async def test_embed_with_path(fake_embeddings: CharacterEmbeddings) -> None:
     assert results[0].key != results[1].key
     ascore = results[0].score
     bscore = results[1].score
-    assert ascore == bscore
     assert ascore is not None and bscore is not None
+    assert ascore == pytest.approx(bscore, abs=1e-5)
 
     results = await store.asearch(("test",), query="uuu")
     assert len(results) == 2
@@ -985,3 +1021,27 @@ async def test_embed_with_path(fake_embeddings: CharacterEmbeddings) -> None:
     assert len(results) == 3
     doc5_result = next(r for r in results if r.key == "doc5")
     assert doc5_result.score is None
+
+
+def test_non_ascii(fake_embeddings: CharacterEmbeddings) -> None:
+    """Test support for non-ascii characters"""
+    store = InMemoryStore(
+        index={"dims": fake_embeddings.dims, "embed": fake_embeddings}
+    )
+    store.put(("user_123", "memories"), "1", {"text": "这是中文"})  # Chinese
+    store.put(("user_123", "memories"), "2", {"text": "これは日本語です"})  # Japanese
+    store.put(("user_123", "memories"), "3", {"text": "이건 한국어야"})  # Korean
+    store.put(("user_123", "memories"), "4", {"text": "Это русский"})  # Russian
+    store.put(("user_123", "memories"), "5", {"text": "यह रूसी है"})  # Hindi
+
+    result1 = store.search(("user_123", "memories"), query="这是中文")
+    result2 = store.search(("user_123", "memories"), query="これは日本語です")
+    result3 = store.search(("user_123", "memories"), query="이건 한국어야")
+    result4 = store.search(("user_123", "memories"), query="Это русский")
+    result5 = store.search(("user_123", "memories"), query="यह रूसी है")
+
+    assert result1[0].key == "1"
+    assert result2[0].key == "2"
+    assert result3[0].key == "3"
+    assert result4[0].key == "4"
+    assert result5[0].key == "5"

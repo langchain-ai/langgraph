@@ -24,8 +24,11 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from langgraph.cache.base import BaseCache
+from langgraph.checkpoint.base import Checkpoint
+from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
-from typing_extensions import Self, Unpack, is_typeddict
+from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
 from langgraph._internal._constants import (
     INTERRUPT,
@@ -41,7 +44,6 @@ from langgraph._internal._fields import (
 from langgraph._internal._pydantic import create_model
 from langgraph._internal._runnable import coerce_to_runnable
 from langgraph._internal._typing import EMPTY_SEQ, MISSING, DeprecatedKwargs
-from langgraph.cache.base import BaseCache
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
@@ -50,7 +52,6 @@ from langgraph.channels.named_barrier_value import (
     NamedBarrierValue,
     NamedBarrierValueAfterFinish,
 )
-from langgraph.checkpoint.base import Checkpoint
 from langgraph.constants import END, START, TAG_HIDDEN
 from langgraph.errors import (
     ErrorCode,
@@ -71,7 +72,6 @@ from langgraph.pregel._write import (
     ChannelWriteEntry,
     ChannelWriteTupleEntry,
 )
-from langgraph.store.base import BaseStore
 from langgraph.types import (
     All,
     CachePolicy,
@@ -125,7 +125,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     Args:
         state_schema: The schema class that defines the state.
         context_schema: The schema class that defines the runtime context.
-            Use this to expose immutable context data to your nodes, like user_id, db_conn, etc.
+            Use this to expose immutable context data to your nodes, like `user_id`, `db_conn`, etc.
         input_schema: The schema class that defines the input to the graph.
         output_schema: The schema class that defines the output from the graph.
 
@@ -141,24 +141,30 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         from langgraph.graph import StateGraph
         from langgraph.runtime import Runtime
 
+
         def reducer(a: list, b: int | None) -> list:
             if b is not None:
                 return a + [b]
             return a
 
+
         class State(TypedDict):
             x: Annotated[list, reducer]
+
 
         class Context(TypedDict):
             r: float
 
+
         graph = StateGraph(state_schema=State, context_schema=Context)
 
+
         def node(state: State, runtime: Runtime[Context]) -> dict:
-            r = runtie.context.get("r", 1.0)
+            r = runtime.context.get("r", 1.0)
             x = state["x"][-1]
             next_value = x * r * (1 - x)
             return {"x": next_value}
+
 
         graph.add_node("A", node)
         graph.set_entry_point("A")
@@ -364,19 +370,21 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         Args:
             node: The function or runnable this node will run.
                 If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
-            action: The action associated with the node. (default: None)
+            action: The action associated with the node.
                 Will be used as the node function or runnable if `node` is a string (node name).
             defer: Whether to defer the execution of the node until the run is about to end.
-            metadata: The metadata associated with the node. (default: None)
+            metadata: The metadata associated with the node.
             input_schema: The input schema for the node. (default: the graph's state schema)
-            retry_policy: The retry policy for the node. (default: None)
+            retry_policy: The retry policy for the node.
                 If a sequence is provided, the first matching policy will be applied.
-            cache_policy: The cache policy for the node. (default: None)
+            cache_policy: The cache policy for the node.
             destinations: Destinations that indicate where a node can route to.
                 This is useful for edgeless graphs with nodes that return `Command` objects.
                 If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
                 If a tuple is provided, the values will be used as the target node names.
-                NOTE: this is only used for graph rendering and doesn't have any effect on the graph execution.
+
+                !!! note
+                    This is only used for graph rendering and doesn't have any effect on the graph execution.
 
         Example:
             ```python
@@ -385,11 +393,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             from langchain_core.runnables import RunnableConfig
             from langgraph.graph import START, StateGraph
 
+
             class State(TypedDict):
                 x: int
 
+
             def my_node(state: State, config: RunnableConfig) -> State:
                 return {"x": state["x"] + 1}
+
 
             builder = StateGraph(State)
             builder.add_node(my_node)  # node name will be 'my_node'
@@ -562,7 +573,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             end_key: The key of the end node of the edge.
 
         Raises:
-            ValueError: If the start key is 'END' or if the start key or end key is not present in the graph.
+            ValueError: If the start key is `'END'` or if the start key or end key is not present in the graph.
 
         Returns:
             Self: The instance of the state graph, allowing for method chaining.
@@ -607,9 +618,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     def add_conditional_edges(
         self,
         source: str,
-        path: Callable[..., Hashable | list[Hashable]]
-        | Callable[..., Awaitable[Hashable | list[Hashable]]]
-        | Runnable[Any, Hashable | list[Hashable]],
+        path: Callable[..., Hashable | Sequence[Hashable]]
+        | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
+        | Runnable[Any, Hashable | Sequence[Hashable]],
         path_map: dict[Hashable, str] | list[str] | None = None,
     ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
@@ -619,14 +630,15 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 exiting this node.
             path: The callable that determines the next
                 node or nodes. If not specifying `path_map` it should return one or
-                more nodes. If it returns END, the graph will stop execution.
+                more nodes. If it returns `'END'`, the graph will stop execution.
             path_map: Optional mapping of paths to node
                 names. If omitted the paths returned by `path` should be node names.
 
         Returns:
             Self: The instance of the graph, allowing for method chaining.
 
-        Note: Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
+        !!! warning
+            Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
             or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
 
         """  # noqa: E501
@@ -660,13 +672,13 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         """Add a sequence of nodes that will be executed in the provided order.
 
         Args:
-            nodes: A sequence of StateNodes (callables that accept a state arg) or (name, StateNode) tuples.
-                If no names are provided, the name will be inferred from the node object (e.g. a runnable or a callable name).
+            nodes: A sequence of `StateNode` (callables that accept a `state` arg) or `(name, StateNode)` tuples.
+                If no names are provided, the name will be inferred from the node object (e.g. a `Runnable` or a `Callable` name).
                 Each node will be executed in the order provided.
 
         Raises:
-            ValueError: if the sequence is empty.
-            ValueError: if the sequence contains duplicate node names.
+            ValueError: If the sequence is empty.
+            ValueError: If the sequence contains duplicate node names.
 
         Returns:
             Self: The instance of the state graph, allowing for method chaining.
@@ -710,9 +722,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     def set_conditional_entry_point(
         self,
-        path: Callable[..., Hashable | list[Hashable]]
-        | Callable[..., Awaitable[Hashable | list[Hashable]]]
-        | Runnable[Any, Hashable | list[Hashable]],
+        path: Callable[..., Hashable | Sequence[Hashable]]
+        | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
+        | Runnable[Any, Hashable | Sequence[Hashable]],
         path_map: dict[Hashable, str] | list[str] | None = None,
     ) -> Self:
         """Sets a conditional entry point in the graph.
@@ -809,10 +821,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         Args:
             checkpointer: A checkpoint saver object or flag.
-                If provided, this Checkpointer serves as a fully versioned "short-term memory" for the graph,
+                If provided, this `Checkpointer` serves as a fully versioned "short-term memory" for the graph,
                 allowing it to be paused, resumed, and replayed from any point.
-                If None, it may inherit the parent graph's checkpointer when used as a subgraph.
-                If False, it will not use or inherit any checkpointer.
+                If `None`, it may inherit the parent graph's checkpointer when used as a subgraph.
+                If `False`, it will not use or inherit any checkpointer.
             interrupt_before: An optional list of node names to interrupt before.
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
@@ -1334,6 +1346,12 @@ def _get_channel(
 def _get_channel(
     name: str, annotation: Any, *, allow_managed: bool = True
 ) -> BaseChannel | ManagedValueSpec:
+    # Strip out Required and NotRequired wrappers
+    if hasattr(annotation, "__origin__") and annotation.__origin__ in (
+        Required,
+        NotRequired,
+    ):
+        annotation = annotation.__args__[0]
     if manager := _is_field_managed_value(name, annotation):
         if allow_managed:
             return manager
@@ -1354,10 +1372,14 @@ def _get_channel(
 def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
-        if len(meta) >= 1 and isinstance(meta[-1], BaseChannel):
-            return meta[-1]
-        elif len(meta) >= 1 and isclass(meta[-1]) and issubclass(meta[-1], BaseChannel):
-            return meta[-1](typ.__origin__ if hasattr(typ, "__origin__") else typ)
+        # Search through all annotated medata to find channel annotations
+        for item in meta:
+            if isinstance(item, BaseChannel):
+                return item
+            elif isclass(item) and issubclass(item, BaseChannel):
+                # ex, Annotated[int, EphemeralValue, SomeOtherAnnotation]
+                # would return EphemeralValue(int)
+                return item(typ.__origin__ if hasattr(typ, "__origin__") else typ)
     return None
 
 

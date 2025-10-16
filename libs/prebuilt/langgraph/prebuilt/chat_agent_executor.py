@@ -1,4 +1,5 @@
 import inspect
+import warnings
 from typing import (
     Any,
     Awaitable,
@@ -12,7 +13,6 @@ from typing import (
     cast,
     get_type_hints,
 )
-from warnings import warn
 
 from langchain_core.language_models import (
     BaseChatModel,
@@ -33,9 +33,6 @@ from langchain_core.runnables import (
     RunnableSequence,
 )
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel
-from typing_extensions import Annotated, NotRequired, TypedDict
-
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
 from langgraph.errors import ErrorCode, create_error_message
@@ -43,23 +40,24 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import RemainingSteps
-from langgraph.prebuilt._internal import ToolCallWithContext
-from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Checkpointer, Send
 from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
+from pydantic import BaseModel
+from typing_extensions import Annotated, NotRequired, TypedDict, deprecated
+
+from langgraph.prebuilt.tool_node import ToolNode
 
 StructuredResponse = Union[dict, BaseModel]
 StructuredResponseSchema = Union[dict, type[BaseModel]]
-F = TypeVar("F", bound=Callable[..., Any])
 
 
-# We create the AgentState that we will pass around
-# This simply involves a list of messages
-# We want steps to return messages to append to the list
-# So we annotate the messages attribute with `add_messages` reducer
+@deprecated(
+    "AgentState has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentState`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class AgentState(TypedDict):
     """The state of the agent."""
 
@@ -68,6 +66,10 @@ class AgentState(TypedDict):
     remaining_steps: NotRequired[RemainingSteps]
 
 
+@deprecated(
+    "AgentStatePydantic has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStatePydantic`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class AgentStatePydantic(BaseModel):
     """The state of the agent."""
 
@@ -76,16 +78,38 @@ class AgentStatePydantic(BaseModel):
     remaining_steps: RemainingSteps = 25
 
 
-class AgentStateWithStructuredResponse(AgentState):
-    """The state of the agent with a structured response."""
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        category=LangGraphDeprecatedSinceV10,
+        message="AgentState has been moved to langchain.agents.*",
+    )
 
-    structured_response: StructuredResponse
+    @deprecated(
+        "AgentStateWithStructuredResponse has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStateWithStructuredResponse`.",
+        category=LangGraphDeprecatedSinceV10,
+    )
+    class AgentStateWithStructuredResponse(AgentState):
+        """The state of the agent with a structured response."""
+
+        structured_response: StructuredResponse
 
 
-class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
-    """The state of the agent with a structured response."""
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        category=LangGraphDeprecatedSinceV10,
+        message="AgentStatePydantic has been moved to langchain.agents.*",
+    )
 
-    structured_response: StructuredResponse
+    @deprecated(
+        "AgentStateWithStructuredResponsePydantic has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStateWithStructuredResponsePydantic`.",
+        category=LangGraphDeprecatedSinceV10,
+    )
+    class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
+        """The state of the agent with a structured response."""
+
+        structured_response: StructuredResponse
 
 
 StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
@@ -246,6 +270,10 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
+@deprecated(
+    "create_react_agent has been moved to `langchain.agents`. Please update your import to `from langchain.agents import create_agent`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 def create_react_agent(
     model: Union[
         str,
@@ -391,6 +419,14 @@ def create_react_agent(
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `remaining_steps` keys.
             Defaults to `AgentState` that defines those two keys.
+            !!! Note
+                `remaining_steps` is used to limit the number of steps the react agent can take.
+                Calculated roughly as `recursion_limit` - `total_steps_taken`.
+                If `remaining_steps` is less than 2 and tool calls are present in the response,
+                the react agent will return a final AI Message with
+                the content "Sorry, need more steps to process this request.".
+                No `GraphRecusionError` will be raised in this case.
+
         context_schema: An optional schema for runtime context.
         checkpointer: An optional checkpoint saver object. This is used for persisting
             the state of the graph (e.g., as chat memory) for a single thread (e.g., a single conversation).
@@ -466,13 +502,18 @@ def create_react_agent(
     if (
         config_schema := deprecated_kwargs.pop("config_schema", MISSING)
     ) is not MISSING:
-        warn(
+        warnings.warn(
             "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
             category=LangGraphDeprecatedSinceV10,
         )
 
         if context_schema is None:
             context_schema = config_schema
+
+    if len(deprecated_kwargs) > 0:
+        raise TypeError(
+            f"create_react_agent() got unexpected keyword arguments: {deprecated_kwargs}"
+        )
 
     if version not in ("v1", "v2"):
         raise ValueError(
@@ -790,17 +831,11 @@ def create_react_agent(
             elif version == "v2":
                 if post_model_hook is not None:
                     return "post_model_hook"
-                return [
-                    Send(
-                        "tools",
-                        ToolCallWithContext(
-                            __type="tool_call_with_context",
-                            tool_call=tool_call,
-                            state=state,
-                        ),
-                    )
-                    for tool_call in last_message.tool_calls
+                tool_calls = [
+                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    for call in last_message.tool_calls
                 ]
+                return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
     workflow = StateGraph(
@@ -881,17 +916,11 @@ def create_react_agent(
             ]
 
             if pending_tool_calls:
-                return [
-                    Send(
-                        "tools",
-                        ToolCallWithContext(
-                            __type="tool_call_with_context",
-                            tool_call=tool_call,
-                            state=state,
-                        ),
-                    )
-                    for tool_call in pending_tool_calls
+                pending_tool_calls = [
+                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                    for call in pending_tool_calls
                 ]
+                return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
             elif isinstance(messages[-1], ToolMessage):
                 return entrypoint
             elif response_format is not None:
@@ -901,13 +930,13 @@ def create_react_agent(
 
         workflow.add_conditional_edges(
             "post_model_hook",
-            post_model_hook_router,  # type: ignore[arg-type]
+            post_model_hook_router,
             path_map=post_model_hook_paths,
         )
 
     workflow.add_conditional_edges(
         "agent",
-        should_continue,  # type: ignore[arg-type]
+        should_continue,
         path_map=agent_paths,
     )
 

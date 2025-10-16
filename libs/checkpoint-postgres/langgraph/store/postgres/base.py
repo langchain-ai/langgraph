@@ -22,14 +22,6 @@ from typing import (
 )
 
 import orjson
-from psycopg import Capabilities, Connection, Cursor, Pipeline
-from psycopg.rows import DictRow, dict_row
-from psycopg.types.json import Jsonb
-from psycopg_pool import ConnectionPool
-from typing_extensions import TypedDict
-
-from langgraph.checkpoint.postgres import _ainternal as _ainternal
-from langgraph.checkpoint.postgres import _internal as _pg_internal
 from langgraph.store.base import (
     BaseStore,
     GetOp,
@@ -46,6 +38,14 @@ from langgraph.store.base import (
     get_text_at_path,
     tokenize_path,
 )
+from psycopg import Capabilities, Connection, Cursor, Pipeline
+from psycopg.rows import DictRow, dict_row
+from psycopg.types.json import Jsonb
+from psycopg_pool import ConnectionPool
+from typing_extensions import TypedDict
+
+from langgraph.checkpoint.postgres import _ainternal as _ainternal
+from langgraph.checkpoint.postgres import _internal as _pg_internal
 
 if TYPE_CHECKING:
     from langchain_core.embeddings import Embeddings
@@ -868,7 +868,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
 
         Args:
             timeout: Maximum time to wait for the thread to stop, in seconds.
-                If None, wait indefinitely.
+                If `None`, wait indefinitely.
 
         Returns:
             bool: True if the thread was successfully stopped or wasn't running,

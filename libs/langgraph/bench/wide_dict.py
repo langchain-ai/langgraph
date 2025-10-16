@@ -129,7 +129,6 @@ if __name__ == "__main__":
     import asyncio
 
     import uvloop
-
     from langgraph.checkpoint.memory import InMemorySaver
 
     graph = wide_dict(1000).compile(checkpointer=InMemorySaver())

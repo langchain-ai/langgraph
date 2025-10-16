@@ -5,10 +5,10 @@ from enum import Enum
 from typing import Any
 from warnings import warn
 
-from typing_extensions import deprecated
-
 # EmptyChannelError is re-exported from langgraph.channels.base
 from langgraph.checkpoint.base import EmptyChannelError  # noqa: F401
+from typing_extensions import deprecated
+
 from langgraph.types import Command, Interrupt
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
@@ -50,7 +50,7 @@ class GraphRecursionError(RecursionError):
 
     Troubleshooting Guides:
 
-    - [GRAPH_RECURSION_LIMIT](https://python.langchain.com/docs/troubleshooting/errors/GRAPH_RECURSION_LIMIT)
+    - [GRAPH_RECURSION_LIMIT](https://docs.langchain.com/oss/python/langgraph/GRAPH_RECURSION_LIMIT)
 
     Examples:
 
@@ -70,8 +70,8 @@ class InvalidUpdateError(Exception):
 
     Troubleshooting Guides:
 
-    - [INVALID_CONCURRENT_GRAPH_UPDATE](https://python.langchain.com/docs/troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE)
-    - [INVALID_GRAPH_NODE_RETURN_VALUE](https://python.langchain.com/docs/troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE)
+    - [INVALID_CONCURRENT_GRAPH_UPDATE](https://docs.langchain.com/oss/python/langgraph/INVALID_CONCURRENT_GRAPH_UPDATE)
+    - [INVALID_GRAPH_NODE_RETURN_VALUE](https://docs.langchain.com/oss/python/langgraph/INVALID_GRAPH_NODE_RETURN_VALUE)
     """
 
     pass
@@ -90,14 +90,11 @@ class GraphInterrupt(GraphBubbleUp):
 
 
 @deprecated(
-    "NodeInterrupt is deprecated. Please use `langgraph.types.interrupt` instead.",
+    "NodeInterrupt is deprecated. Please use [`interrupt`][langgraph.types.interrupt] instead.",
     category=None,
 )
 class NodeInterrupt(GraphInterrupt):
-    """Raised by a node to interrupt execution.
-
-    Deprecated in V1.0.0 in favor of [`interrupt`][langgraph.types.interrupt].
-    """
+    """Raised by a node to interrupt execution."""
 
     def __init__(self, value: Any, id: str | None = None) -> None:
         warn(

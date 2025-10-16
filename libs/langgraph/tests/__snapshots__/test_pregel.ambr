@@ -307,6 +307,99 @@
   
   '''
 # ---
+# name: test_get_graph_nonterminal_last_step_source
+  '''
+  {
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "human"
+      },
+      {
+        "conditional": true,
+        "source": "chatbot",
+        "target": "human"
+      },
+      {
+        "conditional": true,
+        "source": "chatbot",
+        "target": "tools"
+      },
+      {
+        "conditional": true,
+        "source": "human",
+        "target": "__end__"
+      },
+      {
+        "conditional": true,
+        "source": "human",
+        "target": "chatbot"
+      },
+      {
+        "source": "tools",
+        "target": "chatbot"
+      }
+    ],
+    "nodes": [
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        },
+        "id": "__start__",
+        "type": "runnable"
+      },
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "chatbot"
+        },
+        "id": "chatbot",
+        "type": "runnable"
+      },
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "id": "tools",
+        "type": "runnable"
+      },
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "human"
+        },
+        "id": "human",
+        "type": "runnable"
+      },
+      {
+        "id": "__end__"
+      }
+    ]
+  }
+  '''
+# ---
 # name: test_get_graph_root_channel
   '''
   {

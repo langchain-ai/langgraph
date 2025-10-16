@@ -23,16 +23,7 @@ import pytest
 from langchain_core.language_models import GenericFakeChatModel
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from langchain_core.utils.aiter import aclosing
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from pytest_mock import MockerFixture
-from syrupy import SnapshotAssertion
-from typing_extensions import TypedDict
-
-from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
 from langgraph.cache.base import BaseCache
-from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.last_value import LastValue
-from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     ChannelVersions,
@@ -42,6 +33,18 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.store.base import BaseStore
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pytest_mock import MockerFixture
+from syrupy import SnapshotAssertion
+from typing_extensions import NotRequired, TypedDict
+
+from langgraph._internal._constants import CONFIG_KEY_NODE_FINISHED, ERROR, PULL
+from langgraph._internal._queue import AsyncQueue
+from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.last_value import LastValue
+from langgraph.channels.topic import Topic
 from langgraph.errors import (
     GraphRecursionError,
     InvalidUpdateError,
@@ -50,11 +53,9 @@ from langgraph.errors import (
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
-from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import NodeBuilder, Pregel
 from langgraph.pregel._loop import AsyncPregelLoop
 from langgraph.pregel._runner import PregelRunner
-from langgraph.store.base import BaseStore
 from langgraph.types import (
     CachePolicy,
     Command,
@@ -1908,6 +1909,7 @@ async def test_pending_writes_resume(
                 "branch:to:two": AnyVersion(),
             },
             "channel_values": {"value": 6},
+            "updated_channels": ["value"],
         },
         metadata={
             "parents": {},
@@ -1955,6 +1957,7 @@ async def test_pending_writes_resume(
                 "branch:to:one": None,
                 "branch:to:two": None,
             },
+            "updated_channels": ["branch:to:one", "branch:to:two", "value"],
         },
         metadata={
             "parents": {},
@@ -2002,6 +2005,7 @@ async def test_pending_writes_resume(
                 "__start__": AnyVersion(),
             },
             "channel_values": {"__start__": {"value": 1}},
+            "updated_channels": ["__start__"],
         },
         metadata={
             "parents": {},
@@ -7544,7 +7548,7 @@ async def test_tags_stream_mode_messages() -> None:
         )
     ] == [
         (
-            _AnyIdAIMessageChunk(content="foo"),
+            _AnyIdAIMessageChunk(content="foo", chunk_position="last"),
             {
                 "langgraph_step": 1,
                 "langgraph_node": "call_model",
@@ -9050,3 +9054,215 @@ async def test_fork_and_update_task_results(
             ],
         ],
     ]
+
+
+async def test_subgraph_streaming_async() -> None:
+    """Test subgraph streaming when used as a node in async version"""
+
+    # Create a fake chat model that returns a simple response
+    model = GenericFakeChatModel(messages=iter(["The weather is sunny today."]))
+
+    # Create a subgraph that uses the fake chat model
+    async def call_model_node(
+        state: MessagesState, config: RunnableConfig
+    ) -> MessagesState:
+        """Node that calls the model with the last message."""
+        messages = state["messages"]
+        last_message = messages[-1].content if messages else ""
+        response = await model.ainvoke([("user", last_message)], config)
+        return {"messages": [response]}
+
+    # Build the subgraph
+    subgraph = StateGraph(MessagesState)
+    subgraph.add_node("call_model", call_model_node)
+    subgraph.add_edge(START, "call_model")
+    compiled_subgraph = subgraph.compile()
+
+    class SomeCustomState(TypedDict):
+        last_chunk: NotRequired[str]
+        num_chunks: NotRequired[int]
+
+    # Will invoke a subgraph as a function
+    async def parent_node(state: SomeCustomState, config: RunnableConfig) -> dict:
+        """Node that runs the subgraph."""
+        msgs = {"messages": [("user", "What is the weather in Tokyo?")]}
+        events = []
+        async for event in compiled_subgraph.astream(
+            msgs, config, stream_mode="messages"
+        ):
+            events.append(event)
+        ai_msg_chunks = [ai_msg_chunk for ai_msg_chunk, _ in events]
+        return {
+            "last_chunk": ai_msg_chunks[-1],
+            "num_chunks": len(ai_msg_chunks),
+        }
+
+    # Build the main workflow
+    workflow = StateGraph(SomeCustomState)
+    workflow.add_node("subgraph", parent_node)
+    workflow.add_edge(START, "subgraph")
+    compiled_workflow = workflow.compile()
+
+    # Test the basic functionality
+    result = await compiled_workflow.ainvoke({})
+
+    assert result["last_chunk"].content == "today."
+    assert result["num_chunks"] == 9
+
+
+@NEEDS_CONTEXTVARS
+async def test_null_resume_disallowed_with_multiple_interrupts(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        text_1: str
+        text_2: str
+
+    async def human_node_1(state: State):
+        value = interrupt(state["text_1"])
+        return {"text_1": value}
+
+    async def human_node_2(state: State):
+        value = interrupt(state["text_2"])
+        return {"text_2": value}
+
+    graph_builder = StateGraph(State)
+    graph_builder.add_node("human_node_1", human_node_1)
+    graph_builder.add_node("human_node_2", human_node_2)
+
+    # Add both nodes in parallel from START
+    graph_builder.add_edge(START, "human_node_1")
+    graph_builder.add_edge(START, "human_node_2")
+
+    checkpointer = InMemorySaver()
+    graph = graph_builder.compile(checkpointer=checkpointer)
+
+    thread_id = str(uuid.uuid4())
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    await graph.ainvoke(
+        {"text_1": "original text 1", "text_2": "original text 2"}, config=config
+    )
+
+    resume_map = {
+        i.id: f"resume for prompt: {i.value}"
+        for i in (await graph.aget_state(config)).interrupts
+    }
+    with pytest.raises(
+        RuntimeError,
+        match="When there are multiple pending interrupts, you must specify the interrupt id when resuming.",
+    ):
+        await graph.ainvoke(Command(resume="singular resume"), config=config)
+
+    assert await graph.ainvoke(Command(resume=resume_map), config=config) == {
+        "text_1": "resume for prompt: original text 1",
+        "text_2": "resume for prompt: original text 2",
+    }
+
+
+async def test_astream_waiter_cleanup_on_cancel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that AsyncPregelLoop cleans up waiter tasks after cancellation."""
+
+    recorded_tasks: list[asyncio.Task[None]] = []
+    finished_tasks: list[asyncio.Task[None]] = []
+
+    original_wait = AsyncQueue.wait
+
+    async def tracked_wait(self: AsyncQueue) -> None:
+        task = asyncio.current_task()
+        assert task is not None
+        recorded_tasks.append(task)
+        try:
+            await original_wait(self)
+        finally:
+            finished_tasks.append(task)
+
+    monkeypatch.setattr(AsyncQueue, "wait", tracked_wait)
+
+    class State(TypedDict, total=False):
+        count: int
+
+    async def slow_node(state: State) -> State:
+        await asyncio.sleep(0.05)
+        state = dict(state)
+        state["count"] = state.get("count", 0) + 1
+        await asyncio.sleep(0.1)
+        return state
+
+    builder = StateGraph(State)
+    builder.add_node("slow", slow_node)
+    builder.add_edge(START, "slow")
+    builder.add_edge("slow", END)
+    graph = builder.compile()
+
+    async def consumer() -> None:
+        async for _ in graph.astream({"msg": "hi"}, stream_mode="messages"):
+            await asyncio.sleep(0.01)
+
+    task = asyncio.create_task(consumer())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    await asyncio.sleep(0.05)
+
+    assert recorded_tasks, "expected stream.wait() task to be created"
+    assert set(finished_tasks) == set(recorded_tasks)
+    assert all(t.done() for t in recorded_tasks)
+
+
+async def test_supersteps_populate_task_results(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        num: int
+        text: str
+
+    def double(state: State) -> State:
+        return {"num": state["num"] * 2, "text": state["text"] * 2}
+
+    graph = (
+        StateGraph(State)
+        .add_node("double", double)
+        .add_edge(START, "double")
+        .add_edge("double", END)
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    # reference run with ainvoke
+    ref_cfg = {"configurable": {"thread_id": "ref"}}
+    await graph.ainvoke({"num": 1, "text": "one"}, ref_cfg)
+    ref_history = [h async for h in graph.aget_state_history(ref_cfg)]
+
+    # Helper: pull first task result for a node name from history
+    def first_task_result(history: list[StateSnapshot], node: str) -> Any:
+        for s in history:
+            for t in s.tasks:
+                if t.name == node:
+                    return t.result
+        return None
+
+    ref_start_result = first_task_result(ref_history, "__start__")
+    ref_double_result = first_task_result(ref_history, "double")
+    assert ref_start_result == {"num": 1, "text": "one"}
+    assert ref_double_result == {"num": 2, "text": "oneone"}
+
+    # using supersteps
+    bulk_cfg = {"configurable": {"thread_id": "bulk"}}
+    await graph.abulk_update_state(
+        bulk_cfg,
+        [
+            [StateUpdate(values={}, as_node="__input__")],
+            [StateUpdate(values={"num": 1, "text": "one"}, as_node="__start__")],
+            [StateUpdate(values={"num": 2, "text": "oneone"}, as_node="double")],
+        ],
+    )
+    bulk_history = [h async for h in graph.aget_state_history(bulk_cfg)]
+
+    bulk_start_result = first_task_result(bulk_history, "__start__")
+    bulk_double_result = first_task_result(bulk_history, "double")
+
+    assert bulk_start_result == ref_start_result == {"num": 1, "text": "one"}
+    assert bulk_double_result == ref_double_result == {"num": 2, "text": "oneone"}

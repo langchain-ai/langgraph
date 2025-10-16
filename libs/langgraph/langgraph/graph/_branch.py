@@ -41,16 +41,16 @@ _Writer = Callable[
 
 
 def _get_branch_path_input_schema(
-    path: Callable[..., Hashable | list[Hashable]]
-    | Callable[..., Awaitable[Hashable | list[Hashable]]]
-    | Runnable[Any, Hashable | list[Hashable]],
+    path: Callable[..., Hashable | Sequence[Hashable]]
+    | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
+    | Runnable[Any, Hashable | Sequence[Hashable]],
 ) -> type[Any] | None:
     input = None
     # detect input schema annotation in the branch callable
     try:
         callable_: (
-            Callable[..., Hashable | list[Hashable]]
-            | Callable[..., Awaitable[Hashable | list[Hashable]]]
+            Callable[..., Hashable | Sequence[Hashable]]
+            | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
             | None
         ) = None
         if isinstance(path, (RunnableCallable, RunnableLambda)):

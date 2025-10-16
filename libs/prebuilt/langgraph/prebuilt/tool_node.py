@@ -68,15 +68,14 @@ from langchain_core.tools.base import (
     TOOL_MESSAGE_BLOCK_TYPES,
     get_all_basemodel_annotations,
 )
-from pydantic import BaseModel
-from typing_extensions import Annotated, get_args, get_origin
-
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from langgraph.prebuilt._internal import ToolCallWithContext
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
+from langgraph.warnings import LangGraphDeprecatedSinceV10
+from pydantic import BaseModel
+from typing_extensions import Annotated, deprecated, get_args, get_origin
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
@@ -142,7 +141,7 @@ def _handle_tool_error(
     Args:
         e: The exception that occurred during tool execution.
         flag: Configuration for how to handle the error. Can be:
-            - bool: If True, use default error template
+            - bool: If `True`, use default error template
             - str: Use this string as the error message
             - Callable: Call this function with the exception to get error message
             - tuple: Not used in this context (handled by caller)
@@ -237,6 +236,10 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
     return (Exception,)
 
 
+@deprecated(
+    "ToolNode has been moved to `langchain.agents.tool_node`. Please update your import to `from langchain.agents.tool_node import ToolNode`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class ToolNode(RunnableCallable):
     """A node that runs the tools called in the last AIMessage.
 
@@ -245,29 +248,6 @@ class ToolNode(RunnableCallable):
     a list of ToolMessages, one for each tool call.
 
     Tool calls can also be passed directly as a list of `ToolCall` dicts.
-
-    Args:
-        tools: A sequence of tools that can be invoked by this node. Tools can be
-            BaseTool instances or plain functions that will be converted to tools.
-        name: The name identifier for this node in the graph. Used for debugging
-            and visualization. Defaults to "tools".
-        tags: Optional metadata tags to associate with the node for filtering
-            and organization. Defaults to None.
-        handle_tool_errors: Configuration for error handling during tool execution.
-            Defaults to True. Supports multiple strategies:
-
-            - True: Catch all errors and return a ToolMessage with the default
-              error template containing the exception details.
-            - str: Catch all errors and return a ToolMessage with this custom
-              error message string.
-            - tuple[type[Exception], ...]: Only catch exceptions of the specified
-              types and return default error messages for them.
-            - Callable[..., str]: Catch exceptions matching the callable's signature
-              and return the string result of calling it with the exception.
-            - False: Disable error handling entirely, allowing exceptions to propagate.
-
-        messages_key: The key in the state dictionary that contains the message list.
-            This same key will be used for the output ToolMessages. Defaults to "messages".
 
     Example:
         Basic usage with simple tools:
@@ -331,11 +311,26 @@ class ToolNode(RunnableCallable):
         """Initialize the ToolNode with the provided tools and configuration.
 
         Args:
-            tools: Sequence of tools to make available for execution.
-            name: Node name for graph identification.
-            tags: Optional metadata tags.
-            handle_tool_errors: Error handling configuration.
-            messages_key: State key containing messages.
+            tools: A sequence of tools that can be invoked by this node. Tools can be
+                BaseTool instances or plain functions that will be converted to tools.
+            name: The name identifier for this node in the graph. Used for debugging
+                and visualization.
+            tags: Optional metadata tags to associate with the node for filtering
+                and organization.
+            handle_tool_errors: Configuration for error handling during tool execution.
+                Defaults to True. Supports multiple strategies:
+
+                - True: Catch all errors and return a ToolMessage with the default
+                    error template containing the exception details.
+                - str: Catch all errors and return a ToolMessage with this custom
+                    error message string.
+                - tuple[type[Exception], ...]: Only catch exceptions of the specified
+                    types and return default error messages for them.
+                - Callable[..., str]: Catch exceptions matching the callable's signature
+                    and return the string result of calling it with the exception.
+                - False: Disable error handling entirely, allowing exceptions to propagate.
+            messages_key: The key in the state dictionary that contains the message list.
+                This same key will be used for the output ToolMessages.
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: dict[str, BaseTool] = {}
@@ -361,8 +356,7 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input)
-        tool_calls = [self.inject_tool_args(call, input, store) for call in tool_calls]
+        tool_calls, input_type = self._parse_input(input, store)
         config_list = get_config_list(config, len(tool_calls))
         input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
@@ -383,8 +377,7 @@ class ToolNode(RunnableCallable):
         *,
         store: Optional[BaseStore],
     ) -> Any:
-        tool_calls, input_type = self._parse_input(input)
-        tool_calls = [self.inject_tool_args(call, input, store) for call in tool_calls]
+        tool_calls, input_type = self._parse_input(input, store)
         outputs = await asyncio.gather(
             *(self._arun_one(call, input_type, config) for call in tool_calls)
         )
@@ -502,13 +495,14 @@ class ToolNode(RunnableCallable):
             return invalid_tool_message
 
         try:
-            input = {**call, **{"type": "tool_call"}}
-            response = await self.tools_by_name[call["name"]].ainvoke(input, config)
+            call_args = {**call, **{"type": "tool_call"}}
+            response = await self.tools_by_name[call["name"]].ainvoke(call_args, config)
 
         # GraphInterrupt is a special exception that will always be raised.
-        # It can be triggered in the following scenarios:
-        # (1) a NodeInterrupt is raised inside a tool
-        # (2) a NodeInterrupt is raised inside a graph node for a graph called as a tool
+        # It can be triggered in the following scenarios,
+        # Where GraphInterrupt(GraphBubbleUp) is raised from an `interrupt` invocation most commonly:
+        # (1) a GraphInterrupt is raised inside a tool
+        # (2) a GraphInterrupt is raised inside a graph node for a graph called as a tool
         # (3) a GraphInterrupt is raised when a subgraph is interrupted inside a graph called as a tool
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         except GraphBubbleUp as e:
@@ -555,6 +549,7 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
+        store: Optional[BaseStore],
     ) -> Tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
         input_type: Literal["list", "dict", "tool_calls"]
         if isinstance(input, list):
@@ -565,15 +560,6 @@ class ToolNode(RunnableCallable):
             else:
                 input_type = "list"
                 messages = input
-        elif (
-            isinstance(input, dict) and input.get("__type") == "tool_call_with_context"
-        ):
-            # mypy will not be able to type narrow correctly since the signature
-            # for input contains dict[str, Any]. We'd need to type dict[str, Any]
-            # before we can apply correct typing.
-            input = cast(ToolCallWithContext, input)  # type: ignore[assignment]
-            input_type = "tool_calls"
-            return [input["tool_call"]], input_type
         elif isinstance(input, dict) and (messages := input.get(self.messages_key, [])):
             input_type = "dict"
         elif messages := getattr(input, self.messages_key, []):
@@ -589,7 +575,10 @@ class ToolNode(RunnableCallable):
         except StopIteration:
             raise ValueError("No AIMessage found in input")
 
-        tool_calls = [call for call in latest_ai_message.tool_calls]
+        tool_calls = [
+            self.inject_tool_args(call, input, store)
+            for call in latest_ai_message.tool_calls
+        ]
         return tool_calls, input_type
 
     def _validate_tool_call(self, call: ToolCall) -> Optional[ToolMessage]:
@@ -632,19 +621,14 @@ class ToolNode(RunnableCallable):
                     err_msg += f" State should contain fields {required_fields_str}."
                 raise ValueError(err_msg)
 
-        if isinstance(input, dict) and input.get("__type") == "tool_call_with_context":
-            state = input["state"]
-        else:
-            state = input
-
-        if isinstance(state, dict):
+        if isinstance(input, dict):
             tool_state_args = {
-                tool_arg: state[state_field] if state_field else state
+                tool_arg: input[state_field] if state_field else input
                 for tool_arg, state_field in state_args.items()
             }
         else:
             tool_state_args = {
-                tool_arg: getattr(state, state_field) if state_field else state
+                tool_arg: getattr(input, state_field) if state_field else input
                 for tool_arg, state_field in state_args.items()
             }
 
@@ -802,7 +786,6 @@ def tools_condition(
 
     Args:
         state: The current graph state to examine for tool calls. Supported formats:
-            - List of messages (for MessageGraph)
             - Dictionary containing a messages key (for StateGraph)
             - BaseModel instance with a messages attribute
         messages_key: The key or attribute name containing the message list in the state.
@@ -864,6 +847,10 @@ def tools_condition(
     return "__end__"
 
 
+@deprecated(
+    "InjectedState has been moved to `langchain.agents.tool_node`. Please update your import to `from langchain.agents.tool_node import InjectedState`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class InjectedState(InjectedToolArg):
     """Annotation for injecting graph state into tool arguments.
 
@@ -871,12 +858,6 @@ class InjectedState(InjectedToolArg):
     management details to the language model. Tools annotated with InjectedState
     receive state data automatically during execution while remaining invisible
     to the model's tool-calling interface.
-
-    Args:
-        field: Optional key to extract from the state dictionary. If None, the entire
-            state is injected. If specified, only that field's value is injected.
-            This allows tools to request specific state components rather than
-            processing the full state structure.
 
     Example:
         ```python
@@ -935,9 +916,21 @@ class InjectedState(InjectedToolArg):
     """  # noqa: E501
 
     def __init__(self, field: Optional[str] = None) -> None:
+        """Initialize InjectedState annotation.
+
+        Args:
+            field: Optional key to extract from the state dictionary. If `None`, the entire
+                state is injected. If specified, only that field's value is injected.
+                This allows tools to request specific state components rather than
+                processing the full state structure.
+        """
         self.field = field
 
 
+@deprecated(
+    "InjectedStore has been moved to `langchain.agents.tool_node`. Please update your import to `from langchain.agents.tool_node import InjectedStore`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class InjectedStore(InjectedToolArg):
     """Annotation for injecting persistent store into tool arguments.
 

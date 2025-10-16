@@ -41,6 +41,7 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.utils import Input, Output
 from langchain_core.tracers.langchain import LangChainTracer
+from langgraph.store.base import BaseStore
 from typing_extensions import TypeGuard
 
 from langgraph._internal._config import (
@@ -54,7 +55,6 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
 )
 from langgraph._internal._typing import MISSING
-from langgraph.store.base import BaseStore
 from langgraph.types import StreamWriter
 
 try:
@@ -345,7 +345,7 @@ class RunnableCallable(Runnable):
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
 
-        runtime = config[CONF].get(CONFIG_KEY_RUNTIME)
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
 
         for kw, (runtime_key, default) in self.func_accepts.items():
             # If the kwarg is already set, use the set value
@@ -417,7 +417,7 @@ class RunnableCallable(Runnable):
             args = (input,)
             kwargs = {**self.kwargs, **kwargs}
 
-        runtime = config[CONF].get(CONFIG_KEY_RUNTIME)
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
 
         for kw, (runtime_key, default) in self.func_accepts.items():
             # If the kwarg has already been set, use the set value
@@ -534,9 +534,9 @@ def coerce_to_runnable(
 
 
 class RunnableSeq(Runnable):
-    """Sequence of Runnables, where the output of each is the input of the next.
+    """Sequence of `Runnable`, where the output of each is the input of the next.
 
-    RunnableSeq is a simpler version of RunnableSequence that is internal to
+    `RunnableSeq` is a simpler version of `RunnableSequence` that is internal to
     LangGraph.
     """
 
@@ -550,7 +550,7 @@ class RunnableSeq(Runnable):
 
         Args:
             steps: The steps to include in the sequence.
-            name: The name of the Runnable. Defaults to None.
+            name: The name of the `Runnable`.
 
         Raises:
             ValueError: If the sequence has less than 2 steps.

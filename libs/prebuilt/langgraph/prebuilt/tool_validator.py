@@ -2,8 +2,7 @@
 in a langchain graph. It applies a pydantic schema to tool_calls in the models' outputs,
 and returns a ToolMessage with the validated content. If the schema is not valid, it
 returns a ToolMessage with the error message. The ValidationNode can be used in a
-StateGraph with a "messages" key or in a MessageGraph. If multiple tool calls are
-requested, they will be run in parallel.
+StateGraph with a "messages" key. If multiple tool calls are requested, they will be run in parallel.
 """
 
 from typing import (
@@ -30,11 +29,12 @@ from langchain_core.runnables import (
 from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool, create_schema_from_function
 from langchain_core.utils.pydantic import is_basemodel_subclass
+from langgraph._internal._runnable import RunnableCallable
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
-
-from langgraph._internal._runnable import RunnableCallable
+from typing_extensions import deprecated
 
 
 def _default_format_error(
@@ -46,10 +46,14 @@ def _default_format_error(
     return f"{repr(error)}\n\nRespond after fixing all validation errors."
 
 
+@deprecated(
+    "ValidationNode is deprecated. Please use `create_agent` from `langchain.agents` with custom tool error handling.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class ValidationNode(RunnableCallable):
     """A node that validates all tools requests from the last AIMessage.
 
-    It can be used either in StateGraph with a "messages" key or in MessageGraph.
+    It can be used either in StateGraph with a "messages" key.
 
     !!! note
 
@@ -57,18 +61,6 @@ class ValidationNode(RunnableCallable):
         which is useful for extraction and other use cases where you need to generate
         structured output that conforms to a complex schema without losing the original
         messages and tool IDs (for use in multi-turn conversations).
-
-    Args:
-        schemas: A list of schemas to validate the tool calls with. These can be
-            any of the following:
-            - A pydantic BaseModel class
-            - A BaseTool instance (the args_schema will be used)
-            - A function (a schema will be created from the function signature)
-        format_error: A function that takes an exception, a ToolCall, and a schema
-            and returns a formatted error string. By default, it returns the
-            exception repr and a message to respond after fixing validation errors.
-        name: The name of the node.
-        tags: A list of tags to add to the node.
 
     Returns:
         (Union[Dict[str, List[ToolMessage]], Sequence[ToolMessage]]): A list of ToolMessages with the validated content or error messages.
@@ -136,6 +128,20 @@ class ValidationNode(RunnableCallable):
         name: str = "validation",
         tags: Optional[list[str]] = None,
     ) -> None:
+        """Initialize the ValidationNode.
+
+        Args:
+            schemas: A list of schemas to validate the tool calls with. These can be
+                any of the following:
+                - A pydantic BaseModel class
+                - A BaseTool instance (the args_schema will be used)
+                - A function (a schema will be created from the function signature)
+            format_error: A function that takes an exception, a ToolCall, and a schema
+                and returns a formatted error string. By default, it returns the
+                exception repr and a message to respond after fixing validation errors.
+            name: The name of the node.
+            tags: A list of tags to add to the node.
+        """
         super().__init__(self._func, None, name=name, tags=tags, trace=False)
         self._format_error = format_error or _default_format_error
         self.schemas_by_name: Dict[str, Type[BaseModel]] = {}

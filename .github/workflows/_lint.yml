@@ -31,7 +31,7 @@ jobs:
           - "3.12"
     name: "lint #${{ matrix.python-version }}"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Get changed files
         id: changed-files
         uses: Ana06/get-changed-files@v2.3.0
@@ -39,7 +39,7 @@ jobs:
           filter: "${{ inputs.working-directory }}/**"
       - name: Set up Python ${{ matrix.python-version }}
         if: steps.changed-files.outputs.all
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true

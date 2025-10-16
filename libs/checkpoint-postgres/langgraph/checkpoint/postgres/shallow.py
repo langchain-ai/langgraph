@@ -6,6 +6,16 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
+    ChannelVersions,
+    Checkpoint,
+    CheckpointMetadata,
+    CheckpointTuple,
+    get_serializable_checkpoint_metadata,
+)
+from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.types import TASKS
 from psycopg import (
     AsyncConnection,
     AsyncCursor,
@@ -19,18 +29,8 @@ from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
-from langgraph.checkpoint.base import (
-    WRITES_IDX_MAP,
-    ChannelVersions,
-    Checkpoint,
-    CheckpointMetadata,
-    CheckpointTuple,
-    get_checkpoint_metadata,
-)
 from langgraph.checkpoint.postgres import _ainternal, _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
-from langgraph.checkpoint.serde.base import SerializerProtocol
-from langgraph.checkpoint.serde.types import TASKS
 
 """
 To add a new migration, add a new string to the MIGRATIONS list.
@@ -309,7 +309,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
             config: The config to use for retrieving the checkpoint.
 
         Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
 
         Examples:
 
@@ -441,7 +441,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     Jsonb(copy),
-                    Jsonb(get_checkpoint_metadata(config, metadata)),
+                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -672,7 +672,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             config: The config to use for retrieving the checkpoint.
 
         Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -774,7 +774,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     Jsonb(copy),
-                    Jsonb(get_checkpoint_metadata(config, metadata)),
+                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -893,7 +893,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
             config: The config to use for retrieving the checkpoint.
 
         Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         try:
             # check if we are in the main thread, only bg threads can block

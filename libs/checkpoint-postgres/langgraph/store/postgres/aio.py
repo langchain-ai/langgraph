@@ -8,11 +8,6 @@ from types import TracebackType
 from typing import Any, Callable, cast
 
 import orjson
-from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
-from psycopg.rows import DictRow, dict_row
-from psycopg_pool import AsyncConnectionPool
-
-from langgraph.checkpoint.postgres import _ainternal
 from langgraph.store.base import (
     GetOp,
     ListNamespacesOp,
@@ -22,6 +17,11 @@ from langgraph.store.base import (
     SearchOp,
 )
 from langgraph.store.base.batch import AsyncBatchedBaseStore
+from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
+from psycopg.rows import DictRow, dict_row
+from psycopg_pool import AsyncConnectionPool
+
+from langgraph.checkpoint.postgres import _ainternal
 from langgraph.store.postgres.base import (
     PLACEHOLDER,
     BasePostgresStore,
@@ -339,7 +339,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
 
         Args:
             timeout: Maximum time to wait for the task to stop, in seconds.
-                If None, wait indefinitely.
+                If `None`, wait indefinitely.
 
         Returns:
             bool: True if the task was successfully stopped or wasn't running,

@@ -74,17 +74,26 @@ class FakeChatModel(GenericFakeChatModel):
             assert isinstance(content, str)
             content_chunks = cast(list[str], re.split(r"(\s)", content))
 
-            for token in content_chunks:
-                chunk = ChatGenerationChunk(
-                    message=AIMessageChunk(content=token, id=message.id)
-                )
+            for i, token in enumerate(content_chunks):
+                if i == len(content_chunks) - 1:
+                    chunk = ChatGenerationChunk(
+                        message=AIMessageChunk(
+                            content=token, id=message.id, chunk_position="last"
+                        )
+                    )
+                else:
+                    chunk = ChatGenerationChunk(
+                        message=AIMessageChunk(content=token, id=message.id)
+                    )
                 if run_manager:
                     run_manager.on_llm_new_token(token, chunk=chunk)
                 yield chunk
         else:
             args = message.__dict__
             args.pop("type")
-            chunk = ChatGenerationChunk(message=AIMessageChunk(**args))
+            chunk = ChatGenerationChunk(
+                message=AIMessageChunk(**args, chunk_position="last")
+            )
             if run_manager:
                 run_manager.on_llm_new_token("", chunk=chunk)
             yield chunk
@@ -122,17 +131,27 @@ class FakeChatModel(GenericFakeChatModel):
             assert isinstance(content, str)
             content_chunks = cast(list[str], re.split(r"(\s)", content))
 
-            for token in content_chunks:
-                chunk = ChatGenerationChunk(
-                    message=AIMessageChunk(content=token, id=message.id)
-                )
+            for i, token in enumerate(content_chunks):
+                if i == len(content_chunks) - 1:
+                    chunk = ChatGenerationChunk(
+                        message=AIMessageChunk(
+                            content=token, id=message.id, chunk_position="last"
+                        )
+                    )
+                else:
+                    chunk = ChatGenerationChunk(
+                        message=AIMessageChunk(content=token, id=message.id)
+                    )
+
                 if run_manager:
                     run_manager.on_llm_new_token(token, chunk=chunk)
                 yield chunk
         else:
             args = message.__dict__
             args.pop("type")
-            chunk = ChatGenerationChunk(message=AIMessageChunk(**args))
+            chunk = ChatGenerationChunk(
+                message=AIMessageChunk(**args, chunk_position="last")
+            )
             if run_manager:
                 await run_manager.on_llm_new_token("", chunk=chunk)
             yield chunk
