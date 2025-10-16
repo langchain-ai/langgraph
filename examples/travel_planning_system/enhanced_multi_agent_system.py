@@ -37,11 +37,10 @@ from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
 # Tracing imports
 try:
-    from langchain_azure_ai.callbacks.tracers import AzureOpenAITracingCallback, AsyncAzureOpenAITracingCallback
+    from langchain_azure_ai.callbacks.tracers import AzureAIOpenTelemetryTracer
 except ImportError as e:
     logger.warning(f"Tracing imports failed: {e}")
-    AzureOpenAITracingCallback = None
-    AsyncAzureOpenAITracingCallback = None
+    AzureAIOpenTelemetryTracer = None
 
 try:
     from opentelemetry import trace, context
@@ -135,18 +134,17 @@ def setup_tracing():
     tracers = []
     
     # Azure Application Insights
-    if config.tracing.application_insights_connection_string and AzureOpenAITracingCallback:
+    if config.tracing.application_insights_connection_string and AzureAIOpenTelemetryTracer:
         # Use only the synchronous Azure OpenAI tracing callback to avoid
         # duplicate spans and ensure consistent parent/child relationships.
-        azure_tracer = AzureOpenAITracingCallback(
+        azure_tracer = AzureAIOpenTelemetryTracer(
             connection_string=config.tracing.application_insights_connection_string,
             enable_content_recording=True,
             name="enhanced_multi_agent_travel_planning",
-            id="enhanced_travel_planner_agent",
-            endpoint="my_fdp_url",
-            scope="Travel planning orchestrator"
         )
         tracers.append(azure_tracer)
+        print(azure_tracer)
+        print("azure tracer initialized")
         logger.info("Azure tracing (sync) enabled")
     
     # try:

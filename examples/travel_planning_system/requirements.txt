@@ -3,6 +3,7 @@ langgraph>=0.1.14
 langchain-core>=0.2.0
 langchain-openai>=0.2.0
 langchain-azure-ai>=0.1.5
+aiohttp>=3.9.0
 
 # Environment and tracing
 python-dotenv>=1.0.1
