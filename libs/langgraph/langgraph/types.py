@@ -523,3 +523,12 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
+
+
+@dataclass(**_DC_SLOTS)
+class Overwrite:
+    """Bypass a reducer and write the wrapped value directly to a BinaryOperatorAggregate channel.
+
+    Receiving multiple Overwrite values for the same channel in a single step will raise an InvalidUpdateError."""
+
+    value: Any
