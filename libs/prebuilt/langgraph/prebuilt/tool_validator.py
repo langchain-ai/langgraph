@@ -30,9 +30,11 @@ from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool, create_schema_from_function
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langgraph._internal._runnable import RunnableCallable
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
+from typing_extensions import deprecated
 
 
 def _default_format_error(
@@ -44,6 +46,10 @@ def _default_format_error(
     return f"{repr(error)}\n\nRespond after fixing all validation errors."
 
 
+@deprecated(
+    "ValidationNode is deprecated. Please use `create_agent` from `langchain.agents` with custom tool error handling.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class ValidationNode(RunnableCallable):
     """A node that validates all tools requests from the last AIMessage.
 

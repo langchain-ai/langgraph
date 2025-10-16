@@ -73,8 +73,9 @@ from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 from pydantic import BaseModel
-from typing_extensions import Annotated, get_args, get_origin
+from typing_extensions import Annotated, deprecated, get_args, get_origin
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
@@ -235,6 +236,10 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
     return (Exception,)
 
 
+@deprecated(
+    "ToolNode has been moved to `langchain.agents.tool_node`. Please update your import to `from langchain.agents.tool_node import ToolNode`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class ToolNode(RunnableCallable):
     """A node that runs the tools called in the last AIMessage.
 
@@ -850,6 +855,10 @@ def tools_condition(
     return "__end__"
 
 
+@deprecated(
+    "InjectedState has been moved to `langchain.agents.tool_node`. Please update your import to `from langchain.agents.tool_node import InjectedState`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class InjectedState(InjectedToolArg):
     """Annotation for injecting graph state into tool arguments.
 
@@ -924,6 +933,10 @@ class InjectedState(InjectedToolArg):
         self.field = field
 
 
+@deprecated(
+    "InjectedStore has been moved to `langchain.agents.tool_node`. Please update your import to `from langchain.agents.tool_node import InjectedStore`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class InjectedStore(InjectedToolArg):
     """Annotation for injecting persistent store into tool arguments.
 
