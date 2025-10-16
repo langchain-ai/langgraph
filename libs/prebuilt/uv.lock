@@ -299,7 +299,7 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.1.1"
+version = "2.1.2"
 source = { editable = "../checkpoint" }
 dependencies = [
     { name = "langchain-core" },
@@ -330,7 +330,7 @@ dev = [
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.24"
+version = "2.0.25"
 source = { editable = "../checkpoint-postgres" }
 dependencies = [
     { name = "langgraph-checkpoint" },
