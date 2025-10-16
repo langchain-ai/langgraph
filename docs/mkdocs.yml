@@ -136,6 +136,7 @@ plugins:
         - how-tos/ttl/configure_ttl.md
         - how-tos/use-remote-graph.md
         - index.md
+        - reference/index.md
         - snippets/chat_model_tabs.md
         - troubleshooting/errors/GRAPH_RECURSION_LIMIT.md
         - troubleshooting/errors/index.md
