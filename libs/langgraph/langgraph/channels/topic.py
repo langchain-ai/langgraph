@@ -28,7 +28,7 @@ class Topic(
 
     Args:
         typ: The type of the value stored in the channel.
-        accumulate: Whether to accumulate values across steps. If False, the channel will be emptied after each step.
+        accumulate: Whether to accumulate values across steps. If `False`, the channel will be emptied after each step.
     """
 
     __slots__ = ("values", "accumulate")

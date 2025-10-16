@@ -74,15 +74,15 @@ def add_messages(
         left: The base list of messages.
         right: The list of messages (or single message) to merge
             into the base list.
-        format: The format to return messages in. If None then messages will be
-            returned as is. If 'langchain-openai' then messages will be returned as
-            BaseMessage objects with their contents formatted to match OpenAI message
-            format, meaning contents can be string, 'text' blocks, or 'image_url' blocks
-            and tool responses are returned as their own ToolMessages.
+        format: The format to return messages in. If `None` then messages will be
+            returned as is. If `langchain-openai` then messages will be returned as
+            `BaseMessage` objects with their contents formatted to match OpenAI message
+            format, meaning contents can be string, `'text'` blocks, or `'image_url'` blocks
+            and tool responses are returned as their own `ToolMessage` objects.
 
             !!! important "Requirement"
 
-                Must have ``langchain-core>=0.3.11`` installed to use this feature.
+                Must have `langchain-core>=0.3.11` installed to use this feature.
 
     Returns:
         A new list of messages with the messages from `right` merged into `left`.

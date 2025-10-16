@@ -85,7 +85,7 @@ StreamMode = Literal[
     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
 - `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
-- `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by get_state().
+- `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
 - `"debug"`: Emit "checkpoints" and "tasks" events, for debugging purposes.
 """
@@ -93,7 +93,7 @@ StreamMode = Literal[
 StreamWriter = Callable[[Any], None]
 """Callable that accepts a single argument and writes it to the output stream.
 Always injected into nodes if requested as a keyword argument, but it's a no-op
-when not using stream_mode="custom"."""
+when not using `stream_mode="custom"`."""
 
 if sys.version_info >= (3, 10):
     _DC_SLOTS = {"slots": True}
@@ -137,7 +137,7 @@ class CachePolicy(Generic[KeyFuncT]):
     Defaults to hashing the input with pickle."""
 
     ttl: int | None = None
-    """Time to live for the cache entry in seconds. If None, the entry never expires."""
+    """Time to live for the cache entry in seconds. If `None`, the entry never expires."""
 
 
 _DEFAULT_INTERRUPT_ID = "placeholder-id"
@@ -354,20 +354,20 @@ class Command(Generic[N], ToolOutputMixin):
     Args:
         graph: graph to send the command to. Supported values are:
 
-            - None: the current graph (default)
-            - Command.PARENT: closest parent graph
-        update: update to apply to the graph's state.
-        resume: value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
+            - `None`: the current graph
+            - `Command.PARENT`: closest parent graph
+        update: Update to apply to the graph's state.
+        resume: Value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
             Can be one of the following:
 
-            - mapping of interrupt ids to resume values
-            - a single value with which to resume the next interrupt
-        goto: can be one of the following:
+            - Mapping of interrupt ids to resume values
+            - A single value with which to resume the next interrupt
+        goto: Can be one of the following:
 
-            - name of the node to navigate to next (any node that belongs to the specified `graph`)
-            - sequence of node names to navigate to next
+            - Name of the node to navigate to next (any node that belongs to the specified `graph`)
+            - Sequence of node names to navigate to next
             - `Send` object (to execute a node with the input provided)
-            - sequence of `Send` objects
+            - Sequence of `Send` objects
     """
 
     graph: str | None = None

@@ -392,11 +392,11 @@ def prepare_next_tasks(
         processes: The mapping of process names to PregelNode instances.
         channels: The mapping of channel names to BaseChannel instances.
         managed: The mapping of managed value names to functions.
-        config: The runnable configuration.
+        config: The `Runnable` configuration.
         step: The current step.
         for_execution: Whether the tasks are being prepared for execution.
         store: An instance of BaseStore to make it available for usage within tasks.
-        checkpointer: Checkpointer instance used for saving checkpoints.
+        checkpointer: `Checkpointer` instance used for saving checkpoints.
         manager: The parent run manager to use for the tasks.
         trigger_to_nodes: Optional: Mapping of channel names to the set of nodes
             that are can be triggered by that channel.

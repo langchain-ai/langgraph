@@ -35,17 +35,17 @@ class CheckpointMetadata(TypedDict, total=False):
     source: Literal["input", "loop", "update", "fork"]
     """The source of the checkpoint.
 
-    - "input": The checkpoint was created from an input to invoke/stream/batch.
-    - "loop": The checkpoint was created from inside the pregel loop.
-    - "update": The checkpoint was created from a manual state update.
-    - "fork": The checkpoint was created as a copy of another checkpoint.
+    - `"input"`: The checkpoint was created from an input to invoke/stream/batch.
+    - `"loop"`: The checkpoint was created from inside the pregel loop.
+    - `"update"`: The checkpoint was created from a manual state update.
+    - `"fork"`: The checkpoint was created as a copy of another checkpoint.
     """
     step: int
     """The step number of the checkpoint.
 
-    -1 for the first "input" checkpoint.
-    0 for the first "loop" checkpoint.
-    ... for the nth checkpoint afterwards.
+    `-1` for the first `"input"` checkpoint.
+    `0` for the first `"loop"` checkpoint.
+    `...` for the `nth` checkpoint afterwards.
     """
     parents: dict[str, str]
     """The IDs of the parent checkpoints.
@@ -148,7 +148,7 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            Optional[Checkpoint]: The requested checkpoint, or None if not found.
+            The requested checkpoint, or `None` if not found.
         """
         if value := self.get_tuple(config):
             return value.checkpoint
@@ -160,7 +160,7 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
+            The requested checkpoint tuple, or `None` if not found.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -184,7 +184,7 @@ class BaseCheckpointSaver(Generic[V]):
             limit: Maximum number of checkpoints to return.
 
         Returns:
-            Iterator[CheckpointTuple]: Iterator of matching checkpoint tuples.
+            Iterator of matching checkpoint tuples.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -252,7 +252,7 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            Optional[Checkpoint]: The requested checkpoint, or None if not found.
+            The requested checkpoint, or `None` if not found.
         """
         if value := await self.aget_tuple(config):
             return value.checkpoint
@@ -264,7 +264,7 @@ class BaseCheckpointSaver(Generic[V]):
             config: Configuration specifying which checkpoint to retrieve.
 
         Returns:
-            Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
+            The requested checkpoint tuple, or `None` if not found.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
@@ -288,7 +288,7 @@ class BaseCheckpointSaver(Generic[V]):
             limit: Maximum number of checkpoints to return.
 
         Returns:
-            AsyncIterator[CheckpointTuple]: Async iterator of matching checkpoint tuples.
+            Async iterator of matching checkpoint tuples.
 
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.

@@ -121,11 +121,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Args:
             config: Base configuration for filtering checkpoints.
             filter: Additional filtering criteria for metadata.
-            before: If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
+            before: If provided, only checkpoints before the specified checkpoint ID are returned.
             limit: Maximum number of checkpoints to return.
 
         Yields:
-            AsyncIterator[CheckpointTuple]: An asynchronous iterator of matching checkpoint tuples.
+            An asynchronous iterator of matching checkpoint tuples.
         """
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
@@ -169,7 +169,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """Get a checkpoint tuple from the database asynchronously.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the
-        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
+        provided config. If the config contains a `checkpoint_id` key, the checkpoint with
         the matching thread ID and "checkpoint_id" is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
 
@@ -177,7 +177,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             config: The config to use for retrieving the checkpoint.
 
         Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
@@ -444,11 +444,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Args:
             config: Base configuration for filtering checkpoints.
             filter: Additional filtering criteria for metadata.
-            before: If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
+            before: If provided, only checkpoints before the specified checkpoint ID are returned.
             limit: Maximum number of checkpoints to return.
 
         Yields:
-            Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
+            An iterator of matching checkpoint tuples.
         """
         try:
             # check if we are in the main thread, only bg threads can block
@@ -476,7 +476,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """Get a checkpoint tuple from the database.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the
-        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
+        provided config. If the config contains a `checkpoint_id` key, the checkpoint with
         the matching thread ID and "checkpoint_id" is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
 
@@ -484,7 +484,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             config: The config to use for retrieving the checkpoint.
 
         Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         try:
             # check if we are in the main thread, only bg threads can block

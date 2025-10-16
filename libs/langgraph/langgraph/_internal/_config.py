@@ -162,14 +162,10 @@ def patch_config(
     Args:
         config: The config to patch.
         callbacks: The callbacks to set.
-          Defaults to None.
         recursion_limit: The recursion limit to set.
-          Defaults to None.
         max_concurrency: The max number of concurrent steps to run, which also applies to parallelized steps.
-          Defaults to None.
-        run_name: The run name to set. Defaults to None.
+        run_name: The run name to set.
         configurable: The configurable to set.
-          Defaults to None.
 
     Returns:
         RunnableConfig: The patched config.

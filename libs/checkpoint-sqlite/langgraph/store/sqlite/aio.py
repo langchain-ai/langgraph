@@ -303,7 +303,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
 
         Args:
             timeout: Maximum time to wait for the task to stop, in seconds.
-                If None, wait indefinitely.
+                If `None`, wait indefinitely.
 
         Returns:
             bool: True if the task was successfully stopped or wasn't running,
