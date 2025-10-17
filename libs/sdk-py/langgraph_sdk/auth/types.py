@@ -912,7 +912,7 @@ class StorePut(typing.TypedDict):
     """Unique identifier for the item within its namespace."""
 
     value: dict[str, typing.Any] | None
-    """The data to store, or None to mark the item for deletion."""
+    """The data to store, or `None` to mark the item for deletion."""
 
     index: typing.Literal[False] | list[str] | None
     """Optional index configuration for full-text search."""

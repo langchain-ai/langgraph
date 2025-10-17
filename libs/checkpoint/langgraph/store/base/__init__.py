@@ -4,9 +4,9 @@ Stores provide long-term memory that persists across threads and conversations.
 Supports hierarchical namespaces, key-value storage, and optional vector search.
 
 Core types:
-    - BaseStore: Store interface with sync/async operations
-    - Item: Stored key-value pairs with metadata
-    - Op: Get/Put/Search/List operations
+    - `BaseStore`: Store interface with sync/async operations
+    - `Item`: Stored key-value pairs with metadata
+    - `Op`: Get/Put/Search/List operations
 """
 
 from __future__ import annotations
@@ -473,10 +473,10 @@ class PutOp(NamedTuple):
     """
 
     value: dict[str, Any] | None
-    """The data to store, or None to mark the item for deletion.
+    """The data to store, or `None` to mark the item for deletion.
 
     The value must be a dictionary with string keys and JSON-serializable values.
-    Setting this to None signals that the item should be deleted.
+    Setting this to `None` signals that the item should be deleted.
 
     Example:
         {
@@ -490,9 +490,9 @@ class PutOp(NamedTuple):
     """Controls how the item's fields are indexed for search operations.
 
     Indexing configuration determines how the item can be found through search:
-        - None (default): Uses the store's default indexing configuration (if provided)
-        - False: Disables indexing for this item
-        - list[str]: Specifies which json path fields to index for search
+        - `None` (default): Uses the store's default indexing configuration (if provided)
+        - `False`: Disables indexing for this item
+        - `list[str]`: Specifies which json path fields to index for search
 
     The item remains accessible through direct get() operations regardless of indexing.
     When indexed, fields can be searched using natural language queries through
@@ -590,7 +590,7 @@ class IndexConfig(TypedDict, total=False):
     """Optional function to generate embeddings from text.
     
     Can be specified in three ways:
-        1. A LangChain Embeddings instance
+        1. A LangChain `Embeddings` instance
         2. A synchronous embedding function (`EmbeddingsFunc`)
         3. An asynchronous embedding function (`AEmbeddingsFunc`)
         4. A provider string (e.g., `"openai:text-embedding-3-small"`)
@@ -757,7 +757,7 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
             refresh_ttl: Whether to refresh TTLs for the returned item.
-                If `None`, uses the store's default refresh_ttl setting.
+                If `None`, uses the store's default `refresh_ttl` setting.
                 If no TTL is specified, this argument is ignored.
 
         Returns:
@@ -1037,8 +1037,8 @@ class BaseStore(ABC):
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
             refresh_ttl: Whether to refresh TTLs for the returned items.
-                If `None`, uses the store's TTLConfig.refresh_default setting.
-                If TTLConfig is not provided or no TTL is specified, this argument is ignored.
+                If `None`, uses the store's `TTLConfig.refresh_default` setting.
+                If `TTLConfig` is not provided or no TTL is specified, this argument is ignored.
 
         Returns:
             List of items matching the search criteria.
