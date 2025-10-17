@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from functools import cached_property
 from typing import (
     Any,
-    Callable,
-    Union,
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -18,7 +16,7 @@ from langgraph.pregel._write import ChannelWrite
 from langgraph.pregel.protocol import PregelProtocol
 from langgraph.types import CachePolicy, RetryPolicy
 
-READ_TYPE = Callable[[Union[str, Sequence[str]], bool], Union[Any, dict[str, Any]]]
+READ_TYPE = Callable[[str | Sequence[str], bool], Any | dict[str, Any]]
 INPUT_CACHE_KEY_TYPE = tuple[Callable[..., Any], tuple[str, ...]]
 
 

@@ -2,7 +2,7 @@ import operator
 from collections.abc import Sequence
 from functools import partial
 from random import choice
-from typing import Annotated, Optional
+from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -55,7 +55,7 @@ def pydantic_state(n: int) -> StateGraph:
                 raise TypeError("primary_issue_medium must be a string")
             return v
 
-        autoresponse: Annotated[Optional[dict], lambda _, y: y] = Field(
+        autoresponse: Annotated[dict | None, lambda _, y: y] = Field(
             default=None
         )  # Always overwrite
 
@@ -75,7 +75,7 @@ def pydantic_state(n: int) -> StateGraph:
                 raise TypeError("issue must be a dict or None")
             return v
 
-        relevant_rules: Optional[list[dict]] = Field(default=None)
+        relevant_rules: list[dict] | None = Field(default=None)
         """SOPs fetched from the rulebook that are relevant to the current conversation."""
 
         @field_validator("relevant_rules", mode="after")
@@ -94,7 +94,7 @@ def pydantic_state(n: int) -> StateGraph:
                     )
             return v
 
-        memory_docs: Optional[list[dict]] = Field(default=None)
+        memory_docs: list[dict] | None = Field(default=None)
         """Memory docs fetched from the memory service that are relevant to the current conversation."""
 
         @field_validator("memory_docs", mode="after")
@@ -145,7 +145,7 @@ def pydantic_state(n: int) -> StateGraph:
                     raise TypeError("responses must be a list of dicts with str keys")
             return v
 
-        user_info: Annotated[Optional[dict], lambda x, y: y if y is not None else x] = (
+        user_info: Annotated[dict | None, lambda x, y: y if y is not None else x] = (
             Field(default=None)
         )
         """The current user state (by email)."""
@@ -157,7 +157,7 @@ def pydantic_state(n: int) -> StateGraph:
                 raise TypeError("user_info must be a dict or None")
             return v
 
-        crm_info: Annotated[Optional[dict], lambda x, y: y if y is not None else x] = (
+        crm_info: Annotated[dict | None, lambda x, y: y if y is not None else x] = (
             Field(default=None)
         )
         """The CRM information for organization the current user is from."""
@@ -170,7 +170,7 @@ def pydantic_state(n: int) -> StateGraph:
             return v
 
         email_thread_id: Annotated[
-            Optional[str], lambda x, y: y if y is not None else x
+            str | None, lambda x, y: y if y is not None else x
         ] = Field(default=None)
         """The current email thread ID."""
 
@@ -194,7 +194,7 @@ def pydantic_state(n: int) -> StateGraph:
                     raise TypeError("slack_participants must be a dict with str keys")
             return v
 
-        bot_id: Optional[str] = Field(default=None)
+        bot_id: str | None = Field(default=None)
         """The ID of the bot user in the slack channel."""
 
         @field_validator("bot_id", mode="after")

@@ -110,7 +110,7 @@ class RemoteGraph(PregelProtocol):
     APIs that implement the LangGraph Server API specification.
 
     For example, the `RemoteGraph` class can be used to call APIs from deployments
-    on LangGraph Platform.
+    on LangSmith Deployment.
 
     `RemoteGraph` behaves the same way as a `Graph` and can be used directly as
     a node in another `Graph`.

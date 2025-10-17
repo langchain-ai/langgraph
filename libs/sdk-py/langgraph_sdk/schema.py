@@ -8,14 +8,11 @@ from typing import (
     Any,
     Literal,
     NamedTuple,
-    Optional,
+    TypeAlias,
     TypedDict,
-    Union,
 )
 
-from typing_extensions import TypeAlias
-
-Json = Optional[dict[str, Any]]
+Json = dict[str, Any] | None
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
 
 RunStatus = Literal["pending", "running", "error", "success", "timeout", "interrupted"]
@@ -418,15 +415,15 @@ CronSelectField = Literal[
     "now",
 ]
 
-PrimitiveData = Optional[Union[str, int, float, bool]]
+PrimitiveData = str | int | float | bool | None
 
-QueryParamTypes = Union[
-    Mapping[str, Union[PrimitiveData, Sequence[PrimitiveData]]],
-    list[tuple[str, PrimitiveData]],
-    tuple[tuple[str, PrimitiveData], ...],
-    str,
-    bytes,
-]
+QueryParamTypes = (
+    Mapping[str, PrimitiveData | Sequence[PrimitiveData]]
+    | list[tuple[str, PrimitiveData]]
+    | tuple[tuple[str, PrimitiveData], ...]
+    | str
+    | bytes
+)
 
 
 class RunCreate(TypedDict):

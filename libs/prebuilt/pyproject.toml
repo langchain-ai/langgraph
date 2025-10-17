@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-prebuilt"
-version = "0.6.4"
+version = "0.7.0a2"
 description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
 authors = []
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
@@ -28,6 +28,7 @@ dev = [
     "pytest-mock",
     "pytest-watcher",
     "mypy",
+    "langchain-core",
     "langgraph",
     "langgraph-checkpoint",
     "langgraph-checkpoint-sqlite",
@@ -52,8 +53,9 @@ addopts = "--strict-markers --strict-config --durations=5 -vv"
 asyncio_mode = "auto"
 
 [tool.ruff]
-lint.select = [ "E", "F", "I", "TID251" ]
+lint.select = [ "E", "F", "I", "TID251", "UP" ]
 lint.ignore = [ "E501" ]
+target-version = "py310"
 
 [tool.pytest-watcher]
 now = true

@@ -4,7 +4,7 @@ import asyncio
 import binascii
 import concurrent.futures
 from collections import defaultdict, deque
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import (
     AbstractAsyncContextManager,
     AbstractContextManager,
@@ -16,9 +16,7 @@ from inspect import signature
 from types import TracebackType
 from typing import (
     Any,
-    Callable,
     Literal,
-    Optional,
     TypeVar,
     cast,
 )
@@ -404,7 +402,7 @@ class PregelLoop:
         checkpoint_id_bytes = binascii.unhexlify(self.checkpoint["id"].replace("-", ""))
         null_version = checkpoint_null_version(self.checkpoint)
         if pushed := cast(
-            Optional[PregelExecutableTask],
+            PregelExecutableTask | None,
             prepare_single_task(
                 (PUSH, task.path, write_idx, task.id, call),
                 None,

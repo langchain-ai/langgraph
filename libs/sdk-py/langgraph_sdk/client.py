@@ -16,14 +16,11 @@ import os
 import re
 import sys
 import warnings
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from types import TracebackType
 from typing import (
     Any,
-    Callable,
     Literal,
-    Optional,
-    Union,
     overload,
 )
 
@@ -160,7 +157,7 @@ def get_client(
 ) -> LangGraphClient:
     """Create and configure a LangGraphClient.
 
-    The client provides programmatic access to a LangGraph Platform deployment. It supports
+    The client provides programmatic access to LangSmith Deployment. It supports
     both remote servers and local in-process connections (when running inside a LangGraph server).
 
     Args:
@@ -941,7 +938,7 @@ class AssistantsClient:
         Args:
             assistant_id: Assistant to update.
             graph_id: The ID of the graph the assistant should use.
-                The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
+                The graph ID is normally set in your langgraph.json configuration. If `None`, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
             context: Static context to add to the assistant.
                 !!! version-added "Added in version 0.6.0"
@@ -1275,7 +1272,7 @@ class ThreadsClient:
         Args:
             metadata: Metadata to add to thread.
             thread_id: ID of thread.
-                If None, ID will be a randomly generated UUID.
+                If `None`, ID will be a randomly generated UUID.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing thread).
             supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
@@ -1952,7 +1949,7 @@ class RunsClient:
 
         Args:
             thread_id: the thread ID to assign to the thread.
-                If None will create a stateless run.
+                If `None` will create a stateless run.
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
@@ -2162,7 +2159,7 @@ class RunsClient:
 
         Args:
             thread_id: the thread ID to assign to the thread.
-                If None will create a stateless run.
+                If `None` will create a stateless run.
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
@@ -2414,7 +2411,7 @@ class RunsClient:
 
         Args:
             thread_id: the thread ID to create the run on.
-                If None will create a stateless run.
+                If `None` will create a stateless run.
             assistant_id: The assistant ID or graph name to run.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
@@ -3238,7 +3235,7 @@ class StoreClient:
         Args:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
-            refresh_ttl: Whether to refresh the TTL on this read operation. If None, uses the store's default behavior.
+            refresh_ttl: Whether to refresh the TTL on this read operation. If `None`, uses the store's default behavior.
 
         Returns:
             Item: The retrieved item.
@@ -3336,7 +3333,7 @@ class StoreClient:
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
             query: Optional query for natural language search.
-            refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
+            refresh_ttl: Whether to refresh the TTL on items returned by this search. If `None`, uses the store's default behavior.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -4200,7 +4197,7 @@ class SyncAssistantsClient:
         Args:
             assistant_id: Assistant to update.
             graph_id: The ID of the graph the assistant should use.
-                The graph ID is normally set in your langgraph.json configuration. If None, assistant will keep pointing to same graph.
+                The graph ID is normally set in your langgraph.json configuration. If `None`, assistant will keep pointing to same graph.
             config: Configuration to use for the graph.
             context: Static context to add to the assistant.
                 !!! version-added "Added in version 0.6.0"
@@ -4521,7 +4518,7 @@ class SyncThreadsClient:
         Args:
             metadata: Metadata to add to thread.
             thread_id: ID of thread.
-                If None, ID will be a randomly generated UUID.
+                If `None`, ID will be a randomly generated UUID.
             if_exists: How to handle duplicate creation. Defaults to 'raise' under the hood.
                 Must be either 'raise' (raise error if duplicate), or 'do_nothing' (return existing thread).
             supersteps: Apply a list of supersteps when creating a thread, each containing a sequence of updates.
@@ -5186,7 +5183,7 @@ class SyncRunsClient:
 
         Args:
             thread_id: the thread ID to assign to the thread.
-                If None will create a stateless run.
+                If `None` will create a stateless run.
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
@@ -5392,7 +5389,7 @@ class SyncRunsClient:
 
         Args:
             thread_id: the thread ID to assign to the thread.
-                If None will create a stateless run.
+                If `None` will create a stateless run.
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
@@ -5644,7 +5641,7 @@ class SyncRunsClient:
 
         Args:
             thread_id: the thread ID to create the run on.
-                If None will create a stateless run.
+                If `None` will create a stateless run.
             assistant_id: The assistant ID or graph name to run.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
@@ -6441,7 +6438,7 @@ class SyncStoreClient:
         Args:
             key: The unique identifier for the item.
             namespace: Optional list of strings representing the namespace path.
-            refresh_ttl: Whether to refresh the TTL on this read operation. If None, uses the store's default behavior.
+            refresh_ttl: Whether to refresh the TTL on this read operation. If `None`, uses the store's default behavior.
             headers: Optional custom headers to include with the request.
 
         Returns:
@@ -6539,7 +6536,7 @@ class SyncStoreClient:
             limit: Maximum number of items to return (default is 10).
             offset: Number of items to skip before returning results (default is 0).
             query: Optional query for natural language search.
-            refresh_ttl: Whether to refresh the TTL on items returned by this search. If None, uses the store's default behavior.
+            refresh_ttl: Whether to refresh the TTL on items returned by this search. If `None`, uses the store's default behavior.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -6679,10 +6676,10 @@ def get_asgi_transport() -> type[httpx.ASGITransport]:
         return httpx.ASGITransport
 
 
-TimeoutTypes = Union[
-    None,
-    float,
-    tuple[Optional[float], Optional[float]],
-    tuple[Optional[float], Optional[float], Optional[float], Optional[float]],
-    httpx.Timeout,
-]
+TimeoutTypes = (
+    None
+    | float
+    | tuple[float | None, float | None]
+    | tuple[float | None, float | None, float | None, float | None]
+    | httpx.Timeout
+)

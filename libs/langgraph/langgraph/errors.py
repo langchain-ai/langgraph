@@ -50,7 +50,7 @@ class GraphRecursionError(RecursionError):
 
     Troubleshooting Guides:
 
-    - [GRAPH_RECURSION_LIMIT](https://python.langchain.com/docs/troubleshooting/errors/GRAPH_RECURSION_LIMIT)
+    - [GRAPH_RECURSION_LIMIT](https://docs.langchain.com/oss/python/langgraph/GRAPH_RECURSION_LIMIT)
 
     Examples:
 
@@ -70,8 +70,8 @@ class InvalidUpdateError(Exception):
 
     Troubleshooting Guides:
 
-    - [INVALID_CONCURRENT_GRAPH_UPDATE](https://python.langchain.com/docs/troubleshooting/errors/INVALID_CONCURRENT_GRAPH_UPDATE)
-    - [INVALID_GRAPH_NODE_RETURN_VALUE](https://python.langchain.com/docs/troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE)
+    - [INVALID_CONCURRENT_GRAPH_UPDATE](https://docs.langchain.com/oss/python/langgraph/INVALID_CONCURRENT_GRAPH_UPDATE)
+    - [INVALID_GRAPH_NODE_RETURN_VALUE](https://docs.langchain.com/oss/python/langgraph/INVALID_GRAPH_NODE_RETURN_VALUE)
     """
 
     pass
@@ -90,14 +90,11 @@ class GraphInterrupt(GraphBubbleUp):
 
 
 @deprecated(
-    "NodeInterrupt is deprecated. Please use `langgraph.types.interrupt` instead.",
+    "NodeInterrupt is deprecated. Please use [`interrupt`][langgraph.types.interrupt] instead.",
     category=None,
 )
 class NodeInterrupt(GraphInterrupt):
-    """Raised by a node to interrupt execution.
-
-    Deprecated in V1.0.0 in favor of [`interrupt`][langgraph.types.interrupt].
-    """
+    """Raised by a node to interrupt execution."""
 
     def __init__(self, value: Any, id: str | None = None) -> None:
         warn(

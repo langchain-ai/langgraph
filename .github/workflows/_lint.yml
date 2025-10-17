@@ -39,7 +39,7 @@ jobs:
           filter: "${{ inputs.working-directory }}/**"
       - name: Set up Python ${{ matrix.python-version }}
         if: steps.changed-files.outputs.all
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
