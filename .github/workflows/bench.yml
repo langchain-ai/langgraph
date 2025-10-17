@@ -28,7 +28,7 @@ jobs:
           enable-cache: true
           cache-suffix: "bench"
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --group test
       - name: Download baseline
         uses: actions/cache/restore@v4
         with:

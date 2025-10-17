@@ -37,7 +37,7 @@ dependencies = [
 Repository = "https://www.github.com/langchain-ai/langgraph"
 
 [dependency-groups]
-dev = [
+test = [
     "pytest",
     "pytest-cov",
     "pytest-dotenv",
@@ -45,9 +45,6 @@ dev = [
     "syrupy",
     "httpx",
     "pytest-watcher",
-    "mypy",
-    "ruff",
-    "jupyter",
     "pytest-xdist[psutil]",
     "pytest-repeat",
     "langchain-core==1.0.0a1",
@@ -60,10 +57,19 @@ dev = [
     "uvloop==0.21.0beta1",
     "pyperf",
     "py-spy",
-    "types-requests",
     "pycryptodome",
     "langgraph-cli[inmem]",
     "redis",
+]
+lint = [
+    "mypy",
+    "ruff",
+    "types-requests",
+]
+dev = [
+    {include-group = "test"},
+    {include-group = "lint"},
+    "jupyter",
 ]
 
 [tool.uv]

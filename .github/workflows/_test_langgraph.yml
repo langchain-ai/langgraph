@@ -39,7 +39,7 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group test
 
       - name: Run tests
         shell: bash
