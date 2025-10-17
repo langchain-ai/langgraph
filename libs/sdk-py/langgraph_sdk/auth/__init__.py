@@ -384,7 +384,7 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
         if fn is not None:
             _validate_handler(fn)
             return typing.cast(
-                _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+                _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
                 _register_handler(self.auth, self.resource, "*", fn),
             )
 
@@ -393,7 +393,7 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
         ) -> _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]:
             _validate_handler(handler)
             return typing.cast(
-                _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+                _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
                 _register_handler(self.auth, self.resource, "*", handler),
             )
 
@@ -411,13 +411,13 @@ class _AssistantsOn(
         types.AssistantsSearch,
     ]
 ):
-    value = typing.Union[
-        types.AssistantsCreate,
-        types.AssistantsRead,
-        types.AssistantsUpdate,
-        types.AssistantsDelete,
-        types.AssistantsSearch,
-    ]
+    value = (
+        types.AssistantsCreate
+        | types.AssistantsRead
+        | types.AssistantsUpdate
+        | types.AssistantsDelete
+        | types.AssistantsSearch
+    )
     Create = types.AssistantsCreate
     Read = types.AssistantsRead
     Update = types.AssistantsUpdate
@@ -434,14 +434,14 @@ class _ThreadsOn(
         types.ThreadsSearch,
     ]
 ):
-    value = typing.Union[
-        type[types.ThreadsCreate],
-        type[types.ThreadsRead],
-        type[types.ThreadsUpdate],
-        type[types.ThreadsDelete],
-        type[types.ThreadsSearch],
-        type[types.RunsCreate],
-    ]
+    value = (
+        types.ThreadsCreate
+        | types.ThreadsRead
+        | types.ThreadsUpdate
+        | types.ThreadsDelete
+        | types.ThreadsSearch
+        | types.RunsCreate
+    )
     Create = types.ThreadsCreate
     Read = types.ThreadsRead
     Update = types.ThreadsUpdate
@@ -470,13 +470,11 @@ class _CronsOn(
     ]
 ):
     value = type[
-        typing.Union[
-            types.CronsCreate,
-            types.CronsRead,
-            types.CronsUpdate,
-            types.CronsDelete,
-            types.CronsSearch,
-        ]
+        types.CronsCreate
+        | types.CronsRead
+        | types.CronsUpdate
+        | types.CronsDelete
+        | types.CronsSearch
     ]
 
     Create = types.CronsCreate

@@ -2,7 +2,7 @@ import operator
 import sys
 import time
 from collections import defaultdict
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, Literal
 
 import pytest
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointTuple
@@ -1421,9 +1421,7 @@ SAVED_CHECKPOINTS = {
 
 
 def make_state_graph() -> StateGraph:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -1610,7 +1608,7 @@ def test_saved_checkpoint_state_graph(
     config = {"configurable": {"thread_id": thread1, "checkpoint_ns": ""}}
 
     # save checkpoints
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
     for checkpoint in reversed(SAVED_CHECKPOINTS[checkpoint_version]):
         grouped_writes = defaultdict(list)
         for write in checkpoint.pending_writes:
@@ -1676,7 +1674,7 @@ async def test_saved_checkpoint_state_graph_async(
     config = {"configurable": {"thread_id": thread1, "checkpoint_ns": ""}}
 
     # save checkpoints
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
     for checkpoint in reversed(SAVED_CHECKPOINTS[checkpoint_version]):
         grouped_writes = defaultdict(list)
         for write in checkpoint.pending_writes:

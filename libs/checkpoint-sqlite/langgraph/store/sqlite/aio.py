@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import defaultdict
-from collections.abc import AsyncIterator, Iterable, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Sequence
 from contextlib import asynccontextmanager
 from types import TracebackType
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 import aiosqlite
 import orjson
@@ -484,7 +484,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
 
             # Convert vectors to SQLite-friendly format
             vector_params = []
-            for (ns, k, pathname, _), vector in zip(txt_params, vectors):
+            for (ns, k, pathname, _), vector in zip(txt_params, vectors, strict=False):
                 vector_params.extend(
                     [ns, k, pathname, sqlite_vec.serialize_float32(vector)]
                 )
@@ -517,7 +517,9 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                 [query for _, query in embedding_requests]
             )
 
-            for (embed_req_idx, _), embedding in zip(embedding_requests, vectors):
+            for (embed_req_idx, _), embedding in zip(
+                embedding_requests, vectors, strict=False
+            ):
                 # Find the corresponding query in prepared_queries
                 # The embed_req_idx is the original index in search_ops, which should map to prepared_queries
                 if embed_req_idx < len(prepared_queries):
@@ -531,7 +533,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                     )
 
         for (original_op_idx, _), (query, params, needs_refresh) in zip(
-            search_ops, prepared_queries
+            search_ops, prepared_queries, strict=False
         ):
             await cur.execute(query, params)
             rows = await cur.fetchall()
@@ -614,7 +616,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             cur: Database cursor.
         """
         queries = self._get_batch_list_namespaces_queries(list_ops)
-        for (query, params), (idx, _) in zip(queries, list_ops):
+        for (query, params), (idx, _) in zip(queries, list_ops, strict=False):
             await cur.execute(query, params)
 
             rows = await cur.fetchall()

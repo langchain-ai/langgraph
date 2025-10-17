@@ -2,13 +2,12 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Union
 
 from psycopg import AsyncConnection
 from psycopg.rows import DictRow
 from psycopg_pool import AsyncConnectionPool
 
-Conn = Union[AsyncConnection[DictRow], AsyncConnectionPool[AsyncConnection[DictRow]]]
+Conn = AsyncConnection[DictRow] | AsyncConnectionPool[AsyncConnection[DictRow]]
 
 
 @asynccontextmanager

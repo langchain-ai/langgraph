@@ -1,4 +1,4 @@
-from typing import Literal, Optional, Union
+from typing import Literal
 
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 from typing_extensions import TypedDict, deprecated
@@ -81,7 +81,7 @@ class HumanInterrupt(TypedDict):
 
     action_request: ActionRequest
     config: HumanInterruptConfig
-    description: Optional[str]
+    description: str | None
 
 
 class HumanResponse(TypedDict):
@@ -100,4 +100,4 @@ class HumanResponse(TypedDict):
     """
 
     type: Literal["accept", "ignore", "response", "edit"]
-    args: Union[None, str, ActionRequest]
+    args: None | str | ActionRequest

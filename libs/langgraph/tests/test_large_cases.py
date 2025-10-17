@@ -3,7 +3,7 @@ import operator
 import re
 import time
 from dataclasses import replace
-from typing import Annotated, Any, Literal, Optional, Union, cast
+from typing import Annotated, Any, Literal, cast
 
 import pytest
 from langchain_core.messages import AIMessage, AnyMessage, ToolCall
@@ -489,11 +489,11 @@ def test_conditional_state_graph(
 
     class AgentState(TypedDict, total=False):
         input: Annotated[str, UntrackedValue]
-        agent_outcome: Optional[Union[AgentAction, AgentFinish]]
+        agent_outcome: AgentAction | AgentFinish | None
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
 
     class ToolState(TypedDict, total=False):
-        agent_outcome: Union[AgentAction, AgentFinish]
+        agent_outcome: AgentAction | AgentFinish
 
     # Assemble the tools
     @tool()
@@ -514,7 +514,7 @@ def test_conditional_state_graph(
         ]
     )
 
-    def agent_parser(input: str) -> dict[str, Union[AgentAction, AgentFinish]]:
+    def agent_parser(input: str) -> dict[str, AgentAction | AgentFinish]:
         if input.startswith("finish"):
             _, answer = input.split(":")
             return {
@@ -2388,8 +2388,8 @@ def test_message_graph(
         def _generate(
             self,
             messages: list[BaseMessage],
-            stop: Optional[list[str]] = None,
-            run_manager: Optional[CallbackManagerForLLMRun] = None,
+            stop: list[str] | None = None,
+            run_manager: CallbackManagerForLLMRun | None = None,
             **kwargs: Any,
         ) -> ChatResult:
             response = deepcopy(self.responses[self.i])
@@ -3111,8 +3111,8 @@ def test_root_graph(
         def _generate(
             self,
             messages: list[BaseMessage],
-            stop: Optional[list[str]] = None,
-            run_manager: Optional[CallbackManagerForLLMRun] = None,
+            stop: list[str] | None = None,
+            run_manager: CallbackManagerForLLMRun | None = None,
             **kwargs: Any,
         ) -> ChatResult:
             response = deepcopy(self.responses[self.i])
@@ -4326,7 +4326,7 @@ def test_partial_pending_checkpoint(sync_checkpointer: BaseCheckpointSaver) -> N
             answer = " all good"
         return {"my_key": answer}
 
-    def start(state: State) -> list[Union[Send, str]]:
+    def start(state: State) -> list[Send | str]:
         return ["tool_two", Send("tool_one", state)]
 
     tool_two_graph = StateGraph(State)

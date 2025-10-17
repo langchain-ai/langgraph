@@ -1,6 +1,6 @@
 import re
 import sys
-from typing import Annotated, Optional, Union
+from typing import Annotated
 from unittest.mock import AsyncMock, MagicMock
 
 import langsmith as ls
@@ -1086,7 +1086,7 @@ async def nested_graph() -> Pregel:
     )
 
 
-def get_message_dict(msg: Union[BaseMessage, dict]):
+def get_message_dict(msg: BaseMessage | dict):
     # just get the core stuff from within the message
     if isinstance(msg, dict):
         return {
@@ -1185,7 +1185,7 @@ async def test_remote_graph_stream_messages_tuple(
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("headers", [None, {"foo": "bar"}])
 async def test_include_headers(
-    distributed_tracing: bool, stream: bool, headers: Optional[dict[str, str]]
+    distributed_tracing: bool, stream: bool, headers: dict[str, str] | None
 ):
     mock_async_client = MagicMock()
     async_iter = MagicMock()

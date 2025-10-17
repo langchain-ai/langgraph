@@ -7,8 +7,8 @@ import functools
 import inspect
 import sys
 import types
-from collections.abc import Awaitable, Generator, Sequence
-from typing import Any, Callable, Generic, TypeVar, cast
+from collections.abc import Awaitable, Callable, Generator, Sequence
+from typing import Any, Generic, TypeVar, cast
 
 from langchain_core.runnables import Runnable
 from typing_extensions import ParamSpec

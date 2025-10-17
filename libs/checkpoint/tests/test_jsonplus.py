@@ -60,21 +60,14 @@ class MyDataclass:
         pass
 
 
-if sys.version_info < (3, 10):
+@dataclasses.dataclass(slots=True)
+class MyDataclassWSlots:
+    foo: str
+    bar: int
+    inner: InnerDataclass
 
-    class MyDataclassWSlots(MyDataclass):
+    def something(self) -> None:
         pass
-
-else:
-
-    @dataclasses.dataclass(slots=True)
-    class MyDataclassWSlots:
-        foo: str
-        bar: int
-        inner: InnerDataclass
-
-        def something(self) -> None:
-            pass
 
 
 class MyEnum(Enum):
