@@ -1,3 +1,4 @@
+import sys
 from typing import Any
 
 import pytest
@@ -36,7 +37,13 @@ def my_tool(some_val: int, some_other_val: str) -> str:
     [
         my_function,
         MyModel,
-        MyModelV1,
+        pytest.param(
+            MyModelV1,
+            marks=pytest.mark.skipif(
+                sys.version_info >= (3, 14),
+                reason="Pydantic v1 not supported in Python 3.14+",
+            ),
+        ),
         my_tool,
     ],
 )

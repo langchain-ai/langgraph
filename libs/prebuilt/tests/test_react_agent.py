@@ -1,6 +1,7 @@
 import dataclasses
 import inspect
 import json
+import sys
 from functools import partial
 from typing import (
     Annotated,
@@ -678,7 +679,13 @@ T = TypeVar("T")
     "schema_",
     [
         _InjectStateSchema,
-        _InjectedStatePydanticSchema,
+        pytest.param(
+            _InjectedStatePydanticSchema,
+            marks=pytest.mark.skipif(
+                sys.version_info >= (3, 14),
+                reason="Pydantic v1 not supported in Python 3.14+",
+            ),
+        ),
         _InjectedStatePydanticV2Schema,
         _InjectedStateDataclassSchema,
     ],
