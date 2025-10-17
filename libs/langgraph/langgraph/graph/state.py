@@ -120,7 +120,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     Each state key can optionally be annotated with a reducer function that
     will be used to aggregate the values of that key received from multiple nodes.
-    The signature of a reducer function is (Value, Value) -> Value.
+    The signature of a reducer function is `(Value, Value) -> Value`.
 
     Args:
         state_schema: The schema class that defines the state.
@@ -380,8 +380,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             cache_policy: The cache policy for the node.
             destinations: Destinations that indicate where a node can route to.
                 This is useful for edgeless graphs with nodes that return `Command` objects.
-                If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
-                If a tuple is provided, the values will be used as the target node names.
+                If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+                If a `tuple` is provided, the values will be used as the target node names.
 
                 !!! note
 
@@ -639,7 +639,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             Self: The instance of the graph, allowing for method chaining.
 
         !!! warning
-            Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
+            Without type hints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
             or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
 
         """  # noqa: E501

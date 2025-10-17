@@ -353,11 +353,11 @@ class BaseCheckpointSaver(Generic[V]):
     def get_next_version(self, current: V | None, channel: None) -> V:
         """Generate the next version ID for a channel.
 
-        Default is to use integer versions, incrementing by 1. If you override, you can use str/int/float versions,
-        as long as they are monotonically increasing.
+        Default is to use integer versions, incrementing by `1`. If you override, you can use `str`/`int`/`float`
+        versions, as long as they are monotonically increasing.
 
         Args:
-            current: The current version identifier (int, float, or str).
+            current: The current version identifier (`int`, `float`, or `str`).
             channel: Deprecated argument, kept for backwards compatibility.
 
         Returns:

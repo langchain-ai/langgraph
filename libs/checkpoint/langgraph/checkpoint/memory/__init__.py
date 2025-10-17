@@ -42,7 +42,7 @@ class InMemorySaver(
         If you are using LangSmith Deployment, no checkpointer needs to be specified. The correct managed checkpointer will be used automatically.
 
     Args:
-        serde: The serializer to use for serializing and deserializing checkpoints. Defaults to None.
+        serde: The serializer to use for serializing and deserializing checkpoints.
 
     Examples:
 

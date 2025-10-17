@@ -71,11 +71,11 @@ def add_messages(
     new message has the same ID as an existing message.
 
     Args:
-        left: The base list of messages.
-        right: The list of messages (or single message) to merge
+        left: The base list of `Messages`.
+        right: The list of `Messages` (or single `Message`) to merge
             into the base list.
-        format: The format to return messages in. If `None` then messages will be
-            returned as is. If `langchain-openai` then messages will be returned as
+        format: The format to return messages in. If `None` then `Messages` will be
+            returned as is. If `langchain-openai` then `Messages` will be returned as
             `BaseMessage` objects with their contents formatted to match OpenAI message
             format, meaning contents can be string, `'text'` blocks, or `'image_url'` blocks
             and tool responses are returned as their own `ToolMessage` objects.
@@ -87,7 +87,7 @@ def add_messages(
     Returns:
         A new list of messages with the messages from `right` merged into `left`.
         If a message in `right` has the same ID as a message in `left`, the
-        message from `right` will replace the message from `left`.
+            message from `right` will replace the message from `left`.
 
     Example:
         ```python title="Basic usage"
