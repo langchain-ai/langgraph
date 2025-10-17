@@ -265,7 +265,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                     self.serde.loads_typed((type, checkpoint)),
                     cast(
                         CheckpointMetadata,
-                        self.jsonplus_serde.loads(metadata)
+                        self.jsonplus_serde.loads_typed(("msgpack", metadata))
                         if metadata is not None
                         else {},
                     ),
@@ -358,7 +358,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                     self.serde.loads_typed((type, checkpoint)),
                     cast(
                         CheckpointMetadata,
-                        self.jsonplus_serde.loads(metadata)
+                        self.jsonplus_serde.loads_typed(("msgpack", metadata))
                         if metadata is not None
                         else {},
                     ),
@@ -413,7 +413,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
-        serialized_metadata = self.jsonplus_serde.dumps(
+        _, serialized_metadata = self.jsonplus_serde.dumps_typed(
             get_checkpoint_metadata(config, metadata)
         )
         with self.cursor() as cur:
