@@ -80,27 +80,33 @@ Subset containment is only supported by newer versions of the LangGraph dev serv
 install langgraph-runtime-inmem >= 0.14.1 to use this filter variant.
 
 ???+ example "Examples"
+
     Simple exact match filter for the resource owner:
+
     ```python
     filter = {"owner": "user-abcd123"}
     ```
 
     Explicit version of the exact match filter:
+
     ```python
     filter = {"owner": {"$eq": "user-abcd123"}}
     ```
- 
+
     Containment (membership of a single element):
+
     ```python
     filter = {"participants": {"$contains": "user-abcd123"}}
     ```
 
     Containment (subset containment; all values must be present, but order doesn't matter):
+
     ```python
     filter = {"participants": {"$contains": ["user-abcd123", "user-efgh456"]}}
     ```
 
     Combining filters (treated as a logical `AND`):
+
     ```python
     filter = {"owner": "user-abcd123", "participants": {"$contains": "user-efgh456"}}
     ```
@@ -123,6 +129,7 @@ Allows storing custom key-value pairs with any entity.
 Keys must be strings, values can be any JSON-serializable type.
 
 ???+ example "Examples"
+
     ```python
     metadata = {
         "created_by": "user123",
@@ -238,6 +245,7 @@ class StudioUser:
     for developers accessing the instance from the LangGraph Studio UI.
 
     ???+ example "Examples"
+
         ```python
         @auth.on
         async def allow_developers(ctx: Auth.types.AuthContext, value: Any) -> None:
@@ -304,7 +312,9 @@ Parameters:
     authorization (str | None): The Authorization header value (e.g. "Bearer <token>")
 
 ???+ example "Examples"
+
     Basic authentication with token:
+
     ```python
     from langgraph_sdk import Auth
 
@@ -316,6 +326,7 @@ Parameters:
     ```
 
     Authentication with multiple parameters:
+
     ```    
     @auth.authenticate
     async def authenticate2(
@@ -329,6 +340,7 @@ Parameters:
     ```
 
     Accepting the raw ASGI request:
+
     ```python
     MY_SECRET = "my-secret-key"
     @auth.authenticate
@@ -434,6 +446,7 @@ class ThreadsCreate(typing.TypedDict, total=False):
     """Parameters for creating a new thread.
 
     ???+ example "Examples"
+
         ```python
         create_params = {
             "thread_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -533,6 +546,7 @@ class RunsCreate(typing.TypedDict, total=False):
     """Payload for creating a run.
 
     ???+ example "Examples"
+
         ```python
         create_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -588,6 +602,7 @@ class AssistantsCreate(typing.TypedDict, total=False):
     """Payload for creating an assistant.
 
     ???+ example "Examples"
+
         ```python
         create_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -626,6 +641,7 @@ class AssistantsRead(typing.TypedDict, total=False):
     """Payload for reading an assistant.
 
     ???+ example "Examples"
+
         ```python
         read_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -645,6 +661,7 @@ class AssistantsUpdate(typing.TypedDict, total=False):
     """Payload for updating an assistant.
 
     ???+ example "Examples"
+
         ```python
         update_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -684,6 +701,7 @@ class AssistantsDelete(typing.TypedDict):
     """Payload for deleting an assistant.
 
     ???+ example "Examples"
+
         ```python
         delete_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000")
@@ -699,6 +717,7 @@ class AssistantsSearch(typing.TypedDict):
     """Payload for searching assistants.
 
     ???+ example "Examples"
+
         ```python
         search_params = {
             "graph_id": "graph123",
@@ -726,6 +745,7 @@ class CronsCreate(typing.TypedDict, total=False):
     """Payload for creating a cron job.
 
     ???+ example "Examples"
+
         ```python
         create_params = {
             "payload": {"key": "value"},
@@ -761,6 +781,7 @@ class CronsDelete(typing.TypedDict):
     """Payload for deleting a cron job.
 
     ???+ example "Examples"
+
         ```python
         delete_params = {
             "cron_id": UUID("123e4567-e89b-12d3-a456-426614174000")
@@ -776,6 +797,7 @@ class CronsRead(typing.TypedDict):
     """Payload for reading a cron job.
 
     ???+ example "Examples"
+
         ```python
         read_params = {
             "cron_id": UUID("123e4567-e89b-12d3-a456-426614174000")
@@ -791,6 +813,7 @@ class CronsUpdate(typing.TypedDict, total=False):
     """Payload for updating a cron job.
 
     ???+ example "Examples"
+
         ```python
         update_params = {
             "cron_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -814,6 +837,7 @@ class CronsSearch(typing.TypedDict, total=False):
     """Payload for searching cron jobs.
 
     ???+ example "Examples"
+
         ```python
         search_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),

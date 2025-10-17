@@ -384,6 +384,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 If a tuple is provided, the values will be used as the target node names.
 
                 !!! note
+
                     This is only used for graph rendering and doesn't have any effect on the graph execution.
 
         Example:
