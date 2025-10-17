@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Union, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from langchain_core.messages import AnyMessage
@@ -55,7 +55,7 @@ class RemoveUIMessage(TypedDict):
     id: str
 
 
-AnyUIMessage = Union[UIMessage, RemoveUIMessage]
+AnyUIMessage = UIMessage | RemoveUIMessage
 
 
 def push_ui_message(

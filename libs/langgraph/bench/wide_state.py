@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import partial
 from random import choice
-from typing import Annotated, Optional
+from typing import Annotated
 
 from langgraph.constants import END, START
 from langgraph.graph.state import StateGraph
@@ -18,13 +18,13 @@ def wide_state(n: int) -> StateGraph:
         primary_issue_medium: Annotated[str, lambda x, y: y or x] = field(
             default="email"
         )
-        autoresponse: Annotated[Optional[dict], lambda _, y: y] = field(
+        autoresponse: Annotated[dict | None, lambda _, y: y] = field(
             default=None
         )  # Always overwrite
         issue: Annotated[dict | None, lambda x, y: y if y else x] = field(default=None)
-        relevant_rules: Optional[list[dict]] = field(default=None)
+        relevant_rules: list[dict] | None = field(default=None)
         """SOPs fetched from the rulebook that are relevant to the current conversation."""
-        memory_docs: Optional[list[dict]] = field(default=None)
+        memory_docs: list[dict] | None = field(default=None)
         """Memory docs fetched from the memory service that are relevant to the current conversation."""
         categorizations: Annotated[list[dict], operator.add] = field(
             default_factory=list
@@ -33,21 +33,21 @@ def wide_state(n: int) -> StateGraph:
         responses: Annotated[list[dict], operator.add] = field(default_factory=list)
         """The draft responses recommended by the AI."""
 
-        user_info: Annotated[Optional[dict], lambda x, y: y if y is not None else x] = (
+        user_info: Annotated[dict | None, lambda x, y: y if y is not None else x] = (
             field(default=None)
         )
         """The current user state (by email)."""
-        crm_info: Annotated[Optional[dict], lambda x, y: y if y is not None else x] = (
+        crm_info: Annotated[dict | None, lambda x, y: y if y is not None else x] = (
             field(default=None)
         )
         """The CRM information for organization the current user is from."""
         email_thread_id: Annotated[
-            Optional[str], lambda x, y: y if y is not None else x
+            str | None, lambda x, y: y if y is not None else x
         ] = field(default=None)
         """The current email thread ID."""
         slack_participants: Annotated[dict, operator.or_] = field(default_factory=dict)
         """The growing list of current slack participants."""
-        bot_id: Optional[str] = field(default=None)
+        bot_id: str | None = field(default=None)
         """The ID of the bot user in the slack channel."""
         notified_assignees: Annotated[dict, operator.or_] = field(default_factory=dict)
 

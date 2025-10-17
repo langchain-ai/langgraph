@@ -7,9 +7,9 @@ import re
 import sqlite3
 import threading
 from collections import defaultdict
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Callable, Literal, NamedTuple, cast
+from typing import Any, Literal, NamedTuple, cast
 
 import orjson
 import sqlite_vec  # type: ignore[import-untyped]
@@ -232,7 +232,7 @@ class BaseSqliteStore:
 
         results = []
         for namespace, items in namespace_groups.items():
-            _, keys = zip(*items)
+            _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
             refresh_ttl_any = any(this_refresh_ttls)
 
@@ -829,7 +829,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
 
         results = []
         for namespace, items in namespace_groups.items():
-            _, keys = zip(*items)
+            _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
             refresh_ttl_any = any(this_refresh_ttls)
 
@@ -1304,7 +1304,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
 
             # Convert vectors to SQLite-friendly format
             vector_params = []
-            for (ns, k, pathname, _), vector in zip(txt_params, vectors):
+            for (ns, k, pathname, _), vector in zip(txt_params, vectors, strict=False):
                 vector_params.extend(
                     [ns, k, pathname, sqlite_vec.serialize_float32(vector)]
                 )
@@ -1332,7 +1332,9 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             )
 
             # Replace placeholders with actual embeddings
-            for (embed_req_idx, _), embedding in zip(embedding_requests, embeddings):
+            for (embed_req_idx, _), embedding in zip(
+                embedding_requests, embeddings, strict=False
+            ):
                 if embed_req_idx < len(prepared_queries):
                     _params_list: list = prepared_queries[embed_req_idx][1]
                     for i, param in enumerate(_params_list):
@@ -1344,7 +1346,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                     )
 
         for (original_op_idx, _), (query, params, needs_refresh) in zip(
-            search_ops, prepared_queries
+            search_ops, prepared_queries, strict=False
         ):
             cur.execute(query, params)
             rows = cur.fetchall()
@@ -1417,7 +1419,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         cur: sqlite3.Cursor,
     ) -> None:
         queries = self._get_batch_list_namespaces_queries(list_ops)
-        for (query, params), (idx, _) in zip(queries, list_ops):
+        for (query, params), (idx, _) in zip(queries, list_ops, strict=False):
             cur.execute(query, params)
             results[idx] = [_decode_ns_text(row[0]) for row in cur.fetchall()]
 

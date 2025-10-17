@@ -5,7 +5,7 @@ import tempfile
 import uuid
 from collections.abc import AsyncIterator, Generator, Iterable
 from contextlib import asynccontextmanager
-from typing import Optional, Union, cast
+from typing import cast
 
 import pytest
 from langgraph.store.base import (
@@ -51,7 +51,7 @@ def fake_embeddings() -> CharacterEmbeddings:
 async def create_vector_store(
     fake_embeddings: CharacterEmbeddings,
     conn_string: str = ":memory:",
-    text_fields: Optional[list[str]] = None,
+    text_fields: list[str] | None = None,
 ) -> AsyncIterator[AsyncSqliteStore]:
     """Create an AsyncSqliteStore with vector search capabilities."""
     index_config: SqliteIndexConfig = {
@@ -168,7 +168,7 @@ async def test_abatch_order(store: AsyncSqliteStore) -> None:
     ]
 
     results = await store.abatch(
-        cast(Iterable[Union[GetOp, PutOp, SearchOp, ListNamespacesOp]], ops)
+        cast(Iterable[GetOp | PutOp | SearchOp | ListNamespacesOp], ops)
     )
     assert len(results) == 5
     assert isinstance(results[0], Item)
@@ -193,7 +193,7 @@ async def test_abatch_order(store: AsyncSqliteStore) -> None:
     ]
 
     results_reordered = await store.abatch(
-        cast(Iterable[Union[GetOp, PutOp, SearchOp, ListNamespacesOp]], ops_reordered)
+        cast(Iterable[GetOp | PutOp | SearchOp | ListNamespacesOp], ops_reordered)
     )
     assert len(results_reordered) == 5
     assert isinstance(results_reordered[0], list)
@@ -681,7 +681,7 @@ async def test_search_items(
         fake_embeddings, text_fields=["key0", "key1", "key3"]
     ) as store:
         # Insert test data
-        for ns, item in zip(test_namespaces, test_items):
+        for ns, item in zip(test_namespaces, test_items, strict=False):
             key = f"item_{ns[-1]}"
             await store.aput(ns, key, item)
 

@@ -2,17 +2,16 @@ from __future__ import annotations
 
 import inspect
 import logging
-import sys
 import typing
 import warnings
 from collections import defaultdict
-from collections.abc import Awaitable, Hashable, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Sequence
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
+from types import NoneType as NoneType
 from typing import (
     Any,
-    Callable,
     Generic,
     Literal,
     Union,
@@ -82,11 +81,6 @@ from langgraph.types import (
 )
 from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
-
-if sys.version_info < (3, 10):
-    NoneType = type(None)
-else:
-    from types import NoneType as NoneType
 
 __all__ = ("StateGraph", "CompiledStateGraph")
 
@@ -437,7 +431,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 category=LangGraphDeprecatedSinceV05,
             )
             if input_schema is None:
-                input_schema = cast(Union[type[NodeInputT], None], input_)
+                input_schema = cast(type[NodeInputT] | None, input_)
 
         if not isinstance(node, str):
             action = node

@@ -99,6 +99,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             for v, migration in zip(
                 range(version + 1, len(self.MIGRATIONS)),
                 self.MIGRATIONS[version + 1 :],
+                strict=False,
             ):
                 await cur.execute(migration)
                 await cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")

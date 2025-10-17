@@ -1,4 +1,3 @@
-import sys
 from contextlib import asynccontextmanager, contextmanager
 from uuid import uuid4
 
@@ -115,8 +114,6 @@ async def _checkpointer_sqlite_aio():
 
 @asynccontextmanager
 async def _checkpointer_postgres_aio():
-    if sys.version_info < (3, 10):
-        pytest.skip("Async Postgres tests require Python 3.10+")
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     async with await AsyncConnection.connect(
@@ -140,8 +137,6 @@ async def _checkpointer_postgres_aio():
 
 @asynccontextmanager
 async def _checkpointer_postgres_aio_pipe():
-    if sys.version_info < (3, 10):
-        pytest.skip("Async Postgres tests require Python 3.10+")
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     async with await AsyncConnection.connect(
@@ -168,8 +163,6 @@ async def _checkpointer_postgres_aio_pipe():
 
 @asynccontextmanager
 async def _checkpointer_postgres_aio_pool():
-    if sys.version_info < (3, 10):
-        pytest.skip("Async Postgres tests require Python 3.10+")
     database = f"test_{uuid4().hex[:16]}"
     # create unique db
     async with await AsyncConnection.connect(

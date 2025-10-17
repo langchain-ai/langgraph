@@ -3,12 +3,11 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import time
-from collections.abc import Awaitable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, ExitStack
 from contextvars import copy_context
 from types import TracebackType
 from typing import (
-    Callable,
     Protocol,
     TypeVar,
     cast,
