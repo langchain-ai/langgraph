@@ -40,6 +40,7 @@ class Auth:
     Then the LangGraph server will load your auth file and run it server-side whenever a request comes in.
 
     ???+ example "Basic Usage"
+
         ```python
         from langgraph_sdk import Auth
 
@@ -76,6 +77,7 @@ class Auth:
         ```
 
     ???+ note "Request Processing Flow"
+
         1. Authentication (your `@auth.authenticate` handler) is performed first on **every request**
         2. For authorization, the most specific matching handler is called:
             * If a handler exists for the exact resource and action, it is used (e.g., `@auth.on.threads.create`)
@@ -129,7 +131,9 @@ class Auth:
             - FilterType: Apply filtering rules to the response
         
         ???+ example "Examples"
+
             Global handler for all requests:
+
             ```python
             @auth.on
             async def reject_unhandled_requests(ctx: AuthContext, value: Any) -> None:
@@ -139,6 +143,7 @@ class Auth:
 
             Resource-specific handler. This would take precedence over the global handler
             for all actions on the `threads` resource:
+            
             ```python
             @auth.on.threads
             async def check_thread_access(ctx: AuthContext, value: Any) -> bool:
@@ -147,6 +152,7 @@ class Auth:
             ```
 
             Resource and action specific handler:
+
             ```python
             @auth.on.threads.delete
             async def prevent_thread_deletion(ctx: AuthContext, value: Any) -> bool:
@@ -155,6 +161,7 @@ class Auth:
             ```
 
             Multiple resources or actions:
+
             ```python
             @auth.on(resources=["threads", "runs"], actions=["create", "update"])
             async def rate_limit_writes(ctx: AuthContext, value: Any) -> bool:
@@ -163,7 +170,8 @@ class Auth:
             ```
 
             Auth for the `store` resource is a bit different since its structure is developer defined.
-            You typically want to enforce user creds in the namespace. Y
+            You typically want to enforce user creds in the namespace.
+
             ```python
             @auth.on.store
             async def check_store_access(ctx: AuthContext, value: Auth.types.on) -> bool:
@@ -209,7 +217,9 @@ class Auth:
             ValueError: If an authentication handler is already registered.
 
         ???+ example "Examples"
+
             Basic token authentication:
+
             ```python
             @auth.authenticate
             async def authenticate(authorization: str) -> str:
@@ -218,6 +228,7 @@ class Auth:
             ```
 
             Accept the full request context:
+
             ```python
             @auth.authenticate
             async def authenticate(
@@ -230,6 +241,7 @@ class Auth:
             ```
 
             Return user name and permissions:
+
             ```python
             @auth.authenticate
             async def authenticate(
@@ -562,6 +574,7 @@ class _On:
     ???+ example "Examples"
 
         Global handler for all requests:
+
         ```python
         @auth.on
         async def log_all_requests(ctx: AuthContext, value: Any) -> None:
@@ -570,6 +583,7 @@ class _On:
         ```
 
         Resource-specific handler:
+
         ```python
         @auth.on.threads
         async def check_thread_access(ctx: AuthContext, value: Any) -> bool:
@@ -578,6 +592,7 @@ class _On:
         ```
 
         Resource and action specific handler:
+
         ```python
         @auth.on.threads.delete
         async def prevent_thread_deletion(ctx: AuthContext, value: Any) -> bool:
@@ -586,6 +601,7 @@ class _On:
         ```
 
         Multiple resources or actions:
+
         ```python
         @auth.on(resources=["threads", "runs"], actions=["create", "update"])
         async def rate_limit_writes(ctx: AuthContext, value: Any) -> bool:

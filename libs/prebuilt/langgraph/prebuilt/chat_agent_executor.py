@@ -342,11 +342,12 @@ def create_react_agent(
             ```
 
             !!! note "Dynamic Model Requirements"
+
                 Ensure returned models have appropriate tools bound via
                 `.bind_tools()` and support required functionality. Bound tools
                 must be a subset of those specified in the `tools` parameter.
 
-        tools: A list of tools or a ToolNode instance.
+        tools: A list of tools or a `ToolNode` instance.
             If an empty list is provided, the agent will consist of a single LLM node without tool calling.
         prompt: An optional prompt for the LLM. Can take a few different forms:
 
