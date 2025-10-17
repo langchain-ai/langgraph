@@ -58,7 +58,8 @@ test = [
     "pyperf",
     "py-spy",
     "pycryptodome",
-    "langgraph-cli[inmem]",
+    "langgraph-cli[inmem]; python_version < '3.14'",
+    "langgraph-cli; python_version >= '3.14'",
     "redis",
 ]
 lint = [
