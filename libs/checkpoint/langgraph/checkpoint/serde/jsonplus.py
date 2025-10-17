@@ -22,13 +22,12 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import Any, cast
+from typing import Any, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import ormsgpack
 from langchain_core.load.load import Reviver
-from langchain_core.load.serializable import Serializable
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import SendProtocol
@@ -52,14 +51,14 @@ class JsonPlusSerializer(SerializerProtocol):
         self,
         *,
         pickle_fallback: bool = False,
-        allowed_json_modules: Sequence[tuple[str, ...]] | None = None,
+        allowed_json_modules: Sequence[tuple[str, ...]] | Literal[True] | None = None,
         __unpack_ext_hook__: Callable[[int, bytes], Any] | None = None,
     ) -> None:
         self.pickle_fallback = pickle_fallback
         self._allowed_modules = (
             {mod_and_name for mod_and_name in allowed_json_modules}
-            if allowed_json_modules
-            else None
+            if allowed_json_modules and allowed_json_modules is not True
+            else (allowed_json_modules if allowed_json_modules is True else None)
         )
         self._unpack_ext_hook = (
             __unpack_ext_hook__
@@ -88,86 +87,6 @@ class JsonPlusSerializer(SerializerProtocol):
             out["kwargs"] = kwargs
         return out
 
-    def _default(self, obj: Any) -> str | dict[str, Any]:
-        if isinstance(obj, Serializable):
-            return cast(dict[str, Any], obj.to_json())
-        elif hasattr(obj, "model_dump") and callable(obj.model_dump):
-            return self._encode_constructor_args(
-                obj.__class__, method=(None, "model_construct"), kwargs=obj.model_dump()
-            )
-        elif hasattr(obj, "dict") and callable(obj.dict):
-            return self._encode_constructor_args(
-                obj.__class__, method=(None, "construct"), kwargs=obj.dict()
-            )
-        elif hasattr(obj, "_asdict") and callable(obj._asdict):
-            return self._encode_constructor_args(obj.__class__, kwargs=obj._asdict())
-        elif isinstance(obj, pathlib.Path):
-            return self._encode_constructor_args(pathlib.Path, args=obj.parts)
-        elif isinstance(obj, re.Pattern):
-            return self._encode_constructor_args(
-                re.compile, args=(obj.pattern, obj.flags)
-            )
-        elif isinstance(obj, UUID):
-            return self._encode_constructor_args(UUID, args=(obj.hex,))
-        elif isinstance(obj, decimal.Decimal):
-            return self._encode_constructor_args(decimal.Decimal, args=(str(obj),))
-        elif isinstance(obj, (set, frozenset, deque)):
-            return self._encode_constructor_args(type(obj), args=(tuple(obj),))
-        elif isinstance(obj, (IPv4Address, IPv4Interface, IPv4Network)):
-            return self._encode_constructor_args(obj.__class__, args=(str(obj),))
-        elif isinstance(obj, (IPv6Address, IPv6Interface, IPv6Network)):
-            return self._encode_constructor_args(obj.__class__, args=(str(obj),))
-
-        elif isinstance(obj, datetime):
-            return self._encode_constructor_args(
-                datetime, method="fromisoformat", args=(obj.isoformat(),)
-            )
-        elif isinstance(obj, timezone):
-            return self._encode_constructor_args(
-                timezone,
-                args=obj.__getinitargs__(),  # type: ignore[attr-defined]
-            )
-        elif isinstance(obj, ZoneInfo):
-            return self._encode_constructor_args(ZoneInfo, args=(obj.key,))
-        elif isinstance(obj, timedelta):
-            return self._encode_constructor_args(
-                timedelta, args=(obj.days, obj.seconds, obj.microseconds)
-            )
-        elif isinstance(obj, date):
-            return self._encode_constructor_args(
-                date, args=(obj.year, obj.month, obj.day)
-            )
-        elif isinstance(obj, time):
-            return self._encode_constructor_args(
-                time,
-                args=(obj.hour, obj.minute, obj.second, obj.microsecond, obj.tzinfo),
-                kwargs={"fold": obj.fold},
-            )
-        elif dataclasses.is_dataclass(obj):
-            return self._encode_constructor_args(
-                obj.__class__,
-                kwargs={
-                    field.name: getattr(obj, field.name)
-                    for field in dataclasses.fields(obj)
-                },
-            )
-        elif isinstance(obj, Enum):
-            return self._encode_constructor_args(obj.__class__, args=(obj.value,))
-        elif isinstance(obj, SendProtocol):
-            return self._encode_constructor_args(
-                obj.__class__, kwargs={"node": obj.node, "arg": obj.arg}
-            )
-        elif isinstance(obj, (bytes, bytearray)):
-            return self._encode_constructor_args(
-                obj.__class__, method="fromhex", args=(obj.hex(),)
-            )
-        elif isinstance(obj, BaseException):
-            return repr(obj)
-        else:
-            raise TypeError(
-                f"Object of type {obj.__class__.__name__} is not JSON serializable"
-            )
-
     def _reviver(self, value: dict[str, Any]) -> Any:
         if self._allowed_modules and (
             value.get("lc", None) == 2
@@ -176,32 +95,27 @@ class JsonPlusSerializer(SerializerProtocol):
         ):
             try:
                 return self._revive_lc2(value)
-            except InvalidModuleError:
-                logger.warning(f"Invalid module: {value['id']}")
+            except InvalidModuleError as e:
+                logger.warning(
+                    "Object %s is not in the deserialization allowlist.\n%s",
+                    value["id"],
+                    e.message,
+                )
 
         return LC_REVIVER(value)
 
     def _revive_lc2(self, value: dict[str, Any]) -> Any:
-        if not self._allowed_modules:
-            raise InvalidModuleError("No allowed modules specified")
-        try:
-            # Get module and class name
-            [*module, name] = value["id"]
-            if tuple(value["id"]) not in self._allowed_modules:
-                raise InvalidModuleError(f"Module {value['id']} not allowed")
+        self._check_allowed_modules(value)
 
-            # Import module
+        [*module, name] = value["id"]
+        try:
             mod = importlib.import_module(".".join(module))
-            # Import class
             cls = getattr(mod, name)
-            # Instantiate class
             method = value.get("method")
             if isinstance(method, str):
                 methods = [getattr(cls, method)]
             elif isinstance(method, list):
-                methods = [
-                    cls if method is None else getattr(cls, method) for method in method
-                ]
+                methods = [cls if m is None else getattr(cls, m) for m in method]
             else:
                 methods = [cls]
             args = value.get("args")
@@ -222,6 +136,42 @@ class JsonPlusSerializer(SerializerProtocol):
                     continue
         except Exception:
             return None
+
+    def _check_allowed_modules(self, value: dict[str, Any]) -> None:
+        needed = tuple(value["id"])
+        method = value.get("method")
+        if isinstance(method, list):
+            method_display = ",".join(m or "<init>" for m in method)
+        elif isinstance(method, str):
+            method_display = method
+        else:
+            method_display = "<init>"
+
+        dotted = ".".join(needed)
+        if not self._allowed_modules:
+            raise InvalidModuleError(
+                f"Refused to deserialize JSON constructor: {dotted} (method: {method_display}). "
+                "No allowed_json_modules configured.\n\n"
+                "Unblock with ONE of:\n"
+                f"  • JsonPlusSerializer(allowed_json_modules=[{needed!r}, ...])\n"
+                "  • (DANGEROUS) JsonPlusSerializer(allowed_json_modules=True)\n\n"
+                "Note: Prefix allowlists are intentionally unsupported; prefer exact symbols "
+                "or plain-JSON representations revived without import-time side effects."
+            )
+
+        if self._allowed_modules is True:
+            return
+        if needed in self._allowed_modules:
+            return
+
+        raise InvalidModuleError(
+            f"Refused to deserialize JSON constructor: {dotted} (method: {method_display}). "
+            "Symbol is not in the deserialization allowlist.\n\n"
+            "Add exactly this symbol to unblock:\n"
+            f"  JsonPlusSerializer(allowed_json_modules=[{needed!r}, ...])\n"
+            "Or, as a last resort (DANGEROUS):\n"
+            "  JsonPlusSerializer(allowed_json_modules=True)"
+        )
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         if obj is None:
@@ -678,7 +628,10 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
 
 
 class InvalidModuleError(Exception):
-    pass
+    """Exception raised when a module is not in the allowlist."""
+
+    def __init__(self, message: str):
+        self.message = message
 
 
 _option = (
