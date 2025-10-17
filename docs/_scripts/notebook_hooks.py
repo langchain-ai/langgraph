@@ -847,29 +847,6 @@ def on_post_build(config):
 
             _write_html(site_dir, old_html_path, new_html_path)
 
-    # Create root index.html redirect
-    root_redirect_html = """<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>Redirecting to LangGraph Documentation</title>
-    <link rel="canonical" href="https://docs.langchain.com/oss/python/langgraph/overview">
-    <meta name="robots" content="noindex">
-    <script>var anchor=window.location.hash.substr(1);location.href="https://docs.langchain.com/oss/python/langgraph/overview"+(anchor?"#"+anchor:"")</script>
-    <meta http-equiv="refresh" content="0; url=https://docs.langchain.com/oss/python/langgraph/overview">
-</head>
-<body>
-<h1>Documentation has moved</h1>
-<p>The LangGraph documentation has moved to <a href="https://docs.langchain.com/oss/python/langgraph/overview">docs.langchain.com</a>.</p>
-<p>Redirecting you now...</p>
-</body>
-</html>
-"""
-
-    root_index_path = os.path.join(site_dir, "index.html")
-    with open(root_index_path, "w", encoding="utf-8") as f:
-        f.write(root_redirect_html)
-
     # Create server-side catch-all redirect file for Netlify/Cloudflare Pages
     # This handles any pages not explicitly mapped in REDIRECT_MAP
     redirects_content = """# Netlify/Cloudflare Pages redirect rules
