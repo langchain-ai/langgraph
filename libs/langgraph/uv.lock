@@ -1321,7 +1321,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "1.0.0rc1"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },
@@ -1686,7 +1686,7 @@ test = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.7.0rc1"
+version = "1.0.0"
 source = { editable = "../prebuilt" }
 dependencies = [
     { name = "langchain-core" },
