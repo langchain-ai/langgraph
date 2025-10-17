@@ -304,7 +304,7 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a GET request."""
+        """Send a `GET` request."""
         r = await self.client.get(path, params=params, headers=headers)
         if on_response:
             on_response(r)
@@ -320,7 +320,7 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a POST request."""
+        """Send a `POST` request."""
         if json is not None:
             request_headers, content = await _aencode_json(json)
         else:
@@ -345,7 +345,7 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a PUT request."""
+        """Send a `PUT` request."""
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
@@ -366,7 +366,7 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a PATCH request."""
+        """Send a `PATCH` request."""
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
@@ -387,7 +387,7 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
-        """Send a DELETE request."""
+        """Send a `DELETE` request."""
         r = await self.client.request(
             "DELETE", path, json=json, params=params, headers=headers
         )
@@ -3569,7 +3569,7 @@ class SyncHttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a GET request."""
+        """Send a `GET` request."""
         r = self.client.get(path, params=params, headers=headers)
         if on_response:
             on_response(r)
@@ -3585,7 +3585,7 @@ class SyncHttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a POST request."""
+        """Send a `POST` request."""
         if json is not None:
             request_headers, content = _encode_json(json)
         else:
@@ -3609,7 +3609,7 @@ class SyncHttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a PUT request."""
+        """Send a `PUT` request."""
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
@@ -3631,7 +3631,7 @@ class SyncHttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a PATCH request."""
+        """Send a `PATCH` request."""
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
@@ -3652,7 +3652,7 @@ class SyncHttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
-        """Send a DELETE request."""
+        """Send a `DELETE` request."""
         r = self.client.request(
             "DELETE", path, json=json, params=params, headers=headers
         )

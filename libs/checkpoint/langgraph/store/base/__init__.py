@@ -207,7 +207,8 @@ class SearchOp(NamedTuple):
     within a given namespace prefix. It provides pagination through limit and offset
     parameters.
 
-    Note:
+    !!! note
+
         Natural language search support depends on your store implementation.
 
     ???+ example "Examples"
@@ -468,8 +469,8 @@ class PutOp(NamedTuple):
     Together with the namespace, it forms a complete path to the item.
 
     Example:
-        If namespace is ("documents", "user123") and key is "report1",
-        the full path would effectively be "documents/user123/report1"
+        If namespace is `("documents", "user123")` and key is `"report1"`,
+        the full path would effectively be `"documents/user123/report1"`
     """
 
     value: dict[str, Any] | None
