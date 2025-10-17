@@ -2,7 +2,7 @@ import os
 import tempfile
 from collections import defaultdict
 from functools import partial
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -54,8 +54,8 @@ class MemorySaverAssertImmutable(InMemorySaver):
     def __init__(
         self,
         *,
-        serde: Optional[SerializerProtocol] = None,
-        put_sleep: Optional[float] = None,
+        serde: SerializerProtocol | None = None,
+        put_sleep: float | None = None,
     ) -> None:
         _, filename = tempfile.mkstemp()
         super().__init__(
@@ -94,7 +94,7 @@ class MemorySaverAssertImmutable(InMemorySaver):
 
 
 class MemorySaverNoPending(InMemorySaver):
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         result = super().get_tuple(config)
         if result:
             return CheckpointTuple(result.config, result.checkpoint, result.metadata)

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Iterable, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Sequence
 from contextlib import asynccontextmanager
 from types import TracebackType
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 import orjson
 from langgraph.store.base import (
@@ -465,7 +465,9 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                     query,
                     [
                         p
-                        for (ns, k, pathname, _), vector in zip(txt_params, vectors)
+                        for (ns, k, pathname, _), vector in zip(
+                            txt_params, vectors, strict=False
+                        )
                         for p in (ns, k, pathname, vector)
                     ],
                 )
@@ -486,13 +488,13 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             vectors = await self.embeddings.aembed_documents(
                 [query for _, query in embedding_requests]
             )
-            for (idx, _), vector in zip(embedding_requests, vectors):
+            for (idx, _), vector in zip(embedding_requests, vectors, strict=False):
                 _paramslist = queries[idx][1]
                 for i in range(len(_paramslist)):
                     if _paramslist[i] is PLACEHOLDER:
                         _paramslist[i] = vector
 
-        for (idx, _), (query, params) in zip(search_ops, queries):
+        for (idx, _), (query, params) in zip(search_ops, queries, strict=False):
             await cur.execute(query, params)
             rows = cast(list[Row], await cur.fetchall())
             items = [
@@ -510,7 +512,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         cur: AsyncCursor[DictRow],
     ) -> None:
         queries = self._get_batch_list_namespaces_queries(list_ops)
-        for (query, params), (idx, _) in zip(queries, list_ops):
+        for (query, params), (idx, _) in zip(queries, list_ops, strict=False):
             await cur.execute(query, params)
             rows = cast(list[dict], await cur.fetchall())
             namespaces = [_decode_ns_bytes(row["truncated_prefix"]) for row in rows]

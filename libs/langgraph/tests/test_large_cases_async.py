@@ -5,8 +5,6 @@ import sys
 from typing import (
     Annotated,
     Literal,
-    Optional,
-    Union,
     cast,
 )
 
@@ -487,7 +485,7 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
 
     class AgentState(TypedDict):
         input: Annotated[str, UntrackedValue]
-        agent_outcome: Optional[Union[AgentAction, AgentFinish]]
+        agent_outcome: AgentAction | AgentFinish | None
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
 
     # Assemble the tools
@@ -509,7 +507,7 @@ async def test_conditional_graph_state(async_checkpointer: BaseCheckpointSaver) 
         ]
     )
 
-    def agent_parser(input: str) -> dict[str, Union[AgentAction, AgentFinish]]:
+    def agent_parser(input: str) -> dict[str, AgentAction | AgentFinish]:
         if input.startswith("finish"):
             _, answer = input.split(":")
             return {

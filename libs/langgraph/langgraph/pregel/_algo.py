@@ -5,16 +5,14 @@ import itertools
 import sys
 import threading
 from collections import defaultdict, deque
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import copy
 from functools import partial
 from hashlib import sha1
 from typing import (
     Any,
-    Callable,
     Literal,
     NamedTuple,
-    Optional,
     Protocol,
     cast,
     overload,
@@ -82,7 +80,7 @@ from langgraph.types import (
     Send,
 )
 
-GetNextVersion = Callable[[Optional[V], None], V]
+GetNextVersion = Callable[[V | None, None], V]
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
@@ -415,7 +413,7 @@ def prepare_next_tasks(
     null_version = checkpoint_null_version(checkpoint)
     tasks: list[PregelTask | PregelExecutableTask] = []
     # Consume pending tasks
-    tasks_channel = cast(Optional[Topic[Send]], channels.get(TASKS))
+    tasks_channel = cast(Topic[Send] | None, channels.get(TASKS))
     if tasks_channel and tasks_channel.is_available():
         for idx, _ in enumerate(tasks_channel.get()):
             if task := prepare_single_task(

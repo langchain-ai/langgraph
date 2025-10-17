@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import random
-from collections.abc import AsyncIterator, Iterator, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from contextlib import asynccontextmanager
-from typing import Any, Callable, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig

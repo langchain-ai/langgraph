@@ -16,14 +16,11 @@ import os
 import re
 import sys
 import warnings
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from types import TracebackType
 from typing import (
     Any,
-    Callable,
     Literal,
-    Optional,
-    Union,
     overload,
 )
 
@@ -6681,10 +6678,10 @@ def get_asgi_transport() -> type[httpx.ASGITransport]:
         return httpx.ASGITransport
 
 
-TimeoutTypes = Union[
-    None,
-    float,
-    tuple[Optional[float], Optional[float]],
-    tuple[Optional[float], Optional[float], Optional[float], Optional[float]],
-    httpx.Timeout,
-]
+TimeoutTypes = (
+    None
+    | float
+    | tuple[float | None, float | None]
+    | tuple[float | None, float | None, float | None, float | None]
+    | httpx.Timeout
+)

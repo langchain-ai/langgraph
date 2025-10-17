@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from random import randrange
-from typing import Annotated, Any, Literal, Optional, Union, get_type_hints
+from typing import Annotated, Any, Literal, get_type_hints
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
@@ -139,7 +139,7 @@ def test_graph_validation_with_command() -> None:
 
 def test_checkpoint_errors() -> None:
     class FaultyGetCheckpointer(InMemorySaver):
-        def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
             raise ValueError("Faulty get_tuple")
 
     class FaultyPutCheckpointer(InMemorySaver):
@@ -148,7 +148,7 @@ def test_checkpoint_errors() -> None:
             config: RunnableConfig,
             checkpoint: Checkpoint,
             metadata: CheckpointMetadata,
-            new_versions: Optional[dict[str, Union[str, int, float]]] = None,
+            new_versions: dict[str, str | int | float] | None = None,
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 
@@ -159,7 +159,7 @@ def test_checkpoint_errors() -> None:
             raise ValueError("Faulty put_writes")
 
     class FaultyVersionCheckpointer(InMemorySaver):
-        def get_next_version(self, current: Optional[int], channel: None) -> int:
+        def get_next_version(self, current: int | None, channel: None) -> int:
             raise ValueError("Faulty get_next_version")
 
     def logic(inp: str) -> str:
@@ -835,7 +835,7 @@ def test_pending_writes_resume(
         value: Annotated[int, operator.add]
 
     class AwhileMaker:
-        def __init__(self, sleep: float, rtn: Union[dict, Exception]) -> None:
+        def __init__(self, sleep: float, rtn: dict | Exception) -> None:
             self.sleep = sleep
             self.rtn = rtn
             self.reset()
@@ -1338,7 +1338,7 @@ def test_imp_stream_order(
         return state["a"] + "foo", "bar"
 
     @task
-    def bar(a: str, b: str, c: Optional[str] = None) -> dict:
+    def bar(a: str, b: str, c: str | None = None) -> dict:
         return {"a": a + b, "c": (c or "") + "bark"}
 
     @task
@@ -1725,7 +1725,7 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
 
     class BaseState(TypedDict):
         input: str
-        agent_outcome: Optional[Union[AgentAction, AgentFinish]]
+        agent_outcome: AgentAction | AgentFinish | None
 
     class AgentState(BaseState, total=False):
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
@@ -1758,7 +1758,7 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
         ]
     )
 
-    def agent_parser(input: str) -> dict[str, Union[AgentAction, AgentFinish]]:
+    def agent_parser(input: str) -> dict[str, AgentAction | AgentFinish]:
         if input.startswith("finish"):
             _, answer = input.split(":")
             return {
@@ -1892,9 +1892,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
 def test_in_one_fan_out_state_graph_waiting_edge(
     snapshot: SnapshotAssertion, sync_checkpointer: BaseCheckpointSaver
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2031,9 +2029,7 @@ def test_in_one_fan_out_state_graph_defer_node(
     sync_checkpointer: BaseCheckpointSaver,
     use_waiting_edge: bool,
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2307,9 +2303,7 @@ def test_in_one_fan_out_state_graph_defer_node(
 def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     snapshot: SnapshotAssertion, sync_checkpointer: BaseCheckpointSaver
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2399,9 +2393,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     snapshot: SnapshotAssertion,
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2416,13 +2408,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
         query: str
         inner: Annotated[InnerObject, lambda x, y: y]
-        answer: Optional[str] = None
+        answer: str | None = None
         docs: Annotated[list[str], sorted_add]
 
     class StateUpdate(BaseModel):
-        query: Optional[str] = None
-        answer: Optional[str] = None
-        docs: Optional[list[str]] = None
+        query: str | None = None
+        answer: str | None = None
+        docs: list[str] | None = None
 
     class UpdateDocs34(BaseModel):
         docs: list[str] = Field(default_factory=lambda: ["doc3", "doc4"])
@@ -2534,9 +2526,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_input(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2551,13 +2541,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
 
     class State(QueryModel):
         inner: InnerObject
-        answer: Optional[str] = None
+        answer: str | None = None
         docs: Annotated[list[str], sorted_add]
 
     class StateUpdate(BaseModel):
-        query: Optional[str] = None
-        answer: Optional[str] = None
-        docs: Optional[list[str]] = None
+        query: str | None = None
+        answer: str | None = None
+        docs: list[str] | None = None
 
     class Input(QueryModel):
         inner: InnerObject
@@ -2659,9 +2649,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
 def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2772,9 +2760,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
 def test_in_one_fan_out_state_graph_waiting_edge_multiple(
     with_cache: bool, cache: BaseCache
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2939,9 +2925,7 @@ def test_function_in_conditional_edges_with_no_path_map() -> None:
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -4242,7 +4226,7 @@ def test_store_injected(
     thread_2 = str(uuid.uuid4())
 
     class Node:
-        def __init__(self, i: Optional[int] = None):
+        def __init__(self, i: int | None = None):
             self.i = i
 
         def __call__(self, inputs: State, config: RunnableConfig, store: BaseStore):
@@ -4368,7 +4352,7 @@ def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
         for c in graph.get_state_history(config)
     }
 
-    def lax_normalize_config(config: Optional[dict]) -> Optional[dict]:
+    def lax_normalize_config(config: dict | None) -> dict | None:
         if config is None:
             return None
         return config["configurable"]
@@ -4435,7 +4419,7 @@ def test_debug_subgraphs(
 
     assert len(checkpoint_events) == len(checkpoint_history)
 
-    def lax_normalize_config(config: Optional[dict]) -> Optional[dict]:
+    def lax_normalize_config(config: dict | None) -> dict | None:
         if config is None:
             return None
         return config["configurable"]
@@ -4528,7 +4512,7 @@ def test_debug_nested_subgraphs(
         for ns in stream_ns.keys()
     }
 
-    def normalize_config(config: Optional[dict]) -> Optional[dict]:
+    def normalize_config(config: dict | None) -> dict | None:
         if config is None:
             return None
 
@@ -5146,7 +5130,7 @@ def test_multistep_plan(sync_checkpointer: BaseCheckpointSaver):
     from langchain_core.messages import AnyMessage
 
     class State(TypedDict, total=False):
-        plan: list[Union[str, list[str]]]
+        plan: list[str | list[str]]
         messages: Annotated[list[AnyMessage], add_messages]
 
     def planner(state: State):
@@ -6747,7 +6731,7 @@ def test_node_destinations() -> None:
 
 def test_pydantic_none_state_update() -> None:
     class State(BaseModel):
-        foo: Optional[str]
+        foo: str | None
 
     def node_a(state: State) -> State:
         return State(foo=None)
@@ -6758,7 +6742,7 @@ def test_pydantic_none_state_update() -> None:
 
 def test_pydantic_state_update_command() -> None:
     class State(BaseModel):
-        foo: Optional[str]
+        foo: str | None
 
     def node_a(state: State) -> State:
         return Command(update=State(foo=None))
@@ -6767,8 +6751,8 @@ def test_pydantic_state_update_command() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": None}
 
     class State(BaseModel):
-        foo: Optional[str] = None
-        bar: Optional[str] = None
+        foo: str | None = None
+        bar: str | None = None
 
     def node_a(state: State):
         return State(foo="foo")
@@ -7140,7 +7124,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
 
     class ChildState(BaseModel):
         prompt: str = Field(..., description="What is going to be asked to the user?")
-        human_input: Optional[str] = Field(None, description="What the human said")
+        human_input: str | None = Field(None, description="What the human said")
         human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )
@@ -7298,7 +7282,7 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
 
     class ChildState(BaseModel):
         prompt: str = Field(..., description="What is going to be asked to the user?")
-        human_input: Optional[str] = Field(None, description="What the human said")
+        human_input: str | None = Field(None, description="What the human said")
         human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )

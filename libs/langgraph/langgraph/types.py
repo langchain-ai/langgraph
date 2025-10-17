@@ -2,18 +2,16 @@ from __future__ import annotations
 
 import sys
 from collections import deque
-from collections.abc import Hashable, Sequence
+from collections.abc import Callable, Hashable, Sequence
 from dataclasses import asdict, dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     ClassVar,
     Generic,
     Literal,
     NamedTuple,
     TypeVar,
-    Union,
     final,
 )
 from warnings import warn
@@ -68,7 +66,7 @@ Durability = Literal["sync", "async", "exit"]
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
-Checkpointer = Union[None, bool, BaseCheckpointSaver]
+Checkpointer = None | bool | BaseCheckpointSaver
 """Type of the checkpointer to use for a subgraph.
 - True enables persistent checkpointing for this subgraph.
 - False disables checkpointing, even if the parent graph has a checkpointer.
@@ -95,12 +93,7 @@ StreamWriter = Callable[[Any], None]
 Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using `stream_mode="custom"`."""
 
-if sys.version_info >= (3, 10):
-    _DC_SLOTS = {"slots": True}
-    _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
-else:
-    _DC_SLOTS = {}
-    _DC_KWARGS = {"frozen": True}
+_DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 
 
 class RetryPolicy(NamedTuple):
@@ -125,7 +118,7 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
-KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., Union[str, bytes]])
+KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., str | bytes])
 
 
 @dataclass(**_DC_KWARGS)
@@ -144,7 +137,7 @@ _DEFAULT_INTERRUPT_ID = "placeholder-id"
 
 
 @final
-@dataclass(init=False, **_DC_SLOTS)
+@dataclass(init=False, slots=True)
 class Interrupt:
     """Information about an interrupt that occurred in a node.
 

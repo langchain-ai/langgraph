@@ -8,7 +8,6 @@ from typing import (  # noqa: UP035
     NamedTuple,
     TypedDict,
     TypeVar,
-    Union,
 )
 
 from langchain_core.runnables import RunnableConfig
@@ -54,7 +53,7 @@ class CheckpointMetadata(TypedDict, total=False):
     """
 
 
-ChannelVersions = dict[str, Union[str, int, float]]
+ChannelVersions = dict[str, str | int | float]
 
 
 class Checkpoint(TypedDict):

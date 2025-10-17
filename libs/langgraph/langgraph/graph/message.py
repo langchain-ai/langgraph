@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import uuid
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import partial
 from typing import (
     Annotated,
     Any,
-    Callable,
     Literal,
-    Union,
     cast,
 )
 
@@ -34,7 +32,7 @@ __all__ = (
     "MessageGraph",
 )
 
-Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
+Messages = list[MessageLikeRepresentation] | MessageLikeRepresentation
 
 REMOVE_ALL_MESSAGES = "__remove_all__"
 

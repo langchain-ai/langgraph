@@ -10,8 +10,6 @@ Note:
 
 from __future__ import annotations
 
-import functools
-import sys
 import typing
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -57,17 +55,15 @@ Values:
     - reject: Reject the operation
 """
 
-FilterType = typing.Union[
+FilterType = (
     dict[
         str,
-        typing.Union[
-            str,
-            dict[typing.Literal["$eq", "$contains"], str],
-            dict[typing.Literal["$contains"], list[str]],
-        ],
-    ],
-    dict[str, str],
-]
+        str
+        | dict[typing.Literal["$eq", "$contains"], str]
+        | dict[typing.Literal["$contains"], list[str]],
+    ]
+    | dict[str, str]
+)
 """Response type for authorization handlers.
 
 Supports exact matches and operators:
@@ -139,7 +135,7 @@ Keys must be strings, values can be any JSON-serializable type.
     ```
 """
 
-HandlerResult = typing.Union[None, bool, FilterType]
+HandlerResult = None | bool | FilterType
 """The result of a handler can be:
     * None | True: accept the request.
     * False: reject the request with a 403 error
@@ -149,15 +145,6 @@ HandlerResult = typing.Union[None, bool, FilterType]
 Handler = Callable[..., Awaitable[HandlerResult]]
 
 T = typing.TypeVar("T")
-
-
-def _slotify(fn: T) -> T:
-    if sys.version_info >= (3, 10):  # noqa: UP036
-        return functools.partial(fn, slots=True)  # type: ignore
-    return fn
-
-
-dataclass = _slotify(dataclass)
 
 
 @typing.runtime_checkable
@@ -283,9 +270,11 @@ class StudioUser:
 Authenticator = Callable[
     ...,
     Awaitable[
-        typing.Union[
-            MinimalUser, str, BaseUser, MinimalUserDict, typing.Mapping[str, typing.Any]
-        ],
+        MinimalUser
+        | str
+        | BaseUser
+        | MinimalUserDict
+        | typing.Mapping[str, typing.Any],
     ],
 ]
 """Type for authentication functions.
@@ -374,7 +363,7 @@ Parameters:
 """
 
 
-@dataclass
+@dataclass(slots=True)
 class BaseAuthContext:
     """Base class for authentication context.
 
@@ -390,7 +379,7 @@ class BaseAuthContext:
 
 
 @typing.final
-@dataclass
+@dataclass(slots=True)
 class AuthContext(BaseAuthContext):
     """Complete authentication context with resource and action information.
 
@@ -972,9 +961,9 @@ class on:
     class threads:
         """Types for thread-related operations."""
 
-        value = typing.Union[
-            ThreadsCreate, ThreadsRead, ThreadsUpdate, ThreadsDelete, ThreadsSearch
-        ]
+        value = (
+            ThreadsCreate | ThreadsRead | ThreadsUpdate | ThreadsDelete | ThreadsSearch
+        )
 
         class create:
             """Type for thread creation parameters."""
@@ -1009,13 +998,13 @@ class on:
     class assistants:
         """Types for assistant-related operations."""
 
-        value = typing.Union[
-            AssistantsCreate,
-            AssistantsRead,
-            AssistantsUpdate,
-            AssistantsDelete,
-            AssistantsSearch,
-        ]
+        value = (
+            AssistantsCreate
+            | AssistantsRead
+            | AssistantsUpdate
+            | AssistantsDelete
+            | AssistantsSearch
+        )
 
         class create:
             """Type for assistant creation parameters."""
@@ -1045,9 +1034,7 @@ class on:
     class crons:
         """Types for cron-related operations."""
 
-        value = typing.Union[
-            CronsCreate, CronsRead, CronsUpdate, CronsDelete, CronsSearch
-        ]
+        value = CronsCreate | CronsRead | CronsUpdate | CronsDelete | CronsSearch
 
         class create:
             """Type for cron creation parameters."""
@@ -1077,9 +1064,7 @@ class on:
     class store:
         """Types for store-related operations."""
 
-        value = typing.Union[
-            StoreGet, StoreSearch, StoreListNamespaces, StorePut, StoreDelete
-        ]
+        value = StoreGet | StoreSearch | StoreListNamespaces | StorePut | StoreDelete
 
         class put:
             """Type for store put parameters."""

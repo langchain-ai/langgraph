@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Hashable, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Sequence
 from inspect import (
     isfunction,
     ismethod,
@@ -10,10 +10,8 @@ from itertools import zip_longest
 from types import FunctionType
 from typing import (
     Any,
-    Callable,
     Literal,
     NamedTuple,
-    Union,
     cast,
     get_args,
     get_origin,
@@ -35,8 +33,8 @@ from langgraph.pregel._write import PASSTHROUGH, ChannelWrite, ChannelWriteEntry
 from langgraph.types import Send
 
 _Writer = Callable[
-    [Sequence[Union[str, Send]], bool],
-    Sequence[Union[ChannelWriteEntry, Send]],
+    [Sequence[str | Send], bool],
+    Sequence[ChannelWriteEntry | Send],
 ]
 
 
@@ -205,7 +203,7 @@ class BranchSpec(NamedTuple):
                 r if isinstance(r, Send) else self.ends[r] for r in result
             ]
         else:
-            destinations = cast(Sequence[Union[Send, str]], result)
+            destinations = cast(Sequence[Send | str], result)
         if any(dest is None or dest == START for dest in destinations):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Send)):

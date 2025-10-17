@@ -1,8 +1,9 @@
 import asyncio
 import signal
 import sys
+from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Callable, Optional, cast
+from typing import cast
 
 import click.exceptions
 
@@ -30,12 +31,12 @@ def Runner():
 async def subp_exec(
     cmd: str,
     *args: str,
-    input: Optional[str] = None,
-    wait: Optional[float] = None,
+    input: str | None = None,
+    wait: float | None = None,
     verbose: bool = False,
     collect: bool = False,
-    on_stdout: Optional[Callable[[str], Optional[bool]]] = None,
-) -> tuple[Optional[str], Optional[str]]:
+    on_stdout: Callable[[str], bool | None] | None = None,
+) -> tuple[str | None, str | None]:
     if verbose:
         cmd_str = f"+ {cmd} {' '.join(map(str, args))}"
         if input:
@@ -126,8 +127,8 @@ async def monitor_stream(
     stream: asyncio.StreamReader,
     collect: bool = False,
     display: bool = False,
-    on_line: Optional[Callable[[str], Optional[bool]]] = None,
-) -> Optional[bytearray]:
+    on_line: Callable[[str], bool | None] | None = None,
+) -> bytearray | None:
     if collect:
         ba = bytearray()
 
