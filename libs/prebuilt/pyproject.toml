@@ -33,20 +33,26 @@ dependencies = [
 Repository = "https://www.github.com/langchain-ai/langgraph"
 
 [dependency-groups]
-dev = [
-    "ruff",
-    "codespell",
+test = [
     "pytest",
     "pytest-asyncio",
     "pytest-mock",
     "pytest-watcher",
-    "mypy",
     "langchain-core",
     "langgraph",
     "langgraph-checkpoint",
     "langgraph-checkpoint-sqlite",
     "langgraph-checkpoint-postgres",
     "syrupy",
+]
+lint = [
+    "ruff",
+    "codespell",
+    "mypy",
+]
+dev = [
+    {include-group = "test"},
+    {include-group = "lint"},
 ]
 
 [tool.uv]

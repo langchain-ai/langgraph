@@ -262,6 +262,22 @@ dev = [
     { name = "redis" },
     { name = "ruff" },
 ]
+lint = [
+    { name = "codespell" },
+    { name = "mypy" },
+    { name = "ruff" },
+]
+test = [
+    { name = "dataclasses-json" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pandas-stubs", specifier = ">=2.2.2.240807" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-watcher" },
+    { name = "redis" },
+]
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
@@ -287,6 +303,20 @@ dev = [
     { name = "pytest-watcher" },
     { name = "ruff" },
 ]
+lint = [
+    { name = "codespell" },
+    { name = "mypy" },
+    { name = "ruff" },
+]
+test = [
+    { name = "anyio" },
+    { name = "langgraph-checkpoint" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-watcher" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -308,6 +338,20 @@ dev = [
     { name = "pytest-mock" },
     { name = "pytest-watcher" },
     { name = "ruff" },
+]
+lint = [
+    { name = "codespell" },
+    { name = "mypy" },
+    { name = "ruff" },
+]
+test = [
+    { name = "anyio" },
+    { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "psycopg", extras = ["binary"] },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-watcher" },
 ]
 
 [[package]]

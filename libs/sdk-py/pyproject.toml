@@ -23,14 +23,20 @@ path = "langgraph_sdk/__init__.py"
 Repository = "https://www.github.com/langchain-ai/langgraph"
 
 [dependency-groups]
-dev = [
-  "ruff",
-  "codespell",
+test = [
   "pytest",
   "pytest-asyncio",
   "pytest-mock",
   "pytest-watch",
+]
+lint = [
+  "ruff",
+  "codespell",
   "mypy",
+]
+dev = [
+  {include-group = "test"},
+  {include-group = "lint"},
 ]
 
 [tool.hatch.build.targets.wheel]

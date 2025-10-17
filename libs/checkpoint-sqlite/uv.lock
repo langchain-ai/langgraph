@@ -274,6 +274,22 @@ dev = [
     { name = "redis" },
     { name = "ruff" },
 ]
+lint = [
+    { name = "codespell" },
+    { name = "mypy" },
+    { name = "ruff" },
+]
+test = [
+    { name = "dataclasses-json" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "pandas-stubs", specifier = ">=2.2.2.240807" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-watcher" },
+    { name = "redis" },
+]
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
@@ -297,6 +313,19 @@ dev = [
     { name = "pytest-watcher" },
     { name = "ruff" },
 ]
+lint = [
+    { name = "codespell" },
+    { name = "mypy" },
+    { name = "ruff" },
+]
+test = [
+    { name = "langgraph-checkpoint" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-retry" },
+    { name = "pytest-watcher" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -316,6 +345,19 @@ dev = [
     { name = "pytest-retry", specifier = ">=1.7.0" },
     { name = "pytest-watcher" },
     { name = "ruff" },
+]
+lint = [
+    { name = "codespell" },
+    { name = "mypy" },
+    { name = "ruff" },
+]
+test = [
+    { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+    { name = "pytest-retry", specifier = ">=1.7.0" },
+    { name = "pytest-watcher" },
 ]
 
 [[package]]

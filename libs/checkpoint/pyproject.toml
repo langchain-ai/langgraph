@@ -20,19 +20,25 @@ dependencies = [
 Repository = "https://www.github.com/langchain-ai/langgraph"
 
 [dependency-groups]
-dev = [
-  "ruff",
-  "codespell",
+test = [
   "pytest",
   "pytest-asyncio",
   "pytest-mock",
   "pytest-watcher",
-  "mypy",
   "dataclasses-json",
   "numpy",
   "pandas",
   "pandas-stubs>=2.2.2.240807",
   "redis",
+]
+lint = [
+  "ruff",
+  "codespell",
+  "mypy",
+]
+dev = [
+  {include-group = "test"},
+  {include-group = "lint"},
 ]
 
 [tool.hatch.build.targets.wheel]
