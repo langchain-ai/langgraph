@@ -21,18 +21,18 @@ def test_interrupt_legacy_ns() -> None:
         assert new_interrupt.id == old_interrupt.id
 
 
-serializer = JsonPlusSerializer()
+serializer = JsonPlusSerializer(allowed_json_modules=True)
 
 
 def test_serialization_roundtrip() -> None:
     """Test that the legacy interrupt (pre v1) can be reserialized as the modern interrupt without id corruption."""
 
     # generated with:
-    # JsonPlusSerializer().dumps(Interrupt(value="legacy_test", ns=["legacy_test"], resumable=True, when="during"))
+    # JsonPlusSerializer().dumps_typed(Interrupt(value="legacy_test", ns=["legacy_test"], resumable=True, when="during"))
     legacy_interrupt_bytes = b'{"lc": 2, "type": "constructor", "id": ["langgraph", "types", "Interrupt"], "kwargs": {"value": "legacy_test", "resumable": true, "ns": ["legacy_test"], "when": "during"}}'
     legacy_interrupt_id = "f1fa625689ec006a5b32b76863e22a6c"
 
-    interrupt = serializer.loads(legacy_interrupt_bytes)
+    interrupt = serializer.loads_typed(("json", legacy_interrupt_bytes))
     assert interrupt.id == legacy_interrupt_id
     assert interrupt.value == "legacy_test"
 
@@ -41,10 +41,10 @@ def test_serialization_roundtrip_complex_ns() -> None:
     """Test that the legacy interrupt (pre v1), with a more complex ns can be reserialized as the modern interrupt without id corruption."""
 
     # generated with:
-    # JsonPlusSerializer().dumps(Interrupt(value="legacy_test", ns=["legacy:test", "with:complex", "name:space"], resumable=True, when="during"))
+    # JsonPlusSerializer().dumps_typed(Interrupt(value="legacy_test", ns=["legacy:test", "with:complex", "name:space"], resumable=True, when="during"))
     legacy_interrupt_bytes = b'{"lc": 2, "type": "constructor", "id": ["langgraph", "types", "Interrupt"], "kwargs": {"value": "legacy_test", "resumable": true, "ns": ["legacy:test", "with:complex", "name:space"], "when": "during"}}'
     legacy_interrupt_id = "e69356a9ee3630ee7f4f597f2693000c"
 
-    interrupt = serializer.loads(legacy_interrupt_bytes)
+    interrupt = serializer.loads_typed(("json", legacy_interrupt_bytes))
     assert interrupt.id == legacy_interrupt_id
     assert interrupt.value == "legacy_test"
