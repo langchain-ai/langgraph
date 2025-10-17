@@ -1337,6 +1337,35 @@ dev = [
     { name = "types-requests" },
     { name = "uvloop" },
 ]
+lint = [
+    { name = "mypy" },
+    { name = "ruff" },
+    { name = "types-requests" },
+]
+test = [
+    { name = "httpx" },
+    { name = "langchain-core" },
+    { name = "langgraph-checkpoint" },
+    { name = "langgraph-checkpoint-postgres" },
+    { name = "langgraph-checkpoint-sqlite" },
+    { name = "langgraph-cli", extra = ["inmem"] },
+    { name = "langgraph-prebuilt" },
+    { name = "langgraph-sdk" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "py-spy" },
+    { name = "pycryptodome" },
+    { name = "pyperf" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-dotenv" },
+    { name = "pytest-mock" },
+    { name = "pytest-repeat" },
+    { name = "pytest-watcher" },
+    { name = "pytest-xdist", extra = ["psutil"] },
+    { name = "redis" },
+    { name = "syrupy" },
+    { name = "uvloop" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -1375,6 +1404,35 @@ dev = [
     { name = "ruff" },
     { name = "syrupy" },
     { name = "types-requests" },
+    { name = "uvloop", specifier = "==0.21.0b1" },
+]
+lint = [
+    { name = "mypy" },
+    { name = "ruff" },
+    { name = "types-requests" },
+]
+test = [
+    { name = "httpx" },
+    { name = "langchain-core", specifier = "==1.0.0a1" },
+    { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
+    { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
+    { name = "langgraph-cli", extras = ["inmem"], editable = "../cli" },
+    { name = "langgraph-prebuilt", editable = "../prebuilt" },
+    { name = "langgraph-sdk", editable = "../sdk-py" },
+    { name = "psycopg", extras = ["binary"] },
+    { name = "py-spy" },
+    { name = "pycryptodome" },
+    { name = "pyperf" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-dotenv" },
+    { name = "pytest-mock" },
+    { name = "pytest-repeat" },
+    { name = "pytest-watcher" },
+    { name = "pytest-xdist", extras = ["psutil"] },
+    { name = "redis" },
+    { name = "syrupy" },
     { name = "uvloop", specifier = "==0.21.0b1" },
 ]
 
