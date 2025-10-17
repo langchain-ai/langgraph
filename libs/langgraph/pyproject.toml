@@ -72,6 +72,10 @@ dev = [
     "jupyter",
 ]
 
+
+[tool.uv]
+default-groups = ['dev']
+
 [tool.uv.sources]
 langgraph-prebuilt = { path = "../prebuilt", editable = true }
 langgraph-checkpoint = { path = "../checkpoint", editable = true }
