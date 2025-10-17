@@ -11,6 +11,19 @@ requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
+classifiers = [
+    'Development Status :: 5 - Production/Stable',
+    'Programming Language :: Python',
+    'Programming Language :: Python :: Implementation :: CPython',
+    'Programming Language :: Python :: Implementation :: PyPy',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3 :: Only',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
+]
 dependencies = [
     "langgraph-checkpoint>=2.1.0,<3.0.0",
     "langchain-core>=0.3.67",
@@ -20,20 +33,26 @@ dependencies = [
 Repository = "https://www.github.com/langchain-ai/langgraph"
 
 [dependency-groups]
-dev = [
-    "ruff",
-    "codespell",
+test = [
     "pytest",
     "pytest-asyncio",
     "pytest-mock",
     "pytest-watcher",
-    "mypy",
     "langchain-core",
     "langgraph",
     "langgraph-checkpoint",
     "langgraph-checkpoint-sqlite",
     "langgraph-checkpoint-postgres",
     "syrupy",
+]
+lint = [
+    "ruff",
+    "codespell",
+    "mypy",
+]
+dev = [
+    {include-group = "test"},
+    {include-group = "lint"},
 ]
 
 [tool.uv]

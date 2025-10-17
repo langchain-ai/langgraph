@@ -221,7 +221,7 @@ jobs:
           uv run python -c "import $IMPORT_NAME; print(dir($IMPORT_NAME))"
 
       - name: Import test dependencies
-        run: uv sync --group dev
+        run: uv sync --group test
         working-directory: ${{ inputs.working-directory }}
 
       # Overwrite the local version of the package with the test PyPI version.

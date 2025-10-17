@@ -21,6 +21,7 @@ jobs:
           - "3.11"
           - "3.12"
           - "3.13"
+          - "3.14"
 
     name: "test #${{ matrix.python-version }}"
     steps:
@@ -41,7 +42,7 @@ jobs:
       - name: Install dependencies
         shell: bash
         working-directory: ${{ inputs.working-directory }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group test --no-dev
 
       - name: Run tests
         shell: bash
