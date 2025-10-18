@@ -246,6 +246,7 @@ class PregelLoop:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
+        self.skipped_task_ids: set[str] = set()
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -313,15 +314,35 @@ class PregelLoop:
             ]
             writes_to_save: WritesT = [
                 w[1:] for w in self.checkpoint_pending_writes if w[0] == task_id
-            ] + list(writes)
+            ] + [(c, v) for c, v in writes if c != RESUME]
+            self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         else:
-            # remove existing writes for this task
+            # build map of existing interrupts for this task: interrupt id -> list of interrupts
+            existing_interrupts_by_id: dict[str, list[Any]] = {
+                v[0].id: v
+                for tid, ch, v in self.checkpoint_pending_writes
+                if tid == task_id and ch == INTERRUPT
+            }
+            writes_to_save = []
+            for ch, v in writes:
+                if ch == INTERRUPT:
+                    # we merge new interrupt writes with existing interrupts writes if they
+                    # occurred within the same task (which means they have the same interrupt id)
+                    new_interrupts = v if isinstance(v, list) else list(v)
+                    if new_interrupts and (
+                        existing := existing_interrupts_by_id.get(new_interrupts[0].id)
+                    ):
+                        v = existing + new_interrupts
+                    writes_to_save.append((ch, v))
+                else:
+                    # we add non-interrupt writes as-is
+                    writes_to_save.append((ch, v))
+
+            # replace all writes for this task_id with the merged writes
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[0] != task_id
-            ]
-            writes_to_save = writes
-        # save writes
-        self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
+            ] + [(task_id, c, v) for c, v in writes_to_save]
+
         if self.durability != "exit" and self.checkpointer_put_writes is not None:
             config = patch_configurable(
                 self.checkpoint_config,
@@ -469,6 +490,22 @@ class PregelLoop:
             cache_policy=self.cache_policy,
         )
 
+        resume_map = self.config.get(CONF, {}).get(CONFIG_KEY_RESUME_MAP, {})
+        if resume_map or self.input is None:
+            # do not re-execute tasks that have unresumable interrupts
+            # i.e. when the graph is invoked with None, or the interrupt id is not in the resume map
+            skipped_interrupt_ids = self._pending_interrupts() - set(resume_map)
+            self.skipped_task_ids = {
+                task_id
+                for task_id, channel, value in self.checkpoint_pending_writes
+                if channel == INTERRUPT
+                # interrupts within a task are uncovered sequentially as resumes are provided,
+                # so we only need to check the last interrupt id
+                and value[-1].id in skipped_interrupt_ids
+            }
+        else:
+            self.skipped_task_ids = set()
+
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
             self._emit(
@@ -514,9 +551,45 @@ class PregelLoop:
             if task.writes:
                 self.output_writes(task.id, task.writes, cached=True)
 
+        if self.skipped_task_ids:
+            # remove tasks with writes that have been matched with previous pending writes
+            self.skipped_task_ids = {
+                task_id
+                for task_id in self.skipped_task_ids
+                if not self.tasks[task_id].writes
+            }
+            # output interrupt writes for blocked tasks so they are still visible in the stream
+            for task_id, channel, value in self.checkpoint_pending_writes:
+                if task_id in self.skipped_task_ids and channel == INTERRUPT:
+                    # find resume count for this task
+                    resumes = next(
+                        (
+                            v
+                            for tid, ch, v in self.checkpoint_pending_writes
+                            if tid == task_id and ch == RESUME
+                        ),
+                        None,
+                    )
+                    resume_count = len(resumes) if resumes is not None else 0
+                    # only output unresumed interrupts
+                    if resume_count < len(value):
+                        self.output_writes(task_id, [(INTERRUPT, value[resume_count:])])
+
         return True
 
     def after_tick(self) -> None:
+        if self.skipped_task_ids:
+            # raise early GraphInterrupt for skipped tasks.
+            # since we know len(resumes) < len(interrupts) for these tasks, we
+            # can prevent unnecessary node re-execution by raising early
+            interrupts = []
+            for task_id, channel, value in self.checkpoint_pending_writes:
+                if channel == INTERRUPT and task_id in self.skipped_task_ids:
+                    interrupts.extend(value)
+            if interrupts:
+                raise GraphInterrupt(interrupts)
+
+        self.skipped_task_ids.clear()
         # finish superstep
         writes = [w for t in self.tasks.values() for w in t.writes]
         # all tasks have finished
@@ -568,30 +641,26 @@ class PregelLoop:
 
     def _pending_interrupts(self) -> set[str]:
         """Return the set of interrupt ids that are pending without corresponding resume values."""
-        # mapping of task ids to interrupt ids
-        pending_interrupts: dict[str, str] = {}
+        # mapping of task ids to (interrupt_id, interrupt_count)
+        pending_interrupts: dict[str, tuple[str, int]] = {}
+        # mapping of task ids to resume count
+        pending_resumes: dict[str, int] = {}
 
-        # set of resume task ids
-        pending_resumes: set[str] = set()
+        for task_id, channel, value in self.checkpoint_pending_writes:
+            if channel == INTERRUPT:
+                pending_interrupts[task_id] = (
+                    value[0].id,
+                    len(value),
+                )
+            elif channel == RESUME:
+                resume_list = value if isinstance(value, list) else [value]
+                pending_resumes[task_id] = len(resume_list)
 
-        for task_id, write_type, value in self.checkpoint_pending_writes:
-            if write_type == INTERRUPT:
-                # interrupts is always a list, but there should only be one element
-                pending_interrupts[task_id] = value[0].id
-            elif write_type == RESUME:
-                pending_resumes.add(task_id)
-
-        resumed_interrupt_ids = {
-            pending_interrupts[task_id]
-            for task_id in pending_resumes
-            if task_id in pending_interrupts
-        }
-
-        # Keep only interrupts whose interrupt_id is not resumed
+        # keep only interrupt ids where resume_count < interrupt_count
         hanging_interrupts: set[str] = {
             interrupt_id
-            for interrupt_id in pending_interrupts.values()
-            if interrupt_id not in resumed_interrupt_ids
+            for task_id, (interrupt_id, interrupt_count) in pending_interrupts.items()
+            if pending_resumes.get(task_id, 0) < interrupt_count
         }
 
         return hanging_interrupts
@@ -1024,6 +1093,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
+
         super().put_writes(task_id, writes)
         if not writes or self.cache is None or not hasattr(self, "tasks"):
             return
