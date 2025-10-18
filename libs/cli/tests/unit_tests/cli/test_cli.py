@@ -6,6 +6,7 @@ import tempfile
 import textwrap
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from click.testing import CliRunner
 
@@ -427,6 +428,52 @@ def test_dockerfile_command_with_docker_compose() -> None:
         assert (temp_dir / ".dockerignore").exists()
         assert (temp_dir / "docker-compose.yml").exists()
         assert (temp_dir / ".env").exists() or "➖ Skipped: .env" in result.output
+
+
+def test_dev_command_dependency_manager_detection() -> None:
+    """Test dependency manager detection in dev command context."""
+    # Test dependency manager detection directly
+    from langgraph_cli.dependency_manager import detect_dependency_manager
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = pathlib.Path(temp_dir)
+        pipfile_path = temp_path / "Pipfile"
+        pipfile_path.write_text('[[source]]\nurl = "https://pypi.org/simple"')
+
+        manager, config_file = detect_dependency_manager(temp_path)
+        assert manager.value == "pipenv"
+        assert config_file == pipfile_path
+
+
+def test_dev_command_with_install_deps() -> None:
+    """Test dependency installation functionality."""
+    from langgraph_cli.dependency_manager import DependencyManager, install_dependencies
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = pathlib.Path(temp_dir)
+
+        # Test pipenv installation
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock()
+            result = install_dependencies(DependencyManager.PIPENV, temp_path)
+            assert result is True
+            mock_run.assert_called_once_with(
+                ["pipenv", "install"],
+                cwd=temp_path,
+                check=True,
+            )
+
+
+def test_dev_command_pip_fallback() -> None:
+    """Test pip fallback when no modern dependency manager is detected."""
+    from langgraph_cli.dependency_manager import detect_dependency_manager
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_path = pathlib.Path(temp_dir)
+
+        manager, config_file = detect_dependency_manager(temp_path)
+        assert manager.value == "pip"
+        assert config_file is None
 
 
 def test_dockerfile_command_with_bad_config() -> None:
