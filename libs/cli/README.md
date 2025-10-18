@@ -43,20 +43,55 @@ The `langgraph dev` command now automatically detects and activates virtual envi
 - **Pipenv**: Detects `Pipfile` and activates the pipenv virtual environment
 - **pip**: Falls back to system Python if no modern dependency manager is detected
 
-**Examples:**
+**Detection Priority:** uv > poetry > pipenv > pip
+
+**Usage Examples:**
+
+**With uv (recommended):**
 ```bash
-# With uv (recommended - LangGraph's chosen tool)
+# Initialize uv project
+uv init my-langgraph-app
+cd my-langgraph-app
+uv add langchain-openai langchain-community
+
+# Run with automatic virtual environment activation
 uv run langgraph dev
+```
 
-# With poetry  
+**With Poetry:**
+```bash
+# Initialize poetry project
+poetry init
+poetry add langchain-openai langchain-community
+
+# Run with automatic virtual environment activation
 poetry run langgraph dev
+```
 
-# With pipenv
+**With Pipenv:**
+```bash
+# Initialize pipenv project
+pipenv install langchain-openai langchain-community
+
+# Run with automatic virtual environment activation
 pipenv run langgraph dev
+```
 
-# Auto-install dependencies
+**Auto-install dependencies:**
+```bash
+# Automatically install dependencies using detected manager
 langgraph dev --install-deps
 ```
+
+**What happens when you run `langgraph dev`:**
+1. **Detects** your dependency manager based on project files
+2. **Activates** the corresponding virtual environment
+3. **Displays** confirmation message: `✅ Detected [manager] project and activated virtual environment`
+4. **Starts** the development server with proper Python path
+
+**Fallback behavior:**
+- If virtual environment activation fails: `⚠️ Detected [manager] project but couldn't activate virtual environment. Using system Python.`
+- If no modern dependency manager detected: Uses system Python (no message)
 
 ### `langgraph up` 🚀
 Launch LangGraph API server in Docker
