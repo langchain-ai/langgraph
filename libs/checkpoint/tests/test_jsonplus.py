@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import pathlib
 import re
 import sys
@@ -19,6 +20,7 @@ from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
 
 from langgraph.checkpoint.serde.jsonplus import (
+    InvalidModuleError,
     JsonPlusSerializer,
     _msgpack_ext_hook_to_json,
 )
@@ -160,10 +162,9 @@ def test_serde_jsonplus() -> None:
         "Text\ud83d\udcac",
         "收花🙄·到",
     ]
+    serde = JsonPlusSerializer(pickle_fallback=True)
 
-    assert serde.loads_typed(serde.dumps_typed(surrogates)) == [
-        v.encode("utf-8", "ignore").decode() for v in surrogates
-    ]
+    assert serde.loads_typed(serde.dumps_typed(surrogates)) == surrogates
 
 
 def test_serde_jsonplus_json_mode() -> None:
@@ -288,6 +289,20 @@ def test_serde_jsonplus_bytes() -> None:
 
     assert dumped == ("bytes", some_bytes)
     assert serde.loads_typed(dumped) == some_bytes
+
+
+def test_deserde_invalid_module() -> None:
+    serde = JsonPlusSerializer()
+    load = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["pprint", "pprint"],
+        "kwargs": {"object": "HELLO"},
+    }
+    with pytest.raises(InvalidModuleError):
+        serde._revive_lc2(load)
+    serde = JsonPlusSerializer(allowed_json_modules=[("pprint", "pprint")])
+    serde.loads_typed(("json", json.dumps(load).encode("utf-8")))
 
 
 def test_serde_jsonplus_bytearray() -> None:
