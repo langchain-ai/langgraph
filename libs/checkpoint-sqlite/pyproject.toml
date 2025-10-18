@@ -7,7 +7,7 @@ name = "langgraph-checkpoint-sqlite"
 version = "2.0.11"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 authors = []
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
@@ -21,16 +21,22 @@ dependencies = [
 Repository = "https://www.github.com/langchain-ai/langgraph"
 
 [dependency-groups]
-dev = [
-  "ruff",
-  "codespell",
+test = [
   "pytest",
   "pytest-asyncio",
   "pytest-mock",
   "pytest-watcher",
-  "mypy",
   "langgraph-checkpoint",
   "pytest-retry>=1.7.0",
+]
+lint = [
+  "ruff",
+  "codespell",
+  "mypy",
+]
+dev = [
+  {include-group = "test"},
+  {include-group = "lint"},
 ]
 
 [tool.uv]
@@ -53,8 +59,10 @@ lint.select = [
   "UP", # pyupgrade
   "B",  # flake8-bugbear
   "I",  # isort
+  "UP", # pyupgrade
 ]
 lint.ignore = ["E501", "B008"]
+target-version = "py310"
 
 [tool.pytest-watcher]
 now = true

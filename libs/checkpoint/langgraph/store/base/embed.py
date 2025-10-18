@@ -11,8 +11,8 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
-from collections.abc import Awaitable, Sequence
-from typing import Any, Callable
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Any
 
 from langchain_core.embeddings import Embeddings
 
@@ -49,7 +49,9 @@ def ensure_embeddings(
         An Embeddings instance that wraps the provided function(s).
 
     ??? example "Examples"
+
         Wrap a synchronous embedding function:
+
         ```python
         def my_embed_fn(texts):
             return [[0.1, 0.2] for _ in texts]
@@ -59,6 +61,7 @@ def ensure_embeddings(
         ```
 
         Wrap an asynchronous embedding function:
+
         ```python
         async def my_async_fn(texts):
             return [[0.1, 0.2] for _ in texts]
@@ -68,6 +71,7 @@ def ensure_embeddings(
         ```
 
         Initialize embeddings using a provider string:
+
         ```python
         # Requires langchain>=0.3.9 and langgraph-checkpoint>=2.0.11
         embeddings = ensure_embeddings("openai:text-embedding-3-small")
@@ -119,7 +123,9 @@ class EmbeddingsLambda(Embeddings):
             will raise an error. If sync, it will be used for both sync and async operations.
 
     ??? example "Examples"
+
         With a sync function:
+
         ```python
         def my_embed_fn(texts):
             # Return 2D embeddings for each text
@@ -131,6 +137,7 @@ class EmbeddingsLambda(Embeddings):
         ```
 
         With an async function:
+
         ```python
         async def my_async_fn(texts):
             return [[0.1, 0.2] for _ in texts]

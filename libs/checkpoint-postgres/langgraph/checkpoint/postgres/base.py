@@ -4,7 +4,7 @@ import random
 import warnings
 from collections.abc import Sequence
 from importlib.metadata import version as get_version
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -16,7 +16,7 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.serde.types import TASKS
 from psycopg.types.json import Jsonb
 
-MetadataInput = Optional[dict[str, Any]]
+MetadataInput = dict[str, Any] | None
 
 try:
     major, minor = get_version("langgraph").split(".")[:2]

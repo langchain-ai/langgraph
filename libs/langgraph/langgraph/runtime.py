@@ -80,11 +80,11 @@ class Runtime(Generic[ContextT]):
 
     1. Define a schema for the runtime context.
     2. Create a store to persist memories and other information.
-    3. Use the runtime context to access the user_id.
+    3. Use the runtime context to access the `user_id`.
     """
 
     context: ContextT = field(default=None)  # type: ignore[assignment]
-    """Static context for the graph run, like user_id, db_conn, etc.
+    """Static context for the graph run, like `user_id`, `db_conn`, etc.
     
     Can also be thought of as 'run dependencies'."""
 

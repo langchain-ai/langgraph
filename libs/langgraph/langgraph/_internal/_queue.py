@@ -3,13 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import queue
-import sys
 import threading
 import types
 from collections import deque
 from time import monotonic
-
-PY_310 = sys.version_info >= (3, 10)
 
 
 class AsyncQueue(asyncio.Queue):
@@ -24,10 +21,7 @@ class AsyncQueue(asyncio.Queue):
         ie. this doesn't consume the item, just waits for it.
         """
         while self.empty():
-            if PY_310:
-                getter = self._get_loop().create_future()
-            else:
-                getter = self._loop.create_future()
+            getter = self._get_loop().create_future()
             self._getters.append(getter)
             try:
                 await getter

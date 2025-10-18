@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import functools
 import weakref
-from collections.abc import Iterable
-from typing import Any, Callable, Literal, TypeVar
+from collections.abc import Callable, Iterable
+from typing import Any, Literal, TypeVar
 
 from langgraph.store.base import (
     NOT_PROVIDED,
@@ -349,7 +349,7 @@ async def _run(
                         results = [results[ix] for ix in listen]
 
                     # set the results of each operation
-                    for fut, result in zip(futs, results):
+                    for fut, result in zip(futs, results, strict=False):
                         # guard against future being done (e.g. cancelled)
                         if not fut.done():
                             fut.set_result(result)

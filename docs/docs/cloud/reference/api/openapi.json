@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "LangGraph Platform",
+    "title": "LangSmith Deployment",
     "version": "0.1.0"
   },
   "tags": [

@@ -1,6 +1,6 @@
 import re
 from collections.abc import Sequence
-from typing import Any, Union
+from typing import Any
 
 from typing_extensions import Self
 
@@ -31,7 +31,7 @@ class FloatBetween(float):
 
 
 class AnyStr(str):
-    def __init__(self, prefix: Union[str, re.Pattern] = "") -> None:
+    def __init__(self, prefix: str | re.Pattern = "") -> None:
         super().__init__()
         self.prefix = prefix
 

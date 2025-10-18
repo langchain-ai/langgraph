@@ -29,7 +29,11 @@ logger = logging.getLogger(__name__)
 
 
 def _transform_link(
-    link_name: str, scope: str, file_path: str, line_number: int, custom_title: Optional[str] = None
+    link_name: str,
+    scope: str,
+    file_path: str,
+    line_number: int,
+    custom_title: Optional[str] = None,
 ) -> Optional[str]:
     """Transform a cross-reference link based on the current scope.
 
@@ -38,7 +42,7 @@ def _transform_link(
         scope: The current scope context ("global", "python", "js", etc.).
         file_path: The file path for error reporting.
         line_number: The line number for error reporting.
-        custom_title: Optional custom title for the link. If None, uses link_name.
+        custom_title: Optional custom title for the link. If `None`, uses link_name.
 
     Returns:
         A formatted markdown link if the link is found in the scope mapping,
@@ -117,7 +121,9 @@ CROSS_REFERENCE_PATTERN = re.compile(
 )
 
 
-def _replace_autolinks(markdown: str, file_path: str, *, default_scope: str = "python") -> str:
+def _replace_autolinks(
+    markdown: str, file_path: str, *, default_scope: str = "python"
+) -> str:
     """Preprocess markdown lines to handle @[links] with conditional fence scopes.
 
     This function processes markdown content to transform @[link_name] references
@@ -169,7 +175,7 @@ def _replace_autolinks(markdown: str, file_path: str, *, default_scope: str = "p
                 # This is @[ref] format
                 link_name = match.group("link_name")
                 custom_title = None
-            
+
             transformed = _transform_link(
                 link_name, current_scope, file_path, line_number, custom_title
             )

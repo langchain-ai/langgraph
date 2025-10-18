@@ -1,8 +1,13 @@
-from typing import Literal, Optional, Union
+from typing import Literal
 
-from typing_extensions import TypedDict
+from langgraph.warnings import LangGraphDeprecatedSinceV10
+from typing_extensions import TypedDict, deprecated
 
 
+@deprecated(
+    "HumanInterruptConfig has been moved to `langchain.agents.interrupt`. Please update your import to `from langchain.agents.interrupt import HumanInterruptConfig`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class HumanInterruptConfig(TypedDict):
     """Configuration that defines what actions are allowed for a human interrupt.
 
@@ -21,6 +26,10 @@ class HumanInterruptConfig(TypedDict):
     allow_accept: bool
 
 
+@deprecated(
+    "ActionRequest has been moved to `langchain.agents.interrupt`. Please update your import to `from langchain.agents.interrupt import ActionRequest`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class ActionRequest(TypedDict):
     """Represents a request for human action within the graph execution.
 
@@ -35,6 +44,10 @@ class ActionRequest(TypedDict):
     args: dict
 
 
+@deprecated(
+    "HumanInterrupt has been moved to `langchain.agents.interrupt`. Please update your import to `from langchain.agents.interrupt import HumanInterrupt`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class HumanInterrupt(TypedDict):
     """Represents an interrupt triggered by the graph that requires human intervention.
 
@@ -68,7 +81,7 @@ class HumanInterrupt(TypedDict):
 
     action_request: ActionRequest
     config: HumanInterruptConfig
-    description: Optional[str]
+    description: str | None
 
 
 class HumanResponse(TypedDict):
@@ -87,4 +100,4 @@ class HumanResponse(TypedDict):
     """
 
     type: Literal["accept", "ignore", "response", "edit"]
-    args: Union[None, str, ActionRequest]
+    args: None | str | ActionRequest
