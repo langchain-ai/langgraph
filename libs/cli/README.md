@@ -31,7 +31,31 @@ langgraph dev [OPTIONS]
   --no-reload               Disable auto-reload
   --debug-port INTEGER      Enable remote debugging
   --no-browser             Skip opening browser window
+  --install-deps           Automatically install dependencies using detected dependency manager
   -c, --config FILE        Config file path (default: langgraph.json)
+```
+
+**Modern Python Workflow Support:**
+The `langgraph dev` command now automatically detects and activates virtual environments for modern Python dependency managers:
+
+- **uv**: Detects `uv.lock`, `requirements.lock`, or `pyproject.toml` with `[tool.uv]` section and activates the uv virtual environment (LangGraph's chosen tool)
+- **Poetry**: Detects `pyproject.toml` with `[tool.poetry]` section and activates the poetry virtual environment  
+- **Pipenv**: Detects `Pipfile` and activates the pipenv virtual environment
+- **pip**: Falls back to system Python if no modern dependency manager is detected
+
+**Examples:**
+```bash
+# With uv (recommended - LangGraph's chosen tool)
+uv run langgraph dev
+
+# With poetry  
+poetry run langgraph dev
+
+# With pipenv
+pipenv run langgraph dev
+
+# Auto-install dependencies
+langgraph dev --install-deps
 ```
 
 ### `langgraph up` 🚀
