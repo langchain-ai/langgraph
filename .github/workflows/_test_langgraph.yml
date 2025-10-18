@@ -12,11 +12,11 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.9"
           - "3.10"
           - "3.11"
           - "3.12"
           - "3.13"
+          - "3.14"
 
     defaults:
       run:
@@ -39,7 +39,7 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group test --no-dev
 
       - name: Run tests
         shell: bash

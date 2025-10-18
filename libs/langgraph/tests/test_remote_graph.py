@@ -1,6 +1,6 @@
 import re
 import sys
-from typing import Annotated, Optional, Union
+from typing import Annotated
 from unittest.mock import AsyncMock, MagicMock
 
 import langsmith as ls
@@ -32,6 +32,11 @@ pytestmark = pytest.mark.anyio
 NEEDS_CONTEXTVARS = pytest.mark.skipif(
     sys.version_info < (3, 11),
     reason="Python 3.11+ is required for async contextvars support",
+)
+
+SKIP_PYTHON_314 = pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="Not yet testing Python 3.14 with the server bc of dependency limits on the api side",
 )
 
 
@@ -1086,7 +1091,7 @@ async def nested_graph() -> Pregel:
     )
 
 
-def get_message_dict(msg: Union[BaseMessage, dict]):
+def get_message_dict(msg: BaseMessage | dict):
     # just get the core stuff from within the message
     if isinstance(msg, dict):
         return {
@@ -1106,6 +1111,7 @@ def get_message_dict(msg: Union[BaseMessage, dict]):
 
 
 @NEEDS_CONTEXTVARS
+@SKIP_PYTHON_314
 async def test_remote_graph_basic_invoke(remote_graph: RemoteGraph) -> None:
     # Basic smoke test of the remote graph
     response = await remote_graph.ainvoke(
@@ -1143,6 +1149,7 @@ uid_pattern = re.compile(
 
 
 @NEEDS_CONTEXTVARS
+@SKIP_PYTHON_314
 async def test_remote_graph_stream_messages_tuple(
     nested_graph: Pregel, nested_remote_graph: Pregel
 ) -> None:
@@ -1185,7 +1192,7 @@ async def test_remote_graph_stream_messages_tuple(
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("headers", [None, {"foo": "bar"}])
 async def test_include_headers(
-    distributed_tracing: bool, stream: bool, headers: Optional[dict[str, str]]
+    distributed_tracing: bool, stream: bool, headers: dict[str, str] | None
 ):
     mock_async_client = MagicMock()
     async_iter = MagicMock()

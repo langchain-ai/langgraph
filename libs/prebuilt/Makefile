@@ -19,7 +19,7 @@ test-fast:
 	LANGGRAPH_TEST_FAST=1 uv run pytest $(TEST)
 
 test:
-	make start-services && LANGGRAPH_TEST_FAST=0 uv run pytest $(TEST); \
+	make start-services && LANGGRAPH_TEST_FAST=0 uv run --active pytest $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-services; \
 	exit $$EXIT_CODE

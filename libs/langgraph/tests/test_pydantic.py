@@ -6,7 +6,7 @@ import re
 import sys
 import uuid
 from enum import Enum
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, Literal, Optional
 
 from pydantic import (
     BaseModel,
@@ -101,11 +101,11 @@ def test_nested_pydantic_models() -> None:
         top_level: str
         auuid: uuid.UUID
         nested: NestedModel
-        optional_nested: Annotated[Optional[NestedModel], lambda x, y: y, "Foo"]
+        optional_nested: Annotated[NestedModel | None, lambda x, y: y, "Foo"]
         dict_nested: dict[str, NestedModel]
         simple_str_list: list[str]
         list_nested: Annotated[
-            Union[dict, list[dict[str, NestedModel]]], lambda x, y: (x or []) + [y]
+            dict | list[dict[str, NestedModel]], lambda x, y: (x or []) + [y]
         ]
         tuple_nested: tuple[str, NestedModel]
         tuple_list_nested: list[tuple[int, NestedModel]]
@@ -115,7 +115,7 @@ def test_nested_pydantic_models() -> None:
         recursive: RecursiveModel
 
         # Discriminated union test
-        pet: Union[Cat, Dog]
+        pet: Cat | Dog
 
         # Cyclic reference test
         people: dict[str, Person]  # Map of ID -> Person

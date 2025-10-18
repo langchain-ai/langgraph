@@ -26,7 +26,7 @@ jobs:
           enable-cache: true
           cache-suffix: "bench"
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --group test
       - name: Run benchmarks
         run: OUTPUT=out/benchmark-baseline.json make -s benchmark
       - name: Save outputs

@@ -10,8 +10,6 @@ Note:
 
 from __future__ import annotations
 
-import functools
-import sys
 import typing
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -57,17 +55,15 @@ Values:
     - reject: Reject the operation
 """
 
-FilterType = typing.Union[
+FilterType = (
     dict[
         str,
-        typing.Union[
-            str,
-            dict[typing.Literal["$eq", "$contains"], str],
-            dict[typing.Literal["$contains"], list[str]],
-        ],
-    ],
-    dict[str, str],
-]
+        str
+        | dict[typing.Literal["$eq", "$contains"], str]
+        | dict[typing.Literal["$contains"], list[str]],
+    ]
+    | dict[str, str]
+)
 """Response type for authorization handlers.
 
 Supports exact matches and operators:
@@ -80,27 +76,33 @@ Subset containment is only supported by newer versions of the LangGraph dev serv
 install langgraph-runtime-inmem >= 0.14.1 to use this filter variant.
 
 ???+ example "Examples"
+
     Simple exact match filter for the resource owner:
+
     ```python
     filter = {"owner": "user-abcd123"}
     ```
 
     Explicit version of the exact match filter:
+
     ```python
     filter = {"owner": {"$eq": "user-abcd123"}}
     ```
- 
+
     Containment (membership of a single element):
+
     ```python
     filter = {"participants": {"$contains": "user-abcd123"}}
     ```
 
     Containment (subset containment; all values must be present, but order doesn't matter):
+
     ```python
     filter = {"participants": {"$contains": ["user-abcd123", "user-efgh456"]}}
     ```
 
     Combining filters (treated as a logical `AND`):
+
     ```python
     filter = {"owner": "user-abcd123", "participants": {"$contains": "user-efgh456"}}
     ```
@@ -123,6 +125,7 @@ Allows storing custom key-value pairs with any entity.
 Keys must be strings, values can be any JSON-serializable type.
 
 ???+ example "Examples"
+
     ```python
     metadata = {
         "created_by": "user123",
@@ -132,7 +135,7 @@ Keys must be strings, values can be any JSON-serializable type.
     ```
 """
 
-HandlerResult = typing.Union[None, bool, FilterType]
+HandlerResult = None | bool | FilterType
 """The result of a handler can be:
     * None | True: accept the request.
     * False: reject the request with a 403 error
@@ -142,15 +145,6 @@ HandlerResult = typing.Union[None, bool, FilterType]
 Handler = Callable[..., Awaitable[HandlerResult]]
 
 T = typing.TypeVar("T")
-
-
-def _slotify(fn: T) -> T:
-    if sys.version_info >= (3, 10):  # noqa: UP036
-        return functools.partial(fn, slots=True)  # type: ignore
-    return fn
-
-
-dataclass = _slotify(dataclass)
 
 
 @typing.runtime_checkable
@@ -238,6 +232,7 @@ class StudioUser:
     for developers accessing the instance from the LangGraph Studio UI.
 
     ???+ example "Examples"
+
         ```python
         @auth.on
         async def allow_developers(ctx: Auth.types.AuthContext, value: Any) -> None:
@@ -275,9 +270,11 @@ class StudioUser:
 Authenticator = Callable[
     ...,
     Awaitable[
-        typing.Union[
-            MinimalUser, str, BaseUser, MinimalUserDict, typing.Mapping[str, typing.Any]
-        ],
+        MinimalUser
+        | str
+        | BaseUser
+        | MinimalUserDict
+        | typing.Mapping[str, typing.Any],
     ],
 ]
 """Type for authentication functions.
@@ -304,7 +301,9 @@ Parameters:
     authorization (str | None): The Authorization header value (e.g. "Bearer <token>")
 
 ???+ example "Examples"
+
     Basic authentication with token:
+
     ```python
     from langgraph_sdk import Auth
 
@@ -316,6 +315,7 @@ Parameters:
     ```
 
     Authentication with multiple parameters:
+
     ```    
     @auth.authenticate
     async def authenticate2(
@@ -329,6 +329,7 @@ Parameters:
     ```
 
     Accepting the raw ASGI request:
+
     ```python
     MY_SECRET = "my-secret-key"
     @auth.authenticate
@@ -362,7 +363,7 @@ Parameters:
 """
 
 
-@dataclass
+@dataclass(slots=True)
 class BaseAuthContext:
     """Base class for authentication context.
 
@@ -378,7 +379,7 @@ class BaseAuthContext:
 
 
 @typing.final
-@dataclass
+@dataclass(slots=True)
 class AuthContext(BaseAuthContext):
     """Complete authentication context with resource and action information.
 
@@ -434,6 +435,7 @@ class ThreadsCreate(typing.TypedDict, total=False):
     """Parameters for creating a new thread.
 
     ???+ example "Examples"
+
         ```python
         create_params = {
             "thread_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -533,6 +535,7 @@ class RunsCreate(typing.TypedDict, total=False):
     """Payload for creating a run.
 
     ???+ example "Examples"
+
         ```python
         create_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -588,6 +591,7 @@ class AssistantsCreate(typing.TypedDict, total=False):
     """Payload for creating an assistant.
 
     ???+ example "Examples"
+
         ```python
         create_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -626,6 +630,7 @@ class AssistantsRead(typing.TypedDict, total=False):
     """Payload for reading an assistant.
 
     ???+ example "Examples"
+
         ```python
         read_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -645,6 +650,7 @@ class AssistantsUpdate(typing.TypedDict, total=False):
     """Payload for updating an assistant.
 
     ???+ example "Examples"
+
         ```python
         update_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -684,6 +690,7 @@ class AssistantsDelete(typing.TypedDict):
     """Payload for deleting an assistant.
 
     ???+ example "Examples"
+
         ```python
         delete_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000")
@@ -699,6 +706,7 @@ class AssistantsSearch(typing.TypedDict):
     """Payload for searching assistants.
 
     ???+ example "Examples"
+
         ```python
         search_params = {
             "graph_id": "graph123",
@@ -726,6 +734,7 @@ class CronsCreate(typing.TypedDict, total=False):
     """Payload for creating a cron job.
 
     ???+ example "Examples"
+
         ```python
         create_params = {
             "payload": {"key": "value"},
@@ -761,6 +770,7 @@ class CronsDelete(typing.TypedDict):
     """Payload for deleting a cron job.
 
     ???+ example "Examples"
+
         ```python
         delete_params = {
             "cron_id": UUID("123e4567-e89b-12d3-a456-426614174000")
@@ -776,6 +786,7 @@ class CronsRead(typing.TypedDict):
     """Payload for reading a cron job.
 
     ???+ example "Examples"
+
         ```python
         read_params = {
             "cron_id": UUID("123e4567-e89b-12d3-a456-426614174000")
@@ -791,6 +802,7 @@ class CronsUpdate(typing.TypedDict, total=False):
     """Payload for updating a cron job.
 
     ???+ example "Examples"
+
         ```python
         update_params = {
             "cron_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -814,6 +826,7 @@ class CronsSearch(typing.TypedDict, total=False):
     """Payload for searching cron jobs.
 
     ???+ example "Examples"
+
         ```python
         search_params = {
             "assistant_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -899,7 +912,7 @@ class StorePut(typing.TypedDict):
     """Unique identifier for the item within its namespace."""
 
     value: dict[str, typing.Any] | None
-    """The data to store, or None to mark the item for deletion."""
+    """The data to store, or `None` to mark the item for deletion."""
 
     index: typing.Literal[False] | list[str] | None
     """Optional index configuration for full-text search."""
@@ -948,9 +961,9 @@ class on:
     class threads:
         """Types for thread-related operations."""
 
-        value = typing.Union[
-            ThreadsCreate, ThreadsRead, ThreadsUpdate, ThreadsDelete, ThreadsSearch
-        ]
+        value = (
+            ThreadsCreate | ThreadsRead | ThreadsUpdate | ThreadsDelete | ThreadsSearch
+        )
 
         class create:
             """Type for thread creation parameters."""
@@ -985,13 +998,13 @@ class on:
     class assistants:
         """Types for assistant-related operations."""
 
-        value = typing.Union[
-            AssistantsCreate,
-            AssistantsRead,
-            AssistantsUpdate,
-            AssistantsDelete,
-            AssistantsSearch,
-        ]
+        value = (
+            AssistantsCreate
+            | AssistantsRead
+            | AssistantsUpdate
+            | AssistantsDelete
+            | AssistantsSearch
+        )
 
         class create:
             """Type for assistant creation parameters."""
@@ -1021,9 +1034,7 @@ class on:
     class crons:
         """Types for cron-related operations."""
 
-        value = typing.Union[
-            CronsCreate, CronsRead, CronsUpdate, CronsDelete, CronsSearch
-        ]
+        value = CronsCreate | CronsRead | CronsUpdate | CronsDelete | CronsSearch
 
         class create:
             """Type for cron creation parameters."""
@@ -1053,9 +1064,7 @@ class on:
     class store:
         """Types for store-related operations."""
 
-        value = typing.Union[
-            StoreGet, StoreSearch, StoreListNamespaces, StorePut, StoreDelete
-        ]
+        value = StoreGet | StoreSearch | StoreListNamespaces | StorePut | StoreDelete
 
         class put:
             """Type for store put parameters."""

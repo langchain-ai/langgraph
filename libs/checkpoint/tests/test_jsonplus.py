@@ -60,21 +60,14 @@ class MyDataclass:
         pass
 
 
-if sys.version_info < (3, 10):
+@dataclasses.dataclass(slots=True)
+class MyDataclassWSlots:
+    foo: str
+    bar: int
+    inner: InnerDataclass
 
-    class MyDataclassWSlots(MyDataclass):
+    def something(self) -> None:
         pass
-
-else:
-
-    @dataclasses.dataclass(slots=True)
-    class MyDataclassWSlots:
-        foo: str
-        bar: int
-        inner: InnerDataclass
-
-        def something(self) -> None:
-            pass
 
 
 class MyEnum(Enum):
@@ -115,11 +108,7 @@ def test_serde_jsonplus() -> None:
         "my_dataclass": MyDataclass("foo", 1, InnerDataclass("hello")),
         "my_enum": MyEnum.FOO,
         "my_pydantic": MyPydantic(foo="foo", bar=1, inner=InnerPydantic(hello="hello")),
-        "my_pydantic_v1": MyPydanticV1(
-            foo="foo", bar=1, inner=InnerPydanticV1(hello="hello")
-        ),
         "my_secret_str": SecretStr("meow"),
-        "my_secret_str_v1": SecretStrV1("meow"),
         "person": Person(name="foo"),
         "a_bool": True,
         "a_none": None,
@@ -140,6 +129,12 @@ def test_serde_jsonplus() -> None:
             updated_at=datetime(2024, 9, 24, 17, 29, 11, 128397),
         ),
     }
+
+    if sys.version_info < (3, 14):
+        to_serialize["my_pydantic_v1"] = MyPydanticV1(
+            foo="foo", bar=1, inner=InnerPydanticV1(hello="hello")
+        )
+        to_serialize["my_secret_str_v1"] = SecretStrV1("meow")
 
     serde = JsonPlusSerializer()
 
@@ -197,11 +192,7 @@ def test_serde_jsonplus_json_mode() -> None:
         "my_dataclass": MyDataclass("foo", 1, InnerDataclass("hello")),
         "my_enum": MyEnum.FOO,
         "my_pydantic": MyPydantic(foo="foo", bar=1, inner=InnerPydantic(hello="hello")),
-        "my_pydantic_v1": MyPydanticV1(
-            foo="foo", bar=1, inner=InnerPydanticV1(hello="hello")
-        ),
         "my_secret_str": SecretStr("meow"),
-        "my_secret_str_v1": SecretStrV1("meow"),
         "person": Person(name="foo"),
         "a_bool": True,
         "a_none": None,
@@ -223,13 +214,20 @@ def test_serde_jsonplus_json_mode() -> None:
         ),
     }
 
+    if sys.version_info < (3, 14):
+        to_serialize["my_pydantic_v1"] = MyPydanticV1(
+            foo="foo", bar=1, inner=InnerPydanticV1(hello="hello")
+        )
+        to_serialize["my_secret_str_v1"] = SecretStrV1("meow")
+
     serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
 
     dumped = serde.dumps_typed(to_serialize)
 
     assert dumped[0] == "msgpack"
     result = serde.loads_typed(dumped)
-    assert result == {
+
+    expected_result = {
         "path": ["foo", "bar"],
         "re": ["foo", 48],
         "decimal": "1.10101",
@@ -253,9 +251,7 @@ def test_serde_jsonplus_json_mode() -> None:
         "my_dataclass": {"foo": "foo", "bar": 1, "inner": {"hello": "hello"}},
         "my_enum": "foo",
         "my_pydantic": {"foo": "foo", "bar": 1, "inner": {"hello": "hello"}},
-        "my_pydantic_v1": {"foo": "foo", "bar": 1, "inner": {"hello": "hello"}},
         "my_secret_str": "meow",
-        "my_secret_str_v1": "meow",
         "person": {"name": "foo"},
         "a_bool": True,
         "a_none": None,
@@ -276,6 +272,12 @@ def test_serde_jsonplus_json_mode() -> None:
             "updated_at": "2024-09-24T17:29:11.128397",
         },
     }
+
+    if sys.version_info < (3, 14):
+        expected_result["my_pydantic_v1"] = {"foo": "foo", "bar": 1, "inner": {"hello": "hello"}}
+        expected_result["my_secret_str_v1"] = "meow"
+
+    assert result == expected_result
 
 
 def test_serde_jsonplus_bytes() -> None:

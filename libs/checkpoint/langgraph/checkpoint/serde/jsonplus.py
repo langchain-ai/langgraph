@@ -9,7 +9,7 @@ import pickle
 import re
 import sys
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from inspect import isclass
@@ -21,7 +21,7 @@ from ipaddress import (
     IPv6Interface,
     IPv6Network,
 )
-from typing import Any, Callable, cast
+from typing import Any, cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 

@@ -7,7 +7,7 @@ name = "langgraph-sdk"
 dynamic = ["version"]
 description = "SDK for interacting with LangGraph API"
 authors = []
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
@@ -23,14 +23,20 @@ path = "langgraph_sdk/__init__.py"
 Repository = "https://www.github.com/langchain-ai/langgraph"
 
 [dependency-groups]
-dev = [
-  "ruff",
-  "codespell",
+test = [
   "pytest",
   "pytest-asyncio",
   "pytest-mock",
   "pytest-watch",
+]
+lint = [
+  "ruff",
+  "codespell",
   "mypy",
+]
+dev = [
+  {include-group = "test"},
+  {include-group = "lint"},
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -51,5 +57,7 @@ lint.select = [
   "B",  # flake8-bugbear
   "I",  # isort
   "ARG", # flake8-unused-arguments
+  "UP", # pyupgrade
 ]
 lint.ignore = ["E501", "B008"]
+target-version = "py310"
