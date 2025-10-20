@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import inspect
 import threading
 import time
 import weakref
@@ -281,7 +282,11 @@ class PregelRunner:
             Awaitable[PregelExecutableTask | None],
         ],
     ) -> AsyncIterator[None]:
-        loop = asyncio.get_event_loop()
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         tasks = tuple(tasks)
         futures = FuturesDict(
             callback=weakref.WeakMethod(self.commit),
@@ -539,7 +544,7 @@ def _call(
     ],
     submit: weakref.ref[Submit],
 ) -> concurrent.futures.Future[Any]:
-    if asyncio.iscoroutinefunction(func):
+    if inspect.iscoroutinefunction(func):
         raise RuntimeError("In an sync context async tasks cannot be called")
 
     fut: concurrent.futures.Future | None = None

@@ -304,7 +304,7 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a GET request."""
+        """Send a `GET` request."""
         r = await self.client.get(path, params=params, headers=headers)
         if on_response:
             on_response(r)
@@ -320,7 +320,7 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a POST request."""
+        """Send a `POST` request."""
         if json is not None:
             request_headers, content = await _aencode_json(json)
         else:
@@ -345,7 +345,7 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a PUT request."""
+        """Send a `PUT` request."""
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
@@ -366,7 +366,7 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a PATCH request."""
+        """Send a `PATCH` request."""
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
@@ -387,7 +387,7 @@ class HttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
-        """Send a DELETE request."""
+        """Send a `DELETE` request."""
         r = await self.client.request(
             "DELETE", path, json=json, params=params, headers=headers
         )
@@ -950,7 +950,7 @@ class AssistantsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Assistant: The updated assistant.
+            The updated assistant.
 
         ???+ example "Example Usage"
 
@@ -1000,7 +1000,7 @@ class AssistantsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -1043,7 +1043,7 @@ class AssistantsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            list[Assistant]: A list of assistants.
+            A list of assistants.
 
         ???+ example "Example Usage"
 
@@ -1127,7 +1127,7 @@ class AssistantsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            list[AssistantVersion]: A list of assistant versions.
+            A list of assistant versions.
 
         ???+ example "Example Usage"
 
@@ -1169,7 +1169,7 @@ class AssistantsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Assistant: Assistant Object.
+            Assistant Object.
 
         ???+ example "Example Usage"
 
@@ -1226,7 +1226,7 @@ class ThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Thread: Thread object.
+            Thread object.
 
         ???+ example "Example Usage"
 
@@ -1285,7 +1285,7 @@ class ThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Thread: The created thread.
+            The created thread.
 
         ???+ example "Example Usage"
 
@@ -1353,7 +1353,7 @@ class ThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Thread: The created thread.
+            The created thread.
 
         ???+ example "Example Usage"
 
@@ -1394,7 +1394,7 @@ class ThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -1439,7 +1439,7 @@ class ThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            list[Thread]: List of the threads matching the search parameters.
+            List of the threads matching the search parameters.
 
         ???+ example "Example Usage"
 
@@ -1526,7 +1526,7 @@ class ThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -1563,7 +1563,7 @@ class ThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            ThreadState: the thread of the state.
+            The thread of the state.
 
         ???+ example "Example Usage"
 
@@ -1701,7 +1701,7 @@ class ThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            ThreadUpdateStateResponse: Response after updating a thread's state.
+            Response after updating a thread's state.
 
         ???+ example "Example Usage"
 
@@ -1764,7 +1764,7 @@ class ThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            list[ThreadState]: the state history of the thread.
+            The state history of the thread.
 
         ???+ example "Example Usage"
 
@@ -1811,7 +1811,7 @@ class ThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Iterator[StreamPart]: An iterator of stream parts.
+            An iterator of stream parts.
 
         ???+ example "Example Usage"
 
@@ -1987,7 +1987,7 @@ class RunsClient:
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
-            AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
+            Asynchronous iterator of stream results.
 
         ???+ example "Example Usage"
 
@@ -2193,7 +2193,7 @@ class RunsClient:
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
-            Run: The created background run.
+            The created background run.
 
         ???+ example "Example Usage"
 
@@ -2443,7 +2443,7 @@ class RunsClient:
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
-            Union[list[dict], dict[str, Any]]: The output of the run.
+            The output of the run.
 
         ???+ example "Example Usage"
 
@@ -2572,7 +2572,7 @@ class RunsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            list[Run]: The runs for the thread.
+            The runs for the thread.
 
         ???+ example "Example Usage"
 
@@ -2617,7 +2617,7 @@ class RunsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Run: Run object.
+            `Run` object.
 
         ???+ example "Example Usage"
 
@@ -2657,7 +2657,7 @@ class RunsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -2710,7 +2710,7 @@ class RunsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -2757,7 +2757,7 @@ class RunsClient:
             last_event_id: The last event ID to use for the stream.
 
         Returns:
-            AsyncIterator[StreamPart]: The stream of parts.
+            The stream of parts.
 
         ???+ example "Example Usage"
 
@@ -2806,7 +2806,7 @@ class RunsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -2843,6 +2843,7 @@ class CronClient:
         ```
 
     !!! note "Feature Availability"
+
         The crons client functionality is not supported on all licenses.
         Please check the relevant license documentation for the most up-to-date
         details on feature availability.
@@ -2893,7 +2894,7 @@ class CronClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Run: The cron run.
+            The cron run.
 
         ???+ example "Example Usage"
 
@@ -2973,7 +2974,7 @@ class CronClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Run: The cron run.
+            The cron run.
 
         ???+ example "Example Usage"
 
@@ -3027,7 +3028,7 @@ class CronClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -3065,7 +3066,7 @@ class CronClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            list[Cron]: The list of cron jobs returned by the search,
+            The list of cron jobs returned by the search,
 
         ???+ example "Example Usage"
 
@@ -3191,7 +3192,7 @@ class StoreClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -3294,7 +3295,7 @@ class StoreClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -3338,7 +3339,7 @@ class StoreClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            list[Item]: A list of items matching the search criteria.
+            A list of items matching the search criteria.
 
         ???+ example "Example Usage"
 
@@ -3411,7 +3412,7 @@ class StoreClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            list[list[str]]: A list of namespaces matching the criteria.
+            A list of namespaces matching the criteria.
 
         ???+ example "Example Usage"
 
@@ -3568,7 +3569,7 @@ class SyncHttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a GET request."""
+        """Send a `GET` request."""
         r = self.client.get(path, params=params, headers=headers)
         if on_response:
             on_response(r)
@@ -3584,7 +3585,7 @@ class SyncHttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a POST request."""
+        """Send a `POST` request."""
         if json is not None:
             request_headers, content = _encode_json(json)
         else:
@@ -3608,7 +3609,7 @@ class SyncHttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a PUT request."""
+        """Send a `PUT` request."""
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
@@ -3630,7 +3631,7 @@ class SyncHttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
-        """Send a PATCH request."""
+        """Send a `PATCH` request."""
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
@@ -3651,7 +3652,7 @@ class SyncHttpClient:
         headers: Mapping[str, str] | None = None,
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
-        """Send a DELETE request."""
+        """Send a `DELETE` request."""
         r = self.client.request(
             "DELETE", path, json=json, params=params, headers=headers
         )
@@ -3828,7 +3829,7 @@ class SyncAssistantsClient:
 
     This class provides methods to interact with assistants, which are versioned configurations of your graph.
 
-    ???+ example "Examples"
+    ???+ example "Example"
 
         ```python
         client = get_sync_client(url="http://localhost:2024")
@@ -3854,7 +3855,7 @@ class SyncAssistantsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Assistant: Assistant Object.
+            `Assistant` Object.
 
         ???+ example "Example Usage"
 
@@ -3901,7 +3902,7 @@ class SyncAssistantsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Graph: The graph information for the assistant in JSON format.
+            The graph information for the assistant in JSON format.
 
         ???+ example "Example Usage"
 
@@ -3954,7 +3955,7 @@ class SyncAssistantsClient:
         Returns:
             GraphSchema: The graph schema for the assistant.
 
-        ???+ example "  Example Usage"
+        ???+ example "Example Usage"
 
             ```python
             client = get_sync_client(url="http://localhost:2024")
@@ -4140,7 +4141,7 @@ class SyncAssistantsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Assistant: The created assistant.
+            The created assistant.
 
         ???+ example "Example Usage"
 
@@ -4208,7 +4209,7 @@ class SyncAssistantsClient:
                 The description field is available for langgraph-api server version>=0.0.45
 
         Returns:
-            Assistant: The updated assistant.
+            The updated assistant.
 
         ???+ example "Example Usage"
 
@@ -4257,7 +4258,7 @@ class SyncAssistantsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -4295,7 +4296,7 @@ class SyncAssistantsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            list[Assistant]: A list of assistants.
+            A list of assistants.
 
         ???+ example "Example Usage"
 
@@ -4378,7 +4379,7 @@ class SyncAssistantsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            list[Assistant]: A list of assistants.
+            A list of assistants.
 
         ???+ example "Example Usage"
 
@@ -4420,7 +4421,7 @@ class SyncAssistantsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            Assistant: Assistant Object.
+            `Assistant` Object.
 
         ???+ example "Example Usage"
 
@@ -4475,7 +4476,7 @@ class SyncThreadsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            Thread: Thread object.
+            `Thread` object.
 
         ???+ example "Example Usage"
 
@@ -4530,7 +4531,7 @@ class SyncThreadsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            Thread: The created thread.
+            The created `Thread`.
 
         ???+ example "Example Usage"
 
@@ -4597,7 +4598,7 @@ class SyncThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Thread: The created thread.
+            The created `Thread`.
 
         ???+ example "Example Usage"
 
@@ -4638,7 +4639,7 @@ class SyncThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -4679,7 +4680,7 @@ class SyncThreadsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            list[Thread]: List of the threads matching the search parameters.
+            List of the threads matching the search parameters.
 
         ???+ example "Example Usage"
 
@@ -4762,7 +4763,7 @@ class SyncThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -4797,7 +4798,7 @@ class SyncThreadsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            ThreadState: the thread of the state.
+            The thread of the state.
 
         ???+ example "Example Usage"
 
@@ -4934,7 +4935,7 @@ class SyncThreadsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            ThreadUpdateStateResponse: Response after updating a thread's state.
+            Response after updating a thread's state.
 
         ???+ example "Example Usage"
 
@@ -4995,7 +4996,7 @@ class SyncThreadsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            list[ThreadState]: the state history of the thread.
+            The state history of the `Thread`.
 
         ???+ example "Example Usage"
 
@@ -5044,7 +5045,7 @@ class SyncThreadsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            Iterator[StreamPart]: An iterator of stream parts.
+            An iterator of stream parts.
 
         ???+ example "Example Usage"
 
@@ -5221,7 +5222,7 @@ class SyncRunsClient:
 
 
         Returns:
-            Iterator[StreamPart]: Iterator of stream results.
+            Iterator of stream results.
 
         ???+ example "Example Usage"
 
@@ -5423,7 +5424,7 @@ class SyncRunsClient:
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
-            Run: The created background run.
+            The created background `Run`.
 
         ???+ example "Example Usage"
 
@@ -5674,7 +5675,7 @@ class SyncRunsClient:
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
 
         Returns:
-            Union[list[dict], dict[str, Any]]: The output of the run.
+            The output of the `Run`.
 
         ???+ example "Example Usage"
 
@@ -5794,7 +5795,7 @@ class SyncRunsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            list[Run]: The runs for the thread.
+            The runs for the thread.
 
         ???+ example "Example Usage"
 
@@ -5835,7 +5836,7 @@ class SyncRunsClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            Run: Run object.
+            `Run` object.
 
         ???+ example "Example Usage"
 
@@ -5874,7 +5875,7 @@ class SyncRunsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -5927,7 +5928,7 @@ class SyncRunsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -5974,7 +5975,7 @@ class SyncRunsClient:
             last_event_id: The last event ID to use for the stream.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -6022,7 +6023,7 @@ class SyncRunsClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -6053,6 +6054,7 @@ class SyncCronClient:
         ```
 
     !!! note "Feature Availability"
+
         The crons client functionality is not supported on all licenses.
         Please check the relevant license documentation for the most up-to-date
         details on feature availability.
@@ -6100,7 +6102,7 @@ class SyncCronClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            Run: The cron run.
+            The cron `Run`.
 
         ???+ example "Example Usage"
 
@@ -6178,7 +6180,7 @@ class SyncCronClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            Run: The cron run.
+            The cron `Run`.
 
         ???+ example "Example Usage"
 
@@ -6232,7 +6234,7 @@ class SyncCronClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -6269,7 +6271,7 @@ class SyncCronClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            list[Cron]: The list of cron jobs returned by the search,
+            The list of cron jobs returned by the search,
 
         ???+ example "Example Usage"
 
@@ -6394,7 +6396,7 @@ class SyncStoreClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -6442,7 +6444,7 @@ class SyncStoreClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            Item: The retrieved item.
+            The retrieved item.
 
         ???+ example "Example Usage"
 
@@ -6497,7 +6499,7 @@ class SyncStoreClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            None
+            `None`
 
         ???+ example "Example Usage"
 
@@ -6541,7 +6543,7 @@ class SyncStoreClient:
             params: Optional query parameters to include with the request.
 
         Returns:
-            list[Item]: A list of items matching the search criteria.
+            A list of items matching the search criteria.
 
         ???+ example "Example Usage"
 
@@ -6612,7 +6614,7 @@ class SyncStoreClient:
             headers: Optional custom headers to include with the request.
 
         Returns:
-            list[list[str]]: A list of namespaces matching the criteria.
+            A list of namespaces matching the criteria.
 
         ???+ example "Example Usage"
 

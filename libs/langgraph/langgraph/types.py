@@ -85,11 +85,11 @@ StreamMode = Literal[
 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
-- `"debug"`: Emit "checkpoints" and "tasks" events, for debugging purposes.
+- `"debug"`: Emit `"checkpoints"` and `"tasks"` events for debugging purposes.
 """
 
 StreamWriter = Callable[[Any], None]
-"""Callable that accepts a single argument and writes it to the output stream.
+"""`Callable` that accepts a single argument and writes it to the output stream.
 Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using `stream_mode="custom"`."""
 
@@ -115,7 +115,7 @@ class RetryPolicy(NamedTuple):
     retry_on: (
         type[Exception] | Sequence[type[Exception]] | Callable[[Exception], bool]
     ) = default_retry_on
-    """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
+    """List of exception classes that should trigger a retry, or a callable that returns `True` for exceptions that should trigger a retry."""
 
 
 KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., str | bytes])
@@ -312,7 +312,7 @@ class Send:
 
     def __init__(self, /, node: str, arg: Any) -> None:
         """
-        Initialize a new instance of the Send class.
+        Initialize a new instance of the `Send` class.
 
         Args:
             node: The name of the target node to send the message to.

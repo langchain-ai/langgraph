@@ -934,7 +934,7 @@ class Pregel(
                 If `False`, only the immediate subgraphs will be returned.
 
         Returns:
-            An iterator of the (namespace, subgraph) pairs.
+            An iterator of the `(namespace, subgraph)` pairs.
         """
         for name, node in self.nodes.items():
             # filter by prefix
@@ -973,7 +973,7 @@ class Pregel(
                 If `False`, only the immediate subgraphs will be returned.
 
         Returns:
-            An iterator of the (namespace, subgraph) pairs.
+            An iterator of the `(namespace, subgraph)` pairs.
         """
         for name, node in self.get_subgraphs(namespace=namespace, recurse=recurse):
             yield name, node
@@ -2487,7 +2487,9 @@ class Pregel(
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
-            durability: The durability mode for the graph execution, defaults to `"async"`. Options are:
+            durability: The durability mode for the graph execution, defaults to `"async"`.
+                Options are:
+
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
@@ -2752,7 +2754,9 @@ class Pregel(
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
-            durability: The durability mode for the graph execution, defaults to `"async"`. Options are:
+            durability: The durability mode for the graph execution, defaults to `"async"`.
+                Options are:
+
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
@@ -3069,7 +3073,9 @@ class Pregel(
             output_keys: The output keys to retrieve from the graph run.
             interrupt_before: The nodes to interrupt the graph run before.
             interrupt_after: The nodes to interrupt the graph run after.
-            durability: The durability mode for the graph execution, defaults to `"async"`. Options are:
+            durability: The durability mode for the graph execution, defaults to `"async"`.
+                Options are:
+
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
@@ -3154,7 +3160,9 @@ class Pregel(
             output_keys: The output keys to include in the result.
             interrupt_before: The nodes to interrupt before.
             interrupt_after: The nodes to interrupt after.
-            durability: The durability mode for the graph execution, defaults to `"async"`. Options are:
+            durability: The durability mode for the graph execution, defaults to `"async"`.
+                Options are:
+
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.

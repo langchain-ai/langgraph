@@ -201,6 +201,10 @@ def get_cached_annotated_keys(obj: type[Any]) -> tuple[str, ...]:
         keys: list[str] = []
         for base in reversed(obj.__mro__):
             ann = base.__dict__.get("__annotations__")
+            # In Python 3.14+, Pydantic models use descriptors for __annotations__
+            # so we need to fall back to getattr if __dict__.get returns None
+            if ann is None:
+                ann = getattr(base, "__annotations__", None)
             if ann is None or isinstance(ann, types.GetSetDescriptorType):
                 continue
             keys.extend(ann.keys())

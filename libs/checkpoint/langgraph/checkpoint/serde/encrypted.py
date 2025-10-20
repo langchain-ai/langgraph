@@ -15,7 +15,7 @@ class EncryptedSerializer(SerializerProtocol):
         self.serde = serde
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
-        """Serialize an object to a tuple (type, bytes) and encrypt the bytes."""
+        """Serialize an object to a tuple `(type, bytes)` and encrypt the bytes."""
         # serialize data
         typ, data = self.serde.dumps_typed(obj)
         # encrypt data
@@ -39,7 +39,7 @@ class EncryptedSerializer(SerializerProtocol):
     def from_pycryptodome_aes(
         cls, serde: SerializerProtocol = JsonPlusSerializer(), **kwargs: Any
     ) -> "EncryptedSerializer":
-        """Create an EncryptedSerializer using AES encryption."""
+        """Create an `EncryptedSerializer` using AES encryption."""
         try:
             from Crypto.Cipher import AES  # type: ignore
         except ImportError:

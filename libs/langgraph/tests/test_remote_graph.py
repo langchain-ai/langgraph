@@ -34,6 +34,11 @@ NEEDS_CONTEXTVARS = pytest.mark.skipif(
     reason="Python 3.11+ is required for async contextvars support",
 )
 
+SKIP_PYTHON_314 = pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="Not yet testing Python 3.14 with the server bc of dependency limits on the api side",
+)
+
 
 def test_with_config():
     # set up test
@@ -1106,6 +1111,7 @@ def get_message_dict(msg: BaseMessage | dict):
 
 
 @NEEDS_CONTEXTVARS
+@SKIP_PYTHON_314
 async def test_remote_graph_basic_invoke(remote_graph: RemoteGraph) -> None:
     # Basic smoke test of the remote graph
     response = await remote_graph.ainvoke(
@@ -1143,6 +1149,7 @@ uid_pattern = re.compile(
 
 
 @NEEDS_CONTEXTVARS
+@SKIP_PYTHON_314
 async def test_remote_graph_stream_messages_tuple(
     nested_graph: Pregel, nested_remote_graph: Pregel
 ) -> None:

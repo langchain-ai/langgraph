@@ -481,9 +481,9 @@ def is_async_callable(
 ) -> TypeGuard[Callable[..., Awaitable]]:
     """Check if a function is async."""
     return (
-        asyncio.iscoroutinefunction(func)
+        inspect.iscoroutinefunction(func)
         or hasattr(func, "__call__")
-        and asyncio.iscoroutinefunction(func.__call__)
+        and inspect.iscoroutinefunction(func.__call__)
     )
 
 
