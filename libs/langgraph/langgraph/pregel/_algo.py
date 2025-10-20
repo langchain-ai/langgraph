@@ -6,7 +6,7 @@ import sys
 import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from copy import copy
+from copy import copy, deepcopy
 from functools import partial
 from hashlib import sha1
 from typing import (
@@ -63,6 +63,7 @@ from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
@@ -71,6 +72,7 @@ from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
 from langgraph.runtime import DEFAULT_RUNTIME, Runtime
 from langgraph.types import (
+    RUNTIME_PLACEHOLDER,
     All,
     CacheKey,
     CachePolicy,
@@ -639,6 +641,9 @@ def prepare_single_task(
                     f"Ignoring invalid packet type {type(packet)} in pending sends"
                 )
                 return
+            # Replace runtime placeholders with untracked values
+            packet = rehydrate_untracked_values_in_send(packet, channels)
+
             if packet.node not in processes:
                 logger.warning(
                     f"Ignoring unknown node name {packet.node} in pending sends"
@@ -1106,3 +1111,45 @@ class LazyAtomicCounter:
                 if self._counter is None:
                     self._counter = itertools.count(0).__next__
         return self._counter()
+
+def sanitize_untracked_values_in_send(packet: Send, channels: Mapping[str, BaseChannel]) -> Send:
+    """Replace any UntrackedValue contents in Send.arg with RUNTIME_PLACEHOLDER for checkpointing.
+    
+    Send is not typed and arg may be a nested dict."""
+    
+    if not isinstance(packet.arg, dict):
+        # Command
+        return packet
+
+    def replace(obj: dict[str, Any]) -> dict[str, Any]:
+        for k, v in obj.items():
+            if isinstance(v, dict):
+                # arg can be nested dicts
+                v = replace(v)
+            if isinstance(channels.get(k), UntrackedValue):
+                obj[k] = RUNTIME_PLACEHOLDER
+        return obj
+
+    sanitized_arg = replace(packet.arg)
+    return Send(node=packet.node, arg=sanitized_arg)
+
+def rehydrate_untracked_values_in_send(packet: Send, channels: Mapping[str, BaseChannel]) -> Send:
+    """Replace RUNTIME_PLACEHOLDERs in Send.arg with actual untracked values from UntrackedValue channels."""
+
+    if not isinstance(packet.arg, dict):
+        # Command
+        return packet
+
+    # deepcopy to avoid mutating the original packet, as it is later persisted in checkpoints
+    arg_deepcopy = deepcopy(packet.arg) 
+    def replace(obj: dict[str, Any]) -> dict[str, Any]:
+        for k, v in obj.items():
+            if isinstance(v, dict):
+                # arg can be nested dicts
+                v = replace(v)
+            if v is RUNTIME_PLACEHOLDER and k in channels and isinstance(channels[k], UntrackedValue):
+                obj[k] = channels[k].get()
+        return obj
+
+    rehydrated_arg = replace(arg_deepcopy)
+    return Send(node=packet.node, arg=rehydrated_arg)

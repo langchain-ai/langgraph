@@ -176,6 +176,8 @@ def _assemble_writes(
     tuples: list[tuple[str, Any]] = []
     for w in writes:
         if isinstance(w, Send):
+            # Send packets go to TASKS channel; sanitation for storage
+            # is handled centrally where channel specs are available.
             tuples.append((TASKS, w))
         elif isinstance(w, ChannelWriteTupleEntry):
             if ww := w.mapper(w.value):

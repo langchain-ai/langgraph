@@ -27,6 +27,9 @@ from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
+# placeholder for untracked values replaced at runtime
+RUNTIME_PLACEHOLDER = "__pregel_runtime_placeholder__"
+
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
 
