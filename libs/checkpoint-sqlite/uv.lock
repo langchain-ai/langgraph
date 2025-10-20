@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 
 [[package]]
@@ -246,7 +246,7 @@ wheels = [
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "2.1.2"
+version = "3.0.0"
 source = { editable = "../checkpoint" }
 dependencies = [
     { name = "langchain-core" },
@@ -293,7 +293,7 @@ test = [
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "2.0.11"
+version = "3.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
