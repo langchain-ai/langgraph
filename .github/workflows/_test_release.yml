@@ -7,6 +7,12 @@ on:
         required: true
         type: string
         description: "From which folder this pipeline executes"
+      
+      release-branch:
+        required: false
+        type: string
+        default: "main"
+
 
 env:
   PYTHON_VERSION: "3.10"
@@ -16,7 +22,7 @@ permissions:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/${{ inputs.release-branch }}'
     runs-on: ubuntu-latest
 
     outputs:

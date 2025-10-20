@@ -16,7 +16,7 @@ env:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/0.6'
     runs-on: ubuntu-latest
 
     outputs:
@@ -79,6 +79,10 @@ jobs:
           echo short-pkg-name="$SHORT_PKG_NAME" >> $GITHUB_OUTPUT
           echo version="$VERSION" >> $GITHUB_OUTPUT
           echo tag="$TAG" >> $GITHUB_OUTPUT
+          echo "Pkg-name: $PKG_NAME"
+          echo "Short-pkg-name: $SHORT_PKG_NAME"
+          echo "Version: $VERSION"
+          echo "Tag: $TAG"
 
   release-notes:
     needs:
@@ -93,7 +97,7 @@ jobs:
           path: langgraph
           sparse-checkout: | # this only grabs files for relevant dir
             ${{ inputs.working-directory }}
-          ref: main # this scopes to just master branch
+          ref: "0.6"  #this scopes to just 0.6 branch
           fetch-depth: 0 # this fetches entire commit history
       - name: Check Tags
         id: check-tags
@@ -105,19 +109,48 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
           TAG: ${{ needs.build.outputs.tag }}
         run: |
-          if [ -z $SHORT_PKG_NAME ]; then
-            REGEX="^\\d+\\.\\d+\\.\\d+((a|b|rc)\\d+)?\$"
-          else
-            REGEX="^$SHORT_PKG_NAME==\\d+\\.\\d+\\.\\d+((a|b|rc)\\d+)?\$"
-          fi
-          echo $REGEX
-          PREV_TAG=$(git tag --sort=-creatordate | grep -P $REGEX | head -1 || echo "")
-          echo $PREV_TAG
-          if [ "$TAG" == "$PREV_TAG" ]; then
-            echo "No new version to release"
+          # 1) Parse major/minor and enforce we're on the 0.6 series
+          MAJOR="${VERSION%%.*}"
+          REST="${VERSION#*.}"
+          MINOR="${REST%%.*}"
+
+          # Minor/major numeric guard: fail if >= 0.7.* (or any non-0 major)
+          if [ -z "$MAJOR" ] || [ -z "$MINOR" ]; then
+            echo "Could not parse VERSION '$VERSION' to MAJOR.MINOR"
             exit 1
           fi
-          echo prev-tag="$PREV_TAG" >> $GITHUB_OUTPUT
+
+          if [ "$MAJOR" -ne 0 ] || [ "$MINOR" -ne 6 ]; then
+            echo "Refusing to release VERSION '$VERSION' from 0.6 maintenance branch (got $MAJOR.$MINOR)"
+            exit 1
+          fi
+
+          # 2) Build a regex that only matches 0.6.* tags, handling both tag shapes
+          #    - Plain:        ^0\.6\.\d+((a|b|rc)\d+)?$
+          #    - With prefix:  ^<SHORT>==0\.6\.\d+((a|b|rc)\d+)?$
+          SERIES_REGEX="0\\.6"
+          if [ -z "$SHORT_PKG_NAME" ]; then
+            REGEX="^${SERIES_REGEX}\\.\\d+((a|b|rc)\\d+)?$"
+          else
+            # SHORT_PKG_NAME is already pre-sanitized by your step (e.g., no spaces).
+            REGEX="^${SHORT_PKG_NAME}==${SERIES_REGEX}\\.\\d+((a|b|rc)\\d+)?$"
+          fi
+
+          echo "Tag match regex: $REGEX"
+
+          # 3) Find the most recent tag in this series
+          PREV_TAG="$(git tag --sort=-creatordate | grep -P "$REGEX" | head -1 || true)"
+          echo "Previous tag in series: ${PREV_TAG:-<none>}"
+
+          # 4) If computed TAG equals the previous tag, there’s nothing new to release
+          if [ "$TAG" = "$PREV_TAG" ] && [ -n "$TAG" ]; then
+            echo "No new version to release for 0.6.x (TAG matches previous)."
+            exit 1
+          fi
+
+          # 5) Surface prev-tag for later steps
+          echo "prev-tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+
       - name: Generate release body
         id: generate-release-body
         working-directory: langgraph
@@ -149,6 +182,7 @@ jobs:
     uses: ./.github/workflows/_test_release.yml
     with:
       working-directory: ${{ inputs.working-directory }}
+      release-branch: "0.6"
     secrets: inherit
 
   pre-release-checks:
