@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import random
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from contextlib import asynccontextmanager
@@ -377,9 +378,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     self.serde.loads_typed((type, checkpoint)),
                     cast(
                         CheckpointMetadata,
-                        self.jsonplus_serde.loads(metadata)
-                        if metadata is not None
-                        else {},
+                        (json.loads(metadata) if metadata is not None else {}),
                     ),
                     (
                         {
@@ -457,9 +456,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     self.serde.loads_typed((type, checkpoint)),
                     cast(
                         CheckpointMetadata,
-                        self.jsonplus_serde.loads(metadata)
-                        if metadata is not None
-                        else {},
+                        (json.loads(metadata) if metadata is not None else {}),
                     ),
                     (
                         {
@@ -503,9 +500,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
-        serialized_metadata = self.jsonplus_serde.dumps(
-            get_checkpoint_metadata(config, metadata)
-        )
+        serialized_metadata = json.dumps(
+            get_checkpoint_metadata(config, metadata), ensure_ascii=False
+        ).encode("utf-8", "ignore")
         async with (
             self.lock,
             self.conn.execute(

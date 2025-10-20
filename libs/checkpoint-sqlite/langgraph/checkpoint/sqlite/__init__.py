@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import random
 import sqlite3
 import threading
@@ -265,9 +266,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                     self.serde.loads_typed((type, checkpoint)),
                     cast(
                         CheckpointMetadata,
-                        self.jsonplus_serde.loads(metadata)
-                        if metadata is not None
-                        else {},
+                        json.loads(metadata) if metadata is not None else {},
                     ),
                     (
                         {
@@ -358,9 +357,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                     self.serde.loads_typed((type, checkpoint)),
                     cast(
                         CheckpointMetadata,
-                        self.jsonplus_serde.loads(metadata)
-                        if metadata is not None
-                        else {},
+                        json.loads(metadata) if metadata is not None else {},
                     ),
                     (
                         {
@@ -413,9 +410,9 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
-        serialized_metadata = self.jsonplus_serde.dumps(
-            get_checkpoint_metadata(config, metadata)
-        )
+        serialized_metadata = json.dumps(
+            get_checkpoint_metadata(config, metadata), ensure_ascii=False
+        ).encode("utf-8", "ignore")
         with self.cursor() as cur:
             cur.execute(
                 "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
