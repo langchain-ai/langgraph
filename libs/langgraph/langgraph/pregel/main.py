@@ -2308,15 +2308,8 @@ class Pregel(
                 # channel writes are saved to current checkpoint
                 channel_writes = [w for w in task.writes if w[0] != PUSH]
                 if saved and channel_writes:
-                    # sanitize TASKS writes for storage
-                    sanitized = [
-                        (c, sanitize_untracked_values_in_send(v, channels))
-                        if c == TASKS and isinstance(v, Send)
-                        else (c, v)
-                        for c, v in channel_writes
-                    ]
                     await checkpointer.aput_writes(
-                        checkpoint_config, sanitized, task_id
+                        checkpoint_config, channel_writes, task_id
                     )
             # apply to checkpoint and save
             apply_writes(
