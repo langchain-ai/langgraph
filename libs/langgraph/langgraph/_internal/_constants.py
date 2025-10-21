@@ -24,6 +24,7 @@ PREVIOUS = sys.intern("__previous__")
 
 # --- Reserved cache namespaces ---
 CACHE_NS_WRITES = sys.intern("__pregel_ns_writes")
+
 # cache namespace for node writes
 
 # --- Reserved config.configurable keys ---
@@ -77,6 +78,8 @@ CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
 NULL_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000000")
 # the task_id to use for writes that are not associated with a task
+RUNTIME_PLACEHOLDER = "__pregel_runtime_placeholder__"
+# placeholder for untracked values replaced at runtime
 
 # redefined to avoid circular import with langgraph.constants
 _TAG_HIDDEN = sys.intern("langsmith:hidden")

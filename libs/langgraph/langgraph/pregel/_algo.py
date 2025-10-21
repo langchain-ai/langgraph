@@ -57,6 +57,7 @@ from langgraph._internal._constants import (
     RESERVED,
     RESUME,
     RETURN,
+    RUNTIME_PLACEHOLDER,
     TASKS,
 )
 from langgraph._internal._scratchpad import PregelScratchpad
@@ -72,7 +73,6 @@ from langgraph.pregel._log import logger
 from langgraph.pregel._read import INPUT_CACHE_KEY_TYPE, PregelNode
 from langgraph.runtime import DEFAULT_RUNTIME, Runtime
 from langgraph.types import (
-    RUNTIME_PLACEHOLDER,
     All,
     CacheKey,
     CachePolicy,
@@ -1112,11 +1112,14 @@ class LazyAtomicCounter:
                     self._counter = itertools.count(0).__next__
         return self._counter()
 
-def sanitize_untracked_values_in_send(packet: Send, channels: Mapping[str, BaseChannel]) -> Send:
+
+def sanitize_untracked_values_in_send(
+    packet: Send, channels: Mapping[str, BaseChannel]
+) -> Send:
     """Replace any UntrackedValue contents in Send.arg with RUNTIME_PLACEHOLDER for checkpointing.
-    
+
     Send is not typed and arg may be a nested dict."""
-    
+
     if not isinstance(packet.arg, dict):
         # Command
         return packet
@@ -1133,7 +1136,10 @@ def sanitize_untracked_values_in_send(packet: Send, channels: Mapping[str, BaseC
     sanitized_arg = replace(packet.arg)
     return Send(node=packet.node, arg=sanitized_arg)
 
-def rehydrate_untracked_values_in_send(packet: Send, channels: Mapping[str, BaseChannel]) -> Send:
+
+def rehydrate_untracked_values_in_send(
+    packet: Send, channels: Mapping[str, BaseChannel]
+) -> Send:
     """Replace RUNTIME_PLACEHOLDERs in Send.arg with actual untracked values from UntrackedValue channels."""
 
     if not isinstance(packet.arg, dict):
@@ -1141,13 +1147,18 @@ def rehydrate_untracked_values_in_send(packet: Send, channels: Mapping[str, Base
         return packet
 
     # deepcopy to avoid mutating the original packet, as it is later persisted in checkpoints
-    arg_deepcopy = deepcopy(packet.arg) 
+    arg_deepcopy = deepcopy(packet.arg)
+
     def replace(obj: dict[str, Any]) -> dict[str, Any]:
         for k, v in obj.items():
             if isinstance(v, dict):
                 # arg can be nested dicts
                 v = replace(v)
-            if v is RUNTIME_PLACEHOLDER and k in channels and isinstance(channels[k], UntrackedValue):
+            if (
+                v is RUNTIME_PLACEHOLDER
+                and k in channels
+                and isinstance(channels[k], UntrackedValue)
+            ):
                 obj[k] = channels[k].get()
         return obj
 

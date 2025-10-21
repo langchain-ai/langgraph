@@ -13,7 +13,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from random import randrange
 from typing import Annotated, Any, Literal, get_type_hints
-from langgraph.channels.untracked_value import UntrackedValue
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
@@ -45,6 +44,7 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
@@ -8599,6 +8599,7 @@ def test_multiple_writes_same_channel_from_same_node(
         },
     ]
 
+
 def test_send_with_untracked_value(sync_checkpointer: BaseCheckpointSaver):
     """Test that Send objects work correctly with untracked values in state."""
 
@@ -8648,6 +8649,4 @@ def test_send_with_untracked_value(sync_checkpointer: BaseCheckpointSaver):
 
     # Check that the untracked resource is NOT in the final state checkpoint
     state = app.get_state(config)
-    assert (
-        "session_resource" not in state.values
-    )
+    assert "session_resource" not in state.values

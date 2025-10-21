@@ -20,7 +20,6 @@ from typing import (
     TypeVar,
     cast,
 )
-from langgraph.channels.untracked_value import UntrackedValue
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
@@ -62,6 +61,7 @@ from langgraph._internal._constants import (
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
@@ -75,12 +75,12 @@ from langgraph.pregel._algo import (
     Call,
     GetNextVersion,
     PregelTaskWrites,
-    sanitize_untracked_values_in_send,
     apply_writes,
     checkpoint_null_version,
     increment,
     prepare_next_tasks,
     prepare_single_task,
+    sanitize_untracked_values_in_send,
     should_interrupt,
     task_path_str,
 )
@@ -327,20 +327,15 @@ class PregelLoop:
 
         # We never want to persist untracked values in checkpoints
         # because there is no guarantee that they are serializable
-        def _sanitize(group: WritesT) -> WritesT:
-            out: WritesT = []
-            for c, v in group:
-                # Do not persist UntrackedValue channel writes
-                if isinstance(self.specs.get(c), UntrackedValue):
-                    continue
-                # Sanitize UntrackedValues that are nested within Send packets
-                if c == TASKS and isinstance(v, Send):
-                    out.append((c, sanitize_untracked_values_in_send(v, self.channels)))
-                else:
-                    out.append((c, v))
-            return out
-
-        writes_to_save = _sanitize(writes_to_save)
+        writes_to_save = [
+            # Sanitize UntrackedValues that are nested within Send packets
+            (c, sanitize_untracked_values_in_send(v, self.channels))
+            if c == TASKS and isinstance(v, Send)
+            else (c, v)
+            for c, v in writes_to_save
+            # Do not persist UntrackedValue channel writes
+            if not isinstance(self.specs.get(c), UntrackedValue)
+        ]
 
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
