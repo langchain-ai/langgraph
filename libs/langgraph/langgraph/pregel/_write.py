@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import (
     Any,
-    Callable,
     NamedTuple,
-    Optional,
     TypeVar,
-    Union,
     cast,
 )
 
@@ -67,7 +64,7 @@ class ChannelWrite(RunnableCallable):
             trace=False,
         )
         self.writes = cast(
-            list[Union[ChannelWriteEntry, ChannelWriteTupleEntry, Send]], writes
+            list[ChannelWriteEntry | ChannelWriteTupleEntry | Send], writes
         )
 
     def get_name(self, suffix: str | None = None, *, name: str | None = None) -> str:
@@ -151,7 +148,7 @@ class ChannelWrite(RunnableCallable):
         elif writes := getattr(runnable, "_is_channel_writer", MISSING):
             if writes is not MISSING:
                 writes = cast(
-                    Sequence[tuple[Union[ChannelWriteEntry, Send], Optional[str]]],
+                    Sequence[tuple[ChannelWriteEntry | Send, str | None]],
                     writes,
                 )
                 entries = [e for e, _ in writes]

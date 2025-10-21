@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 from typing import (
     Any,
-    Optional,
     Protocol,
     TypeVar,
     runtime_checkable,
@@ -28,9 +27,9 @@ class ChannelProtocol(Protocol[Value, Update, C]):
     @property
     def UpdateType(self) -> Any: ...
 
-    def checkpoint(self) -> Optional[C]: ...
+    def checkpoint(self) -> C | None: ...
 
-    def from_checkpoint(self, checkpoint: Optional[C]) -> Self: ...
+    def from_checkpoint(self, checkpoint: C | None) -> Self: ...
 
     def update(self, values: Sequence[Update]) -> bool: ...
 

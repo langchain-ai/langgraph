@@ -4,9 +4,9 @@ Stores provide long-term memory that persists across threads and conversations.
 Supports hierarchical namespaces, key-value storage, and optional vector search.
 
 Core types:
-    - BaseStore: Store interface with sync/async operations
-    - Item: Stored key-value pairs with metadata
-    - Op: Get/Put/Search/List operations
+    - `BaseStore`: Store interface with sync/async operations
+    - `Item`: Stored key-value pairs with metadata
+    - `Op`: Get/Put/Search/List operations
 """
 
 from __future__ import annotations
@@ -19,7 +19,6 @@ from typing import (
     Literal,
     NamedTuple,
     TypedDict,
-    Union,
     cast,
 )
 
@@ -57,7 +56,7 @@ class Item:
         key: Unique identifier within the namespace.
         namespace: Hierarchical path defining the collection in which this document resides.
             Represented as a tuple of strings, allowing for nested categorization.
-            For example: ("documents", 'user123')
+            For example: `("documents", 'user123')`
         created_at: Timestamp of item creation.
         updated_at: Timestamp of last update.
     """
@@ -164,6 +163,7 @@ class GetOp(NamedTuple):
     ???+ example "Examples"
 
         Basic item retrieval:
+
         ```python
         GetOp(namespace=("users", "profiles"), key="user123")
         GetOp(namespace=("cache", "embeddings"), key="doc456")
@@ -207,11 +207,14 @@ class SearchOp(NamedTuple):
     within a given namespace prefix. It provides pagination through limit and offset
     parameters.
 
-    Note:
+    !!! note
+
         Natural language search support depends on your store implementation.
 
     ???+ example "Examples"
+
         Search with filters and pagination:
+
         ```python
         SearchOp(
             namespace_prefix=("documents",),
@@ -222,6 +225,7 @@ class SearchOp(NamedTuple):
         ```
 
         Natural language search:
+
         ```python
         SearchOp(
             namespace_prefix=("users", "content"),
@@ -249,14 +253,15 @@ class SearchOp(NamedTuple):
     The filter supports both exact matches and operator-based comparisons.
 
     Supported Operators:
-        - $eq: Equal to (same as direct value comparison)
-        - $ne: Not equal to
-        - $gt: Greater than
-        - $gte: Greater than or equal to
-        - $lt: Less than
-        - $lte: Less than or equal to
+        - `$eq`: Equal to (same as direct value comparison)
+        - `$ne`: Not equal to
+        - `$gt`: Greater than
+        - `$gte`: Greater than or equal to
+        - `$lt`: Less than
+        - `$lte`: Less than or equal to
 
     ???+ example "Examples"
+
         Simple exact match:
 
         ```python
@@ -289,6 +294,7 @@ class SearchOp(NamedTuple):
     """Natural language search query for semantic search capabilities.
 
     ???+ example "Examples"
+
         - "technical documentation about REST APIs"
         - "machine learning papers from 2023"
     """
@@ -302,10 +308,11 @@ class SearchOp(NamedTuple):
 
 
 # Type representing a namespace path that can include wildcards
-NamespacePath = tuple[Union[str, Literal["*"]], ...]
+NamespacePath = tuple[str | Literal["*"], ...]
 """A tuple representing a namespace path that can include wildcards.
 
 ???+ example "Examples"
+
     ```python
     ("users",)  # Exact users namespace
     ("documents", "*")  # Any sub-namespace under documents
@@ -331,17 +338,21 @@ class MatchCondition(NamedTuple):
     hierarchies.
 
     ???+ example "Examples"
+
         Prefix matching:
+
         ```python
         MatchCondition(match_type="prefix", path=("users", "profiles"))
         ```
 
         Suffix matching with wildcard:
+
         ```python
         MatchCondition(match_type="suffix", path=("cache", "*"))
         ```
 
         Simple suffix matching:
+
         ```python
         MatchCondition(match_type="suffix", path=("v1",))
         ```
@@ -362,7 +373,8 @@ class ListNamespacesOp(NamedTuple):
 
     ???+ example "Examples"
 
-        List all namespaces under the "documents" path:
+        List all namespaces under the `"documents"` path:
+
         ```python
         ListNamespacesOp(
             match_conditions=(MatchCondition(match_type="prefix", path=("documents",)),),
@@ -370,7 +382,8 @@ class ListNamespacesOp(NamedTuple):
         )
         ```
 
-        List all namespaces that end with "v1":
+        List all namespaces that end with `"v1"`:
+
         ```python
         ListNamespacesOp(
             match_conditions=(MatchCondition(match_type="suffix", path=("v1",)),),
@@ -384,12 +397,15 @@ class ListNamespacesOp(NamedTuple):
     """Optional conditions for filtering namespaces.
 
     ???+ example "Examples"
+
         All user namespaces:
+
         ```python
         (MatchCondition(match_type="prefix", path=("users",)),)
         ```
 
-        All namespaces that start with "docs" and end with "draft":
+        All namespaces that start with `"docs"` and end with `"draft"`:
+
         ```python
         (
             MatchCondition(match_type="prefix", path=("docs",)),
@@ -426,17 +442,21 @@ class PutOp(NamedTuple):
     Each element in the tuple represents one level in the hierarchy.
 
     ???+ example "Examples"
-        Root level documents
+
+        Root level documents:
+
         ```python
         ("documents",)
         ```
         
-        User-specific documents
+        User-specific documents:
+
         ```python
         ("documents", "user123")
         ```
         
-        Nested cache structure
+        Nested cache structure:
+
         ```python
         ("cache", "embeddings", "v1")
         ```
@@ -449,15 +469,15 @@ class PutOp(NamedTuple):
     Together with the namespace, it forms a complete path to the item.
 
     Example:
-        If namespace is ("documents", "user123") and key is "report1",
-        the full path would effectively be "documents/user123/report1"
+        If namespace is `("documents", "user123")` and key is `"report1"`,
+        the full path would effectively be `"documents/user123/report1"`
     """
 
     value: dict[str, Any] | None
-    """The data to store, or None to mark the item for deletion.
+    """The data to store, or `None` to mark the item for deletion.
 
     The value must be a dictionary with string keys and JSON-serializable values.
-    Setting this to None signals that the item should be deleted.
+    Setting this to `None` signals that the item should be deleted.
 
     Example:
         {
@@ -471,25 +491,26 @@ class PutOp(NamedTuple):
     """Controls how the item's fields are indexed for search operations.
 
     Indexing configuration determines how the item can be found through search:
-        - None (default): Uses the store's default indexing configuration (if provided)
-        - False: Disables indexing for this item
-        - list[str]: Specifies which json path fields to index for search
+        - `None` (default): Uses the store's default indexing configuration (if provided)
+        - `False`: Disables indexing for this item
+        - `list[str]`: Specifies which json path fields to index for search
 
     The item remains accessible through direct get() operations regardless of indexing.
     When indexed, fields can be searched using natural language queries through
     vector similarity search (if supported by the store implementation).
 
     Path Syntax:
-        - Simple field access: "field"
-        - Nested fields: "parent.child.grandchild"
+        - Simple field access: `"field"`
+        - Nested fields: `"parent.child.grandchild"`
         - Array indexing:
-          - Specific index: "array[0]"
-          - Last element: "array[-1]"
-          - All elements (each individually): "array[*]"
+            - Specific index: `"array[0]"`
+            - Last element: `"array[-1]"`
+            - All elements (each individually): `"array[*]"`
 
     ???+ example "Examples"
-        - None - Use store defaults (whole item)
-        - list[str] - List of fields to index
+
+        - `None` - Use store defaults (whole item)
+        - `list[str]` - List of fields to index
         
         ```python
         [
@@ -509,12 +530,12 @@ class PutOp(NamedTuple):
     will expire this many minutes after it was last accessed. The expiration timer
     refreshes on both read operations (get/search) and write operations (put/update).
     When the TTL expires, the item will be scheduled for deletion on a best-effort basis.
-    Defaults to None (no expiration).
+    Defaults to `None` (no expiration).
     """
 
 
-Op = Union[GetOp, SearchOp, PutOp, ListNamespacesOp]
-Result = Union[Item, list[Item], list[SearchItem], list[tuple[str, ...]], None]
+Op = GetOp | SearchOp | PutOp | ListNamespacesOp
+Result = Item | list[Item] | list[SearchItem] | list[tuple[str, ...]] | None
 
 
 class InvalidNamespaceError(ValueError):
@@ -525,18 +546,18 @@ class TTLConfig(TypedDict, total=False):
     """Configuration for TTL (time-to-live) behavior in the store."""
 
     refresh_on_read: bool
-    """Default behavior for refreshing TTLs on read operations (GET and SEARCH).
+    """Default behavior for refreshing TTLs on read operations (`GET` and `SEARCH`).
     
-    If True, TTLs will be refreshed on read operations (get/search) by default.
-    This can be overridden per-operation by explicitly setting refresh_ttl.
-    Defaults to True if not configured.
+    If `True`, TTLs will be refreshed on read operations (get/search) by default.
+    This can be overridden per-operation by explicitly setting `refresh_ttl`.
+    Defaults to `True` if not configured.
     """
     default_ttl: float | None
     """Default TTL (time-to-live) in minutes for new items.
     
     If provided, new items will expire after this many minutes after their last access.
     The expiration timer refreshes on both read and write operations.
-    Defaults to None (no expiration).
+    Defaults to `None` (no expiration).
     """
     sweep_interval_minutes: int | None
     """Interval in minutes between TTL sweep operations.
@@ -550,33 +571,35 @@ class IndexConfig(TypedDict, total=False):
     """Configuration for indexing documents for semantic search in the store.
 
     If not provided to the store, the store will not support vector search.
-    In that case, all `index` arguments to put() and `aput()` operations will be ignored.
+    In that case, all `index` arguments to `put()` and `aput()` operations will be ignored.
     """
 
     dims: int
     """Number of dimensions in the embedding vectors.
     
     Common embedding models have the following dimensions:
-        - openai:text-embedding-3-large: 3072
-        - openai:text-embedding-3-small: 1536
-        - openai:text-embedding-ada-002: 1536
-        - cohere:embed-english-v3.0: 1024
-        - cohere:embed-english-light-v3.0: 384
-        - cohere:embed-multilingual-v3.0: 1024
-        - cohere:embed-multilingual-light-v3.0: 384
+        - `openai:text-embedding-3-large`: `3072`
+        - `openai:text-embedding-3-small`: `1536`
+        - `openai:text-embedding-ada-002`: `1536`
+        - `cohere:embed-english-v3.0`: `1024`
+        - `cohere:embed-english-light-v3.0`: `384`
+        - `cohere:embed-multilingual-v3.0`: `1024`
+        - `cohere:embed-multilingual-light-v3.0`: `384`
     """
 
     embed: Embeddings | EmbeddingsFunc | AEmbeddingsFunc | str
     """Optional function to generate embeddings from text.
     
     Can be specified in three ways:
-        1. A LangChain Embeddings instance
-        2. A synchronous embedding function (EmbeddingsFunc)
-        3. An asynchronous embedding function (AEmbeddingsFunc)
-        4. A provider string (e.g., "openai:text-embedding-3-small")
+        1. A LangChain `Embeddings` instance
+        2. A synchronous embedding function (`EmbeddingsFunc`)
+        3. An asynchronous embedding function (`AEmbeddingsFunc`)
+        4. A provider string (e.g., `"openai:text-embedding-3-small"`)
     
     ???+ example "Examples"
-        Using LangChain's initialization with InMemoryStore:
+
+        Using LangChain's initialization with `InMemoryStore`:
+
         ```python
         from langchain.embeddings import init_embeddings
         from langgraph.store.memory import InMemoryStore
@@ -589,7 +612,8 @@ class IndexConfig(TypedDict, total=False):
         )
         ```
         
-        Using a custom embedding function with InMemoryStore:
+        Using a custom embedding function with `InMemoryStore`:
+
         ```python
         from openai import OpenAI
         from langgraph.store.memory import InMemoryStore
@@ -611,7 +635,8 @@ class IndexConfig(TypedDict, total=False):
         )
         ```
         
-        Using an asynchronous embedding function with InMemoryStore:
+        Using an asynchronous embedding function with `InMemoryStore`:
+
         ```python
         from openai import AsyncOpenAI
         from langgraph.store.memory import InMemoryStore
@@ -639,16 +664,17 @@ class IndexConfig(TypedDict, total=False):
     
     Controls which parts of stored items are embedded for semantic search. Follows JSON path syntax:
 
-        - ["$"]: Embeds the entire JSON object as one vector  (default)
-        - ["field1", "field2"]: Embeds specific top-level fields
-        - ["parent.child"]: Embeds nested fields using dot notation
-        - ["array[*].field"]: Embeds field from each array element separately
+    - `["$"]`: Embeds the entire JSON object as one vector  (default)
+    - `["field1", "field2"]`: Embeds specific top-level fields
+    - `["parent.child"]`: Embeds nested fields using dot notation
+    - `["array[*].field"]`: Embeds field from each array element separately
     
     Note:
         You can always override this behavior when storing an item using the
         `index` parameter in the `put` or `aput` operations.
     
     ???+ example "Examples"
+
         ```python
         # Embed entire document (default)
         fields=["$"]
@@ -667,7 +693,7 @@ class IndexConfig(TypedDict, total=False):
     Note:
         - Fields missing from a document are skipped
         - Array notation creates separate embeddings for each element
-        - Complex nested paths are supported (e.g., "a.b[*].c.d")
+        - Complex nested paths are supported (e.g., `"a.b[*].c.d"`)
     """
 
 
@@ -732,11 +758,11 @@ class BaseStore(ABC):
             namespace: Hierarchical path for the item.
             key: Unique identifier within the namespace.
             refresh_ttl: Whether to refresh TTLs for the returned item.
-                If None (default), uses the store's default refresh_ttl setting.
+                If `None`, uses the store's default `refresh_ttl` setting.
                 If no TTL is specified, this argument is ignored.
 
         Returns:
-            The retrieved item or None if not found.
+            The retrieved item or `None` if not found.
         """
         return self.batch(
             [GetOp(namespace, str(key), _ensure_refresh(self.ttl_config, refresh_ttl))]
@@ -768,7 +794,9 @@ class BaseStore(ABC):
             List of items matching the search criteria.
 
         ???+ example "Examples"
+
             Basic filtering:
+
             ```python
             # Search for documents with specific metadata
             results = store.search(
@@ -778,6 +806,7 @@ class BaseStore(ABC):
             ```
 
             Natural language search (requires vector store implementation):
+
             ```python
             # Initialize store with embedding configuration
             store = YourStore( # e.g., InMemoryStore, AsyncPostgresStore
@@ -789,6 +818,7 @@ class BaseStore(ABC):
             )
 
             # Search for semantically similar documents
+
             results = store.search(
                 ("docs",),
                 query="machine learning applications in healthcare",
@@ -797,8 +827,10 @@ class BaseStore(ABC):
             )
             ```
 
-            Note: Natural language search support depends on your store implementation
-            and requires proper embedding configuration.
+            !!! note
+
+                Natural language search support depends on your store implementation
+                and requires proper embedding configuration.
         """
         return self.batch(
             [
@@ -826,7 +858,7 @@ class BaseStore(ABC):
 
         Args:
             namespace: Hierarchical path for the item, represented as a tuple of strings.
-                Example: ("documents", "user123")
+                Example: `("documents", "user123")`
             key: Unique identifier within the namespace. Together with namespace forms
                 the complete path to the item.
             value: Dictionary containing the item's data. Must contain string keys
@@ -837,10 +869,10 @@ class BaseStore(ABC):
                     If you do not initialize the store with indexing capabilities,
                     the `index` parameter will be ignored
                 - False: Disable indexing for this item
-                - list[str]: List of field paths to index, supporting:
-                    - Nested fields: "metadata.title"
-                    - Array access: "chapters[*].content" (each indexed separately)
-                    - Specific indices: "authors[0].name"
+                - `list[str]`: List of field paths to index, supporting:
+                    - Nested fields: `"metadata.title"`
+                    - Array access: `"chapters[*].content"` (each indexed separately)
+                    - Specific indices: `"authors[0].name"`
             ttl: Time to live in minutes. Support for this argument depends on your store adapter.
                 If specified, the item will expire after this many minutes from when it was last accessed.
                 None means no expiration. Expired runs will be deleted opportunistically.
@@ -856,18 +888,22 @@ class BaseStore(ABC):
             Some implementations may not support expiration of items.
 
         ???+ example "Examples"
-            Store item. Indexing depends on how you configure the store.
+
+            Store item. Indexing depends on how you configure the store:
+
             ```python
             store.put(("docs",), "report", {"memory": "Will likes ai"})
             ```
 
-            Do not index item for semantic search. Still accessible through get()
-            and search() operations but won't have a vector representation.
+            Do not index item for semantic search. Still accessible through `get()`
+            and `search()` operations but won't have a vector representation.
+
             ```python
             store.put(("docs",), "report", {"memory": "Will likes ai"}, index=False)
             ```
 
-            Index specific fields for search.
+            Index specific fields for search:
+
             ```python
             store.put(("docs",), "report", {"memory": "Will likes ai"}, index=["memory"])
             ```
@@ -918,15 +954,17 @@ class BaseStore(ABC):
             suffix: Filter namespaces that end with this path.
             max_depth: Return namespaces up to this depth in the hierarchy.
                 Namespaces deeper than this level will be truncated.
-            limit: Maximum number of namespaces to return (default 100).
-            offset: Number of namespaces to skip for pagination (default 0).
+            limit: Maximum number of namespaces to return.
+            offset: Number of namespaces to skip for pagination.
 
         Returns:
-            List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
-            Each tuple represents a full namespace path up to `max_depth`.
+            A list of namespace tuples that match the criteria. Each tuple represents a
+                full namespace path up to `max_depth`.
 
         ???+ example "Examples":
-            Setting max_depth=3. Given the namespaces:
+
+            Setting `max_depth=3`. Given the namespaces:
+
             ```python
             # Example if you have the following namespaces:
             # ("a", "b", "c")
@@ -966,7 +1004,7 @@ class BaseStore(ABC):
             key: Unique identifier within the namespace.
 
         Returns:
-            The retrieved item or None if not found.
+            The retrieved item or `None` if not found.
         """
         return (
             await self.abatch(
@@ -1000,14 +1038,16 @@ class BaseStore(ABC):
             limit: Maximum number of items to return.
             offset: Number of items to skip before returning results.
             refresh_ttl: Whether to refresh TTLs for the returned items.
-                If None (default), uses the store's TTLConfig.refresh_default setting.
-                If TTLConfig is not provided or no TTL is specified, this argument is ignored.
+                If `None`, uses the store's `TTLConfig.refresh_default` setting.
+                If `TTLConfig` is not provided or no TTL is specified, this argument is ignored.
 
         Returns:
             List of items matching the search criteria.
 
         ???+ example "Examples"
+
             Basic filtering:
+
             ```python
             # Search for documents with specific metadata
             results = await store.asearch(
@@ -1017,6 +1057,7 @@ class BaseStore(ABC):
             ```
 
             Natural language search (requires vector store implementation):
+
             ```python
             # Initialize store with embedding configuration
             store = YourStore( # e.g., InMemoryStore, AsyncPostgresStore
@@ -1028,6 +1069,7 @@ class BaseStore(ABC):
             )
 
             # Search for semantically similar documents
+
             results = await store.asearch(
                 ("docs",),
                 query="machine learning applications in healthcare",
@@ -1036,8 +1078,10 @@ class BaseStore(ABC):
             )
             ```
 
-            Note: Natural language search support depends on your store implementation
-            and requires proper embedding configuration.
+            !!! note
+
+                Natural language search support depends on your store implementation
+                and requires proper embedding configuration.
         """
         return (
             await self.abatch(
@@ -1067,7 +1111,7 @@ class BaseStore(ABC):
 
         Args:
             namespace: Hierarchical path for the item, represented as a tuple of strings.
-                Example: ("documents", "user123")
+                Example: `("documents", "user123")`
             key: Unique identifier within the namespace. Together with namespace forms
                 the complete path to the item.
             value: Dictionary containing the item's data. Must contain string keys
@@ -1078,10 +1122,10 @@ class BaseStore(ABC):
                     If you do not initialize the store with indexing capabilities,
                     the `index` parameter will be ignored
                 - False: Disable indexing for this item
-                - list[str]: List of field paths to index, supporting:
-                    - Nested fields: "metadata.title"
-                    - Array access: "chapters[*].content" (each indexed separately)
-                    - Specific indices: "authors[0].name"
+                - `list[str]`: List of field paths to index, supporting:
+                    - Nested fields: `"metadata.title"`
+                    - Array access: `"chapters[*].content"` (each indexed separately)
+                    - Specific indices: `"authors[0].name"`
             ttl: Time to live in minutes. Support for this argument depends on your store adapter.
                 If specified, the item will expire after this many minutes from when it was last accessed.
                 None means no expiration. Expired runs will be deleted opportunistically.
@@ -1097,18 +1141,22 @@ class BaseStore(ABC):
             Some implementations may not support expiration of items.
 
         ???+ example "Examples"
-            Store item. Indexing depends on how you configure the store.
+
+            Store item. Indexing depends on how you configure the store:
+
             ```python
             await store.aput(("docs",), "report", {"memory": "Will likes ai"})
             ```
 
-            Do not index item for semantic search. Still accessible through get()
-            and search() operations but won't have a vector representation.
+            Do not index item for semantic search. Still accessible through `get()`
+            and `search()` operations but won't have a vector representation.
+
             ```python
             await store.aput(("docs",), "report", {"memory": "Will likes ai"}, index=False)
             ```
 
             Index specific fields for search (if store configured to index items):
+
             ```python
             await store.aput(
                 ("docs",),
@@ -1167,15 +1215,16 @@ class BaseStore(ABC):
             suffix: Filter namespaces that end with this path.
             max_depth: Return namespaces up to this depth in the hierarchy.
                 Namespaces deeper than this level will be truncated to this depth.
-            limit: Maximum number of namespaces to return (default 100).
-            offset: Number of namespaces to skip for pagination (default 0).
+            limit: Maximum number of namespaces to return.
+            offset: Number of namespaces to skip for pagination.
 
         Returns:
-            List[Tuple[str, ...]]: A list of namespace tuples that match the criteria.
-            Each tuple represents a full namespace path up to `max_depth`.
+            A list of namespace tuples that match the criteria. Each tuple represents a
+                full namespace path up to `max_depth`.
 
         ???+ example "Examples"
-            Setting max_depth=3 with existing namespaces:
+
+            Setting `max_depth=3` with existing namespaces:
             ```python
             # Given the following namespaces:
             # ("a", "b", "c")
