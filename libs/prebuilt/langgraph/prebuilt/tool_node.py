@@ -529,7 +529,7 @@ def _filter_validation_errors(
     return filtered_errors
 
 
-class _ToolNode(RunnableCallable):
+class ToolNode(RunnableCallable):
     """A node for executing tools in LangGraph workflows.
 
     Handles tool execution patterns including function calls, state injection,
