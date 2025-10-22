@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1327,7 +1327,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "1.0.0a1"
+version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -1338,9 +1338,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d9/c8/25d9ff74f8d4184dfce0e5c3332d5a1c9bead5db5fcf9ed1f1d4a826a804/langchain_core-1.0.0a1.tar.gz", hash = "sha256:b1acc3342911c3a95db0e0bbfa600c5a528b2e46d6e8faa90cbc6f154a29c582", size = 603792, upload-time = "2025-08-27T17:41:44.264Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ad/d0/9db6d375ecf8bd498fcc87016e43c3d930ddbfbacf9a1e99018ada4e824f/langchain_core-1.0.0.tar.gz", hash = "sha256:8e81c94a22fa3a362a0f101bbd1271bf3725e50cf1e31c84e8f4a1c731279785", size = 764484, upload-time = "2025-10-17T13:48:24.408Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/41/925fb1f2dfb9d85c492c9d5654cbede160e8e3aab5a91c25b557235e5578/langchain_core-1.0.0a1-py3-none-any.whl", hash = "sha256:83fe163134bc52245962f45f7098ec348eb85c1f02a75eb35d1771f80fa40420", size = 473126, upload-time = "2025-08-27T17:41:42.896Z" },
+    { url = "https://files.pythonhosted.org/packages/68/6a/8dd566cb7379d6e3a921f94713babba2f71cbed65c73c784c649c1fd7d4e/langchain_core-1.0.0-py3-none-any.whl", hash = "sha256:a94561bf75dd097c7d6e3864950f28dadc963f0bd810114de4095f41f634059b", size = 467157, upload-time = "2025-10-17T13:48:23.138Z" },
 ]
 
 [[package]]
@@ -1429,7 +1429,7 @@ requires-dist = [
 dev = [
     { name = "httpx" },
     { name = "jupyter" },
-    { name = "langchain-core", specifier = "==1.0.0a1" },
+    { name = "langchain-core", specifier = ">=1.0.0" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
@@ -1462,7 +1462,7 @@ lint = [
 ]
 test = [
     { name = "httpx" },
-    { name = "langchain-core", specifier = "==1.0.0a1" },
+    { name = "langchain-core", specifier = ">=1.0.0" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
     { name = "langgraph-checkpoint-postgres", editable = "../checkpoint-postgres" },
     { name = "langgraph-checkpoint-sqlite", editable = "../checkpoint-sqlite" },
@@ -1719,7 +1719,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=0.3.67" },
+    { name = "langchain-core", specifier = ">=1.0.0" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
 ]
 
