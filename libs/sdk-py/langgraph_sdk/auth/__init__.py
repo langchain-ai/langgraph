@@ -194,7 +194,6 @@ class Auth:
         by name:
 
             - request (Request): The raw ASGI request object
-            - body (dict | None): The parsed request body, if a valid JSON body is present in `request` (otherwise, `None`).
             - path (str): The request path, e.g., "/threads/abcd-1234-abcd-1234/runs/abcd-1234-abcd-1234/stream"
             - method (str): The HTTP method, e.g., "GET"
             - path_params (dict[str, str]): URL path parameters, e.g., {"thread_id": "abcd-1234-abcd-1234", "run_id": "abcd-1234-abcd-1234"}
