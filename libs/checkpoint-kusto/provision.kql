@@ -1,0 +1,121 @@
+// ============================================================================
+// LangGraph Kusto Checkpointer - Table Provisioning Script
+// ============================================================================
+// This script creates the necessary tables and policies for the Kusto-backed
+// LangGraph checkpointer.
+//
+// Prerequisites:
+//   - Azure Data Explorer cluster and database created
+//   - User/Service Principal with Database Admin permissions
+//
+// Usage:
+//   Run this script in Azure Data Explorer Web UI or via Kusto CLI
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// 1. Checkpoints Table
+// ----------------------------------------------------------------------------
+// Stores the main checkpoint data including serialized state and channel values
+// Uses Kusto's columnar storage with dynamic type for efficient blob storage
+.create-merge table Checkpoints (
+    thread_id: string,
+    checkpoint_ns: string,
+    checkpoint_id: string,
+    parent_checkpoint_id: string,
+    type: string,
+    checkpoint_json: string,
+    metadata_json: string,
+    channel_values: dynamic,     // Stores blob data as dynamic array of objects
+    created_at: datetime
+)
+
+// Create indexes for query optimization
+.alter table Checkpoints policy caching hot = 7d
+
+// Add ingestion time policy for automatic timestamp
+.alter table Checkpoints policy ingestiontime true
+
+// ----------------------------------------------------------------------------
+// 2. CheckpointWrites Table
+// ----------------------------------------------------------------------------
+// Stores intermediate writes (pending writes) linked to checkpoints
+.create-merge table CheckpointWrites (
+    thread_id: string,
+    checkpoint_ns: string,
+    checkpoint_id: string,
+    task_id: string,
+    task_path: string,
+    idx: int,
+    channel: string,
+    type: string,
+    value_json: string,
+    created_at: datetime
+)
+
+// Create indexes for query optimization
+.alter table CheckpointWrites policy caching hot = 7d
+
+// Add ingestion time policy
+.alter table CheckpointWrites policy ingestiontime true
+
+// ----------------------------------------------------------------------------
+// 3. Retention Policies
+// ----------------------------------------------------------------------------
+// Set retention to 90 days (adjust as needed for your use case)
+.alter-merge table Checkpoints policy retention softdelete = 90d recoverability = disabled
+
+.alter-merge table CheckpointWrites policy retention softdelete = 90d recoverability = disabled
+
+// ----------------------------------------------------------------------------
+// 5. Materialized Views (for Performance Optimization)
+// ----------------------------------------------------------------------------
+// Create a materialized view for "latest checkpoint per thread"
+// This significantly speeds up queries for the most recent checkpoint
+// Uses arg_max() to efficiently get the checkpoint with the highest checkpoint_id
+
+.create-or-alter materialized-view with (backfill=true) LatestCheckpoints on table Checkpoints
+{
+    Checkpoints
+    | summarize arg_max(checkpoint_id, *) by thread_id, checkpoint_ns
+}
+
+// Set caching policy for the materialized view
+.alter materialized-view LatestCheckpoints policy caching hot = 7d
+
+// ----------------------------------------------------------------------------
+// 6. Row Level Security (Optional)
+// ----------------------------------------------------------------------------
+// Uncomment and configure if you need multi-tenant isolation
+
+// .create function RowLevelSecurityFilter()
+// {
+//     let userThreads = dynamic(["thread-1", "thread-2"]); // Replace with actual logic
+//     Checkpoints
+//     | where thread_id in (userThreads)
+// }
+
+// .alter table Checkpoints policy row_level_security enable "RowLevelSecurityFilter"
+
+// ----------------------------------------------------------------------------
+// 6. Verify Schema
+// ----------------------------------------------------------------------------
+// Run these commands to verify the tables were created successfully
+
+.show tables
+
+.show table Checkpoints schema
+
+.show table CheckpointWrites schema
+
+// ============================================================================
+// Setup Complete!
+// ============================================================================
+// Note: CheckpointBlobs table removed in v1.1.0+ 
+// Blob data now stored in Checkpoints.channel_values (dynamic column)
+// This leverages Kusto's columnar storage for better performance
+// ============================================================================
+// Next steps:
+//   1. Configure connection strings in your application
+//   2. Grant appropriate permissions (Database Ingestor + Database Viewer)
+//   3. Run the checkpointer setup() method to validate connectivity
+// ============================================================================
