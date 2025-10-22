@@ -8,22 +8,18 @@ feedback about the parameters it can actually control, improving error correctio
 and reducing confusion from irrelevant system implementation details.
 """
 
-import sys
 from typing import Annotated
 from unittest.mock import Mock
 
 import pytest
-from langchain.agents import create_agent
-from langchain.agents.middleware.types import AgentState
-from langchain.tools import InjectedState, InjectedStore
-from langchain.tools.tool_node import ToolInvocationError, ToolRuntime, _ToolNode
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import tool as dec_tool
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
 
-from .model import FakeToolCallingModel
+from langgraph.prebuilt import InjectedState, InjectedStore, ToolNode, ToolRuntime
+from langgraph.prebuilt.tool_node import ToolInvocationError
 
 pytestmark = pytest.mark.anyio
 
@@ -63,7 +59,7 @@ async def test_filter_injected_state_validation_errors() -> None:
         """
         return f"value={value}, messages={len(state.get('messages', []))}"
 
-    tool_node = _ToolNode([my_tool])
+    tool_node = ToolNode([my_tool])
 
     # Call with invalid 'value' argument (should be int, not str)
     result = await tool_node.ainvoke(
@@ -117,7 +113,7 @@ async def test_filter_injected_store_validation_errors() -> None:
         """
         return f"key={key}"
 
-    tool_node = _ToolNode([my_tool])
+    tool_node = ToolNode([my_tool])
 
     # Call with invalid 'key' argument (missing required argument)
     result = await tool_node.ainvoke(
@@ -176,7 +172,7 @@ async def test_filter_tool_runtime_validation_errors() -> None:
         """
         return f"query={query}"
 
-    tool_node = _ToolNode([my_tool])
+    tool_node = ToolNode([my_tool])
 
     # Call with invalid 'query' argument (wrong type)
     result = await tool_node.ainvoke(
@@ -233,7 +229,7 @@ async def test_filter_multiple_injected_args() -> None:
         """
         return f"value={value}"
 
-    tool_node = _ToolNode([my_tool])
+    tool_node = ToolNode([my_tool])
 
     # Call with invalid 'value' - injected args should be filtered from error
     result = await tool_node.ainvoke(
@@ -289,7 +285,7 @@ async def test_no_filtering_when_all_errors_are_model_args() -> None:
         """
         return f"value1={value1}, value2={value2}"
 
-    tool_node = _ToolNode([my_tool])
+    tool_node = ToolNode([my_tool])
 
     # Call with invalid arguments for BOTH non-injected parameters
     result = await tool_node.ainvoke(
@@ -342,7 +338,7 @@ async def test_validation_error_with_no_injected_args() -> None:
         """
         return f"{value1} {value2}"
 
-    tool_node = _ToolNode([my_tool])
+    tool_node = ToolNode([my_tool])
 
     result = await tool_node.ainvoke(
         {
@@ -392,7 +388,7 @@ async def test_tool_invocation_error_without_handle_errors() -> None:
         """
         return f"value={value}"
 
-    tool_node = _ToolNode([my_tool], handle_tool_errors=False)
+    tool_node = ToolNode([my_tool], handle_tool_errors=False)
 
     # Should raise ToolInvocationError with filtered errors
     with pytest.raises(ToolInvocationError) as exc_info:
@@ -446,7 +442,7 @@ async def test_sync_tool_validation_error_filtering() -> None:
         """
         return f"value={value}"
 
-    tool_node = _ToolNode([my_tool])
+    tool_node = ToolNode([my_tool])
 
     # Test sync invocation
     result = tool_node.invoke(
@@ -472,216 +468,3 @@ async def test_sync_tool_validation_error_filtering() -> None:
     assert tool_message.status == "error"
     assert "value" in tool_message.content
     assert "state" not in tool_message.content.lower()
-
-
-@pytest.mark.skipif(
-    sys.version_info >= (3, 14), reason="Pydantic model rebuild issue in Python 3.14"
-)
-async def test_create_agent_error_content_with_multiple_params() -> None:
-    """Test that error messages only include LLM-controlled parameter errors.
-
-    Uses create_agent to verify that when a tool with both LLM-controlled
-    and system-injected parameters receives invalid arguments, the error message:
-    1. Contains details about LLM-controlled parameter errors (query, limit)
-    2. Does NOT contain system-injected parameter names (state, store, runtime)
-    3. Does NOT contain values from system-injected parameters
-    4. Properly formats the validation errors for LLM correction
-
-    This ensures the LLM receives focused, actionable feedback.
-    """
-
-    class TestState(AgentState):
-        user_id: str
-        api_key: str
-        session_data: dict
-
-    @dec_tool
-    def complex_tool(
-        query: str,
-        limit: int,
-        state: Annotated[TestState, InjectedState],
-        store: Annotated[BaseStore, InjectedStore()],
-        runtime: ToolRuntime,
-    ) -> str:
-        """A complex tool with multiple injected and non-injected parameters.
-
-        Args:
-            query: The search query string.
-            limit: Maximum number of results to return.
-            state: The graph state (injected).
-            store: The persistent store (injected).
-            runtime: The tool runtime context (injected).
-        """
-        # Access injected params to verify they work in normal execution
-        user = state.get("user_id", "unknown")
-        return f"Results for '{query}' (limit={limit}, user={user})"
-
-    # Create a model that makes an incorrect tool call with multiple errors:
-    # - query is wrong type (int instead of str)
-    # - limit is missing
-    # Then returns no tool calls to end the loop
-    model = FakeToolCallingModel(
-        tool_calls=[
-            [
-                {
-                    "name": "complex_tool",
-                    "args": {
-                        "query": 12345,  # Wrong type - should be str
-                        # "limit" is missing - required field
-                    },
-                    "id": "call_complex_1",
-                }
-            ],
-            [],  # No tool calls on second iteration to end the loop
-        ]
-    )
-
-    # Create an agent with the complex tool and custom state
-    # Need to provide a store since the tool uses InjectedStore
-    agent = create_agent(
-        model=model,
-        tools=[complex_tool],
-        state_schema=TestState,
-        store=InMemoryStore(),
-    )
-
-    # Invoke with sensitive data in state
-    result = agent.invoke(
-        {
-            "messages": [HumanMessage("Search for something")],
-            "user_id": "user_12345",
-            "api_key": "sk-secret-key-abc123xyz",
-            "session_data": {"token": "secret_session_token"},
-        }
-    )
-
-    # Find the tool error message
-    tool_messages = [m for m in result["messages"] if m.type == "tool"]
-    assert len(tool_messages) == 1
-    tool_message = tool_messages[0]
-    assert tool_message.status == "error"
-    assert tool_message.tool_call_id == "call_complex_1"
-
-    content = tool_message.content
-
-    # Verify error mentions LLM-controlled parameter issues
-    assert "query" in content.lower(), "Error should mention 'query' (LLM-controlled)"
-    assert "limit" in content.lower(), "Error should mention 'limit' (LLM-controlled)"
-
-    # Should indicate validation errors occurred
-    assert "validation error" in content.lower() or "error" in content.lower(), (
-        "Error should indicate validation occurred"
-    )
-
-    # Verify NO system-injected parameter names appear in error
-    # These are not controlled by the LLM and should be excluded
-    assert "state" not in content.lower(), (
-        "Error should NOT mention 'state' (system-injected)"
-    )
-    assert "store" not in content.lower(), (
-        "Error should NOT mention 'store' (system-injected)"
-    )
-    assert "runtime" not in content.lower(), (
-        "Error should NOT mention 'runtime' (system-injected)"
-    )
-
-    # Verify NO values from system-injected parameters appear in error
-    # The LLM doesn't control these, so they shouldn't distract from the actual issues
-    assert "user_12345" not in content, (
-        "Error should NOT contain user_id value (from state)"
-    )
-    assert "sk-secret-key" not in content, (
-        "Error should NOT contain api_key value (from state)"
-    )
-    assert "secret_session_token" not in content, (
-        "Error should NOT contain session_data value (from state)"
-    )
-
-    # Verify the LLM's original tool call args are present
-    # The error should show what the LLM actually provided to help it correct the mistake
-    assert "12345" in content, (
-        "Error should show the invalid query value provided by LLM (12345)"
-    )
-
-    # Check error is well-formatted
-    assert "complex_tool" in content, "Error should mention the tool name"
-
-
-@pytest.mark.skipif(
-    sys.version_info >= (3, 14), reason="Pydantic model rebuild issue in Python 3.14"
-)
-async def test_create_agent_error_only_model_controllable_params() -> None:
-    """Test that errors only include LLM-controllable parameter issues.
-
-    Focused test ensuring that validation errors for LLM-controlled parameters
-    are clearly reported, while system-injected parameters remain completely
-    absent from error messages. This provides focused feedback to the LLM.
-    """
-
-    class StateWithSecrets(AgentState):
-        password: str  # Example of data not controlled by LLM
-
-    @dec_tool
-    def secure_tool(
-        username: str,
-        email: str,
-        state: Annotated[StateWithSecrets, InjectedState],
-    ) -> str:
-        """Tool that validates user credentials.
-
-        Args:
-            username: The username (3-20 chars).
-            email: The email address.
-            state: State with password (system-injected).
-        """
-        return f"Validated {username} with email {email}"
-
-    # LLM provides invalid username (too short) and invalid email
-    model = FakeToolCallingModel(
-        tool_calls=[
-            [
-                {
-                    "name": "secure_tool",
-                    "args": {
-                        "username": "ab",  # Too short (needs 3-20)
-                        "email": "not-an-email",  # Invalid format
-                    },
-                    "id": "call_secure_1",
-                }
-            ],
-            [],
-        ]
-    )
-
-    agent = create_agent(
-        model=model,
-        tools=[secure_tool],
-        state_schema=StateWithSecrets,
-    )
-
-    result = agent.invoke(
-        {
-            "messages": [HumanMessage("Create account")],
-            "password": "super_secret_password_12345",
-        }
-    )
-
-    tool_messages = [m for m in result["messages"] if m.type == "tool"]
-    assert len(tool_messages) == 1
-    content = tool_messages[0].content
-
-    # The error should mention LLM-controlled parameters
-    # Note: Pydantic's default validation may or may not catch format issues,
-    # but the parameters themselves should be present in error messages
-    assert "username" in content.lower() or "email" in content.lower(), (
-        "Error should mention at least one LLM-controlled parameter"
-    )
-
-    # Password is system-injected and should not appear
-    # The LLM doesn't control it, so it shouldn't distract from the actual errors
-    assert "password" not in content.lower(), (
-        "Error should NOT mention 'password' (system-injected parameter)"
-    )
-    assert "super_secret_password" not in content, (
-        "Error should NOT contain password value (from system-injected state)"
-    )

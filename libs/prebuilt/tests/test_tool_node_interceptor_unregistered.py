@@ -4,12 +4,14 @@ from collections.abc import Awaitable, Callable
 from unittest.mock import Mock
 
 import pytest
-from langchain.tools.tool_node import ToolCallRequest, _ToolNode
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import tool as dec_tool
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
+
+from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt.tool_node import ToolCallRequest
 
 pytestmark = pytest.mark.anyio
 
@@ -61,7 +63,7 @@ def test_interceptor_can_handle_unregistered_tool_sync() -> None:
         # Pass through for registered tools
         return execute(request)
 
-    node = _ToolNode([registered_tool], wrap_tool_call=interceptor)
+    node = ToolNode([registered_tool], wrap_tool_call=interceptor)
 
     # Test registered tool works normally
     result = node.invoke(
@@ -123,7 +125,7 @@ async def test_interceptor_can_handle_unregistered_tool_async() -> None:
         # Pass through for registered tools
         return await execute(request)
 
-    node = _ToolNode([registered_tool], awrap_tool_call=async_interceptor)
+    node = ToolNode([registered_tool], awrap_tool_call=async_interceptor)
 
     # Test registered tool works normally
     result = await node.ainvoke(
@@ -178,7 +180,7 @@ def test_unregistered_tool_error_when_interceptor_calls_execute() -> None:
         # This should fail validation when execute is called
         return execute(request)
 
-    node = _ToolNode([registered_tool], wrap_tool_call=bad_interceptor)
+    node = ToolNode([registered_tool], wrap_tool_call=bad_interceptor)
 
     # Registered tool should still work
     result = node.invoke(
@@ -238,7 +240,7 @@ def test_interceptor_handles_mix_of_registered_and_unregistered() -> None:
             )
         return execute(request)
 
-    node = _ToolNode([registered_tool], wrap_tool_call=selective_interceptor)
+    node = ToolNode([registered_tool], wrap_tool_call=selective_interceptor)
 
     # Test multiple tool calls - mix of registered and unregistered
     result = node.invoke(
@@ -301,7 +303,7 @@ def test_interceptor_command_for_unregistered_tool() -> None:
             )
         return execute(request)
 
-    node = _ToolNode([registered_tool], wrap_tool_call=command_interceptor)
+    node = ToolNode([registered_tool], wrap_tool_call=command_interceptor)
 
     result = node.invoke(
         [
@@ -342,7 +344,7 @@ def test_interceptor_exception_with_unregistered_tool() -> None:
             raise ValueError(msg)
         return execute(request)
 
-    node = _ToolNode(
+    node = ToolNode(
         [registered_tool], wrap_tool_call=failing_interceptor, handle_tool_errors=True
     )
 
@@ -370,7 +372,7 @@ def test_interceptor_exception_with_unregistered_tool() -> None:
     assert result[0].tool_call_id == "1"
 
     # Test that exception is raised when handle_tool_errors is False
-    node_no_handling = _ToolNode(
+    node_no_handling = ToolNode(
         [registered_tool], wrap_tool_call=failing_interceptor, handle_tool_errors=False
     )
 
@@ -406,7 +408,7 @@ async def test_async_interceptor_exception_with_unregistered_tool() -> None:
             raise RuntimeError(msg)
         return await execute(request)
 
-    node = _ToolNode(
+    node = ToolNode(
         [registered_tool],
         awrap_tool_call=failing_async_interceptor,
         handle_tool_errors=True,
@@ -436,7 +438,7 @@ async def test_async_interceptor_exception_with_unregistered_tool() -> None:
     assert result[0].tool_call_id == "1"
 
     # Test that exception is raised when handle_tool_errors is False
-    node_no_handling = _ToolNode(
+    node_no_handling = ToolNode(
         [registered_tool],
         awrap_tool_call=failing_async_interceptor,
         handle_tool_errors=False,
@@ -477,7 +479,7 @@ def test_interceptor_with_dict_input_format() -> None:
             )
         return execute(request)
 
-    node = _ToolNode([registered_tool], wrap_tool_call=interceptor)
+    node = ToolNode([registered_tool], wrap_tool_call=interceptor)
 
     # Test with dict input format
     result = node.invoke(
@@ -528,7 +530,7 @@ def test_interceptor_verifies_tool_is_none_for_unregistered() -> None:
         # Tool is registered
         return execute(request)
 
-    node = _ToolNode([registered_tool], wrap_tool_call=capturing_interceptor)
+    node = ToolNode([registered_tool], wrap_tool_call=capturing_interceptor)
 
     # Test unregistered tool
     node.invoke(
