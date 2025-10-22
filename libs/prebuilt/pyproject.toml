@@ -43,6 +43,7 @@ test = [
     "langgraph-checkpoint-sqlite",
     "langgraph-checkpoint-postgres",
     "syrupy",
+    "psycopg-binary",
 ]
 lint = [
     "ruff",

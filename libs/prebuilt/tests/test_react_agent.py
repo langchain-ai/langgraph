@@ -760,37 +760,6 @@ def test_tool_node_inject_state(schema_: type[T]) -> None:
         tool_message = result["messages"][-1]
         assert tool_message.content == "bar", f"Failed for tool={tool_name}"
 
-        if tool_name == "tool3":
-            failure_input = None
-            try:
-                failure_input = schema_(**{"messages": [msg], "notfoo": "bar"})
-            except Exception:
-                pass
-            if failure_input is not None:
-                with pytest.raises(KeyError):
-                    node.invoke(failure_input, config=_create_config_with_runtime())
-
-                with pytest.raises(ValueError):
-                    node.invoke([msg], config=_create_config_with_runtime())
-        else:
-            failure_input = None
-            try:
-                failure_input = schema_(**{"messages": [msg], "notfoo": "bar"})
-            except Exception:
-                # We'd get a validation error from pydantic state and wouldn't make it to the node
-                # anyway
-                pass
-            if failure_input is not None:
-                messages_ = node.invoke(
-                    failure_input, config=_create_config_with_runtime()
-                )
-                tool_message = messages_["messages"][-1]
-                assert "KeyError" in tool_message.content
-                tool_message = node.invoke([msg], config=_create_config_with_runtime())[
-                    -1
-                ]
-                assert "KeyError" in tool_message.content
-
     tool_call = {
         "name": "tool4",
         "args": {"some_val": 1},

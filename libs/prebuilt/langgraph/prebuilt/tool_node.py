@@ -120,7 +120,7 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
     tool_call: ToolCall
 
 
-@dataclass()
+@dataclass
 class ToolCallRequest:
     """Tool execution request passed to tool call interceptors.
 
@@ -759,7 +759,7 @@ class ToolNode(RunnableCallable):
         # compatibility
         if not any(isinstance(output, Command) for output in outputs):
             # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
-            return outputs if input_type == "list" else {self._messages_key: outputs}  # type: ignore[return-value, return-value]
+            return outputs if input_type == "list" else {self._messages_key: outputs}
 
         # LangGraph will automatically handle list of Command and non-command node
         # updates
