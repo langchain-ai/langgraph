@@ -8,6 +8,7 @@ from typing import (
     Literal,
     TypeVar,
 )
+from unittest.mock import Mock
 
 import pytest
 from langchain_core.language_models import BaseChatModel
@@ -62,6 +63,29 @@ from tests.model import FakeToolCallingModel
 pytestmark = pytest.mark.anyio
 
 REACT_TOOL_CALL_VERSIONS = ["v1", "v2"]
+
+
+def _create_mock_runtime(store: BaseStore | None = None) -> Mock:
+    """Create a mock Runtime object for testing ToolNode outside of graph context.
+
+    This helper is needed because ToolNode._func expects a Runtime parameter
+    which is injected by RunnableCallable from config["configurable"]["__pregel_runtime"].
+    When testing ToolNode directly (outside a graph), we need to provide this manually.
+    """
+    mock_runtime = Mock()
+    mock_runtime.store = store
+    mock_runtime.context = None
+    mock_runtime.stream_writer = lambda *args, **kwargs: None
+    return mock_runtime
+
+
+def _create_config_with_runtime(store: BaseStore | None = None) -> RunnableConfig:
+    """Create a RunnableConfig with mock Runtime for testing ToolNode.
+
+    Returns:
+        RunnableConfig with __pregel_runtime in configurable dict.
+    """
+    return {"configurable": {"__pregel_runtime": _create_mock_runtime(store)}}
 
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
@@ -327,7 +351,8 @@ def test_model_with_tools(tool_style: str, version: str, include_builtin: bool):
                     ],
                 )
             ]
-        }
+        },
+        config=_create_config_with_runtime(),
     )
     tool_messages: ToolMessage = result["messages"][-2:]
     for tool_message in tool_messages:
@@ -728,7 +753,10 @@ def test_tool_node_inject_state(schema_: type[T]) -> None:
             "type": "tool_call",
         }
         msg = AIMessage("hi?", tool_calls=[tool_call])
-        result = node.invoke(schema_(**{"messages": [msg], "foo": "bar"}))
+        result = node.invoke(
+            schema_(**{"messages": [msg], "foo": "bar"}),
+            config=_create_config_with_runtime(),
+        )
         tool_message = result["messages"][-1]
         assert tool_message.content == "bar", f"Failed for tool={tool_name}"
 
@@ -740,10 +768,10 @@ def test_tool_node_inject_state(schema_: type[T]) -> None:
                 pass
             if failure_input is not None:
                 with pytest.raises(KeyError):
-                    node.invoke(failure_input)
+                    node.invoke(failure_input, config=_create_config_with_runtime())
 
                 with pytest.raises(ValueError):
-                    node.invoke([msg])
+                    node.invoke([msg], config=_create_config_with_runtime())
         else:
             failure_input = None
             try:
@@ -753,10 +781,14 @@ def test_tool_node_inject_state(schema_: type[T]) -> None:
                 # anyway
                 pass
             if failure_input is not None:
-                messages_ = node.invoke(failure_input)
+                messages_ = node.invoke(
+                    failure_input, config=_create_config_with_runtime()
+                )
                 tool_message = messages_["messages"][-1]
                 assert "KeyError" in tool_message.content
-                tool_message = node.invoke([msg])[-1]
+                tool_message = node.invoke([msg], config=_create_config_with_runtime())[
+                    -1
+                ]
                 assert "KeyError" in tool_message.content
 
     tool_call = {
@@ -766,11 +798,13 @@ def test_tool_node_inject_state(schema_: type[T]) -> None:
         "type": "tool_call",
     }
     msg = AIMessage("hi?", tool_calls=[tool_call])
-    result = node.invoke(schema_(**{"messages": [msg], "foo": ""}))
+    result = node.invoke(
+        schema_(**{"messages": [msg], "foo": ""}), config=_create_config_with_runtime()
+    )
     tool_message = result["messages"][-1]
     assert tool_message.content == "hi?"
 
-    result = node.invoke([msg])
+    result = node.invoke([msg], config=_create_config_with_runtime())
     tool_message = result[-1]
     assert tool_message.content == "hi?"
 
@@ -882,7 +916,9 @@ def test_tool_node_inject_store() -> None:
             "type": "tool_call",
         }
         msg = AIMessage("hi?", tool_calls=[tool_call])
-        node_result = node.invoke({"messages": [msg]}, store=store)
+        node_result = node.invoke(
+            {"messages": [msg]}, config=_create_config_with_runtime(store=store)
+        )
         graph_result = graph.invoke({"messages": [msg]})
         for result in (node_result, graph_result):
             result["messages"][-1]
@@ -898,7 +934,10 @@ def test_tool_node_inject_store() -> None:
         "type": "tool_call",
     }
     msg = AIMessage("hi?", tool_calls=[tool_call])
-    node_result = node.invoke({"messages": [msg], "bar": "baz"}, store=store)
+    node_result = node.invoke(
+        {"messages": [msg], "bar": "baz"},
+        config=_create_config_with_runtime(store=store),
+    )
     graph_result = graph.invoke({"messages": [msg], "bar": "baz"})
     for result in (node_result, graph_result):
         result["messages"][-1]
@@ -923,7 +962,8 @@ def test_tool_node_ensure_utf8() -> None:
     tools = [get_day_list]
     tool_calls = [ToolCall(name=get_day_list.name, args={"days": data}, id="test_id")]
     outputs: list[ToolMessage] = ToolNode(tools).invoke(
-        [AIMessage(content="", tool_calls=tool_calls)]
+        [AIMessage(content="", tool_calls=tool_calls)],
+        config=_create_config_with_runtime(),
     )
     assert outputs[0].content == json.dumps(data, ensure_ascii=False)
 
