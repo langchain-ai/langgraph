@@ -252,7 +252,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
                 strict=False,
             ):
                 cur.execute(migration)
-                cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+                cur.execute("INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,))
         if self.pipe:
             self.pipe.sync()
 
@@ -614,7 +614,9 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
                 strict=False,
             ):
                 await cur.execute(migration)
-                await cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+                await cur.execute(
+                    "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
+                )
         if self.pipe:
             await self.pipe.sync()
 
