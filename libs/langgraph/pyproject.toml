@@ -46,7 +46,7 @@ test = [
     "pytest-watcher",
     "pytest-xdist[psutil]",
     "pytest-repeat",
-    "langchain-core==1.0.0a1",
+    "langchain-core==1.0.0",
     "langgraph-prebuilt",
     "langgraph-checkpoint",
     "langgraph-checkpoint-sqlite",
