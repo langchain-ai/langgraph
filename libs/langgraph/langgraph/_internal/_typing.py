@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import Field
-from typing import Any, ClassVar, Protocol, Union
+from typing import Any, ClassVar, Protocol, TypeAlias
 
 from pydantic import BaseModel
-from typing_extensions import TypeAlias, TypedDict
+from typing_extensions import TypedDict
 
 
 class TypedDictLikeV1(Protocol):
@@ -35,7 +35,7 @@ class DataclassLike(Protocol):
     __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
 
 
-StateLike: TypeAlias = Union[TypedDictLikeV1, TypedDictLikeV2, DataclassLike, BaseModel]
+StateLike: TypeAlias = TypedDictLikeV1 | TypedDictLikeV2 | DataclassLike | BaseModel
 """Type alias for state-like types.
 
 It can either be a `TypedDict`, `dataclass`, or Pydantic `BaseModel`.

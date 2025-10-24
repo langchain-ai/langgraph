@@ -17,17 +17,17 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.9"
           - "3.10"
           - "3.11"
           - "3.12"
           - "3.13"
+          - "3.14"
 
     name: "test #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v5
       - name: Set up Python ${{ matrix.python-version }}
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
@@ -42,7 +42,7 @@ jobs:
       - name: Install dependencies
         shell: bash
         working-directory: ${{ inputs.working-directory }}
-        run: uv sync --frozen --group dev
+        run: uv sync --frozen --group test --no-dev
 
       - name: Run tests
         shell: bash

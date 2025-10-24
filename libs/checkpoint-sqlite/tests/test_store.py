@@ -5,7 +5,7 @@ import tempfile
 import uuid
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
-from typing import Any, Literal, Optional, Union, cast
+from typing import Any, Literal, cast
 
 import pytest
 from langchain_core.embeddings import Embeddings
@@ -110,7 +110,7 @@ VECTOR_TYPES = ["cosine"]  # SQLite only supports cosine similarity
 @contextmanager
 def create_vector_store(
     fake_embeddings: CharacterEmbeddings,
-    text_fields: Optional[list[str]] = None,
+    text_fields: list[str] | None = None,
     distance_type: str = "cosine",
     conn_type: Literal["memory", "file"] = "memory",
 ) -> Generator[SqliteStore, None, None]:
@@ -153,7 +153,7 @@ def test_batch_order(store: SqliteStore) -> None:
     ]
 
     results = store.batch(
-        cast(Iterable[Union[GetOp, PutOp, SearchOp, ListNamespacesOp]], ops)
+        cast(Iterable[GetOp | PutOp | SearchOp | ListNamespacesOp], ops)
     )
     assert len(results) == 5
     assert isinstance(results[0], Item)
@@ -182,7 +182,7 @@ def test_batch_order(store: SqliteStore) -> None:
     ]
 
     results_reordered = store.batch(
-        cast(Iterable[Union[GetOp, PutOp, SearchOp, ListNamespacesOp]], ops_reordered)
+        cast(Iterable[GetOp | PutOp | SearchOp | ListNamespacesOp], ops_reordered)
     )
     assert len(results_reordered) == 5
     assert isinstance(results_reordered[0], list)
@@ -301,7 +301,7 @@ def test_batch_list_namespaces_ops(store: SqliteStore) -> None:
     ]
 
     results = store.batch(
-        cast(Iterable[Union[GetOp, PutOp, SearchOp, ListNamespacesOp]], ops)
+        cast(Iterable[GetOp | PutOp | SearchOp | ListNamespacesOp], ops)
     )
     assert len(results) == 3
 
@@ -778,7 +778,7 @@ def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
 
     similarities = []
     for y in Y:
-        dot_product = sum(a * b for a, b in zip(X, y))
+        dot_product = sum(a * b for a, b in zip(X, y, strict=False))
         norm1 = sum(a * a for a in X) ** 0.5
         norm2 = sum(a * a for a in y) ** 0.5
         similarity = dot_product / (norm1 * norm2) if norm1 > 0 and norm2 > 0 else 0.0
@@ -1011,7 +1011,7 @@ def test_search_items(
         fake_embeddings, text_fields=["key0", "key1", "key3"]
     ) as store:
         # Insert test data
-        for ns, item in zip(test_namespaces, test_items):
+        for ns, item in zip(test_namespaces, test_items, strict=False):
             key = f"item_{ns[-1]}"
             store.put(ns, key, item)
 

@@ -2,13 +2,12 @@
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Union
 
 from psycopg import Connection
 from psycopg.rows import DictRow
 from psycopg_pool import ConnectionPool
 
-Conn = Union[Connection[DictRow], ConnectionPool[Connection[DictRow]]]
+Conn = Connection[DictRow] | ConnectionPool[Connection[DictRow]]
 
 
 @contextmanager

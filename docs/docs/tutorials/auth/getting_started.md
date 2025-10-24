@@ -68,7 +68,7 @@ The server will start and open the studio in your browser:
 > - 📚 API Docs: http://127.0.0.1:2024/docs
 >
 > This in-memory server is designed for development and testing.
-> For production use, please use LangGraph Platform.
+> For production use, please use LangSmith Deployment.
 ```
 
 If you were to self-host this on the public internet, anyone could access it!

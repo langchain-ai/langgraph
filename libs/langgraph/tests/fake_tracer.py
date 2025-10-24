@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 from langchain_core.messages.base import BaseMessage
@@ -85,7 +85,7 @@ class FakeTracer(BaseTracer):
         return result
 
     @property
-    def run_ids(self) -> list[Optional[UUID]]:
+    def run_ids(self) -> list[UUID | None]:
         runs = self.flattened_runs()
         uuids_map = {v: k for k, v in self.uuids_map.items()}
         return [uuids_map.get(r.id) for r in runs]

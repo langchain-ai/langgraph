@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Annotated, Optional
+from typing import Annotated
 
 from langchain_community.retrievers import WikipediaRetriever
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -51,7 +51,7 @@ class Subsection(BaseModel):
 class Section(BaseModel):
     section_title: str = Field(..., title="Title of the section")
     description: str = Field(..., title="Content of the section")
-    subsections: Optional[list[Subsection]] = Field(
+    subsections: list[Subsection] | None = Field(
         default=None,
         title="Titles and descriptions for each subsection of the Wikipedia page.",
     )
@@ -201,8 +201,8 @@ def update_editor(editor, new_editor):
 
 class InterviewState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
-    references: Annotated[Optional[dict], update_references]
-    editor: Annotated[Optional[Editor], update_editor]
+    references: Annotated[dict | None, update_references]
+    editor: Annotated[Editor | None, update_editor]
 
 
 gen_qn_prompt = ChatPromptTemplate.from_messages(
@@ -321,7 +321,7 @@ async def search_engine(query: str):
 
 async def gen_answer(
     state: InterviewState,
-    config: Optional[RunnableConfig] = None,
+    config: RunnableConfig | None = None,
     name: str = "Subject_Matter_Expert",
     max_str_len: int = 15000,
 ):
@@ -437,7 +437,7 @@ class SubSection(BaseModel):
 class WikiSection(BaseModel):
     section_title: str = Field(..., title="Title of the section")
     content: str = Field(..., title="Full content of the section")
-    subsections: Optional[list[Subsection]] = Field(
+    subsections: list[Subsection] | None = Field(
         default=None,
         title="Titles and descriptions for each subsection of the Wikipedia page.",
     )

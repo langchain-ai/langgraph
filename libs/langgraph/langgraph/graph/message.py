@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import uuid
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import partial
 from typing import (
     Annotated,
     Any,
-    Callable,
     Literal,
-    Union,
     cast,
 )
 
@@ -34,7 +32,7 @@ __all__ = (
     "MessageGraph",
 )
 
-Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
+Messages = list[MessageLikeRepresentation] | MessageLikeRepresentation
 
 REMOVE_ALL_MESSAGES = "__remove_all__"
 
@@ -71,23 +69,23 @@ def add_messages(
     new message has the same ID as an existing message.
 
     Args:
-        left: The base list of messages.
-        right: The list of messages (or single message) to merge
+        left: The base list of `Messages`.
+        right: The list of `Messages` (or single `Message`) to merge
             into the base list.
-        format: The format to return messages in. If None then messages will be
-            returned as is. If 'langchain-openai' then messages will be returned as
-            BaseMessage objects with their contents formatted to match OpenAI message
-            format, meaning contents can be string, 'text' blocks, or 'image_url' blocks
-            and tool responses are returned as their own ToolMessages.
+        format: The format to return messages in. If `None` then `Messages` will be
+            returned as is. If `langchain-openai` then `Messages` will be returned as
+            `BaseMessage` objects with their contents formatted to match OpenAI message
+            format, meaning contents can be string, `'text'` blocks, or `'image_url'` blocks
+            and tool responses are returned as their own `ToolMessage` objects.
 
             !!! important "Requirement"
 
-                Must have ``langchain-core>=0.3.11`` installed to use this feature.
+                Must have `langchain-core>=0.3.11` installed to use this feature.
 
     Returns:
         A new list of messages with the messages from `right` merged into `left`.
         If a message in `right` has the same ID as a message in `left`, the
-        message from `right` will replace the message from `left`.
+            message from `right` will replace the message from `left`.
 
     Example:
         ```python title="Basic usage"
@@ -243,14 +241,11 @@ def add_messages(
 
 
 @deprecated(
-    "MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.",
+    "MessageGraph is deprecated in langgraph 1.0.0, to be removed in 2.0.0. Please use StateGraph with a `messages` key instead.",
     category=None,
 )
 class MessageGraph(StateGraph):
     """A StateGraph where every node receives a list of messages as input and returns one or more messages as output.
-
-    !!! warning "Deprecation"
-        MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.
 
     MessageGraph is a subclass of StateGraph whose entire state is a single, append-only* list of messages.
     Each node in a MessageGraph takes a list of messages as input and returns zero or more

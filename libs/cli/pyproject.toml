@@ -7,7 +7,7 @@ name = "langgraph-cli"
 dynamic = ["version"]
 description = "CLI for interacting with LangGraph API"
 authors = []
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
@@ -31,15 +31,21 @@ Repository = "https://www.github.com/langchain-ai/langgraph"
 langgraph = "langgraph_cli.cli:cli"
 
 [dependency-groups]
-dev = [
-    "ruff",
-    "codespell",
+test = [
     "pytest",
     "pytest-asyncio",
     "pytest-mock",
     "pytest-watch",
-    "mypy",
     "msgspec",
+]
+lint = [
+    "ruff",
+    "codespell",
+    "mypy",
+]
+dev = [
+    {include-group = "test"},
+    {include-group = "lint"},
 ]
 
 [tool.uv]
@@ -59,5 +65,7 @@ lint.select = [
   "UP", # pyupgrade
   "B",  # flake8-bugbear
   "I",  # isort
+  "UP", # pyupgrade
 ]
 lint.ignore = ["E501", "B008"]
+target-version = "py310"

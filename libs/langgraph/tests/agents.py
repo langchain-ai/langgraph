@@ -1,4 +1,4 @@
-from typing import Literal, Union
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -14,7 +14,7 @@ class AgentAction(BaseModel):
     """
 
     tool: str
-    tool_input: Union[str, dict]
+    tool_input: str | dict
     log: str
     type: Literal["AgentAction"] = "AgentAction"
 

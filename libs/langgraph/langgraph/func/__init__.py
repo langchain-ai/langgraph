@@ -3,11 +3,10 @@ from __future__ import annotations
 import functools
 import inspect
 import warnings
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import (
     Any,
-    Callable,
     Generic,
     TypeVar,
     cast,
@@ -130,12 +129,12 @@ def task(
         The `task` decorator supports both sync and async functions. To use async
         functions, ensure that you are using Python 3.11 or higher.
 
-    Tasks can only be called from within an [entrypoint][langgraph.func.entrypoint] or
-    from within a StateGraph. A task can be called like a regular function with the
+    Tasks can only be called from within an [`entrypoint`][langgraph.func.entrypoint] or
+    from within a `StateGraph`. A task can be called like a regular function with the
     following differences:
 
     - When a checkpointer is enabled, the function inputs and outputs must be serializable.
-    - The decorated function can only be called from within an entrypoint or StateGraph.
+    - The decorated function can only be called from within an entrypoint or `StateGraph`.
     - Calling the function produces a future. This makes it easy to parallelize tasks.
 
     Args:
@@ -240,11 +239,11 @@ class entrypoint(Generic[ContextT]):
     The decorated function can request access to additional parameters
     that will be injected automatically at run time. These parameters include:
 
-    | Parameter        | Description                                                                                        |
-    |------------------|----------------------------------------------------------------------------------------------------|
-    | **`config`**     | A configuration object (aka RunnableConfig) that holds run-time configuration values.              |
-    | **`previous`**   | The previous return value for the given thread (available only when a checkpointer is provided).   |
-    | **`runtime`**    | A Runtime object that contains information about the current run, including context, store, writer |                                |
+    | Parameter        | Description                                                                                          |
+    |------------------|------------------------------------------------------------------------------------------------------|
+    | **`config`**     | A configuration object (aka `RunnableConfig`) that holds run-time configuration values.              |
+    | **`previous`**   | The previous return value for the given thread (available only when a checkpointer is provided).     |
+    | **`runtime`**    | A `Runtime` object that contains information about the current run, including context, store, writer |
 
     The entrypoint decorator can be applied to sync functions or async functions.
 
@@ -462,11 +461,11 @@ class entrypoint(Generic[ContextT]):
         """
 
         value: R
-        """Value to return. A value will always be returned even if it is None."""
+        """Value to return. A value will always be returned even if it is `None`."""
         save: S
         """The value for the state for the next checkpoint.
 
-        A value will always be saved even if it is None.
+        A value will always be saved even if it is `None`.
         """
 
     def __call__(self, func: Callable[..., Any]) -> Pregel:

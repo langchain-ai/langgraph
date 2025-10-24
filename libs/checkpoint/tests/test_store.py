@@ -845,7 +845,7 @@ async def test_async_batched_vector_search_concurrent(
         ]
     )
 
-    for results, (query, filter_) in zip(all_results, search_queries):
+    for results, (query, filter_) in zip(all_results, search_queries, strict=False):
         assert len(results) > 0, f"No results for query '{query}' with filter {filter_}"
 
         for result in results:
