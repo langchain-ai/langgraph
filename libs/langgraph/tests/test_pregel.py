@@ -8601,20 +8601,49 @@ def test_multiple_writes_same_channel_from_same_node(
 
 
 @pytest.mark.parametrize("as_json", [False, True])
-def test_overwrite_basic(sync_checkpointer: BaseCheckpointSaver, as_json: bool) -> None:
-    """Test that a node can use Overwrite to bypass a reducer and write a value directly to the channel."""
+def test_overwrite_sequential(
+    sync_checkpointer: BaseCheckpointSaver, as_json: bool
+) -> None:
+    """Test a sequential chain of nodes where the last node uses Overwrite to bypass a reducer and write a value directly to the channel."""
 
     class State(TypedDict):
         messages: Annotated[list, operator.add]
-
-    def _ow(val: list[str]):
-        return {"__overwrite__": val} if as_json else Overwrite(value=val)
 
     def node_a(state: State):
         return {"messages": ["a"]}
 
     def node_b(state: State):
-        return {"messages": _ow(["b"])}
+        overwrite = {"__overwrite__": ["b"]} if as_json else Overwrite(["b"])
+        return {"messages": overwrite}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"messages": ["START"]}, config)
+    # a is overwritten by b
+    assert result == {"messages": ["b"]}
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_overwrite_parallel(
+    sync_checkpointer: BaseCheckpointSaver, as_json: bool
+) -> None:
+    """Test parallel nodes where max one node uses Overwrite to bypass a reducer and write a value directly to the channel."""
+
+    class State(TypedDict):
+        messages: Annotated[list, operator.add]
+
+    def node_a(state: State):
+        return {"messages": ["a"]}
+
+    def node_b(state: State):
+        overwrite = {"__overwrite__": ["b"]} if as_json else Overwrite(["b"])
+        return {"messages": overwrite}
 
     def node_c(state: State):
         return {"messages": ["c"]}
@@ -8641,25 +8670,24 @@ def test_overwrite_basic(sync_checkpointer: BaseCheckpointSaver, as_json: bool) 
 
 
 @pytest.mark.parametrize("as_json", [False, True])
-def test_overwrite_concurrent_overwrites_error(
+def test_overwrite_parallel_error(
     sync_checkpointer: BaseCheckpointSaver, as_json: bool
 ) -> None:
-    """Test that an error is raised when multiple Overwrite values are encountered in a single step."""
+    """Test parallel nodes where more than one node uses Overwrite to bypass a reducer and write a value directly to the channel. In this case, InvalidUpdateError should be raised."""
 
     class State(TypedDict):
         messages: Annotated[list, operator.add]
-
-    def _ow(val: list[str]):
-        return {"__overwrite__": val} if as_json else Overwrite(value=val)
 
     def node_a(state: State):
         return {"messages": ["a"]}
 
     def node_b(state: State):
-        return {"messages": _ow(["b"])}
+        overwrite = {"__overwrite__": ["b"]} if as_json else Overwrite(["b"])
+        return {"messages": overwrite}
 
     def node_c(state: State):
-        return {"messages": _ow(["c"])}
+        overwrite = {"__overwrite__": ["c"]} if as_json else Overwrite(["c"])
+        return {"messages": overwrite}
 
     builder = StateGraph(State)
     builder.add_node("node_a", node_a)
@@ -8674,6 +8702,6 @@ def test_overwrite_concurrent_overwrites_error(
     graph = builder.compile(checkpointer=sync_checkpointer)
     config = {"configurable": {"thread_id": "1"}}
     with pytest.raises(
-        InvalidUpdateError, match="Can receive only one Overwrite value per step."
+        InvalidUpdateError, match="Can receive only one Overwrite value per super-step."
     ):
         graph.invoke({"messages": ["START"]}, config)

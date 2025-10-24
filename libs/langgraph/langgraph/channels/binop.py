@@ -4,6 +4,7 @@ from typing import Any, Generic
 
 from typing_extensions import NotRequired, Required, Self
 
+from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import (
@@ -28,12 +29,12 @@ def _strip_extras(t):  # type: ignore[no-untyped-def]
     return t
 
 
-def get_overwrite(value: Any) -> tuple[bool, Any]:
+def _get_overwrite(value: Any) -> tuple[bool, Any]:
     """Inspects the given value and returns (is_overwrite, overwrite_value)."""
     if isinstance(value, Overwrite):
         return True, value.value
-    if isinstance(value, dict) and set(value.keys()) == {"__overwrite__"}:
-        return True, value["__overwrite__"]
+    if isinstance(value, dict) and set(value.keys()) == {OVERWRITE}:
+        return True, value[OVERWRITE]
     return False, None
 
 
@@ -106,15 +107,15 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
             values = values[1:]
         seen_overwrite: bool = False
         for value in values:
-            is_ow, ow_value = get_overwrite(value)
-            if is_ow:
+            is_overwrite, overwrite_value = _get_overwrite(value)
+            if is_overwrite:
                 if seen_overwrite:
                     msg = create_error_message(
-                        message="Can receive only one Overwrite value per step.",
+                        message="Can receive only one Overwrite value per super-step.",
                         error_code=ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE,
                     )
                     raise InvalidUpdateError(msg)
-                self.value = ow_value
+                self.value = overwrite_value
                 seen_overwrite = True
                 continue
             if not seen_overwrite:
