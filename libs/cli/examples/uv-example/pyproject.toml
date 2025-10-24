@@ -1,0 +1,14 @@
+[project]
+name = "my-langgraph-app"
+version = "0.1.0"
+description = "A LangGraph application using uv"
+requires-python = ">=3.11"
+dependencies = [
+    "langchain-openai>=0.1.0",
+    "langchain-community>=0.2.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0.0",
+]
