@@ -325,17 +325,21 @@ class PregelLoop:
             ]
             writes_to_save = writes
 
-        # We never want to persist untracked values in checkpoints
-        # because there is no guarantee that they are serializable
-        writes_to_save = [
-            # Sanitize UntrackedValues that are nested within Send packets
-            (c, sanitize_untracked_values_in_send(v, self.channels))
-            if c == TASKS and isinstance(v, Send)
-            else (c, v)
-            for c, v in writes_to_save
-            # Do not persist UntrackedValue channel writes
-            if not isinstance(self.specs.get(c), UntrackedValue)
-        ]
+        # Check if any writes are to an UntrackedValue channel
+        if any(
+            isinstance(channel, UntrackedValue) for channel in self.channels.values()
+        ):
+            # We never want to persist untracked values in checkpoints
+            # because there is no guarantee that they are serializable
+            writes_to_save = [
+                # Sanitize UntrackedValues that are nested within Send packets
+                (c, sanitize_untracked_values_in_send(v, self.channels))
+                if c == TASKS and isinstance(v, Send)
+                else (c, v)
+                for c, v in writes_to_save
+                # Do not persist UntrackedValue channel writes
+                if not isinstance(self.specs.get(c), UntrackedValue)
+            ]
 
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)

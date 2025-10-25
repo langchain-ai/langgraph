@@ -78,7 +78,7 @@ CONF = cast(Literal["configurable"], sys.intern("configurable"))
 # key for the configurable dict in RunnableConfig
 NULL_TASK_ID = sys.intern("00000000-0000-0000-0000-000000000000")
 # the task_id to use for writes that are not associated with a task
-RUNTIME_PLACEHOLDER = "__pregel_runtime_placeholder__"
+UNTRACKED_VALUE_PLACEHOLDER = sys.intern("__pregel_untracked_value_placeholder")
 # placeholder for untracked values replaced at runtime
 
 # redefined to avoid circular import with langgraph.constants
