@@ -56,10 +56,12 @@ from langgraph._internal._constants import (
     NULL_TASK_ID,
     PUSH,
     RESUME,
+    TASKS,
 )
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
@@ -78,6 +80,7 @@ from langgraph.pregel._algo import (
     increment,
     prepare_next_tasks,
     prepare_single_task,
+    sanitize_untracked_values_in_send,
     should_interrupt,
     task_path_str,
 )
@@ -114,6 +117,7 @@ from langgraph.types import (
     Durability,
     PregelExecutableTask,
     RetryPolicy,
+    Send,
     StreamMode,
 )
 
@@ -320,6 +324,23 @@ class PregelLoop:
                 w for w in self.checkpoint_pending_writes if w[0] != task_id
             ]
             writes_to_save = writes
+
+        # Check if any writes are to an UntrackedValue channel
+        if any(
+            isinstance(channel, UntrackedValue) for channel in self.channels.values()
+        ):
+            # We never want to persist untracked values in checkpoints
+            # because there is no guarantee that they are serializable
+            writes_to_save = [
+                # Sanitize UntrackedValues that are nested within Send packets
+                (c, sanitize_untracked_values_in_send(v, self.channels))
+                if c == TASKS and isinstance(v, Send)
+                else (c, v)
+                for c, v in writes_to_save
+                # Do not persist UntrackedValue channel writes
+                if not isinstance(self.specs.get(c), UntrackedValue)
+            ]
+
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         if self.durability != "exit" and self.checkpointer_put_writes is not None:
