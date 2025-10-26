@@ -1,0 +1,40 @@
+diff --git a/langgraph_api/models/run.py b/langgraph_api/models/run.py
+index 1234567..abcdefg 100644
+--- a/langgraph_api/models/run.py
++++ b/langgraph_api/models/run.py
+@@ -218,19 +218,23 @@ async def create_valid_run(
+     # assign custom headers and checkpoint to config
+     config = payload.get("config") or {}
+     context = payload.get("context") or {}
+     configurable = config.setdefault("configurable", {})
+ 
+-    if configurable and context:
+-        raise HTTPException(
+-            status_code=400,
+-            detail="Cannot specify both configurable and context. Prefer setting context alone. Context was introduced in LangGraph 0.6.0 and is the long term planned replacement for configurable.",
+-        )
+-
+     # Keep config and context in sync for user provided params
+-    if context:
++    # Fill configurable from context when only context is provided (backward compat)
++    # Fill context from configurable when only config is provided (backward compat)
++    # When both provided, keep them separate and forward both to runtime
++    if context and not configurable:
++        # Only context provided - copy to configurable for backward compatibility
++        configurable.update(context)
++    elif configurable and not context:
++        # Only config provided - copy to context for backward compatibility
++        context = configurable.copy()
++    elif context and configurable:
++        # Both provided - keep them separate, but ensure thread_id consistency
++        # If thread_id is in context but not in configurable, copy it over
++        if "thread_id" in context and "thread_id" not in configurable:
++            configurable["thread_id"] = context["thread_id"]
+-        configurable = context.copy()
+-        config["configurable"] = configurable
+-    else:
+-        context = configurable.copy()
+ 
+     if checkpoint_id:
+         configurable["checkpoint_id"] = str(checkpoint_id)
+
