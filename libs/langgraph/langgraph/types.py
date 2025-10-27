@@ -518,7 +518,7 @@ def interrupt(value: Any) -> Any:
     )
 
 
-@dataclass(**_DC_SLOTS)
+@dataclass(slots=True)
 class Overwrite:
     """Bypass a reducer and write the wrapped value directly to a BinaryOperatorAggregate channel.
 
