@@ -870,33 +870,6 @@ def on_post_build(config):
     with open(root_index_path, "w", encoding="utf-8") as f:
         f.write(root_redirect_html)
 
-    # Create 404.html for GitHub Pages catch-all redirect
-    # GitHub Pages will serve this for any unmapped URLs
-    notfound_redirect_html = """<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>Redirecting to LangGraph Documentation</title>
-    <link rel="canonical" href="https://docs.langchain.com/oss/python/langgraph/overview">
-    <meta name="robots" content="noindex">
-    <script>
-        // Redirect to new docs site
-        window.location.href = "https://docs.langchain.com/oss/python/langgraph/overview";
-    </script>
-    <meta http-equiv="refresh" content="0; url=https://docs.langchain.com/oss/python/langgraph/overview">
-</head>
-<body>
-<h1>Page Not Found</h1>
-<p>This page has moved to the new LangGraph documentation at <a href="https://docs.langchain.com/oss/python/langgraph/overview">docs.langchain.com</a>.</p>
-<p>Redirecting you now...</p>
-</body>
-</html>
-"""
-
-    notfound_path = os.path.join(site_dir, "404.html")
-    with open(notfound_path, "w", encoding="utf-8") as f:
-        f.write(notfound_redirect_html)
-
     # Create server-side catch-all redirect file for Netlify/Cloudflare Pages
     # This handles any pages not explicitly mapped in REDIRECT_MAP
     # Note: This won't work on GitHub Pages, but kept for potential future use
