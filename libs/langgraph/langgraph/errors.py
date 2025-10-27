@@ -37,8 +37,8 @@ class ErrorCode(Enum):
 def create_error_message(*, message: str, error_code: ErrorCode) -> str:
     return (
         f"{message}\n"
-        "For troubleshooting, visit: https://python.langchain.com/docs/"
-        f"troubleshooting/errors/{error_code.value}"
+        "For troubleshooting, visit: https://docs.langchain.com/oss/python/langgraph/"
+        f"errors/{error_code.value}"
     )
 
 
