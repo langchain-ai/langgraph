@@ -586,7 +586,7 @@ class RemoteGraph(PregelProtocol):
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
 
-        response: dict = sync_client.threads.update_state(  # type: ignore
+        response: dict = sync_client.threads.update_state(
             thread_id=merged_config["configurable"]["thread_id"],
             values=values,
             as_node=as_node,
@@ -621,7 +621,7 @@ class RemoteGraph(PregelProtocol):
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
 
-        response: dict = await client.threads.update_state(  # type: ignore
+        response: dict = await client.threads.update_state(
             thread_id=merged_config["configurable"]["thread_id"],
             values=values,
             as_node=as_node,
@@ -773,7 +773,7 @@ class RemoteGraph(PregelProtocol):
                 continue
 
             if chunk.event.startswith("messages"):
-                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+                chunk = chunk._replace(data=tuple(chunk.data))
 
             # emit chunk
             if subgraphs:
@@ -882,7 +882,7 @@ class RemoteGraph(PregelProtocol):
                 continue
 
             if chunk.event.startswith("messages"):
-                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+                chunk = chunk._replace(data=tuple(chunk.data))
 
             # emit chunk
             if subgraphs:
