@@ -103,9 +103,9 @@
 
 .show tables
 
-.show table Checkpoints schema
+.show table Checkpoints
 
-.show table CheckpointWrites schema
+.show table CheckpointWrites
 
 // ============================================================================
 // Setup Complete!

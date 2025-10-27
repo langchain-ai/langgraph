@@ -4,8 +4,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from azure.kusto.data.aio import KustoClient as AsyncKustoClient
-from azure.kusto.ingest.aio import (
-    StreamingIngestClient as AsyncStreamingIngestClient,
+from azure.kusto.ingest import (
+    ManagedStreamingIngestClient as AsyncStreamingIngestClient,
 )
 
 # Type aliases for async connection types

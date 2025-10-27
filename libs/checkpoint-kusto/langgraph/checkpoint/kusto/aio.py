@@ -8,6 +8,7 @@ from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime
+from io import BytesIO
 from typing import Any
 
 import orjson
@@ -15,10 +16,8 @@ from azure.identity import DefaultAzureCredential
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from azure.kusto.data import KustoConnectionStringBuilder
 from azure.kusto.data.aio import KustoClient as AsyncKustoClient
-from azure.kusto.ingest import IngestionProperties, DataFormat
-from azure.kusto.ingest.aio import (
-    StreamingIngestClient as AsyncStreamingIngestClient,
-)
+from azure.kusto.data import DataFormat
+from azure.kusto.ingest import IngestionProperties
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
@@ -32,6 +31,7 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 from langgraph.checkpoint.kusto import _ainternal
+from langgraph.checkpoint.kusto._ainternal import AsyncStreamingIngestClient
 from langgraph.checkpoint.kusto.base import BaseKustoSaver
 
 logger = logging.getLogger(__name__)
@@ -148,19 +148,30 @@ class AsyncKustoSaver(BaseKustoSaver):
                 # Use saver...
             ```
         """
+        # Use async credential for query client
         if credential is None:
-            credential = AsyncDefaultAzureCredential()
+            async_credential = AsyncDefaultAzureCredential()
+        else:
+            async_credential = credential
         
-        # Build connection string for query client
-        kcsb = KustoConnectionStringBuilder.with_azure_token_credential(
-            cluster_uri, credential
+        # Create sync credential for ingest client (ManagedStreamingIngestClient is sync)
+        sync_credential = DefaultAzureCredential()
+        
+        # Build connection string for async query client
+        kcsb_query = KustoConnectionStringBuilder.with_azure_token_credential(
+            cluster_uri, async_credential
         )
         
-        # Create query client
-        query_client = AsyncKustoClient(kcsb)
+        # Build connection string for sync ingest client
+        kcsb_ingest = KustoConnectionStringBuilder.with_azure_token_credential(
+            cluster_uri, sync_credential
+        )
         
-        # Create streaming ingest client
-        ingest_client = AsyncStreamingIngestClient(kcsb)
+        # Create query client (async)
+        query_client = AsyncKustoClient(kcsb_query)
+        
+        # Create streaming ingest client (sync client, needs sync credential)
+        ingest_client = AsyncStreamingIngestClient(kcsb_ingest)
         
         try:
             saver = cls(
@@ -175,10 +186,16 @@ class AsyncKustoSaver(BaseKustoSaver):
         finally:
             # Flush any pending writes
             await saver.flush()
-            # Close clients
+            # Close async query client
             await query_client.close()
-            if hasattr(ingest_client, 'close'):
-                await ingest_client.close()
+            # Close sync credential
+            sync_credential.close()
+            # Close async credential if we created it
+            if credential is None:
+                await async_credential.close()
+            # Close async credential if it's an async credential
+            if hasattr(credential, 'close'):
+                await credential.close()
 
     async def setup(self) -> None:
         """Set up and validate the Kusto database schema.
@@ -194,7 +211,7 @@ class AsyncKustoSaver(BaseKustoSaver):
         # Query to check if tables exist
         query = f"""
         .show database {self.database} schema
-        | where TableName in ('Checkpoints', 'CheckpointWrites', 'CheckpointBlobs')
+        | where TableName in ('Checkpoints', 'CheckpointWrites')
         | summarize tables = make_set(TableName)
         """
         
@@ -202,7 +219,7 @@ class AsyncKustoSaver(BaseKustoSaver):
             response = await client.execute(self.database, query)
             
             # Parse response to check for all required tables
-            required_tables = {"Checkpoints", "CheckpointWrites", "CheckpointBlobs"}
+            required_tables = {"Checkpoints", "CheckpointWrites"}
             if response.primary_results:
                 for row in response.primary_results[0]:
                     found_tables = set(row["tables"])
@@ -565,6 +582,9 @@ class AsyncKustoSaver(BaseKustoSaver):
         # Convert records to JSON lines format
         json_data = "\n".join(orjson.dumps(r).decode() for r in records)
         
+        # Create a BytesIO stream from the JSON data
+        stream = BytesIO(json_data.encode('utf-8'))
+        
         # Create ingestion properties
         ingestion_props = IngestionProperties(
             database=self.database,
@@ -572,10 +592,12 @@ class AsyncKustoSaver(BaseKustoSaver):
             data_format=DataFormat.JSON,
         )
         
-        # Ingest data
+        # Ingest data - ManagedStreamingIngestClient is sync, so run in thread pool
         async with self._ingest() as client:
-            await client.ingest_from_stream(
-                stream=json_data,
+            # Run the synchronous ingest_from_stream in a thread pool
+            await asyncio.to_thread(
+                client.ingest_from_stream,
+                stream,
                 ingestion_properties=ingestion_props,
             )
 
@@ -602,11 +624,21 @@ class AsyncKustoSaver(BaseKustoSaver):
         Returns:
             CheckpointTuple with all data loaded and deserialized.
         """
-        # Parse JSON fields
+        # Access fields directly - KustoResultRow supports dict-like access
+        # but doesn't convert properly with dict()
         checkpoint = row["checkpoint"]
         metadata = row["metadata"]
-        channel_values = row.get("channel_values", [])
-        pending_writes = row.get("pending_writes", [])
+        
+        # Handle optional fields with try/except or check if key exists
+        try:
+            channel_values = row["channel_values"] or []
+        except (KeyError, TypeError):
+            channel_values = []
+        
+        try:
+            pending_writes = row["pending_writes"] or []
+        except (KeyError, TypeError):
+            pending_writes = []
         
         # Load blobs
         blob_dict = await asyncio.to_thread(self._load_blobs, channel_values)
@@ -625,12 +657,13 @@ class AsyncKustoSaver(BaseKustoSaver):
         
         # Build parent config
         parent_config = None
-        if row.get("parent_checkpoint_id"):
+        parent_checkpoint_id = row.get("parent_checkpoint_id") if hasattr(row, 'get') else row["parent_checkpoint_id"]
+        if parent_checkpoint_id:
             parent_config = {
                 "configurable": {
                     "thread_id": row["thread_id"],
                     "checkpoint_ns": row["checkpoint_ns"],
-                    "checkpoint_id": row["parent_checkpoint_id"],
+                    "checkpoint_id": parent_checkpoint_id,
                 }
             }
         

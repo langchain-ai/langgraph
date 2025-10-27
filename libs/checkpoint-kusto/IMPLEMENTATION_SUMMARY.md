@@ -62,9 +62,11 @@ libs/checkpoint-kusto/
 ### 3. Kusto Schema
 
 **Tables Created:**
-- `Checkpoints`: Main checkpoint data (8 columns)
+- `Checkpoints`: Main checkpoint data with blobs stored in `channel_values` dynamic column (9 columns)
 - `CheckpointWrites`: Intermediate writes (9 columns)
-- `CheckpointBlobs`: Large binary data (7 columns)
+- `LatestCheckpoints`: Materialized view for efficient latest checkpoint queries
+
+**Note:** Blobs are no longer stored in a separate table. They are now stored in the `channel_values` dynamic column of the `Checkpoints` table, leveraging Kusto's columnar storage for better performance.
 
 **Policies Applied:**
 - Retention: 90 days (configurable)

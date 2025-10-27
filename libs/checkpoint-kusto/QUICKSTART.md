@@ -15,29 +15,43 @@ In Azure Data Explorer Web UI, run:
 ```kql
 // Create tables
 .create-merge table Checkpoints (
-    thread_id: string, checkpoint_ns: string, checkpoint_id: string,
-    parent_checkpoint_id: string, type: string, checkpoint_json: string,
-    metadata_json: string, created_at: datetime
+    thread_id: string, 
+    checkpoint_ns: string, 
+    checkpoint_id: string,
+    parent_checkpoint_id: string, 
+    type: string, 
+    checkpoint_json: string,
+    metadata_json: string,
+    channel_values: dynamic,
+    created_at: datetime
 )
 
 .create-merge table CheckpointWrites (
-    thread_id: string, checkpoint_ns: string, checkpoint_id: string,
-    task_id: string, task_path: string, idx: int, channel: string,
-    type: string, value_json: string, created_at: datetime
-)
-
-.create-merge table CheckpointBlobs (
-    thread_id: string, checkpoint_ns: string, channel: string,
-    version: string, type: string, blob: string, created_at: datetime
+    thread_id: string, 
+    checkpoint_ns: string, 
+    checkpoint_id: string,
+    task_id: string, 
+    task_path: string, 
+    idx: int, 
+    channel: string,
+    type: string, 
+    value_json: string, 
+    created_at: datetime
 )
 
 // Add policies
 .alter table Checkpoints policy caching hot = 7d
 .alter table CheckpointWrites policy caching hot = 7d
-.alter table CheckpointBlobs policy caching hot = 7d
+
 .alter-merge table Checkpoints policy retention softdelete = 90d
 .alter-merge table CheckpointWrites policy retention softdelete = 90d
-.alter-merge table CheckpointBlobs policy retention softdelete = 90d
+
+// Create materialized view for efficient latest checkpoint queries
+.create-or-alter materialized-view LatestCheckpoints on table Checkpoints
+{
+    Checkpoints
+    | summarize arg_max(checkpoint_id, *) by thread_id, checkpoint_ns
+}
 ```
 
 Or run the full `provision.kql` file.

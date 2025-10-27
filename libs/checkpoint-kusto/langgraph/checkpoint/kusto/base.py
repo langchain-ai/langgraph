@@ -133,14 +133,15 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
         """
         if not pending_sends:
             return
-        # add to values
-        enc, blob = self.serde.dumps_typed(
-            [self.serde.loads_typed((c.decode(), b)) for c, b in pending_sends],
-        )
+        
+        # Deserialize old format and re-serialize as JSON
+        tasks = [self.serde.loads_typed((c.decode(), b)) for c, b in pending_sends]
+        blob_value = orjson.dumps(tasks).decode('utf-8')
+        
         channel_values.append({
             "channel": TASKS,
-            "type": enc,
-            "blob": blob.decode() if isinstance(blob, bytes) else blob,
+            "type": "json",
+            "blob": blob_value,
         })
         # add to versions
         checkpoint["channel_versions"][TASKS] = (
@@ -162,11 +163,22 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
         """
         if not blob_values:
             return {}
-        return {
-            item["channel"]: self.serde.loads_typed((item["type"], item["blob"]))
-            for item in blob_values
-            if item["type"] != "empty"
-        }
+        result = {}
+        for item in blob_values:
+            if item["type"] == "empty":
+                continue
+            
+            blob = item["blob"]
+            type_str = item["type"]
+            
+            # All data is stored as JSON strings, so deserialize directly
+            if type_str == "json":
+                result[item["channel"]] = orjson.loads(blob)
+            else:
+                # Fallback for backwards compatibility with old data
+                result[item["channel"]] = self.serde.loads_typed((type_str, blob))
+        
+        return result
 
     def _dump_blobs(
         self,
@@ -178,6 +190,8 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
         Returns a list of blob objects suitable for storing in the
         Checkpoints.channel_values dynamic column. This leverages Kusto's
         columnar storage for efficient compression.
+        
+        All values are serialized as JSON strings for simplicity and readability.
         
         Args:
             values: Dictionary of channel values to serialize.
@@ -192,9 +206,9 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
         records = []
         for k, ver in versions.items():
             if k in values:
-                type_str, blob = self.serde.dumps_typed(values[k])
-                # For dynamic column, keep as-is (Kusto handles encoding)
-                blob_value = blob.decode() if isinstance(blob, bytes) else blob
+                # Always serialize as JSON
+                blob_value = orjson.dumps(values[k]).decode('utf-8')
+                type_str = "json"
             else:
                 type_str, blob_value = "empty", ""
             
@@ -219,14 +233,26 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
         """
         if not writes:
             return []
-        return [
-            (
+        
+        result = []
+        for write in writes:
+            value_json = write["value_json"]
+            type_str = write["type"]
+            
+            # All data is stored as JSON strings, so deserialize directly
+            if type_str == "json":
+                value = orjson.loads(value_json)
+            else:
+                # Fallback for backwards compatibility with old data
+                value = self.serde.loads_typed((type_str, value_json))
+            
+            result.append((
                 write["task_id"],
                 write["channel"],
-                self.serde.loads_typed((write["type"], write["value_json"])),
-            )
-            for write in writes
-        ]
+                value,
+            ))
+        
+        return result
 
     def _dump_writes(
         self,
@@ -238,6 +264,8 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
         writes: Sequence[tuple[str, Any]],
     ) -> list[dict[str, Any]]:
         """Serialize and dump checkpoint writes for ingestion.
+        
+        All values are serialized as JSON strings for simplicity.
         
         Args:
             thread_id: The thread identifier.
@@ -252,8 +280,8 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
         """
         records = []
         for idx, (channel, value) in enumerate(writes):
-            type_str, blob = self.serde.dumps_typed(value)
-            value_str = blob.decode() if isinstance(blob, bytes) else str(blob)
+            # Always serialize as JSON
+            value_str = orjson.dumps(value).decode('utf-8')
             
             records.append({
                 "thread_id": thread_id,
@@ -263,7 +291,7 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
                 "task_path": task_path,
                 "idx": WRITES_IDX_MAP.get(channel, idx),
                 "channel": channel,
-                "type": type_str,
+                "type": "json",
                 "value_json": value_str,
                 "created_at": "now()",
             })
