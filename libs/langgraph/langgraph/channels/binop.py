@@ -1,5 +1,5 @@
 import collections.abc
-from collections.abc import Sequence, Callable
+from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
 from typing_extensions import NotRequired, Required, Self
