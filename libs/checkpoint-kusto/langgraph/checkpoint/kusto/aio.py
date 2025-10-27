@@ -173,29 +173,29 @@ class AsyncKustoSaver(BaseKustoSaver):
         # Create streaming ingest client (sync client, needs sync credential)
         ingest_client = AsyncStreamingIngestClient(kcsb_ingest)
         
+        saver = cls(
+            query_client=query_client,
+            ingest_client=ingest_client,
+            database=database,
+            batch_size=batch_size,
+            flush_interval=flush_interval,
+            serde=serde,
+        )
+        
+        # Store credentials for cleanup
+        saver._async_credential = async_credential if credential is None else None
+        saver._sync_credential = sync_credential
+        
         try:
-            saver = cls(
-                query_client=query_client,
-                ingest_client=ingest_client,
-                database=database,
-                batch_size=batch_size,
-                flush_interval=flush_interval,
-                serde=serde,
-            )
             yield saver
         finally:
-            # Flush any pending writes
+            # Flush any pending writes before closing
             await saver.flush()
-            # Close async query client
+            # Close clients and credentials
             await query_client.close()
-            # Close sync credential
             sync_credential.close()
-            # Close async credential if we created it
-            if credential is None:
-                await async_credential.close()
-            # Close async credential if it's an async credential
-            if hasattr(credential, 'close'):
-                await credential.close()
+            if saver._async_credential:
+                await saver._async_credential.close()
 
     async def setup(self) -> None:
         """Set up and validate the Kusto database schema.
@@ -299,12 +299,19 @@ class AsyncKustoSaver(BaseKustoSaver):
         async with self._query() as client:
             response = await client.execute(self.database, query)
             
-            if not response.primary_results or not response.primary_results[0]:
-                logger.debug("No checkpoint found", extra={"thread_id": thread_id})
+            # Check if we have results
+            if not response.primary_results:
+                logger.debug("No checkpoint found (no results)", extra={"thread_id": thread_id})
+                return None
+            
+            # Check if the first result table has any rows
+            result_table = response.primary_results[0]
+            if not result_table or len(result_table.rows) == 0:
+                logger.debug("No checkpoint found (empty result)", extra={"thread_id": thread_id})
                 return None
             
             # Get first row
-            row = response.primary_results[0][0]
+            row = result_table[0]
             return await self._load_checkpoint_tuple(row)
 
     async def alist(

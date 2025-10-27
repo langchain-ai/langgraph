@@ -83,9 +83,7 @@ async def main():
     """Run the chatbot example."""
     # Configuration from environment
     cluster_uri = os.getenv(
-        "KUSTO_CLUSTER_URI",
-        "https://your-cluster.eastus.kusto.windows.net"
-    )
+        "KUSTO_CLUSTER_URI")
     database = os.getenv("KUSTO_DATABASE", "langgraph")
     
     # Validate configuration
@@ -101,7 +99,7 @@ async def main():
     print(f"   Database: {database}\n")
     
     try:
-        # Create checkpointer
+        # Create checkpointer - keep context open for entire usage
         async with AsyncKustoSaver.from_connection_string(
             cluster_uri=cluster_uri,
             database=database,
@@ -109,83 +107,83 @@ async def main():
             # Verify setup
             await checkpointer.setup()
             print("✓ Connected to Kusto\n")
-        
-        # Build the graph
-        graph = StateGraph(State)
-        graph.add_node("chatbot", chatbot_node)
-        graph.add_edge(START, "chatbot")
-        graph.add_edge("chatbot", END)
-        
-        # Compile with checkpointing enabled
-        app = graph.compile(checkpointer=checkpointer)
-        print("✓ Agent compiled with checkpointing\n")
-        
-        # Thread ID identifies this conversation
-        # Different thread IDs = different conversations
-        thread_id = "tutorial-conversation-1"
-        config = {"configurable": {"thread_id": thread_id}}
-        
-        # Message 1: Start conversation
-        print("=" * 50)
-        print("👤 User: Hello!")
-        result = await app.ainvoke(
-            {"messages": ["Hello!"], "step_count": 0},
-            config=config,
-        )
-        print(f"🤖 Bot: {result['messages'][-1]}")
-        print(f"   (Step {result['step_count']})")
-        
-        # Flush and wait for streaming ingestion
-        await checkpointer.flush()
-        await asyncio.sleep(1)
-        
-        # Message 2: Continue conversation
-        print("\n" + "=" * 50)
-        print("👤 User: How are you?")
-        result = await app.ainvoke(
-            {"messages": ["How are you?"]},
-            config=config,
-        )
-        print(f"🤖 Bot: {result['messages'][-1]}")
-        print(f"   (Step {result['step_count']})")
-        
-        await checkpointer.flush()
-        await asyncio.sleep(1)
-        
-        # Message 3: Ask about previous messages
-        print("\n" + "=" * 50)
-        print("👤 User: What did I say first?")
-        result = await app.ainvoke(
-            {"messages": ["What did I say first?"]},
-            config=config,
-        )
-        print(f"🤖 Bot: {result['messages'][-1]}")
-        print(f"   (Step {result['step_count']})")
-        
-        await checkpointer.flush()
-        await asyncio.sleep(1)
-        
-        # Show full conversation history from checkpoint
-        print("\n" + "=" * 50)
-        print("📜 Full conversation history (from checkpoint):")
-        checkpoint = await checkpointer.aget_tuple(config)
-        
-        if checkpoint:
-            messages = checkpoint.checkpoint.get("channel_values", {}).get("messages", [])
-            step_count = checkpoint.checkpoint.get("channel_values", {}).get("step_count", 0)
             
-            for i, msg in enumerate(messages, 1):
-                emoji = "👤" if i % 2 == 1 else "🤖"
-                print(f"   {emoji} {i}. {msg}")
+            # Build the graph
+            graph = StateGraph(State)
+            graph.add_node("chatbot", chatbot_node)
+            graph.add_edge(START, "chatbot")
+            graph.add_edge("chatbot", END)
             
-            print(f"\n   Total steps: {step_count}")
-            print(f"   Thread ID: {thread_id}")
-            print(f"   Checkpoint ID: {checkpoint.checkpoint['id']}")
+            # Compile with checkpointing enabled
+            app = graph.compile(checkpointer=checkpointer)
+            print("✓ Agent compiled with checkpointing\n")
             
-            print("\n✨ Try running this again - it will create a new conversation!")
-            print("   Each thread_id creates a separate conversation history.")
-        else:
-            print("   ⚠ No checkpoint found yet")
+            # Thread ID identifies this conversation
+            # Different thread IDs = different conversations
+            thread_id = "tutorial-conversation-1"
+            config = {"configurable": {"thread_id": thread_id}}
+            
+            # Message 1: Start conversation
+            print("=" * 50)
+            print("👤 User: Hello!")
+            result = await app.ainvoke(
+                {"messages": ["Hello!"], "step_count": 0},
+                config=config,
+            )
+            print(f"🤖 Bot: {result['messages'][-1]}")
+            print(f"   (Step {result['step_count']})")
+            
+            # Flush and wait for streaming ingestion
+            await checkpointer.flush()
+            await asyncio.sleep(1)
+            
+            # Message 2: Continue conversation
+            print("\n" + "=" * 50)
+            print("👤 User: How are you?")
+            result = await app.ainvoke(
+                {"messages": ["How are you?"]},
+                config=config,
+            )
+            print(f"🤖 Bot: {result['messages'][-1]}")
+            print(f"   (Step {result['step_count']})")
+            
+            await checkpointer.flush()
+            await asyncio.sleep(1)
+            
+            # Message 3: Ask about previous messages
+            print("\n" + "=" * 50)
+            print("👤 User: What did I say first?")
+            result = await app.ainvoke(
+                {"messages": ["What did I say first?"]},
+                config=config,
+            )
+            print(f"🤖 Bot: {result['messages'][-1]}")
+            print(f"   (Step {result['step_count']})")
+            
+            await checkpointer.flush()
+            await asyncio.sleep(1)
+            
+            # Show full conversation history from checkpoint
+            print("\n" + "=" * 50)
+            print("📜 Full conversation history (from checkpoint):")
+            checkpoint = await checkpointer.aget_tuple(config)
+            
+            if checkpoint:
+                messages = checkpoint.checkpoint.get("channel_values", {}).get("messages", [])
+                step_count = checkpoint.checkpoint.get("channel_values", {}).get("step_count", 0)
+                
+                for i, msg in enumerate(messages, 1):
+                    emoji = "👤" if i % 2 == 1 else "🤖"
+                    print(f"   {emoji} {i}. {msg}")
+                
+                print(f"\n   Total steps: {step_count}")
+                print(f"   Thread ID: {thread_id}")
+                print(f"   Checkpoint ID: {checkpoint.checkpoint['id']}")
+                
+                print("\n✨ Try running this again - it will create a new conversation!")
+                print("   Each thread_id creates a separate conversation history.")
+            else:
+                print("   ⚠ No checkpoint found yet")
     
     except Exception as e:
         print(f"\n❌ Error: {e}")

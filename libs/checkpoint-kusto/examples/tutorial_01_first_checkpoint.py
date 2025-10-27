@@ -44,10 +44,7 @@ async def main():
     AsyncKustoSaver, Checkpoint = check_dependencies()
     
     # Configuration from environment variables
-    cluster_uri = os.getenv(
-        "KUSTO_CLUSTER_URI",
-        "https://trd-tmsyxf11yg21na1kuv.z7.kusto.fabric.microsoft.com"
-    )
+    cluster_uri = os.getenv("KUSTO_CLUSTER_URI")
     database = os.getenv("KUSTO_DATABASE", "langgraph")
     
     # Validate configuration

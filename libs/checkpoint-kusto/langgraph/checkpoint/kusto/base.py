@@ -171,11 +171,16 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
             blob = item["blob"]
             type_str = item["type"]
             
-            # All data is stored as JSON strings, so deserialize directly
+            # Handle different serialization formats
             if type_str == "json":
+                # Simple JSON deserialization
                 result[item["channel"]] = orjson.loads(blob)
             else:
-                # Fallback for backwards compatibility with old data
+                # Use serde for msgpack/pickle (handles LangChain objects)
+                # Decode base64 if needed
+                if type_str in ("msgpack", "pickle") and isinstance(blob, str):
+                    import base64
+                    blob = base64.b64decode(blob)
                 result[item["channel"]] = self.serde.loads_typed((type_str, blob))
         
         return result
@@ -191,7 +196,8 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
         Checkpoints.channel_values dynamic column. This leverages Kusto's
         columnar storage for efficient compression.
         
-        All values are serialized as JSON strings for simplicity and readability.
+        Tries JSON serialization first for simplicity, but falls back to
+        serde (which handles LangChain objects) when needed.
         
         Args:
             values: Dictionary of channel values to serialize.
@@ -206,9 +212,19 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
         records = []
         for k, ver in versions.items():
             if k in values:
-                # Always serialize as JSON
-                blob_value = orjson.dumps(values[k]).decode('utf-8')
-                type_str = "json"
+                # Try JSON first (simple and readable)
+                try:
+                    blob_value = orjson.dumps(values[k]).decode('utf-8')
+                    type_str = "json"
+                except TypeError:
+                    # Fall back to serde for complex objects (e.g., LangChain messages)
+                    type_str, blob = self.serde.dumps_typed(values[k])
+                    # Handle bytes from serde (e.g., msgpack)
+                    if isinstance(blob, bytes):
+                        import base64
+                        blob_value = base64.b64encode(blob).decode('ascii')
+                    else:
+                        blob_value = blob
             else:
                 type_str, blob_value = "empty", ""
             
@@ -239,11 +255,15 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
             value_json = write["value_json"]
             type_str = write["type"]
             
-            # All data is stored as JSON strings, so deserialize directly
+            # Handle different serialization formats
             if type_str == "json":
                 value = orjson.loads(value_json)
             else:
-                # Fallback for backwards compatibility with old data
+                # Use serde for msgpack/pickle (handles LangChain objects)
+                # Decode base64 if needed
+                if type_str in ("msgpack", "pickle") and isinstance(value_json, str):
+                    import base64
+                    value_json = base64.b64decode(value_json)
                 value = self.serde.loads_typed((type_str, value_json))
             
             result.append((
@@ -280,8 +300,18 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
         """
         records = []
         for idx, (channel, value) in enumerate(writes):
-            # Always serialize as JSON
-            value_str = orjson.dumps(value).decode('utf-8')
+            # Try JSON first, fall back to serde for complex objects
+            try:
+                value_str = orjson.dumps(value).decode('utf-8')
+                type_str = "json"
+            except TypeError:
+                # Use serde for complex objects (e.g., LangChain messages)
+                type_str, blob = self.serde.dumps_typed(value)
+                if isinstance(blob, bytes):
+                    import base64
+                    value_str = base64.b64encode(blob).decode('ascii')
+                else:
+                    value_str = blob
             
             records.append({
                 "thread_id": thread_id,
@@ -291,7 +321,7 @@ class BaseKustoSaver(BaseCheckpointSaver[str]):
                 "task_path": task_path,
                 "idx": WRITES_IDX_MAP.get(channel, idx),
                 "channel": channel,
-                "type": "json",
+                "type": type_str,
                 "value_json": value_str,
                 "created_at": "now()",
             })
