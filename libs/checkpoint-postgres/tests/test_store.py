@@ -754,7 +754,7 @@ def _cosine_similarity(X: list[float], Y: list[list[float]]) -> list[float]:
 
     similarities = []
     for y in Y:
-        dot_product = sum(a * b for a, b in zip(X, y))
+        dot_product = sum(a * b for a, b in zip(X, y, strict=False))
         norm1 = sum(a * a for a in X) ** 0.5
         norm2 = sum(a * a for a in y) ** 0.5
         similarity = dot_product / (norm1 * norm2) if norm1 > 0 and norm2 > 0 else 0.0
@@ -771,7 +771,7 @@ def _inner_product(X: list[float], Y: list[list[float]]) -> list[float]:
 
     similarities = []
     for y in Y:
-        similarity = sum(a * b for a, b in zip(X, y))
+        similarity = sum(a * b for a, b in zip(X, y, strict=False))
         similarities.append(similarity)
 
     return similarities
@@ -785,7 +785,7 @@ def _neg_l2_distance(X: list[float], Y: list[list[float]]) -> list[float]:
 
     similarities = []
     for y in Y:
-        similarity = sum((a - b) ** 2 for a, b in zip(X, y)) ** 0.5
+        similarity = sum((a - b) ** 2 for a, b in zip(X, y, strict=False)) ** 0.5
         similarities.append(-similarity)
 
     return similarities

@@ -4,7 +4,7 @@ import pathlib
 import re
 import textwrap
 from collections import Counter
-from typing import Any, Literal, NamedTuple, Optional, TypedDict, Union
+from typing import Any, Literal, NamedTuple, TypedDict
 
 import click
 
@@ -25,19 +25,19 @@ class TTLConfig(TypedDict, total=False):
     """Configuration for TTL (time-to-live) behavior in the store."""
 
     refresh_on_read: bool
-    """Default behavior for refreshing TTLs on read operations (GET and SEARCH).
+    """Default behavior for refreshing TTLs on read operations (`GET` and `SEARCH`).
     
-    If True, TTLs will be refreshed on read operations (get/search) by default.
-    This can be overridden per-operation by explicitly setting refresh_ttl.
-    Defaults to True if not configured.
+    If `True`, TTLs will be refreshed on read operations (get/search) by default.
+    This can be overridden per-operation by explicitly setting `refresh_ttl`.
+    Defaults to `True` if not configured.
     """
-    default_ttl: Optional[float]
+    default_ttl: float | None
     """Optional. Default TTL (time-to-live) in minutes for new items.
     
     If provided, all new items will have this TTL unless explicitly overridden.
     If omitted, items will have no TTL by default.
     """
-    sweep_interval_minutes: Optional[int]
+    sweep_interval_minutes: int | None
     """Optional. Interval in minutes between TTL sweep iterations.
     
     If provided, the store will periodically delete expired items based on the TTL.
@@ -83,7 +83,7 @@ class IndexConfig(TypedDict, total=False):
     Note: Must return embeddings of dimension `dims`.
     """
 
-    fields: Optional[list[str]]
+    fields: list[str] | None
     """Optional. List of JSON fields to extract before generating embeddings.
     
     Defaults to ["$"], which means the entire JSON object is embedded as one piece of text.
@@ -102,7 +102,7 @@ class StoreConfig(TypedDict, total=False):
     the store will just handle traditional (non-embedded) data without vector lookups.
     """
 
-    index: Optional[IndexConfig]
+    index: IndexConfig | None
     """Optional. Defines the vector-based semantic search configuration.
     
     If provided, the store will:
@@ -113,7 +113,7 @@ class StoreConfig(TypedDict, total=False):
     If omitted, no vector index is initialized.
     """
 
-    ttl: Optional[TTLConfig]
+    ttl: TTLConfig | None
     """Optional. Defines the TTL (time-to-live) behavior configuration.
     
     If provided, the store will apply TTL settings according to the configuration.
@@ -130,9 +130,9 @@ class ThreadTTLConfig(TypedDict, total=False):
     Choices:
       - "delete": Delete all checkpoints for a thread after TTL expires.
     """
-    default_ttl: Optional[float]
+    default_ttl: float | None
     """Default TTL (time-to-live) in minutes for checkpointed data."""
-    sweep_interval_minutes: Optional[int]
+    sweep_interval_minutes: int | None
     """Interval in minutes between sweep iterations.
     If omitted, a default interval will be used (typically ~ 5 minutes)."""
 
@@ -143,7 +143,7 @@ class CheckpointerConfig(TypedDict, total=False):
     If omitted, no checkpointer is set up (the object store will still be present, however).
     """
 
-    ttl: Optional[ThreadTTLConfig]
+    ttl: ThreadTTLConfig | None
     """Optional. Defines the TTL (time-to-live) behavior configuration.
     
     If provided, the checkpointer will apply TTL settings according to the configuration.
@@ -159,7 +159,7 @@ class SecurityConfig(TypedDict, total=False):
     """
 
     securitySchemes: dict[str, dict[str, Any]]
-    """Required. Dict describing each security scheme recognized by your OpenAPI spec.
+    """Describe each security scheme recognized by your OpenAPI spec.
     
     Keys are scheme names (e.g. "OAuth2", "ApiKeyAuth") and values are their definitions.
     Example:
@@ -176,7 +176,7 @@ class SecurityConfig(TypedDict, total=False):
         }
     """
     security: list[dict[str, list[str]]]
-    """Optional. Global security requirements across all endpoints.
+    """Global security requirements across all endpoints.
     
     Each element in the list maps a security scheme (e.g. "OAuth2") to a list of scopes (e.g. ["read", "write"]).
     Example:
@@ -187,7 +187,7 @@ class SecurityConfig(TypedDict, total=False):
     """
     # path => {method => security}
     paths: dict[str, dict[str, list[dict[str, list[str]]]]]
-    """Optional. Path-specific security overrides.
+    """Path-specific security overrides.
     
     Keys are path templates (e.g., "/items/{item_id}"), mapping to:
       - Keys that are HTTP methods (e.g., "GET", "POST"),
@@ -215,11 +215,11 @@ class AuthConfig(TypedDict, total=False):
     """Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio. 
     
     Defaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header
-    value is a valid API key for the deployment's workspace. If True, all requests will go through your custom
+    value is a valid API key for the deployment's workspace. If `True`, all requests will go through your custom
     authentication logic, regardless of origin of the request.
     """
     openapi: SecurityConfig
-    """Required. Detailed security configuration that merges into your deployment's OpenAPI spec.
+    """The security configuration to include in your server's OpenAPI spec.
     
     Example (OAuth2):
         {
@@ -262,7 +262,7 @@ class CorsConfig(TypedDict, total=False):
     allow_headers: list[str]
     """Optional. HTTP headers that can be used in cross-origin requests (e.g. ["Content-Type", "Authorization"])."""
     allow_credentials: bool
-    """Optional. If True, cross-origin requests can include credentials (cookies, auth headers).
+    """Optional. If `True`, cross-origin requests can include credentials (cookies, auth headers).
     
     Default False to avoid accidentally exposing secured endpoints to untrusted sites.
     """
@@ -290,14 +290,14 @@ class ConfigurableHeaderConfig(TypedDict):
     Each value can be a raw string with an optional wildcard.
     """
 
-    includes: Optional[list[str]]
+    includes: list[str] | None
     """Headers to include (if not also matches against an 'exludes' pattern.
 
     Examples:
         - 'user-agent'
         - 'x-configurable-*'
     """
-    excludes: Optional[list[str]]
+    excludes: list[str] | None
     """Headers to exclude. Applied before the 'includes' checks.
 
     Examples:
@@ -317,27 +317,27 @@ class HttpConfig(TypedDict, total=False):
     If provided, it can override or extend the default routes.
     """
     disable_assistants: bool
-    """Optional. If True, /assistants routes are removed from the server.
+    """Optional. If `True`, /assistants routes are removed from the server.
     
     Default is False (meaning /assistants is enabled).
     """
     disable_threads: bool
-    """Optional. If True, /threads routes are removed.
+    """Optional. If `True`, /threads routes are removed.
     
     Default is False.
     """
     disable_runs: bool
-    """Optional. If True, /runs routes are removed.
+    """Optional. If `True`, /runs routes are removed.
     
     Default is False.
     """
     disable_store: bool
-    """Optional. If True, /store routes are removed, disabling direct store interactions via HTTP.
+    """Optional. If `True`, /store routes are removed, disabling direct store interactions via HTTP.
     
     Default is False.
     """
     disable_mcp: bool
-    """Optional. If True, /mcp routes are removed, disabling the MCP server.
+    """Optional. If `True`, /mcp routes are removed, disabling the MCP server.
     
     Default is False.
     """
@@ -349,18 +349,18 @@ class HttpConfig(TypedDict, total=False):
     
     Default is False.
     """
-    cors: Optional[CorsConfig]
+    cors: CorsConfig | None
     """Optional. Defines CORS restrictions. If omitted, no special rules are set and 
     cross-origin behavior depends on default server settings.
     """
-    configurable_headers: Optional[ConfigurableHeaderConfig]
+    configurable_headers: ConfigurableHeaderConfig | None
     """Optional. Defines how headers are treated for a run's configuration.
 
     You can include or exclude headers as configurable values to condition your
     agent's behavior or permissions on a request's headers."""
-    logging_headers: Optional[ConfigurableHeaderConfig]
+    logging_headers: ConfigurableHeaderConfig | None
     """Optional. Defines which headers are excluded from logging."""
-    middleware_order: Optional[MiddlewareOrders]
+    middleware_order: MiddlewareOrders | None
     """Optional. Defines the order in which to apply server customizations.
 
     Choices:
@@ -372,7 +372,7 @@ class HttpConfig(TypedDict, total=False):
     Default is `middleware_first`.
     """
     enable_custom_route_auth: bool
-    """Optional. If True, authentication is enabled for custom routes,
+    """Optional. If `True`, authentication is enabled for custom routes,
     not just the routes that are protected by default.
     (Routes protected by default include /assistants, /threads, and /runs).
 
@@ -389,42 +389,42 @@ class Config(TypedDict, total=False):
     Must be at least 3.11 or greater for this deployment to function properly.
     """
 
-    node_version: Optional[str]
+    node_version: str | None
     """Optional. Node.js version as a major version (e.g. '20'), if your deployment needs Node.
     Must be >= 20 if provided.
     """
 
-    api_version: Optional[str]
+    api_version: str | None
     """Optional. Which semantic version of the LangGraph API server to use.
     
     Defaults to latest. Check the
     [changelog](https://docs.langchain.com/langgraph-platform/langgraph-server-changelog)
     for more information."""
 
-    _INTERNAL_docker_tag: Optional[str]
+    _INTERNAL_docker_tag: str | None
     """Optional. Internal use only.
     """
 
-    base_image: Optional[str]
+    base_image: str | None
     """Optional. Base image to use for the LangGraph API server.
     
     Defaults to langchain/langgraph-api or langchain/langgraphjs-api."""
 
-    image_distro: Optional[Distros]
+    image_distro: Distros | None
     """Optional. Linux distribution for the base image.
     
     Must be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.
     If omitted, defaults to 'debian' ('latest').
     """
 
-    pip_config_file: Optional[str]
+    pip_config_file: str | None
     """Optional. Path to a pip config file (e.g., "/etc/pip.conf" or "pip.ini") for controlling
     package installation (custom indices, credentials, etc.).
     
     Only relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.
     """
 
-    pip_installer: Optional[str]
+    pip_installer: str | None
     """Optional. Python package installer to use ('auto', 'pip', 'uv').
     
     - 'auto' (default): Use uv for supported base images, otherwise pip
@@ -469,7 +469,7 @@ class Config(TypedDict, total=False):
         }
     """
 
-    env: Union[dict[str, str], str]
+    env: dict[str, str] | str
     """Optional. Environment variables to set for your deployment.
     
     - If given as a dict, keys are variable names and values are their values.
@@ -481,33 +481,33 @@ class Config(TypedDict, total=False):
         env=".env"
     """
 
-    store: Optional[StoreConfig]
+    store: StoreConfig | None
     """Optional. Configuration for the built-in long-term memory store, including semantic search indexing.
     
     If omitted, no vector index is set up (the object store will still be present, however).
     """
 
-    checkpointer: Optional[CheckpointerConfig]
+    checkpointer: CheckpointerConfig | None
     """Optional. Configuration for the built-in checkpointer, which handles checkpointing of state.
     
     If omitted, no checkpointer is set up (the object store will still be present, however).
     """
 
-    auth: Optional[AuthConfig]
+    auth: AuthConfig | None
     """Optional. Custom authentication config, including the path to your Python auth logic and 
     the OpenAPI security definitions it uses.
     """
 
-    http: Optional[HttpConfig]
+    http: HttpConfig | None
     """Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed
     and how cross-origin requests are handled.
     """
 
-    ui: Optional[dict[str, str]]
+    ui: dict[str, str] | None
     """Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.
     """
 
-    keep_pkg_tools: Optional[Union[bool, list[str]]]
+    keep_pkg_tools: bool | list[str] | None
     """Optional. Control whether to retain Python packaging tools in the final image.
     
     Allowed tools are: "pip", "setuptools", "wheel".
@@ -520,7 +520,7 @@ _BUILD_TOOLS = ("pip", "setuptools", "wheel")
 
 def _get_pip_cleanup_lines(
     install_cmd: str,
-    to_uninstall: Optional[tuple[str]],
+    to_uninstall: tuple[str] | None,
     pip_installer: Literal["uv", "pip"],
 ) -> str:
     commands = [
@@ -586,7 +586,7 @@ def _parse_node_version(version_str: str) -> int:
         ) from None
 
 
-def _is_node_graph(spec: Union[str, dict]) -> bool:
+def _is_node_graph(spec: str | dict) -> bool:
     """Check if a graph is a Node.js graph based on the file extension."""
     if isinstance(spec, dict):
         spec = spec.get("path")
@@ -846,7 +846,7 @@ class LocalDeps(NamedTuple):
     real_pkgs: dict[pathlib.Path, tuple[str, str]]
     faux_pkgs: dict[pathlib.Path, tuple[str, str]]
     # if . is in dependencies, use it as working_dir
-    working_dir: Optional[str] = None
+    working_dir: str | None = None
     # if there are local dependencies in parent directories, use additional_contexts
     additional_contexts: list[pathlib.Path] = None
 
@@ -882,7 +882,7 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
     pip_reqs = []
     real_pkgs = {}
     faux_pkgs = {}
-    working_dir: Optional[str] = None
+    working_dir: str | None = None
     additional_contexts: list[pathlib.Path] = []
 
     for local_dep in config["dependencies"]:
@@ -1265,7 +1265,7 @@ def python_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: str,
-    api_version: Optional[str] = None,
+    api_version: str | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     pip_installer = config.get("pip_installer", "auto")
@@ -1434,7 +1434,7 @@ ADD {relpath} /deps/{name}
             echo "Installing $dep"; \
             if [ -d "$dep" ]; then \
                 echo "Installing $dep"; \
-                (cd "$dep" && {global_reqs_pip_install} .); \
+                (cd "$dep" && {global_reqs_pip_install} -e .); \
             fi; \
         done""",
         "# -- End of local dependencies install --",
@@ -1469,10 +1469,10 @@ def node_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: str,
-    api_version: Optional[str] = None,
-    install_command: Optional[str] = None,
-    build_command: Optional[str] = None,
-    build_context: Optional[str] = None,
+    api_version: str | None = None,
+    install_command: str | None = None,
+    build_command: str | None = None,
+    build_context: str | None = None,
 ) -> tuple[str, dict[str, str]]:
     # Calculate paths for monorepo support
     if build_context:
@@ -1562,8 +1562,8 @@ def default_base_image(config: Config) -> str:
 
 def docker_tag(
     config: Config,
-    base_image: Optional[str] = None,
-    api_version: Optional[str] = None,
+    base_image: str | None = None,
+    api_version: str | None = None,
 ) -> str:
     api_version = api_version or config.get("api_version")
     base_image = base_image or default_base_image(config)
@@ -1612,11 +1612,11 @@ def _calculate_relative_workdir(config_path: pathlib.Path, build_context: str) -
 def config_to_docker(
     config_path: pathlib.Path,
     config: Config,
-    base_image: Optional[str] = None,
-    api_version: Optional[str] = None,
-    install_command: Optional[str] = None,
-    build_command: Optional[str] = None,
-    build_context: Optional[str] = None,
+    base_image: str | None = None,
+    api_version: str | None = None,
+    install_command: str | None = None,
+    build_command: str | None = None,
+    build_context: str | None = None,
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or default_base_image(config)
 
@@ -1637,9 +1637,9 @@ def config_to_docker(
 def config_to_compose(
     config_path: pathlib.Path,
     config: Config,
-    base_image: Optional[str] = None,
-    api_version: Optional[str] = None,
-    image: Optional[str] = None,
+    base_image: str | None = None,
+    api_version: str | None = None,
+    image: str | None = None,
     watch: bool = False,
 ) -> str:
     base_image = base_image or default_base_image(config)

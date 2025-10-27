@@ -1,13 +1,7 @@
+from collections.abc import Callable, Sequence
 from typing import (
     Any,
-    Callable,
-    Dict,
-    List,
     Literal,
-    Optional,
-    Sequence,
-    Type,
-    Union,
 )
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -26,16 +20,16 @@ from langgraph.prebuilt.chat_agent_executor import StructuredResponse
 
 
 class FakeToolCallingModel(BaseChatModel):
-    tool_calls: Optional[list[list[ToolCall]]] = None
-    structured_response: Optional[StructuredResponse] = None
+    tool_calls: list[list[ToolCall]] | None = None
+    structured_response: StructuredResponse | None = None
     index: int = 0
     tool_style: Literal["openai", "anthropic"] = "openai"
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Top Level call"""
@@ -56,7 +50,7 @@ class FakeToolCallingModel(BaseChatModel):
         return "fake-tool-call-model"
 
     def with_structured_output(
-        self, schema: Type[BaseModel]
+        self, schema: type[BaseModel]
     ) -> Runnable[LanguageModelInput, StructuredResponse]:
         if self.structured_response is None:
             raise ValueError("Structured response is not set")
@@ -65,7 +59,7 @@ class FakeToolCallingModel(BaseChatModel):
 
     def bind_tools(
         self,
-        tools: Sequence[Union[Dict[str, Any], Type[BaseModel], Callable, BaseTool]],
+        tools: Sequence[dict[str, Any] | type[BaseModel] | Callable | BaseTool],
         **kwargs: Any,
     ) -> Runnable[LanguageModelInput, BaseMessage]:
         if len(tools) == 0:

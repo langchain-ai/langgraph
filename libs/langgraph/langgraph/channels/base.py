@@ -39,13 +39,13 @@ class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
 
     def copy(self) -> Self:
         """Return a copy of the channel.
-        By default, delegates to checkpoint() and from_checkpoint().
+        By default, delegates to `checkpoint()` and `from_checkpoint()`.
         Subclasses can override this method with a more efficient implementation."""
         return self.from_checkpoint(self.checkpoint())
 
     def checkpoint(self) -> Checkpoint | Any:
         """Return a serializable representation of the channel's current state.
-        Raises EmptyChannelError if the channel is empty (never updated yet),
+        Raises `EmptyChannelError` if the channel is empty (never updated yet),
         or doesn't support checkpoints."""
         try:
             return self.get()
@@ -63,12 +63,12 @@ class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
     def get(self) -> Value:
         """Return the current value of the channel.
 
-        Raises EmptyChannelError if the channel is empty (never updated yet)."""
+        Raises `EmptyChannelError` if the channel is empty (never updated yet)."""
 
     def is_available(self) -> bool:
-        """Return True if the channel is available (not empty), False otherwise.
+        """Return `True` if the channel is available (not empty), `False` otherwise.
         Subclasses should override this method to provide a more efficient
-        implementation than calling get() and catching EmptyChannelError.
+        implementation than calling `get()` and catching `EmptyChannelError`.
         """
         try:
             self.get()
@@ -84,15 +84,15 @@ class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
         The order of the updates in the sequence is arbitrary.
         This method is called by Pregel for all channels at the end of each step.
         If there are no updates, it is called with an empty sequence.
-        Raises InvalidUpdateError if the sequence of updates is invalid.
-        Returns True if the channel was updated, False otherwise."""
+        Raises `InvalidUpdateError` if the sequence of updates is invalid.
+        Returns `True` if the channel was updated, `False` otherwise."""
 
     def consume(self) -> bool:
         """Notify the channel that a subscribed task ran. By default, no-op.
         A channel can use this method to modify its state, preventing the value
         from being consumed again.
 
-        Returns True if the channel was updated, False otherwise.
+        Returns `True` if the channel was updated, `False` otherwise.
         """
         return False
 
@@ -100,6 +100,6 @@ class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
         """Notify the channel that the Pregel run is finishing. By default, no-op.
         A channel can use this method to modify its state, preventing finish.
 
-        Returns True if the channel was updated, False otherwise.
+        Returns `True` if the channel was updated, `False` otherwise.
         """
         return False

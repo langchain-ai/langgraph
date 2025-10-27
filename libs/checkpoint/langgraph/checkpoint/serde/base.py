@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 
 class UntypedSerializerProtocol(Protocol):
@@ -11,13 +11,14 @@ class UntypedSerializerProtocol(Protocol):
     def loads(self, data: bytes) -> Any: ...
 
 
-class SerializerProtocol(UntypedSerializerProtocol, Protocol):
+@runtime_checkable
+class SerializerProtocol(Protocol):
     """Protocol for serialization and deserialization of objects.
 
     - `dumps`: Serialize an object to bytes.
-    - `dumps_typed`: Serialize an object to a tuple (type, bytes).
+    - `dumps_typed`: Serialize an object to a tuple `(type, bytes)`.
     - `loads`: Deserialize an object from bytes.
-    - `loads_typed`: Deserialize an object from a tuple (type, bytes).
+    - `loads_typed`: Deserialize an object from a tuple `(type, bytes)`.
 
     Valid implementations include the `pickle`, `json` and `orjson` modules.
     """
@@ -31,12 +32,6 @@ class SerializerCompat(SerializerProtocol):
     def __init__(self, serde: UntypedSerializerProtocol) -> None:
         self.serde = serde
 
-    def dumps(self, obj: Any) -> bytes:
-        return self.serde.dumps(obj)
-
-    def loads(self, data: bytes) -> Any:
-        return self.serde.loads(data)
-
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
         return type(obj).__name__, self.serde.dumps(obj)
 
@@ -49,7 +44,7 @@ def maybe_add_typed_methods(
 ) -> SerializerProtocol:
     """Wrap serde old serde implementations in a class with loads_typed and dumps_typed for backwards compatibility."""
 
-    if not hasattr(serde, "loads_typed") or not hasattr(serde, "dumps_typed"):
+    if not isinstance(serde, SerializerProtocol):
         return SerializerCompat(serde)
 
     return serde

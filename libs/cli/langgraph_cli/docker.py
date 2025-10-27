@@ -1,7 +1,7 @@
 import json
 import pathlib
 import shutil
-from typing import Literal, NamedTuple, Optional
+from typing import Literal, NamedTuple
 
 import click.exceptions
 
@@ -90,9 +90,7 @@ def check_capabilities(runner) -> DockerCapabilities:
     )
 
 
-def debugger_compose(
-    *, port: Optional[int] = None, base_url: Optional[str] = None
-) -> dict:
+def debugger_compose(*, port: int | None = None, base_url: str | None = None) -> dict:
     if port is None:
         return ""
 
@@ -141,16 +139,16 @@ def compose_as_dict(
     capabilities: DockerCapabilities,
     *,
     port: int,
-    debugger_port: Optional[int] = None,
-    debugger_base_url: Optional[str] = None,
+    debugger_port: int | None = None,
+    debugger_base_url: str | None = None,
     # postgres://user:password@host:port/database?option=value
-    postgres_uri: Optional[str] = None,
+    postgres_uri: str | None = None,
     # If you are running against an already-built image, you can pass it here
-    image: Optional[str] = None,
+    image: str | None = None,
     # Base image to use for the LangGraph API server
-    base_image: Optional[str] = None,
+    base_image: str | None = None,
     # API version of the base image
-    api_version: Optional[str] = None,
+    api_version: str | None = None,
 ) -> dict:
     """Create a docker compose file as a dictionary in YML style."""
     if postgres_uri is None:
@@ -250,13 +248,13 @@ def compose(
     capabilities: DockerCapabilities,
     *,
     port: int,
-    debugger_port: Optional[int] = None,
-    debugger_base_url: Optional[str] = None,
+    debugger_port: int | None = None,
+    debugger_base_url: str | None = None,
     # postgres://user:password@host:port/database?option=value
-    postgres_uri: Optional[str] = None,
-    image: Optional[str] = None,
-    base_image: Optional[str] = None,
-    api_version: Optional[str] = None,
+    postgres_uri: str | None = None,
+    image: str | None = None,
+    base_image: str | None = None,
+    api_version: str | None = None,
 ) -> str:
     """Create a docker compose file as a string."""
     compose_content = compose_as_dict(

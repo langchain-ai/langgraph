@@ -1,7 +1,6 @@
 from typing import (
     Annotated,
     Any,
-    Union,
 )
 
 import pytest
@@ -196,7 +195,7 @@ async def test_tool_node_tool_call_input():
 
 
 async def test_tool_node_error_handling():
-    def handle_all(e: Union[ValueError, ToolException, ValidationError]):
+    def handle_all(e: ValueError | ToolException | ValidationError):
         return TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
 
     # test catching all exceptions, via:

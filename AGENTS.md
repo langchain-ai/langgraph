@@ -28,7 +28,7 @@ Below is a high-level overview:
 - **langgraph** – core framework for building stateful, multi-actor agents.
 - **prebuilt** – high-level APIs for creating and running agents and tools.
 - **sdk-js** – JS/TS SDK for interacting with the LangGraph REST API.
-- **sdk-py** – Python SDK for the LangGraph Platform API.
+- **sdk-py** – Python SDK for the LangGraph Server API.
 
 ### Dependency map
 

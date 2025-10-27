@@ -40,6 +40,7 @@ class Auth:
     Then the LangGraph server will load your auth file and run it server-side whenever a request comes in.
 
     ???+ example "Basic Usage"
+
         ```python
         from langgraph_sdk import Auth
 
@@ -76,6 +77,7 @@ class Auth:
         ```
 
     ???+ note "Request Processing Flow"
+
         1. Authentication (your `@auth.authenticate` handler) is performed first on **every request**
         2. For authorization, the most specific matching handler is called:
             * If a handler exists for the exact resource and action, it is used (e.g., `@auth.on.threads.create`)
@@ -129,7 +131,9 @@ class Auth:
             - FilterType: Apply filtering rules to the response
         
         ???+ example "Examples"
+
             Global handler for all requests:
+
             ```python
             @auth.on
             async def reject_unhandled_requests(ctx: AuthContext, value: Any) -> None:
@@ -139,6 +143,7 @@ class Auth:
 
             Resource-specific handler. This would take precedence over the global handler
             for all actions on the `threads` resource:
+            
             ```python
             @auth.on.threads
             async def check_thread_access(ctx: AuthContext, value: Any) -> bool:
@@ -147,6 +152,7 @@ class Auth:
             ```
 
             Resource and action specific handler:
+
             ```python
             @auth.on.threads.delete
             async def prevent_thread_deletion(ctx: AuthContext, value: Any) -> bool:
@@ -155,6 +161,7 @@ class Auth:
             ```
 
             Multiple resources or actions:
+
             ```python
             @auth.on(resources=["threads", "runs"], actions=["create", "update"])
             async def rate_limit_writes(ctx: AuthContext, value: Any) -> bool:
@@ -163,7 +170,8 @@ class Auth:
             ```
 
             Auth for the `store` resource is a bit different since its structure is developer defined.
-            You typically want to enforce user creds in the namespace. Y
+            You typically want to enforce user creds in the namespace.
+
             ```python
             @auth.on.store
             async def check_store_access(ctx: AuthContext, value: Auth.types.on) -> bool:
@@ -186,7 +194,6 @@ class Auth:
         by name:
 
             - request (Request): The raw ASGI request object
-            - body (dict): The parsed request body
             - path (str): The request path, e.g., "/threads/abcd-1234-abcd-1234/runs/abcd-1234-abcd-1234/stream"
             - method (str): The HTTP method, e.g., "GET"
             - path_params (dict[str, str]): URL path parameters, e.g., {"thread_id": "abcd-1234-abcd-1234", "run_id": "abcd-1234-abcd-1234"}
@@ -209,7 +216,9 @@ class Auth:
             ValueError: If an authentication handler is already registered.
 
         ???+ example "Examples"
+
             Basic token authentication:
+
             ```python
             @auth.authenticate
             async def authenticate(authorization: str) -> str:
@@ -218,6 +227,7 @@ class Auth:
             ```
 
             Accept the full request context:
+
             ```python
             @auth.authenticate
             async def authenticate(
@@ -230,6 +240,7 @@ class Auth:
             ```
 
             Return user name and permissions:
+
             ```python
             @auth.authenticate
             async def authenticate(
@@ -372,7 +383,7 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
         if fn is not None:
             _validate_handler(fn)
             return typing.cast(
-                _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+                _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
                 _register_handler(self.auth, self.resource, "*", fn),
             )
 
@@ -381,7 +392,7 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
         ) -> _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]:
             _validate_handler(handler)
             return typing.cast(
-                _ActionHandler[typing.Union[VCreate, VUpdate, VRead, VDelete, VSearch]],
+                _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
                 _register_handler(self.auth, self.resource, "*", handler),
             )
 
@@ -399,13 +410,13 @@ class _AssistantsOn(
         types.AssistantsSearch,
     ]
 ):
-    value = typing.Union[
-        types.AssistantsCreate,
-        types.AssistantsRead,
-        types.AssistantsUpdate,
-        types.AssistantsDelete,
-        types.AssistantsSearch,
-    ]
+    value = (
+        types.AssistantsCreate
+        | types.AssistantsRead
+        | types.AssistantsUpdate
+        | types.AssistantsDelete
+        | types.AssistantsSearch
+    )
     Create = types.AssistantsCreate
     Read = types.AssistantsRead
     Update = types.AssistantsUpdate
@@ -422,14 +433,14 @@ class _ThreadsOn(
         types.ThreadsSearch,
     ]
 ):
-    value = typing.Union[
-        type[types.ThreadsCreate],
-        type[types.ThreadsRead],
-        type[types.ThreadsUpdate],
-        type[types.ThreadsDelete],
-        type[types.ThreadsSearch],
-        type[types.RunsCreate],
-    ]
+    value = (
+        types.ThreadsCreate
+        | types.ThreadsRead
+        | types.ThreadsUpdate
+        | types.ThreadsDelete
+        | types.ThreadsSearch
+        | types.RunsCreate
+    )
     Create = types.ThreadsCreate
     Read = types.ThreadsRead
     Update = types.ThreadsUpdate
@@ -458,13 +469,11 @@ class _CronsOn(
     ]
 ):
     value = type[
-        typing.Union[
-            types.CronsCreate,
-            types.CronsRead,
-            types.CronsUpdate,
-            types.CronsDelete,
-            types.CronsSearch,
-        ]
+        types.CronsCreate
+        | types.CronsRead
+        | types.CronsUpdate
+        | types.CronsDelete
+        | types.CronsSearch
     ]
 
     Create = types.CronsCreate
@@ -564,6 +573,7 @@ class _On:
     ???+ example "Examples"
 
         Global handler for all requests:
+
         ```python
         @auth.on
         async def log_all_requests(ctx: AuthContext, value: Any) -> None:
@@ -572,6 +582,7 @@ class _On:
         ```
 
         Resource-specific handler:
+
         ```python
         @auth.on.threads
         async def check_thread_access(ctx: AuthContext, value: Any) -> bool:
@@ -580,6 +591,7 @@ class _On:
         ```
 
         Resource and action specific handler:
+
         ```python
         @auth.on.threads.delete
         async def prevent_thread_deletion(ctx: AuthContext, value: Any) -> bool:
@@ -588,6 +600,7 @@ class _On:
         ```
 
         Multiple resources or actions:
+
         ```python
         @auth.on(resources=["threads", "runs"], actions=["create", "update"])
         async def rate_limit_writes(ctx: AuthContext, value: Any) -> bool:

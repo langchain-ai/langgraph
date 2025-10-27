@@ -39,10 +39,10 @@ class InMemorySaver(
         Only use `InMemorySaver` for debugging or testing purposes.
         For production use cases we recommend installing [langgraph-checkpoint-postgres](https://pypi.org/project/langgraph-checkpoint-postgres/) and using `PostgresSaver` / `AsyncPostgresSaver`.
 
-        If you are using the LangGraph Platform, no checkpointer needs to be specified. The correct managed checkpointer will be used automatically.
+        If you are using LangSmith Deployment, no checkpointer needs to be specified. The correct managed checkpointer will be used automatically.
 
     Args:
-        serde: The serializer to use for serializing and deserializing checkpoints. Defaults to None.
+        serde: The serializer to use for serializing and deserializing checkpoints.
 
     Examples:
 
@@ -133,7 +133,7 @@ class InMemorySaver(
         """Get a checkpoint tuple from the in-memory storage.
 
         This method retrieves a checkpoint tuple from the in-memory storage based on the
-        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
+        provided config. If the config contains a `checkpoint_id` key, the checkpoint with
         the matching thread ID and timestamp is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
 
@@ -141,7 +141,7 @@ class InMemorySaver(
             config: The config to use for retrieving the checkpoint.
 
         Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         thread_id: str = config["configurable"]["thread_id"]
         checkpoint_ns: str = config["configurable"].get("checkpoint_ns", "")
@@ -231,7 +231,7 @@ class InMemorySaver(
             limit: Maximum number of checkpoints to return.
 
         Yields:
-            Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
+            An iterator of matching checkpoint tuples.
         """
         thread_ids = (config["configurable"]["thread_id"],) if config else self.storage
         config_checkpoint_ns = (
@@ -423,16 +423,16 @@ class InMemorySaver(
                 del self.blobs[k]
 
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
-        """Asynchronous version of get_tuple.
+        """Asynchronous version of `get_tuple`.
 
-        This method is an asynchronous wrapper around get_tuple that runs the synchronous
+        This method is an asynchronous wrapper around `get_tuple` that runs the synchronous
         method in a separate thread using asyncio.
 
         Args:
             config: The config to use for retrieving the checkpoint.
 
         Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         return self.get_tuple(config)
 
@@ -444,16 +444,16 @@ class InMemorySaver(
         before: RunnableConfig | None = None,
         limit: int | None = None,
     ) -> AsyncIterator[CheckpointTuple]:
-        """Asynchronous version of list.
+        """Asynchronous version of `list`.
 
-        This method is an asynchronous wrapper around list that runs the synchronous
+        This method is an asynchronous wrapper around `list` that runs the synchronous
         method in a separate thread using asyncio.
 
         Args:
             config: The config to use for listing the checkpoints.
 
         Yields:
-            AsyncIterator[CheckpointTuple]: An asynchronous iterator of checkpoint tuples.
+            An asynchronous iterator of checkpoint tuples.
         """
         for item in self.list(config, filter=filter, before=before, limit=limit):
             yield item
@@ -465,7 +465,7 @@ class InMemorySaver(
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        """Asynchronous version of put.
+        """Asynchronous version of `put`.
 
         Args:
             config: The config to associate with the checkpoint.
@@ -485,9 +485,9 @@ class InMemorySaver(
         task_id: str,
         task_path: str = "",
     ) -> None:
-        """Asynchronous version of put_writes.
+        """Asynchronous version of `put_writes`.
 
-        This method is an asynchronous wrapper around put_writes that runs the synchronous
+        This method is an asynchronous wrapper around `put_writes` that runs the synchronous
         method in a separate thread using asyncio.
 
         Args:

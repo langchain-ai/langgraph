@@ -4,8 +4,7 @@ import os
 import pathlib
 import shutil
 import sys
-from collections.abc import Sequence
-from typing import Callable, Optional
+from collections.abc import Callable, Sequence
 
 import click
 import click.exceptions
@@ -200,23 +199,23 @@ def cli():
 @log_command
 def up(
     config: pathlib.Path,
-    docker_compose: Optional[pathlib.Path],
+    docker_compose: pathlib.Path | None,
     port: int,
     recreate: bool,
     pull: bool,
     watch: bool,
     wait: bool,
     verbose: bool,
-    debugger_port: Optional[int],
-    debugger_base_url: Optional[str],
-    postgres_uri: Optional[str],
-    api_version: Optional[str],
-    image: Optional[str],
-    base_image: Optional[str],
+    debugger_port: int | None,
+    debugger_base_url: str | None,
+    postgres_uri: str | None,
+    api_version: str | None,
+    image: str | None,
+    base_image: str | None,
 ):
     click.secho("Starting LangGraph API server...", fg="green")
     click.secho(
-        """For local dev, requires env var LANGSMITH_API_KEY with access to LangGraph Platform.
+        """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Deployment.
 For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.""",
     )
     with Runner() as runner, Progress(message="Pulling...") as set:
@@ -298,13 +297,13 @@ def _build(
     set: Callable[[str], None],
     config: pathlib.Path,
     config_json: dict,
-    base_image: Optional[str],
-    api_version: Optional[str],
+    base_image: str | None,
+    api_version: str | None,
     pull: bool,
     tag: str,
     passthrough: Sequence[str] = (),
-    install_command: Optional[str] = None,
-    build_command: Optional[str] = None,
+    install_command: str | None = None,
+    build_command: str | None = None,
 ):
     # pull latest images
     if pull:
@@ -403,12 +402,12 @@ def _build(
 def build(
     config: pathlib.Path,
     docker_build_args: Sequence[str],
-    base_image: Optional[str],
-    api_version: Optional[str],
+    base_image: str | None,
+    api_version: str | None,
     pull: bool,
     tag: str,
-    install_command: Optional[str],
-    build_command: Optional[str],
+    install_command: str | None,
+    build_command: str | None,
 ):
     with Runner() as runner, Progress(message="Pulling...") as set:
         if shutil.which("docker") is None:
@@ -512,8 +511,8 @@ def dockerfile(
     save_path: str,
     config: pathlib.Path,
     add_docker_compose: bool,
-    base_image: Optional[str] = None,
-    api_version: Optional[str] = None,
+    base_image: str | None = None,
+    api_version: str | None = None,
 ) -> None:
     save_path = pathlib.Path(save_path).absolute()
     secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
@@ -584,7 +583,7 @@ def dockerfile(
                         "\n",
                         "# LANGSMITH_API_KEY=your-api-key",
                         "\n",
-                        "# Or if you have a LangGraph Platform license key, "
+                        "# Or if you have a LangSmith Deployment license key, "
                         "then uncomment the following line: ",
                         "\n",
                         "# LANGGRAPH_CLOUD_LICENSE_KEY=your-license-key",
@@ -688,11 +687,11 @@ def dev(
     port: int,
     no_reload: bool,
     config: str,
-    n_jobs_per_worker: Optional[int],
+    n_jobs_per_worker: int | None,
     no_browser: bool,
-    debug_port: Optional[int],
+    debug_port: int | None,
     wait_for_client: bool,
-    studio_url: Optional[str],
+    studio_url: str | None,
     allow_blocking: bool,
     tunnel: bool,
     server_log_level: str,
@@ -776,7 +775,7 @@ def dev(
 )
 @cli.command("new", help="🌱 Create a new LangGraph project from a template.")
 @log_command
-def new(path: Optional[str], template: Optional[str]) -> None:
+def new(path: str | None, template: str | None) -> None:
     """Create a new LangGraph project from a template."""
     return create_new(path, template)
 
@@ -786,17 +785,17 @@ def prepare_args_and_stdin(
     capabilities: DockerCapabilities,
     config_path: pathlib.Path,
     config: Config,
-    docker_compose: Optional[pathlib.Path],
+    docker_compose: pathlib.Path | None,
     port: int,
     watch: bool,
-    debugger_port: Optional[int] = None,
-    debugger_base_url: Optional[str] = None,
-    postgres_uri: Optional[str] = None,
-    api_version: Optional[str] = None,
+    debugger_port: int | None = None,
+    debugger_base_url: str | None = None,
+    postgres_uri: str | None = None,
+    api_version: str | None = None,
     # Like "my-tag" (if you already built it locally)
-    image: Optional[str] = None,
+    image: str | None = None,
     # Like "langchain/langgraphjs-api" or "langchain/langgraph-api
-    base_image: Optional[str] = None,
+    base_image: str | None = None,
 ) -> tuple[list[str], str]:
     assert config_path.exists(), f"Config file not found: {config_path}"
     # prepare args
@@ -835,17 +834,17 @@ def prepare(
     *,
     capabilities: DockerCapabilities,
     config_path: pathlib.Path,
-    docker_compose: Optional[pathlib.Path],
+    docker_compose: pathlib.Path | None,
     port: int,
     pull: bool,
     watch: bool,
     verbose: bool,
-    debugger_port: Optional[int] = None,
-    debugger_base_url: Optional[str] = None,
-    postgres_uri: Optional[str] = None,
-    api_version: Optional[str] = None,
-    image: Optional[str] = None,
-    base_image: Optional[str] = None,
+    debugger_port: int | None = None,
+    debugger_base_url: str | None = None,
+    postgres_uri: str | None = None,
+    api_version: str | None = None,
+    image: str | None = None,
+    base_image: str | None = None,
 ) -> tuple[list[str], str]:
     """Prepare the arguments and stdin for running the LangGraph API server."""
     config_json = langgraph_cli.config.validate_config_file(config_path)

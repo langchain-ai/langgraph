@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import pathlib
 import re
 import sys
@@ -19,6 +20,7 @@ from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
 
 from langgraph.checkpoint.serde.jsonplus import (
+    InvalidModuleError,
     JsonPlusSerializer,
     _msgpack_ext_hook_to_json,
 )
@@ -60,21 +62,14 @@ class MyDataclass:
         pass
 
 
-if sys.version_info < (3, 10):
+@dataclasses.dataclass(slots=True)
+class MyDataclassWSlots:
+    foo: str
+    bar: int
+    inner: InnerDataclass
 
-    class MyDataclassWSlots(MyDataclass):
+    def something(self) -> None:
         pass
-
-else:
-
-    @dataclasses.dataclass(slots=True)
-    class MyDataclassWSlots:
-        foo: str
-        bar: int
-        inner: InnerDataclass
-
-        def something(self) -> None:
-            pass
 
 
 class MyEnum(Enum):
@@ -115,11 +110,7 @@ def test_serde_jsonplus() -> None:
         "my_dataclass": MyDataclass("foo", 1, InnerDataclass("hello")),
         "my_enum": MyEnum.FOO,
         "my_pydantic": MyPydantic(foo="foo", bar=1, inner=InnerPydantic(hello="hello")),
-        "my_pydantic_v1": MyPydanticV1(
-            foo="foo", bar=1, inner=InnerPydanticV1(hello="hello")
-        ),
         "my_secret_str": SecretStr("meow"),
-        "my_secret_str_v1": SecretStrV1("meow"),
         "person": Person(name="foo"),
         "a_bool": True,
         "a_none": None,
@@ -140,6 +131,12 @@ def test_serde_jsonplus() -> None:
             updated_at=datetime(2024, 9, 24, 17, 29, 11, 128397),
         ),
     }
+
+    if sys.version_info < (3, 14):
+        to_serialize["my_pydantic_v1"] = MyPydanticV1(
+            foo="foo", bar=1, inner=InnerPydanticV1(hello="hello")
+        )
+        to_serialize["my_secret_str_v1"] = SecretStrV1("meow")
 
     serde = JsonPlusSerializer()
 
@@ -165,10 +162,9 @@ def test_serde_jsonplus() -> None:
         "Text\ud83d\udcac",
         "收花🙄·到",
     ]
+    serde = JsonPlusSerializer(pickle_fallback=True)
 
-    assert serde.loads_typed(serde.dumps_typed(surrogates)) == [
-        v.encode("utf-8", "ignore").decode() for v in surrogates
-    ]
+    assert serde.loads_typed(serde.dumps_typed(surrogates)) == surrogates
 
 
 def test_serde_jsonplus_json_mode() -> None:
@@ -197,11 +193,7 @@ def test_serde_jsonplus_json_mode() -> None:
         "my_dataclass": MyDataclass("foo", 1, InnerDataclass("hello")),
         "my_enum": MyEnum.FOO,
         "my_pydantic": MyPydantic(foo="foo", bar=1, inner=InnerPydantic(hello="hello")),
-        "my_pydantic_v1": MyPydanticV1(
-            foo="foo", bar=1, inner=InnerPydanticV1(hello="hello")
-        ),
         "my_secret_str": SecretStr("meow"),
-        "my_secret_str_v1": SecretStrV1("meow"),
         "person": Person(name="foo"),
         "a_bool": True,
         "a_none": None,
@@ -223,13 +215,20 @@ def test_serde_jsonplus_json_mode() -> None:
         ),
     }
 
+    if sys.version_info < (3, 14):
+        to_serialize["my_pydantic_v1"] = MyPydanticV1(
+            foo="foo", bar=1, inner=InnerPydanticV1(hello="hello")
+        )
+        to_serialize["my_secret_str_v1"] = SecretStrV1("meow")
+
     serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
 
     dumped = serde.dumps_typed(to_serialize)
 
     assert dumped[0] == "msgpack"
     result = serde.loads_typed(dumped)
-    assert result == {
+
+    expected_result = {
         "path": ["foo", "bar"],
         "re": ["foo", 48],
         "decimal": "1.10101",
@@ -253,9 +252,7 @@ def test_serde_jsonplus_json_mode() -> None:
         "my_dataclass": {"foo": "foo", "bar": 1, "inner": {"hello": "hello"}},
         "my_enum": "foo",
         "my_pydantic": {"foo": "foo", "bar": 1, "inner": {"hello": "hello"}},
-        "my_pydantic_v1": {"foo": "foo", "bar": 1, "inner": {"hello": "hello"}},
         "my_secret_str": "meow",
-        "my_secret_str_v1": "meow",
         "person": {"name": "foo"},
         "a_bool": True,
         "a_none": None,
@@ -277,6 +274,12 @@ def test_serde_jsonplus_json_mode() -> None:
         },
     }
 
+    if sys.version_info < (3, 14):
+        expected_result["my_pydantic_v1"] = {"foo": "foo", "bar": 1, "inner": {"hello": "hello"}}
+        expected_result["my_secret_str_v1"] = "meow"
+
+    assert result == expected_result
+
 
 def test_serde_jsonplus_bytes() -> None:
     serde = JsonPlusSerializer()
@@ -286,6 +289,20 @@ def test_serde_jsonplus_bytes() -> None:
 
     assert dumped == ("bytes", some_bytes)
     assert serde.loads_typed(dumped) == some_bytes
+
+
+def test_deserde_invalid_module() -> None:
+    serde = JsonPlusSerializer()
+    load = {
+        "lc": 2,
+        "type": "constructor",
+        "id": ["pprint", "pprint"],
+        "kwargs": {"object": "HELLO"},
+    }
+    with pytest.raises(InvalidModuleError):
+        serde._revive_lc2(load)
+    serde = JsonPlusSerializer(allowed_json_modules=[("pprint", "pprint")])
+    serde.loads_typed(("json", json.dumps(load).encode("utf-8")))
 
 
 def test_serde_jsonplus_bytearray() -> None:
