@@ -7,7 +7,7 @@ import logging
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
 
@@ -33,6 +33,7 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.kusto import _ainternal
 from langgraph.checkpoint.kusto._ainternal import AsyncStreamingIngestClient
 from langgraph.checkpoint.kusto.base import BaseKustoSaver
+from langgraph.checkpoint.kusto.json_serializer import JsonStringSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +90,9 @@ class AsyncKustoSaver(BaseKustoSaver):
             database: Name of the Kusto database.
             batch_size: Number of records to batch before auto-flush.
             flush_interval: Seconds between automatic flushes.
-            serde: Custom serializer (optional).
+            serde: Custom serializer (defaults to JsonStringSerializer).
         """
-        super().__init__(serde=serde)
+        super().__init__(serde=serde or JsonStringSerializer())
         self.query_client = query_client
         self.ingest_client = ingest_client
         self.database = database
@@ -448,13 +449,13 @@ class AsyncKustoSaver(BaseKustoSaver):
             "checkpoint_ns": checkpoint_ns,
             "checkpoint_id": checkpoint["id"],
             "parent_checkpoint_id": checkpoint_id or "",
-            "type": "",  # Reserved for future use
+            "type": "json",  # Serialization type
             "checkpoint_json": orjson.dumps(copy).decode(),
             "metadata_json": orjson.dumps(
                 get_serializable_checkpoint_metadata(config, metadata)
             ).decode(),
             "channel_values": channel_values_dynamic,  # Dynamic column
-            "created_at": "now()",
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self._checkpoint_buffer.append(checkpoint_record)
         

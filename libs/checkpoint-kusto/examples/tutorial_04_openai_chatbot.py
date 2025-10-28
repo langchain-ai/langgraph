@@ -221,9 +221,15 @@ async def main():
                 # This is a continuing conversation - test memory first
                 print("=" * 70)
                 print("💡 Detected existing conversation - Testing memory...")
-                print("👤 User: How many times have we talked before? What topics did we discuss?")
+                
+                # Ask a more specific question that references the conversation history
+                memory_question = (
+                    "Looking at our conversation history above, what topics have we discussed so far? "
+                    "Please list the main subjects we've talked about."
+                )
+                print(f"👤 User: {memory_question}")
                 result = await app.ainvoke(
-                    {"messages": [HumanMessage(content="How many times have we talked before? What topics did we discuss?")]},
+                    {"messages": [HumanMessage(content=memory_question)]},
                     config=config,
                 )
                 ai_response = result['messages'][-1]
