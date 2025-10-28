@@ -58,7 +58,6 @@ from langgraph._internal._constants import (
     RESUME,
     RETURN,
     TASKS,
-    UNTRACKED_VALUE_PLACEHOLDER,
 )
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
@@ -1114,9 +1113,9 @@ class LazyAtomicCounter:
 def sanitize_untracked_values_in_send(
     packet: Send, channels: Mapping[str, BaseChannel]
 ) -> Send:
-    """Replace any UntrackedValue contents in Send.arg with UNTRACKED_VALUE_PLACEHOLDER for checkpointing.
+    """Pop any UntrackedValue contents in Send.arg for safe checkpointing.
 
-    Send is not typed and arg may be a nested dict."""
+    Send is not typed and arg may be a nested dict. We only look at the top level."""
 
     if not isinstance(packet.arg, dict):
         # Command
@@ -1124,8 +1123,12 @@ def sanitize_untracked_values_in_send(
 
     sanitized_arg = dict(packet.arg)
 
+    # top level keys should be the channel names
+    to_pop = set()
     for k, v in sanitized_arg.items():
         if isinstance(channels.get(k), UntrackedValue):
-            sanitized_arg[k] = UNTRACKED_VALUE_PLACEHOLDER
+            to_pop.add(k)
+    for k in to_pop:
+        sanitized_arg.pop(k)
 
     return Send(node=packet.node, arg=sanitized_arg)
