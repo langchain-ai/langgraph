@@ -1124,7 +1124,6 @@ async def test_remote_graph_basic_invoke(remote_graph: RemoteGraph) -> None:
         "type": "ai",
         "name": None,
         "id": "ai3",
-        "example": False,
         "tool_calls": [],
         "invalid_tool_calls": [],
         "usage_metadata": None,
