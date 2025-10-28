@@ -1113,22 +1113,19 @@ class LazyAtomicCounter:
 def sanitize_untracked_values_in_send(
     packet: Send, channels: Mapping[str, BaseChannel]
 ) -> Send:
-    """Pop any UntrackedValue contents in Send.arg for safe checkpointing.
+    """Pop any values belonging to UntrackedValue channels in Send.arg for safe checkpointing.
 
-    Send is not typed and arg may be a nested dict. We only look at the top level."""
+    Send is often called with state to be passed to the dest node, which may contain
+    UntrackedValues at the top level. Send is not typed and arg may be a nested dict."""
 
     if not isinstance(packet.arg, dict):
         # Command
         return packet
 
-    sanitized_arg = dict(packet.arg)
-
     # top level keys should be the channel names
-    to_pop = set()
-    for k, v in sanitized_arg.items():
-        if isinstance(channels.get(k), UntrackedValue):
-            to_pop.add(k)
-    for k in to_pop:
-        sanitized_arg.pop(k)
-
+    sanitized_arg = {
+        k: v
+        for k, v in packet.arg.items()
+        if not isinstance(channels.get(k), UntrackedValue)
+    }
     return Send(node=packet.node, arg=sanitized_arg)
