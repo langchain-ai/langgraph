@@ -8636,10 +8636,9 @@ def test_send_with_untracked_value(sync_checkpointer: BaseCheckpointSaver):
     graph.add_node("tool_node", tool_node)
     graph.add_edge(START, "setup")
     graph.add_conditional_edges("setup", send_to_tool)
-    graph.add_edge("tool_node", END)
 
     app = graph.compile(checkpointer=sync_checkpointer)
-    config = {"configurable": {"thread_id": "test_thread"}}
+    config = {"configurable": {"thread_id": "1"}}
     result = app.invoke({}, config)
 
     assert len(result["messages"]) == 2
@@ -8647,6 +8646,54 @@ def test_send_with_untracked_value(sync_checkpointer: BaseCheckpointSaver):
     assert result["messages"][1] == "tool used resource: test_session"
     assert result["session_resource"].name == "new_session"
 
-    # Check that the untracked resource is NOT in the final state checkpoint
     state = app.get_state(config)
     assert "session_resource" not in state.values
+
+
+def test_send_with_untracked_value_overlapping_keys(
+    sync_checkpointer: BaseCheckpointSaver,
+):
+    """Test that Send objects work correctly with untracked values in state."""
+
+    class State(TypedDict):
+        dictionary: dict
+        session_resource: Annotated[str, UntrackedValue]
+
+    def setup_node(state: State) -> State:
+        return {}
+
+    def send_to_tool(state: State):
+        return [
+            Send(
+                "tool_node",
+                {
+                    "dictionary": {"session_resource": "legal_value"},
+                    "session_resource": "illegal_value",
+                },
+            )
+        ]
+
+    def tool_node(state: State) -> State:
+        print(f"STATE: {state}")
+        assert state["dictionary"] == {"session_resource": "legal_value"}
+        assert state["session_resource"] == "illegal_value"
+
+        return {
+            "dictionary": state["dictionary"],
+            "session_resource": "new_illegal_value",
+        }
+
+    graph = StateGraph(State)
+    graph.add_node("setup", setup_node)
+    graph.add_node("tool_node", tool_node)
+    graph.add_edge(START, "setup")
+    graph.add_conditional_edges("setup", send_to_tool)
+
+    app = graph.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = app.invoke({}, config)
+
+    assert result["session_resource"] == "new_illegal_value"
+    state = app.get_state(config)
+    assert "session_resource" not in state.values
+    assert state.values.get("dictionary") == {"session_resource": "legal_value"}

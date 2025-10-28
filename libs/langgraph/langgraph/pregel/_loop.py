@@ -329,13 +329,14 @@ class PregelLoop:
         if any(
             isinstance(channel, UntrackedValue) for channel in self.channels.values()
         ):
-            # We never want to persist untracked values in checkpoints
-            # because there is no guarantee that they are serializable
+            # We do not persist untracked values in checkpoints
             writes_to_save = [
                 # Sanitize UntrackedValues that are nested within Send packets
-                (c, sanitize_untracked_values_in_send(v, self.channels))
-                if c == TASKS and isinstance(v, Send)
-                else (c, v)
+                (
+                    (c, sanitize_untracked_values_in_send(v, self.channels))
+                    if c == TASKS and isinstance(v, Send)
+                    else (c, v)
+                )
                 for c, v in writes_to_save
                 # Do not persist UntrackedValue channel writes
                 if not isinstance(self.specs.get(c), UntrackedValue)
@@ -756,6 +757,17 @@ class PregelLoop:
             id=self.checkpoint["id"] if exiting else None,
             updated_channels=self.updated_channels,
         )
+        # sanitize TASK channel in the checkpoint before saving
+        if TASKS in self.checkpoint["channel_values"] and any(
+            isinstance(channel, UntrackedValue) for channel in self.channels.values()
+        ):
+            sanitized_tasks = [
+                sanitize_untracked_values_in_send(value, self.channels)
+                if isinstance(value, Send)
+                else value
+                for value in self.checkpoint["channel_values"][TASKS]
+            ]
+            self.checkpoint["channel_values"][TASKS] = sanitized_tasks
         # bail if no checkpointer
         if do_checkpoint and self._checkpointer_put_after_previous is not None:
             self.prev_checkpoint_config = (

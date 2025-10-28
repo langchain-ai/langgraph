@@ -6,7 +6,7 @@ import sys
 import threading
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from copy import copy, deepcopy
+from copy import copy
 from functools import partial
 from hashlib import sha1
 from typing import (
@@ -642,14 +642,6 @@ def prepare_single_task(
                 )
                 return
 
-            # Check if any channels are UntrackedValue - if true, some
-            # untracked values may have been replaced with runtime placeholders
-            if any(
-                isinstance(channel, UntrackedValue) for channel in channels.values()
-            ):
-                # Replace runtime placeholders with untracked values
-                packet = rehydrate_untracked_values_in_send(packet, channels)
-
             if packet.node not in processes:
                 logger.warning(
                     f"Ignoring unknown node name {packet.node} in pending sends"
@@ -1130,43 +1122,10 @@ def sanitize_untracked_values_in_send(
         # Command
         return packet
 
-    def replace(obj: dict[str, Any]) -> dict[str, Any]:
-        for k, v in obj.items():
-            if isinstance(v, dict):
-                # arg can be nested dicts
-                v = replace(v)
-            if isinstance(channels.get(k), UntrackedValue):
-                obj[k] = UNTRACKED_VALUE_PLACEHOLDER
-        return obj
+    sanitized_arg = dict(packet.arg)
 
-    sanitized_arg = replace(packet.arg)
+    for k, v in sanitized_arg.items():
+        if isinstance(channels.get(k), UntrackedValue):
+            sanitized_arg[k] = UNTRACKED_VALUE_PLACEHOLDER
+
     return Send(node=packet.node, arg=sanitized_arg)
-
-
-def rehydrate_untracked_values_in_send(
-    packet: Send, channels: Mapping[str, BaseChannel]
-) -> Send:
-    """Replace UNTRACKED_VALUE_PLACEHOLDER in Send.arg with actual untracked values from UntrackedValue channels."""
-
-    if not isinstance(packet.arg, dict):
-        # Command
-        return packet
-
-    # deepcopy to avoid mutating the original packet, as it is later persisted in checkpoints
-    arg_deepcopy = deepcopy(packet.arg)
-
-    def replace(obj: dict[str, Any]) -> dict[str, Any]:
-        for k, v in obj.items():
-            if isinstance(v, dict):
-                # arg can be nested dicts
-                v = replace(v)
-            if (
-                v == UNTRACKED_VALUE_PLACEHOLDER
-                and k in channels
-                and isinstance(channels[k], UntrackedValue)
-            ):
-                obj[k] = channels[k].get()
-        return obj
-
-    rehydrated_arg = replace(arg_deepcopy)
-    return Send(node=packet.node, arg=rehydrated_arg)
