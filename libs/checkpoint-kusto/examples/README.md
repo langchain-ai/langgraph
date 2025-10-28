@@ -104,6 +104,66 @@ python tutorial_03_production_ready.py
 - Resource cleanup procedures
 - Production-ready patterns
 
+### Tutorial 04: OpenAI Chatbot ⭐ NEW
+**File:** `tutorial_04_openai_chatbot.py`  
+**Run time:** ~30 seconds  
+**Difficulty:** Intermediate
+
+Build a real chatbot using **OpenAI or Azure OpenAI**:
+
+- Real LLM calls with ChatOpenAI (gpt-4o-mini)
+- **Supports both OpenAI and Azure OpenAI**
+- Proper LangChain message handling (HumanMessage, AIMessage, SystemMessage)
+- Conversation memory with context awareness
+- System message configuration
+- Full conversation persistence in Kusto
+
+**Prerequisites:**
+
+```bash
+pip install langchain-openai
+```
+
+**Option A - OpenAI:**
+
+```powershell
+# PowerShell
+$env:OPENAI_API_KEY = "sk-..."
+```
+
+```bash
+# Bash
+export OPENAI_API_KEY="sk-..."
+```
+
+**Option B - Azure OpenAI (Recommended for Enterprise):**
+
+```powershell
+# PowerShell
+$env:AZURE_OPENAI_ENDPOINT = "https://your-resource.openai.azure.com/"
+$env:AZURE_OPENAI_API_KEY = "your-key"
+$env:AZURE_OPENAI_DEPLOYMENT = "gpt-4o-mini"
+```
+
+📚 **See [AZURE_OPENAI_SETUP.md](AZURE_OPENAI_SETUP.md) for detailed Azure OpenAI configuration**
+export OPENAI_API_KEY="sk-..."
+```
+
+**Run:**
+```bash
+cd examples
+python tutorial_04_openai_chatbot.py
+```
+
+**What you'll see:**
+- Real AI conversations with GPT
+- Context-aware responses (AI remembers conversation)
+- System message for personality configuration
+- LangChain message objects stored as JSON in Kusto
+- Full conversation history retrieval
+
+**Try this:** Run the script multiple times - the AI will remember your entire conversation history!
+
 ## 🐛 Troubleshooting
 
 ### "ModuleNotFoundError: No module named 'langgraph'"
