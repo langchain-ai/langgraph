@@ -516,3 +516,43 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
+
+
+@dataclass(slots=True)
+class Overwrite:
+    """Bypass a reducer and write the wrapped value directly to a BinaryOperatorAggregate channel.
+
+    Receiving multiple Overwrite values for the same channel in a single super-step will raise an InvalidUpdateError.
+
+    Example:
+        >>> from typing import Annotated
+        >>> import operator
+        >>> from langgraph.graph import StateGraph
+        >>> from langgraph.types import Overwrite
+        >>>
+        >>> class State(TypedDict):
+        ...     messages: Annotated[list, operator.add]
+        >>>
+        >>> def node_a(state: TypedDict):
+        ...     # Normal update: uses the reducer (operator.add)
+        ...     return {"messages": ["a"]}
+        >>>
+        >>> def node_b(state: State):
+        ...     # Overwrite: bypasses the reducer and replaces the entire value
+        ...     return {"messages": Overwrite(value=["b"])}
+        >>>
+        >>> builder = StateGraph(State)
+        >>> builder.add_node("node_a", node_a)
+        >>> builder.add_node("node_b", node_b)
+        >>> builder.set_entry_point("node_a")
+        >>> builder.add_edge("node_a", "node_b")
+        >>> graph = builder.compile()
+        >>>
+        >>> # Without Overwrite in node_b, messages would be ["START", "a", "b"]
+        >>> # With Overwrite, messages is just ["b"]
+        >>> result = graph.invoke({"messages": ["START"]})
+        >>> assert result == {"messages": ["b"]}
+    """
+
+    value: Any
+    """The value to write directly to the channel, bypassing any reducer."""
