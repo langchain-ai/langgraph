@@ -877,6 +877,9 @@ def on_post_build(config):
 # Specific redirects are handled by individual HTML redirect pages
 # This is the catch-all for any unmapped pages
 
+# Exclude reference docs from catch-all
+/reference/*  200
+
 # Catch-all: redirect any page not explicitly mapped
 /*  https://docs.langchain.com/oss/python/langgraph/overview  301
 """
