@@ -44,6 +44,7 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
@@ -8598,6 +8599,105 @@ def test_multiple_writes_same_channel_from_same_node(
             "values": {"foo": ""},
         },
     ]
+
+
+def test_send_with_untracked_value(sync_checkpointer: BaseCheckpointSaver):
+    """Test that Send objects work correctly with untracked values in state."""
+
+    class UnserializableResource:
+        def __init__(self, name: str):
+            self.name = name
+            self.lock = threading.Lock()
+
+    class State(TypedDict):
+        messages: Annotated[list[str], operator.add]
+        session_resource: Annotated[UnserializableResource, UntrackedValue]
+
+    def setup_node(state: State) -> State:
+        resource = UnserializableResource("test_session")
+        return {"messages": ["setup complete"], "session_resource": resource}
+
+    def send_to_tool(state: State):
+        return [Send("tool_node", state)]
+
+    def tool_node(state: State) -> State:
+        resource = state["session_resource"]
+        assert isinstance(resource, UnserializableResource)
+        assert resource.name == "test_session"
+
+        new_resource = UnserializableResource("new_session")
+
+        return {
+            "messages": [f"tool used resource: {resource.name}"],
+            "session_resource": new_resource,
+        }
+
+    graph = StateGraph(State)
+    graph.add_node("setup", setup_node)
+    graph.add_node("tool_node", tool_node)
+    graph.add_edge(START, "setup")
+    graph.add_conditional_edges("setup", send_to_tool)
+
+    app = graph.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = app.invoke({}, config)
+
+    assert len(result["messages"]) == 2
+    assert result["messages"][0] == "setup complete"
+    assert result["messages"][1] == "tool used resource: test_session"
+    assert result["session_resource"].name == "new_session"
+
+    state = app.get_state(config)
+    assert "session_resource" not in state.values
+
+
+def test_send_with_untracked_value_overlapping_keys(
+    sync_checkpointer: BaseCheckpointSaver,
+):
+    """Test that Send objects work correctly with untracked values in state."""
+
+    class State(TypedDict):
+        dictionary: dict
+        session_resource: Annotated[str, UntrackedValue]
+
+    def setup_node(state: State) -> State:
+        return {}
+
+    def send_to_tool(state: State):
+        return [
+            Send(
+                "tool_node",
+                {
+                    "dictionary": {"session_resource": "legal_value"},
+                    "session_resource": "illegal_value",
+                },
+            )
+        ]
+
+    def tool_node(state: State) -> State:
+        print(f"STATE: {state}")
+        assert state["dictionary"] == {"session_resource": "legal_value"}
+        assert state["session_resource"] == "illegal_value"
+
+        return {
+            "dictionary": state["dictionary"],
+            "session_resource": "new_illegal_value",
+        }
+
+    graph = StateGraph(State)
+    graph.add_node("setup", setup_node)
+    graph.add_node("tool_node", tool_node)
+    graph.add_edge(START, "setup")
+    graph.add_conditional_edges("setup", send_to_tool)
+
+    app = graph.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = app.invoke({}, config)
+
+    assert result["session_resource"] == "new_illegal_value"
+    state = app.get_state(config)
+    assert "session_resource" not in state.values
+    assert state.values.get("dictionary") == {"session_resource": "legal_value"}
 
 
 @pytest.mark.parametrize("as_json", [False, True])
