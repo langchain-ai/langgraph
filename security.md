@@ -2,10 +2,10 @@
 
 ## Reporting OSS Vulnerabilities
 
-LangChain is partnered with [huntr by Protect AI](https://huntr.com/) to provide 
-a bounty program for our open source projects. 
+LangChain is partnered with [huntr by Protect AI](https://huntr.com/) to provide
+a bounty program for our open source projects.
 
-Please report security vulnerabilities associated with the LangChain 
+Please report security vulnerabilities associated with the LangChain
 open source projects by visiting the following link:
 
 [https://huntr.com/bounties/disclose/](https://huntr.com/bounties/disclose/?target=https%3A%2F%2Fgithub.com%2Flangchain-ai%2Flangchain&validSearch=true)
@@ -13,7 +13,7 @@ open source projects by visiting the following link:
 Before reporting a vulnerability, please review:
 
 1) In-Scope Targets and Out-of-Scope Targets below.
-2) The [langchain-ai/langchain](https://python.langchain.com/docs/contributing/repo_structure) monorepo structure.
+2) The [langchain-ai/langchain](https://github.com/langchain-ai/langchain) monorepo structure.
 3) LangChain [security guidelines](https://python.langchain.com/docs/security) to
    understand what we consider to be a security vulnerability vs. developer
    responsibility.
@@ -53,8 +53,8 @@ All out of scope targets defined by huntr as well as:
 
 Please report security vulnerabilities associated with LangSmith by email to `security@langchain.dev`.
 
-- LangSmith site: https://smith.langchain.com
-- SDK client: https://github.com/langchain-ai/langsmith-sdk
+- LangSmith site: <https://smith.langchain.com>
+- SDK client: <https://github.com/langchain-ai/langsmith-sdk>
 
 ### Other Security Concerns
 
