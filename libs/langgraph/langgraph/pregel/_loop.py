@@ -56,10 +56,12 @@ from langgraph._internal._constants import (
     NULL_TASK_ID,
     PUSH,
     RESUME,
+    TASKS,
 )
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
@@ -78,6 +80,7 @@ from langgraph.pregel._algo import (
     increment,
     prepare_next_tasks,
     prepare_single_task,
+    sanitize_untracked_values_in_send,
     should_interrupt,
     task_path_str,
 )
@@ -114,6 +117,7 @@ from langgraph.types import (
     Durability,
     PregelExecutableTask,
     RetryPolicy,
+    Send,
     StreamMode,
 )
 
@@ -320,6 +324,24 @@ class PregelLoop:
                 w for w in self.checkpoint_pending_writes if w[0] != task_id
             ]
             writes_to_save = writes
+
+        # check if any writes are to an UntrackedValue channel
+        if any(
+            isinstance(channel, UntrackedValue) for channel in self.channels.values()
+        ):
+            # we do not persist untracked values in checkpoints
+            writes_to_save = [
+                # sanitize UntrackedValues that are nested within Send packets
+                (
+                    (c, sanitize_untracked_values_in_send(v, self.channels))
+                    if c == TASKS and isinstance(v, Send)
+                    else (c, v)
+                )
+                for c, v in writes_to_save
+                # dont persist UntrackedValue channel writes
+                if not isinstance(self.specs.get(c), UntrackedValue)
+            ]
+
         # save writes
         self.checkpoint_pending_writes.extend((task_id, c, v) for c, v in writes)
         if self.durability != "exit" and self.checkpointer_put_writes is not None:
@@ -735,6 +757,17 @@ class PregelLoop:
             id=self.checkpoint["id"] if exiting else None,
             updated_channels=self.updated_channels,
         )
+        # sanitize TASK channel in the checkpoint before saving (durability=="exit")
+        if TASKS in self.checkpoint["channel_values"] and any(
+            isinstance(channel, UntrackedValue) for channel in self.channels.values()
+        ):
+            sanitized_tasks = [
+                sanitize_untracked_values_in_send(value, self.channels)
+                if isinstance(value, Send)
+                else value
+                for value in self.checkpoint["channel_values"][TASKS]
+            ]
+            self.checkpoint["channel_values"][TASKS] = sanitized_tasks
         # bail if no checkpointer
         if do_checkpoint and self._checkpointer_put_after_previous is not None:
             self.prev_checkpoint_config = (
