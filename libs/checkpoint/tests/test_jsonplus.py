@@ -381,7 +381,12 @@ def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
                 "str_col": ["a", None, "c"],
             }
         ),
-        pd.DataFrame({"cat_col": pd.Categorical(["a", "b", "a", "c"])}),
+        pytest.param(
+            pd.DataFrame({"cat_col": pd.Categorical(["a", "b", "a", "c"])}),
+            marks=pytest.mark.skipif(
+                sys.version_info >= (3, 14), reason="NotImplementedError on Python 3.14"
+            ),
+        ),
         pd.DataFrame(
             {
                 "int8": pd.array([1, 2, 3], dtype="int8"),
@@ -409,11 +414,21 @@ def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
                 "col3": np.random.rand(1000),
             }
         ),
-        pd.DataFrame(
-            {"tz_datetime": pd.date_range("2024-01-01", periods=3, freq="D", tz="UTC")}
+        pytest.param(
+            pd.DataFrame(
+                {"tz_datetime": pd.date_range("2024-01-01", periods=3, freq="D", tz="UTC")}
+            ),
+            marks=pytest.mark.skipif(
+                sys.version_info >= (3, 14), reason="NotImplementedError on Python 3.14"
+            ),
         ),
         pd.DataFrame({"timedelta": pd.to_timedelta([1, 2, 3], unit="D")}),
-        pd.DataFrame({"period": pd.period_range("2024-01", periods=3, freq="M")}),
+        pytest.param(
+            pd.DataFrame({"period": pd.period_range("2024-01", periods=3, freq="M")}),
+            marks=pytest.mark.skipif(
+                sys.version_info >= (3, 14), reason="NotImplementedError on Python 3.14"
+            ),
+        ),
         pd.DataFrame({"interval": pd.interval_range(start=0, end=3, periods=3)}),
         pd.DataFrame({"unicode": ["Hello 🌍", "Python 🐍", "Data 📊"]}),
         pd.DataFrame({"mixed": [1, "string", [1, 2, 3], {"key": "value"}]}),
@@ -450,7 +465,12 @@ def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
         pd.Series([1, 2, None]),
         pd.Series([1.1, None, 3.3]),
         pd.Series(["a", None, "c"]),
-        pd.Series(pd.Categorical(["a", "b", "a", "c"])),
+        pytest.param(
+            pd.Series(pd.Categorical(["a", "b", "a", "c"])),
+            marks=pytest.mark.skipif(
+                sys.version_info >= (3, 14), reason="NotImplementedError on Python 3.14"
+            ),
+        ),
         pd.Series([1, 2, 3], dtype="int8"),
         pd.Series([10, 20, 30], dtype="int16"),
         pd.Series([100, 200, 300], dtype="int32"),
