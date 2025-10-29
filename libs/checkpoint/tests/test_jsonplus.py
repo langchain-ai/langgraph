@@ -275,7 +275,11 @@ def test_serde_jsonplus_json_mode() -> None:
     }
 
     if sys.version_info < (3, 14):
-        expected_result["my_pydantic_v1"] = {"foo": "foo", "bar": 1, "inner": {"hello": "hello"}}
+        expected_result["my_pydantic_v1"] = {
+            "foo": "foo",
+            "bar": 1,
+            "inner": {"hello": "hello"},
+        }
         expected_result["my_secret_str_v1"] = "meow"
 
     assert result == expected_result
@@ -416,7 +420,11 @@ def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
         ),
         pytest.param(
             pd.DataFrame(
-                {"tz_datetime": pd.date_range("2024-01-01", periods=3, freq="D", tz="UTC")}
+                {
+                    "tz_datetime": pd.date_range(
+                        "2024-01-01", periods=3, freq="D", tz="UTC"
+                    )
+                }
             ),
             marks=pytest.mark.skipif(
                 sys.version_info >= (3, 14), reason="NotImplementedError on Python 3.14"
