@@ -18,7 +18,7 @@ This directory contains hands-on tutorials for the LangGraph Kusto checkpointer.
    ```
    This will verify your Python version, dependencies, Azure CLI, and environment variables.
 
-3. **Set up Azure Data Explorer:**
+3. **Set up Kusto:**
    - Create a Kusto cluster and database
    - Run `provision.kql` to create required tables
    - See [`../SETUP.md`](../SETUP.md) for detailed instructions
@@ -242,7 +242,7 @@ Make sure your account has access to the Kusto cluster.
 ### "Table does not exist"
 
 **Solution:** Run the provision script:
-1. Open Azure Data Explorer Web UI
+1. Open Kusto Web UI
 2. Connect to your database
 3. Run the contents of `provision.kql`
 
@@ -272,7 +272,7 @@ After completing the tutorials:
 ## 🔗 Additional Resources
 
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
-- [Azure Data Explorer Documentation](https://docs.microsoft.com/azure/data-explorer/)
+- [Kusto Documentation](https://docs.microsoft.com/azure/data-explorer/)
 - [Azure Authentication Guide](https://docs.microsoft.com/azure/developer/python/azure-sdk-authenticate)
 
 Happy coding! 🎉

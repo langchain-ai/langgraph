@@ -1,6 +1,6 @@
 # Getting Started with LangGraph Checkpoint Kusto
 
-A beginner-friendly guide to using Azure Data Explorer (Kusto) as your LangGraph checkpoint storage.
+A beginner-friendly guide to using Kusto as your LangGraph checkpoint storage.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ A beginner-friendly guide to using Azure Data Explorer (Kusto) as your LangGraph
 
 ## What is This?
 
-When you build AI agents with LangGraph, you want them to remember their progress - like saving a game. This library lets you save those "checkpoints" to Azure Data Explorer (Kusto), a powerful cloud database.
+When you build AI agents with LangGraph, you want them to remember their progress - like saving a game. This library lets you save those "checkpoints" to Kusto, a powerful cloud database.
 
 **Why Kusto?**
 - ✅ Scales to millions of checkpoints
@@ -97,7 +97,7 @@ Download the `provision.kql` script from this repository and run it in your Kust
 // - LatestCheckpoints: Materialized view for fast queries
 ```
 
-You can run this in the [Azure Data Explorer Web UI](https://dataexplorer.azure.com/).
+You can run this in the [Kusto Web UI](https://dataexplorer.azure.com/).
 
 ### Step 3: Grant Permissions
 
@@ -647,7 +647,7 @@ if __name__ == "__main__":
 
 - **LangGraph Documentation**: https://langchain-ai.github.io/langgraph/
 - **Kusto Query Language**: https://learn.microsoft.com/en-us/azure/data-explorer/kusto/query/
-- **Azure Data Explorer**: https://learn.microsoft.com/en-us/azure/data-explorer/
+- **Kusto Documentation**: https://learn.microsoft.com/en-us/azure/data-explorer/
 
 ## Need Help?
 

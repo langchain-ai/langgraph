@@ -7,7 +7,7 @@ Thank you for your interest in contributing! This guide will help you get starte
 ### Prerequisites
 
 - Python 3.10 or higher
-- Azure Data Explorer cluster (for integration tests)
+- Kusto cluster (for integration tests)
 - Git
 
 ### Clone and Install

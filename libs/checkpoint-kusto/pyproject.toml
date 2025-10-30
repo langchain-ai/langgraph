@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "langgraph-checkpoint-kusto"
 version = "1.0.0"
-description = "Azure Data Explorer (Kusto) implementation of LangGraph checkpoint saver."
+description = "Kusto implementation of LangGraph checkpoint saver."
 authors = []
 requires-python = ">=3.10"
 readme = "README.md"

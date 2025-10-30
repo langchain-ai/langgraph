@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 class AsyncKustoSaver(BaseKustoSaver):
-    """Asynchronous checkpointer that stores checkpoints in Azure Data Explorer (Kusto).
+    """Asynchronous checkpointer that stores checkpoints in Kusto.
     
     This implementation uses Kusto's async clients for both querying and streaming ingestion.
     Streaming ingestion provides low latency (<1 second) data availability.

@@ -3,11 +3,11 @@
 [![PyPI version](https://badge.fury.io/py/langgraph-checkpoint-kusto.svg)](https://badge.fury.io/py/langgraph-checkpoint-kusto)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Azure Data Explorer (Kusto) implementation of LangGraph checkpoint saver.
+Kusto implementation of LangGraph checkpoint saver.
 
 ## Overview
 
-This library provides a production-ready checkpointer for [LangGraph](https://github.com/langchain-ai/langgraph) that persists checkpoints to Azure Data Explorer (Kusto/ADX). It replicates the behavior and contracts of the official Postgres checkpointer while leveraging Kusto's scalability and analytics capabilities.
+This library provides a production-ready checkpointer for [LangGraph](https://github.com/langchain-ai/langgraph) that persists checkpoints to Kusto. It replicates the behavior and contracts of the official Postgres checkpointer while leveraging Kusto's scalability and analytics capabilities.
 
 ### Key Features
 
@@ -99,7 +99,7 @@ Get started immediately with a free cluster for learning and experimentation.
 
 ### 1. Provision Kusto Tables
 
-Run the provided `provision.kql` script in your Azure Data Explorer cluster:
+Run the provided `provision.kql` script in your Kusto cluster:
 
 ```bash
 # Via Azure CLI
@@ -108,7 +108,7 @@ az kusto script create \
   --database-name <your-database> \
   --script-content @provision.kql
 
-# Or via Azure Data Explorer Web UI
+# Or via Kusto Web UI
 # Copy and run the contents of provision.kql
 ```
 

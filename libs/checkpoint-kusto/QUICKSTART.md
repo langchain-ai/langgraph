@@ -18,7 +18,7 @@ Choose one:
 
 ## Step 1: Provision Kusto Tables (One-time)
 
-In Azure Data Explorer Web UI, run:
+In Kusto Web UI, run:
 
 ```kql
 // Create tables

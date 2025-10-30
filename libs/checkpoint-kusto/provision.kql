@@ -5,11 +5,11 @@
 // LangGraph checkpointer.
 //
 // Prerequisites:
-//   - Azure Data Explorer cluster and database created
+//   - Kusto cluster and database created
 //   - User/Service Principal with Database Admin permissions
 //
 // Usage:
-//   Run this script in Azure Data Explorer Web UI or via Kusto CLI
+//   Run this script in Kusto Web UI or via Kusto CLI
 // ============================================================================
 
 // ----------------------------------------------------------------------------
