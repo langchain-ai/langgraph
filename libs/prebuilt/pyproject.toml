@@ -29,7 +29,10 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://www.github.com/langchain-ai/langgraph"
+Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/prebuilt"
+Twitter = "https://x.com/LangChainAI"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
 
 [dependency-groups]
 test = [
