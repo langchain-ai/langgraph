@@ -379,7 +379,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 - **Issues**: [GitHub Issues](https://github.com/langchain-ai/langgraph/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/langchain-ai/langgraph/discussions)
 - **Documentation**: [LangGraph Docs](https://langchain-ai.github.io/langgraph/)
+- **Tutorials**: See [examples/](examples/) directory for hands-on guides
 
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history and migration guides.

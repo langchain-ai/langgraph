@@ -164,6 +164,48 @@ python tutorial_04_openai_chatbot.py
 
 **Try this:** Run the script multiple times - the AI will remember your entire conversation history!
 
+### Tutorial 05: Multi-Agent Collaboration ⭐ ADVANCED
+**File:** `tutorial_05_multi_agent.py`  
+**Run time:** ~60 seconds  
+**Difficulty:** Advanced
+
+Learn how multiple AI agents collaborate in parallel:
+
+- **3 specialized agents** working simultaneously (Technical, Business, UX)
+- **Parallel execution** with shared state management
+- **Reducer functions** for handling concurrent updates
+- **Persistent research history** across sessions in Kusto
+- **Multi-phase research** where agents build on each other's work
+- **Synthesizer agent** that integrates all perspectives
+
+**Prerequisites:**
+
+```bash
+pip install langchain-openai
+```
+
+Set OpenAI or Azure OpenAI credentials (same as Tutorial 04).
+
+**Run:**
+```bash
+cd examples
+python tutorial_05_multi_agent.py
+```
+
+**What you'll see:**
+- All 3 agents analyzing the same topic in parallel
+- Each agent's findings merged into shared state
+- Research history accumulating across multiple sessions
+- Final synthesis combining all perspectives
+- Complete execution trace showing parallel branching
+
+**Try this:**
+- Run multiple times - agents will reference previous research
+- Change the research topic in the code
+- Observe how research accumulates in Kusto over time
+
+📚 **See [TUTORIAL_05_MULTI_AGENT.md](TUTORIAL_05_MULTI_AGENT.md) for detailed explanation of multi-agent patterns**
+
 ## 🐛 Troubleshooting
 
 ### "ModuleNotFoundError: No module named 'langgraph'"
@@ -207,15 +249,16 @@ Make sure your account has access to the Kusto cluster.
 ### Getting help
 
 - **Detailed setup guide:** [`../SETUP.md`](../SETUP.md)
-- **Full tutorial:** [`../TUTORIAL.md`](../TUTORIAL.md)
-- **Change documentation:** [`../INGESTION_SIMPLIFICATION.md`](../INGESTION_SIMPLIFICATION.md)
+- **Full tutorial:** [`TUTORIAL.md`](TUTORIAL.md)
+- **Multi-agent patterns:** [`TUTORIAL_05_MULTI_AGENT.md`](TUTORIAL_05_MULTI_AGENT.md)
+- **Azure OpenAI setup:** [`AZURE_OPENAI_SETUP.md`](AZURE_OPENAI_SETUP.md)
 
 ## 🎯 Next Steps
 
 After completing the tutorials:
 
-1. **Read the full tutorial:** [`../TUTORIAL.md`](../TUTORIAL.md) for in-depth explanations
-2. **Explore examples:** Check the `examples/` directory for more complex scenarios
+1. **Read the full tutorial:** [`TUTORIAL.md`](TUTORIAL.md) for in-depth explanations
+2. **Explore advanced patterns:** [`TUTORIAL_05_MULTI_AGENT.md`](TUTORIAL_05_MULTI_AGENT.md) for multi-agent systems
 3. **Build your own:** Use these patterns to build your own LangGraph applications
 4. **Production deployment:** Review [`../SETUP.md`](../SETUP.md) for production best practices
 

@@ -379,12 +379,12 @@ Once setup is complete:
 1. ✅ Run `tutorial_01_first_checkpoint.py` - Learn basics
 2. ✅ Run `tutorial_02_simple_agent.py` - Build a chatbot
 3. ✅ Run `tutorial_03_production_ready.py` - Best practices
-4. ✅ Read `TUTORIAL.md` - Full guide
+4. ✅ Read `examples/TUTORIAL.md` - Full guide
 5. ✅ Explore `examples/` - More examples
 
 ## Getting Help
 
-- 📖 Read [TUTORIAL.md](TUTORIAL.md) for concepts
+- 📖 Read [examples/TUTORIAL.md](examples/TUTORIAL.md) for concepts
 - 📚 Check [README.md](README.md) for API reference
 - 🐛 Report issues on GitHub
 - 💬 Ask in LangChain Discord

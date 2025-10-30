@@ -47,13 +47,9 @@ To make them permanent:
 [System.Environment]::SetEnvironmentVariable('KUSTO_DATABASE', 'langgraph', 'User')
 ```
 
-## Step 4: Run Setup Check
+## Step 4: Provision Kusto Tables
 
-```powershell
-python setup_check.py
-```
-
-This will verify everything is installed correctly.
+See [SETUP.md](SETUP.md) for detailed instructions on creating tables with `provision.kql`.
 
 ## Step 5: Run Tutorials
 
@@ -161,9 +157,6 @@ az login
 $env:KUSTO_CLUSTER_URI = "https://your-cluster.eastus.kusto.windows.net"
 $env:KUSTO_DATABASE = "langgraph"
 
-# Verify installation
-python setup_check.py
-
 # Run first tutorial
 cd examples
 python tutorial_01_first_checkpoint.py
@@ -199,7 +192,7 @@ cd C:/Users/YourName/Projects/langgraph-kusto
 ## Need More Help?
 
 - Full setup guide: [SETUP.md](SETUP.md)
-- Tutorial: [TUTORIAL.md](TUTORIAL.md)
+- Tutorial: [examples/TUTORIAL.md](examples/TUTORIAL.md)
 - Examples: [examples/README.md](examples/README.md)
 
 ## Quick Commands Reference
