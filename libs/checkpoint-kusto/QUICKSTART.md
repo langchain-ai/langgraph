@@ -5,8 +5,16 @@ Get up and running with the Kusto checkpointer in 5 minutes.
 ## Prerequisites
 
 - Python 3.10+
-- Azure Data Explorer cluster
+- Kusto cluster endpoint (see options below)
 - Azure credentials configured
+
+## Getting a Kusto Endpoint
+
+Choose one:
+
+1. **Azure Data Explorer**: [Create cluster](https://learn.microsoft.com/azure/data-explorer/create-cluster-database-portal) - Best for production
+2. **Microsoft Fabric Eventhouse**: [Create Eventhouse](https://learn.microsoft.com/fabric/real-time-intelligence/create-eventhouse) - Best for Fabric users
+3. **Free Cluster**: [Get free cluster](https://dataexplorer.azure.com/freecluster) - Best for learning (no Azure subscription needed)
 
 ## Step 1: Provision Kusto Tables (One-time)
 

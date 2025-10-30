@@ -33,9 +33,15 @@ Before starting, you need:
    python --version  # Should show 3.10+
    ```
 
-2. **An Azure Data Explorer cluster**
-   - [Create one](https://learn.microsoft.com/en-us/azure/data-explorer/create-cluster-database-portal) (free tier available)
-   - Note your cluster URI (e.g., `https://mycluster.eastus.kusto.windows.net`)
+2. **A Kusto cluster endpoint**
+   
+   You have several options:
+   
+   - **Azure Data Explorer**: [Create cluster](https://learn.microsoft.com/azure/data-explorer/create-cluster-database-portal) - Production ready with free tier
+   - **Microsoft Fabric Eventhouse**: [Create Eventhouse](https://learn.microsoft.com/fabric/real-time-intelligence/create-eventhouse) - Integrated with Fabric
+   - **Free Cluster**: [Get free access](https://dataexplorer.azure.com/freecluster) - No Azure subscription needed!
+   
+   Note your cluster URI (e.g., `https://mycluster.eastus.kusto.windows.net`)
 
 3. **Azure credentials**
    - Use your Azure CLI login, or

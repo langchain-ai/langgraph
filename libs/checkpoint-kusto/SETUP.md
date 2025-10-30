@@ -5,8 +5,35 @@ Complete setup instructions for running the LangGraph Kusto Checkpointer tutoria
 ## Prerequisites
 
 - **Python 3.10 or higher**
-- **Azure Data Explorer cluster** (or access to one)
+- **Kusto cluster endpoint** (see options below)
 - **Azure credentials** (Azure CLI, Service Principal, or Managed Identity)
+
+## Getting a Kusto Endpoint
+
+You need access to a Kusto cluster. Choose one of these options:
+
+### Option 1: Azure Data Explorer (ADX) Cluster
+Deploy a dedicated cluster in Azure. **Best for production workloads.**
+
+- [Create an Azure Data Explorer cluster](https://learn.microsoft.com/azure/data-explorer/create-cluster-database-portal)
+- Free tier available for development/testing
+- Endpoint format: `https://<cluster-name>.<region>.kusto.windows.net`
+
+### Option 2: Microsoft Fabric Eventhouse
+Use Kusto as part of Microsoft Fabric's Real-Time Intelligence. **Best for Fabric users.**
+
+- [Create an Eventhouse in Microsoft Fabric](https://learn.microsoft.com/fabric/real-time-intelligence/create-eventhouse)
+- Integrated with Fabric workspace and OneLake
+- Endpoint format: `https://<workspace>.<region>.kusto.fabric.microsoft.com`
+
+### Option 3: Free Cluster
+Get started immediately with no Azure subscription. **Best for learning and testing.**
+
+- [Access free cluster at dataexplorer.azure.com](https://dataexplorer.azure.com/freecluster)
+- No credit card required
+- Perfect for tutorials and experimentation
+- Endpoint: `https://help.kusto.windows.net`
+- Database: Create your own (e.g., `langgraph`)
 
 ## Step 1: Install Dependencies
 
@@ -86,14 +113,21 @@ python -c "from langgraph.checkpoint.kusto.aio import AsyncKustoSaver; print('âœ
 
 Expected output: `âœ“ Installation successful!`
 
-## Step 3: Set Up Azure Data Explorer
+## Step 3: Provision Kusto Tables
 
-### Create a Kusto Cluster
+Once you have your Kusto cluster endpoint (from one of the options above), you need to create the required tables.
 
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Create a new Azure Data Explorer cluster (free tier available)
-3. Create a database (e.g., `langgraph`)
-4. Note your cluster URI: `https://your-cluster.region.kusto.windows.net`
+### Run provision.kql
+
+1. Open [Kusto Web Explorer](https://dataexplorer.azure.com/)
+2. Connect to your cluster
+3. Select your database
+4. Copy and run the contents of `libs/checkpoint-kusto/provision.kql`
+
+This creates:
+- `Checkpoints` table
+- `CheckpointWrites` table
+- `LatestCheckpoints` materialized view
 
 ### Grant Permissions
 
@@ -102,23 +136,10 @@ You need two permissions:
 - **Database Ingestor** (write checkpoints)
 
 ```kql
-// Run in Kusto Web Explorer (https://dataexplorer.azure.com/)
+// Run in Kusto Web Explorer
 .add database langgraph viewers ('aaduser=your-email@domain.com')
 .add database langgraph ingestors ('aaduser=your-email@domain.com')
 ```
-
-### Create Tables
-
-Run the `provision.kql` script:
-
-1. Open [Kusto Web Explorer](https://dataexplorer.azure.com/)
-2. Connect to your cluster
-3. Copy and run the contents of `libs/checkpoint-kusto/langgraph/checkpoint/kusto/provision.kql`
-
-This creates:
-- `Checkpoints` table
-- `CheckpointWrites` table
-- `LatestCheckpoints` materialized view
 
 ## Step 4: Configure Authentication
 
