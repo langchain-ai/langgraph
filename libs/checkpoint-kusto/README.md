@@ -366,35 +366,7 @@ checkpointer = AsyncKustoSaver.from_connection_string(
 
 ## Contributing
 
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development setup and guidelines.
-
-### Running Tests
-
-```bash
-# Unit tests only
-make test-unit
-
-# Integration tests (requires live Kusto cluster)
-export KUSTO_CLUSTER_URI="https://..."
-export KUSTO_DATABASE="test_db"
-make test-integration
-
-# All tests
-make test
-```
-
-### Code Quality
-
-```bash
-# Format code
-make format
-
-# Run linters
-make lint
-
-# Type checking
-mypy langgraph
-```
+Contributions are welcome! Please follow the development guidelines in the main [LangGraph repository](https://github.com/langchain-ai/langgraph).
 
 ## License
 

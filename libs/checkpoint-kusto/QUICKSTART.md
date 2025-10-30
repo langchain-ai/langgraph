@@ -248,9 +248,8 @@ async for checkpoint in checkpointer.alist(config, limit=10):
 ## Next Steps
 
 - Read the [full README](README.md) for detailed configuration
-- Check [examples/](examples/) for more patterns
-- See [CONTRIBUTING.md](CONTRIBUTING.md) to contribute
-- Review [API documentation](langgraph/checkpoint/kusto/) for advanced usage
+- Check [examples/](examples/) for more patterns and tutorials
+- Review [SETUP.md](SETUP.md) for detailed setup instructions
 
 ## Getting Help
 
