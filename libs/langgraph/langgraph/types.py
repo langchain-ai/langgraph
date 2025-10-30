@@ -55,6 +55,7 @@ __all__ = (
     "Command",
     "Durability",
     "interrupt",
+    "Overwrite",
 )
 
 Durability = Literal["sync", "async", "exit"]
