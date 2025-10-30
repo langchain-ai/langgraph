@@ -74,17 +74,23 @@ uv add langgraph-checkpoint-kusto
 You have several options to get access to a Kusto cluster:
 
 ### Option 1: Azure Data Explorer (ADX) Cluster
+
 Deploy a dedicated cluster in Azure. Ideal for production workloads.
+
 - [Create an Azure Data Explorer cluster](https://learn.microsoft.com/en-us/azure/data-explorer/create-cluster-database-portal)
 - Free tier available for development/testing
 
 ### Option 2: Microsoft Fabric Eventhouse
+
 Use Kusto as part of Microsoft Fabric's Real-Time Intelligence capabilities.
+
 - [Create an Eventhouse in Microsoft Fabric](https://learn.microsoft.com/en-us/fabric/real-time-intelligence/create-eventhouse)
 - Integrated with Fabric workspace and OneLake
 
 ### Option 3: Free Cluster
+
 Get started immediately with a free cluster for learning and experimentation.
+
 - [Access free cluster at dataexplorer.azure.com](https://dataexplorer.azure.com/freecluster)
 - No Azure subscription required
 - Perfect for tutorials and testing
