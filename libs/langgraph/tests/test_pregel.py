@@ -8805,3 +8805,50 @@ def test_overwrite_parallel_error(
         InvalidUpdateError, match="Can receive only one Overwrite value per super-step."
     ):
         graph.invoke({"messages": ["START"]}, config)
+
+
+def test_get_subgraphs_with_common_prefix() -> None:
+    class State(TypedDict):
+        do_not_care: str
+
+    def generic_node(state: State) -> State:
+        # Just need a properly typed node; we will not be running this graph
+        return state
+
+    grandchild_graph_builder = StateGraph(State)
+    grandchild_graph_builder.add_node("grandchild", generic_node)
+    grandchild_graph_builder.set_entry_point("grandchild")
+    grandchild_graph_builder.add_edge("grandchild", END)
+    grandchild_graph = grandchild_graph_builder.compile()
+
+    child_graph_builder = StateGraph(State)
+    child_graph_builder.add_node("child_subgraph", grandchild_graph)
+    child_graph_builder.set_entry_point("child_subgraph")
+    child_graph_builder.add_edge("child_subgraph", END)
+    child_graph = child_graph_builder.compile()
+
+    parent_graph_builder = StateGraph(State)
+    parent_graph_builder.add_node("common_prefix", child_graph)
+    parent_graph_builder.add_node("common_prefix_2", child_graph)
+    parent_graph_builder.set_entry_point("common_prefix")
+    parent_graph_builder.add_edge("common_prefix", "common_prefix_2")
+    parent_graph_builder.add_edge("common_prefix_2", END)
+
+    parent_graph = parent_graph_builder.compile()
+
+    # It's pretty intricate to get this to fail against the previous
+    # implementation of get_subgraphs. You need the following conditions:
+    # * A parent graph with 2 subgraphs
+    # * Subgraph A added before subgraph B
+    # * Subgraph A's name is a prefix of subgraph B's name
+    # * Subgraph B must also contain a subgraph (call it subgraph C)
+    # * You must call get_subgraphs with the namespace 'subgraph_b|subgraph_c'
+    #
+    # The old implementation used prefix matching to find subgraphs,
+    # so it would chop of subgraph A's name from subgraph B's name and
+    # look for subgraph C under the chopped-off name, which would fail.
+    subgraphs = parent_graph.get_subgraphs(
+        namespace="common_prefix_2|child_subgraph",
+        recurse=True,
+    )
+    assert len(list(subgraphs)) == 1

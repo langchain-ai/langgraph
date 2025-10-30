@@ -937,9 +937,9 @@ class Pregel(
             An iterator of the `(namespace, subgraph)` pairs.
         """
         for name, node in self.nodes.items():
-            # filter by prefix
+            # Find the node whose name matches the first token of the namespace.
             if namespace is not None:
-                if not namespace.startswith(name):
+                if name != namespace.split(NS_SEP)[0]:
                     continue
 
             # find the subgraph, if any
