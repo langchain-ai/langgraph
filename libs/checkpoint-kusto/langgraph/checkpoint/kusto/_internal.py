@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from azure.kusto.data import KustoClient, KustoConnectionStringBuilder
+from azure.kusto.data import KustoClient
 from azure.kusto.ingest import StreamingIngestClient
 
 # Type aliases for connection types
@@ -14,10 +14,10 @@ KustoIngestConn = StreamingIngestClient
 @contextmanager
 def get_query_client(client: KustoQueryConn) -> Iterator[KustoQueryConn]:
     """Get a Kusto query client context manager.
-    
+
     Args:
         client: The Kusto client to use for queries.
-        
+
     Yields:
         The Kusto client.
     """
@@ -31,10 +31,10 @@ def get_query_client(client: KustoQueryConn) -> Iterator[KustoQueryConn]:
 @contextmanager
 def get_ingest_client(client: StreamingIngestClient) -> Iterator[StreamingIngestClient]:
     """Get a Kusto ingest client context manager.
-    
+
     Args:
         client: The Kusto ingest client to use.
-        
+
     Yields:
         The Kusto ingest client.
     """

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -14,13 +13,11 @@ from typing import Any
 import orjson
 from azure.identity import DefaultAzureCredential
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
-from azure.kusto.data import KustoConnectionStringBuilder
+from azure.kusto.data import DataFormat, KustoConnectionStringBuilder
 from azure.kusto.data.aio import KustoClient as AsyncKustoClient
-from azure.kusto.data import DataFormat
 from azure.kusto.ingest import IngestionProperties
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
-    WRITES_IDX_MAP,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
@@ -40,10 +37,10 @@ logger = logging.getLogger(__name__)
 
 class AsyncKustoSaver(BaseKustoSaver):
     """Asynchronous checkpointer that stores checkpoints in Kusto.
-    
+
     This implementation uses Kusto's async clients for both querying and streaming ingestion.
     Streaming ingestion provides low latency (<1 second) data availability.
-    
+
     Example:
         ```python
         async with AsyncKustoSaver.from_connection_string(
@@ -54,7 +51,7 @@ class AsyncKustoSaver(BaseKustoSaver):
             config = {"configurable": {"thread_id": "thread-1"}}
             checkpoint = await checkpointer.aget_tuple(config)
         ```
-    
+
     Attributes:
         query_client: Async Kusto client for querying.
         ingest_client: Async Kusto client for streaming ingestion.
@@ -83,7 +80,7 @@ class AsyncKustoSaver(BaseKustoSaver):
         serde: SerializerProtocol | None = None,
     ) -> None:
         """Initialize the async Kusto checkpointer.
-        
+
         Args:
             query_client: Async Kusto client for queries.
             ingest_client: Async Kusto client for streaming ingestion.
@@ -100,12 +97,12 @@ class AsyncKustoSaver(BaseKustoSaver):
         self.flush_interval = flush_interval
         self.lock = asyncio.Lock()
         self.loop = asyncio.get_running_loop()
-        
+
         # Initialize buffers for batching
         # Note: Blobs now stored in Checkpoints.channel_values (dynamic column)
         self._write_buffer = []
         self._checkpoint_buffer = []
-        
+
         logger.info(
             "Initialized AsyncKustoSaver with streaming ingestion",
             extra={
@@ -127,7 +124,7 @@ class AsyncKustoSaver(BaseKustoSaver):
         serde: SerializerProtocol | None = None,
     ) -> AsyncIterator[AsyncKustoSaver]:
         """Create an AsyncKustoSaver from connection parameters.
-        
+
         Args:
             cluster_uri: Kusto cluster URI (e.g., "https://cluster.region.kusto.windows.net").
             database: Database name.
@@ -135,10 +132,10 @@ class AsyncKustoSaver(BaseKustoSaver):
             batch_size: Number of records to batch before flush.
             flush_interval: Seconds between automatic flushes.
             serde: Custom serializer.
-            
+
         Yields:
             Configured AsyncKustoSaver instance.
-            
+
         Example:
             ```python
             async with AsyncKustoSaver.from_connection_string(
@@ -154,26 +151,26 @@ class AsyncKustoSaver(BaseKustoSaver):
             async_credential = AsyncDefaultAzureCredential()
         else:
             async_credential = credential
-        
+
         # Create sync credential for ingest client (ManagedStreamingIngestClient is sync)
         sync_credential = DefaultAzureCredential()
-        
+
         # Build connection string for async query client
         kcsb_query = KustoConnectionStringBuilder.with_azure_token_credential(
             cluster_uri, async_credential
         )
-        
+
         # Build connection string for sync ingest client
         kcsb_ingest = KustoConnectionStringBuilder.with_azure_token_credential(
             cluster_uri, sync_credential
         )
-        
+
         # Create query client (async)
         query_client = AsyncKustoClient(kcsb_query)
-        
+
         # Create streaming ingest client (sync client, needs sync credential)
         ingest_client = AsyncStreamingIngestClient(kcsb_ingest)
-        
+
         saver = cls(
             query_client=query_client,
             ingest_client=ingest_client,
@@ -182,11 +179,11 @@ class AsyncKustoSaver(BaseKustoSaver):
             flush_interval=flush_interval,
             serde=serde,
         )
-        
+
         # Store credentials for cleanup
         saver._async_credential = async_credential if credential is None else None
         saver._sync_credential = sync_credential
-        
+
         try:
             yield saver
         finally:
@@ -200,25 +197,25 @@ class AsyncKustoSaver(BaseKustoSaver):
 
     async def setup(self) -> None:
         """Set up and validate the Kusto database schema.
-        
+
         This method checks that the required tables exist in the database.
         It does NOT create tables - run provision.kql manually first.
-        
+
         Raises:
             ValueError: If required tables are missing.
         """
         logger.info("Validating Kusto schema", extra={"database": self.database})
-        
+
         # Query to check if tables exist
         query = f"""
         .show database {self.database} schema
         | where TableName in ('Checkpoints', 'CheckpointWrites')
         | summarize tables = make_set(TableName)
         """
-        
+
         async with self._query() as client:
             response = await client.execute(self.database, query)
-            
+
             # Parse response to check for all required tables
             required_tables = {"Checkpoints", "CheckpointWrites"}
             if response.primary_results:
@@ -234,21 +231,21 @@ class AsyncKustoSaver(BaseKustoSaver):
                 raise ValueError(
                     "Could not validate schema. Please ensure provision.kql has been run."
                 )
-        
+
         logger.info("Schema validation successful")
 
     async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from Kusto asynchronously.
-        
+
         If the config contains a checkpoint_id, retrieves that specific checkpoint.
         Otherwise, retrieves the latest checkpoint for the thread.
-        
+
         Args:
             config: Configuration containing thread_id and optional checkpoint_id.
-            
+
         Returns:
             CheckpointTuple if found, None otherwise.
-            
+
         Example:
             ```python
             config = {"configurable": {"thread_id": "thread-1"}}
@@ -260,7 +257,7 @@ class AsyncKustoSaver(BaseKustoSaver):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        
+
         logger.debug(
             "Fetching checkpoint",
             extra={
@@ -269,11 +266,11 @@ class AsyncKustoSaver(BaseKustoSaver):
                 "checkpoint_ns": checkpoint_ns,
             },
         )
-        
+
         # Build query with parameters
         filter_info = self._build_kql_filter(config, None, None)
         params = filter_info["params"]
-        
+
         # Construct query
         # Use materialized view for "latest checkpoint" queries (more efficient than ORDER BY + TAKE 1)
         # Use base table for specific checkpoint_id queries
@@ -292,25 +289,29 @@ class AsyncKustoSaver(BaseKustoSaver):
             query = self.SELECT_LATEST_CHECKPOINT_KQL.format(
                 checkpoint_id_filter=checkpoint_filter,
             )
-        
+
         # Replace parameter placeholders
         for param_name, param_value in params.items():
             query = query.replace(param_name, f"'{param_value}'")
-        
+
         async with self._query() as client:
             response = await client.execute(self.database, query)
-            
+
             # Check if we have results
             if not response.primary_results:
-                logger.debug("No checkpoint found (no results)", extra={"thread_id": thread_id})
+                logger.debug(
+                    "No checkpoint found (no results)", extra={"thread_id": thread_id}
+                )
                 return None
-            
+
             # Check if the first result table has any rows
             result_table = response.primary_results[0]
             if not result_table or len(result_table.rows) == 0:
-                logger.debug("No checkpoint found (empty result)", extra={"thread_id": thread_id})
+                logger.debug(
+                    "No checkpoint found (empty result)", extra={"thread_id": thread_id}
+                )
                 return None
-            
+
             # Get first row
             row = result_table[0]
             return await self._load_checkpoint_tuple(row)
@@ -324,18 +325,18 @@ class AsyncKustoSaver(BaseKustoSaver):
         limit: int | None = None,
     ) -> AsyncIterator[CheckpointTuple]:
         """List checkpoints from Kusto asynchronously.
-        
+
         Checkpoints are ordered by checkpoint_id descending (newest first).
-        
+
         Args:
             config: Base configuration for filtering.
             filter: Additional metadata filters.
             before: Only return checkpoints before this checkpoint_id.
             limit: Maximum number of checkpoints to return.
-            
+
         Yields:
             CheckpointTuple instances matching the criteria.
-            
+
         Example:
             ```python
             config = {"configurable": {"thread_id": "thread-1"}}
@@ -345,31 +346,31 @@ class AsyncKustoSaver(BaseKustoSaver):
         """
         filter_info = self._build_kql_filter(config, filter, before)
         params = filter_info["params"]
-        
+
         # Build query
         checkpoint_filter = ""
         if filter_info["filters"]:
             checkpoint_filter = "| where " + " and ".join(filter_info["filters"])
-        
+
         limit_clause = f"| take {limit}" if limit else ""
-        
+
         query = self.SELECT_CHECKPOINT_KQL.format(
             checkpoint_id_filter=checkpoint_filter,
             limit_clause=limit_clause,
         )
-        
+
         # Replace parameters
         for param_name, param_value in params.items():
             query = query.replace(param_name, f"'{param_value}'")
-        
+
         logger.debug("Listing checkpoints", extra={"filter": filter, "limit": limit})
-        
+
         async with self._query() as client:
             response = await client.execute(self.database, query)
-            
+
             if not response.primary_results:
                 return
-            
+
             for row in response.primary_results[0]:
                 yield await self._load_checkpoint_tuple(row)
 
@@ -381,16 +382,16 @@ class AsyncKustoSaver(BaseKustoSaver):
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """Save a checkpoint to Kusto asynchronously.
-        
+
         Args:
             config: Configuration for this checkpoint.
             checkpoint: The checkpoint data to save.
             metadata: Metadata to associate with the checkpoint.
             new_versions: New channel versions for this checkpoint.
-            
+
         Returns:
             Updated configuration with the checkpoint_id.
-            
+
         Example:
             ```python
             config = await saver.aput(
@@ -406,7 +407,7 @@ class AsyncKustoSaver(BaseKustoSaver):
         thread_id = configurable.pop("thread_id")
         checkpoint_ns = configurable.pop("checkpoint_ns", "")
         checkpoint_id = configurable.pop("checkpoint_id", None)
-        
+
         logger.debug(
             "Putting checkpoint",
             extra={
@@ -415,7 +416,7 @@ class AsyncKustoSaver(BaseKustoSaver):
                 "checkpoint_ns": checkpoint_ns,
             },
         )
-        
+
         copy = checkpoint.copy()
         copy["channel_values"] = copy["channel_values"].copy()
         next_config = {
@@ -425,7 +426,7 @@ class AsyncKustoSaver(BaseKustoSaver):
                 "checkpoint_id": checkpoint["id"],
             }
         }
-        
+
         # Separate inline values from blobs
         blob_values = {}
         for k, v in checkpoint["channel_values"].items():
@@ -433,7 +434,7 @@ class AsyncKustoSaver(BaseKustoSaver):
                 pass  # Keep in checkpoint JSON
             else:
                 blob_values[k] = copy["channel_values"].pop(k)
-        
+
         # Prepare blob data as dynamic array for the channel_values column
         channel_values_dynamic = []
         if blob_versions := {k: v for k, v in new_versions.items() if k in blob_values}:
@@ -442,7 +443,7 @@ class AsyncKustoSaver(BaseKustoSaver):
                 blob_values,
                 blob_versions,
             )
-        
+
         # Prepare checkpoint record with blobs stored in channel_values column
         checkpoint_record = {
             "thread_id": thread_id,
@@ -458,11 +459,11 @@ class AsyncKustoSaver(BaseKustoSaver):
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         self._checkpoint_buffer.append(checkpoint_record)
-        
+
         # Auto-flush if batch size reached
         if len(self._checkpoint_buffer) >= self.batch_size:
             await self.flush()
-        
+
         return next_config
 
     async def aput_writes(
@@ -473,13 +474,13 @@ class AsyncKustoSaver(BaseKustoSaver):
         task_path: str = "",
     ) -> None:
         """Store intermediate writes linked to a checkpoint asynchronously.
-        
+
         Args:
             config: Configuration of the related checkpoint.
             writes: List of (channel, value) tuples to store.
             task_id: Identifier for the task creating the writes.
             task_path: Path of the task in the execution tree.
-            
+
         Example:
             ```python
             await saver.aput_writes(
@@ -498,7 +499,7 @@ class AsyncKustoSaver(BaseKustoSaver):
                 "num_writes": len(writes),
             },
         )
-        
+
         records = await asyncio.to_thread(
             self._dump_writes,
             config["configurable"]["thread_id"],
@@ -508,20 +509,20 @@ class AsyncKustoSaver(BaseKustoSaver):
             task_path,
             writes,
         )
-        
+
         self._write_buffer.extend(records)
-        
+
         # Auto-flush if batch size reached
         if len(self._write_buffer) >= self.batch_size:
             await self.flush()
 
     async def flush(self) -> None:
         """Flush all buffered writes to Kusto.
-        
+
         This method should be called periodically or when you need to ensure
         all pending data is ingested. With streaming ingestion, data typically
         appears in Kusto within 1 second after flushing.
-        
+
         Example:
             ```python
             # After a batch of operations
@@ -537,7 +538,7 @@ class AsyncKustoSaver(BaseKustoSaver):
                     extra={"count": len(self._checkpoint_buffer)},
                 )
                 self._checkpoint_buffer.clear()
-            
+
             # Flush writes
             if self._write_buffer:
                 await self._ingest_records("CheckpointWrites", self._write_buffer)
@@ -549,57 +550,57 @@ class AsyncKustoSaver(BaseKustoSaver):
 
     async def adelete_thread(self, thread_id: str) -> None:
         """Delete all checkpoints and writes for a thread.
-        
+
         Note: Kusto deletes are eventually consistent and may take time to propagate.
         Deleting checkpoints also removes associated blobs (stored in channel_values column).
-        
+
         Args:
             thread_id: The thread ID to delete.
-            
+
         Example:
             ```python
             await saver.adelete_thread("thread-1")
             ```
         """
         logger.info("Deleting thread", extra={"thread_id": thread_id})
-        
+
         # Execute delete commands (blobs removed automatically with checkpoints)
         delete_queries = [
             self.DELETE_THREAD_KQL_CHECKPOINTS.format(thread_id=thread_id),
             self.DELETE_THREAD_KQL_WRITES.format(thread_id=thread_id),
         ]
-        
+
         async with self._query() as client:
             for query in delete_queries:
                 await client.execute_mgmt(self.database, query)
-        
+
         logger.info("Thread deleted", extra={"thread_id": thread_id})
 
     async def _ingest_records(
         self, table_name: str, records: list[dict[str, Any]]
     ) -> None:
         """Ingest records into a Kusto table.
-        
+
         Args:
             table_name: Name of the target table.
             records: List of record dictionaries to ingest.
         """
         if not records:
             return
-        
+
         # Convert records to JSON lines format
         json_data = "\n".join(orjson.dumps(r).decode() for r in records)
-        
+
         # Create a BytesIO stream from the JSON data
-        stream = BytesIO(json_data.encode('utf-8'))
-        
+        stream = BytesIO(json_data.encode("utf-8"))
+
         # Create ingestion properties
         ingestion_props = IngestionProperties(
             database=self.database,
             table=table_name,
             data_format=DataFormat.JSON,
         )
-        
+
         # Ingest data - ManagedStreamingIngestClient is sync, so run in thread pool
         async with self._ingest() as client:
             # Run the synchronous ingest_from_stream in a thread pool
@@ -625,10 +626,10 @@ class AsyncKustoSaver(BaseKustoSaver):
 
     async def _load_checkpoint_tuple(self, row: dict[str, Any]) -> CheckpointTuple:
         """Convert a Kusto row into a CheckpointTuple.
-        
+
         Args:
             row: Dictionary representing a row from Kusto.
-            
+
         Returns:
             CheckpointTuple with all data loaded and deserialized.
         """
@@ -636,21 +637,21 @@ class AsyncKustoSaver(BaseKustoSaver):
         # but doesn't convert properly with dict()
         checkpoint = row["checkpoint"]
         metadata = row["metadata"]
-        
+
         # Handle optional fields with try/except or check if key exists
         try:
             channel_values = row["channel_values"] or []
         except (KeyError, TypeError):
             channel_values = []
-        
+
         try:
             pending_writes = row["pending_writes"] or []
         except (KeyError, TypeError):
             pending_writes = []
-        
+
         # Load blobs
         blob_dict = await asyncio.to_thread(self._load_blobs, channel_values)
-        
+
         # Merge blob values into checkpoint
         full_checkpoint = {
             **checkpoint,
@@ -659,13 +660,17 @@ class AsyncKustoSaver(BaseKustoSaver):
                 **blob_dict,
             },
         }
-        
+
         # Load writes
         writes_list = await asyncio.to_thread(self._load_writes, pending_writes)
-        
+
         # Build parent config
         parent_config = None
-        parent_checkpoint_id = row.get("parent_checkpoint_id") if hasattr(row, 'get') else row["parent_checkpoint_id"]
+        parent_checkpoint_id = (
+            row.get("parent_checkpoint_id")
+            if hasattr(row, "get")
+            else row["parent_checkpoint_id"]
+        )
         if parent_checkpoint_id:
             parent_config = {
                 "configurable": {
@@ -674,7 +679,7 @@ class AsyncKustoSaver(BaseKustoSaver):
                     "checkpoint_id": parent_checkpoint_id,
                 }
             }
-        
+
         return CheckpointTuple(
             config={
                 "configurable": {
@@ -707,7 +712,7 @@ class AsyncKustoSaver(BaseKustoSaver):
                 )
         except RuntimeError:
             pass
-        
+
         aiter_ = self.alist(config, filter=filter, before=before, limit=limit)
         while True:
             try:
@@ -728,7 +733,7 @@ class AsyncKustoSaver(BaseKustoSaver):
                 )
         except RuntimeError:
             pass
-        
+
         return asyncio.run_coroutine_threadsafe(
             self.aget_tuple(config), self.loop
         ).result()
@@ -767,7 +772,7 @@ class AsyncKustoSaver(BaseKustoSaver):
                 )
         except RuntimeError:
             pass
-        
+
         return asyncio.run_coroutine_threadsafe(
             self.adelete_thread(thread_id), self.loop
         ).result()

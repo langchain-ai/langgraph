@@ -18,10 +18,10 @@ async def get_query_client(
     client: AsyncKustoQueryConn,
 ) -> AsyncIterator[AsyncKustoQueryConn]:
     """Get an async Kusto query client context manager.
-    
+
     Args:
         client: The async Kusto client to use for queries.
-        
+
     Yields:
         The async Kusto client.
     """
@@ -37,10 +37,10 @@ async def get_ingest_client(
     client: AsyncStreamingIngestClient,
 ) -> AsyncIterator[AsyncStreamingIngestClient]:
     """Get an async Kusto ingest client context manager.
-    
+
     Args:
         client: The async Kusto ingest client to use.
-        
+
     Yields:
         The async Kusto ingest client.
     """
