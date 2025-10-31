@@ -55,6 +55,7 @@ __all__ = (
     "Command",
     "Durability",
     "interrupt",
+    "Overwrite",
 )
 
 Durability = Literal["sync", "async", "exit"]
@@ -283,26 +284,32 @@ class Send:
         node (str): The name of the target node to send the message to.
         arg (Any): The state or message to send to the target node.
 
-    Examples:
-        >>> from typing import Annotated
-        >>> import operator
-        >>> class OverallState(TypedDict):
-        ...     subjects: list[str]
-        ...     jokes: Annotated[list[str], operator.add]
-        >>> from langgraph.types import Send
-        >>> from langgraph.graph import END, START
-        >>> def continue_to_jokes(state: OverallState):
-        ...     return [Send("generate_joke", {"subject": s}) for s in state["subjects"]]
-        >>> from langgraph.graph import StateGraph
-        >>> builder = StateGraph(OverallState)
-        >>> builder.add_node("generate_joke", lambda state: {"jokes": [f"Joke about {state['subject']}"]})
-        >>> builder.add_conditional_edges(START, continue_to_jokes)
-        >>> builder.add_edge("generate_joke", END)
-        >>> graph = builder.compile()
-        >>>
-        >>> # Invoking with two subjects results in a generated joke for each
-        >>> graph.invoke({"subjects": ["cats", "dogs"]})
-        {'subjects': ['cats', 'dogs'], 'jokes': ['Joke about cats', 'Joke about dogs']}
+    !!! example
+
+        ```python
+        from typing import Annotated
+        from langgraph.types import Send
+        from langgraph.graph import END, START
+        from langgraph.graph import StateGraph
+        import operator
+
+        class OverallState(TypedDict):
+            subjects: list[str]
+            jokes: Annotated[list[str], operator.add]
+
+        def continue_to_jokes(state: OverallState):
+            return [Send("generate_joke", {"subject": s}) for s in state["subjects"]]
+
+        builder = StateGraph(OverallState)
+        builder.add_node("generate_joke", lambda state: {"jokes": [f"Joke about {state['subject']}"]})
+        builder.add_conditional_edges(START, continue_to_jokes)
+        builder.add_edge("generate_joke", END)
+        graph = builder.compile()
+
+        # Invoking with two subjects results in a generated joke for each
+        graph.invoke({"subjects": ["cats", "dogs"]})
+        # {'subjects': ['cats', 'dogs'], 'jokes': ['Joke about cats', 'Joke about dogs']}
+        ```
     """
 
     __slots__ = ("node", "arg")
@@ -342,10 +349,8 @@ N = TypeVar("N", bound=Hashable)
 class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
-    !!! version-added "Added in version 0.2.24"
-
     Args:
-        graph: graph to send the command to. Supported values are:
+        graph: Graph to send the command to. Supported values are:
 
             - `None`: the current graph
             - `Command.PARENT`: closest parent graph
@@ -415,7 +420,8 @@ def interrupt(value: Any) -> Any:
     To use an `interrupt`, you must enable a checkpointer, as the feature relies
     on persisting the graph state.
 
-    Example:
+    !!! example
+
         ```python
         import uuid
         from typing import Optional
@@ -516,3 +522,47 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
+
+
+@dataclass(slots=True)
+class Overwrite:
+    """Bypass a reducer and write the wrapped value directly to a `BinaryOperatorAggregate` channel.
+
+    Receiving multiple `Overwrite` values for the same channel in a single super-step
+    will raise an `InvalidUpdateError`.
+
+    !!! example
+
+        ```python
+        from typing import Annotated
+        import operator
+        from langgraph.graph import StateGraph
+        from langgraph.types import Overwrite
+
+        class State(TypedDict):
+            messages: Annotated[list, operator.add]
+
+        def node_a(state: TypedDict):
+            # Normal update: uses the reducer (operator.add)
+            return {"messages": ["a"]}
+
+        def node_b(state: State):
+            # Overwrite: bypasses the reducer and replaces the entire value
+            return {"messages": Overwrite(value=["b"])}
+
+        builder = StateGraph(State)
+        builder.add_node("node_a", node_a)
+        builder.add_node("node_b", node_b)
+        builder.set_entry_point("node_a")
+        builder.add_edge("node_a", "node_b")
+        graph = builder.compile()
+
+        # Without Overwrite in node_b, messages would be ["START", "a", "b"]
+        # With Overwrite, messages is just ["b"]
+        result = graph.invoke({"messages": ["START"]})
+        assert result == {"messages": ["b"]}
+        ```
+    """
+
+    value: Any
+    """The value to write directly to the channel, bypassing any reducer."""
