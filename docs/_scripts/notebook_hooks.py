@@ -180,7 +180,7 @@ REDIRECT_MAP = {
     "cloud/concepts/data_storage_and_privacy.md": "https://docs.langchain.com/langsmith/data-storage-and-privacy",
     "cloud/deployment/semantic_search.md": "https://docs.langchain.com/langsmith/semantic-search",
     "how-tos/ttl/configure_ttl.md": "https://docs.langchain.com/langsmith/configure-ttl",
-    "concepts/deployment_options.md": "https://docs.langchain.com/langsmith/hosting",
+    "concepts/deployment_options.md": "https://docs.langchain.com/langsmith/platform-setup",
     "cloud/quick_start.md": "https://docs.langchain.com/langsmith/deployment-quickstart",
     "cloud/deployment/setup.md": "https://docs.langchain.com/langsmith/setup-app-requirements-txt",
     "cloud/deployment/setup_pyproject.md": "https://docs.langchain.com/langsmith/setup-pyproject",
