@@ -1,11 +1,11 @@
 """The LangGraph client implementations connect to the LangGraph API.
 
-This module provides both asynchronous ([get_client(url="http://localhost:2024"))](#get_client) or [LangGraphClient](#LangGraphClient))
-and synchronous ([get_sync_client(url="http://localhost:2024"))](#get_sync_client) or [SyncLanggraphClient](#SyncLanggraphClient))
-clients to interacting with the LangGraph API's core resources such as
-Assistants, Threads, Runs, and Cron jobs, as well as its persistent
-document Store.
-"""  # noqa: E501
+This module provides both asynchronous (`get_client(url="http://localhost:2024")` or
+`LangGraphClient`) and synchronous (`get_sync_client(url="http://localhost:2024")` or
+`SyncLanggraphClient`) clients to interacting with the LangGraph API's core resources
+such as Assistants, Threads, Runs, and Cron jobs, as well as its persistent document
+Store.
+"""
 
 from __future__ import annotations
 
