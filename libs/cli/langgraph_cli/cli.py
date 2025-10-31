@@ -677,6 +677,11 @@ def dockerfile(
     default="WARNING",
     help="Set the log level for the API server.",
 )
+@click.option(
+    "--install-deps",
+    is_flag=True,
+    help="Automatically install dependencies using the detected dependency manager (pipenv, poetry, uv).",
+)
 @cli.command(
     "dev",
     help="🏃‍♀️‍➡️ Run LangGraph API server in development mode with hot reloading and debugging support",
@@ -695,6 +700,7 @@ def dev(
     allow_blocking: bool,
     tunnel: bool,
     server_log_level: str,
+    install_deps: bool,
 ):
     """CLI entrypoint for running the LangGraph API server."""
     try:
@@ -736,6 +742,35 @@ def dev(
         ) from None
 
     cwd = os.getcwd()
+
+    # Detect and activate dependency manager virtual environment
+    from langgraph_cli.dependency_manager import (
+        install_dependencies,
+        setup_development_environment,
+    )
+
+    project_dir = pathlib.Path(cwd)
+    dependency_manager, success = setup_development_environment(project_dir)
+
+    if success and dependency_manager.value != "pip":
+        click.echo(
+            f"✅ Detected {dependency_manager.value} project and activated virtual environment"
+        )
+    elif not success:
+        click.echo(
+            f"⚠️  Detected {dependency_manager.value} project but couldn't activate virtual environment. Using system Python."
+        )
+
+    # Install dependencies if requested
+    if install_deps and dependency_manager.value != "pip":
+        click.echo(f"📦 Installing dependencies using {dependency_manager.value}...")
+        if install_dependencies(dependency_manager, project_dir):
+            click.echo("✅ Dependencies installed successfully")
+        else:
+            click.echo(
+                "❌ Failed to install dependencies. Please install them manually."
+            )
+
     sys.path.append(cwd)
     dependencies = config_json.get("dependencies", [])
     for dep in dependencies:

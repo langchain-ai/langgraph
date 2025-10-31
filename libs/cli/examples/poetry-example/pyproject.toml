@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "my-langgraph-app"
+version = "0.1.0"
+description = "A LangGraph application using Poetry"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+langchain-openai = "^0.1.0"
+langchain-community = "^0.2.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
