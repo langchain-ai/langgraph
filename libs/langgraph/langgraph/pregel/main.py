@@ -937,9 +937,13 @@ class Pregel(
             An iterator of the `(namespace, subgraph)` pairs.
         """
         for name, node in self.nodes.items():
-            # Find the node whose name matches the first token of the namespace.
+            remainder_namespace: str | None = None
+
             if namespace is not None:
-                if name != namespace.split(NS_SEP)[0]:
+                first_namespace_token, _, remainder_namespace = namespace.partition(
+                    NS_SEP
+                )
+                if name != first_namespace_token:
                     continue
 
             # find the subgraph, if any
@@ -953,12 +957,10 @@ class Pregel(
                 if namespace is None:
                     yield name, graph
                 if recurse and isinstance(graph, Pregel):
-                    if namespace is not None:
-                        namespace = namespace[len(name) + 1 :]
                     yield from (
                         (f"{name}{NS_SEP}{n}", s)
                         for n, s in graph.get_subgraphs(
-                            namespace=namespace, recurse=recurse
+                            namespace=remainder_namespace, recurse=recurse
                         )
                     )
 
