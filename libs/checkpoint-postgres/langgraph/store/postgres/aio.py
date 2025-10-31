@@ -384,6 +384,12 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             while not self._aqueue.empty():
                 await asyncio.sleep(0.01)
 
+            # Give a brief moment for any recently dequeued operations to complete
+            # This prevents race conditions where items were just removed from queue
+            # but are still being processed
+            if self._task is not None and not self._task.done():
+                await asyncio.sleep(0.05)
+
             # Cancel the background batch task
             if self._task is not None and not self._task.done():
                 self._task.cancel()
