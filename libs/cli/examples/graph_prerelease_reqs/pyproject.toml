@@ -6,8 +6,8 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "langchain-openai==1.0.0a2",
-  "langgraph==1.0.0a2",
-  "langchain_community>=0.3.0",
+  "langchain-anthropic==1.0.0.a5",
+  "langgraph==1.0.2"
 ]
 
 [tool.uv]

@@ -10,6 +10,10 @@ from langgraph_cli.cli import prepare_args_and_stdin
 from langgraph_cli.constants import DEFAULT_PORT
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
@@ -57,7 +61,9 @@ def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
             sys.stderr.write(f"docker compose up failed: {e}\n")
             try:
                 sys.stderr.write("\n== docker compose ps ==\n")
-                runner.run(subp_exec(*compose_cmd, *args, "ps", input=stdin, verbose=False))
+                runner.run(
+                    subp_exec(*compose_cmd, *args, "ps", input=stdin, verbose=False)
+                )
             except Exception:
                 pass
             try:
@@ -93,7 +99,7 @@ def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
         set("")
         base_url = f"http://localhost:{port}"
         ok_url = f"{base_url}/ok"
-        print(f"Waiting for {ok_url} to respond with 200...")
+        logger.info(f"Waiting for {ok_url} to respond with 200...")
         deadline = time.time() + 30
         last_err: Exception | None = None
         while time.time() < deadline:
@@ -107,13 +113,16 @@ def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
                         break
                     else:
                         last_err = RuntimeError(f"Unexpected status: {resp.status}")
-                        print(f"Unexpected status: {resp.status}")
+                        logger.error(f"Unexpected status: {resp.status}")
             except error.URLError as e:
+                logger.error(f"URLError: {e}")
                 last_err = e
             except Exception as e:  # noqa: BLE001
+                logger.error(f"Exception: {e}")
                 last_err = e
             time.sleep(0.5)
         else:
+            logger.error("Timeout waiting for /ok to return 200")
             # Bring stack down before raising
             args_down = [*args, "down", "-v", "--remove-orphans"]
             try:
@@ -131,15 +140,22 @@ def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
                 )
 
         # Clean up: bring compose stack down to free ports for next test
-        args_down = [*args, "down", "-v", "--remove-orphans"]
-        runner.run(
-            subp_exec(
-                *compose_cmd,
-                *args_down,
-                input=stdin,
-                verbose=verbose,
+        logger.info("Test succeeded. Bringing down compose stack...")
+        try:
+            args_down = [*args, "down", "-v", "--remove-orphans"]
+            runner.run(
+                subp_exec(
+                    *compose_cmd,
+                    *args_down,
+                    input=stdin,
+                    verbose=verbose,
+                )
             )
-        )
+            logger.info("Compose stack down. Finishing...")
+        except Exception:
+            logger.exception("Failed to bring down compose stack")
+            pass
+    logger.info("Test finished")
 
 
 if __name__ == "__main__":
