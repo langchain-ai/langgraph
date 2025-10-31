@@ -32,8 +32,15 @@ dependencies = [
     "pydantic>=2.7.4",
 ]
 
+
 [project.urls]
-Repository = "https://www.github.com/langchain-ai/langgraph"
+Homepage = "https://docs.langchain.com/oss/python/langgraph/overview"
+Documentation = "https://reference.langchain.com/python/langgraph/"
+Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/langgraph"
+Changelog = "https://github.com/langchain-ai/langgraph/releases"
+Twitter = "https://x.com/LangChainAI"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
 
 [dependency-groups]
 test = [
