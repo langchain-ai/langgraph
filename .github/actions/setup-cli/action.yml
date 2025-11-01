@@ -1,0 +1,20 @@
+name: Setup LangGraph CLI
+description: Set up Python and install the CLI
+inputs:
+  python-version:
+    description: Python version (e.g. 3.11)
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v7
+      with:
+        python-version: ${{ inputs.python-version }}
+        enable-cache: true
+        cache-suffix: cli-integration-test
+        ignore-nothing-to-cache: true
+
+    - name: Install CLI
+      shell: bash
+      working-directory: libs/cli
+      run: pip install -e .

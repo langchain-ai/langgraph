@@ -148,7 +148,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
     name: CLI integration test
-    uses: ./.github/workflows/_integration_test.yml
+    uses: ./.github/workflows/ci_integration_tests.yml
     secrets: inherit
 
   ci_success:
