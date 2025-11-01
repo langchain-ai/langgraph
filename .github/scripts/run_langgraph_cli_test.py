@@ -1,7 +1,8 @@
+import logging
 import pathlib
 import sys
 import time
-from urllib import request, error
+from urllib import error, request
 
 import langgraph_cli
 import langgraph_cli.config
@@ -10,7 +11,6 @@ from langgraph_cli.cli import prepare_args_and_stdin
 from langgraph_cli.constants import DEFAULT_PORT
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
-import logging
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +18,7 @@ logging.basicConfig(level=logging.INFO)
 
 def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
     """Spin up API with Postgres/Redis via docker compose and wait until ready."""
+    logger.info("Starting test...")
     with Runner() as runner, Progress(message="Pulling...") as set:
         # Detect docker/compose capabilities
         capabilities = langgraph_cli.docker.check_capabilities(runner)
@@ -155,6 +156,7 @@ def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
         except Exception:
             logger.exception("Failed to bring down compose stack")
             pass
+
     logger.info("Test finished")
 
 
@@ -166,4 +168,10 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--config", type=str, default="./langgraph.json")
     parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args()
-    test(pathlib.Path(args.config), args.port, args.tag, verbose=True)
+    try:
+        test(pathlib.Path(args.config), args.port, args.tag, verbose=True)
+    except BaseException:
+        logger.exception("Test failed")
+        raise
+    
+    logger.info("Test execution finished")

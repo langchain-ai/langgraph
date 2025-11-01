@@ -94,16 +94,20 @@ jobs:
           cp ../.env.example .env
           if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h
+          echo "Finished starting up langgraph-test-h"
           LANGGRAPH_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langgraph'); print(v);")
           if [ "$LANGGRAPH_VERSION" != "1.0.2" ]; then
+            echo "LANGGRAPH_VERSION != 1.0.2; $LANGGRAPH_VERSION"
             exit 1
           fi
           LANGCHAIN_OPENAI_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-openai'); print(v);")
           if [ "$LANGCHAIN_OPENAI_VERSION" != "1.0.1" ]; then
+            echo "LANGCHAIN_OPENAI_VERSION != 1.0.1; $LANGCHAIN_OPENAI_VERSION"
             exit 1
           fi
           LANGCHAIN_ANTHROPIC_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-anthropic'); print(v);")
-          if [ "$LANGCHAIN_ANTHROPIC_VERSION" != "1.0.0.a5" ]; then
+          if [ "$LANGCHAIN_ANTHROPIC_VERSION" != "1.0.0a5" ]; then
+            echo "LANGCHAIN_ANTHROPIC_VERSION != 1.0.0a5; $LANGCHAIN_ANTHROPIC_VERSION"
             exit 1
           fi
 
