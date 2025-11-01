@@ -111,7 +111,7 @@ class Runtime(Generic[ContextT]):
             stream_writer=other.stream_writer
             if other.stream_writer is not _no_op_stream_writer
             else self.stream_writer,
-            previous=other.previous or self.previous,
+            previous=self.previous if other.previous is None else other.previous,
         )
 
     def override(
