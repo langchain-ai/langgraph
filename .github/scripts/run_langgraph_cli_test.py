@@ -1,7 +1,8 @@
+import logging
 import pathlib
 import sys
 import time
-from urllib import request, error
+from urllib import error, request
 
 import langgraph_cli
 import langgraph_cli.config
@@ -10,7 +11,6 @@ from langgraph_cli.cli import prepare_args_and_stdin
 from langgraph_cli.constants import DEFAULT_PORT
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
-import logging
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -167,3 +167,4 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args()
     test(pathlib.Path(args.config), args.port, args.tag, verbose=True)
+    logger.info("Test execution finished")

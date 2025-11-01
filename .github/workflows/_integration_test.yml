@@ -136,12 +136,13 @@ jobs:
           cp ../.env.example .env
           if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h
+          echo "Finished initial test. Checking versions..."
           LANGGRAPH_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "from importlib.metadata import version; print(version('langgraph'))")
           test "$LANGGRAPH_VERSION" = "1.0.2"
           LANGCHAIN_OPENAI_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "from importlib.metadata import version; print(version('langchain-openai'))")
           test "$LANGCHAIN_OPENAI_VERSION" = "1.0.1"
           LANGCHAIN_ANTHROPIC_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "from importlib.metadata import version; print(version('langchain-anthropic'))")
-          test "$LANGCHAIN_ANTHROPIC_VERSION" = "1.0.0.a5"
+          test "$LANGCHAIN_ANTHROPIC_VERSION" = "1.0.0a5"
 
   build_and_test_prerelease_reqs_fail_service:
     needs: detect_changes
