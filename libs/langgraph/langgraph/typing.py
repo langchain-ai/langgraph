@@ -31,13 +31,13 @@ ContextT_contra = TypeVar(
 )
 
 InputT = TypeVar("InputT", bound=StateLike, default=StateT)
-"""Type variable used to represent the input to a state graph.
+"""Type variable used to represent the input to a `StateGraph`.
 
 Defaults to `StateT`.
 """
 
 OutputT = TypeVar("OutputT", bound=StateLike, default=StateT)
-"""Type variable used to represent the output of a state graph.
+"""Type variable used to represent the output of a `StateGraph`.
 
 Defaults to `StateT`.
 """
