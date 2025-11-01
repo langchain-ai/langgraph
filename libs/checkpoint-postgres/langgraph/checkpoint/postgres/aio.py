@@ -102,7 +102,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 strict=False,
             ):
                 await cur.execute(migration)
-                await cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+                await cur.execute(
+                    "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
+                )
         if self.pipe:
             await self.pipe.sync()
 
