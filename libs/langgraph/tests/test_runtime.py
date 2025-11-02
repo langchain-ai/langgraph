@@ -389,3 +389,65 @@ def test_context_coercion_pydantic_validation_errors() -> None:
         compiled.invoke(
             {"message": "test"}, context={"api_key": "sk_test", "timeout": "not_an_int"}
         )
+
+
+def test_subgraph_invoked_with_config_preserves_runtime() -> None:
+    """Test that manually invoking a subgraph with config parameter preserves runtime (store and context)."""
+    from langchain_core.runnables import RunnableConfig
+    from langgraph.store.memory import InMemoryStore
+
+    @dataclass
+    class Context:
+        username: str
+
+    class State(TypedDict):
+        foo: str
+
+    # Subgraph
+    def subgraph_node_1(state: State, runtime: Runtime[Context]):
+        assert runtime.store is not None, "Store is required"
+        assert runtime.context is not None, "Context is required"
+        username = state["foo"]
+        runtime.store.put(("subgraph", "1"), "foo", {"value": "hi! " + username})
+        return {"foo": "hi! " + username}
+
+    subgraph_builder = StateGraph(State, context_schema=Context)
+    subgraph_builder.add_node(subgraph_node_1)
+    subgraph_builder.set_entry_point("subgraph_node_1")
+    subgraph = subgraph_builder.compile()
+
+    # Parent graph
+    def main_node(state: State, runtime: Runtime[Context]):
+        last_foo = runtime.store.get(("subgraph", "1"), "foo")
+        if last_foo:
+            last_foo = last_foo.value["value"]
+        else:
+            last_foo = runtime.context.username
+        return {"foo": "hello " + str(last_foo)}
+
+    def invoke_subgraph(state: State, runtime: Runtime[Context], config: RunnableConfig):
+        # Before the fix, users had to manually call patch_configurable here
+        # Now it should work automatically when passing config with thread_id
+        new_config = {**config, "configurable": {**config.get("configurable", {}), "thread_id": "1"}}
+        return subgraph.invoke(input=state, config=new_config)
+
+    store = InMemoryStore()
+    builder = StateGraph(State, context_schema=Context)
+    builder.add_node(main_node)
+    builder.add_node(invoke_subgraph)
+    builder.set_entry_point("main_node")
+    builder.add_edge("main_node", "invoke_subgraph")
+    graph = builder.compile(store=store)
+
+    context = Context(username="Alice")
+    result = graph.invoke(input={"foo": "world"}, context=context)
+    
+    # The flow is:
+    # 1. main_node: returns {'foo': 'hello Alice'} (from context)
+    # 2. invoke_subgraph: subgraph receives {'foo': 'hello Alice'}, returns {'foo': 'hi! hello Alice'}
+    assert result == {"foo": "hi! hello Alice"}
+    
+    # Verify store was updated by subgraph
+    stored_value = store.get(("subgraph", "1"), "foo")
+    assert stored_value is not None
+    assert stored_value.value["value"] == "hi! hello Alice"

@@ -302,7 +302,8 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
         for k, v in config.items():
             if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
-                    empty[k] = cast(dict, v).copy()
+                    # Merge CONF sections instead of replacing
+                    empty[k] = {**empty.get(k, {}), **cast(dict, v)}  # type: ignore[dict-item]
                 else:
                     empty[k] = v  # type: ignore[literal-required]
         for k, v in config.items():
