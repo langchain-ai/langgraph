@@ -141,6 +141,7 @@ services:
             additional_contexts:
                 - cli_1: {str(pathlib.Path(__file__).parent.parent.parent.parent.absolute())}
             dockerfile_inline: |
+                # syntax=docker/dockerfile:1.4
                 FROM langchain/langgraph-api:3.11
                 # -- Adding local package . --
                 ADD . /deps/cli
