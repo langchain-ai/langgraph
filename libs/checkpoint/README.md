@@ -38,8 +38,10 @@ Each checkpointer should conform to `langgraph.checkpoint.base.BaseCheckpointSav
 - `.put_writes` - Store intermediate writes linked to a checkpoint (i.e. pending writes).
 - `.get_tuple` - Fetch a checkpoint tuple using for a given configuration (`thread_id` and `checkpoint_id`).
 - `.list` - List checkpoints that match a given configuration and filter criteria.
+- `.delete_thread()` - Delete all checkpoints and writes associated with a specific thread.
+- `.get_next_version()` - Generate the next version ID for a channel.
 
-If the checkpointer will be used with asynchronous graph execution (i.e. executing the graph via `.ainvoke`, `.astream`, `.abatch`), checkpointer must implement asynchronous versions of the above methods (`.aput`, `.aput_writes`, `.aget_tuple`, `.alist`).
+If the checkpointer will be used with asynchronous graph execution (i.e. executing the graph via `.ainvoke`, `.astream`, `.abatch`), checkpointer must implement asynchronous versions of the above methods (`.aput`, `.aput_writes`, `.aget_tuple`, `.alist`). Similarly, the checkpointer must implement `.adelete_thread()` if asynchronous thread cleanup is desired. The base class provides a default version of `.get_next_version()` that generates an integer sequence starting from 1, but this method should be overriden for custom versioning schemes.
 
 ## Usage
 
