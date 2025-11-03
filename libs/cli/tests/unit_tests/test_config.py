@@ -419,6 +419,7 @@ def test_config_to_docker_simple():
         "langchain/langgraph-api",
     )
     expected_docker_stdin = f"""\
+# syntax=docker/dockerfile:1.4
 FROM langchain/langgraph-api:3.11
 # -- Installing local requirements --
 COPY --from=outer-requirements.txt requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
@@ -482,6 +483,7 @@ def test_config_to_docker_outside_path():
     )
     expected_docker_stdin = (
         """\
+# syntax=docker/dockerfile:1.4
 FROM langchain/langgraph-api:3.11
 # -- Adding non-package dependency unit_tests --
 ADD . /deps/outer-unit_tests/unit_tests

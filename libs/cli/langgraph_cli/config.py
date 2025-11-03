@@ -926,7 +926,19 @@ ADD {relpath} /deps/{name}
             ]
         )
     image_str = docker_tag(config, base_image, api_version)
-    docker_file_contents = [
+    
+    # Prepare docker file contents
+    docker_file_contents = []
+    
+    # Add syntax directive if we have additional contexts (requires BuildKit frontend.contexts capability)
+    if local_deps.additional_contexts:
+        docker_file_contents.extend([
+            "# syntax=docker/dockerfile:1.4",
+            "",
+        ])
+    
+    # Add main dockerfile content
+    docker_file_contents.extend([
         f"FROM {image_str}",
         "",
         os.linesep.join(config["dockerfile_lines"]),
@@ -954,7 +966,7 @@ ADD {relpath} /deps/{name}
         ),
         "",
         f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
-    ]
+    ])
 
     additional_contexts: dict[str, str] = {}
     for p in local_deps.additional_contexts:
