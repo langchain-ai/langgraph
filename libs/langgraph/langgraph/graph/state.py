@@ -108,6 +108,44 @@ def _get_node_name(node: StateNode[Any, ContextT]) -> str:
         raise TypeError(f"Unsupported node type: {type(node)}")
 
 
+def _get_node_key(node: str | Any) -> str:
+    """Convert node object or string to string key.
+
+    Mirrors the logic used in add_node() for consistency.
+    Accepts strings (returned as-is) or objects (converted to string names).
+
+    Args:
+        node: Either a string node name or a node object (Runnable, function, etc.)
+
+    Returns:
+        str: The string key for the node
+
+    Raises:
+        ValueError: If the node name cannot be extracted from the object
+    """
+    if isinstance(node, str):
+        return node
+
+    # Try Runnable first
+    if isinstance(node, Runnable):
+        key = node.get_name()
+    else:
+        # Fall back to __name__ or class name
+        key = getattr(node, "__name__", None)
+        if key is None:
+            key = getattr(node, "__class__", None)
+            if key is not None:
+                key = getattr(key, "__name__", None)
+
+    if key is None:
+        raise ValueError(
+            f"Could not extract node name from {node}. "
+            "Please provide an explicit string name."
+        )
+
+    return key
+
+
 class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
 
@@ -564,7 +602,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         return self
 
-    def add_edge(self, start_key: str | list[str], end_key: str) -> Self:
+    def add_edge(
+        self, start_key: str | list[str] | Any | list[Any], end_key: str | Any
+    ) -> Self:
         """Add a directed edge from the start node (or list of start nodes) to the end node.
 
         When a single start node is provided, the graph will wait for that node to complete
@@ -573,19 +613,42 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         Args:
             start_key: The key(s) of the start node(s) of the edge.
+                Can be a string, a node object (which will be converted to its string name),
+                or a list of strings/objects.
             end_key: The key of the end node of the edge.
+                Can be a string or a node object (which will be converted to its string name).
 
         Raises:
             ValueError: If the start key is `'END'` or if the start key or end key is not present in the graph.
 
         Returns:
             Self: The instance of the `StateGraph`, allowing for method chaining.
+
+        Example:
+            ```python
+            # Using strings (existing behavior)
+            builder.add_edge("node_a", "node_b")
+
+            # Using node objects (new behavior)
+            builder.add_edge(node_a, node_b)
+
+            # Using a mix of strings and objects
+            builder.add_edge([node_a, "node_b"], node_c)
+            ```
         """
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
+
+        # Convert node objects to string keys
+        if isinstance(start_key, list):
+            start_key = [_get_node_key(k) for k in start_key]
+        else:
+            start_key = _get_node_key(start_key)
+
+        end_key = _get_node_key(end_key)
 
         if isinstance(start_key, str):
             if start_key == END:
