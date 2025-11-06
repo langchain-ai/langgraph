@@ -891,6 +891,9 @@ class ToolNode(RunnableCallable):
             return self._validate_tool_command(response, request.tool_call, input_type)
         if isinstance(response, ToolMessage):
             response.content = cast("str | list", msg_content_output(response.content))
+            # Enrich ToolMessage with name if not set (e.g., from fallback handlers)
+            if response.name is None:
+                response.name = call["name"]
             return response
 
         msg = f"Tool {call['name']} returned unexpected type: {type(response)}"
@@ -1048,6 +1051,9 @@ class ToolNode(RunnableCallable):
             return self._validate_tool_command(response, request.tool_call, input_type)
         if isinstance(response, ToolMessage):
             response.content = cast("str | list", msg_content_output(response.content))
+            # Enrich ToolMessage with name if not set (e.g., from fallback handlers)
+            if response.name is None:
+                response.name = call["name"]
             return response
 
         msg = f"Tool {call['name']} returned unexpected type: {type(response)}"
