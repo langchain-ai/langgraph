@@ -14,7 +14,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     get_checkpoint_id,
-    get_checkpoint_metadata,
+    get_serializable_checkpoint_metadata,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
@@ -99,9 +99,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
             for v, migration in zip(
                 range(version + 1, len(self.MIGRATIONS)),
                 self.MIGRATIONS[version + 1 :],
+                strict=False,
             ):
                 await cur.execute(migration)
-                await cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+                await cur.execute(
+                    "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
+                )
         if self.pipe:
             await self.pipe.sync()
 
@@ -121,11 +124,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Args:
             config: Base configuration for filtering checkpoints.
             filter: Additional filtering criteria for metadata.
-            before: If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
+            before: If provided, only checkpoints before the specified checkpoint ID are returned.
             limit: Maximum number of checkpoints to return.
 
         Yields:
-            AsyncIterator[CheckpointTuple]: An asynchronous iterator of matching checkpoint tuples.
+            An asynchronous iterator of matching checkpoint tuples.
         """
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
@@ -169,7 +172,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """Get a checkpoint tuple from the database asynchronously.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the
-        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
+        provided config. If the config contains a `checkpoint_id` key, the checkpoint with
         the matching thread ID and "checkpoint_id" is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
 
@@ -177,7 +180,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             config: The config to use for retrieving the checkpoint.
 
         Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
@@ -283,7 +286,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     checkpoint["id"],
                     checkpoint_id,
                     Jsonb(copy),
-                    Jsonb(get_checkpoint_metadata(config, metadata)),
+                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
                 ),
             )
         return next_config
@@ -409,7 +412,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             {
                 **value["checkpoint"],
                 "channel_values": {
-                    **value["checkpoint"].get("channel_values"),
+                    **(value["checkpoint"].get("channel_values") or {}),
                     **self._load_blobs(value["channel_values"]),
                 },
             },
@@ -444,11 +447,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Args:
             config: Base configuration for filtering checkpoints.
             filter: Additional filtering criteria for metadata.
-            before: If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
+            before: If provided, only checkpoints before the specified checkpoint ID are returned.
             limit: Maximum number of checkpoints to return.
 
         Yields:
-            Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
+            An iterator of matching checkpoint tuples.
         """
         try:
             # check if we are in the main thread, only bg threads can block
@@ -476,7 +479,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """Get a checkpoint tuple from the database.
 
         This method retrieves a checkpoint tuple from the Postgres database based on the
-        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
+        provided config. If the config contains a `checkpoint_id` key, the checkpoint with
         the matching thread ID and "checkpoint_id" is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
 
@@ -484,7 +487,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             config: The config to use for retrieving the checkpoint.
 
         Returns:
-            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+            The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         try:
             # check if we are in the main thread, only bg threads can block

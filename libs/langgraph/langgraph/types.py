@@ -2,18 +2,16 @@ from __future__ import annotations
 
 import sys
 from collections import deque
-from collections.abc import Hashable, Sequence
+from collections.abc import Callable, Hashable, Sequence
 from dataclasses import asdict, dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     ClassVar,
     Generic,
     Literal,
     NamedTuple,
     TypeVar,
-    Union,
     final,
 )
 from warnings import warn
@@ -57,6 +55,7 @@ __all__ = (
     "Command",
     "Durability",
     "interrupt",
+    "Overwrite",
 )
 
 Durability = Literal["sync", "async", "exit"]
@@ -68,7 +67,7 @@ Durability = Literal["sync", "async", "exit"]
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
-Checkpointer = Union[None, bool, BaseCheckpointSaver]
+Checkpointer = None | bool | BaseCheckpointSaver
 """Type of the checkpointer to use for a subgraph.
 - True enables persistent checkpointing for this subgraph.
 - False disables checkpointing, even if the parent graph has a checkpointer.
@@ -85,28 +84,23 @@ StreamMode = Literal[
     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
 - `"custom"`: Emit custom data using from inside nodes or tasks using `StreamWriter`.
 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
-- `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by get_state().
+- `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
-- `"debug"`: Emit "checkpoints" and "tasks" events, for debugging purposes.
+- `"debug"`: Emit `"checkpoints"` and `"tasks"` events for debugging purposes.
 """
 
 StreamWriter = Callable[[Any], None]
-"""Callable that accepts a single argument and writes it to the output stream.
+"""`Callable` that accepts a single argument and writes it to the output stream.
 Always injected into nodes if requested as a keyword argument, but it's a no-op
-when not using stream_mode="custom"."""
+when not using `stream_mode="custom"`."""
 
-if sys.version_info >= (3, 10):
-    _DC_SLOTS = {"slots": True}
-    _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
-else:
-    _DC_SLOTS = {}
-    _DC_KWARGS = {"frozen": True}
+_DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 
 
 class RetryPolicy(NamedTuple):
     """Configuration for retrying nodes.
 
-    !!! version-added "Added in version 0.2.24."
+    !!! version-added "Added in version 0.2.24"
     """
 
     initial_interval: float = 0.5
@@ -122,10 +116,10 @@ class RetryPolicy(NamedTuple):
     retry_on: (
         type[Exception] | Sequence[type[Exception]] | Callable[[Exception], bool]
     ) = default_retry_on
-    """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
+    """List of exception classes that should trigger a retry, or a callable that returns `True` for exceptions that should trigger a retry."""
 
 
-KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., Union[str, bytes]])
+KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., str | bytes])
 
 
 @dataclass(**_DC_KWARGS)
@@ -137,18 +131,18 @@ class CachePolicy(Generic[KeyFuncT]):
     Defaults to hashing the input with pickle."""
 
     ttl: int | None = None
-    """Time to live for the cache entry in seconds. If None, the entry never expires."""
+    """Time to live for the cache entry in seconds. If `None`, the entry never expires."""
 
 
 _DEFAULT_INTERRUPT_ID = "placeholder-id"
 
 
 @final
-@dataclass(init=False, **_DC_SLOTS)
+@dataclass(init=False, slots=True)
 class Interrupt:
     """Information about an interrupt that occurred in a node.
 
-    !!! version-added "Added in version 0.2.24."
+    !!! version-added "Added in version 0.2.24"
 
     !!! version-changed "Changed in version v0.4.0"
         * `interrupt_id` was introduced as a property
@@ -290,28 +284,32 @@ class Send:
         node (str): The name of the target node to send the message to.
         arg (Any): The state or message to send to the target node.
 
-    Examples:
-        >>> from typing import Annotated
-        >>> import operator
-        >>> class OverallState(TypedDict):
-        ...     subjects: list[str]
-        ...     jokes: Annotated[list[str], operator.add]
-        ...
-        >>> from langgraph.types import Send
-        >>> from langgraph.graph import END, START
-        >>> def continue_to_jokes(state: OverallState):
-        ...     return [Send("generate_joke", {"subject": s}) for s in state['subjects']]
-        ...
-        >>> from langgraph.graph import StateGraph
-        >>> builder = StateGraph(OverallState)
-        >>> builder.add_node("generate_joke", lambda state: {"jokes": [f"Joke about {state['subject']}"]})
-        >>> builder.add_conditional_edges(START, continue_to_jokes)
-        >>> builder.add_edge("generate_joke", END)
-        >>> graph = builder.compile()
-        >>>
-        >>> # Invoking with two subjects results in a generated joke for each
-        >>> graph.invoke({"subjects": ["cats", "dogs"]})
-        {'subjects': ['cats', 'dogs'], 'jokes': ['Joke about cats', 'Joke about dogs']}
+    !!! example
+
+        ```python
+        from typing import Annotated
+        from langgraph.types import Send
+        from langgraph.graph import END, START
+        from langgraph.graph import StateGraph
+        import operator
+
+        class OverallState(TypedDict):
+            subjects: list[str]
+            jokes: Annotated[list[str], operator.add]
+
+        def continue_to_jokes(state: OverallState):
+            return [Send("generate_joke", {"subject": s}) for s in state["subjects"]]
+
+        builder = StateGraph(OverallState)
+        builder.add_node("generate_joke", lambda state: {"jokes": [f"Joke about {state['subject']}"]})
+        builder.add_conditional_edges(START, continue_to_jokes)
+        builder.add_edge("generate_joke", END)
+        graph = builder.compile()
+
+        # Invoking with two subjects results in a generated joke for each
+        graph.invoke({"subjects": ["cats", "dogs"]})
+        # {'subjects': ['cats', 'dogs'], 'jokes': ['Joke about cats', 'Joke about dogs']}
+        ```
     """
 
     __slots__ = ("node", "arg")
@@ -321,7 +319,7 @@ class Send:
 
     def __init__(self, /, node: str, arg: Any) -> None:
         """
-        Initialize a new instance of the Send class.
+        Initialize a new instance of the `Send` class.
 
         Args:
             node: The name of the target node to send the message to.
@@ -351,25 +349,23 @@ N = TypeVar("N", bound=Hashable)
 class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
-    !!! version-added "Added in version 0.2.24."
-
     Args:
-        graph: graph to send the command to. Supported values are:
+        graph: Graph to send the command to. Supported values are:
 
-            - None: the current graph (default)
-            - Command.PARENT: closest parent graph
-        update: update to apply to the graph's state.
-        resume: value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
+            - `None`: the current graph
+            - `Command.PARENT`: closest parent graph
+        update: Update to apply to the graph's state.
+        resume: Value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
             Can be one of the following:
 
-            - mapping of interrupt ids to resume values
-            - a single value with which to resume the next interrupt
-        goto: can be one of the following:
+            - Mapping of interrupt ids to resume values
+            - A single value with which to resume the next interrupt
+        goto: Can be one of the following:
 
-            - name of the node to navigate to next (any node that belongs to the specified `graph`)
-            - sequence of node names to navigate to next
+            - Name of the node to navigate to next (any node that belongs to the specified `graph`)
+            - Sequence of node names to navigate to next
             - `Send` object (to execute a node with the input provided)
-            - sequence of `Send` objects
+            - Sequence of `Send` objects
     """
 
     graph: str | None = None
@@ -424,7 +420,8 @@ def interrupt(value: Any) -> Any:
     To use an `interrupt`, you must enable a checkpointer, as the feature relies
     on persisting the graph state.
 
-    Example:
+    !!! example
+
         ```python
         import uuid
         from typing import Optional
@@ -525,3 +522,47 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
+
+
+@dataclass(slots=True)
+class Overwrite:
+    """Bypass a reducer and write the wrapped value directly to a `BinaryOperatorAggregate` channel.
+
+    Receiving multiple `Overwrite` values for the same channel in a single super-step
+    will raise an `InvalidUpdateError`.
+
+    !!! example
+
+        ```python
+        from typing import Annotated
+        import operator
+        from langgraph.graph import StateGraph
+        from langgraph.types import Overwrite
+
+        class State(TypedDict):
+            messages: Annotated[list, operator.add]
+
+        def node_a(state: TypedDict):
+            # Normal update: uses the reducer (operator.add)
+            return {"messages": ["a"]}
+
+        def node_b(state: State):
+            # Overwrite: bypasses the reducer and replaces the entire value
+            return {"messages": Overwrite(value=["b"])}
+
+        builder = StateGraph(State)
+        builder.add_node("node_a", node_a)
+        builder.add_node("node_b", node_b)
+        builder.set_entry_point("node_a")
+        builder.add_edge("node_a", "node_b")
+        graph = builder.compile()
+
+        # Without Overwrite in node_b, messages would be ["START", "a", "b"]
+        # With Overwrite, messages is just ["b"]
+        result = graph.invoke({"messages": ["START"]})
+        assert result == {"messages": ["b"]}
+        ```
+    """
+
+    value: Any
+    """The value to write directly to the channel, bypassing any reducer."""

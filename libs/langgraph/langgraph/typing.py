@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Union
-
 from typing_extensions import TypeVar
 
 from langgraph._internal._typing import StateLike
@@ -22,24 +20,24 @@ StateT_co = TypeVar("StateT_co", bound=StateLike, covariant=True)
 
 StateT_contra = TypeVar("StateT_contra", bound=StateLike, contravariant=True)
 
-ContextT = TypeVar("ContextT", bound=Union[StateLike, None], default=None)
+ContextT = TypeVar("ContextT", bound=StateLike | None, default=None)
 """Type variable used to represent graph run scoped context.
 
 Defaults to `None`.
 """
 
 ContextT_contra = TypeVar(
-    "ContextT_contra", bound=Union[StateLike, None], contravariant=True, default=None
+    "ContextT_contra", bound=StateLike | None, contravariant=True, default=None
 )
 
 InputT = TypeVar("InputT", bound=StateLike, default=StateT)
-"""Type variable used to represent the input to a state graph.
+"""Type variable used to represent the input to a `StateGraph`.
 
 Defaults to `StateT`.
 """
 
 OutputT = TypeVar("OutputT", bound=StateLike, default=StateT)
-"""Type variable used to represent the output of a state graph.
+"""Type variable used to represent the output of a `StateGraph`.
 
 Defaults to `StateT`.
 """

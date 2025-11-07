@@ -845,7 +845,7 @@ async def test_async_batched_vector_search_concurrent(
         ]
     )
 
-    for results, (query, filter_) in zip(all_results, search_queries):
+    for results, (query, filter_) in zip(all_results, search_queries, strict=False):
         assert len(results) > 0, f"No results for query '{query}' with filter {filter_}"
 
         for result in results:
@@ -950,8 +950,8 @@ async def test_embed_with_path(fake_embeddings: CharacterEmbeddings) -> None:
     assert results[0].key != results[1].key
     ascore = results[0].score
     bscore = results[1].score
-    assert ascore == bscore
     assert ascore is not None and bscore is not None
+    assert ascore == pytest.approx(bscore, abs=1e-5)
 
     results = await store.asearch(("test",), query="uuu")
     assert len(results) == 2

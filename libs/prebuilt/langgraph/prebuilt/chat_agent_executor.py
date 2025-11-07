@@ -1,18 +1,14 @@
 import inspect
+import warnings
+from collections.abc import Awaitable, Callable, Sequence
 from typing import (
+    Annotated,
     Any,
-    Awaitable,
-    Callable,
     Literal,
-    Optional,
-    Sequence,
-    Type,
     TypeVar,
-    Union,
     cast,
     get_type_hints,
 )
-from warnings import warn
 
 from langchain_core.language_models import (
     BaseChatModel,
@@ -46,19 +42,18 @@ from langgraph.types import Checkpointer, Send
 from langgraph.typing import ContextT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 from pydantic import BaseModel
-from typing_extensions import Annotated, NotRequired, TypedDict
+from typing_extensions import NotRequired, TypedDict, deprecated
 
-from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.prebuilt.tool_node import ToolCallWithContext, ToolNode
 
-StructuredResponse = Union[dict, BaseModel]
-StructuredResponseSchema = Union[dict, type[BaseModel]]
-F = TypeVar("F", bound=Callable[..., Any])
+StructuredResponse = dict | BaseModel
+StructuredResponseSchema = dict | type[BaseModel]
 
 
-# We create the AgentState that we will pass around
-# This simply involves a list of messages
-# We want steps to return messages to append to the list
-# So we annotate the messages attribute with `add_messages` reducer
+@deprecated(
+    "AgentState has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentState`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class AgentState(TypedDict):
     """The state of the agent."""
 
@@ -67,6 +62,10 @@ class AgentState(TypedDict):
     remaining_steps: NotRequired[RemainingSteps]
 
 
+@deprecated(
+    "AgentStatePydantic has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStatePydantic`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class AgentStatePydantic(BaseModel):
     """The state of the agent."""
 
@@ -75,29 +74,51 @@ class AgentStatePydantic(BaseModel):
     remaining_steps: RemainingSteps = 25
 
 
-class AgentStateWithStructuredResponse(AgentState):
-    """The state of the agent with a structured response."""
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        category=LangGraphDeprecatedSinceV10,
+        message="AgentState has been moved to langchain.agents.*",
+    )
 
-    structured_response: StructuredResponse
+    @deprecated(
+        "AgentStateWithStructuredResponse has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStateWithStructuredResponse`.",
+        category=LangGraphDeprecatedSinceV10,
+    )
+    class AgentStateWithStructuredResponse(AgentState):
+        """The state of the agent with a structured response."""
+
+        structured_response: StructuredResponse
 
 
-class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
-    """The state of the agent with a structured response."""
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        category=LangGraphDeprecatedSinceV10,
+        message="AgentStatePydantic has been moved to langchain.agents.*",
+    )
 
-    structured_response: StructuredResponse
+    @deprecated(
+        "AgentStateWithStructuredResponsePydantic has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStateWithStructuredResponsePydantic`.",
+        category=LangGraphDeprecatedSinceV10,
+    )
+    class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
+        """The state of the agent with a structured response."""
+
+        structured_response: StructuredResponse
 
 
-StateSchema = TypeVar("StateSchema", bound=Union[AgentState, AgentStatePydantic])
-StateSchemaType = Type[StateSchema]
+StateSchema = TypeVar("StateSchema", bound=AgentState | AgentStatePydantic)
+StateSchemaType = type[StateSchema]
 
 PROMPT_RUNNABLE_NAME = "Prompt"
 
-Prompt = Union[
-    SystemMessage,
-    str,
-    Callable[[StateSchema], LanguageModelInput],
-    Runnable[StateSchema, LanguageModelInput],
-]
+Prompt = (
+    SystemMessage
+    | str
+    | Callable[[StateSchema], LanguageModelInput]
+    | Runnable[StateSchema, LanguageModelInput]
+)
 
 
 def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
@@ -108,7 +129,7 @@ def _get_state_value(state: StateSchema, key: str, default: Any = None) -> Any:
     )
 
 
-def _get_prompt_runnable(prompt: Optional[Prompt]) -> Runnable:
+def _get_prompt_runnable(prompt: Prompt | None) -> Runnable:
     prompt_runnable: Runnable
     if prompt is None:
         prompt_runnable = RunnableCallable(
@@ -245,37 +266,39 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
+@deprecated(
+    "create_react_agent has been moved to `langchain.agents`. Please update your import to `from langchain.agents import create_agent`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 def create_react_agent(
-    model: Union[
-        str,
-        LanguageModelLike,
-        Callable[[StateSchema, Runtime[ContextT]], BaseChatModel],
-        Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]],
-        Callable[
-            [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]
-        ],
-        Callable[
-            [StateSchema, Runtime[ContextT]],
-            Awaitable[Runnable[LanguageModelInput, BaseMessage]],
-        ],
+    model: str
+    | LanguageModelLike
+    | Callable[[StateSchema, Runtime[ContextT]], BaseChatModel]
+    | Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]]
+    | Callable[
+        [StateSchema, Runtime[ContextT]], Runnable[LanguageModelInput, BaseMessage]
+    ]
+    | Callable[
+        [StateSchema, Runtime[ContextT]],
+        Awaitable[Runnable[LanguageModelInput, BaseMessage]],
     ],
-    tools: Union[Sequence[Union[BaseTool, Callable, dict[str, Any]]], ToolNode],
+    tools: Sequence[BaseTool | Callable | dict[str, Any]] | ToolNode,
     *,
-    prompt: Optional[Prompt] = None,
-    response_format: Optional[
-        Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
-    ] = None,
-    pre_model_hook: Optional[RunnableLike] = None,
-    post_model_hook: Optional[RunnableLike] = None,
-    state_schema: Optional[StateSchemaType] = None,
-    context_schema: Optional[Type[Any]] = None,
-    checkpointer: Optional[Checkpointer] = None,
-    store: Optional[BaseStore] = None,
-    interrupt_before: Optional[list[str]] = None,
-    interrupt_after: Optional[list[str]] = None,
+    prompt: Prompt | None = None,
+    response_format: StructuredResponseSchema
+    | tuple[str, StructuredResponseSchema]
+    | None = None,
+    pre_model_hook: RunnableLike | None = None,
+    post_model_hook: RunnableLike | None = None,
+    state_schema: StateSchemaType | None = None,
+    context_schema: type[Any] | None = None,
+    checkpointer: Checkpointer | None = None,
+    store: BaseStore | None = None,
+    interrupt_before: list[str] | None = None,
+    interrupt_after: list[str] | None = None,
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
-    name: Optional[str] = None,
+    name: str | None = None,
     **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
@@ -286,64 +309,71 @@ def create_react_agent(
         model: The language model for the agent. Supports static and dynamic
             model selection.
 
-            - **Static model**: A chat model instance (e.g., `ChatOpenAI()`) or
-              string identifier (e.g., `"openai:gpt-4"`)
+            - **Static model**: A chat model instance (e.g.,
+                [`ChatOpenAI`][langchain_openai.ChatOpenAI]) or string identifier (e.g.,
+                `"openai:gpt-4"`)
             - **Dynamic model**: A callable with signature
-              `(state, runtime) -> BaseChatModel` that returns different models
-              based on runtime context
-              If the model has tools bound via `.bind_tools()` or other configurations,
-              the return type should be a Runnable[LanguageModelInput, BaseMessage]
-              Coroutines are also supported, allowing for asynchronous model selection.
+                `(state, runtime) -> BaseChatModel` that returns different models
+                based on runtime context
+
+                If the model has tools bound via `bind_tools` or other configurations,
+                the return type should be a `Runnable[LanguageModelInput, BaseMessage]`
+                Coroutines are also supported, allowing for asynchronous model selection.
 
             Dynamic functions receive graph state and runtime, enabling
             context-dependent model selection. Must return a `BaseChatModel`
             instance. For tool calling, bind tools using `.bind_tools()`.
             Bound tools must be a subset of the `tools` parameter.
 
-            Dynamic model example:
-            ```python
-            from dataclasses import dataclass
+            !!! example "Dynamic model"
 
-            @dataclass
-            class ModelContext:
-                model_name: str = "gpt-3.5-turbo"
+                ```python
+                from dataclasses import dataclass
 
-            # Instantiate models globally
-            gpt4_model = ChatOpenAI(model="gpt-4")
-            gpt35_model = ChatOpenAI(model="gpt-3.5-turbo")
+                @dataclass
+                class ModelContext:
+                    model_name: str = "gpt-3.5-turbo"
 
-            def select_model(state: AgentState, runtime: Runtime[ModelContext]) -> ChatOpenAI:
-                model_name = runtime.context.model_name
-                model = gpt4_model if model_name == "gpt-4" else gpt35_model
-                return model.bind_tools(tools)
-            ```
+                # Instantiate models globally
+                gpt4_model = ChatOpenAI(model="gpt-4")
+                gpt35_model = ChatOpenAI(model="gpt-3.5-turbo")
+
+                def select_model(state: AgentState, runtime: Runtime[ModelContext]) -> ChatOpenAI:
+                    model_name = runtime.context.model_name
+                    model = gpt4_model if model_name == "gpt-4" else gpt35_model
+                    return model.bind_tools(tools)
+                ```
 
             !!! note "Dynamic Model Requirements"
+
                 Ensure returned models have appropriate tools bound via
                 `.bind_tools()` and support required functionality. Bound tools
                 must be a subset of those specified in the `tools` parameter.
 
-        tools: A list of tools or a ToolNode instance.
+        tools: A list of tools or a `ToolNode` instance.
             If an empty list is provided, the agent will consist of a single LLM node without tool calling.
         prompt: An optional prompt for the LLM. Can take a few different forms:
 
-            - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
-            - SystemMessage: this is added to the beginning of the list of messages in state["messages"].
-            - Callable: This function should take in full graph state and the output is then passed to the language model.
-            - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
+            - `str`: This is converted to a `SystemMessage` and added to the beginning of the list of messages in `state["messages"]`.
+            - `SystemMessage`: this is added to the beginning of the list of messages in `state["messages"]`.
+            - `Callable`: This function should take in full graph state and the output is then passed to the language model.
+            - `Runnable`: This runnable should take in full graph state and the output is then passed to the language model.
 
         response_format: An optional schema for the final agent output.
 
             If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
+
             If not provided, `structured_response` will not be present in the output state.
+
             Can be passed in as:
 
-                - an OpenAI function/tool schema,
-                - a JSON Schema,
-                - a TypedDict class,
-                - or a Pydantic class.
-                - a tuple (prompt, schema), where schema is one of the above.
-                    The prompt will be used together with the model that is being used to generate the structured response.
+            - An OpenAI function/tool schema,
+            - A JSON Schema,
+            - A TypedDict class,
+            - A Pydantic class.
+            - A tuple `(prompt, schema)`, where schema is one of the above.
+                The prompt will be used together with the model that is being used to
+                generate the structured response.
 
             !!! Important
                 `response_format` requires the model to support `.with_structured_output`
@@ -404,13 +434,16 @@ def create_react_agent(
         store: An optional store object. This is used for persisting data
             across multiple threads (e.g., multiple conversations / users).
         interrupt_before: An optional list of node names to interrupt before.
-            Should be one of the following: "agent", "tools".
+            Should be one of the following: `"agent"`, `"tools"`.
+
             This is useful if you want to add a user confirmation or other interrupt before taking an action.
         interrupt_after: An optional list of node names to interrupt after.
-            Should be one of the following: "agent", "tools".
+            Should be one of the following: `"agent"`, `"tools"`.
+
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
         version: Determines the version of the graph to create.
+
             Can be one of:
 
             - `"v1"`: The tool node processes a single message. All tool
@@ -419,7 +452,7 @@ def create_react_agent(
                 Tool calls are distributed across multiple instances of the tool
                 node using the [Send](https://langchain-ai.github.io/langgraph/concepts/low_level/#send)
                 API.
-        name: An optional name for the CompiledStateGraph.
+        name: An optional name for the `CompiledStateGraph`.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
 
@@ -429,14 +462,14 @@ def create_react_agent(
 
 
     Returns:
-        A compiled LangChain runnable that can be used for chat interactions.
+        A compiled LangChain `Runnable` that can be used for chat interactions.
 
     The "agent" node calls the language model with the messages list (after applying the prompt).
     If the resulting AIMessage contains `tool_calls`, the graph will then call the ["tools"][langgraph.prebuilt.tool_node.ToolNode].
     The "tools" node executes the tools (1 tool per `tool_call`) and adds the responses to the messages list
     as `ToolMessage` objects. The agent node then calls the language model again.
     The process repeats until no more `tool_calls` are present in the response.
-    The agent then returns the full list of messages as a dictionary containing the key "messages".
+    The agent then returns the full list of messages as a dictionary containing the key `'messages'`.
 
     ``` mermaid
         sequenceDiagram
@@ -473,7 +506,7 @@ def create_react_agent(
     if (
         config_schema := deprecated_kwargs.pop("config_schema", MISSING)
     ) is not MISSING:
-        warn(
+        warnings.warn(
             "`config_schema` is deprecated and will be removed. Please use `context_schema` instead.",
             category=LangGraphDeprecatedSinceV10,
         )
@@ -543,7 +576,7 @@ def create_react_agent(
                 tool_classes + llm_builtin_tools  # type: ignore[operator]
             )
 
-        static_model: Optional[Runnable] = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
+        static_model: Runnable | None = _get_prompt_runnable(prompt) | model  # type: ignore[operator]
     else:
         # For dynamic models, we'll create the runnable at runtime
         static_model = None
@@ -784,7 +817,7 @@ def create_react_agent(
         )
 
     # Define the function that determines whether to continue or not
-    def should_continue(state: StateSchema) -> Union[str, list[Send]]:
+    def should_continue(state: StateSchema) -> str | list[Send]:
         messages = _get_state_value(state, "messages")
         last_message = messages[-1]
         # If there is no function call, then we finish
@@ -802,11 +835,17 @@ def create_react_agent(
             elif version == "v2":
                 if post_model_hook is not None:
                     return "post_model_hook"
-                tool_calls = [
-                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                return [
+                    Send(
+                        "tools",
+                        ToolCallWithContext(
+                            __type="tool_call_with_context",
+                            tool_call=call,
+                            state=state,
+                        ),
+                    )
                     for call in last_message.tool_calls
                 ]
-                return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
     workflow = StateGraph(
@@ -866,7 +905,7 @@ def create_react_agent(
 
     if post_model_hook is not None:
 
-        def post_model_hook_router(state: StateSchema) -> Union[str, list[Send]]:
+        def post_model_hook_router(state: StateSchema) -> str | list[Send]:
             """Route to the next node after post_model_hook.
 
             Routes to one of:
@@ -887,11 +926,17 @@ def create_react_agent(
             ]
 
             if pending_tool_calls:
-                pending_tool_calls = [
-                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                return [
+                    Send(
+                        "tools",
+                        ToolCallWithContext(
+                            __type="tool_call_with_context",
+                            tool_call=call,
+                            state=state,
+                        ),
+                    )
                     for call in pending_tool_calls
                 ]
-                return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
             elif isinstance(messages[-1], ToolMessage):
                 return entrypoint
             elif response_format is not None:

@@ -1,0 +1,9 @@
+[project]
+name = "graph-prerelease-reqs-additional-deps"
+version = "0.1.0"
+description = "Test for prerelease stuff"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "langgraph==1.0.2"
+]

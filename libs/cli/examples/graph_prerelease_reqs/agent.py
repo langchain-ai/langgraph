@@ -1,19 +1,15 @@
 from collections.abc import Sequence
 from typing import Annotated, Literal, TypedDict
 
-from langchain.chat_models import init_chat_model
-from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph, add_messages
 from langgraph.prebuilt import ToolNode
 
-tools = [TavilySearchResults(max_results=1)]
+tools = []
 
-model_anth = init_chat_model("claude-3-7-sonnet-20250219", model_provider="anthropic")
 model_oai = ChatOpenAI(temperature=0)
 
-model_anth = model_anth.bind_tools(tools)
 model_oai = model_oai.bind_tools(tools)
 
 
@@ -35,10 +31,7 @@ def should_continue(state):
 
 # Define the function that calls the model
 def call_model(state, config):
-    if config["configurable"].get("model", "anthropic") == "anthropic":
-        model = model_anth
-    else:
-        model = model_oai
+    model = model_oai
     messages = state["messages"]
     response = model.invoke(messages)
     # We return a list, because this will get added to the existing list

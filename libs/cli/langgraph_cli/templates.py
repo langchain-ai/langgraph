@@ -2,7 +2,6 @@ import os
 import shutil
 import sys
 from io import BytesIO
-from typing import Optional
 from urllib import error, request
 from zipfile import ZipFile
 
@@ -65,7 +64,7 @@ def _choose_template() -> str:
         click.secho(f" - {template_info['description']}", fg="white")
 
     # Get the template choice from the user, defaulting to the first template if blank
-    template_choice: Optional[int] = click.prompt(
+    template_choice: int | None = click.prompt(
         "Enter the number of your template choice (default is 1)",
         type=int,
         default=1,
@@ -131,7 +130,7 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
         sys.exit(1)
 
 
-def _get_template_url(template_name: str) -> Optional[str]:
+def _get_template_url(template_name: str) -> str | None:
     """
     Retrieves the template URL based on the provided template name.
 
@@ -162,7 +161,7 @@ def _get_template_url(template_name: str) -> Optional[str]:
         return None
 
 
-def create_new(path: Optional[str], template: Optional[str]) -> None:
+def create_new(path: str | None, template: str | None) -> None:
     """Create a new LangGraph project at the specified PATH using the chosen TEMPLATE.
 
     Args:

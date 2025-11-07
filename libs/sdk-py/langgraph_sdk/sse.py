@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
-from typing import Union
 
 import httpx
 import orjson
 
 from langgraph_sdk.schema import StreamPart
 
-BytesLike = Union[bytes, bytearray, memoryview]
+BytesLike = bytes | bytearray | memoryview
 
 
 class BytesLineDecoder:
@@ -80,6 +79,12 @@ class SSEDecoder:
         self._data = bytearray()
         self._last_event_id = ""
         self._retry: int | None = None
+
+    @property
+    def last_event_id(self) -> str | None:
+        """Return the last event identifier that was seen."""
+
+        return self._last_event_id or None
 
     def decode(self, line: bytes) -> StreamPart | None:
         # See: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation  # noqa: E501

@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import uuid
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import partial
 from typing import (
     Annotated,
     Any,
-    Callable,
     Literal,
-    Union,
     cast,
 )
 
@@ -32,9 +30,10 @@ __all__ = (
     "add_messages",
     "MessagesState",
     "MessageGraph",
+    "REMOVE_ALL_MESSAGES",
 )
 
-Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
+Messages = list[MessageLikeRepresentation] | MessageLikeRepresentation
 
 REMOVE_ALL_MESSAGES = "__remove_all__"
 
@@ -71,27 +70,28 @@ def add_messages(
     new message has the same ID as an existing message.
 
     Args:
-        left: The base list of messages.
-        right: The list of messages (or single message) to merge
+        left: The base list of `Messages`.
+        right: The list of `Messages` (or single `Message`) to merge
             into the base list.
-        format: The format to return messages in. If None then messages will be
-            returned as is. If 'langchain-openai' then messages will be returned as
-            BaseMessage objects with their contents formatted to match OpenAI message
-            format, meaning contents can be string, 'text' blocks, or 'image_url' blocks
-            and tool responses are returned as their own ToolMessages.
+        format: The format to return messages in. If `None` then `Messages` will be
+            returned as is. If `langchain-openai` then `Messages` will be returned as
+            `BaseMessage` objects with their contents formatted to match OpenAI message
+            format, meaning contents can be string, `'text'` blocks, or `'image_url'` blocks
+            and tool responses are returned as their own `ToolMessage` objects.
 
             !!! important "Requirement"
 
-                Must have ``langchain-core>=0.3.11`` installed to use this feature.
+                Must have `langchain-core>=0.3.11` installed to use this feature.
 
     Returns:
         A new list of messages with the messages from `right` merged into `left`.
         If a message in `right` has the same ID as a message in `left`, the
-        message from `right` will replace the message from `left`.
+            message from `right` will replace the message from `left`.
 
     Example:
         ```python title="Basic usage"
         from langchain_core.messages import AIMessage, HumanMessage
+
         msgs1 = [HumanMessage(content="Hello", id="1")]
         msgs2 = [AIMessage(content="Hi there!", id="2")]
         add_messages(msgs1, msgs2)
@@ -110,8 +110,10 @@ def add_messages(
         from typing_extensions import TypedDict
         from langgraph.graph import StateGraph
 
+
         class State(TypedDict):
             messages: Annotated[list, add_messages]
+
 
         builder = StateGraph(State)
         builder.add_node("chatbot", lambda state: {"messages": [("assistant", "Hello")]})
@@ -127,30 +129,35 @@ def add_messages(
         from typing_extensions import TypedDict
         from langgraph.graph import StateGraph, add_messages
 
+
         class State(TypedDict):
-            messages: Annotated[list, add_messages(format='langchain-openai')]
+            messages: Annotated[list, add_messages(format="langchain-openai")]
+
 
         def chatbot_node(state: State) -> list:
-            return {"messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Here's an image:",
-                            "cache_control": {"type": "ephemeral"},
-                        },
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/jpeg",
-                                "data": "1234",
+            return {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Here's an image:",
+                                "cache_control": {"type": "ephemeral"},
                             },
-                        },
-                    ]
-                },
-            ]}
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": "1234",
+                                },
+                            },
+                        ],
+                    },
+                ]
+            }
+
 
         builder = StateGraph(State)
         builder.add_node("chatbot", chatbot_node)
@@ -235,14 +242,11 @@ def add_messages(
 
 
 @deprecated(
-    "MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.",
+    "MessageGraph is deprecated in langgraph 1.0.0, to be removed in 2.0.0. Please use StateGraph with a `messages` key instead.",
     category=None,
 )
 class MessageGraph(StateGraph):
     """A StateGraph where every node receives a list of messages as input and returns one or more messages as output.
-
-    !!! warning "Deprecation"
-        MessageGraph is deprecated in LangGraph v1.0.0, to be removed in v2.0.0. Please use StateGraph with a `messages` key instead.
 
     MessageGraph is a subclass of StateGraph whose entire state is a single, append-only* list of messages.
     Each node in a MessageGraph takes a list of messages as input and returns zero or more

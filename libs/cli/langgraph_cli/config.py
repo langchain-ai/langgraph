@@ -4,9 +4,11 @@ import pathlib
 import re
 import textwrap
 from collections import Counter
-from typing import Any, Literal, NamedTuple, Optional, TypedDict, Union
+from typing import Literal, NamedTuple
 
 import click
+
+from langgraph_cli.schemas import Config, Distros
 
 MIN_NODE_VERSION = "20"
 DEFAULT_NODE_VERSION = "20"
@@ -17,490 +19,12 @@ DEFAULT_PYTHON_VERSION = "3.11"
 DEFAULT_IMAGE_DISTRO = "debian"
 
 
-Distros = Literal["debian", "wolfi", "bullseye", "bookworm"]
-
-
-class TTLConfig(TypedDict, total=False):
-    """Configuration for TTL (time-to-live) behavior in the store."""
-
-    refresh_on_read: bool
-    """Default behavior for refreshing TTLs on read operations (GET and SEARCH).
-    
-    If True, TTLs will be refreshed on read operations (get/search) by default.
-    This can be overridden per-operation by explicitly setting refresh_ttl.
-    Defaults to True if not configured.
-    """
-    default_ttl: Optional[float]
-    """Optional. Default TTL (time-to-live) in minutes for new items.
-    
-    If provided, all new items will have this TTL unless explicitly overridden.
-    If omitted, items will have no TTL by default.
-    """
-    sweep_interval_minutes: Optional[int]
-    """Optional. Interval in minutes between TTL sweep iterations.
-    
-    If provided, the store will periodically delete expired items based on the TTL.
-    If omitted, no automatic sweeping will occur.
-    """
-
-
-class IndexConfig(TypedDict, total=False):
-    """Configuration for indexing documents for semantic search in the store.
-
-    This governs how text is converted into embeddings and stored for vector-based lookups.
-    """
-
-    dims: int
-    """Required. Dimensionality of the embedding vectors you will store.
-    
-    Must match the output dimension of your selected embedding model or custom embed function.
-    If mismatched, you will likely encounter shape/size errors when inserting or querying vectors.
-    
-    Common embedding model output dimensions:
-        - openai:text-embedding-3-large: 3072
-        - openai:text-embedding-3-small: 1536
-        - openai:text-embedding-ada-002: 1536
-        - cohere:embed-english-v3.0: 1024
-        - cohere:embed-english-light-v3.0: 384
-        - cohere:embed-multilingual-v3.0: 1024
-        - cohere:embed-multilingual-light-v3.0: 384
-    """
-
-    embed: str
-    """Required. Identifier or reference to the embedding model or a custom embedding function.
-    
-    The format can vary:
-      - "<provider>:<model_name>" for recognized providers (e.g., "openai:text-embedding-3-large")
-      - "path/to/module.py:function_name" for your own local embedding function
-      - "my_custom_embed" if it's a known alias in your system
-
-     Examples:
-        - "openai:text-embedding-3-large"
-        - "cohere:embed-multilingual-v3.0"
-        - "src/app.py:embeddings"
-    
-    Note: Must return embeddings of dimension `dims`.
-    """
-
-    fields: Optional[list[str]]
-    """Optional. List of JSON fields to extract before generating embeddings.
-    
-    Defaults to ["$"], which means the entire JSON object is embedded as one piece of text.
-    If you provide multiple fields (e.g. ["title", "content"]), each is extracted and embedded separately,
-    often saving token usage if you only care about certain parts of the data.
-    
-    Example:
-        fields=["title", "abstract", "author.biography"]
-    """
-
-
-class StoreConfig(TypedDict, total=False):
-    """Configuration for the built-in long-term memory store.
-
-    This store can optionally perform semantic search. If you omit `index`,
-    the store will just handle traditional (non-embedded) data without vector lookups.
-    """
-
-    index: Optional[IndexConfig]
-    """Optional. Defines the vector-based semantic search configuration.
-    
-    If provided, the store will:
-      - Generate embeddings according to `index.embed`
-      - Enforce the embedding dimension given by `index.dims`
-      - Embed only specified JSON fields (if any) from `index.fields`
-    
-    If omitted, no vector index is initialized.
-    """
-
-    ttl: Optional[TTLConfig]
-    """Optional. Defines the TTL (time-to-live) behavior configuration.
-    
-    If provided, the store will apply TTL settings according to the configuration.
-    If omitted, no TTL behavior is configured.
-    """
-
-
-class ThreadTTLConfig(TypedDict, total=False):
-    """Configure a default TTL for checkpointed data within threads."""
-
-    strategy: Literal["delete"]
-    """Strategy to use for deleting checkpointed data.
-    
-    Choices:
-      - "delete": Delete all checkpoints for a thread after TTL expires.
-    """
-    default_ttl: Optional[float]
-    """Default TTL (time-to-live) in minutes for checkpointed data."""
-    sweep_interval_minutes: Optional[int]
-    """Interval in minutes between sweep iterations.
-    If omitted, a default interval will be used (typically ~ 5 minutes)."""
-
-
-class CheckpointerConfig(TypedDict, total=False):
-    """Configuration for the built-in checkpointer, which handles checkpointing of state.
-
-    If omitted, no checkpointer is set up (the object store will still be present, however).
-    """
-
-    ttl: Optional[ThreadTTLConfig]
-    """Optional. Defines the TTL (time-to-live) behavior configuration.
-    
-    If provided, the checkpointer will apply TTL settings according to the configuration.
-    If omitted, no TTL behavior is configured.
-    """
-
-
-class SecurityConfig(TypedDict, total=False):
-    """Configuration for OpenAPI security definitions and requirements.
-
-    Useful for specifying global or path-level authentication and authorization flows
-    (e.g., OAuth2, API key headers, etc.).
-    """
-
-    securitySchemes: dict[str, dict[str, Any]]
-    """Required. Dict describing each security scheme recognized by your OpenAPI spec.
-    
-    Keys are scheme names (e.g. "OAuth2", "ApiKeyAuth") and values are their definitions.
-    Example:
-        {
-            "OAuth2": {
-                "type": "oauth2",
-                "flows": {
-                    "password": {
-                        "tokenUrl": "/token",
-                        "scopes": {"read": "Read data", "write": "Write data"}
-                    }
-                }
-            }
-        }
-    """
-    security: list[dict[str, list[str]]]
-    """Optional. Global security requirements across all endpoints.
-    
-    Each element in the list maps a security scheme (e.g. "OAuth2") to a list of scopes (e.g. ["read", "write"]).
-    Example:
-        [
-            {"OAuth2": ["read", "write"]},
-            {"ApiKeyAuth": []}
-        ]
-    """
-    # path => {method => security}
-    paths: dict[str, dict[str, list[dict[str, list[str]]]]]
-    """Optional. Path-specific security overrides.
-    
-    Keys are path templates (e.g., "/items/{item_id}"), mapping to:
-      - Keys that are HTTP methods (e.g., "GET", "POST"),
-      - Values are lists of security definitions (just like `security`) for that method.
-    
-    Example:
-        {
-            "/private_data": {
-                "GET": [{"OAuth2": ["read"]}],
-                "POST": [{"OAuth2": ["write"]}]
-            }
-        }
-    """
-
-
-class AuthConfig(TypedDict, total=False):
-    """Configuration for custom authentication logic and how it integrates into the OpenAPI spec."""
-
-    path: str
-    """Required. Path to an instance of the Auth() class that implements custom authentication.
-    
-    Format: "path/to/file.py:my_auth"
-    """
-    disable_studio_auth: bool
-    """Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio. 
-    
-    Defaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header
-    value is a valid API key for the deployment's workspace. If True, all requests will go through your custom
-    authentication logic, regardless of origin of the request.
-    """
-    openapi: SecurityConfig
-    """Required. Detailed security configuration that merges into your deployment's OpenAPI spec.
-    
-    Example (OAuth2):
-        {
-            "securitySchemes": {
-                "OAuth2": {
-                    "type": "oauth2",
-                    "flows": {
-                        "password": {
-                            "tokenUrl": "/token",
-                            "scopes": {"me": "Read user info", "items": "Manage items"}
-                        }
-                    }
-                }
-            },
-            "security": [
-                {"OAuth2": ["me"]}
-            ]
-        }
-    """
-
-
-class CorsConfig(TypedDict, total=False):
-    """Specifies Cross-Origin Resource Sharing (CORS) rules for your server.
-
-    If omitted, defaults are typically very restrictive (often no cross-origin requests).
-    Configure carefully if you want to allow usage from browsers hosted on other domains.
-    """
-
-    allow_origins: list[str]
-    """Optional. List of allowed origins (e.g., "https://example.com").
-    
-    Default is often an empty list (no external origins). 
-    Use "*" only if you trust all origins, as that bypasses most restrictions.
-    """
-    allow_methods: list[str]
-    """Optional. HTTP methods permitted for cross-origin requests (e.g. ["GET", "POST"]).
-    
-    Default might be ["GET", "POST", "OPTIONS"] depending on your server framework.
-    """
-    allow_headers: list[str]
-    """Optional. HTTP headers that can be used in cross-origin requests (e.g. ["Content-Type", "Authorization"])."""
-    allow_credentials: bool
-    """Optional. If True, cross-origin requests can include credentials (cookies, auth headers).
-    
-    Default False to avoid accidentally exposing secured endpoints to untrusted sites.
-    """
-    allow_origin_regex: str
-    """Optional. A regex pattern for matching allowed origins, used if you have dynamic subdomains.
-    
-    Example: "^https://.*\\.mycompany\\.com$"
-    """
-    expose_headers: list[str]
-    """Optional. List of headers that browsers are allowed to read from the response in cross-origin contexts."""
-    max_age: int
-    """Optional. How many seconds the browser may cache preflight responses.
-    
-    Default might be 600 (10 minutes). Larger values reduce preflight requests but can cause stale configurations.
-    """
-
-
-class ConfigurableHeaderConfig(TypedDict):
-    """Customize which headers to include as configurable values in your runs.
-
-    By default, omits x-api-key, x-tenant-id, and x-service-key.
-
-    Exclusions (if provided) take precedence.
-
-    Each value can be a raw string with an optional wildcard.
-    """
-
-    includes: Optional[list[str]]
-    """Headers to include (if not also matches against an 'exludes' pattern.
-
-    Examples:
-        - 'user-agent'
-        - 'x-configurable-*'
-    """
-    excludes: Optional[list[str]]
-    """Headers to exclude. Applied before the 'includes' checks.
-
-    Examples:
-        - 'x-api-key'
-        - '*key*'
-        - '*token*'
-    """
-
-
-class HttpConfig(TypedDict, total=False):
-    """Configuration for the built-in HTTP server that powers your deployment's routes and endpoints."""
-
-    app: str
-    """Optional. Import path to a custom Starlette/FastAPI application to mount.
-    
-    Format: "path/to/module.py:app_var"
-    If provided, it can override or extend the default routes.
-    """
-    disable_assistants: bool
-    """Optional. If True, /assistants routes are removed from the server.
-    
-    Default is False (meaning /assistants is enabled).
-    """
-    disable_threads: bool
-    """Optional. If True, /threads routes are removed.
-    
-    Default is False.
-    """
-    disable_runs: bool
-    """Optional. If True, /runs routes are removed.
-    
-    Default is False.
-    """
-    disable_store: bool
-    """Optional. If True, /store routes are removed, disabling direct store interactions via HTTP.
-    
-    Default is False.
-    """
-    disable_mcp: bool
-    """Optional. If True, /mcp routes are removed, disabling the MCP server.
-    
-    Default is False.
-    """
-    disable_meta: bool
-    """Optional. Remove meta endpoints.
-    
-    Set to True to disable the following endpoints: /openapi.json, /info, /metrics, /docs.
-    This will also make the /ok endpoint skip any DB or other checks, always returning {"ok": True}.
-    
-    Default is False.
-    """
-    cors: Optional[CorsConfig]
-    """Optional. Defines CORS restrictions. If omitted, no special rules are set and 
-    cross-origin behavior depends on default server settings.
-    """
-    configurable_headers: Optional[ConfigurableHeaderConfig]
-    """Optional. Defines how headers are treated for a run's configuration.
-
-    You can include or exclude headers as configurable values to condition your
-    agent's behavior or permissions on a request's headers."""
-    logging_headers: Optional[ConfigurableHeaderConfig]
-    """Optional. Defines which headers are excluded from logging."""
-
-
-class Config(TypedDict, total=False):
-    """Top-level config for langgraph-cli or similar deployment tooling."""
-
-    python_version: str
-    """Optional. Python version in 'major.minor' format (e.g. '3.11'). 
-    Must be at least 3.11 or greater for this deployment to function properly.
-    """
-
-    node_version: Optional[str]
-    """Optional. Node.js version as a major version (e.g. '20'), if your deployment needs Node.
-    Must be >= 20 if provided.
-    """
-
-    api_version: Optional[str]
-    """Optional. Which semantic version of the LangGraph API server to use.
-    
-    Defaults to latest. Check the
-    [changelog](https://docs.langchain.com/langgraph-platform/langgraph-server-changelog)
-    for more information."""
-
-    _INTERNAL_docker_tag: Optional[str]
-    """Optional. Internal use only.
-    """
-
-    base_image: Optional[str]
-    """Optional. Base image to use for the LangGraph API server.
-    
-    Defaults to langchain/langgraph-api or langchain/langgraphjs-api."""
-
-    image_distro: Optional[Distros]
-    """Optional. Linux distribution for the base image.
-    
-    Must be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.
-    If omitted, defaults to 'debian' ('latest').
-    """
-
-    pip_config_file: Optional[str]
-    """Optional. Path to a pip config file (e.g., "/etc/pip.conf" or "pip.ini") for controlling
-    package installation (custom indices, credentials, etc.).
-    
-    Only relevant if Python dependencies are installed via pip. If omitted, default pip settings are used.
-    """
-
-    pip_installer: Optional[str]
-    """Optional. Python package installer to use ('auto', 'pip', 'uv').
-    
-    - 'auto' (default): Use uv for supported base images, otherwise pip
-    - 'pip': Force use of pip regardless of base image support
-    - 'uv': Force use of uv (will fail if base image doesn't support it)
-    """
-
-    dockerfile_lines: list[str]
-    """Optional. Additional Docker instructions that will be appended to your base Dockerfile.
-    
-    Useful for installing OS packages, setting environment variables, etc. 
-    Example:
-        dockerfile_lines=[
-            "RUN apt-get update && apt-get install -y libmagic-dev",
-            "ENV MY_CUSTOM_VAR=hello_world"
-        ]
-    """
-
-    dependencies: list[str]
-    """List of Python dependencies to install, either from PyPI or local paths.
-    
-    Examples:
-      - "." or "./src" if you have a local Python package
-      - str (aka "anthropic") for a PyPI package
-      - "git+https://github.com/org/repo.git@main" for a Git-based package
-    Defaults to an empty list, meaning no additional packages installed beyond your base environment.
-    """
-
-    graphs: dict[str, str]
-    """Optional. Named definitions of graphs, each pointing to a Python object.
-
-    
-    Graphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context
-    managers that accept a single configuration argument (of type RunnableConfig) and return a pregel object
-    (instance of Stategraph, etc.).
-    
-    Keys are graph names, values are "path/to/file.py:object_name".
-    Example:
-        {
-            "mygraph": "graphs/my_graph.py:graph_definition",
-            "anothergraph": "graphs/another.py:get_graph"
-        }
-    """
-
-    env: Union[dict[str, str], str]
-    """Optional. Environment variables to set for your deployment.
-    
-    - If given as a dict, keys are variable names and values are their values.
-    - If given as a string, it must be a path to a file containing lines in KEY=VALUE format.
-    
-    Example as a dict:
-        env={"API_TOKEN": "abc123", "DEBUG": "true"}
-    Example as a file path:
-        env=".env"
-    """
-
-    store: Optional[StoreConfig]
-    """Optional. Configuration for the built-in long-term memory store, including semantic search indexing.
-    
-    If omitted, no vector index is set up (the object store will still be present, however).
-    """
-
-    checkpointer: Optional[CheckpointerConfig]
-    """Optional. Configuration for the built-in checkpointer, which handles checkpointing of state.
-    
-    If omitted, no checkpointer is set up (the object store will still be present, however).
-    """
-
-    auth: Optional[AuthConfig]
-    """Optional. Custom authentication config, including the path to your Python auth logic and 
-    the OpenAPI security definitions it uses.
-    """
-
-    http: Optional[HttpConfig]
-    """Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed
-    and how cross-origin requests are handled.
-    """
-
-    ui: Optional[dict[str, str]]
-    """Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.
-    """
-
-    keep_pkg_tools: Optional[Union[bool, list[str]]]
-    """Optional. Control whether to retain Python packaging tools in the final image.
-    
-    Allowed tools are: "pip", "setuptools", "wheel".
-    You can also set to true to include all packaging tools.
-    """
-
-
 _BUILD_TOOLS = ("pip", "setuptools", "wheel")
 
 
 def _get_pip_cleanup_lines(
     install_cmd: str,
-    to_uninstall: Optional[tuple[str]],
+    to_uninstall: tuple[str] | None,
     pip_installer: Literal["uv", "pip"],
 ) -> str:
     commands = [
@@ -566,7 +90,7 @@ def _parse_node_version(version_str: str) -> int:
         ) from None
 
 
-def _is_node_graph(spec: Union[str, dict]) -> bool:
+def _is_node_graph(spec: str | dict) -> bool:
     """Check if a graph is a Node.js graph based on the file extension."""
     if isinstance(spec, dict):
         spec = spec.get("path")
@@ -826,7 +350,7 @@ class LocalDeps(NamedTuple):
     real_pkgs: dict[pathlib.Path, tuple[str, str]]
     faux_pkgs: dict[pathlib.Path, tuple[str, str]]
     # if . is in dependencies, use it as working_dir
-    working_dir: Optional[str] = None
+    working_dir: str | None = None
     # if there are local dependencies in parent directories, use additional_contexts
     additional_contexts: list[pathlib.Path] = None
 
@@ -862,7 +386,7 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
     pip_reqs = []
     real_pkgs = {}
     faux_pkgs = {}
-    working_dir: Optional[str] = None
+    working_dir: str | None = None
     additional_contexts: list[pathlib.Path] = []
 
     for local_dep in config["dependencies"]:
@@ -1245,7 +769,7 @@ def python_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: str,
-    api_version: Optional[str] = None,
+    api_version: str | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     pip_installer = config.get("pip_installer", "auto")
@@ -1256,16 +780,22 @@ def python_config_to_docker(
         else:
             pip_installer = "pip"
     if pip_installer == "uv":
-        install_cmd = "uv pip install --system --prerelease=allow"
+        install_cmd = "uv pip install --system"
     elif pip_installer == "pip":
         install_cmd = "pip install"
     else:
         raise ValueError(f"Invalid pip_installer: {pip_installer}")
 
     # configure pip
-    pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
+    local_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
+    global_reqs_pip_install = f"PYTHONDONTWRITEBYTECODE=1 {install_cmd} --no-cache-dir -c /api/constraints.txt"
     if config.get("pip_config_file"):
-        pip_install = f"PIP_CONFIG_FILE=/pipconfig.txt {pip_install}"
+        local_reqs_pip_install = (
+            f"PIP_CONFIG_FILE=/pipconfig.txt {local_reqs_pip_install}"
+        )
+        global_reqs_pip_install = (
+            f"PIP_CONFIG_FILE=/pipconfig.txt {global_reqs_pip_install}"
+        )
     pip_config_file_str = (
         f"ADD {config['pip_config_file']} /pipconfig.txt"
         if config.get("pip_config_file")
@@ -1282,7 +812,9 @@ def python_config_to_docker(
     # Rewrite HTTP app path, so it points to the correct location in the Docker container
     _update_http_app_path(config_path, config, local_deps)
 
-    pip_pkgs_str = f"RUN {pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
+    pip_pkgs_str = (
+        f"RUN {local_reqs_pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
+    )
     if local_deps.pip_reqs:
         pip_reqs_str = os.linesep.join(
             (
@@ -1292,7 +824,7 @@ def python_config_to_docker(
             )
             for reqpath, destpath in local_deps.pip_reqs
         )
-        pip_reqs_str += f"{os.linesep}RUN {pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}"
+        pip_reqs_str += f"{os.linesep}RUN {local_reqs_pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}"
         pip_reqs_str = f"""# -- Installing local requirements --
 {pip_reqs_str}
 # -- End of local requirements install --"""
@@ -1394,29 +926,51 @@ ADD {relpath} /deps/{name}
             ]
         )
     image_str = docker_tag(config, base_image, api_version)
-    docker_file_contents = [
-        f"FROM {image_str}",
-        "",
-        os.linesep.join(config["dockerfile_lines"]),
-        "",
-        installs,
-        "",
-        "# -- Installing all local dependencies --",
-        f"RUN {pip_install} -e /deps/*",
-        "# -- End of local dependencies install --",
-        os.linesep.join(env_vars),
-        "",
-        js_inst_str,
-        "",
-        # Add pip cleanup after all installations are complete
-        _get_pip_cleanup_lines(
-            install_cmd=install_cmd,
-            to_uninstall=build_tools_to_uninstall,
-            pip_installer=pip_installer,
-        ),
-        "",
-        f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
-    ]
+
+    # Prepare docker file contents
+    docker_file_contents = []
+
+    # Add syntax directive if we have additional contexts (requires BuildKit frontend.contexts capability)
+    if local_deps.additional_contexts:
+        docker_file_contents.extend(
+            [
+                "# syntax=docker/dockerfile:1.4",
+                "",
+            ]
+        )
+
+    # Add main dockerfile content
+    docker_file_contents.extend(
+        [
+            f"FROM {image_str}",
+            "",
+            os.linesep.join(config["dockerfile_lines"]),
+            "",
+            installs,
+            "",
+            "# -- Installing all local dependencies --",
+            f"""RUN for dep in /deps/*; do \
+            echo "Installing $dep"; \
+            if [ -d "$dep" ]; then \
+                echo "Installing $dep"; \
+                (cd "$dep" && {global_reqs_pip_install} -e .); \
+            fi; \
+        done""",
+            "# -- End of local dependencies install --",
+            os.linesep.join(env_vars),
+            "",
+            js_inst_str,
+            "",
+            # Add pip cleanup after all installations are complete
+            _get_pip_cleanup_lines(
+                install_cmd=install_cmd,
+                to_uninstall=build_tools_to_uninstall,
+                pip_installer=pip_installer,
+            ),
+            "",
+            f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
+        ]
+    )
 
     additional_contexts: dict[str, str] = {}
     for p in local_deps.additional_contexts:
@@ -1435,10 +989,10 @@ def node_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
     base_image: str,
-    api_version: Optional[str] = None,
-    install_command: Optional[str] = None,
-    build_command: Optional[str] = None,
-    build_context: Optional[str] = None,
+    api_version: str | None = None,
+    install_command: str | None = None,
+    build_command: str | None = None,
+    build_context: str | None = None,
 ) -> tuple[str, dict[str, str]]:
     # Calculate paths for monorepo support
     if build_context:
@@ -1528,8 +1082,8 @@ def default_base_image(config: Config) -> str:
 
 def docker_tag(
     config: Config,
-    base_image: Optional[str] = None,
-    api_version: Optional[str] = None,
+    base_image: str | None = None,
+    api_version: str | None = None,
 ) -> str:
     api_version = api_version or config.get("api_version")
     base_image = base_image or default_base_image(config)
@@ -1578,11 +1132,11 @@ def _calculate_relative_workdir(config_path: pathlib.Path, build_context: str) -
 def config_to_docker(
     config_path: pathlib.Path,
     config: Config,
-    base_image: Optional[str] = None,
-    api_version: Optional[str] = None,
-    install_command: Optional[str] = None,
-    build_command: Optional[str] = None,
-    build_context: Optional[str] = None,
+    base_image: str | None = None,
+    api_version: str | None = None,
+    install_command: str | None = None,
+    build_command: str | None = None,
+    build_context: str | None = None,
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or default_base_image(config)
 
@@ -1603,9 +1157,9 @@ def config_to_docker(
 def config_to_compose(
     config_path: pathlib.Path,
     config: Config,
-    base_image: Optional[str] = None,
-    api_version: Optional[str] = None,
-    image: Optional[str] = None,
+    base_image: str | None = None,
+    api_version: str | None = None,
+    image: str | None = None,
     watch: bool = False,
 ) -> str:
     base_image = base_image or default_base_image(config)

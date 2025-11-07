@@ -4,35 +4,44 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-postgres"
-version = "2.0.23"
+version = "3.0.1"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 authors = []
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
-  "langgraph-checkpoint>=2.0.21,<3.0.0",
+  "langgraph-checkpoint>=2.1.2,<4.0.0",
   "orjson>=3.10.1",
   "psycopg>=3.2.0",
   "psycopg-pool>=3.2.0",
 ]
 
 [project.urls]
-Repository = "https://www.github.com/langchain-ai/langgraph"
+Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint-postgres"
+Twitter = "https://x.com/LangChainAI"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
 
 [dependency-groups]
-dev = [
-  "ruff",
-  "codespell",
+test = [
   "pytest",
   "anyio",
   "pytest-asyncio",
   "pytest-mock",
-  "mypy",
   "psycopg[binary]",
   "langgraph-checkpoint",
   "pytest-watcher",
+]
+lint = [
+  "ruff",
+  "codespell",
+  "mypy",
+]
+dev = [
+  {include-group = "test"},
+  {include-group = "lint"},
 ]
 
 [tool.uv]
@@ -55,8 +64,10 @@ lint.select = [
   "UP", # pyupgrade
   "B",  # flake8-bugbear
   "I",  # isort
+  "UP", # pyupgrade
 ]
 lint.ignore = ["E501", "B008"]
+target-version = "py310"
 
 [tool.mypy]
 # https://mypy.readthedocs.io/en/stable/config_file.html

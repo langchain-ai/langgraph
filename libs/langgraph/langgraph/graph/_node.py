@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Generic, Protocol, Union
+from typing import Any, Generic, Protocol, TypeAlias
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.store.base import BaseStore
-from typing_extensions import TypeAlias
 
 from langgraph._internal._typing import EMPTY_SEQ
 from langgraph.runtime import Runtime
 from langgraph.types import CachePolicy, RetryPolicy, StreamWriter
 from langgraph.typing import ContextT, NodeInputT, NodeInputT_contra
-
-_DC_SLOTS = {"slots": True} if sys.version_info >= (3, 10) else {}
 
 
 class _Node(Protocol[NodeInputT_contra]):
@@ -71,21 +67,21 @@ class _NodeWithRuntime(Protocol[NodeInputT_contra, ContextT]):
 # TODO: we probably don't want to explicitly support the config / store signatures once
 # we move to adding a context arg. Maybe what we do is we add support for kwargs with param spec
 # this is purely for typing purposes though, so can easily change in the coming weeks.
-StateNode: TypeAlias = Union[
-    _Node[NodeInputT],
-    _NodeWithConfig[NodeInputT],
-    _NodeWithWriter[NodeInputT],
-    _NodeWithStore[NodeInputT],
-    _NodeWithWriterStore[NodeInputT],
-    _NodeWithConfigWriter[NodeInputT],
-    _NodeWithConfigStore[NodeInputT],
-    _NodeWithConfigWriterStore[NodeInputT],
-    _NodeWithRuntime[NodeInputT, ContextT],
-    Runnable[NodeInputT, Any],
-]
+StateNode: TypeAlias = (
+    _Node[NodeInputT]
+    | _NodeWithConfig[NodeInputT]
+    | _NodeWithWriter[NodeInputT]
+    | _NodeWithStore[NodeInputT]
+    | _NodeWithWriterStore[NodeInputT]
+    | _NodeWithConfigWriter[NodeInputT]
+    | _NodeWithConfigStore[NodeInputT]
+    | _NodeWithConfigWriterStore[NodeInputT]
+    | _NodeWithRuntime[NodeInputT, ContextT]
+    | Runnable[NodeInputT, Any]
+)
 
 
-@dataclass(**_DC_SLOTS)
+@dataclass(slots=True)
 class StateNodeSpec(Generic[NodeInputT, ContextT]):
     runnable: StateNode[NodeInputT, ContextT]
     metadata: dict[str, Any] | None

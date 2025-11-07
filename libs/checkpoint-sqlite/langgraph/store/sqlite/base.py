@@ -7,9 +7,9 @@ import re
 import sqlite3
 import threading
 from collections import defaultdict
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from typing import Any, Callable, Literal, NamedTuple, cast
+from typing import Any, Literal, NamedTuple, cast
 
 import orjson
 import sqlite_vec  # type: ignore[import-untyped]
@@ -232,7 +232,7 @@ class BaseSqliteStore:
 
         results = []
         for namespace, items in namespace_groups.items():
-            _, keys = zip(*items)
+            _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
             refresh_ttl_any = any(this_refresh_ttls)
 
@@ -371,13 +371,15 @@ class BaseSqliteStore:
     def _prepare_batch_search_queries(
         self, search_ops: Sequence[tuple[int, SearchOp]]
     ) -> tuple[
-        list[tuple[str, list[None | str | list[float]]]],  # queries, params
+        list[
+            tuple[str, list[None | str | list[float]], bool]
+        ],  # queries, params, needs_refresh
         list[tuple[int, str]],  # idx, query_text pairs to embed
     ]:
         """
-        Build per-SearchOp SQL queries (with optional TTL refresh) plus embedding requests.
+        Build per-SearchOp SQL queries (with optional TTL refresh flag) plus embedding requests.
         Returns:
-        - queries: list of (SQL, param_list)
+        - queries: list of (SQL, param_list, needs_ttl_refresh_flag)
         - embedding_requests: list of (original_index_in_search_ops, text_query)
         """
         queries = []
@@ -518,30 +520,18 @@ class BaseSqliteStore:
                 logger.debug(f"Search query: {base_query}")
                 logger.debug(f"Search params: {params}")
 
-            # Handle TTL refresh if requested
-            if (
+            # Determine if TTL refresh is needed
+            needs_ttl_refresh = bool(
                 op.refresh_ttl
                 and self.ttl_config
                 and self.ttl_config.get("refresh_on_read", False)
-            ):
-                final_sql = f"""
-                    WITH search_results AS (
-                        {base_query}
-                    ),
-                    updated AS (
-                        UPDATE store
-                        SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
-                        WHERE (prefix, key) IN (SELECT prefix, key FROM search_results)
-                        AND ttl_minutes IS NOT NULL
-                    )
-                    SELECT * FROM search_results
-                """
-                final_params = params[:]  # copy params
-            else:
-                final_sql = base_query
-                final_params = params
+            )
 
-            queries.append((final_sql, final_params))
+            # The base_query is now the final_sql, and we pass the refresh flag
+            final_sql = base_query
+            final_params = params
+
+            queries.append((final_sql, final_params, needs_ttl_refresh))
 
         return queries, embedding_requests
 
@@ -839,7 +829,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
 
         results = []
         for namespace, items in namespace_groups.items():
-            _, keys = zip(*items)
+            _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
             refresh_ttl_any = any(this_refresh_ttls)
 
@@ -1166,7 +1156,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
 
         Args:
             timeout: Maximum time to wait for the thread to stop, in seconds.
-                If None, wait indefinitely.
+                If `None`, wait indefinitely.
 
         Returns:
             bool: True if the thread was successfully stopped or wasn't running,
@@ -1314,7 +1304,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
 
             # Convert vectors to SQLite-friendly format
             vector_params = []
-            for (ns, k, pathname, _), vector in zip(txt_params, vectors):
+            for (ns, k, pathname, _), vector in zip(txt_params, vectors, strict=False):
                 vector_params.extend(
                     [ns, k, pathname, sqlite_vec.serialize_float32(vector)]
                 )
@@ -1330,7 +1320,9 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         results: list[Result],
         cur: sqlite3.Cursor,
     ) -> None:
-        queries, embedding_requests = self._prepare_batch_search_queries(search_ops)
+        prepared_queries, embedding_requests = self._prepare_batch_search_queries(
+            search_ops
+        )
 
         # Setup similarity functions if they don't exist
         if embedding_requests and self.embeddings:
@@ -1340,15 +1332,49 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             )
 
             # Replace placeholders with actual embeddings
-            for (idx, _), embedding in zip(embedding_requests, embeddings):
-                _params_list: list = queries[idx][1]
-                for i, param in enumerate(_params_list):
-                    if param is _PLACEHOLDER:
-                        _params_list[i] = sqlite_vec.serialize_float32(embedding)
+            for (embed_req_idx, _), embedding in zip(
+                embedding_requests, embeddings, strict=False
+            ):
+                if embed_req_idx < len(prepared_queries):
+                    _params_list: list = prepared_queries[embed_req_idx][1]
+                    for i, param in enumerate(_params_list):
+                        if param is _PLACEHOLDER:
+                            _params_list[i] = sqlite_vec.serialize_float32(embedding)
+                else:
+                    logger.warning(
+                        f"Embedding request index {embed_req_idx} out of bounds for prepared_queries."
+                    )
 
-        for (idx, _), (query, params) in zip(search_ops, queries):
+        for (original_op_idx, _), (query, params, needs_refresh) in zip(
+            search_ops, prepared_queries, strict=False
+        ):
             cur.execute(query, params)
             rows = cur.fetchall()
+
+            if needs_refresh and rows and self.ttl_config:
+                keys_to_refresh = []
+                for row_data in rows:
+                    keys_to_refresh.append((row_data[0], row_data[1]))
+
+                if keys_to_refresh:
+                    updates_by_prefix = defaultdict(list)
+                    for prefix_text, key_text in keys_to_refresh:
+                        updates_by_prefix[prefix_text].append(key_text)
+
+                    for prefix_text, key_list in updates_by_prefix.items():
+                        placeholders = ",".join(["?"] * len(key_list))
+                        update_query = f"""
+                            UPDATE store
+                            SET expires_at = DATETIME(CURRENT_TIMESTAMP, '+' || ttl_minutes || ' minutes')
+                            WHERE prefix = ? AND key IN ({placeholders}) AND ttl_minutes IS NOT NULL
+                        """
+                        update_params = (prefix_text, *key_list)
+                        try:
+                            cur.execute(update_query, update_params)
+                        except Exception as e:
+                            logger.error(
+                                f"Error during TTL refresh update for search: {e}"
+                            )
 
             if "score" in query:  # Vector search query
                 items = [
@@ -1384,7 +1410,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                     for row in rows
                 ]
 
-            results[idx] = items
+            results[original_op_idx] = items
 
     def _batch_list_namespaces_ops(
         self,
@@ -1393,7 +1419,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         cur: sqlite3.Cursor,
     ) -> None:
         queries = self._get_batch_list_namespaces_queries(list_ops)
-        for (query, params), (idx, _) in zip(queries, list_ops):
+        for (query, params), (idx, _) in zip(queries, list_ops, strict=False):
             cur.execute(query, params)
             results[idx] = [_decode_ns_text(row[0]) for row in cur.fetchall()]
 

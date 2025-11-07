@@ -2,17 +2,16 @@ from __future__ import annotations
 
 import inspect
 import logging
-import sys
 import typing
 import warnings
 from collections import defaultdict
-from collections.abc import Awaitable, Hashable, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Sequence
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
+from types import NoneType as NoneType
 from typing import (
     Any,
-    Callable,
     Generic,
     Literal,
     Union,
@@ -83,11 +82,6 @@ from langgraph.types import (
 from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
 
-if sys.version_info < (3, 10):
-    NoneType = type(None)
-else:
-    from types import NoneType as NoneType
-
 __all__ = ("StateGraph", "CompiledStateGraph")
 
 logger = logging.getLogger(__name__)
@@ -120,12 +114,12 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     Each state key can optionally be annotated with a reducer function that
     will be used to aggregate the values of that key received from multiple nodes.
-    The signature of a reducer function is (Value, Value) -> Value.
+    The signature of a reducer function is `(Value, Value) -> Value`.
 
     Args:
         state_schema: The schema class that defines the state.
         context_schema: The schema class that defines the runtime context.
-            Use this to expose immutable context data to your nodes, like user_id, db_conn, etc.
+            Use this to expose immutable context data to your nodes, like `user_id`, `db_conn`, etc.
         input_schema: The schema class that defines the input to the graph.
         output_schema: The schema class that defines the output from the graph.
 
@@ -141,24 +135,30 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         from langgraph.graph import StateGraph
         from langgraph.runtime import Runtime
 
+
         def reducer(a: list, b: int | None) -> list:
             if b is not None:
                 return a + [b]
             return a
 
+
         class State(TypedDict):
             x: Annotated[list, reducer]
+
 
         class Context(TypedDict):
             r: float
 
+
         graph = StateGraph(state_schema=State, context_schema=Context)
+
 
         def node(state: State, runtime: Runtime[Context]) -> dict:
             r = runtime.context.get("r", 1.0)
             x = state["x"][-1]
             next_value = x * r * (1 - x)
             return {"x": next_value}
+
 
         graph.add_node("A", node)
         graph.set_entry_point("A")
@@ -289,7 +289,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the state graph, input schema is inferred as the state schema.
+        """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
         Will take the name of the function/runnable as the node name.
         """
         ...
@@ -307,7 +307,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the state graph, input schema is specified.
+        """Add a new node to the `StateGraph`, input schema is specified.
         Will take the name of the function/runnable as the node name.
         """
         ...
@@ -326,7 +326,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the state graph, input schema is inferred as the state schema."""
+        """Add a new node to the `StateGraph`, input schema is inferred as the state schema."""
         ...
 
     @overload
@@ -343,7 +343,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the state graph, input schema is specified."""
+        """Add a new node to the `StateGraph`, input schema is specified."""
         ...
 
     def add_node(
@@ -359,24 +359,27 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the state graph.
+        """Add a new node to the `StateGraph`.
 
         Args:
             node: The function or runnable this node will run.
                 If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
-            action: The action associated with the node. (default: None)
+            action: The action associated with the node.
                 Will be used as the node function or runnable if `node` is a string (node name).
             defer: Whether to defer the execution of the node until the run is about to end.
-            metadata: The metadata associated with the node. (default: None)
+            metadata: The metadata associated with the node.
             input_schema: The input schema for the node. (default: the graph's state schema)
-            retry_policy: The retry policy for the node. (default: None)
+            retry_policy: The retry policy for the node.
                 If a sequence is provided, the first matching policy will be applied.
-            cache_policy: The cache policy for the node. (default: None)
+            cache_policy: The cache policy for the node.
             destinations: Destinations that indicate where a node can route to.
                 This is useful for edgeless graphs with nodes that return `Command` objects.
-                If a dict is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
-                If a tuple is provided, the values will be used as the target node names.
-                NOTE: this is only used for graph rendering and doesn't have any effect on the graph execution.
+                If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+                If a `tuple` is provided, the values will be used as the target node names.
+
+                !!! note
+
+                    This is only used for graph rendering and doesn't have any effect on the graph execution.
 
         Example:
             ```python
@@ -385,11 +388,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             from langchain_core.runnables import RunnableConfig
             from langgraph.graph import START, StateGraph
 
+
             class State(TypedDict):
                 x: int
 
+
             def my_node(state: State, config: RunnableConfig) -> State:
                 return {"x": state["x"] + 1}
+
 
             builder = StateGraph(State)
             builder.add_node(my_node)  # node name will be 'my_node'
@@ -410,7 +416,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             ```
 
         Returns:
-            Self: The instance of the state graph, allowing for method chaining.
+            Self: The instance of the `StateGraph`, allowing for method chaining.
         """
         if (retry := kwargs.get("retry", MISSING)) is not MISSING:
             warnings.warn(
@@ -426,7 +432,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 category=LangGraphDeprecatedSinceV05,
             )
             if input_schema is None:
-                input_schema = cast(Union[type[NodeInputT], None], input_)
+                input_schema = cast(type[NodeInputT] | None, input_)
 
         if not isinstance(node, str):
             action = node
@@ -562,10 +568,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             end_key: The key of the end node of the edge.
 
         Raises:
-            ValueError: If the start key is 'END' or if the start key or end key is not present in the graph.
+            ValueError: If the start key is `'END'` or if the start key or end key is not present in the graph.
 
         Returns:
-            Self: The instance of the state graph, allowing for method chaining.
+            Self: The instance of the `StateGraph`, allowing for method chaining.
         """
         if self.compiled:
             logger.warning(
@@ -619,14 +625,15 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 exiting this node.
             path: The callable that determines the next
                 node or nodes. If not specifying `path_map` it should return one or
-                more nodes. If it returns END, the graph will stop execution.
+                more nodes. If it returns `'END'`, the graph will stop execution.
             path_map: Optional mapping of paths to node
                 names. If omitted the paths returned by `path` should be node names.
 
         Returns:
             Self: The instance of the graph, allowing for method chaining.
 
-        Note: Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
+        !!! warning
+            Without type hints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
             or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
 
         """  # noqa: E501
@@ -660,16 +667,16 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         """Add a sequence of nodes that will be executed in the provided order.
 
         Args:
-            nodes: A sequence of StateNodes (callables that accept a state arg) or (name, StateNode) tuples.
-                If no names are provided, the name will be inferred from the node object (e.g. a runnable or a callable name).
+            nodes: A sequence of `StateNode` (callables that accept a `state` arg) or `(name, StateNode)` tuples.
+                If no names are provided, the name will be inferred from the node object (e.g. a `Runnable` or a `Callable` name).
                 Each node will be executed in the order provided.
 
         Raises:
-            ValueError: if the sequence is empty.
-            ValueError: if the sequence contains duplicate node names.
+            ValueError: If the sequence is empty.
+            ValueError: If the sequence contains duplicate node names.
 
         Returns:
-            Self: The instance of the state graph, allowing for method chaining.
+            Self: The instance of the `StateGraph`, allowing for method chaining.
         """
         if len(nodes) < 1:
             raise ValueError("Sequence requires at least one node.")
@@ -802,24 +809,24 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         debug: bool = False,
         name: str | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
-        """Compiles the state graph into a `CompiledStateGraph` object.
+        """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
         streamed, batched, and run asynchronously.
 
         Args:
             checkpointer: A checkpoint saver object or flag.
-                If provided, this Checkpointer serves as a fully versioned "short-term memory" for the graph,
+                If provided, this `Checkpointer` serves as a fully versioned "short-term memory" for the graph,
                 allowing it to be paused, resumed, and replayed from any point.
-                If None, it may inherit the parent graph's checkpointer when used as a subgraph.
-                If False, it will not use or inherit any checkpointer.
+                If `None`, it may inherit the parent graph's checkpointer when used as a subgraph.
+                If `False`, it will not use or inherit any checkpointer.
             interrupt_before: An optional list of node names to interrupt before.
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
 
         Returns:
-            CompiledStateGraph: The compiled state graph.
+            CompiledStateGraph: The compiled `StateGraph`.
         """
         # assign default values
         interrupt_before = interrupt_before or []
@@ -1360,10 +1367,14 @@ def _get_channel(
 def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
-        if len(meta) >= 1 and isinstance(meta[-1], BaseChannel):
-            return meta[-1]
-        elif len(meta) >= 1 and isclass(meta[-1]) and issubclass(meta[-1], BaseChannel):
-            return meta[-1](typ.__origin__ if hasattr(typ, "__origin__") else typ)
+        # Search through all annotated medata to find channel annotations
+        for item in meta:
+            if isinstance(item, BaseChannel):
+                return item
+            elif isclass(item) and issubclass(item, BaseChannel):
+                # ex, Annotated[int, EphemeralValue, SomeOtherAnnotation]
+                # would return EphemeralValue(int)
+                return item(typ.__origin__ if hasattr(typ, "__origin__") else typ)
     return None
 
 

@@ -1,0 +1,14 @@
+[project]
+name = "graph-prerelease-reqs"
+version = "0.1.0"
+description = "Test for prerelease stuff"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "langchain-openai==1.0.0a2",
+  "langchain-anthropic==1.0.0a5",
+  "langgraph==1.0.2"
+]
+
+[tool.uv]
+prerelease = "allow"

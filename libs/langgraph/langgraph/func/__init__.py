@@ -3,11 +3,10 @@ from __future__ import annotations
 import functools
 import inspect
 import warnings
-from collections.abc import Awaitable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import (
     Any,
-    Callable,
     Generic,
     TypeVar,
     cast,
@@ -130,12 +129,12 @@ def task(
         The `task` decorator supports both sync and async functions. To use async
         functions, ensure that you are using Python 3.11 or higher.
 
-    Tasks can only be called from within an [entrypoint][langgraph.func.entrypoint] or
-    from within a StateGraph. A task can be called like a regular function with the
+    Tasks can only be called from within an [`entrypoint`][langgraph.func.entrypoint] or
+    from within a `StateGraph`. A task can be called like a regular function with the
     following differences:
 
     - When a checkpointer is enabled, the function inputs and outputs must be serializable.
-    - The decorated function can only be called from within an entrypoint or StateGraph.
+    - The decorated function can only be called from within an entrypoint or `StateGraph`.
     - Calling the function produces a future. This makes it easy to parallelize tasks.
 
     Args:
@@ -150,15 +149,18 @@ def task(
         ```python
         from langgraph.func import entrypoint, task
 
+
         @task
         def add_one(a: int) -> int:
             return a + 1
+
 
         @entrypoint()
         def add_one(numbers: list[int]) -> list[int]:
             futures = [add_one(n) for n in numbers]
             results = [f.result() for f in futures]
             return results
+
 
         # Call the entrypoint
         add_one.invoke([1, 2, 3])  # Returns [2, 3, 4]
@@ -169,14 +171,17 @@ def task(
         import asyncio
         from langgraph.func import entrypoint, task
 
+
         @task
         async def add_one(a: int) -> int:
             return a + 1
+
 
         @entrypoint()
         async def add_one(numbers: list[int]) -> list[int]:
             futures = [add_one(n) for n in numbers]
             return asyncio.gather(*futures)
+
 
         # Call the entrypoint
         await add_one.ainvoke([1, 2, 3])  # Returns [2, 3, 4]
@@ -234,11 +239,11 @@ class entrypoint(Generic[ContextT]):
     The decorated function can request access to additional parameters
     that will be injected automatically at run time. These parameters include:
 
-    | Parameter        | Description                                                                                        |
-    |------------------|----------------------------------------------------------------------------------------------------|
-    | **`config`**     | A configuration object (aka RunnableConfig) that holds run-time configuration values.              |
-    | **`previous`**   | The previous return value for the given thread (available only when a checkpointer is provided).   |
-    | **`runtime`**    | A Runtime object that contains information about the current run, including context, store, writer |                                |
+    | Parameter        | Description                                                                                          |
+    |------------------|------------------------------------------------------------------------------------------------------|
+    | **`config`**     | A configuration object (aka `RunnableConfig`) that holds run-time configuration values.              |
+    | **`previous`**   | The previous return value for the given thread (available only when a checkpointer is provided).     |
+    | **`runtime`**    | A `Runtime` object that contains information about the current run, including context, store, writer |
 
     The entrypoint decorator can be applied to sync functions or async functions.
 
@@ -342,15 +347,13 @@ class entrypoint(Generic[ContextT]):
 
         from langgraph.func import entrypoint
 
+
         @entrypoint(checkpointer=InMemorySaver())
         def my_workflow(input_data: str, previous: Optional[str] = None) -> str:
             return "world"
 
-        config = {
-            "configurable": {
-                "thread_id": "some_thread"
-            }
-        }
+
+        config = {"configurable": {"thread_id": "some_thread"}}
         my_workflow.invoke("hello", config)
         ```
 
@@ -367,19 +370,21 @@ class entrypoint(Generic[ContextT]):
 
         from langgraph.func import entrypoint
 
+
         @entrypoint(checkpointer=InMemorySaver())
-        def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
+        def my_workflow(
+            number: int,
+            *,
+            previous: Any = None,
+        ) -> entrypoint.final[int, int]:
             previous = previous or 0
             # This will return the previous value to the caller, saving
             # 2 * number to the checkpoint, which will be used in the next invocation
             # for the `previous` parameter.
             return entrypoint.final(value=previous, save=2 * number)
 
-        config = {
-            "configurable": {
-                "thread_id": "some_thread"
-            }
-        }
+
+        config = {"configurable": {"thread_id": "some_thread"}}
 
         my_workflow.invoke(3, config)  # 0 (previous was None)
         my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocation)
@@ -434,19 +439,21 @@ class entrypoint(Generic[ContextT]):
             from langgraph.checkpoint.memory import InMemorySaver
             from langgraph.func import entrypoint
 
+
             @entrypoint(checkpointer=InMemorySaver())
-            def my_workflow(number: int, *, previous: Any = None) -> entrypoint.final[int, int]:
+            def my_workflow(
+                number: int,
+                *,
+                previous: Any = None,
+            ) -> entrypoint.final[int, int]:
                 previous = previous or 0
                 # This will return the previous value to the caller, saving
                 # 2 * number to the checkpoint, which will be used in the next invocation
                 # for the `previous` parameter.
                 return entrypoint.final(value=previous, save=2 * number)
 
-            config = {
-                "configurable": {
-                    "thread_id": "1"
-                }
-            }
+
+            config = {"configurable": {"thread_id": "1"}}
 
             my_workflow.invoke(3, config)  # 0 (previous was None)
             my_workflow.invoke(1, config)  # 6 (previous was 3 * 2 from the previous invocation)
@@ -454,11 +461,11 @@ class entrypoint(Generic[ContextT]):
         """
 
         value: R
-        """Value to return. A value will always be returned even if it is None."""
+        """Value to return. A value will always be returned even if it is `None`."""
         save: S
         """The value for the state for the next checkpoint.
 
-        A value will always be saved even if it is None.
+        A value will always be saved even if it is `None`.
         """
 
     def __call__(self, func: Callable[..., Any]) -> Pregel:

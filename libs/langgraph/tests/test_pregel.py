@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from random import randrange
-from typing import Annotated, Any, Literal, Optional, Union, get_type_hints
+from typing import Annotated, Any, Literal, get_type_hints
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
@@ -44,6 +44,7 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
@@ -60,6 +61,7 @@ from langgraph.types import (
     Command,
     Durability,
     Interrupt,
+    Overwrite,
     PregelTask,
     RetryPolicy,
     Send,
@@ -139,7 +141,7 @@ def test_graph_validation_with_command() -> None:
 
 def test_checkpoint_errors() -> None:
     class FaultyGetCheckpointer(InMemorySaver):
-        def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
             raise ValueError("Faulty get_tuple")
 
     class FaultyPutCheckpointer(InMemorySaver):
@@ -148,7 +150,7 @@ def test_checkpoint_errors() -> None:
             config: RunnableConfig,
             checkpoint: Checkpoint,
             metadata: CheckpointMetadata,
-            new_versions: Optional[dict[str, Union[str, int, float]]] = None,
+            new_versions: dict[str, str | int | float] | None = None,
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 
@@ -159,7 +161,7 @@ def test_checkpoint_errors() -> None:
             raise ValueError("Faulty put_writes")
 
     class FaultyVersionCheckpointer(InMemorySaver):
-        def get_next_version(self, current: Optional[int], channel: None) -> int:
+        def get_next_version(self, current: int | None, channel: None) -> int:
             raise ValueError("Faulty get_next_version")
 
     def logic(inp: str) -> str:
@@ -835,7 +837,7 @@ def test_pending_writes_resume(
         value: Annotated[int, operator.add]
 
     class AwhileMaker:
-        def __init__(self, sleep: float, rtn: Union[dict, Exception]) -> None:
+        def __init__(self, sleep: float, rtn: dict | Exception) -> None:
             self.sleep = sleep
             self.rtn = rtn
             self.reset()
@@ -1338,7 +1340,7 @@ def test_imp_stream_order(
         return state["a"] + "foo", "bar"
 
     @task
-    def bar(a: str, b: str, c: Optional[str] = None) -> dict:
+    def bar(a: str, b: str, c: str | None = None) -> dict:
         return {"a": a + b, "c": (c or "") + "bark"}
 
     @task
@@ -1725,7 +1727,7 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
 
     class BaseState(TypedDict):
         input: str
-        agent_outcome: Optional[Union[AgentAction, AgentFinish]]
+        agent_outcome: AgentAction | AgentFinish | None
 
     class AgentState(BaseState, total=False):
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
@@ -1758,7 +1760,7 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
         ]
     )
 
-    def agent_parser(input: str) -> dict[str, Union[AgentAction, AgentFinish]]:
+    def agent_parser(input: str) -> dict[str, AgentAction | AgentFinish]:
         if input.startswith("finish"):
             _, answer = input.split(":")
             return {
@@ -1892,9 +1894,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
 def test_in_one_fan_out_state_graph_waiting_edge(
     snapshot: SnapshotAssertion, sync_checkpointer: BaseCheckpointSaver
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2031,9 +2031,7 @@ def test_in_one_fan_out_state_graph_defer_node(
     sync_checkpointer: BaseCheckpointSaver,
     use_waiting_edge: bool,
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2119,7 +2117,9 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "id": AnyStr(),
                 "name": "rewrite_query",
                 "error": None,
-                "result": [("query", "query: what is weather in sf")],
+                "result": {
+                    "query": "query: what is weather in sf",
+                },
                 "interrupts": [],
             },
         },
@@ -2153,7 +2153,9 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "id": AnyStr(),
                 "name": "retriever_one",
                 "error": None,
-                "result": [("docs", ["doc1", "doc2"])],
+                "result": {
+                    "docs": ["doc1", "doc2"],
+                },
                 "interrupts": [],
             },
         },
@@ -2165,7 +2167,9 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "id": AnyStr(),
                 "name": "retriever_two",
                 "error": None,
-                "result": [("docs", ["doc3", "doc4"])],
+                "result": {
+                    "docs": ["doc3", "doc4"],
+                },
                 "interrupts": [],
             },
         },
@@ -2191,7 +2195,9 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "id": AnyStr(),
                 "name": "analyzer_one",
                 "error": None,
-                "result": [("query", "analyzed: query: what is weather in sf")],
+                "result": {
+                    "query": "analyzed: query: what is weather in sf",
+                },
                 "interrupts": [],
             },
         },
@@ -2219,7 +2225,9 @@ def test_in_one_fan_out_state_graph_defer_node(
                 "id": AnyStr(),
                 "name": "qa",
                 "error": None,
-                "result": [("answer", "doc1,doc2,doc3,doc4")],
+                "result": {
+                    "answer": "doc1,doc2,doc3,doc4",
+                },
                 "interrupts": [],
             },
         },
@@ -2297,9 +2305,7 @@ def test_in_one_fan_out_state_graph_defer_node(
 def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     snapshot: SnapshotAssertion, sync_checkpointer: BaseCheckpointSaver
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2389,9 +2395,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     snapshot: SnapshotAssertion,
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2406,13 +2410,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
         query: str
         inner: Annotated[InnerObject, lambda x, y: y]
-        answer: Optional[str] = None
+        answer: str | None = None
         docs: Annotated[list[str], sorted_add]
 
     class StateUpdate(BaseModel):
-        query: Optional[str] = None
-        answer: Optional[str] = None
-        docs: Optional[list[str]] = None
+        query: str | None = None
+        answer: str | None = None
+        docs: list[str] | None = None
 
     class UpdateDocs34(BaseModel):
         docs: list[str] = Field(default_factory=lambda: ["doc3", "doc4"])
@@ -2524,9 +2528,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_input(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2541,13 +2543,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
 
     class State(QueryModel):
         inner: InnerObject
-        answer: Optional[str] = None
+        answer: str | None = None
         docs: Annotated[list[str], sorted_add]
 
     class StateUpdate(BaseModel):
-        query: Optional[str] = None
-        answer: Optional[str] = None
-        docs: Optional[list[str]] = None
+        query: str | None = None
+        answer: str | None = None
+        docs: list[str] | None = None
 
     class Input(QueryModel):
         inner: InnerObject
@@ -2649,9 +2651,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic_inp
 def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2762,9 +2762,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
 def test_in_one_fan_out_state_graph_waiting_edge_multiple(
     with_cache: bool, cache: BaseCache
 ) -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -2929,9 +2927,7 @@ def test_function_in_conditional_edges_with_no_path_map() -> None:
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
-    def sorted_add(
-        x: list[str], y: Union[list[str], list[tuple[str, str]]]
-    ) -> list[str]:
+    def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
                 x.remove(rem)
@@ -4232,7 +4228,7 @@ def test_store_injected(
     thread_2 = str(uuid.uuid4())
 
     class Node:
-        def __init__(self, i: Optional[int] = None):
+        def __init__(self, i: int | None = None):
             self.i = i
 
         def __call__(self, inputs: State, config: RunnableConfig, store: BaseStore):
@@ -4358,7 +4354,7 @@ def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
         for c in graph.get_state_history(config)
     }
 
-    def lax_normalize_config(config: Optional[dict]) -> Optional[dict]:
+    def lax_normalize_config(config: dict | None) -> dict | None:
         if config is None:
             return None
         return config["configurable"]
@@ -4425,7 +4421,7 @@ def test_debug_subgraphs(
 
     assert len(checkpoint_events) == len(checkpoint_history)
 
-    def lax_normalize_config(config: Optional[dict]) -> Optional[dict]:
+    def lax_normalize_config(config: dict | None) -> dict | None:
         if config is None:
             return None
         return config["configurable"]
@@ -4518,7 +4514,7 @@ def test_debug_nested_subgraphs(
         for ns in stream_ns.keys()
     }
 
-    def normalize_config(config: Optional[dict]) -> Optional[dict]:
+    def normalize_config(config: dict | None) -> dict | None:
         if config is None:
             return None
 
@@ -5136,7 +5132,7 @@ def test_multistep_plan(sync_checkpointer: BaseCheckpointSaver):
     from langchain_core.messages import AnyMessage
 
     class State(TypedDict, total=False):
-        plan: list[Union[str, list[str]]]
+        plan: list[str | list[str]]
         messages: Annotated[list[AnyMessage], add_messages]
 
     def planner(state: State):
@@ -5539,12 +5535,9 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 "id": AnyStr(),
                 "interrupts": [],
                 "name": "falsy_task",
-                "result": [
-                    (
-                        "__return__",
-                        False,
-                    ),
-                ],
+                "result": {
+                    "__return__": False,
+                },
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -5561,7 +5554,7 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                     },
                 ],
                 "name": "graph",
-                "result": [],
+                "result": {},
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -5647,12 +5640,9 @@ def test_falsy_return_from_task(sync_checkpointer: BaseCheckpointSaver):
                 "id": AnyStr(),
                 "interrupts": [],
                 "name": "graph",
-                "result": [
-                    (
-                        "__end__",
-                        None,
-                    ),
-                ],
+                "result": {
+                    "__end__": None,
+                },
             },
             "step": 0,
             "timestamp": AnyStr(),
@@ -6597,7 +6587,7 @@ def test_tags_stream_mode_messages() -> None:
         )
     ) == [
         (
-            _AnyIdAIMessageChunk(content="foo"),
+            _AnyIdAIMessageChunk(content="foo", chunk_position="last"),
             {
                 "langgraph_step": 1,
                 "langgraph_node": "call_model",
@@ -6743,7 +6733,7 @@ def test_node_destinations() -> None:
 
 def test_pydantic_none_state_update() -> None:
     class State(BaseModel):
-        foo: Optional[str]
+        foo: str | None
 
     def node_a(state: State) -> State:
         return State(foo=None)
@@ -6754,7 +6744,7 @@ def test_pydantic_none_state_update() -> None:
 
 def test_pydantic_state_update_command() -> None:
     class State(BaseModel):
-        foo: Optional[str]
+        foo: str | None
 
     def node_a(state: State) -> State:
         return Command(update=State(foo=None))
@@ -6763,8 +6753,8 @@ def test_pydantic_state_update_command() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": None}
 
     class State(BaseModel):
-        foo: Optional[str] = None
-        bar: Optional[str] = None
+        foo: str | None = None
+        bar: str | None = None
 
     def node_a(state: State):
         return State(foo="foo")
@@ -7136,7 +7126,7 @@ def test_parallel_interrupts(sync_checkpointer: BaseCheckpointSaver) -> None:
 
     class ChildState(BaseModel):
         prompt: str = Field(..., description="What is going to be asked to the user?")
-        human_input: Optional[str] = Field(None, description="What the human said")
+        human_input: str | None = Field(None, description="What the human said")
         human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )
@@ -7294,7 +7284,7 @@ def test_parallel_interrupts_double(sync_checkpointer: BaseCheckpointSaver) -> N
 
     class ChildState(BaseModel):
         prompt: str = Field(..., description="What is going to be asked to the user?")
-        human_input: Optional[str] = Field(None, description="What the human said")
+        human_input: str | None = Field(None, description="What the human said")
         human_inputs: Annotated[list[str], operator.add] = Field(
             default_factory=list, description="All of my messages"
         )
@@ -8449,3 +8439,409 @@ def test_interrupt_stream_mode_values():
 
     result = [*app.stream(State(), stream_mode="values")]
     assert "__interrupt__" in result[-1]
+
+
+def test_supersteps_populate_task_results(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        num: int
+        text: str
+
+    def double(state: State) -> State:
+        return {"num": state["num"] * 2, "text": state["text"] * 2}
+
+    graph = (
+        StateGraph(State)
+        .add_node("double", double)
+        .add_edge(START, "double")
+        .add_edge("double", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    def first_task_result(history: list[StateSnapshot], node: str) -> Any:
+        for s in history:
+            for t in s.tasks:
+                if t.name == node:
+                    return t.result
+        return None
+
+    # reference run with invoke
+    ref_cfg = {"configurable": {"thread_id": "ref"}}
+    graph.invoke({"num": 1, "text": "one"}, ref_cfg)
+    ref_history = list(graph.get_state_history(ref_cfg))
+
+    ref_start_result = first_task_result(ref_history, "__start__")
+    ref_double_result = first_task_result(ref_history, "double")
+    assert ref_start_result == {"num": 1, "text": "one"}
+    assert ref_double_result == {"num": 2, "text": "oneone"}
+
+    # using supersteps
+    bulk_cfg = {"configurable": {"thread_id": "bulk"}}
+    graph.bulk_update_state(
+        bulk_cfg,
+        [
+            [StateUpdate(values={}, as_node="__input__")],
+            [StateUpdate(values={"num": 1, "text": "one"}, as_node="__start__")],
+            [StateUpdate(values={"num": 2, "text": "oneone"}, as_node="double")],
+        ],
+    )
+    bulk_history = list(graph.get_state_history(bulk_cfg))
+
+    bulk_start_result = first_task_result(bulk_history, "__start__")
+    bulk_double_result = first_task_result(bulk_history, "double")
+
+    assert bulk_start_result == ref_start_result == {"num": 1, "text": "one"}
+    assert bulk_double_result == ref_double_result == {"num": 2, "text": "oneone"}
+
+
+def test_multiple_writes_same_channel_from_same_node(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that a node can write multiple times to the same channel and that writes are ordered, reduced, and reflected in streamed events and state history."""
+
+    class State(TypedDict):
+        foo: Annotated[str, lambda a, b: ", ".join([x for x in [a, b] if x])]
+
+    def one(_: State) -> Command:
+        return Command(update=[("foo", "one.0"), ("foo", "one.1")])
+
+    def two(_: State) -> State:
+        return {"foo": "two"}
+
+    graph = (
+        StateGraph(State)
+        .add_node("one", one)
+        .add_node("two", two)
+        .add_edge(START, "one")
+        .add_edge("one", "two")
+        .add_edge("two", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    events = [
+        (ns, ev)
+        for ns, ev in graph.stream(
+            {"foo": "input"}, config, stream_mode=["updates", "tasks"]
+        )
+    ]
+
+    assert events == [
+        (
+            "tasks",
+            {
+                "id": AnyStr(),
+                "name": "one",
+                "input": {"foo": "input"},
+                "triggers": ("branch:to:one",),
+            },
+        ),
+        ("updates", {"one": [{"foo": "one.0"}, {"foo": "one.1"}]}),
+        (
+            "tasks",
+            {
+                "id": AnyStr(),
+                "name": "one",
+                "error": None,
+                "result": {"foo": {"$writes": ["one.0", "one.1"]}},
+                "interrupts": [],
+            },
+        ),
+        (
+            "tasks",
+            {
+                "id": AnyStr(),
+                "name": "two",
+                "input": {"foo": "input, one.0, one.1"},
+                "triggers": ("branch:to:two",),
+            },
+        ),
+        ("updates", {"two": {"foo": "two"}}),
+        (
+            "tasks",
+            {
+                "id": AnyStr(),
+                "name": "two",
+                "error": None,
+                "result": {"foo": "two"},
+                "interrupts": [],
+            },
+        ),
+    ]
+
+    def map_snapshot(s: StateSnapshot) -> dict:
+        return {
+            "tasks": [{"name": t.name, "result": t.result} for t in s.tasks],
+            "values": s.values,
+        }
+
+    history = [map_snapshot(s) for s in graph.get_state_history(config)]
+
+    assert history == [
+        {
+            "tasks": [],
+            "values": {"foo": "input, one.0, one.1, two"},
+        },
+        {
+            "tasks": [{"name": "two", "result": {"foo": "two"}}],
+            "values": {"foo": "input, one.0, one.1"},
+        },
+        {
+            "tasks": [
+                {"name": "one", "result": {"foo": {"$writes": ["one.0", "one.1"]}}}
+            ],
+            "values": {"foo": "input"},
+        },
+        {
+            "tasks": [{"name": "__start__", "result": {"foo": "input"}}],
+            "values": {"foo": ""},
+        },
+    ]
+
+
+def test_send_with_untracked_value(sync_checkpointer: BaseCheckpointSaver):
+    """Test that Send objects work correctly with untracked values in state."""
+
+    class UnserializableResource:
+        def __init__(self, name: str):
+            self.name = name
+            self.lock = threading.Lock()
+
+    class State(TypedDict):
+        messages: Annotated[list[str], operator.add]
+        session_resource: Annotated[UnserializableResource, UntrackedValue]
+
+    def setup_node(state: State) -> State:
+        resource = UnserializableResource("test_session")
+        return {"messages": ["setup complete"], "session_resource": resource}
+
+    def send_to_tool(state: State):
+        return [Send("tool_node", state)]
+
+    def tool_node(state: State) -> State:
+        resource = state["session_resource"]
+        assert isinstance(resource, UnserializableResource)
+        assert resource.name == "test_session"
+
+        new_resource = UnserializableResource("new_session")
+
+        return {
+            "messages": [f"tool used resource: {resource.name}"],
+            "session_resource": new_resource,
+        }
+
+    graph = StateGraph(State)
+    graph.add_node("setup", setup_node)
+    graph.add_node("tool_node", tool_node)
+    graph.add_edge(START, "setup")
+    graph.add_conditional_edges("setup", send_to_tool)
+
+    app = graph.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = app.invoke({}, config)
+
+    assert len(result["messages"]) == 2
+    assert result["messages"][0] == "setup complete"
+    assert result["messages"][1] == "tool used resource: test_session"
+    assert result["session_resource"].name == "new_session"
+
+    state = app.get_state(config)
+    assert "session_resource" not in state.values
+
+
+def test_send_with_untracked_value_overlapping_keys(
+    sync_checkpointer: BaseCheckpointSaver,
+):
+    """Test that Send objects work correctly with untracked values in state."""
+
+    class State(TypedDict):
+        dictionary: dict
+        session_resource: Annotated[str, UntrackedValue]
+
+    def setup_node(state: State) -> State:
+        return {}
+
+    def send_to_tool(state: State):
+        return [
+            Send(
+                "tool_node",
+                {
+                    "dictionary": {"session_resource": "legal_value"},
+                    "session_resource": "illegal_value",
+                },
+            )
+        ]
+
+    def tool_node(state: State) -> State:
+        print(f"STATE: {state}")
+        assert state["dictionary"] == {"session_resource": "legal_value"}
+        assert state["session_resource"] == "illegal_value"
+
+        return {
+            "dictionary": state["dictionary"],
+            "session_resource": "new_illegal_value",
+        }
+
+    graph = StateGraph(State)
+    graph.add_node("setup", setup_node)
+    graph.add_node("tool_node", tool_node)
+    graph.add_edge(START, "setup")
+    graph.add_conditional_edges("setup", send_to_tool)
+
+    app = graph.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = app.invoke({}, config)
+
+    assert result["session_resource"] == "new_illegal_value"
+    state = app.get_state(config)
+    assert "session_resource" not in state.values
+    assert state.values.get("dictionary") == {"session_resource": "legal_value"}
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_overwrite_sequential(
+    sync_checkpointer: BaseCheckpointSaver, as_json: bool
+) -> None:
+    """Test a sequential chain of nodes where the last node uses Overwrite to bypass a reducer and write a value directly to the channel."""
+
+    class State(TypedDict):
+        messages: Annotated[list, operator.add]
+
+    def node_a(state: State):
+        return {"messages": ["a"]}
+
+    def node_b(state: State):
+        overwrite = {"__overwrite__": ["b"]} if as_json else Overwrite(["b"])
+        return {"messages": overwrite}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"messages": ["START"]}, config)
+    # a is overwritten by b
+    assert result == {"messages": ["b"]}
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_overwrite_parallel(
+    sync_checkpointer: BaseCheckpointSaver, as_json: bool
+) -> None:
+    """Test parallel nodes where max one node uses Overwrite to bypass a reducer and write a value directly to the channel."""
+
+    class State(TypedDict):
+        messages: Annotated[list, operator.add]
+
+    def node_a(state: State):
+        return {"messages": ["a"]}
+
+    def node_b(state: State):
+        overwrite = {"__overwrite__": ["b"]} if as_json else Overwrite(["b"])
+        return {"messages": overwrite}
+
+    def node_c(state: State):
+        return {"messages": ["c"]}
+
+    def node_d(state: State):
+        return {"messages": ["d"]}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_node("node_c", node_c)
+    builder.add_node("node_d", node_d)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_a", "node_c")
+    builder.add_edge("node_b", "node_d")
+    builder.add_edge("node_c", "node_d")
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"messages": ["START"]}, config)
+    # a, c are overwritten by b, then d is written
+    assert result == {"messages": ["b", "d"]}
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_overwrite_parallel_error(
+    sync_checkpointer: BaseCheckpointSaver, as_json: bool
+) -> None:
+    """Test parallel nodes where more than one node uses Overwrite to bypass a reducer and write a value directly to the channel. In this case, InvalidUpdateError should be raised."""
+
+    class State(TypedDict):
+        messages: Annotated[list, operator.add]
+
+    def node_a(state: State):
+        return {"messages": ["a"]}
+
+    def node_b(state: State):
+        overwrite = {"__overwrite__": ["b"]} if as_json else Overwrite(["b"])
+        return {"messages": overwrite}
+
+    def node_c(state: State):
+        overwrite = {"__overwrite__": ["c"]} if as_json else Overwrite(["c"])
+        return {"messages": overwrite}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_node("node_c", node_c)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_a", "node_c")
+    builder.add_edge("node_b", END)
+    builder.add_edge("node_c", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    with pytest.raises(
+        InvalidUpdateError, match="Can receive only one Overwrite value per super-step."
+    ):
+        graph.invoke({"messages": ["START"]}, config)
+
+
+def test_fork_does_not_apply_pending_writes(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that forking with update_state does not apply pending writes from original execution."""
+
+    class State(TypedDict):
+        value: Annotated[int, operator.add]
+
+    def node_a(state: State) -> State:
+        return {"value": 10}
+
+    def node_b(state: State) -> State:
+        return {"value": 100}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"value": 1}, thread1)
+
+    history = list(graph.get_state_history(thread1))
+    checkpoint_before_a = next(s for s in history if s.next == ("node_a",))
+
+    fork_config = graph.update_state(
+        checkpoint_before_a.config, {"value": 20}, as_node="node_a"
+    )
+
+    # Continue from fork (should run node_b)
+    result = graph.invoke(None, fork_config)
+
+    # Should be: 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
+    assert result == {"value": 121}

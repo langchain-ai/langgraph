@@ -307,6 +307,99 @@
   
   '''
 # ---
+# name: test_get_graph_nonterminal_last_step_source
+  '''
+  {
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "human"
+      },
+      {
+        "conditional": true,
+        "source": "chatbot",
+        "target": "human"
+      },
+      {
+        "conditional": true,
+        "source": "chatbot",
+        "target": "tools"
+      },
+      {
+        "conditional": true,
+        "source": "human",
+        "target": "__end__"
+      },
+      {
+        "conditional": true,
+        "source": "human",
+        "target": "chatbot"
+      },
+      {
+        "source": "tools",
+        "target": "chatbot"
+      }
+    ],
+    "nodes": [
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        },
+        "id": "__start__",
+        "type": "runnable"
+      },
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "chatbot"
+        },
+        "id": "chatbot",
+        "type": "runnable"
+      },
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "id": "tools",
+        "type": "runnable"
+      },
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "human"
+        },
+        "id": "human",
+        "type": "runnable"
+      },
+      {
+        "id": "__end__"
+      }
+    ]
+  }
+  '''
+# ---
 # name: test_get_graph_root_channel
   '''
   {
@@ -573,18 +666,18 @@
   	__end__([<p>__end__</p>]):::last
   	__start__ --> uno;
   	uno -.-> dos;
-  	uno -.-> subgraph_one;
+  	uno -.-> subgraph\3aone;
   	dos --> __end__;
-  	subgraph___end__ --> __end__;
+  	subgraph\3a__end__ --> __end__;
   	subgraph subgraph
-  	subgraph_one(one)
-  	subgraph_two(two)
-  	subgraph_three(three)
-  	subgraph___end__(<p>__end__</p>)
-  	subgraph_one -.-> subgraph_three;
-  	subgraph_one -.-> subgraph_two;
-  	subgraph_three --> subgraph___end__;
-  	subgraph_two --> subgraph___end__;
+  	subgraph\3aone(one)
+  	subgraph\3atwo(two)
+  	subgraph\3athree(three)
+  	subgraph\3a__end__(<p>__end__</p>)
+  	subgraph\3aone -.-> subgraph\3athree;
+  	subgraph\3aone -.-> subgraph\3atwo;
+  	subgraph\3athree --> subgraph\3a__end__;
+  	subgraph\3atwo --> subgraph\3a__end__;
   	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
@@ -612,11 +705,11 @@
   	__start__([<p>__start__</p>]):::first
   	side(side)
   	__end__([<p>__end__</p>]):::last
-  	__start__ --> inner_up;
-  	inner_up --> side;
+  	__start__ --> inner\3aup;
+  	inner\3aup --> side;
   	side --> __end__;
   	subgraph inner
-  	inner_up(up)
+  	inner\3aup(up)
   	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
@@ -775,19 +868,19 @@
   	__end__([<p>__end__</p>]):::last
   	__start__ -.-> tool_one;
   	__start__ -.-> tool_three;
-  	__start__ -.-> tool_two___start__;
+  	__start__ -.-> tool_two\3a__start__;
   	tool_one --> __end__;
   	tool_three --> __end__;
-  	tool_two___end__ --> __end__;
+  	tool_two\3a__end__ --> __end__;
   	subgraph tool_two
-  	tool_two___start__(<p>__start__</p>)
-  	tool_two_tool_two_slow(tool_two_slow)
-  	tool_two_tool_two_fast(tool_two_fast)
-  	tool_two___end__(<p>__end__</p>)
-  	tool_two___start__ -.-> tool_two_tool_two_fast;
-  	tool_two___start__ -.-> tool_two_tool_two_slow;
-  	tool_two_tool_two_fast --> tool_two___end__;
-  	tool_two_tool_two_slow --> tool_two___end__;
+  	tool_two\3a__start__(<p>__start__</p>)
+  	tool_two\3atool_two_slow(tool_two_slow)
+  	tool_two\3atool_two_fast(tool_two_fast)
+  	tool_two\3a__end__(<p>__end__</p>)
+  	tool_two\3a__start__ -.-> tool_two\3atool_two_fast;
+  	tool_two\3a__start__ -.-> tool_two\3atool_two_slow;
+  	tool_two\3atool_two_fast --> tool_two\3a__end__;
+  	tool_two\3atool_two_slow --> tool_two\3a__end__;
   	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
@@ -795,109 +888,16 @@
   
   '''
 # ---
-# name: test_get_graph_nonterminal_last_step_source
-  '''
-  {
-    "edges": [
-      {
-        "source": "__start__",
-        "target": "human"
-      },
-      {
-        "conditional": true,
-        "source": "chatbot",
-        "target": "human"
-      },
-      {
-        "conditional": true,
-        "source": "chatbot",
-        "target": "tools"
-      },
-      {
-        "conditional": true,
-        "source": "human",
-        "target": "__end__"
-      },
-      {
-        "conditional": true,
-        "source": "human",
-        "target": "chatbot"
-      },
-      {
-        "source": "tools",
-        "target": "chatbot"
-      }
-    ],
-    "nodes": [
-      {
-        "data": {
-          "id": [
-            "langgraph",
-            "_internal",
-            "_runnable",
-            "RunnableCallable"
-          ],
-          "name": "__start__"
-        },
-        "id": "__start__",
-        "type": "runnable"
-      },
-      {
-        "data": {
-          "id": [
-            "langgraph",
-            "_internal",
-            "_runnable",
-            "RunnableCallable"
-          ],
-          "name": "chatbot"
-        },
-        "id": "chatbot",
-        "type": "runnable"
-      },
-      {
-        "data": {
-          "id": [
-            "langgraph",
-            "_internal",
-            "_runnable",
-            "RunnableCallable"
-          ],
-          "name": "tools"
-        },
-        "id": "tools",
-        "type": "runnable"
-      },
-      {
-        "data": {
-          "id": [
-            "langgraph",
-            "_internal",
-            "_runnable",
-            "RunnableCallable"
-          ],
-          "name": "human"
-        },
-        "id": "human",
-        "type": "runnable"
-      },
-      {
-        "id": "__end__"
-      }
-    ]
-  }
-  '''
-# ---
 # name: test_repeat_condition
   '''
   graph TD;
-  	Call_Tool -.-> Chart_Generator;
-  	Call_Tool -.-> Researcher;
-  	Chart_Generator -. &nbsp;call_tool&nbsp; .-> Call_Tool;
-  	Chart_Generator -. &nbsp;continue&nbsp; .-> Researcher;
-  	Chart_Generator -. &nbsp;end&nbsp; .-> __end__;
-  	Researcher -. &nbsp;call_tool&nbsp; .-> Call_Tool;
-  	Researcher -. &nbsp;continue&nbsp; .-> Chart_Generator;
+  	Call\20Tool -.-> Chart\20Generator;
+  	Call\20Tool -.-> Researcher;
+  	Chart\20Generator -. &nbsp;call_tool&nbsp; .-> Call\20Tool;
+  	Chart\20Generator -. &nbsp;continue&nbsp; .-> Researcher;
+  	Chart\20Generator -. &nbsp;end&nbsp; .-> __end__;
+  	Researcher -. &nbsp;call_tool&nbsp; .-> Call\20Tool;
+  	Researcher -. &nbsp;continue&nbsp; .-> Chart\20Generator;
   	Researcher -. &nbsp;end&nbsp; .-> __end__;
   	__start__ --> Researcher;
   	Researcher -. &nbsp;redo&nbsp; .-> Researcher;
@@ -939,25 +939,25 @@
   	__end__([<p>__end__</p>]):::last
   	__start__ --> gp_one;
   	gp_one -. &nbsp;1&nbsp; .-> __end__;
-  	gp_one -. &nbsp;0&nbsp; .-> gp_two___start__;
-  	gp_two___end__ --> gp_one;
+  	gp_one -. &nbsp;0&nbsp; .-> gp_two\3a__start__;
+  	gp_two\3a__end__ --> gp_one;
   	subgraph gp_two
-  	gp_two___start__(<p>__start__</p>)
-  	gp_two_p_one(p_one)
-  	gp_two___end__(<p>__end__</p>)
-  	gp_two___start__ --> gp_two_p_one;
-  	gp_two_p_one -. &nbsp;1&nbsp; .-> gp_two___end__;
-  	gp_two_p_one -. &nbsp;0&nbsp; .-> gp_two_p_two___start__;
-  	gp_two_p_two___end__ --> gp_two_p_one;
+  	gp_two\3a__start__(<p>__start__</p>)
+  	gp_two\3ap_one(p_one)
+  	gp_two\3a__end__(<p>__end__</p>)
+  	gp_two\3a__start__ --> gp_two\3ap_one;
+  	gp_two\3ap_one -. &nbsp;1&nbsp; .-> gp_two\3a__end__;
+  	gp_two\3ap_one -. &nbsp;0&nbsp; .-> gp_two\3ap_two\3a__start__;
+  	gp_two\3ap_two\3a__end__ --> gp_two\3ap_one;
   	subgraph p_two
-  	gp_two_p_two___start__(<p>__start__</p>)
-  	gp_two_p_two_c_one(c_one)
-  	gp_two_p_two_c_two(c_two)
-  	gp_two_p_two___end__(<p>__end__</p>)
-  	gp_two_p_two___start__ --> gp_two_p_two_c_one;
-  	gp_two_p_two_c_one -. &nbsp;1&nbsp; .-> gp_two_p_two___end__;
-  	gp_two_p_two_c_one -. &nbsp;0&nbsp; .-> gp_two_p_two_c_two;
-  	gp_two_p_two_c_two --> gp_two_p_two_c_one;
+  	gp_two\3ap_two\3a__start__(<p>__start__</p>)
+  	gp_two\3ap_two\3ac_one(c_one)
+  	gp_two\3ap_two\3ac_two(c_two)
+  	gp_two\3ap_two\3a__end__(<p>__end__</p>)
+  	gp_two\3ap_two\3a__start__ --> gp_two\3ap_two\3ac_one;
+  	gp_two\3ap_two\3ac_one -. &nbsp;1&nbsp; .-> gp_two\3ap_two\3a__end__;
+  	gp_two\3ap_two\3ac_one -. &nbsp;0&nbsp; .-> gp_two\3ap_two\3ac_two;
+  	gp_two\3ap_two\3ac_two --> gp_two\3ap_two\3ac_one;
   	end
   	end
   	classDef default fill:#f2f0ff,line-height:1.2
@@ -979,17 +979,17 @@
   	__end__([<p>__end__</p>]):::last
   	__start__ --> p_one;
   	p_one -. &nbsp;1&nbsp; .-> __end__;
-  	p_one -. &nbsp;0&nbsp; .-> p_two___start__;
-  	p_two___end__ --> p_one;
+  	p_one -. &nbsp;0&nbsp; .-> p_two\3a__start__;
+  	p_two\3a__end__ --> p_one;
   	subgraph p_two
-  	p_two___start__(<p>__start__</p>)
-  	p_two_c_one(c_one)
-  	p_two_c_two(c_two)
-  	p_two___end__(<p>__end__</p>)
-  	p_two___start__ --> p_two_c_one;
-  	p_two_c_one -. &nbsp;1&nbsp; .-> p_two___end__;
-  	p_two_c_one -. &nbsp;0&nbsp; .-> p_two_c_two;
-  	p_two_c_two --> p_two_c_one;
+  	p_two\3a__start__(<p>__start__</p>)
+  	p_two\3ac_one(c_one)
+  	p_two\3ac_two(c_two)
+  	p_two\3a__end__(<p>__end__</p>)
+  	p_two\3a__start__ --> p_two\3ac_one;
+  	p_two\3ac_one -. &nbsp;1&nbsp; .-> p_two\3a__end__;
+  	p_two\3ac_one -. &nbsp;0&nbsp; .-> p_two\3ac_two;
+  	p_two\3ac_two --> p_two\3ac_one;
   	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0

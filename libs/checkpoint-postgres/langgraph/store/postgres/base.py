@@ -6,18 +6,16 @@ import json
 import logging
 import threading
 from collections import defaultdict
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Generic,
     Literal,
     NamedTuple,
     TypeVar,
-    Union,
     cast,
 )
 
@@ -146,7 +144,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS store_vectors_embedding_idx ON store_vec
 ]
 
 
-C = TypeVar("C", bound=Union[_pg_internal.Conn, _ainternal.Conn])
+C = TypeVar("C", bound=_pg_internal.Conn | _ainternal.Conn)
 
 
 class PoolConfig(TypedDict, total=False):
@@ -260,7 +258,7 @@ class BasePostgresStore(Generic[C]):
 
         results = []
         for namespace, items in namespace_groups.items():
-            _, keys = zip(*items)
+            _, keys = zip(*items, strict=False)
             this_refresh_ttls = refresh_ttls[namespace]
 
             query = """
@@ -873,7 +871,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
 
         Args:
             timeout: Maximum time to wait for the thread to stop, in seconds.
-                If None, wait indefinitely.
+                If `None`, wait indefinitely.
 
         Returns:
             bool: True if the thread was successfully stopped or wasn't running,
@@ -1019,7 +1017,9 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                     query,
                     [
                         p
-                        for (ns, k, pathname, _), vector in zip(txt_params, vectors)
+                        for (ns, k, pathname, _), vector in zip(
+                            txt_params, vectors, strict=False
+                        )
                         for p in (ns, k, pathname, vector)
                     ],
                 )
@@ -1040,13 +1040,15 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
             embeddings = self.embeddings.embed_documents(
                 [query for _, query in embedding_requests]
             )
-            for (idx, _), embedding in zip(embedding_requests, embeddings):
+            for (idx, _), embedding in zip(
+                embedding_requests, embeddings, strict=False
+            ):
                 _paramslist = queries[idx][1]
                 for i in range(len(_paramslist)):
                     if _paramslist[i] is PLACEHOLDER:
                         _paramslist[i] = embedding
 
-        for (idx, _), (query, params) in zip(search_ops, queries):
+        for (idx, _), (query, params) in zip(search_ops, queries, strict=False):
             cur.execute(query, params)
             rows = cast(list[Row], cur.fetchall())
             results[idx] = [
@@ -1063,7 +1065,7 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
         cur: Cursor[DictRow],
     ) -> None:
         for (query, params), (idx, _) in zip(
-            self._get_batch_list_namespaces_queries(list_ops), list_ops
+            self._get_batch_list_namespaces_queries(list_ops), list_ops, strict=False
         ):
             cur.execute(query, params)
             results[idx] = [_decode_ns_bytes(row["truncated_prefix"]) for row in cur]

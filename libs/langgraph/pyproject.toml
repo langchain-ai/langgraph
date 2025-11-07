@@ -4,27 +4,46 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "0.6.7"
+version = "1.0.2"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
+classifiers = [
+    'Development Status :: 5 - Production/Stable',
+    'Programming Language :: Python',
+    'Programming Language :: Python :: Implementation :: CPython',
+    'Programming Language :: Python :: Implementation :: PyPy',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3 :: Only',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+]
 dependencies = [
     "langchain-core>=0.1",
-    "langgraph-checkpoint>=2.1.0,<3.0.0",
+    "langgraph-checkpoint>=2.1.0,<4.0.0",
     "langgraph-sdk>=0.2.2,<0.3.0",
-    "langgraph-prebuilt>=0.6.0,<0.7.0",
+    "langgraph-prebuilt>=1.0.2,<1.1.0",
     "xxhash>=3.5.0",
     "pydantic>=2.7.4",
 ]
 
+
 [project.urls]
-Repository = "https://www.github.com/langchain-ai/langgraph"
+Homepage = "https://docs.langchain.com/oss/python/langgraph/overview"
+Documentation = "https://reference.langchain.com/python/langgraph/"
+Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/langgraph"
+Changelog = "https://github.com/langchain-ai/langgraph/releases"
+Twitter = "https://x.com/LangChainAI"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
 
 [dependency-groups]
-dev = [
+test = [
     "pytest",
     "pytest-cov",
     "pytest-dotenv",
@@ -32,11 +51,9 @@ dev = [
     "syrupy",
     "httpx",
     "pytest-watcher",
-    "mypy",
-    "ruff",
-    "jupyter",
     "pytest-xdist[psutil]",
     "pytest-repeat",
+    "langchain-core>=1.0.0",
     "langgraph-prebuilt",
     "langgraph-checkpoint",
     "langgraph-checkpoint-sqlite",
@@ -46,14 +63,22 @@ dev = [
     "uvloop==0.21.0beta1",
     "pyperf",
     "py-spy",
-    "types-requests",
     "pycryptodome",
-    "langgraph-cli[inmem]",
+    "langgraph-cli; python_version < '3.14'",
+    "langgraph-cli[inmem]; python_version < '3.14'",
     "redis",
 ]
+lint = [
+    "mypy",
+    "ruff",
+    "types-requests",
+]
+dev = [
+    {include-group = "test"},
+    {include-group = "lint"},
+    "jupyter",
+]
 
-[tool.uv]
-default-groups = ['dev']
 
 [tool.uv.sources]
 langgraph-prebuilt = { path = "../prebuilt", editable = true }
@@ -69,18 +94,7 @@ lint.ignore = [ "E501" ]
 line-length = 88
 indent-width = 4
 extend-include = ["*.ipynb"]
-target-version = "py39"
-
-[tool.ruff.lint.per-file-ignores]
-"tests/bench/*" = ["UP006", "UP007"]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
-docstring-code-format = false
-docstring-code-line-length = "dynamic"
+target-version = "py310"
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "typing.TypedDict".msg = "Use typing_extensions.TypedDict instead."

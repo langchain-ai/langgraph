@@ -22,13 +22,13 @@ jobs:
         with:
           format: json
       - name: Set up Python 3.11
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.11"
           enable-cache: true
           cache-suffix: "bench"
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --group test
       - name: Download baseline
         uses: actions/cache/restore@v4
         with:

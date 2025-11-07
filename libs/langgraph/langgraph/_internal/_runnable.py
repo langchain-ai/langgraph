@@ -8,6 +8,7 @@ import warnings
 from collections.abc import (
     AsyncIterator,
     Awaitable,
+    Callable,
     Coroutine,
     Generator,
     Iterator,
@@ -18,10 +19,9 @@ from contextvars import Context, Token, copy_context
 from functools import partial, wraps
 from typing import (
     Any,
-    Callable,
     Optional,
     Protocol,
-    Union,
+    TypeGuard,
     cast,
 )
 
@@ -42,7 +42,6 @@ from langchain_core.runnables.config import (
 from langchain_core.runnables.utils import Input, Output
 from langchain_core.tracers.langchain import LangChainTracer
 from langgraph.store.base import BaseStore
-from typing_extensions import TypeGuard
 
 from langgraph._internal._config import (
     ensure_config,
@@ -136,7 +135,7 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
         (
             RunnableConfig,
             "RunnableConfig",
-            Optional[RunnableConfig],
+            Optional[RunnableConfig],  # noqa: UP045
             "Optional[RunnableConfig]",
             inspect.Parameter.empty,
         ),
@@ -163,7 +162,7 @@ KWARGS_CONFIG_KEYS: tuple[tuple[str, tuple[Any, ...], str, Any], ...] = (
     (
         "store",
         (
-            Optional[BaseStore],
+            Optional[BaseStore],  # noqa: UP045
             "Optional[BaseStore]",
         ),
         "store",
@@ -241,15 +240,15 @@ class _RunnableWithConfigWriterStore(Protocol[Input, Output]):
     ) -> Output: ...
 
 
-RunnableLike = Union[
-    LCRunnableLike,
-    _RunnableWithWriter[Input, Output],
-    _RunnableWithStore[Input, Output],
-    _RunnableWithWriterStore[Input, Output],
-    _RunnableWithConfigWriter[Input, Output],
-    _RunnableWithConfigStore[Input, Output],
-    _RunnableWithConfigWriterStore[Input, Output],
-]
+RunnableLike = (
+    LCRunnableLike
+    | _RunnableWithWriter[Input, Output]
+    | _RunnableWithStore[Input, Output]
+    | _RunnableWithWriterStore[Input, Output]
+    | _RunnableWithConfigWriter[Input, Output]
+    | _RunnableWithConfigStore[Input, Output]
+    | _RunnableWithConfigWriterStore[Input, Output]
+)
 
 
 class RunnableCallable(Runnable):
@@ -482,9 +481,9 @@ def is_async_callable(
 ) -> TypeGuard[Callable[..., Awaitable]]:
     """Check if a function is async."""
     return (
-        asyncio.iscoroutinefunction(func)
+        inspect.iscoroutinefunction(func)
         or hasattr(func, "__call__")
-        and asyncio.iscoroutinefunction(func.__call__)
+        and inspect.iscoroutinefunction(func.__call__)
     )
 
 
@@ -534,9 +533,9 @@ def coerce_to_runnable(
 
 
 class RunnableSeq(Runnable):
-    """Sequence of Runnables, where the output of each is the input of the next.
+    """Sequence of `Runnable`, where the output of each is the input of the next.
 
-    RunnableSeq is a simpler version of RunnableSequence that is internal to
+    `RunnableSeq` is a simpler version of `RunnableSequence` that is internal to
     LangGraph.
     """
 
@@ -550,7 +549,7 @@ class RunnableSeq(Runnable):
 
         Args:
             steps: The steps to include in the sequence.
-            name: The name of the Runnable. Defaults to None.
+            name: The name of the `Runnable`.
 
         Raises:
             ValueError: If the sequence has less than 2 steps.

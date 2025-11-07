@@ -169,13 +169,11 @@ def test_data():
     metadata_1: CheckpointMetadata = {
         "source": "input",
         "step": 2,
-        "writes": {},
         "score": 1,
     }
     metadata_2: CheckpointMetadata = {
         "source": "loop",
         "step": 1,
-        "writes": {"foo": "bar"},
         "score": None,
     }
     metadata_3: CheckpointMetadata = {}
@@ -202,7 +200,6 @@ def test_combined_metadata(saver_name: str, test_data) -> None:
         metadata: CheckpointMetadata = {
             "source": "loop",
             "step": 1,
-            "writes": {"foo": "bar"},
             "score": None,
         }
         saver.put(config, chkpnt, metadata, {})
@@ -228,7 +225,6 @@ def test_search(saver_name: str, test_data) -> None:
         query_1 = {"source": "input"}  # search by 1 key
         query_2 = {
             "step": 1,
-            "writes": {"foo": "bar"},
         }  # search by multiple keys
         query_3: dict[str, Any] = {}  # search by no keys, return all checkpoints
         query_4 = {"source": "update", "step": 1}  # no match
@@ -332,3 +328,33 @@ def test_pending_sends_migration(saver_name: str) -> None:
             TASKS: ["send-1", "send-2", "send-3"]
         }
         assert TASKS in search_results[0].checkpoint["channel_versions"]
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+def test_get_checkpoint_no_channel_values(
+    monkeypatch, saver_name: str, test_data
+) -> None:
+    """Backwards compatibility test that verifies a checkpoint with no channel_values key can be retrieved without throwing an error."""
+    with _saver(saver_name) as saver:
+        config = {
+            "configurable": {
+                "thread_id": "thread-2",
+                "checkpoint_ns": "",
+                "__super_private_key": "super_private_value",
+            },
+        }
+        chkpnt: Checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+        saver.put(config, chkpnt, {}, {})
+
+        load_checkpoint_tuple = saver._load_checkpoint_tuple
+
+        def patched_load_checkpoint_tuple(value):
+            value["checkpoint"].pop("channel_values", None)
+            return load_checkpoint_tuple(value)
+
+        monkeypatch.setattr(
+            saver, "_load_checkpoint_tuple", patched_load_checkpoint_tuple
+        )
+
+        checkpoint = saver.get_tuple(config)
+        assert checkpoint.checkpoint["channel_values"] == {}

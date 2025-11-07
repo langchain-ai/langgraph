@@ -7,10 +7,10 @@ import inspect
 import sys
 import types
 from collections.abc import Awaitable, Coroutine, Generator
-from typing import TypeVar, Union, cast
+from typing import TypeVar, cast
 
 T = TypeVar("T")
-AnyFuture = Union[asyncio.Future, concurrent.futures.Future]
+AnyFuture = asyncio.Future | concurrent.futures.Future
 
 CONTEXT_NOT_SUPPORTED = sys.version_info < (3, 11)
 EAGER_NOT_SUPPORTED = sys.version_info < (3, 12)

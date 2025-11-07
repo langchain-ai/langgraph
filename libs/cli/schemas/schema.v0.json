@@ -407,11 +407,11 @@
       "properties": {
         "disable_studio_auth": {
           "type": "boolean",
-          "description": "Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio.\n\nDefaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header\nvalue is a valid API key for the deployment's workspace. If True, all requests will go through your custom\nauthentication logic, regardless of origin of the request.\n"
+          "description": "Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio.\n\nDefaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header\nvalue is a valid API key for the deployment's workspace. If `True`, all requests will go through your custom\nauthentication logic, regardless of origin of the request.\n"
         },
         "openapi": {
           "$ref": "#/$defs/SecurityConfig",
-          "description": "Required. Detailed security configuration that merges into your deployment's OpenAPI spec.\n\n{\n}\n}\n}\n},\n]\n}\n"
+          "description": "The security configuration to include in your server's OpenAPI spec.\n\n{\n}\n}\n}\n},\n]\n}\n"
         },
         "path": {
           "type": "string",
@@ -442,7 +442,7 @@
               }
             }
           },
-          "description": "Optional. Path-specific security overrides.\n\n- Keys that are HTTP methods (e.g., \"GET\", \"POST\"),\n- Values are lists of security definitions (just like `security`) for that method.\n"
+          "description": "Path-specific security overrides.\n\n- Keys that are HTTP methods (e.g., \"GET\", \"POST\"),\n- Values are lists of security definitions (just like `security`) for that method.\n"
         },
         "security": {
           "type": "array",
@@ -455,14 +455,14 @@
               }
             }
           },
-          "description": "Optional. Global security requirements across all endpoints.\n\nEach element in the list maps a security scheme (e.g. \"OAuth2\") to a list of scopes (e.g. [\"read\", \"write\"])."
+          "description": "Global security requirements across all endpoints.\n\nEach element in the list maps a security scheme (e.g. \"OAuth2\") to a list of scopes (e.g. [\"read\", \"write\"])."
         },
         "securitySchemes": {
           "type": "object",
           "additionalProperties": {
             "type": "object"
           },
-          "description": "Required. Dict describing each security scheme recognized by your OpenAPI spec.\n\nKeys are scheme names (e.g. \"OAuth2\", \"ApiKeyAuth\") and values are their definitions."
+          "description": "Describe each security scheme recognized by your OpenAPI spec.\n\nKeys are scheme names (e.g. \"OAuth2\", \"ApiKeyAuth\") and values are their definitions."
         }
       },
       "required": []
@@ -472,6 +472,17 @@
       "description": "Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).",
       "type": "object",
       "properties": {
+        "serde": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SerdeConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines the serde configuration.\n\nIf provided, the checkpointer will apply serde settings according to the configuration.\nIf omitted, no serde behavior is configured.\n\nThis configuration requires server version 0.5 or later to take effect.\n"
+        },
         "ttl": {
           "anyOf": [
             {
@@ -482,6 +493,38 @@
             }
           ],
           "description": "Optional. Defines the TTL (time-to-live) behavior configuration.\n\nIf provided, the checkpointer will apply TTL settings according to the configuration.\nIf omitted, no TTL behavior is configured.\n"
+        }
+      },
+      "required": []
+    },
+    "SerdeConfig": {
+      "title": "SerdeConfig",
+      "description": "Configuration for the built-in serde, which handles checkpointing of state.\n\nIf omitted, no serde is set up (the object store will still be present, however).",
+      "type": "object",
+      "properties": {
+        "allowed_json_modules": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. List of allowed python modules to de-serialize custom objects from.\n\nIf provided, only the specified modules will be allowed to be deserialized.\nIf omitted, no modules are allowed, and the object returned will simply be a json object OR\na deserialized langchain object.\n"
+        },
+        "pickle_fallback": {
+          "type": "boolean",
+          "description": "Optional. Whether to allow pickling as a fallback for deserialization.\n\nIf True, pickling will be allowed as a fallback for deserialization.\nIf False, pickling will not be allowed as a fallback for deserialization.\nDefaults to True if not configured."
         }
       },
       "required": []
@@ -555,11 +598,11 @@
         },
         "disable_assistants": {
           "type": "boolean",
-          "description": "Optional. If True, /assistants routes are removed from the server.\n\nDefault is False (meaning /assistants is enabled).\n"
+          "description": "Optional. If `True`, /assistants routes are removed from the server.\n\nDefault is False (meaning /assistants is enabled).\n"
         },
         "disable_mcp": {
           "type": "boolean",
-          "description": "Optional. If True, /mcp routes are removed, disabling the MCP server.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /mcp routes are removed, disabling the MCP server.\n\nDefault is False.\n"
         },
         "disable_meta": {
           "type": "boolean",
@@ -567,15 +610,19 @@
         },
         "disable_runs": {
           "type": "boolean",
-          "description": "Optional. If True, /runs routes are removed.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /runs routes are removed.\n\nDefault is False.\n"
         },
         "disable_store": {
           "type": "boolean",
-          "description": "Optional. If True, /store routes are removed, disabling direct store interactions via HTTP.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /store routes are removed, disabling direct store interactions via HTTP.\n\nDefault is False.\n"
         },
         "disable_threads": {
           "type": "boolean",
-          "description": "Optional. If True, /threads routes are removed.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /threads routes are removed.\n\nDefault is False.\n"
+        },
+        "enable_custom_route_auth": {
+          "type": "boolean",
+          "description": "Optional. If `True`, authentication is enabled for custom routes,\nnot just the routes that are protected by default.\n(Routes protected by default include /assistants, /threads, and /runs).\n\nDefault is False. This flag only affects authentication behavior\nif `app` is provided and contains custom routes.\n"
         },
         "logging_headers": {
           "anyOf": [
@@ -587,6 +634,20 @@
             }
           ],
           "description": "Optional. Defines which headers are excluded from logging."
+        },
+        "middleware_order": {
+          "anyOf": [
+            {
+              "enum": [
+                "auth_first",
+                "middleware_first"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines the order in which to apply server customizations.\n"
         }
       },
       "required": []
@@ -637,7 +698,7 @@
       "properties": {
         "allow_credentials": {
           "type": "boolean",
-          "description": "Optional. If True, cross-origin requests can include credentials (cookies, auth headers).\n\nDefault False to avoid accidentally exposing secured endpoints to untrusted sites.\n"
+          "description": "Optional. If `True`, cross-origin requests can include credentials (cookies, auth headers).\n\nDefault False to avoid accidentally exposing secured endpoints to untrusted sites.\n"
         },
         "allow_headers": {
           "type": "array",
@@ -756,7 +817,7 @@
         },
         "refresh_on_read": {
           "type": "boolean",
-          "description": "Default behavior for refreshing TTLs on read operations (GET and SEARCH).\n\nIf True, TTLs will be refreshed on read operations (get/search) by default.\nThis can be overridden per-operation by explicitly setting refresh_ttl.\nDefaults to True if not configured.\n"
+          "description": "Default behavior for refreshing TTLs on read operations (`GET` and `SEARCH`).\n\nIf `True`, TTLs will be refreshed on read operations (get/search) by default.\nThis can be overridden per-operation by explicitly setting `refresh_ttl`.\nDefaults to `True` if not configured.\n"
         },
         "sweep_interval_minutes": {
           "anyOf": [

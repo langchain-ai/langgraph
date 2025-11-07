@@ -5,15 +5,9 @@ returns a ToolMessage with the error message. The ValidationNode can be used in 
 StateGraph with a "messages" key. If multiple tool calls are requested, they will be run in parallel.
 """
 
+from collections.abc import Callable, Sequence
 from typing import (
     Any,
-    Callable,
-    Dict,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    Union,
     cast,
 )
 
@@ -30,24 +24,30 @@ from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool, create_schema_from_function
 from langchain_core.utils.pydantic import is_basemodel_subclass
 from langgraph._internal._runnable import RunnableCallable
+from langgraph.warnings import LangGraphDeprecatedSinceV10
 from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
+from typing_extensions import deprecated
 
 
 def _default_format_error(
     error: BaseException,
     call: ToolCall,
-    schema: Union[Type[BaseModel], Type[BaseModelV1]],
+    schema: type[BaseModel] | type[BaseModelV1],
 ) -> str:
     """Default error formatting function."""
     return f"{repr(error)}\n\nRespond after fixing all validation errors."
 
 
+@deprecated(
+    "ValidationNode is deprecated. Please use `create_agent` from `langchain.agents` with custom tool error handling.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class ValidationNode(RunnableCallable):
-    """A node that validates all tools requests from the last AIMessage.
+    """A node that validates all tools requests from the last `AIMessage`.
 
-    It can be used either in StateGraph with a "messages" key.
+    It can be used either in `StateGraph` with a `'messages'` key.
 
     !!! note
 
@@ -56,20 +56,9 @@ class ValidationNode(RunnableCallable):
         structured output that conforms to a complex schema without losing the original
         messages and tool IDs (for use in multi-turn conversations).
 
-    Args:
-        schemas: A list of schemas to validate the tool calls with. These can be
-            any of the following:
-            - A pydantic BaseModel class
-            - A BaseTool instance (the args_schema will be used)
-            - A function (a schema will be created from the function signature)
-        format_error: A function that takes an exception, a ToolCall, and a schema
-            and returns a formatted error string. By default, it returns the
-            exception repr and a message to respond after fixing validation errors.
-        name: The name of the node.
-        tags: A list of tags to add to the node.
-
     Returns:
-        (Union[Dict[str, List[ToolMessage]], Sequence[ToolMessage]]): A list of ToolMessages with the validated content or error messages.
+        (Union[Dict[str, List[ToolMessage]], Sequence[ToolMessage]]): A list of
+            `ToolMessage` objects with the validated content or error messages.
 
     Example:
         ```python title="Example usage for re-prompting the model to generate a valid response:"
@@ -126,17 +115,30 @@ class ValidationNode(RunnableCallable):
 
     def __init__(
         self,
-        schemas: Sequence[Union[BaseTool, Type[BaseModel], Callable]],
+        schemas: Sequence[BaseTool | type[BaseModel] | Callable],
         *,
-        format_error: Optional[
-            Callable[[BaseException, ToolCall, Type[BaseModel]], str]
-        ] = None,
+        format_error: Callable[[BaseException, ToolCall, type[BaseModel]], str]
+        | None = None,
         name: str = "validation",
-        tags: Optional[list[str]] = None,
+        tags: list[str] | None = None,
     ) -> None:
+        """Initialize the ValidationNode.
+
+        Args:
+            schemas: A list of schemas to validate the tool calls with. These can be
+                any of the following:
+                - A pydantic BaseModel class
+                - A BaseTool instance (the args_schema will be used)
+                - A function (a schema will be created from the function signature)
+            format_error: A function that takes an exception, a ToolCall, and a schema
+                and returns a formatted error string. By default, it returns the
+                exception repr and a message to respond after fixing validation errors.
+            name: The name of the node.
+            tags: A list of tags to add to the node.
+        """
         super().__init__(self._func, None, name=name, tags=tags, trace=False)
         self._format_error = format_error or _default_format_error
-        self.schemas_by_name: Dict[str, Type[BaseModel]] = {}
+        self.schemas_by_name: dict[str, type[BaseModel]] = {}
         for schema in schemas:
             if isinstance(schema, BaseTool):
                 if schema.args_schema is None:
@@ -154,7 +156,7 @@ class ValidationNode(RunnableCallable):
             elif isinstance(schema, type) and issubclass(
                 schema, (BaseModel, BaseModelV1)
             ):
-                self.schemas_by_name[schema.__name__] = cast(Type[BaseModel], schema)
+                self.schemas_by_name[schema.__name__] = cast(type[BaseModel], schema)
             elif callable(schema):
                 base_model = create_schema_from_function("Validation", schema)
                 self.schemas_by_name[schema.__name__] = base_model
@@ -164,8 +166,8 @@ class ValidationNode(RunnableCallable):
                 )
 
     def _get_message(
-        self, input: Union[list[AnyMessage], dict[str, Any]]
-    ) -> Tuple[str, AIMessage]:
+        self, input: list[AnyMessage] | dict[str, Any]
+    ) -> tuple[str, AIMessage]:
         """Extract the last AIMessage from the input."""
         if isinstance(input, list):
             output_type = "list"
@@ -180,7 +182,7 @@ class ValidationNode(RunnableCallable):
         return output_type, message
 
     def _func(
-        self, input: Union[list[AnyMessage], dict[str, Any]], config: RunnableConfig
+        self, input: list[AnyMessage] | dict[str, Any], config: RunnableConfig
     ) -> Any:
         """Validate and run tool calls synchronously."""
         output_type, message = self._get_message(input)

@@ -5,16 +5,14 @@ import itertools
 import sys
 import threading
 from collections import defaultdict, deque
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import copy
 from functools import partial
 from hashlib import sha1
 from typing import (
     Any,
-    Callable,
     Literal,
     NamedTuple,
-    Optional,
     Protocol,
     cast,
     overload,
@@ -65,6 +63,7 @@ from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
@@ -82,7 +81,7 @@ from langgraph.types import (
     Send,
 )
 
-GetNextVersion = Callable[[Optional[V], None], V]
+GetNextVersion = Callable[[V | None, None], V]
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
@@ -392,11 +391,11 @@ def prepare_next_tasks(
         processes: The mapping of process names to PregelNode instances.
         channels: The mapping of channel names to BaseChannel instances.
         managed: The mapping of managed value names to functions.
-        config: The runnable configuration.
+        config: The `Runnable` configuration.
         step: The current step.
         for_execution: Whether the tasks are being prepared for execution.
         store: An instance of BaseStore to make it available for usage within tasks.
-        checkpointer: Checkpointer instance used for saving checkpoints.
+        checkpointer: `Checkpointer` instance used for saving checkpoints.
         manager: The parent run manager to use for the tasks.
         trigger_to_nodes: Optional: Mapping of channel names to the set of nodes
             that are can be triggered by that channel.
@@ -415,7 +414,7 @@ def prepare_next_tasks(
     null_version = checkpoint_null_version(checkpoint)
     tasks: list[PregelTask | PregelExecutableTask] = []
     # Consume pending tasks
-    tasks_channel = cast(Optional[Topic[Send]], channels.get(TASKS))
+    tasks_channel = cast(Topic[Send] | None, channels.get(TASKS))
     if tasks_channel and tasks_channel.is_available():
         for idx, _ in enumerate(tasks_channel.get()):
             if task := prepare_single_task(
@@ -641,6 +640,7 @@ def prepare_single_task(
                     f"Ignoring invalid packet type {type(packet)} in pending sends"
                 )
                 return
+
             if packet.node not in processes:
                 logger.warning(
                     f"Ignoring unknown node name {packet.node} in pending sends"
@@ -1108,3 +1108,24 @@ class LazyAtomicCounter:
                 if self._counter is None:
                     self._counter = itertools.count(0).__next__
         return self._counter()
+
+
+def sanitize_untracked_values_in_send(
+    packet: Send, channels: Mapping[str, BaseChannel]
+) -> Send:
+    """Pop any values belonging to UntrackedValue channels in Send.arg for safe checkpointing.
+
+    Send is often called with state to be passed to the dest node, which may contain
+    UntrackedValues at the top level. Send is not typed and arg may be a nested dict."""
+
+    if not isinstance(packet.arg, dict):
+        # Command
+        return packet
+
+    # top level keys should be the channel names
+    sanitized_arg = {
+        k: v
+        for k, v in packet.arg.items()
+        if not isinstance(channels.get(k), UntrackedValue)
+    }
+    return Send(node=packet.node, arg=sanitized_arg)

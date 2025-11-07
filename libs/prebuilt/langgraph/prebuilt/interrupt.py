@@ -1,8 +1,13 @@
-from typing import Literal, Optional, Union
+from typing import Literal
 
-from typing_extensions import TypedDict
+from langgraph.warnings import LangGraphDeprecatedSinceV10
+from typing_extensions import TypedDict, deprecated
 
 
+@deprecated(
+    "HumanInterruptConfig has been moved to `langchain.agents.interrupt`. Please update your import to `from langchain.agents.interrupt import HumanInterruptConfig`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class HumanInterruptConfig(TypedDict):
     """Configuration that defines what actions are allowed for a human interrupt.
 
@@ -21,13 +26,17 @@ class HumanInterruptConfig(TypedDict):
     allow_accept: bool
 
 
+@deprecated(
+    "ActionRequest has been moved to `langchain.agents.interrupt`. Please update your import to `from langchain.agents.interrupt import ActionRequest`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class ActionRequest(TypedDict):
     """Represents a request for human action within the graph execution.
 
     Contains the action type and any associated arguments needed for the action.
 
     Attributes:
-        action: The type or name of action being requested (e.g., "Approve XYZ action")
+        action: The type or name of action being requested (e.g., `"Approve XYZ action"`)
         args: Key-value pairs of arguments needed for the action
     """
 
@@ -35,6 +44,10 @@ class ActionRequest(TypedDict):
     args: dict
 
 
+@deprecated(
+    "HumanInterrupt has been moved to `langchain.agents.interrupt`. Please update your import to `from langchain.agents.interrupt import HumanInterrupt`.",
+    category=LangGraphDeprecatedSinceV10,
+)
 class HumanInterrupt(TypedDict):
     """Represents an interrupt triggered by the graph that requires human intervention.
 
@@ -68,7 +81,7 @@ class HumanInterrupt(TypedDict):
 
     action_request: ActionRequest
     config: HumanInterruptConfig
-    description: Optional[str]
+    description: str | None
 
 
 class HumanResponse(TypedDict):
@@ -76,15 +89,17 @@ class HumanResponse(TypedDict):
 
     Attributes:
         type: The type of response:
-            - "accept": Approves the current state without changes
-            - "ignore": Skips/ignores the current step
-            - "response": Provides text feedback or instructions
-            - "edit": Modifies the current state/content
+
+            - `'accept'`: Approves the current state without changes
+            - `'ignore'`: Skips/ignores the current step
+            - `'response'`: Provides text feedback or instructions
+            - `'edit'`: Modifies the current state/content
         args: The response payload:
-            - None: For ignore/accept actions
-            - str: For text responses
-            - ActionRequest: For edit actions with updated content
+
+            - `None`: For ignore/accept actions
+            - `str`: For text responses
+            - `ActionRequest`: For edit actions with updated content
     """
 
     type: Literal["accept", "ignore", "response", "edit"]
-    args: Union[None, str, ActionRequest]
+    args: None | str | ActionRequest
