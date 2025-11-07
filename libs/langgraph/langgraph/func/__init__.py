@@ -151,13 +151,13 @@ def task(
 
 
         @task
-        def add_one(a: int) -> int:
+        def add_one_task(a: int) -> int:
             return a + 1
 
 
         @entrypoint()
         def add_one(numbers: list[int]) -> list[int]:
-            futures = [add_one(n) for n in numbers]
+            futures = [add_one_task(n) for n in numbers]
             results = [f.result() for f in futures]
             return results
 
@@ -173,13 +173,13 @@ def task(
 
 
         @task
-        async def add_one(a: int) -> int:
+        async def add_one_task(a: int) -> int:
             return a + 1
 
 
         @entrypoint()
         async def add_one(numbers: list[int]) -> list[int]:
-            futures = [add_one(n) for n in numbers]
+            futures = [add_one_task(n) for n in numbers]
             return asyncio.gather(*futures)
 
 
