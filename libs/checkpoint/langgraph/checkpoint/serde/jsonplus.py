@@ -640,6 +640,7 @@ _option = (
     | ormsgpack.OPT_PASSTHROUGH_DATETIME
     | ormsgpack.OPT_PASSTHROUGH_ENUM
     | ormsgpack.OPT_PASSTHROUGH_UUID
+    | ormsgpack.OPT_REPLACE_SURROGATES
 )
 
 

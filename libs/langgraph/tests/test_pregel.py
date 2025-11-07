@@ -8852,3 +8852,41 @@ def test_get_subgraphs_with_common_prefix() -> None:
         recurse=True,
     )
     assert len(list(subgraphs)) == 1
+def test_fork_does_not_apply_pending_writes(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that forking with update_state does not apply pending writes from original execution."""
+
+    class State(TypedDict):
+        value: Annotated[int, operator.add]
+
+    def node_a(state: State) -> State:
+        return {"value": 10}
+
+    def node_b(state: State) -> State:
+        return {"value": 100}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"value": 1}, thread1)
+
+    history = list(graph.get_state_history(thread1))
+    checkpoint_before_a = next(s for s in history if s.next == ("node_a",))
+
+    fork_config = graph.update_state(
+        checkpoint_before_a.config, {"value": 20}, as_node="node_a"
+    )
+
+    # Continue from fork (should run node_b)
+    result = graph.invoke(None, fork_config)
+
+    # Should be: 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
+    assert result == {"value": 121}

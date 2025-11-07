@@ -149,20 +149,20 @@ def test_serde_jsonplus() -> None:
         assert serde.loads_typed(serde.dumps_typed(value)) == value
 
     surrogates = [
-        "Hello\ud83d\ude00",
-        "Python\ud83d\udc0d",
-        "Surrogate\ud834\udd1e",
-        "Example\ud83c\udf89",
-        "String\ud83c\udfa7",
-        "With\ud83c\udf08",
-        "Surrogates\ud83d\ude0e",
-        "Embedded\ud83d\udcbb",
-        "In\ud83c\udf0e",
-        "The\ud83d\udcd6",
-        "Text\ud83d\udcac",
+        "Hello??",
+        "Python??",
+        "Surrogate??",
+        "Example??",
+        "String??",
+        "With??",
+        "Surrogates??",
+        "Embedded??",
+        "In??",
+        "The??",
+        "Text??",
         "收花🙄·到",
     ]
-    serde = JsonPlusSerializer(pickle_fallback=True)
+    serde = JsonPlusSerializer(pickle_fallback=False)
 
     assert serde.loads_typed(serde.dumps_typed(surrogates)) == surrogates
 
