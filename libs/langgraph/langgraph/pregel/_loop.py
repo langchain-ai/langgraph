@@ -459,9 +459,6 @@ class PregelLoop:
     def tick(self) -> bool:
         """Execute a single iteration of the Pregel loop.
 
-        Args:
-            input_keys: The key(s) to read input from.
-
         Returns:
             True if more iterations are needed.
         """
