@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from typing import Any
 
-from langgraph._internal._config import patch_configurable
+from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
@@ -43,16 +43,16 @@ def run_with_retry(
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
-            if cmd.graph in (ns, task.name):
+            if cmd.graph in (recast_checkpoint_ns(ns), task.name):
                 # this command is for the current graph, handle it
                 for w in task.writers:
                     w.invoke(cmd, config)
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent
-                parts = ns.split(NS_SEP)
-                if parts[-1].isdigit():
-                    parts.pop()
+                # normalize namespace by removing task IDs
+                recast_ns = recast_checkpoint_ns(ns)
+                parts = recast_ns.split(NS_SEP)
                 parent_ns = NS_SEP.join(parts[:-1])
                 exc.args = (replace(cmd, graph=parent_ns),)
             # bubble up
@@ -138,16 +138,16 @@ async def arun_with_retry(
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
-            if cmd.graph in (ns, task.name):
+            if cmd.graph in (recast_checkpoint_ns(ns), task.name):
                 # this command is for the current graph, handle it
                 for w in task.writers:
                     w.invoke(cmd, config)
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent
-                parts = ns.split(NS_SEP)
-                if parts[-1].isdigit():
-                    parts.pop()
+                # normalize namespace by removing task IDs
+                recast_ns = recast_checkpoint_ns(ns)
+                parts = recast_ns.split(NS_SEP)
                 parent_ns = NS_SEP.join(parts[:-1])
                 exc.args = (replace(cmd, graph=parent_ns),)
             # bubble up
