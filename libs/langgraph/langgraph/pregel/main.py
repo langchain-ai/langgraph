@@ -2435,7 +2435,7 @@ class Pregel(
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
                 The streamed outputs will be tuples of `(mode, data)`.
 
-                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
+                See [LangGraph streaming guide](https://docs.langchain.com/oss/python/langgraph/streaming) for more details.
             print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
@@ -2452,7 +2452,7 @@ class Pregel(
                 where `namespace` is a tuple with the path to the node where a subgraph is invoked,
                 e.g. `("parent_node:<task_id>", "child_node:<task_id>")`.
 
-                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
+                See [LangGraph streaming guide](https://docs.langchain.com/oss/python/langgraph/streaming) for more details.
 
         Yields:
             The output of each step in the graph. The output shape depends on the `stream_mode`.
@@ -2702,7 +2702,7 @@ class Pregel(
                 You can pass a list as the `stream_mode` parameter to stream multiple modes at once.
                 The streamed outputs will be tuples of `(mode, data)`.
 
-                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
+                See [LangGraph streaming guide](https://docs.langchain.com/oss/python/langgraph/streaming) for more details.
             print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
@@ -2719,7 +2719,7 @@ class Pregel(
                 where `namespace` is a tuple with the path to the node where a subgraph is invoked,
                 e.g. `("parent_node:<task_id>", "child_node:<task_id>")`.
 
-                See [LangGraph streaming guide](https://langchain-ai.github.io/langgraph/how-tos/streaming/) for more details.
+                See [LangGraph streaming guide](https://docs.langchain.com/oss/python/langgraph/streaming) for more details.
 
         Yields:
             The output of each step in the graph. The output shape depends on the `stream_mode`.
