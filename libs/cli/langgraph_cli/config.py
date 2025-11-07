@@ -926,35 +926,51 @@ ADD {relpath} /deps/{name}
             ]
         )
     image_str = docker_tag(config, base_image, api_version)
-    docker_file_contents = [
-        f"FROM {image_str}",
-        "",
-        os.linesep.join(config["dockerfile_lines"]),
-        "",
-        installs,
-        "",
-        "# -- Installing all local dependencies --",
-        f"""RUN for dep in /deps/*; do \
+
+    # Prepare docker file contents
+    docker_file_contents = []
+
+    # Add syntax directive if we have additional contexts (requires BuildKit frontend.contexts capability)
+    if local_deps.additional_contexts:
+        docker_file_contents.extend(
+            [
+                "# syntax=docker/dockerfile:1.4",
+                "",
+            ]
+        )
+
+    # Add main dockerfile content
+    docker_file_contents.extend(
+        [
+            f"FROM {image_str}",
+            "",
+            os.linesep.join(config["dockerfile_lines"]),
+            "",
+            installs,
+            "",
+            "# -- Installing all local dependencies --",
+            f"""RUN for dep in /deps/*; do \
             echo "Installing $dep"; \
             if [ -d "$dep" ]; then \
                 echo "Installing $dep"; \
                 (cd "$dep" && {global_reqs_pip_install} -e .); \
             fi; \
         done""",
-        "# -- End of local dependencies install --",
-        os.linesep.join(env_vars),
-        "",
-        js_inst_str,
-        "",
-        # Add pip cleanup after all installations are complete
-        _get_pip_cleanup_lines(
-            install_cmd=install_cmd,
-            to_uninstall=build_tools_to_uninstall,
-            pip_installer=pip_installer,
-        ),
-        "",
-        f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
-    ]
+            "# -- End of local dependencies install --",
+            os.linesep.join(env_vars),
+            "",
+            js_inst_str,
+            "",
+            # Add pip cleanup after all installations are complete
+            _get_pip_cleanup_lines(
+                install_cmd=install_cmd,
+                to_uninstall=build_tools_to_uninstall,
+                pip_installer=pip_installer,
+            ),
+            "",
+            f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else "",
+        ]
+    )
 
     additional_contexts: dict[str, str] = {}
     for p in local_deps.additional_contexts:
