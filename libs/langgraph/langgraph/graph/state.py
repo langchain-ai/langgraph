@@ -482,26 +482,12 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         if not isinstance(node, str):
             action = node
-            if isinstance(action, Runnable):
-                node = action.get_name()
-            else:
-                node = getattr(action, "__name__", action.__class__.__name__)
-            if node is None:
-                raise ValueError(
-                    "Node name must be provided if action is not a function"
-                )
+            node = _get_node_key(action)
         if self.compiled:
             logger.warning(
                 "Adding a node to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
-        if not isinstance(node, str):
-            action = node
-            node = cast(str, getattr(action, "name", getattr(action, "__name__", None)))
-            if node is None:
-                raise ValueError(
-                    "Node name must be provided if action is not a function"
-                )
         if action is None:
             raise RuntimeError
         if node in self.nodes:
