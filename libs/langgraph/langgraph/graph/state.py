@@ -110,7 +110,8 @@ def _get_node_name(node: StateNode[Any, ContextT]) -> str:
 
 class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
-    The signature of each node is State -> Partial<State>.
+
+    The signature of each node is `State -> Partial<State>`.
 
     Each state key can optionally be annotated with a reducer function that
     will be used to aggregate the values of that key received from multiple nodes.
