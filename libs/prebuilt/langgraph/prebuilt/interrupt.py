@@ -36,7 +36,7 @@ class ActionRequest(TypedDict):
     Contains the action type and any associated arguments needed for the action.
 
     Attributes:
-        action: The type or name of action being requested (e.g., "Approve XYZ action")
+        action: The type or name of action being requested (e.g., `"Approve XYZ action"`)
         args: Key-value pairs of arguments needed for the action
     """
 
@@ -89,14 +89,16 @@ class HumanResponse(TypedDict):
 
     Attributes:
         type: The type of response:
-            - "accept": Approves the current state without changes
-            - "ignore": Skips/ignores the current step
-            - "response": Provides text feedback or instructions
-            - "edit": Modifies the current state/content
+
+            - `'accept'`: Approves the current state without changes
+            - `'ignore'`: Skips/ignores the current step
+            - `'response'`: Provides text feedback or instructions
+            - `'edit'`: Modifies the current state/content
         args: The response payload:
-            - None: For ignore/accept actions
-            - str: For text responses
-            - ActionRequest: For edit actions with updated content
+
+            - `None`: For ignore/accept actions
+            - `str`: For text responses
+            - `ActionRequest`: For edit actions with updated content
     """
 
     type: Literal["accept", "ignore", "response", "edit"]

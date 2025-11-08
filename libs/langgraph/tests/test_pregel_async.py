@@ -9249,3 +9249,41 @@ async def test_supersteps_populate_task_results(
 
     assert bulk_start_result == ref_start_result == {"num": 1, "text": "one"}
     assert bulk_double_result == ref_double_result == {"num": 2, "text": "oneone"}
+
+
+async def test_fork_does_not_apply_pending_writes(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that forking with aupdate_state does not apply pending writes from original execution."""
+
+    class State(TypedDict):
+        value: Annotated[int, operator.add]
+
+    def node_a(state: State) -> State:
+        return {"value": 10}
+
+    def node_b(state: State) -> State:
+        return {"value": 100}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "node_b")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    await graph.ainvoke({"value": 1}, thread1)
+
+    history = [c async for c in graph.aget_state_history(thread1)]
+    checkpoint_before_a = next(s for s in history if s.next == ("node_a",))
+
+    fork_config = await graph.aupdate_state(
+        checkpoint_before_a.config, {"value": 20}, as_node="node_a"
+    )
+    result = await graph.ainvoke(None, fork_config)
+
+    # 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
+    assert result == {"value": 121}

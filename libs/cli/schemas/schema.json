@@ -472,6 +472,17 @@
       "description": "Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).",
       "type": "object",
       "properties": {
+        "serde": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SerdeConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. Defines the serde configuration.\n\nIf provided, the checkpointer will apply serde settings according to the configuration.\nIf omitted, no serde behavior is configured.\n\nThis configuration requires server version 0.5 or later to take effect.\n"
+        },
         "ttl": {
           "anyOf": [
             {
@@ -482,6 +493,38 @@
             }
           ],
           "description": "Optional. Defines the TTL (time-to-live) behavior configuration.\n\nIf provided, the checkpointer will apply TTL settings according to the configuration.\nIf omitted, no TTL behavior is configured.\n"
+        }
+      },
+      "required": []
+    },
+    "SerdeConfig": {
+      "title": "SerdeConfig",
+      "description": "Configuration for the built-in serde, which handles checkpointing of state.\n\nIf omitted, no serde is set up (the object store will still be present, however).",
+      "type": "object",
+      "properties": {
+        "allowed_json_modules": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. List of allowed python modules to de-serialize custom objects from.\n\nIf provided, only the specified modules will be allowed to be deserialized.\nIf omitted, no modules are allowed, and the object returned will simply be a json object OR\na deserialized langchain object.\n"
+        },
+        "pickle_fallback": {
+          "type": "boolean",
+          "description": "Optional. Whether to allow pickling as a fallback for deserialization.\n\nIf True, pickling will be allowed as a fallback for deserialization.\nIf False, pickling will not be allowed as a fallback for deserialization.\nDefaults to True if not configured."
         }
       },
       "required": []

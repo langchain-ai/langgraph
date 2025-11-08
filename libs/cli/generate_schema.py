@@ -13,7 +13,7 @@ from pathlib import Path
 
 import msgspec
 
-from langgraph_cli.config import (
+from langgraph_cli.schemas import (
     AuthConfig,
     CheckpointerConfig,
     Config,
@@ -22,6 +22,7 @@ from langgraph_cli.config import (
     HttpConfig,
     IndexConfig,
     SecurityConfig,
+    SerdeConfig,
     StoreConfig,
     ThreadTTLConfig,
     TTLConfig,
@@ -112,6 +113,7 @@ def add_descriptions_to_schema(schema, cls):
                 CorsConfig,
                 ThreadTTLConfig,
                 CheckpointerConfig,
+                SerdeConfig,
                 TTLConfig,
                 ConfigurableHeaderConfig,
             ]:
