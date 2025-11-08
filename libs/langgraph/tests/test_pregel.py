@@ -44,6 +44,7 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
@@ -60,6 +61,7 @@ from langgraph.types import (
     Command,
     Durability,
     Interrupt,
+    Overwrite,
     PregelTask,
     RetryPolicy,
     Send,
@@ -8597,3 +8599,249 @@ def test_multiple_writes_same_channel_from_same_node(
             "values": {"foo": ""},
         },
     ]
+
+
+def test_send_with_untracked_value(sync_checkpointer: BaseCheckpointSaver):
+    """Test that Send objects work correctly with untracked values in state."""
+
+    class UnserializableResource:
+        def __init__(self, name: str):
+            self.name = name
+            self.lock = threading.Lock()
+
+    class State(TypedDict):
+        messages: Annotated[list[str], operator.add]
+        session_resource: Annotated[UnserializableResource, UntrackedValue]
+
+    def setup_node(state: State) -> State:
+        resource = UnserializableResource("test_session")
+        return {"messages": ["setup complete"], "session_resource": resource}
+
+    def send_to_tool(state: State):
+        return [Send("tool_node", state)]
+
+    def tool_node(state: State) -> State:
+        resource = state["session_resource"]
+        assert isinstance(resource, UnserializableResource)
+        assert resource.name == "test_session"
+
+        new_resource = UnserializableResource("new_session")
+
+        return {
+            "messages": [f"tool used resource: {resource.name}"],
+            "session_resource": new_resource,
+        }
+
+    graph = StateGraph(State)
+    graph.add_node("setup", setup_node)
+    graph.add_node("tool_node", tool_node)
+    graph.add_edge(START, "setup")
+    graph.add_conditional_edges("setup", send_to_tool)
+
+    app = graph.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = app.invoke({}, config)
+
+    assert len(result["messages"]) == 2
+    assert result["messages"][0] == "setup complete"
+    assert result["messages"][1] == "tool used resource: test_session"
+    assert result["session_resource"].name == "new_session"
+
+    state = app.get_state(config)
+    assert "session_resource" not in state.values
+
+
+def test_send_with_untracked_value_overlapping_keys(
+    sync_checkpointer: BaseCheckpointSaver,
+):
+    """Test that Send objects work correctly with untracked values in state."""
+
+    class State(TypedDict):
+        dictionary: dict
+        session_resource: Annotated[str, UntrackedValue]
+
+    def setup_node(state: State) -> State:
+        return {}
+
+    def send_to_tool(state: State):
+        return [
+            Send(
+                "tool_node",
+                {
+                    "dictionary": {"session_resource": "legal_value"},
+                    "session_resource": "illegal_value",
+                },
+            )
+        ]
+
+    def tool_node(state: State) -> State:
+        print(f"STATE: {state}")
+        assert state["dictionary"] == {"session_resource": "legal_value"}
+        assert state["session_resource"] == "illegal_value"
+
+        return {
+            "dictionary": state["dictionary"],
+            "session_resource": "new_illegal_value",
+        }
+
+    graph = StateGraph(State)
+    graph.add_node("setup", setup_node)
+    graph.add_node("tool_node", tool_node)
+    graph.add_edge(START, "setup")
+    graph.add_conditional_edges("setup", send_to_tool)
+
+    app = graph.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = app.invoke({}, config)
+
+    assert result["session_resource"] == "new_illegal_value"
+    state = app.get_state(config)
+    assert "session_resource" not in state.values
+    assert state.values.get("dictionary") == {"session_resource": "legal_value"}
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_overwrite_sequential(
+    sync_checkpointer: BaseCheckpointSaver, as_json: bool
+) -> None:
+    """Test a sequential chain of nodes where the last node uses Overwrite to bypass a reducer and write a value directly to the channel."""
+
+    class State(TypedDict):
+        messages: Annotated[list, operator.add]
+
+    def node_a(state: State):
+        return {"messages": ["a"]}
+
+    def node_b(state: State):
+        overwrite = {"__overwrite__": ["b"]} if as_json else Overwrite(["b"])
+        return {"messages": overwrite}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"messages": ["START"]}, config)
+    # a is overwritten by b
+    assert result == {"messages": ["b"]}
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_overwrite_parallel(
+    sync_checkpointer: BaseCheckpointSaver, as_json: bool
+) -> None:
+    """Test parallel nodes where max one node uses Overwrite to bypass a reducer and write a value directly to the channel."""
+
+    class State(TypedDict):
+        messages: Annotated[list, operator.add]
+
+    def node_a(state: State):
+        return {"messages": ["a"]}
+
+    def node_b(state: State):
+        overwrite = {"__overwrite__": ["b"]} if as_json else Overwrite(["b"])
+        return {"messages": overwrite}
+
+    def node_c(state: State):
+        return {"messages": ["c"]}
+
+    def node_d(state: State):
+        return {"messages": ["d"]}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_node("node_c", node_c)
+    builder.add_node("node_d", node_d)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_a", "node_c")
+    builder.add_edge("node_b", "node_d")
+    builder.add_edge("node_c", "node_d")
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"messages": ["START"]}, config)
+    # a, c are overwritten by b, then d is written
+    assert result == {"messages": ["b", "d"]}
+
+
+@pytest.mark.parametrize("as_json", [False, True])
+def test_overwrite_parallel_error(
+    sync_checkpointer: BaseCheckpointSaver, as_json: bool
+) -> None:
+    """Test parallel nodes where more than one node uses Overwrite to bypass a reducer and write a value directly to the channel. In this case, InvalidUpdateError should be raised."""
+
+    class State(TypedDict):
+        messages: Annotated[list, operator.add]
+
+    def node_a(state: State):
+        return {"messages": ["a"]}
+
+    def node_b(state: State):
+        overwrite = {"__overwrite__": ["b"]} if as_json else Overwrite(["b"])
+        return {"messages": overwrite}
+
+    def node_c(state: State):
+        overwrite = {"__overwrite__": ["c"]} if as_json else Overwrite(["c"])
+        return {"messages": overwrite}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_node("node_c", node_c)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_a", "node_c")
+    builder.add_edge("node_b", END)
+    builder.add_edge("node_c", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    with pytest.raises(
+        InvalidUpdateError, match="Can receive only one Overwrite value per super-step."
+    ):
+        graph.invoke({"messages": ["START"]}, config)
+
+
+def test_fork_does_not_apply_pending_writes(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that forking with update_state does not apply pending writes from original execution."""
+
+    class State(TypedDict):
+        value: Annotated[int, operator.add]
+
+    def node_a(state: State) -> State:
+        return {"value": 10}
+
+    def node_b(state: State) -> State:
+        return {"value": 100}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+    graph.invoke({"value": 1}, thread1)
+
+    history = list(graph.get_state_history(thread1))
+    checkpoint_before_a = next(s for s in history if s.next == ("node_a",))
+
+    fork_config = graph.update_state(
+        checkpoint_before_a.config, {"value": 20}, as_node="node_a"
+    )
+
+    # Continue from fork (should run node_b)
+    result = graph.invoke(None, fork_config)
+
+    # Should be: 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
+    assert result == {"value": 121}

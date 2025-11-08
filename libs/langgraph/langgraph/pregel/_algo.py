@@ -63,6 +63,7 @@ from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.topic import Topic
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
 from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel._call import get_runnable_for_task, identifier
@@ -639,6 +640,7 @@ def prepare_single_task(
                     f"Ignoring invalid packet type {type(packet)} in pending sends"
                 )
                 return
+
             if packet.node not in processes:
                 logger.warning(
                     f"Ignoring unknown node name {packet.node} in pending sends"
@@ -1106,3 +1108,24 @@ class LazyAtomicCounter:
                 if self._counter is None:
                     self._counter = itertools.count(0).__next__
         return self._counter()
+
+
+def sanitize_untracked_values_in_send(
+    packet: Send, channels: Mapping[str, BaseChannel]
+) -> Send:
+    """Pop any values belonging to UntrackedValue channels in Send.arg for safe checkpointing.
+
+    Send is often called with state to be passed to the dest node, which may contain
+    UntrackedValues at the top level. Send is not typed and arg may be a nested dict."""
+
+    if not isinstance(packet.arg, dict):
+        # Command
+        return packet
+
+    # top level keys should be the channel names
+    sanitized_arg = {
+        k: v
+        for k, v in packet.arg.items()
+        if not isinstance(channels.get(k), UntrackedValue)
+    }
+    return Send(node=packet.node, arg=sanitized_arg)

@@ -44,7 +44,7 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10
 from pydantic import BaseModel
 from typing_extensions import NotRequired, TypedDict, deprecated
 
-from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.prebuilt.tool_node import ToolCallWithContext, ToolNode
 
 StructuredResponse = dict | BaseModel
 StructuredResponseSchema = dict | type[BaseModel]
@@ -309,37 +309,40 @@ def create_react_agent(
         model: The language model for the agent. Supports static and dynamic
             model selection.
 
-            - **Static model**: A chat model instance (e.g., `ChatOpenAI()`) or
-              string identifier (e.g., `"openai:gpt-4"`)
+            - **Static model**: A chat model instance (e.g.,
+                [`ChatOpenAI`][langchain_openai.ChatOpenAI]) or string identifier (e.g.,
+                `"openai:gpt-4"`)
             - **Dynamic model**: A callable with signature
-              `(state, runtime) -> BaseChatModel` that returns different models
-              based on runtime context
-              If the model has tools bound via `.bind_tools()` or other configurations,
-              the return type should be a Runnable[LanguageModelInput, BaseMessage]
-              Coroutines are also supported, allowing for asynchronous model selection.
+                `(state, runtime) -> BaseChatModel` that returns different models
+                based on runtime context
+
+                If the model has tools bound via `bind_tools` or other configurations,
+                the return type should be a `Runnable[LanguageModelInput, BaseMessage]`
+                Coroutines are also supported, allowing for asynchronous model selection.
 
             Dynamic functions receive graph state and runtime, enabling
             context-dependent model selection. Must return a `BaseChatModel`
             instance. For tool calling, bind tools using `.bind_tools()`.
             Bound tools must be a subset of the `tools` parameter.
 
-            Dynamic model example:
-            ```python
-            from dataclasses import dataclass
+            !!! example "Dynamic model"
 
-            @dataclass
-            class ModelContext:
-                model_name: str = "gpt-3.5-turbo"
+                ```python
+                from dataclasses import dataclass
 
-            # Instantiate models globally
-            gpt4_model = ChatOpenAI(model="gpt-4")
-            gpt35_model = ChatOpenAI(model="gpt-3.5-turbo")
+                @dataclass
+                class ModelContext:
+                    model_name: str = "gpt-3.5-turbo"
 
-            def select_model(state: AgentState, runtime: Runtime[ModelContext]) -> ChatOpenAI:
-                model_name = runtime.context.model_name
-                model = gpt4_model if model_name == "gpt-4" else gpt35_model
-                return model.bind_tools(tools)
-            ```
+                # Instantiate models globally
+                gpt4_model = ChatOpenAI(model="gpt-4")
+                gpt35_model = ChatOpenAI(model="gpt-3.5-turbo")
+
+                def select_model(state: AgentState, runtime: Runtime[ModelContext]) -> ChatOpenAI:
+                    model_name = runtime.context.model_name
+                    model = gpt4_model if model_name == "gpt-4" else gpt35_model
+                    return model.bind_tools(tools)
+                ```
 
             !!! note "Dynamic Model Requirements"
 
@@ -351,23 +354,26 @@ def create_react_agent(
             If an empty list is provided, the agent will consist of a single LLM node without tool calling.
         prompt: An optional prompt for the LLM. Can take a few different forms:
 
-            - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
-            - SystemMessage: this is added to the beginning of the list of messages in state["messages"].
-            - Callable: This function should take in full graph state and the output is then passed to the language model.
-            - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
+            - `str`: This is converted to a `SystemMessage` and added to the beginning of the list of messages in `state["messages"]`.
+            - `SystemMessage`: this is added to the beginning of the list of messages in `state["messages"]`.
+            - `Callable`: This function should take in full graph state and the output is then passed to the language model.
+            - `Runnable`: This runnable should take in full graph state and the output is then passed to the language model.
 
         response_format: An optional schema for the final agent output.
 
             If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
+
             If not provided, `structured_response` will not be present in the output state.
+
             Can be passed in as:
 
-                - an OpenAI function/tool schema,
-                - a JSON Schema,
-                - a TypedDict class,
-                - or a Pydantic class.
-                - a tuple (prompt, schema), where schema is one of the above.
-                    The prompt will be used together with the model that is being used to generate the structured response.
+            - An OpenAI function/tool schema,
+            - A JSON Schema,
+            - A TypedDict class,
+            - A Pydantic class.
+            - A tuple `(prompt, schema)`, where schema is one of the above.
+                The prompt will be used together with the model that is being used to
+                generate the structured response.
 
             !!! Important
                 `response_format` requires the model to support `.with_structured_output`
@@ -428,13 +434,16 @@ def create_react_agent(
         store: An optional store object. This is used for persisting data
             across multiple threads (e.g., multiple conversations / users).
         interrupt_before: An optional list of node names to interrupt before.
-            Should be one of the following: "agent", "tools".
+            Should be one of the following: `"agent"`, `"tools"`.
+
             This is useful if you want to add a user confirmation or other interrupt before taking an action.
         interrupt_after: An optional list of node names to interrupt after.
-            Should be one of the following: "agent", "tools".
+            Should be one of the following: `"agent"`, `"tools"`.
+
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
         version: Determines the version of the graph to create.
+
             Can be one of:
 
             - `"v1"`: The tool node processes a single message. All tool
@@ -443,7 +452,7 @@ def create_react_agent(
                 Tool calls are distributed across multiple instances of the tool
                 node using the [Send](https://langchain-ai.github.io/langgraph/concepts/low_level/#send)
                 API.
-        name: An optional name for the CompiledStateGraph.
+        name: An optional name for the `CompiledStateGraph`.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
 
@@ -453,14 +462,14 @@ def create_react_agent(
 
 
     Returns:
-        A compiled LangChain runnable that can be used for chat interactions.
+        A compiled LangChain `Runnable` that can be used for chat interactions.
 
     The "agent" node calls the language model with the messages list (after applying the prompt).
     If the resulting AIMessage contains `tool_calls`, the graph will then call the ["tools"][langgraph.prebuilt.tool_node.ToolNode].
     The "tools" node executes the tools (1 tool per `tool_call`) and adds the responses to the messages list
     as `ToolMessage` objects. The agent node then calls the language model again.
     The process repeats until no more `tool_calls` are present in the response.
-    The agent then returns the full list of messages as a dictionary containing the key "messages".
+    The agent then returns the full list of messages as a dictionary containing the key `'messages'`.
 
     ``` mermaid
         sequenceDiagram
@@ -826,11 +835,17 @@ def create_react_agent(
             elif version == "v2":
                 if post_model_hook is not None:
                     return "post_model_hook"
-                tool_calls = [
-                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                return [
+                    Send(
+                        "tools",
+                        ToolCallWithContext(
+                            __type="tool_call_with_context",
+                            tool_call=call,
+                            state=state,
+                        ),
+                    )
                     for call in last_message.tool_calls
                 ]
-                return [Send("tools", [tool_call]) for tool_call in tool_calls]
 
     # Define a new graph
     workflow = StateGraph(
@@ -911,11 +926,17 @@ def create_react_agent(
             ]
 
             if pending_tool_calls:
-                pending_tool_calls = [
-                    tool_node.inject_tool_args(call, state, store)  # type: ignore[arg-type]
+                return [
+                    Send(
+                        "tools",
+                        ToolCallWithContext(
+                            __type="tool_call_with_context",
+                            tool_call=call,
+                            state=state,
+                        ),
+                    )
                     for call in pending_tool_calls
                 ]
-                return [Send("tools", [tool_call]) for tool_call in pending_tool_calls]
             elif isinstance(messages[-1], ToolMessage):
                 return entrypoint
             elif response_format is not None:

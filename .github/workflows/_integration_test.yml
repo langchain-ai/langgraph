@@ -13,7 +13,6 @@ jobs:
       matrix:
         python-version:
           - "3.10"
-          - "3.11"
           - "3.14"
         example:
           - name: A
@@ -67,19 +66,19 @@ jobs:
           timeout 60 python "$REPO_ROOT/.github/scripts/run_langgraph_cli_test.py" -t ${{ matrix.example.tag }}
 
       - name: Build JS service
-        if: steps.changed-files.outputs.all
+        if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' }}
         working-directory: libs/cli/js-examples
         run: |
           langgraph build -t langgraph-test-e
 
       - name: Build JS monorepo service
-        if: steps.changed-files.outputs.all
+        if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' }}
         working-directory: libs/cli/js-monorepo-example
         run: |
           langgraph build -t langgraph-test-f -c apps/agent/langgraph.json --build-command "yarn run turbo build" --install-command "yarn install"
 
       - name: Build Python monorepo service
-        if: steps.changed-files.outputs.all
+        if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' }}
         working-directory: libs/cli/python-monorepo-example
         run: |
           langgraph build -t langgraph-test-g -c apps/agent/langgraph.json
@@ -88,24 +87,32 @@ jobs:
           timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-g -c apps/agent/langgraph.json
 
       - name: Build and test prerelease reqs service
-        if: steps.changed-files.outputs.all
+        if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' }}
         working-directory: libs/cli/examples/graph_prerelease_reqs
         run: |
           langgraph build -t langgraph-test-h
           cp ../.env.example .env
           if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h
+          echo "Finished starting up langgraph-test-h"
           LANGGRAPH_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langgraph'); print(v);")
-          if [ "$LANGGRAPH_VERSION" != "1.0.0a2" ]; then
+          if [ "$LANGGRAPH_VERSION" != "1.0.2" ]; then
+            echo "LANGGRAPH_VERSION != 1.0.2; $LANGGRAPH_VERSION"
             exit 1
           fi
           LANGCHAIN_OPENAI_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-openai'); print(v);")
-          if [ "$LANGCHAIN_OPENAI_VERSION" != "0.3.0" ]; then
+          if [ "$LANGCHAIN_OPENAI_VERSION" != "1.0.1" ]; then
+            echo "LANGCHAIN_OPENAI_VERSION != 1.0.1; $LANGCHAIN_OPENAI_VERSION"
+            exit 1
+          fi
+          LANGCHAIN_ANTHROPIC_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-anthropic'); print(v);")
+          if [ "$LANGCHAIN_ANTHROPIC_VERSION" != "1.0.0a5" ]; then
+            echo "LANGCHAIN_ANTHROPIC_VERSION != 1.0.0a5; $LANGCHAIN_ANTHROPIC_VERSION"
             exit 1
           fi
 
       - name: Build and test prerelease reqs fail service
-        if: steps.changed-files.outputs.all
+        if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' }}
         working-directory: libs/cli/examples/graph_prerelease_reqs_fail
         run: |
           langgraph build -t langgraph-test-i || [ $? -eq 1 ]

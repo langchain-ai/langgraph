@@ -259,7 +259,7 @@ class Auth:
         """
         if self._authenticate_handler is not None:
             raise ValueError(
-                "Authentication handler already set as {self._authenticate_handler}."
+                f"Authentication handler already set as {self._authenticate_handler}."
             )
         self._authenticate_handler = fn
         return fn
