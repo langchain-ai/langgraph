@@ -117,7 +117,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     The signature of a reducer function is `(Value, Value) -> Value`.
 
     !!! warning
-    
+
         `StateGraph` is a builder class and cannot be used directly for execution.
         You must first call `.compile()` to create an executable graph that supports
         methods like `invoke()`, `stream()`, `astream()`, and `ainvoke()`. See the
