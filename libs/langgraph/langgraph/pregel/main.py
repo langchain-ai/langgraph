@@ -3104,31 +3104,30 @@ class Pregel(
         durability: Durability | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
-        """Asynchronously invoke the graph on a single input.
+        """Asynchronously run the graph with a single input and config.
 
         Args:
-            input: The input data for the computation. It can be a dictionary or any other type.
-            config: The configuration for the computation.
+            input: The input data for the graph. It can be a dictionary or any other type.
+            config: The configuration for the graph run.
             context: The static context to use for the run.
                 !!! version-added "Added in version 0.6.0"
-            stream_mode: The stream mode for the computation.
+            stream_mode: The stream mode for the graph run.
             print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
-            output_keys: The output keys to include in the result.
-            interrupt_before: The nodes to interrupt before.
-            interrupt_after: The nodes to interrupt after.
+            output_keys: The output keys to retrieve from the graph run.
+            interrupt_before: The nodes to interrupt the graph run before.
+            interrupt_after: The nodes to interrupt the graph run after.
             durability: The durability mode for the graph execution, defaults to `"async"`.
                 Options are:
 
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
-            **kwargs: Additional keyword arguments.
+            **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
-            The result of the computation. If `stream_mode` is `"values"`, it returns the latest value.
-            If `stream_mode` is `"chunks"`, it returns a list of chunks.
+            The output of the graph run. If `stream_mode` is `"values"`, it returns the latest output.
+            If `stream_mode` is not `"values"`, it returns a list of output chunks.
         """
-
         output_keys = output_keys if output_keys is not None else self.output_channels
 
         latest: dict[str, Any] | Any = None
