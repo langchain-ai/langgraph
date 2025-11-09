@@ -184,9 +184,9 @@ def add_messages(
     remove_all_idx = None
     # coerce to list
     if not isinstance(left, list):
-        left = [left]  # type: ignore[assignment]
+        left = list(left)
     if not isinstance(right, list):
-        right = [right]  # type: ignore[assignment]
+        right = list(right)
     # coerce to message
     left = [
         message_chunk_to_message(cast(BaseMessageChunk, m))
