@@ -8845,3 +8845,305 @@ def test_fork_does_not_apply_pending_writes(
 
     # Should be: 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+def test_conditional_edge_with_store_in_update_state(
+    sync_checkpointer: BaseCheckpointSaver, sync_store: BaseStore
+) -> None:
+    """Test that conditional edges can access store parameter during update_state.
+
+    This is a regression test for a bug where conditional edge functions with
+    store: BaseStore parameter would fail with "Missing required config key 'store'"
+    when invoked via update_state().
+    """
+
+    class State(TypedDict):
+        value: int
+        route_decision: str
+
+    # Track calls to verify execution
+    calls = []
+
+    def node_a(state: State) -> dict:
+        """Simple node that increments value."""
+        calls.append("node_a")
+        return {"value": state["value"] + 1}
+
+    def node_b(state: State) -> dict:
+        """Another node that increments value."""
+        calls.append("node_b")
+        return {"value": state["value"] + 10}
+
+    def route_with_store(state: State, config: RunnableConfig, store: BaseStore) -> str:
+        """Conditional edge that uses store to make routing decision.
+
+        This is the function that would fail before the bug fix.
+        """
+        calls.append("route_with_store")
+
+        # Verify store is accessible
+        assert isinstance(store, BaseStore)
+
+        # Store some data to verify store works
+        thread_id = config["configurable"]["thread_id"]
+        namespace = ("test_routing", thread_id)
+        store.put(namespace, "route_call", {"called": True, "value": state["value"]})
+
+        # Retrieve data to verify store works both ways
+        stored = store.get(namespace, "route_call")
+        assert stored is not None
+        assert stored.value["called"] is True
+
+        # Make routing decision
+        if state["value"] < 5:
+            return "node_b"
+        return END
+
+    # Build graph with conditional edge that uses store
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_conditional_edges("node_a", route_with_store)
+    builder.add_edge("node_b", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer, store=sync_store)
+
+    # Test 1: Normal invoke should work (this worked before the fix)
+    thread_1 = str(uuid.uuid4())
+    config1 = {"configurable": {"thread_id": thread_1}}
+    calls.clear()
+
+    result = graph.invoke({"value": 1}, config1)
+    assert result == {"value": 12}  # 1 + 1 (node_a) + 10 (node_b)
+    assert "node_a" in calls
+    assert "route_with_store" in calls
+    assert "node_b" in calls
+
+    # Verify store was used
+    stored = sync_store.get(("test_routing", thread_1), "route_call")
+    assert stored is not None
+    assert stored.value["value"] == 2  # Value after node_a
+
+    # Test 2: update_state with conditional edge that uses store (this failed before)
+    thread_2 = str(uuid.uuid4())
+    config2 = {"configurable": {"thread_id": thread_2}}
+    calls.clear()
+
+    # Initialize with a value
+    result = graph.invoke({"value": 10}, config2)
+    assert result == {"value": 11}  # 10 + 1 (node_a), routes to END
+
+    # Now use update_state to trigger the conditional edge
+    calls.clear()
+    config2_updated = graph.update_state(config2, {"value": 3}, as_node="node_a")
+
+    # The conditional edge should have been invoked during update_state
+    assert "route_with_store" in calls
+
+    # Verify store was accessible in the conditional edge
+    stored = sync_store.get(("test_routing", thread_2), "route_call")
+    assert stored is not None
+    assert stored.value["called"] is True
+    assert stored.value["value"] == 3
+
+    # Continue execution - should go to node_b since value < 5
+    calls.clear()
+    result = graph.invoke(None, config2_updated)
+    assert "node_b" in calls
+    assert result == {"value": 13}  # 3 + 10 (node_b)
+
+
+def test_conditional_edge_with_store_bulk_update_state(
+    sync_checkpointer: BaseCheckpointSaver, sync_store: BaseStore
+) -> None:
+    """Test that conditional edges can access store parameter during bulk_update_state.
+
+    Tests the bulk update scenario to ensure multiple updates work correctly.
+    """
+
+    class State(TypedDict):
+        count: Annotated[int, operator.add]
+
+    update_calls = []
+
+    def incrementer(state: State) -> dict:
+        """Node that increments count."""
+        return {"count": 1}
+
+    def router_with_store(
+        state: State, config: RunnableConfig, store: BaseStore
+    ) -> Literal["incrementer", "__end__"]:
+        """Router that uses store."""
+        update_calls.append(("router", state["count"]))
+
+        # Use store
+        thread_id = config["configurable"]["thread_id"]
+        namespace = ("bulk_test", thread_id)
+
+        # Store routing history
+        existing = list(store.search(namespace))
+        store.put(
+            namespace,
+            f"route_{len(existing)}",
+            {
+                "count": state["count"],
+                "decision": "continue" if state["count"] < 10 else "end",
+            },
+        )
+
+        # Route based on count
+        if state["count"] < 10:
+            return "incrementer"
+        return END
+
+    builder = StateGraph(State)
+    builder.add_node("incrementer", incrementer)
+    builder.add_edge(START, "incrementer")
+    builder.add_conditional_edges("incrementer", router_with_store)
+
+    graph = builder.compile(checkpointer=sync_checkpointer, store=sync_store)
+
+    # Use bulk_update_state with conditional edges that access store
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # Initialize - graph runs to completion (loops until count >= 10)
+    result = graph.invoke({"count": 0}, config)
+    assert result["count"] == 10
+
+    # Test bulk update - this should trigger the conditional edge multiple times
+    update_calls.clear()
+    config = graph.bulk_update_state(
+        config,
+        [
+            [StateUpdate({"count": 5}, as_node="incrementer")],
+            [StateUpdate({"count": 3}, as_node="incrementer")],
+        ],
+    )
+
+    # Both updates should have triggered the router
+    assert len(update_calls) >= 2
+
+    # Verify store has routing history
+    stored_routes = list(sync_store.search(("bulk_test", thread_id)))
+    assert len(stored_routes) >= 2
+
+    # Verify we can continue execution
+    result = graph.invoke(None, config)
+    assert result["count"] > 0
+
+
+def test_conditional_edge_store_with_config_runtime(
+    sync_checkpointer: BaseCheckpointSaver, sync_store: BaseStore
+) -> None:
+    """Test conditional edge store access when runtime is already in config.
+
+    This tests the case where CONFIG_KEY_RUNTIME already exists in the config
+    to ensure we properly merge/override it.
+    """
+
+    class State(TypedDict):
+        data: str
+
+    def node(state: State) -> dict:
+        return {"data": state["data"] + "_processed"}
+
+    def route_with_store_and_config(
+        state: State, config: RunnableConfig, store: BaseStore
+    ) -> str:
+        """Router that uses both store and config."""
+        # Verify both store and config are accessible
+        assert isinstance(store, BaseStore)
+        assert "configurable" in config
+
+        thread_id = config["configurable"]["thread_id"]
+        namespace = ("config_test", thread_id)
+
+        # Store state
+        store.put(namespace, "state", {"data": state["data"]})
+
+        # Verify retrieval
+        retrieved = store.get(namespace, "state")
+        assert retrieved is not None
+        assert retrieved.value["data"] == state["data"]
+
+        return END
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    builder.add_conditional_edges("node", route_with_store_and_config)
+
+    graph = builder.compile(checkpointer=sync_checkpointer, store=sync_store)
+
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # Initialize graph
+    result = graph.invoke({"data": "test"}, config)
+    assert result["data"] == "test_processed"
+
+    # Update state - this should trigger conditional edge with store access
+    config_updated = graph.update_state(config, {"data": "updated"}, as_node="node")
+
+    # Verify store was used
+    stored = sync_store.get(("config_test", thread_id), "state")
+    assert stored is not None
+    assert stored.value["data"] == "updated"
+
+    # Continue execution
+    result = graph.invoke(None, config_updated)
+    assert result["data"] == "updated"
+
+
+def test_conditional_edge_without_store_still_works(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that conditional edges without store parameter still work correctly.
+
+    This is a backward compatibility test to ensure the fix doesn't break
+    existing conditional edges that don't use store.
+    """
+
+    class State(TypedDict):
+        value: int
+
+    def node_a(state: State) -> dict:
+        return {"value": state["value"] + 1}
+
+    def node_b(state: State) -> dict:
+        return {"value": state["value"] * 2}
+
+    def simple_router(state: State, config: RunnableConfig) -> str:
+        """Router without store parameter - should still work."""
+        # Can access config but not store
+        assert "configurable" in config
+
+        if state["value"] < 5:
+            return "node_b"
+        return END
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_conditional_edges("node_a", simple_router)
+    builder.add_edge("node_b", END)
+
+    # Note: no store parameter
+    graph = builder.compile(checkpointer=sync_checkpointer)
+
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # Test normal invoke
+    result = graph.invoke({"value": 1}, config)
+    assert result == {"value": 4}  # (1 + 1) * 2
+
+    # Test update_state
+    config_updated = graph.update_state(config, {"value": 2}, as_node="node_a")
+
+    # Continue execution
+    result = graph.invoke(None, config_updated)
+    assert result == {"value": 4}  # 2 * 2
