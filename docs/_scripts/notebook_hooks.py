@@ -282,8 +282,8 @@ REDIRECT_MAP = {
     "reference/supervisor.md": "https://reference.langchain.com/python/langgraph/supervisor/",
     "reference/swarm.md": "https://reference.langchain.com/python/langgraph/swarm/",
     "reference/mcp.md": "https://reference.langchain.com/python/langgraph/mcp/",
-    "cloud/reference/sdk/python_sdk_ref.md": "https://reference.langchain.com/python/platform/python_sdk/",
-    "reference/remote_graph.md": "https://reference.langchain.com/python/platform/remote_graph/",
+    "cloud/reference/sdk/python_sdk_ref.md": "https://reference.langchain.com/python/langsmith/deployment/sdk/",
+    "reference/remote_graph.md": "https://reference.langchain.com/python/langsmith/deployment/remote_graph/",
 
     # additional exclude-search entries from mkdocs.yml
     "additional-resources/index.md": "https://docs.langchain.com/oss/python/langchain/overview",
