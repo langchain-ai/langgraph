@@ -100,7 +100,7 @@ class PostgresSaver(BasePostgresSaver):
                 strict=False,
             ):
                 cur.execute(migration)
-                cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+                cur.execute("INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,))
         if self.pipe:
             self.pipe.sync()
 

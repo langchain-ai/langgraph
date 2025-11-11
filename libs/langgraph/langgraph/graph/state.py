@@ -110,11 +110,19 @@ def _get_node_name(node: StateNode[Any, ContextT]) -> str:
 
 class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     """A graph whose nodes communicate by reading and writing to a shared state.
-    The signature of each node is State -> Partial<State>.
+
+    The signature of each node is `State -> Partial<State>`.
 
     Each state key can optionally be annotated with a reducer function that
     will be used to aggregate the values of that key received from multiple nodes.
     The signature of a reducer function is `(Value, Value) -> Value`.
+
+    !!! warning
+
+        `StateGraph` is a builder class and cannot be used directly for execution.
+        You must first call `.compile()` to create an executable graph that supports
+        methods like `invoke()`, `stream()`, `astream()`, and `ainvoke()`. See the
+        `CompiledStateGraph` documentation for more details.
 
     Args:
         state_schema: The schema class that defines the state.
@@ -289,7 +297,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the state graph, input schema is inferred as the state schema.
+        """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
         Will take the name of the function/runnable as the node name.
         """
         ...
@@ -307,7 +315,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the state graph, input schema is specified.
+        """Add a new node to the `StateGraph`, input schema is specified.
         Will take the name of the function/runnable as the node name.
         """
         ...
@@ -326,7 +334,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the state graph, input schema is inferred as the state schema."""
+        """Add a new node to the `StateGraph`, input schema is inferred as the state schema."""
         ...
 
     @overload
@@ -343,7 +351,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the state graph, input schema is specified."""
+        """Add a new node to the `StateGraph`, input schema is specified."""
         ...
 
     def add_node(
@@ -359,7 +367,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         destinations: dict[str, str] | tuple[str, ...] | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
-        """Add a new node to the state graph.
+        """Add a new node to the `StateGraph`.
 
         Args:
             node: The function or runnable this node will run.
@@ -416,7 +424,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             ```
 
         Returns:
-            Self: The instance of the state graph, allowing for method chaining.
+            Self: The instance of the `StateGraph`, allowing for method chaining.
         """
         if (retry := kwargs.get("retry", MISSING)) is not MISSING:
             warnings.warn(
@@ -571,7 +579,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             ValueError: If the start key is `'END'` or if the start key or end key is not present in the graph.
 
         Returns:
-            Self: The instance of the state graph, allowing for method chaining.
+            Self: The instance of the `StateGraph`, allowing for method chaining.
         """
         if self.compiled:
             logger.warning(
@@ -676,7 +684,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             ValueError: If the sequence contains duplicate node names.
 
         Returns:
-            Self: The instance of the state graph, allowing for method chaining.
+            Self: The instance of the `StateGraph`, allowing for method chaining.
         """
         if len(nodes) < 1:
             raise ValueError("Sequence requires at least one node.")
@@ -809,7 +817,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         debug: bool = False,
         name: str | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
-        """Compiles the state graph into a `CompiledStateGraph` object.
+        """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
         streamed, batched, and run asynchronously.
@@ -826,7 +834,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             name: The name to use for the compiled graph.
 
         Returns:
-            CompiledStateGraph: The compiled state graph.
+            CompiledStateGraph: The compiled `StateGraph`.
         """
         # assign default values
         interrupt_before = interrupt_before or []

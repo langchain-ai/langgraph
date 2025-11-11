@@ -1,13 +1,12 @@
 from collections.abc import Sequence
 from typing import Annotated, Literal, TypedDict
 
-from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph, add_messages
 from langgraph.prebuilt import ToolNode
 
-tools = [TavilySearchResults(max_results=1)]
+tools = []
 
 model_oai = ChatOpenAI(temperature=0)
 
