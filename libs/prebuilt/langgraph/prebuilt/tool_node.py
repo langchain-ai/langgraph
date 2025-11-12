@@ -6,6 +6,7 @@ Tools are functions that models can call to interact with external systems,
 APIs, databases, or perform computations.
 
 The module implements design patterns for:
+
 - Parallel execution of multiple tool calls for efficiency
 - Robust error handling with customizable error messages
 - State injection for tools that need access to graph state
@@ -13,11 +14,13 @@ The module implements design patterns for:
 - Command-based state updates for advanced control flow
 
 Key Components:
-    `ToolNode`: Main class for executing tools in LangGraph workflows
-    `InjectedState`: Annotation for injecting graph state into tools
-    `InjectedStore`: Annotation for injecting persistent store into tools
-    `ToolRuntime`: Runtime information for tools, bundling together state, context, config, stream_writer, tool_call_id, and store
-    `tools_condition`: Utility function for conditional routing based on tool calls
+
+- `ToolNode`: Main class for executing tools in LangGraph workflows
+- `InjectedState`: Annotation for injecting graph state into tools
+- `InjectedStore`: Annotation for injecting persistent store into tools
+- `ToolRuntime`: Runtime information for tools, bundling together `state`, `context`,
+    `config`, `stream_writer`, `tool_call_id`, and `store`
+- `tools_condition`: Utility function for conditional routing based on tool calls
 
 Typical Usage:
     ```python
@@ -552,44 +555,52 @@ class ToolNode(RunnableCallable):
         Output format depends on input type and tool behavior:
 
         **For Regular tools**:
+
         - Dict input → `{"messages": [ToolMessage(...)]}`
         - List input → `[ToolMessage(...)]`
 
         **For Command tools**:
+
         - Returns `[Command(...)]` or mixed list with regular tool outputs
-        - Commands can update state, trigger navigation, or send messages
+        - `Command` can update state, trigger navigation, or send messages
 
     Args:
-        tools: A sequence of tools that can be invoked by this node. Supports:
+        tools: A sequence of tools that can be invoked by this node.
+
+            Supports:
+
             - **BaseTool instances**: Tools with schemas and metadata
             - **Plain functions**: Automatically converted to tools with inferred schemas
+
         name: The name identifier for this node in the graph. Used for debugging
-            and visualization. Defaults to "tools".
+            and visualization.
         tags: Optional metadata tags to associate with the node for filtering
-            and organization. Defaults to `None`.
+            and organization.
         handle_tool_errors: Configuration for error handling during tool execution.
             Supports multiple strategies:
 
-            - **True**: Catch all errors and return a ToolMessage with the default
+            - `True`: Catch all errors and return a `ToolMessage` with the default
                 error template containing the exception details.
-            - **str**: Catch all errors and return a ToolMessage with this custom
+            - `str`: Catch all errors and return a `ToolMessage` with this custom
                 error message string.
-            - **type[Exception]**: Only catch exceptions with the specified type and
+            - `type[Exception]`: Only catch exceptions with the specified type and
                 return the default error message for it.
-            - **tuple[type[Exception], ...]**: Only catch exceptions with the specified
+            - `tuple[type[Exception], ...]`: Only catch exceptions with the specified
                 types and return default error messages for them.
-            - **Callable[..., str]**: Catch exceptions matching the callable's signature
+            - `Callable[..., str]`: Catch exceptions matching the callable's signature
                 and return the string result of calling it with the exception.
-            - **False**: Disable error handling entirely, allowing exceptions to
+            - `False`: Disable error handling entirely, allowing exceptions to
                 propagate.
 
             Defaults to a callable that:
-                - catches tool invocation errors (due to invalid arguments provided by the model) and returns a descriptive error message
-                - ignores tool execution errors (they will be re-raised)
+
+            - Catches tool invocation errors (due to invalid arguments provided by the
+                model) and returns a descriptive error message
+            - Ignores tool execution errors (they will be re-raised)
 
         messages_key: The key in the state dictionary that contains the message list.
             This same key will be used for the output `ToolMessage` objects.
-            Defaults to "messages".
+
             Allows custom state schemas with different message field names.
 
     Examples:
@@ -1393,7 +1404,7 @@ def tools_condition(
     """Conditional routing function for tool-calling workflows.
 
     This utility function implements the standard conditional logic for ReAct-style
-    agents: if the last AI message contains tool calls, route to the tool execution
+    agents: if the last `AIMessage` contains tool calls, route to the tool execution
     node; otherwise, end the workflow. This pattern is fundamental to most tool-calling
     agent architectures.
 
@@ -1402,16 +1413,15 @@ def tools_condition(
 
     Args:
         state: The current graph state to examine for tool calls. Supported formats:
-            - Dictionary containing a messages key (for StateGraph)
-            - BaseModel instance with a messages attribute
+            - Dictionary containing a messages key (for `StateGraph`)
+            - `BaseModel` instance with a messages attribute
         messages_key: The key or attribute name containing the message list in the state.
             This allows customization for graphs using different state schemas.
-            Defaults to "messages".
 
     Returns:
-        Either "tools" if tool calls are present in the last AI message, or "__end__"
-        to terminate the workflow. These are the standard routing destinations for
-        tool-calling conditional edges.
+        Either `'tools'` if tool calls are present in the last `AIMessage`, or `'__end__'`
+            to terminate the workflow. These are the standard routing destinations for
+            tool-calling conditional edges.
 
     Raises:
         ValueError: If no messages can be found in the provided state format.
@@ -1608,7 +1618,7 @@ class InjectedStore(InjectedToolArg):
 
     This annotation enables tools to access LangGraph's persistent storage system
     without exposing storage details to the language model. Tools annotated with
-    InjectedStore receive the store instance automatically during execution while
+    `InjectedStore` receive the store instance automatically during execution while
     remaining invisible to the model's tool-calling interface.
 
     The store provides persistent, cross-session data storage that tools can use

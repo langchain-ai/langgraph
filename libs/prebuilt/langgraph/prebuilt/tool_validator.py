@@ -45,9 +45,9 @@ def _default_format_error(
     category=LangGraphDeprecatedSinceV10,
 )
 class ValidationNode(RunnableCallable):
-    """A node that validates all tools requests from the last AIMessage.
+    """A node that validates all tools requests from the last `AIMessage`.
 
-    It can be used either in StateGraph with a "messages" key.
+    It can be used either in `StateGraph` with a `'messages'` key.
 
     !!! note
 
@@ -57,7 +57,8 @@ class ValidationNode(RunnableCallable):
         messages and tool IDs (for use in multi-turn conversations).
 
     Returns:
-        (Union[Dict[str, List[ToolMessage]], Sequence[ToolMessage]]): A list of ToolMessages with the validated content or error messages.
+        (Union[Dict[str, List[ToolMessage]], Sequence[ToolMessage]]): A list of
+            `ToolMessage` objects with the validated content or error messages.
 
     Example:
         ```python title="Example usage for re-prompting the model to generate a valid response:"
