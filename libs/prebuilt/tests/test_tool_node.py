@@ -9,6 +9,7 @@ from typing import (
     NoReturn,
     TypeVar,
 )
+from unittest.mock import Mock
 
 import pytest
 from langchain_core.messages import (
@@ -50,26 +51,27 @@ from .model import FakeToolCallingModel
 pytestmark = pytest.mark.anyio
 
 
+def _create_mock_runtime(store: BaseStore | None = None) -> Mock:
+    """Create a mock Runtime object for testing ToolNode outside of graph context.
+
+    This helper is needed because ToolNode._func expects a Runtime parameter
+    which is injected by RunnableCallable from config["configurable"]["__pregel_runtime"].
+    When testing ToolNode directly (outside a graph), we need to provide this manually.
+    """
+    mock_runtime = Mock()
+    mock_runtime.store = store
+    mock_runtime.context = None
+    mock_runtime.stream_writer = lambda *args, **kwargs: None
+    return mock_runtime
+
+
 def _create_config_with_runtime(store: BaseStore | None = None) -> RunnableConfig:
-    """Create a RunnableConfig for testing ToolNode.
-
-    Since ToolNode now has a default Runtime, this helper can be simplified.
-    It only needs to inject a store if one is provided, otherwise an empty config works.
-
-    Args:
-        store: Optional store to inject via runtime. If None, no runtime is needed.
+    """Create a RunnableConfig with mock Runtime for testing ToolNode.
 
     Returns:
-        RunnableConfig, optionally with __pregel_runtime if store is provided.
+        RunnableConfig with __pregel_runtime in configurable dict.
     """
-    if store is None:
-        # No runtime needed - ToolNode will use DEFAULT_RUNTIME
-        return {}
-
-    # Create a mock runtime only when we need to inject a store
-    from langgraph.runtime import Runtime
-    runtime = Runtime(context=None, store=store, stream_writer=lambda *args, **kwargs: None)
-    return {"configurable": {"__pregel_runtime": runtime}}
+    return {"configurable": {"__pregel_runtime": _create_mock_runtime(store)}}
 
 
 def tool1(some_val: int, some_other_val: str) -> str:

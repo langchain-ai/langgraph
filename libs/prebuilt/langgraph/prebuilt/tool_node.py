@@ -84,7 +84,6 @@ from langchain_core.tools.base import (
 from langgraph._internal._runnable import RunnableCallable
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from langgraph.runtime import DEFAULT_RUNTIME
 from langgraph.store.base import BaseStore  # noqa: TC002
 from langgraph.types import Command, Send, StreamWriter
 from pydantic import BaseModel, ValidationError
@@ -703,7 +702,7 @@ class ToolNode(RunnableCallable):
         self,
         input: list[AnyMessage] | dict[str, Any] | BaseModel,
         config: RunnableConfig,
-        runtime: Runtime = DEFAULT_RUNTIME,
+        runtime: Runtime,
     ) -> Any:
         tool_calls, input_type = self._parse_input(input)
         config_list = get_config_list(config, len(tool_calls))
@@ -735,7 +734,7 @@ class ToolNode(RunnableCallable):
         self,
         input: list[AnyMessage] | dict[str, Any] | BaseModel,
         config: RunnableConfig,
-        runtime: Runtime = DEFAULT_RUNTIME,
+        runtime: Runtime,
     ) -> Any:
         tool_calls, input_type = self._parse_input(input)
         config_list = get_config_list(config, len(tool_calls))

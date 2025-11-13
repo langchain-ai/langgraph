@@ -316,12 +316,7 @@ class RunnableCallable(Runnable):
                 continue
 
             # If the kwarg is accepted by the function, store the key / runtime attribute to inject
-            # Use the actual parameter default from the function signature if available,
-            # otherwise fall back to the default from KWARGS_CONFIG_KEYS
-            param_default = (
-                p.default if p.default is not inspect.Parameter.empty else default
-            )
-            self.func_accepts[kw] = (runtime_key, param_default)
+            self.func_accepts[kw] = (runtime_key, default)
 
     def __repr__(self) -> str:
         repr_args = {
