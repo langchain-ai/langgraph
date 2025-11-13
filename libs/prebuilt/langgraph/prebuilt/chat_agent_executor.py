@@ -82,7 +82,7 @@ with warnings.catch_warnings():
     )
 
     @deprecated(
-        "AgentStateWithStructuredResponse has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStateWithStructuredResponse`.",
+        "AgentStateWithStructuredResponse has been deprecated in favor of AgentState in `langchain.agents`.",
         category=LangGraphDeprecatedSinceV10,
     )
     class AgentStateWithStructuredResponse(AgentState):
@@ -99,7 +99,7 @@ with warnings.catch_warnings():
     )
 
     @deprecated(
-        "AgentStateWithStructuredResponsePydantic has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStateWithStructuredResponsePydantic`.",
+        "AgentStateWithStructuredResponsePydantic has been deprecated in favor of AgentState in `langchain.agents`.",
         category=LangGraphDeprecatedSinceV10,
     )
     class AgentStateWithStructuredResponsePydantic(AgentStatePydantic):
