@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make test:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(LANGGRAPH_TEST_FAST=0 make start-services:*)",
+      "Bash(LANGGRAPH_TEST_FAST=0 uv run:*)",
+      "Bash(EXIT_CODE=$?)",
+      "Bash(make stop-services:*)",
+      "Bash(exit $EXIT_CODE)",
+      "Read(//Users/sydney_runkle/oss/langgraph/**)",
+      "Bash(python3:*)",
+      "Bash(find:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python:*)",
+      "Read(//tmp/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
