@@ -63,7 +63,7 @@ class AgentState(TypedDict):
 
 
 @deprecated(
-    "AgentStatePydantic has been moved to `langchain.agents`. Please update your import to `from langchain.agents import AgentStatePydantic`.",
+    "AgentStatePydantic has been deprecated in favor of AgentState in `langchain.agents`.",
     category=LangGraphDeprecatedSinceV10,
 )
 class AgentStatePydantic(BaseModel):
@@ -78,7 +78,7 @@ with warnings.catch_warnings():
     warnings.filterwarnings(
         "ignore",
         category=LangGraphDeprecatedSinceV10,
-        message="AgentState has been moved to langchain.agents.*",
+        message="AgentState has been moved to `langchain.agents`.*",
     )
 
     @deprecated(
@@ -95,7 +95,7 @@ with warnings.catch_warnings():
     warnings.filterwarnings(
         "ignore",
         category=LangGraphDeprecatedSinceV10,
-        message="AgentStatePydantic has been moved to langchain.agents.*",
+        message="AgentStatePydantic has been deprecated in favor of AgentState in `langchain.agents`.",
     )
 
     @deprecated(
