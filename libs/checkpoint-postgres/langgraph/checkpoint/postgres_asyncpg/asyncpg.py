@@ -58,6 +58,10 @@ class AsyncPgPostgresSaver(BaseCheckpointSaver[str]):
         checkpoint: dict[str, Any],
         channel_values: list[tuple[bytes, bytes, bytes]],
     ) -> None:
+        """
+        Note: Copied from base implementation to maintain independence
+        from psycopg-specific dependencies.
+        """
         if not pending_sends:
             return
         # add to values
