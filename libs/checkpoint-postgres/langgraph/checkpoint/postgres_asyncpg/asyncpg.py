@@ -1,36 +1,37 @@
 from __future__ import annotations
-import random
+
 import asyncio
 import json
+import random
 from collections import defaultdict
 from collections.abc import AsyncIterator, Iterator, Sequence
-from langgraph.checkpoint.serde.types import TASKS
+from contextlib import asynccontextmanager
+from typing import Any, cast
+
+import asyncpg
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
+    BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
-    BaseCheckpointSaver,
 )
-from typing import Any, cast
 from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.types import TASKS
+
 from langgraph.checkpoint.postgres_asyncpg import _ainternal
-from contextlib import asynccontextmanager
-
-import asyncpg
-
 from langgraph.checkpoint.postgres_asyncpg.asyncpg_sql_scripts import (
-    MIGRATIONS,
-    SELECT_SQL,
-    SELECT_PENDING_SENDS_SQL,
-    UPSERT_CHECKPOINT_BLOBS_SQL,
-    UPSERT_CHECKPOINTS_SQL,
-    UPSERT_CHECKPOINT_WRITES_SQL,
     INSERT_CHECKPOINT_WRITES_SQL,
+    MIGRATIONS,
+    SELECT_PENDING_SENDS_SQL,
+    SELECT_SQL,
+    UPSERT_CHECKPOINT_BLOBS_SQL,
+    UPSERT_CHECKPOINT_WRITES_SQL,
+    UPSERT_CHECKPOINTS_SQL,
 )
 
 MetadataInput = dict[str, Any] | None

@@ -1,8 +1,8 @@
 """Shared async utility functions for the Postgres checkpoint & storage classes."""
 
 from __future__ import annotations
-from collections.abc import AsyncIterator
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import asyncpg
