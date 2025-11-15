@@ -9287,3 +9287,311 @@ async def test_fork_does_not_apply_pending_writes(
 
     # 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+async def test_conditional_edge_with_store_in_aupdate_state(
+    async_checkpointer: BaseCheckpointSaver, async_store: BaseStore
+) -> None:
+    """Test that conditional edges can access store parameter during aupdate_state.
+
+    This is a regression test for a bug where conditional edge functions with
+    store: BaseStore parameter would fail with "Missing required config key 'store'"
+    when invoked via aupdate_state().
+    """
+
+    class State(TypedDict):
+        value: int
+        route_decision: str
+
+    # Track calls to verify execution
+    calls = []
+
+    async def node_a(state: State) -> dict:
+        """Simple node that increments value."""
+        calls.append("node_a")
+        return {"value": state["value"] + 1}
+
+    async def node_b(state: State) -> dict:
+        """Another node that increments value."""
+        calls.append("node_b")
+        return {"value": state["value"] + 10}
+
+    async def route_with_store(
+        state: State, config: RunnableConfig, store: BaseStore
+    ) -> str:
+        """Conditional edge that uses store to make routing decision.
+
+        This is the function that would fail before the bug fix.
+        """
+        calls.append("route_with_store")
+
+        # Verify store is accessible
+        assert isinstance(store, BaseStore)
+
+        # Store some data to verify store works
+        thread_id = config["configurable"]["thread_id"]
+        namespace = ("test_async_routing", thread_id)
+        await store.aput(
+            namespace, "route_call", {"called": True, "value": state["value"]}
+        )
+
+        # Retrieve data to verify store works both ways
+        stored = await store.aget(namespace, "route_call")
+        assert stored is not None
+        assert stored.value["called"] is True
+
+        # Make routing decision
+        if state["value"] < 5:
+            return "node_b"
+        return END
+
+    # Build graph with conditional edge that uses store
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_conditional_edges("node_a", route_with_store)
+    builder.add_edge("node_b", END)
+
+    graph = builder.compile(checkpointer=async_checkpointer, store=async_store)
+
+    # Test 1: Normal ainvoke should work (this worked before the fix)
+    thread_1 = str(uuid.uuid4())
+    config1 = {"configurable": {"thread_id": thread_1}}
+    calls.clear()
+
+    result = await graph.ainvoke({"value": 1}, config1)
+    assert result == {"value": 12}  # 1 + 1 (node_a) + 10 (node_b)
+    assert "node_a" in calls
+    assert "route_with_store" in calls
+    assert "node_b" in calls
+
+    # Verify store was used
+    stored = await async_store.aget(("test_async_routing", thread_1), "route_call")
+    assert stored is not None
+    assert stored.value["value"] == 2  # Value after node_a
+
+    # Test 2: aupdate_state with conditional edge that uses store (this failed before)
+    thread_2 = str(uuid.uuid4())
+    config2 = {"configurable": {"thread_id": thread_2}}
+    calls.clear()
+
+    # Initialize with a value
+    result = await graph.ainvoke({"value": 10}, config2)
+    assert result == {"value": 11}  # 10 + 1 (node_a), routes to END
+
+    # Now use aupdate_state to trigger the conditional edge
+    calls.clear()
+    config2_updated = await graph.aupdate_state(config2, {"value": 3}, as_node="node_a")
+
+    # The conditional edge should have been invoked during aupdate_state
+    assert "route_with_store" in calls
+
+    # Verify store was accessible in the conditional edge
+    stored = await async_store.aget(("test_async_routing", thread_2), "route_call")
+    assert stored is not None
+    assert stored.value["called"] is True
+    assert stored.value["value"] == 3
+
+    # Continue execution - should go to node_b since value < 5
+    calls.clear()
+    result = await graph.ainvoke(None, config2_updated)
+    assert "node_b" in calls
+    assert result == {"value": 13}  # 3 + 10 (node_b)
+
+
+async def test_conditional_edge_with_store_abulk_update_state(
+    async_checkpointer: BaseCheckpointSaver, async_store: BaseStore
+) -> None:
+    """Test that conditional edges can access store parameter during abulk_update_state.
+
+    Tests the bulk update scenario to ensure multiple updates work correctly.
+    """
+
+    class State(TypedDict):
+        count: Annotated[int, operator.add]
+
+    update_calls = []
+
+    async def incrementer(state: State) -> dict:
+        """Node that increments count."""
+        return {"count": 1}
+
+    async def router_with_store(
+        state: State, config: RunnableConfig, store: BaseStore
+    ) -> Literal["incrementer", "__end__"]:
+        """Router that uses store."""
+        update_calls.append(("router", state["count"]))
+
+        # Use store
+        thread_id = config["configurable"]["thread_id"]
+        namespace = ("bulk_async_test", thread_id)
+
+        # Store routing history
+        existing = await store.asearch(namespace)
+        await store.aput(
+            namespace,
+            f"route_{len(existing)}",
+            {
+                "count": state["count"],
+                "decision": "continue" if state["count"] < 10 else "end",
+            },
+        )
+
+        # Route based on count
+        if state["count"] < 10:
+            return "incrementer"
+        return END
+
+    builder = StateGraph(State)
+    builder.add_node("incrementer", incrementer)
+    builder.add_edge(START, "incrementer")
+    builder.add_conditional_edges("incrementer", router_with_store)
+
+    graph = builder.compile(checkpointer=async_checkpointer, store=async_store)
+
+    # Use abulk_update_state with conditional edges that access store
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # Initialize - graph runs to completion (loops until count >= 10)
+    result = await graph.ainvoke({"count": 0}, config)
+    assert result["count"] == 10
+
+    # Test bulk update - this should trigger the conditional edge multiple times
+    update_calls.clear()
+    config = await graph.abulk_update_state(
+        config,
+        [
+            [StateUpdate({"count": 5}, as_node="incrementer")],
+            [StateUpdate({"count": 3}, as_node="incrementer")],
+        ],
+    )
+
+    # Both updates should have triggered the router
+    assert len(update_calls) >= 2
+
+    # Verify store has routing history
+    stored_routes = await async_store.asearch(("bulk_async_test", thread_id))
+    assert len(stored_routes) >= 2
+
+    # Verify we can continue execution
+    result = await graph.ainvoke(None, config)
+    assert result["count"] > 0
+
+
+async def test_conditional_edge_store_with_config_runtime_async(
+    async_checkpointer: BaseCheckpointSaver, async_store: BaseStore
+) -> None:
+    """Test conditional edge store access when runtime is already in config (async version).
+
+    This tests the case where CONFIG_KEY_RUNTIME already exists in the config
+    to ensure we properly merge/override it.
+    """
+
+    class State(TypedDict):
+        data: str
+
+    async def node(state: State) -> dict:
+        return {"data": state["data"] + "_processed"}
+
+    async def route_with_store_and_config(
+        state: State, config: RunnableConfig, store: BaseStore
+    ) -> str:
+        """Router that uses both store and config."""
+        # Verify both store and config are accessible
+        assert isinstance(store, BaseStore)
+        assert "configurable" in config
+
+        thread_id = config["configurable"]["thread_id"]
+        namespace = ("config_async_test", thread_id)
+
+        # Store state
+        await store.aput(namespace, "state", {"data": state["data"]})
+
+        # Verify retrieval
+        retrieved = await store.aget(namespace, "state")
+        assert retrieved is not None
+        assert retrieved.value["data"] == state["data"]
+
+        return END
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    builder.add_conditional_edges("node", route_with_store_and_config)
+
+    graph = builder.compile(checkpointer=async_checkpointer, store=async_store)
+
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # Initialize graph
+    result = await graph.ainvoke({"data": "test"}, config)
+    assert result["data"] == "test_processed"
+
+    # Update state - this should trigger conditional edge with store access
+    config_updated = await graph.aupdate_state(
+        config, {"data": "updated"}, as_node="node"
+    )
+
+    # Verify store was used
+    stored = await async_store.aget(("config_async_test", thread_id), "state")
+    assert stored is not None
+    assert stored.value["data"] == "updated"
+
+    # Continue execution
+    result = await graph.ainvoke(None, config_updated)
+    assert result["data"] == "updated"
+
+
+async def test_conditional_edge_without_store_still_works_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that conditional edges without store parameter still work correctly (async).
+
+    This is a backward compatibility test to ensure the fix doesn't break
+    existing conditional edges that don't use store.
+    """
+
+    class State(TypedDict):
+        value: int
+
+    async def node_a(state: State) -> dict:
+        return {"value": state["value"] + 1}
+
+    async def node_b(state: State) -> dict:
+        return {"value": state["value"] * 2}
+
+    async def simple_router(state: State, config: RunnableConfig) -> str:
+        """Router without store parameter - should still work."""
+        # Can access config but not store
+        assert "configurable" in config
+
+        if state["value"] < 5:
+            return "node_b"
+        return END
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_conditional_edges("node_a", simple_router)
+    builder.add_edge("node_b", END)
+
+    # Note: no store parameter
+    graph = builder.compile(checkpointer=async_checkpointer)
+
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # Test normal ainvoke
+    result = await graph.ainvoke({"value": 1}, config)
+    assert result == {"value": 4}  # (1 + 1) * 2
+
+    # Test aupdate_state
+    config_updated = await graph.aupdate_state(config, {"value": 2}, as_node="node_a")
+
+    # Continue execution
+    result = await graph.ainvoke(None, config_updated)
+    assert result == {"value": 4}  # 2 * 2
