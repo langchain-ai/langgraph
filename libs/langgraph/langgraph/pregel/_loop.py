@@ -66,6 +66,7 @@ from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import (
     EmptyInputError,
     GraphInterrupt,
+    InvalidUpdateError,
 )
 from langgraph.managed.base import (
     ManagedValueMapping,
@@ -657,11 +658,15 @@ class PregelLoop:
 
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
-            for tid, c, v in map_command(cmd=self.input):
+            for tid, target_graph, c, v in map_command(cmd=self.input):
                 if not (c == RESUME and resume_is_map):
+                    # For now, just ignore the target_graph - cross-graph handling
+                    # is done by _control_branch which raises ParentCommand
                     writes[tid].append((c, v))
+
             if not writes and not resume_is_map:
                 raise EmptyInputError("Received empty Command input")
+
             # save writes
             for tid, ws in writes.items():
                 self.put_writes(tid, ws)
