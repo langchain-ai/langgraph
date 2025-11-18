@@ -46,7 +46,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.config import get_stream_writer
-from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
+from langgraph.errors import EmptyInputError, GraphRecursionError, InvalidUpdateError, ParentCommand
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
@@ -8845,3 +8845,57 @@ def test_fork_does_not_apply_pending_writes(
 
     # Should be: 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+def test_command_resume_none_with_stream_mode_values_fix(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that Command() with stream_mode='values' after interrupt raises EmptyInputError"""
+
+    class State(TypedDict):
+        value: str
+
+    def node_with_interrupt(state: State) -> State:
+        interrupt("interrupt")
+        return state
+
+    graph = (
+        StateGraph(State)
+        .add_node("node", node_with_interrupt)
+        .add_edge(START, "node")
+        .add_edge("node", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    graph.invoke({"value": "initial"}, config=config)
+
+    with pytest.raises(EmptyInputError, match="Received empty Command input"):
+        graph.invoke(Command(), config=config, stream_mode="values")
+
+
+def test_command_resume_with_stream_mode_values_works_after_fix(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that Command(resume=...) with stream_mode='values' works correctly"""
+
+    class State(TypedDict):
+        value: str
+
+    def node_with_interrupt(state: State) -> State:
+        value = interrupt("interrupt")
+        return {"value": value}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node", node_with_interrupt)
+        .add_edge(START, "node")
+        .add_edge("node", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    graph.invoke({"value": "initial"}, config=config)
+
+    result = graph.invoke(Command(resume="resume value"), config=config, stream_mode="values")
+    assert result == {"value": "resume value"}

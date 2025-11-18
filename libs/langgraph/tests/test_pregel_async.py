@@ -45,6 +45,7 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.errors import (
+    EmptyInputError,
     GraphRecursionError,
     InvalidUpdateError,
     ParentCommand,
@@ -9287,3 +9288,59 @@ async def test_fork_does_not_apply_pending_writes(
 
     # 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+async def test_command_resume_none_with_stream_mode_values_fix_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that Command() with stream_mode='values' after interrupt raises EmptyInputError, not UnboundLocalError"""
+
+    class State(TypedDict):
+        value: str
+
+    async def node_with_interrupt(state: State) -> State:
+        interrupt("interrupt")
+        return state
+
+    graph = (
+        StateGraph(State)
+        .add_node("node", node_with_interrupt)
+        .add_edge(START, "node")
+        .add_edge("node", END)
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    await graph.ainvoke({"value": "initial"}, config=config)
+
+    with pytest.raises(EmptyInputError, match="Received empty Command input"):
+        await graph.ainvoke(Command(), config=config, stream_mode="values")
+
+
+async def test_command_resume_with_stream_mode_values_works_after_fix_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that Command(resume=...) with stream_mode='values' works correctly"""
+
+    class State(TypedDict):
+        value: str
+
+    async def node_with_interrupt(state: State) -> State:
+        value = interrupt("interrupt")
+        return {"value": value}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node", node_with_interrupt)
+        .add_edge(START, "node")
+        .add_edge("node", END)
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    await graph.ainvoke({"value": "initial"}, config=config)
+
+    result = await graph.ainvoke(
+        Command(resume="resume value"), config=config, stream_mode="values"
+    )
+    assert result == {"value": "resume value"}
