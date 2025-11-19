@@ -1615,18 +1615,28 @@ def test_tool_node_stream_writer() -> None:
 def test_tool_call_request_setattr_deprecation_warning():
     """Test that ToolCallRequest raises a deprecation warning on direct attribute modification."""
     import warnings
+    from unittest.mock import Mock
 
-    from langgraph.prebuilt.tool_node import ToolCallRequest
+    from langgraph.prebuilt.tool_node import ToolCallRequest, ToolRuntime
 
     # Create a mock ToolCall
     tool_call = {"name": "test", "args": {"a": 1}, "id": "call_1", "type": "tool_call"}
+
+    # Create a ToolRuntime
+    tool_runtime = ToolRuntime(
+        state={"messages": []},
+        config={},
+        context=None,
+        store=None,
+        stream_writer=Mock(),
+        tool_call_id="call_1",
+    )
 
     # Create a ToolCallRequest
     request = ToolCallRequest(
         tool_call=tool_call,
         tool=None,
-        state={"messages": []},
-        runtime=None,
+        runtime=tool_runtime,
     )
 
     # Test 1: Direct attribute assignment should raise deprecation warning but still work
@@ -1667,8 +1677,7 @@ def test_tool_call_request_setattr_deprecation_warning():
         ToolCallRequest(
             tool_call=tool_call,
             tool=None,
-            state={"messages": []},
-            runtime=None,
+            runtime=tool_runtime,
         )
         # Verify no warning was raised during initialization
         assert len(w) == 0

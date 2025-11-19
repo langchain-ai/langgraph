@@ -13,6 +13,7 @@ from langgraph.types import Command
 from langgraph.prebuilt.tool_node import (
     ToolCallRequest,
     ToolNode,
+    ToolRuntime,
 )
 
 pytestmark = pytest.mark.anyio
@@ -342,16 +343,23 @@ def test_tool_call_request_dataclass() -> None:
     """Test ToolCallRequest dataclass."""
     tool_call: ToolCall = {"name": "add", "args": {"a": 1, "b": 2}, "id": "call_1"}
     state: dict = {"messages": []}
-    runtime = None
+    tool_runtime = ToolRuntime(
+        state=state,
+        config={},
+        context=None,
+        store=None,
+        stream_writer=Mock(),
+        tool_call_id="call_1",
+    )
 
     request = ToolCallRequest(
-        tool_call=tool_call, tool=add, state=state, runtime=runtime
-    )  # type: ignore[arg-type]
+        tool_call=tool_call, tool=add, runtime=tool_runtime
+    )
 
     assert request.tool_call == tool_call
     assert request.tool == add
     assert request.state == state
-    assert request.runtime is None
+    assert request.runtime is tool_runtime
     assert request.tool_call["name"] == "add"
 
 
@@ -1324,11 +1332,18 @@ def test_tool_call_request_is_frozen() -> None:
     """Test that ToolCallRequest raises deprecation warnings on direct attribute reassignment."""
     tool_call: ToolCall = {"name": "add", "args": {"a": 1, "b": 2}, "id": "call_1"}
     state: dict = {"messages": []}
-    runtime = None
+    tool_runtime = ToolRuntime(
+        state=state,
+        config={},
+        context=None,
+        store=None,
+        stream_writer=Mock(),
+        tool_call_id="call_1",
+    )
 
     request = ToolCallRequest(
-        tool_call=tool_call, tool=add, state=state, runtime=runtime
-    )  # type: ignore[arg-type]
+        tool_call=tool_call, tool=add, runtime=tool_runtime
+    )
 
     # Test that direct attribute reassignment raises DeprecationWarning
     with pytest.warns(
@@ -1343,11 +1358,14 @@ def test_tool_call_request_is_frozen() -> None:
     ):
         request.tool = None  # type: ignore[misc]
 
+    # state is now a property, so setting it will raise a deprecation warning
+    # (and then fail with AttributeError after the warning)
     with pytest.warns(
         DeprecationWarning,
         match="Setting attribute 'state' on ToolCallRequest is deprecated",
     ):
-        request.state = {}  # type: ignore[misc]
+        with pytest.raises(AttributeError):
+            request.state = {}  # type: ignore[misc]
 
     with pytest.warns(
         DeprecationWarning,
@@ -1365,8 +1383,8 @@ def test_tool_call_request_is_frozen() -> None:
     # Original request should be unchanged (note: it was modified by the warnings tests above)
     # So we create a fresh request to test override properly
     fresh_request = ToolCallRequest(
-        tool_call=tool_call, tool=add, state=state, runtime=runtime
-    )  # type: ignore[arg-type]
+        tool_call=tool_call, tool=add, runtime=tool_runtime
+    )
     fresh_new_request = fresh_request.override(tool_call=new_tool_call)
 
     # Original request should be unchanged
@@ -1378,4 +1396,4 @@ def test_tool_call_request_is_frozen() -> None:
     assert fresh_new_request.tool_call["name"] == "multiply"
     assert fresh_new_request.tool == add  # Other fields should remain the same
     assert fresh_new_request.state == state
-    assert fresh_new_request.runtime is None
+    assert fresh_new_request.runtime is tool_runtime

@@ -124,7 +124,7 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
 
 
 @dataclass
-class ToolCallRequest:
+class ToolCallRequest(Generic[ContextT, StateT]):
     """Tool execution request passed to tool call interceptors.
 
     Attributes:
@@ -133,14 +133,22 @@ class ToolCallRequest:
             registered with the `ToolNode`. When tool is `None`, interceptors can
             handle the request without validation. If the interceptor calls `execute()`,
             validation will occur and raise an error for unregistered tools.
-        state: Agent state (`dict`, `list`, or `BaseModel`).
         runtime: LangGraph runtime context (optional, `None` if outside graph).
+        state: Agent state (`dict`, `list`, or `BaseModel`). Pulled from `runtime.state`.
     """
 
     tool_call: ToolCall
     tool: BaseTool | None
-    state: Any
-    runtime: ToolRuntime
+    runtime: ToolRuntime[ContextT, StateT]
+
+    @property
+    def state(self) -> StateT:
+        """Get the state from the runtime.
+
+        Returns:
+            The current graph state from the runtime context.
+        """
+        return self.runtime.state
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Raise deprecation warning when setting attributes directly.
@@ -163,7 +171,7 @@ class ToolCallRequest:
 
     def override(
         self, **overrides: Unpack[_ToolCallRequestOverrides]
-    ) -> ToolCallRequest:
+    ) -> ToolCallRequest[ContextT, StateT]:
         """Replace the request with a new request with the given overrides.
 
         Returns a new `ToolCallRequest` instance with the specified attributes replaced.
@@ -947,11 +955,10 @@ class ToolNode(RunnableCallable):
         # to short-circuit requests for unregistered tools
         tool = self.tools_by_name.get(call["name"])
 
-        # Create the tool request with state and runtime
+        # Create the tool request with runtime
         tool_request = ToolCallRequest(
             tool_call=call,
             tool=tool,
-            state=tool_runtime.state,
             runtime=tool_runtime,
         )
 
@@ -1104,11 +1111,10 @@ class ToolNode(RunnableCallable):
         # to short-circuit requests for unregistered tools
         tool = self.tools_by_name.get(call["name"])
 
-        # Create the tool request with state and runtime
+        # Create the tool request with runtime
         tool_request = ToolCallRequest(
             tool_call=call,
             tool=tool,
-            state=tool_runtime.state,
             runtime=tool_runtime,
         )
 
