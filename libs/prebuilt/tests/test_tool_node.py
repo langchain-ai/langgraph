@@ -1610,3 +1610,65 @@ def test_tool_node_stream_writer() -> None:
             },
         ),
     ]
+
+
+def test_tool_call_request_setattr_deprecation_warning():
+    """Test that ToolCallRequest raises a deprecation warning on direct attribute modification."""
+    import warnings
+
+    from langgraph.prebuilt.tool_node import ToolCallRequest
+
+    # Create a mock ToolCall
+    tool_call = {"name": "test", "args": {"a": 1}, "id": "call_1", "type": "tool_call"}
+
+    # Create a ToolCallRequest
+    request = ToolCallRequest(
+        tool_call=tool_call,
+        tool=None,
+        state={"messages": []},
+        runtime=None,
+    )
+
+    # Test 1: Direct attribute assignment should raise deprecation warning but still work
+    with pytest.warns(DeprecationWarning, match="deprecated.*override"):
+        request.tool_call = {"name": "other", "args": {}, "id": "call_2"}
+
+    # Verify the attribute was actually modified
+    assert request.tool_call == {"name": "other", "args": {}, "id": "call_2"}
+
+    # Reset for further tests
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        request.tool_call = tool_call
+
+    # Test 2: override method should work without warnings
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        new_tool_call = {
+            "name": "new_tool",
+            "args": {"b": 2},
+            "id": "call_3",
+            "type": "tool_call",
+        }
+        new_request = request.override(tool_call=new_tool_call)
+
+        # Verify no warning was raised
+        assert len(w) == 0
+
+    # Verify original is unchanged
+    assert request.tool_call == tool_call
+
+    # Verify new request has updated values
+    assert new_request.tool_call == new_tool_call
+
+    # Test 3: Initialization should not trigger warning
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        ToolCallRequest(
+            tool_call=tool_call,
+            tool=None,
+            state={"messages": []},
+            runtime=None,
+        )
+        # Verify no warning was raised during initialization
+        assert len(w) == 0

@@ -130,11 +130,17 @@ def test_modify_arguments() -> None:
         execute: Callable[[ToolCallRequest], ToolMessage | Command],
     ) -> ToolMessage | Command:
         """Handler that doubles the input arguments."""
-        # Modify the arguments
-        request.tool_call["args"]["a"] *= 2
-        request.tool_call["args"]["b"] *= 2
-
-        return execute(request)
+        # Modify the arguments using override method
+        modified_call = {
+            **request.tool_call,
+            "args": {
+                **request.tool_call["args"],
+                "a": request.tool_call["args"]["a"] * 2,
+                "b": request.tool_call["args"]["b"] * 2,
+            },
+        }
+        modified_request = request.override(tool_call=modified_call)
+        return execute(modified_request)
 
     tool_node = ToolNode([add], wrap_tool_call=modify_args_handler)
 
@@ -362,10 +368,17 @@ async def test_handler_with_async_execution() -> None:
         execute: Callable[[ToolCallRequest], ToolMessage | Command],
     ) -> ToolMessage | Command:
         """Handler that modifies arguments."""
-        # Add 10 to both arguments
-        request.tool_call["args"]["a"] += 10
-        request.tool_call["args"]["b"] += 10
-        return execute(request)
+        # Add 10 to both arguments using override method
+        modified_call = {
+            **request.tool_call,
+            "args": {
+                **request.tool_call["args"],
+                "a": request.tool_call["args"]["a"] + 10,
+                "b": request.tool_call["args"]["b"] + 10,
+            },
+        }
+        modified_request = request.override(tool_call=modified_call)
+        return execute(modified_request)
 
     tool_node = ToolNode([async_add], wrap_tool_call=modifying_handler)
 
@@ -1305,3 +1318,64 @@ async def test_state_extraction_with_tool_call_with_context_async() -> None:
     assert state_seen[0] == actual_state
     assert "__type" not in state_seen[0]
     assert "tool_call" not in state_seen[0]
+
+
+def test_tool_call_request_is_frozen() -> None:
+    """Test that ToolCallRequest raises deprecation warnings on direct attribute reassignment."""
+    tool_call: ToolCall = {"name": "add", "args": {"a": 1, "b": 2}, "id": "call_1"}
+    state: dict = {"messages": []}
+    runtime = None
+
+    request = ToolCallRequest(
+        tool_call=tool_call, tool=add, state=state, runtime=runtime
+    )  # type: ignore[arg-type]
+
+    # Test that direct attribute reassignment raises DeprecationWarning
+    with pytest.warns(
+        DeprecationWarning,
+        match="Setting attribute 'tool_call' on ToolCallRequest is deprecated",
+    ):
+        request.tool_call = {"name": "other", "args": {}, "id": "call_2"}  # type: ignore[misc]
+
+    with pytest.warns(
+        DeprecationWarning,
+        match="Setting attribute 'tool' on ToolCallRequest is deprecated",
+    ):
+        request.tool = None  # type: ignore[misc]
+
+    with pytest.warns(
+        DeprecationWarning,
+        match="Setting attribute 'state' on ToolCallRequest is deprecated",
+    ):
+        request.state = {}  # type: ignore[misc]
+
+    with pytest.warns(
+        DeprecationWarning,
+        match="Setting attribute 'runtime' on ToolCallRequest is deprecated",
+    ):
+        request.runtime = None  # type: ignore[misc]
+
+    # Test that override method works correctly
+    new_tool_call: ToolCall = {
+        "name": "multiply",
+        "args": {"x": 5, "y": 10},
+        "id": "call_3",
+    }
+
+    # Original request should be unchanged (note: it was modified by the warnings tests above)
+    # So we create a fresh request to test override properly
+    fresh_request = ToolCallRequest(
+        tool_call=tool_call, tool=add, state=state, runtime=runtime
+    )  # type: ignore[arg-type]
+    fresh_new_request = fresh_request.override(tool_call=new_tool_call)
+
+    # Original request should be unchanged
+    assert fresh_request.tool_call == tool_call
+    assert fresh_request.tool_call["name"] == "add"
+
+    # New request should have the updated tool_call
+    assert fresh_new_request.tool_call == new_tool_call
+    assert fresh_new_request.tool_call["name"] == "multiply"
+    assert fresh_new_request.tool == add  # Other fields should remain the same
+    assert fresh_new_request.state == state
+    assert fresh_new_request.runtime is None

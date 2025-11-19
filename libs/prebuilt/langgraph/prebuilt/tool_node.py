@@ -142,6 +142,25 @@ class ToolCallRequest:
     state: Any
     runtime: ToolRuntime
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Raise deprecation warning when setting attributes directly.
+
+        Direct attribute assignment is deprecated. Use the `override()` method instead.
+        """
+        import warnings
+
+        # Allow setting attributes during initialization
+        if not hasattr(self, "__dataclass_fields__") or not hasattr(self, name):
+            object.__setattr__(self, name, value)
+        else:
+            warnings.warn(
+                f"Setting attribute '{name}' on ToolCallRequest is deprecated. "
+                "Use the override() method instead to create a new instance with modified values.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            object.__setattr__(self, name, value)
+
     def override(
         self, **overrides: Unpack[_ToolCallRequestOverrides]
     ) -> ToolCallRequest:
@@ -202,8 +221,9 @@ Examples:
 
     ```python
     def handler(request, execute):
-        request.tool_call["args"]["value"] *= 2
-        return execute(request)
+        modified_call = {**request.tool_call, "args": {**request.tool_call["args"], "value": request.tool_call["args"]["value"] * 2}}
+        modified_request = request.override(tool_call=modified_call)
+        return execute(modified_request)
     ```
 
     Retry on error (execute multiple times):
