@@ -123,7 +123,7 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
     tool_call: ToolCall
 
 
-@dataclass(frozen=True)
+@dataclass
 class ToolCallRequest:
     """Tool execution request passed to tool call interceptors.
 
@@ -141,6 +141,25 @@ class ToolCallRequest:
     tool: BaseTool | None
     state: Any
     runtime: ToolRuntime
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Raise deprecation warning when setting attributes directly.
+
+        Direct attribute assignment is deprecated. Use the `override()` method instead.
+        """
+        import warnings
+
+        # Allow setting attributes during initialization
+        if not hasattr(self, "__dict__") or name not in self.__dict__:
+            object.__setattr__(self, name, value)
+        else:
+            warnings.warn(
+                f"Setting attribute '{name}' on ToolCallRequest is deprecated. "
+                "Use the override() method instead to create a new instance with modified values.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            object.__setattr__(self, name, value)
 
     def override(
         self, **overrides: Unpack[_ToolCallRequestOverrides]
