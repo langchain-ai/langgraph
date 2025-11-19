@@ -1321,9 +1321,7 @@ async def test_state_extraction_with_tool_call_with_context_async() -> None:
 
 
 def test_tool_call_request_is_frozen() -> None:
-    """Test that ToolCallRequest is frozen and direct attribute reassignment is not allowed."""
-    from dataclasses import FrozenInstanceError
-
+    """Test that ToolCallRequest raises deprecation warnings on direct attribute reassignment."""
     tool_call: ToolCall = {"name": "add", "args": {"a": 1, "b": 2}, "id": "call_1"}
     state: dict = {"messages": []}
     runtime = None
@@ -1332,17 +1330,29 @@ def test_tool_call_request_is_frozen() -> None:
         tool_call=tool_call, tool=add, state=state, runtime=runtime
     )  # type: ignore[arg-type]
 
-    # Test that direct attribute reassignment is not allowed
-    with pytest.raises(FrozenInstanceError):
+    # Test that direct attribute reassignment raises DeprecationWarning
+    with pytest.warns(
+        DeprecationWarning,
+        match="Setting attribute 'tool_call' on ToolCallRequest is deprecated",
+    ):
         request.tool_call = {"name": "other", "args": {}, "id": "call_2"}  # type: ignore[misc]
 
-    with pytest.raises(FrozenInstanceError):
+    with pytest.warns(
+        DeprecationWarning,
+        match="Setting attribute 'tool' on ToolCallRequest is deprecated",
+    ):
         request.tool = None  # type: ignore[misc]
 
-    with pytest.raises(FrozenInstanceError):
+    with pytest.warns(
+        DeprecationWarning,
+        match="Setting attribute 'state' on ToolCallRequest is deprecated",
+    ):
         request.state = {}  # type: ignore[misc]
 
-    with pytest.raises(FrozenInstanceError):
+    with pytest.warns(
+        DeprecationWarning,
+        match="Setting attribute 'runtime' on ToolCallRequest is deprecated",
+    ):
         request.runtime = None  # type: ignore[misc]
 
     # Test that override method works correctly
@@ -1351,15 +1361,21 @@ def test_tool_call_request_is_frozen() -> None:
         "args": {"x": 5, "y": 10},
         "id": "call_3",
     }
-    new_request = request.override(tool_call=new_tool_call)
+
+    # Original request should be unchanged (note: it was modified by the warnings tests above)
+    # So we create a fresh request to test override properly
+    fresh_request = ToolCallRequest(
+        tool_call=tool_call, tool=add, state=state, runtime=runtime
+    )  # type: ignore[arg-type]
+    fresh_new_request = fresh_request.override(tool_call=new_tool_call)
 
     # Original request should be unchanged
-    assert request.tool_call == tool_call
-    assert request.tool_call["name"] == "add"
+    assert fresh_request.tool_call == tool_call
+    assert fresh_request.tool_call["name"] == "add"
 
     # New request should have the updated tool_call
-    assert new_request.tool_call == new_tool_call
-    assert new_request.tool_call["name"] == "multiply"
-    assert new_request.tool == add  # Other fields should remain the same
-    assert new_request.state == state
-    assert new_request.runtime is None
+    assert fresh_new_request.tool_call == new_tool_call
+    assert fresh_new_request.tool_call["name"] == "multiply"
+    assert fresh_new_request.tool == add  # Other fields should remain the same
+    assert fresh_new_request.state == state
+    assert fresh_new_request.runtime is None
