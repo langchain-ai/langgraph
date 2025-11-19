@@ -123,7 +123,7 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
     tool_call: ToolCall
 
 
-@dataclass
+@dataclass(frozen=True)
 class ToolCallRequest:
     """Tool execution request passed to tool call interceptors.
 
@@ -202,8 +202,9 @@ Examples:
 
     ```python
     def handler(request, execute):
-        request.tool_call["args"]["value"] *= 2
-        return execute(request)
+        modified_call = {**request.tool_call, "args": {**request.tool_call["args"], "value": request.tool_call["args"]["value"] * 2}}
+        modified_request = request.override(tool_call=modified_call)
+        return execute(modified_request)
     ```
 
     Retry on error (execute multiple times):
