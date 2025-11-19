@@ -150,7 +150,7 @@ class ToolCallRequest:
         import warnings
 
         # Allow setting attributes during initialization
-        if not hasattr(self, "__dict__") or name not in self.__dict__:
+        if not hasattr(self, "__dataclass_fields__"):
             object.__setattr__(self, name, value)
         else:
             warnings.warn(
