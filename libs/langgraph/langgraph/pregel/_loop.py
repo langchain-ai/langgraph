@@ -938,7 +938,7 @@ class PregelLoop:
                     self._emit("updates", lambda: iter(interrupts))
                 if "values" in stream_modes:
                     current_values = read_channels(self.channels, self.output_keys)
-                    # self.output_keys is a sequence, stream chunk conntains entire state and interrupts
+                    # self.output_keys is a sequence, stream chunk contains entire state and interrupts
                     if isinstance(current_values, dict):
                         current_values[INTERRUPT] = interrupts[0][INTERRUPT]
                         self._emit("values", lambda: iter([current_values]))
