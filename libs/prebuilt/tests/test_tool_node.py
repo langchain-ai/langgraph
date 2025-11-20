@@ -1676,11 +1676,7 @@ def test_tool_call_request_setattr_deprecation_warning():
 
 
 async def test_tool_node_inject_async_all_types_signature_only() -> None:
-    """Test all injection types (state whole/field, store, runtime) in one async tool.
-
-    This test uses plain function signatures without @tool decorator.
-    """
-    # Setup store with test data
+    """Test all injection types without @tool decorator."""
     store = InMemoryStore()
     namespace = ("test",)
     store.put(namespace, "test_key", {"store_data": "from_store"})
@@ -1690,29 +1686,17 @@ async def test_tool_node_inject_async_all_types_signature_only() -> None:
         foo: str
         bar: int
 
-    # Define async tool that uses all injection types
     async def comprehensive_async_tool(
         x: int,
-        # Inject whole state
         whole_state: Annotated[TestState, InjectedState],
-        # Inject specific state field
         foo_field: Annotated[str, InjectedState("foo")],
-        # Inject store
         store: Annotated[BaseStore, InjectedStore()],
-        # Inject runtime
         runtime: ToolRuntime,
     ) -> str:
         """Async tool that uses all injection types."""
-        # Access whole state
         bar_from_whole = whole_state["bar"]
-
-        # Access state field
         foo_value = foo_field
-
-        # Access store
         store_val = store.get(namespace, "test_key").value["store_data"]
-
-        # Access runtime (which also has state)
         foo_from_runtime = runtime.state["foo"]
         tool_call_id = runtime.tool_call_id
 
@@ -1725,7 +1709,6 @@ async def test_tool_node_inject_async_all_types_signature_only() -> None:
             f"tool_call_id={tool_call_id}"
         )
 
-    # Create tool node and invoke
     node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
     tool_call = {
         "name": "comprehensive_async_tool",
@@ -1752,11 +1735,7 @@ async def test_tool_node_inject_async_all_types_signature_only() -> None:
 
 
 async def test_tool_node_inject_async_all_types_with_decorator() -> None:
-    """Test all injection types with @tool decorator (signature not in schema).
-
-    The @tool decorator automatically excludes injected args from the schema.
-    """
-    # Setup store with test data
+    """Test all injection types with @tool decorator."""
     store = InMemoryStore()
     namespace = ("test",)
     store.put(namespace, "test_key", {"store_data": "from_store"})
@@ -1766,30 +1745,18 @@ async def test_tool_node_inject_async_all_types_with_decorator() -> None:
         foo: str
         bar: int
 
-    # Define async tool with @dec_tool decorator that uses all injection types
     @dec_tool
     async def comprehensive_async_tool(
         x: int,
-        # Inject whole state
         whole_state: Annotated[TestState, InjectedState],
-        # Inject specific state field
         foo_field: Annotated[str, InjectedState("foo")],
-        # Inject store
         store: Annotated[BaseStore, InjectedStore()],
-        # Inject runtime
         runtime: ToolRuntime,
     ) -> str:
         """Async tool that uses all injection types."""
-        # Access whole state
         bar_from_whole = whole_state["bar"]
-
-        # Access state field
         foo_value = foo_field
-
-        # Access store
         store_val = store.get(namespace, "test_key").value["store_data"]
-
-        # Access runtime (which also has state)
         foo_from_runtime = runtime.state["foo"]
         tool_call_id = runtime.tool_call_id
 
@@ -1802,7 +1769,6 @@ async def test_tool_node_inject_async_all_types_with_decorator() -> None:
             f"tool_call_id={tool_call_id}"
         )
 
-    # Create tool node and invoke
     node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
     tool_call = {
         "name": "comprehensive_async_tool",
@@ -1829,11 +1795,7 @@ async def test_tool_node_inject_async_all_types_with_decorator() -> None:
 
 
 async def test_tool_node_inject_async_all_types_with_schema() -> None:
-    """Test all injection types with explicit schema (signature and schema).
-
-    Injected args appear in both the function signature and the explicit schema.
-    """
-    # Setup store with test data
+    """Test all injection types with explicit schema."""
     store = InMemoryStore()
     namespace = ("test",)
     store.put(namespace, "test_key", {"store_data": "from_store"})
@@ -1843,7 +1805,6 @@ async def test_tool_node_inject_async_all_types_with_schema() -> None:
         foo: str
         bar: int
 
-    # Define explicit schema with injected types
     class ComprehensiveToolSchema(BaseModel):
         model_config = {"arbitrary_types_allowed": True}
         x: int
@@ -1852,30 +1813,18 @@ async def test_tool_node_inject_async_all_types_with_schema() -> None:
         store: Annotated[BaseStore, InjectedStore()]
         runtime: ToolRuntime
 
-    # Define async tool with explicit schema
     @dec_tool(args_schema=ComprehensiveToolSchema)
     async def comprehensive_async_tool(
         x: int,
-        # Inject whole state
         whole_state: Annotated[TestState, InjectedState],
-        # Inject specific state field
         foo_field: Annotated[str, InjectedState("foo")],
-        # Inject store
         store: Annotated[BaseStore, InjectedStore()],
-        # Inject runtime
         runtime: ToolRuntime,
     ) -> str:
         """Async tool that uses all injection types."""
-        # Access whole state
         bar_from_whole = whole_state["bar"]
-
-        # Access state field
         foo_value = foo_field
-
-        # Access store
         store_val = store.get(namespace, "test_key").value["store_data"]
-
-        # Access runtime (which also has state)
         foo_from_runtime = runtime.state["foo"]
         tool_call_id = runtime.tool_call_id
 
@@ -1888,7 +1837,6 @@ async def test_tool_node_inject_async_all_types_with_schema() -> None:
             f"tool_call_id={tool_call_id}"
         )
 
-    # Create tool node and invoke
     node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
     tool_call = {
         "name": "comprehensive_async_tool",
