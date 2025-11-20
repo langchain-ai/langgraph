@@ -9196,6 +9196,7 @@ async def test_astream_waiter_cleanup_on_cancel(
     assert all(t.done() for t in recorded_tasks)
 
 
+@NEEDS_CONTEXTVARS
 async def test_interrupt_stream_mode_values(async_checkpointer: BaseCheckpointSaver):
     """Test that interrupts are surfaced on 'values' stream mode"""
 
