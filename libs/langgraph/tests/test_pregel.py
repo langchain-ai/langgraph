@@ -831,8 +831,9 @@ def test_invoke_checkpoint_two(
 
 
 def test_pending_writes_resume(
-    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+    sync_checkpointer: BaseCheckpointSaver
 ) -> None:
+    durability = "exit"
     class State(TypedDict):
         value: Annotated[int, operator.add]
 
@@ -1051,6 +1052,7 @@ def test_pending_writes_resume(
             )
         ),
     )
+    assert False
     if durability == "exit":
         return
     assert checkpoints[2] == CheckpointTuple(
@@ -8426,19 +8428,34 @@ def test_interrupt_stream_mode_values():
     """Test that interrupts are surfaced when steam_mode='values'"""
 
     class State(TypedDict):
+        robot_input: str
         human_input: str
+
+    def robot_input_node(state: State) -> State:
+        return {"robot_input": "beep boop i am a robot"}
 
     def human_input_node(state: State) -> Command:
         human_input = interrupt("interrupt")
         return Command(update={"human_input": human_input})
 
     builder = StateGraph(State)
+    builder.add_node(robot_input_node)
     builder.add_node(human_input_node)
-    builder.add_edge(START, "human_input_node")
+    builder.add_edge(START, "robot_input_node")
+    builder.add_edge("robot_input_node", "human_input_node")
     app = builder.compile()
 
-    result = [*app.stream(State(), stream_mode="values")]
-    assert "__interrupt__" in result[-1]
+    result = [*app.stream(State(), stream_mode=["updates", "values"])]
+    print("PY_DEBUG: result", result)
+    assert len(result) == 4
+   
+
+    assert result = [
+        ('updates', {'robot_input_node': {'robot_input': 'beep boop i am a robot'}}), 
+        ('values', {'robot_input': 'beep boop i am a robot'}), 
+        ('updates', {'__interrupt__': (Interrupt(value='interrupt', id=AnyStr()),)}), 
+        ('values', {'robot_input': 'beep boop i am a robot', '__interrupt__': (Interrupt(value='interrupt', id=AnyStr()),)})]
+    assert result[1] == {"robot_input": "beep boop i am a robot", "__interrupt__": (Interrupt(value="interrupt", id=AnyStr()),)}
 
 
 def test_supersteps_populate_task_results(
