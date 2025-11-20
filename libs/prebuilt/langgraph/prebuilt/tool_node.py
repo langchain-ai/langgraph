@@ -1800,7 +1800,7 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
     func = getattr(tool, "func", None) or getattr(tool, "coroutine", None)
     func_annotations = get_type_hints(func, include_extras=True) if func else {}
 
-    # Combine both annotation sources, prefering schema annotations
+    # Combine both annotation sources, preferring schema annotations
     # In the future, we might want to add more restrictions here...
     all_annotations = {**func_annotations, **schema_annotations}
 
