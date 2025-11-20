@@ -514,18 +514,22 @@ def _filter_validation_errors(
 
     Args:
         validation_error: The Pydantic ValidationError raised during tool invocation.
-        injected_args: The _InjectedArgs structure containing all injected arguments.
+        injected_args: The _InjectedArgs structure containing all injected arguments,
+            or None if there are no injected arguments.
 
     Returns:
         List of ErrorDetails containing only errors for LLM-controlled arguments,
         with system-injected argument values removed from the input field.
     """
     # Collect all injected argument names
-    injected_arg_names = set(injected_args.state.keys())
-    if injected_args.store:
-        injected_arg_names.add(injected_args.store)
-    if injected_args.runtime:
-        injected_arg_names.add(injected_args.runtime)
+    injected_arg_names: set[str] = set()
+    if injected_args:
+        if injected_args.state:
+            injected_arg_names.update(injected_args.state.keys())
+        if injected_args.store:
+            injected_arg_names.add(injected_args.store)
+        if injected_args.runtime:
+            injected_arg_names.add(injected_args.runtime)
 
     filtered_errors: list[ErrorDetails] = []
     for error in validation_error.errors():
@@ -878,10 +882,7 @@ class ToolNode(RunnableCallable):
             except ValidationError as exc:
                 # Filter out errors for injected arguments
                 injected = self._injected_args.get(call["name"])
-                if injected:
-                    filtered_errors = _filter_validation_errors(exc, injected)
-                else:
-                    filtered_errors = list(exc.errors())
+                filtered_errors = _filter_validation_errors(exc, injected)
                 # Use original call["args"] without injected values for error reporting
                 raise ToolInvocationError(
                     call["name"], exc, call["args"], filtered_errors
@@ -1034,10 +1035,7 @@ class ToolNode(RunnableCallable):
             except ValidationError as exc:
                 # Filter out errors for injected arguments
                 injected = self._injected_args.get(call["name"])
-                if injected:
-                    filtered_errors = _filter_validation_errors(exc, injected)
-                else:
-                    filtered_errors = list(exc.errors())
+                filtered_errors = _filter_validation_errors(exc, injected)
                 # Use original call["args"] without injected values for error reporting
                 raise ToolInvocationError(
                     call["name"], exc, call["args"], filtered_errors
