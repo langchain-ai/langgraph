@@ -766,6 +766,7 @@ class PregelLoop:
             ]
             self.checkpoint["channel_values"][TASKS] = sanitized_tasks
         # bail if no checkpointer
+
         if do_checkpoint and self._checkpointer_put_after_previous is not None:
             self.prev_checkpoint_config = (
                 self.checkpoint_config
@@ -935,8 +936,15 @@ class PregelLoop:
                 stream_modes = self.stream.modes if self.stream else []
                 if "updates" in stream_modes:
                     self._emit("updates", lambda: iter(interrupts))
-                elif "values" in stream_modes:
-                    self._emit("values", lambda: iter(interrupts))
+                if "values" in stream_modes:
+                    current_values = read_channels(self.channels, self.output_keys)
+                    # self.output_keys is a sequence, stream chunk contains entire state and interrupts
+                    if isinstance(current_values, dict):
+                        current_values[INTERRUPT] = interrupts[0][INTERRUPT]
+                        self._emit("values", lambda: iter([current_values]))
+                    # self.output_keys is a string, stream chunk contains only interrupts
+                    else:
+                        self._emit("values", lambda: iter(interrupts))
             elif writes[0][0] != ERROR:
                 self._emit(
                     "updates",
