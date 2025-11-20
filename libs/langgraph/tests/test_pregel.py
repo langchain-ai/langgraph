@@ -1051,7 +1051,6 @@ def test_pending_writes_resume(sync_checkpointer: BaseCheckpointSaver) -> None:
             )
         ),
     )
-    assert False
     if durability == "exit":
         return
     assert checkpoints[2] == CheckpointTuple(
