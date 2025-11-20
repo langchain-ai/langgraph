@@ -830,9 +830,9 @@ def test_invoke_checkpoint_two(
     assert checkpoint["channel_values"].get("total") == 5
 
 
-def test_pending_writes_resume(sync_checkpointer: BaseCheckpointSaver) -> None:
-    durability = "exit"
-
+def test_pending_writes_resume(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
     class State(TypedDict):
         value: Annotated[int, operator.add]
 
