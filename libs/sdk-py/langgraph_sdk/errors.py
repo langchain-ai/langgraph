@@ -84,11 +84,17 @@ class APIStatusError(APIError):
         self.request_id = response.headers.get("x-request-id")
 
 
-class APIConnectionError(APIError):
+class APIConnectionError(httpx.RequestError, LangGraphError):
+    message: str
+    request: httpx.Request
+
     def __init__(
         self, *, message: str = "Connection error.", request: httpx.Request
     ) -> None:
-        super().__init__(message, request, body=None)
+        httpx.RequestError.__init__(self, message, request=request)
+        LangGraphError.__init__(self)
+        self.message = message
+        self.request = request
 
 
 class APITimeoutError(APIConnectionError):
