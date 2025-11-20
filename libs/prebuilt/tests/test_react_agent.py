@@ -638,8 +638,9 @@ def test_react_agent_parallel_tool_calls(
     for event in agent.stream(
         {"messages": [("user", query)]}, config, stream_mode="values"
     ):
-        if messages := event.get("messages"):
-            message_types.append([m.type for m in messages])
+        if "__interrupt__" not in event: 
+            if messages := event.get("messages"):
+                message_types.append([m.type for m in messages])
 
     if version == "v1":
         assert message_types == [
