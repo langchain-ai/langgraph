@@ -557,14 +557,49 @@ def _filter_validation_errors(
 class _InjectedArgs:
     """Internal structure for tracking injected arguments for a tool.
 
-    This is built once during ToolNode initialization by analyzing the tool's
-    signature and args schema, then used during execution for efficient injection.
+    This data structure is built once during ToolNode initialization by analyzing
+    the tool's signature and args schema, then reused during execution for efficient
+    injection without repeated reflection.
+
+    The structure maps from tool parameter names to their injection sources, enabling
+    the ToolNode to know exactly which arguments need to be injected and where to
+    get their values from.
 
     Attributes:
-        state: Mapping of tool arg names to state field names.
-            Value is str (state field name) or None (entire state).
-        store: Name of the store argument, if any.
-        runtime: Name of the runtime argument, if any.
+        state: Mapping from tool parameter names to state field names for injection.
+            Keys are tool parameter names, values are either:
+            - str: Name of the state field to extract and inject
+            - None: Inject the entire state object
+            Empty dict if no state injection is needed.
+        store: Name of the tool parameter where the store should be injected,
+            or None if no store injection is needed.
+        runtime: Name of the tool parameter where the runtime should be injected,
+            or None if no runtime injection is needed.
+
+    Example:
+        For a tool with signature:
+        ```python
+        def my_tool(
+            x: int,
+            messages: Annotated[list, InjectedState("messages")],
+            full_state: Annotated[dict, InjectedState()],
+            store: Annotated[BaseStore, InjectedStore()],
+            runtime: ToolRuntime,
+        ) -> str:
+            ...
+        ```
+
+        The resulting `_InjectedArgs` would be:
+        ```python
+        _InjectedArgs(
+            state={
+                "messages": "messages",  # Extract state["messages"]
+                "full_state": None,      # Inject entire state
+            },
+            store="store",               # Inject into "store" parameter
+            runtime="runtime",           # Inject into "runtime" parameter
+        )
+        ```
     """
 
     state: dict[str, str | None]
@@ -1763,9 +1798,10 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
     schema_annotations = get_all_basemodel_annotations(full_schema)
 
     func = getattr(tool, "func", None) or getattr(tool, "coroutine", None)
-    func_annotations = getattr(func, "__annotations__", {}) if func else {}
+    func_annotations = get_type_hints(func, include_extras=True) if func else {}
 
-    # Combine both annotation sources
+    # Combine both annotation sources, prefering schema annotations
+    # In the future, we might want to add more restrictions here...
     all_annotations = {**func_annotations, **schema_annotations}
 
     # Track injected args
