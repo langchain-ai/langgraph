@@ -9196,6 +9196,63 @@ async def test_astream_waiter_cleanup_on_cancel(
     assert all(t.done() for t in recorded_tasks)
 
 
+async def test_interrupt_stream_mode_values(async_checkpointer: BaseCheckpointSaver):
+    """Test that interrupts are surfaced on 'values' stream mode"""
+
+    class State(TypedDict):
+        robot_input: str
+        human_input: str
+
+    def robot_input_node(state: State) -> State:
+        return {"robot_input": "beep boop i am a robot"}
+
+    def human_input_node(state: State) -> Command:
+        human_input = interrupt("interrupt")
+        return Command(update={"human_input": human_input})
+
+    builder = StateGraph(State)
+    builder.add_node(robot_input_node)
+    builder.add_node(human_input_node)
+    builder.add_edge(START, "robot_input_node")
+    builder.add_edge("robot_input_node", "human_input_node")
+    app = builder.compile(checkpointer=async_checkpointer)
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+    result = [
+        (mode, e)
+        async for mode, e in app.astream(
+            State(), config, stream_mode=["updates", "values"]
+        )
+    ]
+    assert len(result) == 4
+    assert result == [
+        ("updates", {"robot_input_node": {"robot_input": "beep boop i am a robot"}}),
+        ("values", {"robot_input": "beep boop i am a robot"}),
+        ("updates", {"__interrupt__": (Interrupt(value="interrupt", id=AnyStr()),)}),
+        (
+            "values",
+            {
+                "robot_input": "beep boop i am a robot",
+                "__interrupt__": (Interrupt(value="interrupt", id=AnyStr()),),
+            },
+        ),
+    ]
+    resume_result = [
+        (mode, e)
+        async for mode, e in app.astream(
+            Command(resume="i am a human"), config, stream_mode=["updates", "values"]
+        )
+    ]
+    assert resume_result == [
+        ("values", {"robot_input": "beep boop i am a robot"}),
+        ("updates", {"human_input_node": {"human_input": "i am a human"}}),
+        (
+            "values",
+            {"robot_input": "beep boop i am a robot", "human_input": "i am a human"},
+        ),
+    ]
+
+
 async def test_supersteps_populate_task_results(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
