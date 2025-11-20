@@ -42,6 +42,7 @@ from langgraph.prebuilt import (
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     ToolInvocationError,
+    ToolRuntime,
     tools_condition,
 )
 
@@ -1672,3 +1673,242 @@ def test_tool_call_request_setattr_deprecation_warning():
         )
         # Verify no warning was raised during initialization
         assert len(w) == 0
+
+
+async def test_tool_node_inject_async_all_types_signature_only() -> None:
+    """Test all injection types (state whole/field, store, runtime) in one async tool.
+
+    This test uses plain function signatures without @tool decorator.
+    """
+    # Setup store with test data
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"store_data": "from_store"})
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    # Define async tool that uses all injection types
+    async def comprehensive_async_tool(
+        x: int,
+        # Inject whole state
+        whole_state: Annotated[TestState, InjectedState],
+        # Inject specific state field
+        foo_field: Annotated[str, InjectedState("foo")],
+        # Inject store
+        store: Annotated[BaseStore, InjectedStore()],
+        # Inject runtime
+        runtime: ToolRuntime,
+    ) -> str:
+        """Async tool that uses all injection types."""
+        # Access whole state
+        bar_from_whole = whole_state["bar"]
+
+        # Access state field
+        foo_value = foo_field
+
+        # Access store
+        store_val = store.get(namespace, "test_key").value["store_data"]
+
+        # Access runtime (which also has state)
+        foo_from_runtime = runtime.state["foo"]
+        tool_call_id = runtime.tool_call_id
+
+        return (
+            f"x={x}, "
+            f"bar_from_whole={bar_from_whole}, "
+            f"foo_field={foo_value}, "
+            f"store={store_val}, "
+            f"foo_from_runtime={foo_from_runtime}, "
+            f"tool_call_id={tool_call_id}"
+        )
+
+    # Create tool node and invoke
+    node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
+    tool_call = {
+        "name": "comprehensive_async_tool",
+        "args": {"x": 42},
+        "id": "test_call_123",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime(store=store)
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "foo_value", "bar": 99}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == (
+        "x=42, "
+        "bar_from_whole=99, "
+        "foo_field=foo_value, "
+        "store=from_store, "
+        "foo_from_runtime=foo_value, "
+        "tool_call_id=test_call_123"
+    )
+
+
+async def test_tool_node_inject_async_all_types_with_decorator() -> None:
+    """Test all injection types with @tool decorator (signature not in schema).
+
+    The @tool decorator automatically excludes injected args from the schema.
+    """
+    # Setup store with test data
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"store_data": "from_store"})
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    # Define async tool with @dec_tool decorator that uses all injection types
+    @dec_tool
+    async def comprehensive_async_tool(
+        x: int,
+        # Inject whole state
+        whole_state: Annotated[TestState, InjectedState],
+        # Inject specific state field
+        foo_field: Annotated[str, InjectedState("foo")],
+        # Inject store
+        store: Annotated[BaseStore, InjectedStore()],
+        # Inject runtime
+        runtime: ToolRuntime,
+    ) -> str:
+        """Async tool that uses all injection types."""
+        # Access whole state
+        bar_from_whole = whole_state["bar"]
+
+        # Access state field
+        foo_value = foo_field
+
+        # Access store
+        store_val = store.get(namespace, "test_key").value["store_data"]
+
+        # Access runtime (which also has state)
+        foo_from_runtime = runtime.state["foo"]
+        tool_call_id = runtime.tool_call_id
+
+        return (
+            f"x={x}, "
+            f"bar_from_whole={bar_from_whole}, "
+            f"foo_field={foo_value}, "
+            f"store={store_val}, "
+            f"foo_from_runtime={foo_from_runtime}, "
+            f"tool_call_id={tool_call_id}"
+        )
+
+    # Create tool node and invoke
+    node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
+    tool_call = {
+        "name": "comprehensive_async_tool",
+        "args": {"x": 42},
+        "id": "test_call_456",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime(store=store)
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "foo_value", "bar": 99}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == (
+        "x=42, "
+        "bar_from_whole=99, "
+        "foo_field=foo_value, "
+        "store=from_store, "
+        "foo_from_runtime=foo_value, "
+        "tool_call_id=test_call_456"
+    )
+
+
+async def test_tool_node_inject_async_all_types_with_schema() -> None:
+    """Test all injection types with explicit schema (signature and schema).
+
+    Injected args appear in both the function signature and the explicit schema.
+    """
+    # Setup store with test data
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"store_data": "from_store"})
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    # Define explicit schema with injected types
+    class ComprehensiveToolSchema(BaseModel):
+        model_config = {"arbitrary_types_allowed": True}
+        x: int
+        whole_state: Annotated[TestState, InjectedState]
+        foo_field: Annotated[str, InjectedState("foo")]
+        store: Annotated[BaseStore, InjectedStore()]
+        runtime: ToolRuntime
+
+    # Define async tool with explicit schema
+    @dec_tool(args_schema=ComprehensiveToolSchema)
+    async def comprehensive_async_tool(
+        x: int,
+        # Inject whole state
+        whole_state: Annotated[TestState, InjectedState],
+        # Inject specific state field
+        foo_field: Annotated[str, InjectedState("foo")],
+        # Inject store
+        store: Annotated[BaseStore, InjectedStore()],
+        # Inject runtime
+        runtime: ToolRuntime,
+    ) -> str:
+        """Async tool that uses all injection types."""
+        # Access whole state
+        bar_from_whole = whole_state["bar"]
+
+        # Access state field
+        foo_value = foo_field
+
+        # Access store
+        store_val = store.get(namespace, "test_key").value["store_data"]
+
+        # Access runtime (which also has state)
+        foo_from_runtime = runtime.state["foo"]
+        tool_call_id = runtime.tool_call_id
+
+        return (
+            f"x={x}, "
+            f"bar_from_whole={bar_from_whole}, "
+            f"foo_field={foo_value}, "
+            f"store={store_val}, "
+            f"foo_from_runtime={foo_from_runtime}, "
+            f"tool_call_id={tool_call_id}"
+        )
+
+    # Create tool node and invoke
+    node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
+    tool_call = {
+        "name": "comprehensive_async_tool",
+        "args": {"x": 42},
+        "id": "test_call_789",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime(store=store)
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "foo_value", "bar": 99}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == (
+        "x=42, "
+        "bar_from_whole=99, "
+        "foo_field=foo_value, "
+        "store=from_store, "
+        "foo_from_runtime=foo_value, "
+        "tool_call_id=test_call_789"
+    )
