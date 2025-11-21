@@ -570,6 +570,7 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "mypy" },
+    { name = "mypy", specifier = ">=1.18.2" },
     { name = "pydantic", specifier = ">=2.12.4" },
     { name = "pytest" },
     { name = "pytest-asyncio" },

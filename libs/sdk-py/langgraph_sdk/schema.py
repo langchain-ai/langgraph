@@ -148,8 +148,6 @@ SortOrder = Literal["asc", "desc"]
 The order to sort by.
 """
 
-Context: TypeAlias = dict[str, Any]
-
 
 class Config(TypedDict, total=False):
     """Configuration options for a call."""
@@ -609,11 +607,8 @@ _JSONMap: TypeAlias = Mapping[
     str, Union[_JSONLike, list[_JSONLike], "_JSONMap", list["_JSONMap"]]
 ]
 
-InputLike: TypeAlias = (
+Input: TypeAlias = (
     _TypedDictLikeV1 | _TypedDictLikeV2 | _DataclassLike | _BaseModelLike | _JSONMap
 )
-"""Type alias for input-like types.
 
-It can either be a `TypedDict`, `dataclass`, or Pydantic `BaseModel`.
-Note: we cannot use either `TypedDict` or `dataclass` directly due to limitations in type checking.
-"""
+Context: TypeAlias = Input

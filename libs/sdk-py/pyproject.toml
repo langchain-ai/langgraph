@@ -28,6 +28,7 @@ lint = ["ruff", "codespell", "mypy"]
 dev = [
   { include-group = "test" },
   { include-group = "lint" },
+  "mypy>=1.18.2",
   "pydantic>=2.12.4",
 ]
 
