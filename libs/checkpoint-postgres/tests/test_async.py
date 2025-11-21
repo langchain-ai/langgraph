@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 from uuid import uuid4
 
+import asyncpg
 import pytest
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -22,6 +23,7 @@ from langgraph.checkpoint.postgres.aio import (
     AsyncPostgresSaver,
     AsyncShallowPostgresSaver,
 )
+from langgraph.checkpoint.postgres_asyncpg import AsyncPgPostgresSaver
 from tests.conftest import DEFAULT_POSTGRES_URI
 
 
@@ -83,6 +85,34 @@ async def _pipe_saver():
             DEFAULT_POSTGRES_URI, autocommit=True
         ) as conn:
             await conn.execute(f"DROP DATABASE {database}")
+
+
+@asynccontextmanager
+async def _asyncpg_base_saver():
+    """Fixture for asyncpg regular connection mode testing."""
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    conn = await asyncpg.connect(DEFAULT_POSTGRES_URI)
+    try:
+        await conn.execute(f"CREATE DATABASE {database}")
+    finally:
+        await conn.close()
+
+    try:
+        conn = await asyncpg.connect(DEFAULT_POSTGRES_URI + database)
+        try:
+            checkpointer = AsyncPgPostgresSaver(conn)
+            await checkpointer.setup()
+            yield checkpointer
+        finally:
+            await conn.close()
+    finally:
+        # drop unique db
+        conn = await asyncpg.connect(DEFAULT_POSTGRES_URI)
+        try:
+            await conn.execute(f"DROP DATABASE {database}")
+        finally:
+            await conn.close()
 
 
 @asynccontextmanager
@@ -150,6 +180,9 @@ async def _saver(name: str):
     elif name == "pool":
         async with _pool_saver() as saver:
             yield saver
+    elif name == "asyncpg_base":
+        async with _asyncpg_base_saver() as saver:
+            yield saver
     elif name == "pipe":
         async with _pipe_saver() as saver:
             yield saver
@@ -203,7 +236,9 @@ def test_data():
     }
 
 
-@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+@pytest.mark.parametrize(
+    "saver_name", ["base", "pool", "pipe", "shallow", "asyncpg_base"]
+)
 async def test_combined_metadata(saver_name: str, test_data) -> None:
     async with _saver(saver_name) as saver:
         config = {
@@ -228,7 +263,50 @@ async def test_combined_metadata(saver_name: str, test_data) -> None:
         }
 
 
-@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+@pytest.mark.parametrize(
+    "saver_name", ["base", "pool", "pipe", "shallow", "asyncpg_base"]
+)
+async def test_aput_with_new_versions(saver_name: str) -> None:
+    """Test aput method with new_versions containing blob values."""
+    async with _saver(saver_name) as saver:
+        config = {
+            "configurable": {
+                "thread_id": "thread-with-blobs",
+                "checkpoint_ns": "",
+            }
+        }
+
+        checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+
+        metadata: CheckpointMetadata = {
+            "source": "test",
+            "step": 1,
+        }
+
+        new_versions = {
+            "simple_channel": "v1",
+            "complex_channel": "v1",
+            "number_channel": "v1",
+            "list_channel": "v1",
+        }
+        checkpoint["channel_values"] = {
+            "simple_channel": "simple_string_value",
+            "complex_channel": {"nested": "object", "data": [1, 2, 3]},
+            "number_channel": 42,
+            "list_channel": [1, 2, 3],
+        }
+
+        next_config = await saver.aput(config, checkpoint, metadata, new_versions)
+
+        assert next_config["configurable"]["thread_id"] == "thread-with-blobs"
+        assert next_config["configurable"]["checkpoint_id"] == checkpoint["id"]
+        retrieved = await saver.aget_tuple(next_config)
+        assert retrieved is not None
+
+
+@pytest.mark.parametrize(
+    "saver_name", ["base", "pool", "pipe", "shallow", "asyncpg_base"]
+)
 async def test_asearch(saver_name: str, test_data) -> None:
     async with _saver(saver_name) as saver:
         configs = test_data["configs"]
@@ -278,7 +356,9 @@ async def test_asearch(saver_name: str, test_data) -> None:
         } == {"", "inner"}
 
 
-@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+@pytest.mark.parametrize(
+    "saver_name", ["base", "pool", "pipe", "shallow", "asyncpg_base"]
+)
 async def test_null_chars(saver_name: str, test_data) -> None:
     async with _saver(saver_name) as saver:
         config = await saver.aput(
@@ -293,7 +373,7 @@ async def test_null_chars(saver_name: str, test_data) -> None:
         ].metadata["my_key"] == "abc"
 
 
-@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "asyncpg_base"])
 async def test_pending_sends_migration(saver_name: str) -> None:
     async with _saver(saver_name) as saver:
         config = {
@@ -342,7 +422,7 @@ async def test_pending_sends_migration(saver_name: str) -> None:
         assert TASKS in search_results[0].checkpoint["channel_versions"]
 
 
-@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "asyncpg_base"])
 async def test_get_checkpoint_no_channel_values(
     monkeypatch, saver_name: str, test_data
 ) -> None:
