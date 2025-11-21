@@ -93,10 +93,12 @@ client.runs.stream(None, "agent", input=MyObject("test"))
         result = mypy.api.run(["-c", s, "--strict"])
         if expect_fail:
             assert result[2] != 0, (
-                f"Expected mypy to find errors but it passed: {result[0]} {result[1]}"
+                f"Expected mypy to find errors but it passed: {result[0]} {result[1]} (exit code: {result[2]})"
             )
         else:
-            assert result[2] == 0, f"Mypy found errors: {result[0]} {result[1]}"
+            assert result[2] == 0, (
+                f"Mypy found errors: {result[0]} {result[1]} (exit code: {result[2]})"
+            )
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = []
