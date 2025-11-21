@@ -76,6 +76,7 @@ from langgraph.types import (
     CachePolicy,
     Checkpointer,
     Command,
+    Goto,
     RetryPolicy,
     Send,
 )
@@ -1260,12 +1261,68 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
         if command.graph == Command.PARENT:
             raise ParentCommand(command)
 
-        goto_targets = (
-            [command.goto] if isinstance(command.goto, (Send, str)) else command.goto
-        )
+        # Check if any Goto targets a different graph (cross-graph navigation)
+        has_cross_graph_goto = False
+        if isinstance(command.goto, Goto):
+            if command.goto.graph is not None:
+                # Cross-graph Goto - this will be handled via ParentCommand
+                has_cross_graph_goto = True
+        elif isinstance(command.goto, (list, tuple)):
+            for go in command.goto:
+                if isinstance(go, Goto) and go.graph is not None:
+                    has_cross_graph_goto = True
+                    break
+
+        # If there's a cross-graph Goto, create a new Command and raise ParentCommand
+        if has_cross_graph_goto:
+            # Extract the cross-graph Goto(s)
+            gotos = []
+            target_graph = None
+
+            if isinstance(command.goto, Goto):
+                if command.goto.graph is not None:
+                    gotos = [command.goto]
+                    target_graph = command.goto.graph
+            elif isinstance(command.goto, (list, tuple)):
+                for go in command.goto:
+                    if isinstance(go, Goto) and go.graph is not None:
+                        gotos.append(go)
+                        if target_graph is None:
+                            target_graph = go.graph
+
+            # For cross-graph navigation, create a new Command with ONLY the cross-graph info
+            # The local updates (command.update) are applied separately by _get_updates            if gotos:
+                # Create a new Command with the Goto's update and node
+                cross_graph_cmd = Command(
+                    graph=target_graph,
+                    update=gotos[0].update if gotos and gotos[0].update else None,
+                    goto=gotos[0].node if gotos and gotos[0].node else None,
+                )
+                raise ParentCommand(cross_graph_cmd)
+
+        # Handle same-graph goto
+        if isinstance(command.goto, Goto):
+            # Same-graph Goto (graph is None)
+            goto_targets = [command.goto]
+        elif isinstance(command.goto, (Send, str)):
+            goto_targets = [command.goto]
+        else:
+            goto_targets = command.goto
 
         for go in goto_targets:
-            if isinstance(go, Send):
+            if isinstance(go, Goto):
+                # Same-graph Goto - extract the node targets
+                if go.node:
+                    if isinstance(go.node, (tuple, list)):
+                        nodes = go.node
+                    else:
+                        nodes = [go.node]
+                    for node in nodes:
+                        if isinstance(node, Send):
+                            rtn.append((TASKS, node))
+                        elif isinstance(node, str) and node != END:
+                            rtn.append((_CHANNEL_BRANCH_TO.format(node), None))
+            elif isinstance(go, Send):
                 rtn.append((TASKS, go))
             elif isinstance(go, str) and go != END:
                 # END is a special case, it's not actually a node in a practical sense
