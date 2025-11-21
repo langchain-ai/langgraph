@@ -4,6 +4,7 @@ import inspect
 import logging
 import typing
 import warnings
+import numpy as np
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
 from functools import partial
@@ -15,6 +16,7 @@ from typing import (
     Generic,
     Literal,
     Union,
+    Optional,
     cast,
     get_args,
     get_origin,
@@ -564,7 +566,261 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         return self
 
-    def add_edge(self, start_key: str | list[str], end_key: str) -> Self:
+    @overload
+    def add_negative_node(
+        self,
+        node: str,
+        action: StateNode[NodeInputT, ContextT],
+        *,
+        defer: bool = False,
+        metadata: dict[str, Any] | None = None,
+        input_schema: None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        cache_policy: CachePolicy | None = None,
+        destinations: dict[str, str] | tuple[str, ...] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> Self:
+        """Add a new negative node to the `StateGraph`, input schema is inferred as the state schema."""
+        ...
+
+    @overload
+    def add_negative_node(
+        self,
+        node: str | StateNode[NodeInputT, ContextT],
+        action: StateNode[NodeInputT, ContextT] | None = None,
+        *,
+        defer: bool = False,
+        metadata: dict[str, Any] | None = None,
+        input_schema: type[NodeInputT],
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        cache_policy: CachePolicy | None = None,
+        destinations: dict[str, str] | tuple[str, ...] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> Self:
+        """Add a new negative node to the `StateGraph`, input schema is specified."""
+        ...
+    
+    def add_negative_node(
+        self,
+        node: str | StateNode[NodeInputT, ContextT],
+        action: StateNode[NodeInputT, ContextT] | None = None,
+        *,
+        defer: bool = False,
+        metadata: dict[str, Any] | None = None,
+        input_schema: type[NodeInputT] | None = None,
+        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+        cache_policy: CachePolicy | None = None,
+        destinations: dict[str, str] | tuple[str, ...] | None = None,
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> Self:
+        """Add a new negative node to the `StateGraph`.
+
+        Args:
+            node: The function or runnable this node will run.
+                If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
+            action: The action associated with the node.
+                Will be used as the node function or runnable if `node` is a string (node name).
+            defer: Whether to defer the execution of the node until the run is about to end.
+            metadata: The metadata associated with the node.
+            input_schema: The input schema for the node. (default: the graph's state schema)
+            retry_policy: The retry policy for the node.
+                If a sequence is provided, the first matching policy will be applied.
+            cache_policy: The cache policy for the node.
+            destinations: Destinations that indicate where a node can route to.
+                This is useful for edgeless graphs with nodes that return `Command` objects.
+                If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+                If a `tuple` is provided, the values will be used as the target node names.
+
+                !!! note
+
+                    This is only used for graph rendering and doesn't have any effect on the graph execution.
+
+        Example:
+            ```python
+            from typing_extensions import TypedDict
+
+            from langchain_core.runnables import RunnableConfig
+            from langgraph.graph import START, StateGraph
+
+
+            class State(TypedDict):
+                x: int
+
+
+            def my_node(state: State, config: RunnableConfig) -> State:
+                return {"x": state["x"] + 1}
+
+
+            builder = StateGraph(State)
+            builder.add_negative_node(my_node)  # node name will be 'my_node'
+            builder.add_edge(START, "my_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
+            ```
+
+        Example: Customize the name:
+            ```python
+            builder = StateGraph(State)
+            builder.add_negative_node("my_fair_node", my_node)
+            builder.add_edge(START, "my_fair_node")
+            graph = builder.compile()
+            graph.invoke({"x": 1})
+            # {'x': 2}
+            ```
+
+        Returns:
+            Self: The instance of the `StateGraph`, allowing for method chaining.
+        """
+        if (retry := kwargs.get("retry", MISSING)) is not MISSING:
+            warnings.warn(
+                "`retry` is deprecated and will be removed. Please use `retry_policy` instead.",
+                category=LangGraphDeprecatedSinceV05,
+            )
+            if retry_policy is None:
+                retry_policy = retry  # type: ignore[assignment]
+
+        if (input_ := kwargs.get("input", MISSING)) is not MISSING:
+            warnings.warn(
+                "`input` is deprecated and will be removed. Please use `input_schema` instead.",
+                category=LangGraphDeprecatedSinceV05,
+            )
+            if input_schema is None:
+                input_schema = cast(type[NodeInputT] | None, input_)
+
+        if not isinstance(node, str):
+            action = node
+            if isinstance(action, Runnable):
+                node = action.get_name()
+            else:
+                node = getattr(action, "__name__", action.__class__.__name__)
+            if node is None:
+                raise ValueError(
+                    "Node name must be provided if action is not a function"
+                )
+        if self.compiled:
+            logger.warning(
+                "Adding a node to a graph that has already been compiled. This will "
+                "not be reflected in the compiled graph."
+            )
+        if not isinstance(node, str):
+            action = node
+            node = cast(str, getattr(action, "name", getattr(action, "__name__", None)))
+            if node is None:
+                raise ValueError(
+                    "Node name must be provided if action is not a function"
+                )
+        if action is None:
+            raise RuntimeError
+        if node in self.nodes:
+            raise ValueError(f"Node `{node}` already present.")
+        if node == END or node == START:
+            raise ValueError(f"Node `{node}` is reserved.")
+
+        for character in (NS_SEP, NS_END):
+            if character in node:
+                raise ValueError(
+                    f"'{character}' is a reserved character and is not allowed in the node names."
+                )
+
+        inferred_input_schema = None
+
+        ends: tuple[str, ...] | dict[str, str] = EMPTY_SEQ
+        try:
+            if (
+                isfunction(action)
+                or ismethod(action)
+                or ismethod(getattr(action, "__call__", None))
+            ) and (
+                hints := get_type_hints(getattr(action, "__call__"))
+                or get_type_hints(action)
+            ):
+                if input_schema is None:
+                    first_parameter_name = next(
+                        iter(
+                            inspect.signature(
+                                cast(FunctionType, action)
+                            ).parameters.keys()
+                        )
+                    )
+                    if input_hint := hints.get(first_parameter_name):
+                        if isinstance(input_hint, type) and get_type_hints(input_hint):
+                            inferred_input_schema = input_hint
+                if rtn := hints.get("return"):
+                    # Handle Union types
+                    rtn_origin = get_origin(rtn)
+                    if rtn_origin is Union:
+                        rtn_args = get_args(rtn)
+                        # Look for Command in the union
+                        for arg in rtn_args:
+                            arg_origin = get_origin(arg)
+                            if arg_origin is Command:
+                                rtn = arg
+                                rtn_origin = arg_origin
+                                break
+
+                    # Check if it's a Command type
+                    if (
+                        rtn_origin is Command
+                        and (rargs := get_args(rtn))
+                        and get_origin(rargs[0]) is Literal
+                        and (vals := get_args(rargs[0]))
+                    ):
+                        ends = vals
+        except (NameError, TypeError, StopIteration):
+            pass
+
+        if destinations is not None:
+            ends = destinations
+
+        if metadata is None:
+            metadata = {"__node_type_negative_langgraph__": True}
+        else:
+            metadata = {**metadata, "__node_type_negative_langgraph__": True}
+        
+        if input_schema is not None:
+            self.nodes[node] = StateNodeSpec[NodeInputT, ContextT](
+                coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
+                metadata,
+                input_schema=input_schema,
+                retry_policy=retry_policy,
+                cache_policy=cache_policy,
+                ends=ends,
+                defer=defer,
+            )
+        elif inferred_input_schema is not None:
+            self.nodes[node] = StateNodeSpec(
+                coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
+                metadata,
+                input_schema=inferred_input_schema,
+                retry_policy=retry_policy,
+                cache_policy=cache_policy,
+                ends=ends,
+                defer=defer,
+            )
+        else:
+            self.nodes[node] = StateNodeSpec[StateT, ContextT](
+                coerce_to_runnable(action, name=node, trace=False),  # type: ignore[arg-type]
+                metadata,
+                input_schema=self.state_schema,
+                retry_policy=retry_policy,
+                cache_policy=cache_policy,
+                ends=ends,
+                defer=defer,
+            )
+
+        input_schema = input_schema or inferred_input_schema
+        if input_schema is not None:
+            self._add_schema(input_schema)
+
+        return self
+
+    def add_edge(
+        self,
+        start_key: str | list[str],
+        end_key: str | list[str],
+        nodes_prob_distribution: Optional[list[float]] = None
+    ) -> Self:
         """Add a directed edge from the start node (or list of start nodes) to the end node.
 
         When a single start node is provided, the graph will wait for that node to complete
@@ -590,33 +846,122 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         if isinstance(start_key, str):
             if start_key == END:
                 raise ValueError("END cannot be a start node")
-            if end_key == START:
-                raise ValueError("START cannot be an end node")
+            if start_key not in self.nodes:
+                raise ValueError(f"Need to add_node `{start_key}` first")
+            
+            if isinstance(end_key, str):
+                if end_key == START:
+                    raise ValueError("START cannot be an end node")
+                
+                if self.nodes[start_key].metadata.get('__node_type_negative_langgraph__', False) == True:
+                    if not nodes_prob_distribution:
+                        raise ValueError(
+                            f"Negative nodes need to have probabilistic distribution of outgoing edges."
+                            f"Node `{start_key}` is a negative node."
+                        )
+                    else:
+                        if sum(nodes_prob_distribution) != 1.0 \
+                            or any(True if i < 0 else False for i in nodes_prob_distribution):
+                            raise ValueError(
+                                f"Invalid probability distribution for outgoing edges from negative node `{start_key}`."
+                                "Probabilities must be non-negative and sum to 1.0."
+                            )
+                        return self.add_conditional_edges(
+                            start_key,
+                            lambda _: np.random.choice(
+                                [end_key],
+                                size=1,
+                                p=nodes_prob_distribution,
+                            )[0],
+                            {node_name: node_name for node_name in [end_key]},
+                        )
 
-            # run this validation only for non-StateGraph graphs
-            if not hasattr(self, "channels") and start_key in set(
-                start for start, _ in self.edges
-            ):
-                raise ValueError(
-                    f"Already found path for node '{start_key}'.\n"
-                    "For multiple edges, use StateGraph with an Annotated state key."
+                # run this validation only for non-StateGraph graphs
+                if not hasattr(self, "channels") and start_key in set(
+                    start for start, _ in self.edges
+                ):
+                    raise ValueError(
+                        f"Already found path for node '{start_key}'.\n"
+                        "For multiple edges, use StateGraph with an Annotated state key."
+                    )
+
+                self.edges.add((start_key, end_key))
+                return self
+
+            else:
+                # need to check if start_key is a negative node
+                if not self.nodes[start_key].metadata.get('__node_type_negative_langgraph__', False):
+                    raise ValueError(
+                        f"Only negative nodes can have multiple outgoing edges."
+                        f"Node `{start_key}` is not a negative node."
+                    )
+                    
+                for end in end_key:
+                    if end == END:
+                        raise ValueError("END cannot be a start node")
+                    if end not in self.nodes:
+                        raise ValueError(f"Need to add_node `{start}` first")
+                
+                if not nodes_prob_distribution:
+                    raise ValueError(
+                        f"Negative nodes need to have probabilistic distribution of outgoing edges."
+                        f"Node `{start_key}` is a negative node."
+                    )
+                else:
+                    if len(nodes_prob_distribution) != len(end_key):
+                        raise ValueError(
+                            f"Length of probability distribution does not match number of outgoing edges from negative node `{start_key}`."
+                        )
+                    if sum(nodes_prob_distribution) != 1.0 \
+                        or any(True if i < 0 else False for i in nodes_prob_distribution):
+                        raise ValueError(
+                            f"Invalid probability distribution for outgoing edges from negative node `{start_key}`."
+                            "Probabilities must be non-negative and sum to 1.0."
+                        )
+                
+                return self.add_conditional_edges(
+                    start_key,
+                    lambda _: np.random.choice(
+                        end_key,
+                        size=1,
+                        p=nodes_prob_distribution,
+                    )[0],
+                    {node_name: node_name for node_name in end_key},
                 )
-
-            self.edges.add((start_key, end_key))
-            return self
 
         for start in start_key:
             if start == END:
                 raise ValueError("END cannot be a start node")
             if start not in self.nodes:
                 raise ValueError(f"Need to add_node `{start}` first")
-        if end_key == START:
-            raise ValueError("START cannot be an end node")
-        if end_key != END and end_key not in self.nodes:
-            raise ValueError(f"Need to add_node `{end_key}` first")
+            
+        negative_start_nodes = [
+            start for start in start_key 
+            if self.nodes[start].metadata.get('__node_type_negative_langgraph__', False) == True
+        ]
+        regular_start_nodes = [
+            start for start in start_key
+            if start not in negative_start_nodes
+        ]    
+        
+        if not negative_start_nodes:
+            if isinstance(end_key, str):
+                if end_key == START:
+                    raise ValueError("START cannot be an end node")
+                if end_key != END and end_key not in self.nodes:
+                    raise ValueError(f"Need to add_node `{end_key}` first")
 
-        self.waiting_edges.add((tuple(start_key), end_key))
-        return self
+                self.waiting_edges.add((tuple(regular_start_nodes), end_key))
+                return self
+
+            raise ValueError(
+                f"Only negative nodes can have multiple outgoing edges."
+                f"Nodes `{start_key}` doesn't have a negative node."
+            )
+        raise ValueError(
+            f"Cannot have multiple start nodes when one of them is a negative node."
+            f"Negative nodes must have only one start node."
+        )
 
     def add_conditional_edges(
         self,
