@@ -21,6 +21,7 @@ from types import TracebackType
 from typing import (
     Any,
     Literal,
+    cast,
     overload,
 )
 
@@ -47,6 +48,7 @@ from langgraph_sdk.schema import (
     Durability,
     GraphSchema,
     IfNotExists,
+    InputLike,
     Item,
     Json,
     ListNamespaceResponse,
@@ -117,9 +119,20 @@ def _get_headers(
 
 
 def _orjson_default(obj: Any) -> Any:
+    is_class = isinstance(obj, type)
     if hasattr(obj, "model_dump") and callable(obj.model_dump):
+        if is_class:
+            raise TypeError(
+                f"Cannot JSON-serialize type object: {obj!r}. Did you mean to pass an instance of the object instead?"
+                f"\nReceived type: {obj!r}"
+            )
         return obj.model_dump()
     elif hasattr(obj, "dict") and callable(obj.dict):
+        if is_class:
+            raise TypeError(
+                f"Cannot JSON-serialize type object: {obj!r}. Did you mean to pass an instance of the object instead?"
+                f"\nReceived type: {obj!r}"
+            )
         return obj.dict()
     elif isinstance(obj, (set, frozenset)):
         return list(obj)
@@ -163,7 +176,7 @@ def get_client(
     Args:
         url:
             Base URL of the LangGraph API.
-            – If `None`, the client first attempts an in-process connection via ASGI transport.
+            - If `None`, the client first attempts an in-process connection via ASGI transport.
               If that fails, it falls back to `http://localhost:8123`.
         api_key:
             API key for authentication. If omitted, the client reads from environment
@@ -176,9 +189,9 @@ def get_client(
             Additional HTTP headers to include in requests. Merged with authentication headers.
         timeout:
             HTTP timeout configuration. May be:
-              – `httpx.Timeout` instance
-              – float (total seconds)
-              – tuple `(connect, read, write, pool)` in seconds
+              - `httpx.Timeout` instance
+              - float (total seconds)
+              - tuple `(connect, read, write, pool)` in seconds
             Defaults: connect=5, read=300, write=300, pool=5.
 
     Returns:
@@ -236,7 +249,7 @@ def get_client(
         base_url=url,
         transport=transport,
         timeout=(
-            httpx.Timeout(timeout)
+            httpx.Timeout(timeout)  # ty: ignore[invalid-argument-type]
             if timeout is not None
             else httpx.Timeout(connect=5, read=300, write=300, pool=5)
         ),
@@ -511,7 +524,7 @@ class HttpClient:
                 decoder = SSEDecoder()
                 try:
                     async for line in aiter_lines_raw(res):
-                        sse = decoder.decode(line=line.rstrip(b"\n"))
+                        sse = decoder.decode(line=cast("bytes", line).rstrip(b"\n"))
                         if sse is not None:
                             if decoder.last_event_id is not None:
                                 last_event_id = decoder.last_event_id
@@ -625,7 +638,7 @@ class AssistantsClient:
                 'name': 'my_assistant'
             }
             ```
-        """  # noqa: E501
+        """
         return await self.http.get(
             f"/assistants/{assistant_id}", headers=headers, params=params
         )
@@ -679,7 +692,7 @@ class AssistantsClient:
             ```
 
 
-        """  # noqa: E501
+        """
         query_params = {"xray": xray}
         if params:
             query_params.update(params)
@@ -804,7 +817,7 @@ class AssistantsClient:
             }
             ```
 
-        """  # noqa: E501
+        """
         return await self.http.get(
             f"/assistants/{assistant_id}/schemas", headers=headers, params=params
         )
@@ -830,7 +843,7 @@ class AssistantsClient:
         Returns:
             Subgraphs: The graph schema for the assistant.
 
-        """  # noqa: E501
+        """
         get_params = {"recurse": recurse}
         if params:
             get_params = {**get_params, **params}
@@ -896,7 +909,7 @@ class AssistantsClient:
                 name="my_name"
             )
             ```
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {
             "graph_id": graph_id,
         }
@@ -964,7 +977,7 @@ class AssistantsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {}
         if graph_id:
             payload["graph_id"] = graph_id
@@ -1011,7 +1024,7 @@ class AssistantsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         await self.http.delete(
             f"/assistants/{assistant_id}", headers=headers, params=params
         )
@@ -1137,7 +1150,7 @@ class AssistantsClient:
                 assistant_id="my_assistant_id"
             )
             ```
-        """  # noqa: E501
+        """
 
         payload: dict[str, Any] = {
             "limit": limit,
@@ -1181,7 +1194,7 @@ class AssistantsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
 
         payload: dict[str, Any] = {"version": version}
 
@@ -1249,7 +1262,7 @@ class ThreadsClient:
             }
             ```
 
-        """  # noqa: E501
+        """
 
         return await self.http.get(
             f"/threads/{thread_id}", headers=headers, params=params
@@ -1297,7 +1310,7 @@ class ThreadsClient:
                 if_exists="raise"
             )
             ```
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {}
         if thread_id:
             payload["thread_id"] = thread_id
@@ -1365,7 +1378,7 @@ class ThreadsClient:
                 ttl=43_200,
             )
             ```
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {"metadata": metadata}
         if ttl is not None:
             if isinstance(ttl, (int, float)):
@@ -1405,7 +1418,7 @@ class ThreadsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         await self.http.delete(f"/threads/{thread_id}", headers=headers, params=params)
 
     async def search(
@@ -1453,7 +1466,7 @@ class ThreadsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
@@ -1537,7 +1550,7 @@ class ThreadsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         return await self.http.post(
             f"/threads/{thread_id}/copy", json=None, headers=headers, params=params
         )
@@ -1651,7 +1664,7 @@ class ThreadsClient:
                     }
             }
             ```
-        """  # noqa: E501
+        """
         if checkpoint:
             return await self.http.post(
                 f"/threads/{thread_id}/state/checkpoint",
@@ -1727,7 +1740,7 @@ class ThreadsClient:
                 }
             }
             ```
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {
             "values": values,
         }
@@ -1776,7 +1789,7 @@ class ThreadsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {
             "limit": limit,
         }
@@ -1824,7 +1837,7 @@ class ThreadsClient:
                 print(chunk)
             ```
 
-        """  # noqa: E501
+        """
         query_params = {
             "stream_mode": stream_mode,
         }
@@ -1864,7 +1877,7 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -1894,7 +1907,7 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -1920,7 +1933,7 @@ class RunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -2019,7 +2032,7 @@ class RunsClient:
             StreamPart(event='end', data=None)
             ```
 
-        """  # noqa: E501
+        """
         if checkpoint_during is not None:
             warnings.warn(
                 "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
@@ -2079,7 +2092,7 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -2105,7 +2118,7 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -2132,7 +2145,7 @@ class RunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -2265,7 +2278,7 @@ class RunsClient:
                 'multitask_strategy': 'interrupt'
             }
             ```
-        """  # noqa: E501
+        """
         if checkpoint_during is not None:
             warnings.warn(
                 "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
@@ -2334,7 +2347,7 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -2361,7 +2374,7 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -2385,7 +2398,7 @@ class RunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -2493,7 +2506,7 @@ class RunsClient:
             }
             ```
 
-        """  # noqa: E501
+        """
         if checkpoint_during is not None:
             warnings.warn(
                 "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
@@ -2585,7 +2598,7 @@ class RunsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         query_params: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
@@ -2629,7 +2642,7 @@ class RunsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
 
         return await self.http.get(
             f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
@@ -2671,7 +2684,7 @@ class RunsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         query_params = {
             "wait": 1 if wait else 0,
             "action": action,
@@ -2722,7 +2735,7 @@ class RunsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         return await self.http.request_reconnect(
             f"/threads/{thread_id}/runs/{run_id}/join",
             "GET",
@@ -2771,7 +2784,7 @@ class RunsClient:
                 print(part)
             ```
 
-        """  # noqa: E501
+        """
         query_params = {
             "cancel_on_disconnect": cancel_on_disconnect,
             "stream_mode": stream_mode,
@@ -2818,7 +2831,7 @@ class RunsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         await self.http.delete(
             f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
         )
@@ -2858,7 +2871,7 @@ class CronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
@@ -2913,7 +2926,7 @@ class CronClient:
                 multitask_strategy="interrupt"
             )
             ```
-        """  # noqa: E501
+        """
         payload = {
             "schedule": schedule,
             "input": input,
@@ -2941,7 +2954,7 @@ class CronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
@@ -2993,7 +3006,7 @@ class CronClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         payload = {
             "schedule": schedule,
             "input": input,
@@ -3039,7 +3052,7 @@ class CronClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         await self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
 
     async def search(
@@ -3105,7 +3118,7 @@ class CronClient:
             ]
             ```
 
-        """  # noqa: E501
+        """
         payload = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,
@@ -3497,7 +3510,7 @@ def get_sync_client(
         base_url=url,
         transport=transport,
         timeout=(
-            httpx.Timeout(timeout)
+            httpx.Timeout(timeout)  # ty: ignore[invalid-argument-type]
             if timeout is not None
             else httpx.Timeout(connect=5, read=300, write=300, pool=5)
         ),
@@ -3777,7 +3790,7 @@ class SyncHttpClient:
                 decoder = SSEDecoder()
                 try:
                     for line in iter_lines_raw(res):
-                        sse = decoder.decode(line.rstrip(b"\n"))
+                        sse = decoder.decode(cast(bytes, line).rstrip(b"\n"))
                         if sse is not None:
                             if decoder.last_event_id is not None:
                                 last_event_id = decoder.last_event_id
@@ -3880,7 +3893,7 @@ class SyncAssistantsClient:
             }
             ```
 
-        """  # noqa: E501
+        """
         return self.http.get(
             f"/assistants/{assistant_id}", headers=headers, params=params
         )
@@ -3930,7 +3943,7 @@ class SyncAssistantsClient:
             }
             ```
 
-        """  # noqa: E501
+        """
         query_params = {"xray": xray}
         if params:
             query_params.update(params)
@@ -4066,7 +4079,7 @@ class SyncAssistantsClient:
             }
             ```
 
-        """  # noqa: E501
+        """
         return self.http.get(
             f"/assistants/{assistant_id}/schemas", headers=headers, params=params
         )
@@ -4090,7 +4103,7 @@ class SyncAssistantsClient:
         Returns:
             Subgraphs: The graph schema for the assistant.
 
-        """  # noqa: E501
+        """
         get_params = {"recurse": recurse}
         if params:
             get_params = {**get_params, **params}
@@ -4156,7 +4169,7 @@ class SyncAssistantsClient:
                 name="my_name"
             )
             ```
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {
             "graph_id": graph_id,
         }
@@ -4222,7 +4235,7 @@ class SyncAssistantsClient:
                 metadata={"number":2}
             )
             ```
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {}
         if graph_id:
             payload["graph_id"] = graph_id
@@ -4269,7 +4282,7 @@ class SyncAssistantsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         self.http.delete(f"/assistants/{assistant_id}", headers=headers, params=params)
 
     def search(
@@ -4390,7 +4403,7 @@ class SyncAssistantsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
 
         payload: dict[str, Any] = {
             "limit": limit,
@@ -4433,7 +4446,7 @@ class SyncAssistantsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
 
         payload: dict[str, Any] = {"version": version}
 
@@ -4498,7 +4511,7 @@ class SyncThreadsClient:
             }
             ```
 
-        """  # noqa: E501
+        """
 
         return self.http.get(f"/threads/{thread_id}", headers=headers, params=params)
 
@@ -4544,7 +4557,7 @@ class SyncThreadsClient:
             )
             ```
             )
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {}
         if thread_id:
             payload["thread_id"] = thread_id
@@ -4610,7 +4623,7 @@ class SyncThreadsClient:
                 ttl=43_200,
             )
             ```
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {"metadata": metadata}
         if ttl is not None:
             if isinstance(ttl, (int, float)):
@@ -4649,7 +4662,7 @@ class SyncThreadsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         self.http.delete(f"/threads/{thread_id}", headers=headers, params=params)
 
     def search(
@@ -4693,7 +4706,7 @@ class SyncThreadsClient:
                 offset=5
             )
             ```
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
@@ -4774,7 +4787,7 @@ class SyncThreadsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         return self.http.post(
             f"/threads/{thread_id}/copy", json=None, headers=headers, params=params
         )
@@ -4887,7 +4900,7 @@ class SyncThreadsClient:
             }
             ```
 
-        """  # noqa: E501
+        """
         if checkpoint:
             return self.http.post(
                 f"/threads/{thread_id}/state/checkpoint",
@@ -4960,7 +4973,7 @@ class SyncThreadsClient:
             }
             ```
 
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {
             "values": values,
         }
@@ -5010,7 +5023,7 @@ class SyncThreadsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         payload: dict[str, Any] = {
             "limit": limit,
         }
@@ -5059,7 +5072,7 @@ class SyncThreadsClient:
                 print(chunk)
             ```
 
-        """  # noqa: E501
+        """
         query_params = {
             "stream_mode": stream_mode,
         }
@@ -5099,7 +5112,7 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5128,7 +5141,7 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5155,7 +5168,7 @@ class SyncRunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5251,7 +5264,7 @@ class SyncRunsClient:
             StreamPart(event='values', data={'messages': [{'content': 'how are you?', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'fe0a5778-cfe9-42ee-b807-0adaa1873c10', 'example': False}, {'content': "I'm doing well, thanks for asking! I'm an AI assistant created by Anthropic to be helpful, honest, and harmless.", 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-159b782c-b679-4830-83c6-cef87798fe8b', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]})
             StreamPart(event='end', data=None)
             ```
-        """  # noqa: E501
+        """
         if checkpoint_during is not None:
             warnings.warn(
                 "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
@@ -5310,7 +5323,7 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5336,7 +5349,7 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5363,7 +5376,7 @@ class SyncRunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5496,7 +5509,7 @@ class SyncRunsClient:
                 'multitask_strategy': 'interrupt'
             }
             ```
-        """  # noqa: E501
+        """
         if checkpoint_during is not None:
             warnings.warn(
                 "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
@@ -5565,7 +5578,7 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -5592,7 +5605,7 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -5616,7 +5629,7 @@ class SyncRunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -5726,7 +5739,7 @@ class SyncRunsClient:
             }
             ```
 
-        """  # noqa: E501
+        """
         if checkpoint_during is not None:
             warnings.warn(
                 "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
@@ -5808,7 +5821,7 @@ class SyncRunsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         query_params: dict[str, Any] = {"limit": limit, "offset": offset}
         if status is not None:
             query_params["status"] = status
@@ -5847,7 +5860,7 @@ class SyncRunsClient:
                 run_id="run_id_to_delete",
             )
             ```
-        """  # noqa: E501
+        """
 
         return self.http.get(
             f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
@@ -5889,7 +5902,7 @@ class SyncRunsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         query_params = {
             "wait": 1 if wait else 0,
             "action": action,
@@ -5940,7 +5953,7 @@ class SyncRunsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         return self.http.request_reconnect(
             f"/threads/{thread_id}/runs/{run_id}/join",
             "GET",
@@ -5988,7 +6001,7 @@ class SyncRunsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         query_params = {
             "stream_mode": stream_mode,
             "cancel_on_disconnect": cancel_on_disconnect,
@@ -6035,7 +6048,7 @@ class SyncRunsClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         self.http.delete(
             f"/threads/{thread_id}/runs/{run_id}", headers=headers, params=params
         )
@@ -6069,7 +6082,7 @@ class SyncCronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
@@ -6121,7 +6134,7 @@ class SyncCronClient:
                 multitask_strategy="interrupt"
             )
             ```
-        """  # noqa: E501
+        """
         payload = {
             "schedule": schedule,
             "input": input,
@@ -6148,7 +6161,7 @@ class SyncCronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Mapping[str, Any] | None = None,
+        input: InputLike | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
@@ -6200,7 +6213,7 @@ class SyncCronClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         payload = {
             "schedule": schedule,
             "input": input,
@@ -6245,7 +6258,7 @@ class SyncCronClient:
             )
             ```
 
-        """  # noqa: E501
+        """
         self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
 
     def search(
@@ -6309,7 +6322,7 @@ class SyncCronClient:
                 }
             ]
             ```
-        """  # noqa: E501
+        """
         payload = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,

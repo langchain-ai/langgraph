@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -1794,6 +1794,7 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "mypy" },
+    { name = "pydantic", specifier = ">=2.12.4" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
