@@ -42,6 +42,7 @@ from langgraph.prebuilt import (
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     ToolInvocationError,
+    ToolRuntime,
     tools_condition,
 )
 
@@ -1672,3 +1673,190 @@ def test_tool_call_request_setattr_deprecation_warning():
         )
         # Verify no warning was raised during initialization
         assert len(w) == 0
+
+
+async def test_tool_node_inject_async_all_types_signature_only() -> None:
+    """Test all injection types without @tool decorator."""
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"store_data": "from_store"})
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    async def comprehensive_async_tool(
+        x: int,
+        whole_state: Annotated[TestState, InjectedState],
+        foo_field: Annotated[str, InjectedState("foo")],
+        store: Annotated[BaseStore, InjectedStore()],
+        runtime: ToolRuntime,
+    ) -> str:
+        """Async tool that uses all injection types."""
+        bar_from_whole = whole_state["bar"]
+        foo_value = foo_field
+        store_val = store.get(namespace, "test_key").value["store_data"]
+        foo_from_runtime = runtime.state["foo"]
+        tool_call_id = runtime.tool_call_id
+
+        return (
+            f"x={x}, "
+            f"bar_from_whole={bar_from_whole}, "
+            f"foo_field={foo_value}, "
+            f"store={store_val}, "
+            f"foo_from_runtime={foo_from_runtime}, "
+            f"tool_call_id={tool_call_id}"
+        )
+
+    node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
+    tool_call = {
+        "name": "comprehensive_async_tool",
+        "args": {"x": 42},
+        "id": "test_call_123",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime(store=store)
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "foo_value", "bar": 99}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == (
+        "x=42, "
+        "bar_from_whole=99, "
+        "foo_field=foo_value, "
+        "store=from_store, "
+        "foo_from_runtime=foo_value, "
+        "tool_call_id=test_call_123"
+    )
+
+
+async def test_tool_node_inject_async_all_types_with_decorator() -> None:
+    """Test all injection types with @tool decorator."""
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"store_data": "from_store"})
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    @dec_tool
+    async def comprehensive_async_tool(
+        x: int,
+        whole_state: Annotated[TestState, InjectedState],
+        foo_field: Annotated[str, InjectedState("foo")],
+        store: Annotated[BaseStore, InjectedStore()],
+        runtime: ToolRuntime,
+    ) -> str:
+        """Async tool that uses all injection types."""
+        bar_from_whole = whole_state["bar"]
+        foo_value = foo_field
+        store_val = store.get(namespace, "test_key").value["store_data"]
+        foo_from_runtime = runtime.state["foo"]
+        tool_call_id = runtime.tool_call_id
+
+        return (
+            f"x={x}, "
+            f"bar_from_whole={bar_from_whole}, "
+            f"foo_field={foo_value}, "
+            f"store={store_val}, "
+            f"foo_from_runtime={foo_from_runtime}, "
+            f"tool_call_id={tool_call_id}"
+        )
+
+    node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
+    tool_call = {
+        "name": "comprehensive_async_tool",
+        "args": {"x": 42},
+        "id": "test_call_456",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime(store=store)
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "foo_value", "bar": 99}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == (
+        "x=42, "
+        "bar_from_whole=99, "
+        "foo_field=foo_value, "
+        "store=from_store, "
+        "foo_from_runtime=foo_value, "
+        "tool_call_id=test_call_456"
+    )
+
+
+async def test_tool_node_inject_async_all_types_with_schema() -> None:
+    """Test all injection types with explicit schema."""
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"store_data": "from_store"})
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    class ComprehensiveToolSchema(BaseModel):
+        model_config = {"arbitrary_types_allowed": True}
+        x: int
+        whole_state: Annotated[TestState, InjectedState]
+        foo_field: Annotated[str, InjectedState("foo")]
+        store: Annotated[BaseStore, InjectedStore()]
+        runtime: ToolRuntime
+
+    @dec_tool(args_schema=ComprehensiveToolSchema)
+    async def comprehensive_async_tool(
+        x: int,
+        whole_state: Annotated[TestState, InjectedState],
+        foo_field: Annotated[str, InjectedState("foo")],
+        store: Annotated[BaseStore, InjectedStore()],
+        runtime: ToolRuntime,
+    ) -> str:
+        """Async tool that uses all injection types."""
+        bar_from_whole = whole_state["bar"]
+        foo_value = foo_field
+        store_val = store.get(namespace, "test_key").value["store_data"]
+        foo_from_runtime = runtime.state["foo"]
+        tool_call_id = runtime.tool_call_id
+
+        return (
+            f"x={x}, "
+            f"bar_from_whole={bar_from_whole}, "
+            f"foo_field={foo_value}, "
+            f"store={store_val}, "
+            f"foo_from_runtime={foo_from_runtime}, "
+            f"tool_call_id={tool_call_id}"
+        )
+
+    node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
+    tool_call = {
+        "name": "comprehensive_async_tool",
+        "args": {"x": 42},
+        "id": "test_call_789",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime(store=store)
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "foo_value", "bar": 99}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == (
+        "x=42, "
+        "bar_from_whole=99, "
+        "foo_field=foo_value, "
+        "store=from_store, "
+        "foo_from_runtime=foo_value, "
+        "tool_call_id=test_call_789"
+    )

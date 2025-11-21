@@ -65,7 +65,7 @@ def test_raise_for_status_typed_maps_exceptions_and_sets_status_code(
     with pytest.raises(exc_type) as ei:
         _raise_for_status_typed(r)
 
-    err = cast(APIStatusError, ei.value)
+    err = cast("APIStatusError", ei.value)
     assert err.status_code == status
     # response attribute should be present and match
     assert err.response.status_code == status
@@ -77,7 +77,7 @@ def test_request_id_is_extracted_when_present() -> None:
     )
     with pytest.raises(NotFoundError) as ei:
         _raise_for_status_typed(r)
-    err = cast(APIStatusError, ei.value)
+    err = cast("APIStatusError", ei.value)
     # request_id only exists on APIStatusError subclasses
     assert err.request_id == "req-123"
 
@@ -86,7 +86,7 @@ def test_non_json_body_does_not_break_mapping() -> None:
     r = make_response(429, text_body="Too many requests")
     with pytest.raises(RateLimitError) as ei:
         _raise_for_status_typed(r)
-    err = cast(APIStatusError, ei.value)
+    err = cast("APIStatusError", ei.value)
     assert err.status_code == 429
 
 
@@ -102,7 +102,7 @@ def test_field_extraction_from_json_body() -> None:
     )
     with pytest.raises(BadRequestError) as ei:
         _raise_for_status_typed(r)
-    err = cast(APIStatusError, ei.value)
+    err = cast("APIStatusError", ei.value)
     assert err.code == "invalid_param"
     assert err.param == "limit"
     assert err.type == "invalid_request_error"
