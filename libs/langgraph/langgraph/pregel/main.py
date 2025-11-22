@@ -3038,7 +3038,17 @@ class Pregel(
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
-            The output of the graph run. If `stream_mode` is `"values"`, it returns the latest output.
+            The output of the graph run. Common return types include:
+            
+            - Single channel: `AIMessage`, `list[AnyMessage]`, or any channel value
+            - Multiple channels: `dict[str, Any]` mapping channel names to values
+            - Non-values mode: `list` of output chunks
+            
+            For message-based graphs, typically returns:
+            
+            `{"messages": [HumanMessage, AIMessage, ...]}`
+            
+            If `stream_mode` is `"values"`, it returns the latest output.
             If `stream_mode` is not `"values"`, it returns a list of output chunks.
         """
         output_keys = output_keys if output_keys is not None else self.output_channels
@@ -3125,7 +3135,17 @@ class Pregel(
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
-            The output of the graph run. If `stream_mode` is `"values"`, it returns the latest output.
+            The output of the graph run. Common return types include:
+            
+            - Single channel: `AIMessage`, `list[AnyMessage]`, or any channel value
+            - Multiple channels: `dict[str, Any]` mapping channel names to values
+            - Non-values mode: `list` of output chunks
+            
+            For message-based graphs, typically returns:
+            
+            `{"messages": [HumanMessage, AIMessage, ...]}`
+            
+            If `stream_mode` is `"values"`, it returns the latest output.
             If `stream_mode` is not `"values"`, it returns a list of output chunks.
         """
         output_keys = output_keys if output_keys is not None else self.output_channels
