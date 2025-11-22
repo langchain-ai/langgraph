@@ -846,14 +846,18 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         if isinstance(start_key, str):
             if start_key == END:
                 raise ValueError("END cannot be a start node")
-            if start_key not in self.nodes:
+            # Allow START as a special case since it's a virtual node
+            if start_key not in self.nodes and start_key != START:
                 raise ValueError(f"Need to add_node `{start_key}` first")
             
             if isinstance(end_key, str):
                 if end_key == START:
                     raise ValueError("START cannot be an end node")
+                if end_key != END and end_key not in self.nodes:
+                    raise ValueError(f"Need to add_node `{end_key}` first")
                 
-                if self.nodes[start_key].metadata.get('__node_type_negative_langgraph__', False) == True:
+                # Only check negative node metadata if start_key is an actual node (not START)
+                if start_key in self.nodes and (self.nodes[start_key].metadata or {}).get('__node_type_negative_langgraph__', False) == True:
                     if not nodes_prob_distribution:
                         raise ValueError(
                             f"Negative nodes need to have probabilistic distribution of outgoing edges."
@@ -889,8 +893,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 return self
 
             else:
-                # need to check if start_key is a negative node
-                if not self.nodes[start_key].metadata.get('__node_type_negative_langgraph__', False):
+                # need to check if start_key is a negative node (but only if it's an actual node, not START)
+                if not (self.nodes[start_key].metadata or {}).get('__node_type_negative_langgraph__', False):
                     raise ValueError(
                         f"Only negative nodes can have multiple outgoing edges."
                         f"Node `{start_key}` is not a negative node."
@@ -898,9 +902,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                     
                 for end in end_key:
                     if end == END:
-                        raise ValueError("END cannot be a start node")
-                    if end not in self.nodes:
-                        raise ValueError(f"Need to add_node `{start}` first")
+                        pass  # END is allowed as a destination
+                    elif end not in self.nodes:
+                        raise ValueError(f"Need to add_node `{end}` first")
                 
                 if not nodes_prob_distribution:
                     raise ValueError(
@@ -932,12 +936,12 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for start in start_key:
             if start == END:
                 raise ValueError("END cannot be a start node")
-            if start not in self.nodes:
+            if start not in self.nodes and start != START:
                 raise ValueError(f"Need to add_node `{start}` first")
             
         negative_start_nodes = [
-            start for start in start_key 
-            if self.nodes[start].metadata.get('__node_type_negative_langgraph__', False) == True
+            start for start in start_key
+            if start in self.nodes and (self.nodes[start].metadata or {}).get('__node_type_negative_langgraph__', False) == True
         ]
         regular_start_nodes = [
             start for start in start_key
