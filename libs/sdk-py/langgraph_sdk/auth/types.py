@@ -243,7 +243,7 @@ class StudioUser:
         ```
     """
 
-    __slots__ = ("username", "_is_authenticated", "_permissions")
+    __slots__ = ("_is_authenticated", "_permissions", "username")
 
     def __init__(self, username: str, is_authenticated: bool = False) -> None:
         self.username = username
@@ -1093,22 +1093,22 @@ class on:
 
 
 __all__ = [
-    "on",
+    "AssistantsCreate",
+    "AssistantsDelete",
+    "AssistantsRead",
+    "AssistantsSearch",
+    "AssistantsUpdate",
     "MetadataInput",
     "RunsCreate",
-    "ThreadsCreate",
-    "ThreadsRead",
-    "ThreadsUpdate",
-    "ThreadsDelete",
-    "ThreadsSearch",
-    "AssistantsCreate",
-    "AssistantsRead",
-    "AssistantsUpdate",
-    "AssistantsDelete",
-    "AssistantsSearch",
+    "StoreDelete",
     "StoreGet",
-    "StoreSearch",
     "StoreListNamespaces",
     "StorePut",
-    "StoreDelete",
+    "StoreSearch",
+    "ThreadsCreate",
+    "ThreadsDelete",
+    "ThreadsRead",
+    "ThreadsSearch",
+    "ThreadsUpdate",
+    "on",
 ]

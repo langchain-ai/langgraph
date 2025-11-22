@@ -90,11 +90,11 @@ class Auth:
     """
 
     __slots__ = (
-        "on",
-        "_handlers",
-        "_global_handlers",
         "_authenticate_handler",
+        "_global_handlers",
         "_handler_cache",
+        "_handlers",
+        "on",
     )
     types = types
     """Reference to auth type definitions.
@@ -383,7 +383,7 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
         if fn is not None:
             _validate_handler(fn)
             return typing.cast(
-                _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
+                "_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]",
                 _register_handler(self.auth, self.resource, "*", fn),
             )
 
@@ -392,7 +392,7 @@ class _ResourceOn(typing.Generic[VCreate, VRead, VUpdate, VDelete, VSearch]):
         ) -> _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]:
             _validate_handler(handler)
             return typing.cast(
-                _ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch],
+                "_ActionHandler[VCreate | VUpdate | VRead | VDelete | VSearch]",
                 _register_handler(self.auth, self.resource, "*", handler),
             )
 
@@ -612,10 +612,10 @@ class _On:
     __slots__ = (
         "_auth",
         "assistants",
-        "threads",
-        "runs",
         "crons",
+        "runs",
         "store",
+        "threads",
         "value",
     )
 
@@ -740,9 +740,8 @@ def is_studio_user(
 ) -> bool:
     return (
         isinstance(user, types.StudioUser)
-        or isinstance(user, dict)
-        and user.get("kind") == "StudioUser"  # ty: ignore[invalid-argument-type]
+        or (isinstance(user, dict) and user.get("kind") == "StudioUser")  # ty: ignore[invalid-argument-type]
     )
 
 
-__all__ = ["Auth", "types", "exceptions"]
+__all__ = ["Auth", "exceptions", "types"]
