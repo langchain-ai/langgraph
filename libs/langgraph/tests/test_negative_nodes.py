@@ -1,217 +1,248 @@
-"""Streamlined edge case tests - no compilation"""
-import sys
-sys.path.insert(0, '.')
+"""Test suite for negative nodes functionality in LangGraph.
 
-from typing_extensions import TypedDict
+Tests cover:
+- Basic negative node creation and edge routing
+- Probabilistic distribution handling
+- Error validation and edge cases
+- Integration with StateGraph
+"""
+
+import pytest
 from langchain_core.runnables import RunnableConfig
-from langgraph.graph import StateGraph, START, END
+from typing_extensions import TypedDict
+
+from langgraph.graph import END, START, StateGraph
+
 
 class State(TypedDict):
+    """Simple state for testing."""
+
     value: int
 
+
 def dummy_node(state: State, config: RunnableConfig | None = None) -> State:
+    """Simple node that increments value."""
     return {"value": state["value"] + 1}
 
-tests_passed = 0
-tests_failed = 0
 
-def test(name, fn):
-    global tests_passed, tests_failed
-    print(f"\n[{name}]", end=" ")
-    try:
-        fn()
-        print("✓ PASS")
-        tests_passed += 1
-    except AssertionError as e:
-        print(f"✗ FAIL: {e}")
-        tests_failed += 1
-    except Exception as e:
-        print(f"✗ FAIL (Unexpected): {e}")
-        tests_failed += 1
+class TestNegativeNodesBasic:
+    """Test basic negative node functionality."""
 
-print("=" * 70)
-print("EDGE CASE TESTS FOR NEGATIVE NODE")
-print("=" * 70)
-
-# Test 1
-def t1():
-    builder = StateGraph(State)
-    builder.add_node("a", dummy_node)
-    builder.add_node("b", dummy_node)
-    builder.add_edge("a", "b")
-test("Normal node edge", t1)
-
-# Test 2
-def t2():
-    builder = StateGraph(State)
-    builder.add_node("a", dummy_node)
-    builder.add_edge(START, "a")
-test("START to node", t2)
-
-# Test 3
-def t3():
-    builder = StateGraph(State)
-    builder.add_node("a", dummy_node)
-    builder.add_edge("a", END)
-test("Node to END", t3)
-
-# Test 4
-def t4():
-    builder = StateGraph(State)
-    builder.add_negative_node("a", dummy_node)
-    builder.add_node("b", dummy_node)
-    try:
+    def test_normal_node_edge(self):
+        """Test basic edge creation between normal nodes."""
+        builder = StateGraph(State)
+        builder.add_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
         builder.add_edge("a", "b")
-        raise AssertionError("Should reject negative node without prob distribution")
-    except ValueError as e:
-        if "probabilistic distribution" not in str(e):
-            raise AssertionError(f"Wrong error: {e}")
-test("Negative without prob (reject)", t4)
 
-# Test 5
-def t5():
-    builder = StateGraph(State)
-    builder.add_negative_node("a", dummy_node)
-    builder.add_node("b", dummy_node)
-    builder.add_node("c", dummy_node)
-    builder.add_edge("a", ["b", "c"], nodes_prob_distribution=[0.5, 0.5])
-test("Negative with prob (multiple)", t5)
+    def test_start_to_node(self):
+        """Test edge from START to a node."""
+        builder = StateGraph(State)
+        builder.add_node("a", dummy_node)
+        builder.add_edge(START, "a")
 
-# Test 6
-def t6():
-    builder = StateGraph(State)
-    builder.add_negative_node("a", dummy_node)
-    builder.add_node("b", dummy_node)
-    builder.add_node("c", dummy_node)
-    try:
-        builder.add_edge("a", ["b", "c"], nodes_prob_distribution=[0.3, 0.5])
-        raise AssertionError("Should reject invalid prob sum")
-    except ValueError as e:
-        if "sum to 1.0" not in str(e):
-            raise AssertionError(f"Wrong error: {e}")
-test("Negative invalid prob sum (reject)", t6)
+    def test_node_to_end(self):
+        """Test edge from a node to END."""
+        builder = StateGraph(State)
+        builder.add_node("a", dummy_node)
+        builder.add_edge("a", END)
 
-# Test 7
-def t7():
-    builder = StateGraph(State)
-    builder.add_negative_node("a", dummy_node)
-    builder.add_node("b", dummy_node)
-    builder.add_node("c", dummy_node)
-    try:
-        builder.add_edge("a", ["b", "c"], nodes_prob_distribution=[-0.2, 1.2])
-        raise AssertionError("Should reject negative probabilities")
-    except ValueError as e:
-        if "non-negative" not in str(e):
-            raise AssertionError(f"Wrong error: {e}")
-test("Negative with negative probs (reject)", t7)
 
-# Test 8
-def t8():
-    builder = StateGraph(State)
-    builder.add_negative_node("a", dummy_node)
-    builder.add_node("b", dummy_node)
-    builder.add_node("c", dummy_node)
-    try:
-        builder.add_edge("a", ["b", "c"], nodes_prob_distribution=[0.5])
-        raise AssertionError("Should reject mismatched length")
-    except ValueError as e:
-        if "Length" not in str(e):
-            raise AssertionError(f"Wrong error: {e}")
-test("Negative mismatched length (reject)", t8)
+class TestNegativeNodesValidation:
+    """Test negative node validation and error handling."""
 
-# Test 9
-def t9():
-    builder = StateGraph(State)
-    builder.add_node("a", dummy_node)
-    builder.add_node("b", dummy_node)
-    builder.add_node("c", dummy_node)
-    try:
-        builder.add_edge("a", ["b", "c"])
-        raise AssertionError("Should reject multiple edges from regular node")
-    except ValueError as e:
-        if "Only negative nodes" not in str(e):
-            raise AssertionError(f"Wrong error: {e}")
-test("Regular with multiple edges (reject)", t9)
+    def test_negative_without_prob_distribution_rejects(self):
+        """Test that negative nodes require probability distribution."""
+        builder = StateGraph(State)
+        builder.add_negative_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
 
-# Test 10
-def t10():
-    builder = StateGraph(State)
-    builder.add_negative_node("a", dummy_node)
-    builder.add_node("b", dummy_node)
-    builder.add_edge("a", ["b", END], nodes_prob_distribution=[0.6, 0.4])
-test("Negative to END with prob", t10)
+        with pytest.raises(ValueError, match="probabilistic distribution"):
+            builder.add_edge("a", "b")
 
-# Test 11
-def t11():
-    builder = StateGraph(State)
-    builder.add_negative_node("a", dummy_node)
-    builder.add_node("b", dummy_node)
-    builder.add_node("c", dummy_node)
-    try:
+    def test_negative_with_prob_distribution_succeeds(self):
+        """Test that negative nodes accept valid probability distribution."""
+        builder = StateGraph(State)
+        builder.add_negative_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
+        builder.add_node("c", dummy_node)
+        builder.add_edge("a", ["b", "c"], nodes_prob_distribution=[0.5, 0.5])
+
+    def test_invalid_prob_sum_rejects(self):
+        """Test that probabilities must sum to 1.0."""
+        builder = StateGraph(State)
+        builder.add_negative_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
+        builder.add_node("c", dummy_node)
+
+        with pytest.raises(ValueError, match="sum to 1.0"):
+            builder.add_edge("a", ["b", "c"], nodes_prob_distribution=[0.3, 0.5])
+
+    def test_negative_probabilities_reject(self):
+        """Test that negative probabilities are rejected."""
+        builder = StateGraph(State)
+        builder.add_negative_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
+        builder.add_node("c", dummy_node)
+
+        with pytest.raises(ValueError, match="non-negative"):
+            builder.add_edge("a", ["b", "c"], nodes_prob_distribution=[-0.2, 1.2])
+
+    def test_mismatched_prob_length_rejects(self):
+        """Test that prob distribution length must match end nodes."""
+        builder = StateGraph(State)
+        builder.add_negative_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
+        builder.add_node("c", dummy_node)
+
+        with pytest.raises(ValueError, match="Length"):
+            builder.add_edge("a", ["b", "c"], nodes_prob_distribution=[0.5])
+
+    def test_regular_node_multiple_edges_rejects(self):
+        """Test that regular nodes cannot have multiple edges without prob."""
+        builder = StateGraph(State)
+        builder.add_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
+        builder.add_node("c", dummy_node)
+
+        with pytest.raises(ValueError, match="Only negative nodes"):
+            builder.add_edge("a", ["b", "c"])
+
+    def test_negative_to_end_with_prob_succeeds(self):
+        """Test that negative nodes can route to END with probability."""
+        builder = StateGraph(State)
+        builder.add_negative_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
+        builder.add_edge("a", ["b", END], nodes_prob_distribution=[0.6, 0.4])
+
+    def test_multiple_starts_with_negative_rejects(self):
+        """Test that multiple start nodes with negative nodes are rejected."""
+        builder = StateGraph(State)
+        builder.add_negative_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
+        builder.add_node("c", dummy_node)
+
+        with pytest.raises(ValueError, match="Cannot have multiple start nodes"):
+            builder.add_edge(["a", "b"], "c")
+
+    def test_multiple_regular_starts_succeeds(self):
+        """Test that multiple regular start nodes are allowed."""
+        builder = StateGraph(State)
+        builder.add_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
+        builder.add_node("c", dummy_node)
         builder.add_edge(["a", "b"], "c")
-        raise AssertionError("Should reject multiple starts with negative node")
-    except ValueError as e:
-        if "Cannot have multiple start nodes" not in str(e):
-            raise AssertionError(f"Wrong error: {e}")
-test("Multiple starts with negative (reject)", t11)
 
-# Test 12
-def t12():
-    builder = StateGraph(State)
-    builder.add_node("a", dummy_node)
-    builder.add_node("b", dummy_node)
-    builder.add_node("c", dummy_node)
-    builder.add_edge(["a", "b"], "c")
-test("Multiple regular starts", t12)
+    def test_nonexistent_start_node_rejects(self):
+        """Test that edges from non-existent start nodes are rejected."""
+        builder = StateGraph(State)
+        builder.add_node("a", dummy_node)
 
-# Test 13
-def t13():
-    builder = StateGraph(State)
-    builder.add_node("a", dummy_node)
-    try:
-        builder.add_edge("nonexistent", "a")
-        raise AssertionError("Should reject nonexistent start node")
-    except ValueError as e:
-        if "Need to add_node" not in str(e):
-            raise AssertionError(f"Wrong error: {e}")
-test("Nonexistent start (reject)", t13)
+        with pytest.raises(ValueError, match="Need to add_node"):
+            builder.add_edge("nonexistent", "a")
 
-# Test 14
-def t14():
-    builder = StateGraph(State)
-    builder.add_node("a", dummy_node)
-    try:
-        builder.add_edge("a", "nonexistent")
-        raise AssertionError("Should reject nonexistent end node")
-    except ValueError as e:
-        if "Need to add_node" not in str(e):
-            raise AssertionError(f"Wrong error: {e}")
-test("Nonexistent end (reject)", t14)
+    def test_nonexistent_end_node_rejects(self):
+        """Test that edges to non-existent end nodes are rejected."""
+        builder = StateGraph(State)
+        builder.add_node("a", dummy_node)
 
-# Test 15
-def t15():
-    builder = StateGraph(State)
-    builder.add_node("a", dummy_node)
-    try:
-        builder.add_edge(END, "a")
-        raise AssertionError("Should reject END as start")
-    except ValueError as e:
-        if "END cannot be a start" not in str(e):
-            raise AssertionError(f"Wrong error: {e}")
-test("END as start (reject)", t15)
+        with pytest.raises(ValueError, match="Need to add_node"):
+            builder.add_edge("a", "nonexistent")
 
-# Test 16
-def t16():
-    builder = StateGraph(State)
-    builder.add_node("a", dummy_node)
-    try:
-        builder.add_edge("a", START)
-        raise AssertionError("Should reject START as end")
-    except ValueError as e:
-        if "START cannot be an end" not in str(e):
-            raise AssertionError(f"Wrong error: {e}")
-test("START as end (reject)", t16)
+    def test_end_as_start_rejects(self):
+        """Test that END cannot be used as a start node."""
+        builder = StateGraph(State)
+        builder.add_node("a", dummy_node)
 
-print("\n" + "=" * 70)
-print(f"RESULTS: {tests_passed} passed, {tests_failed} failed")
-print("=" * 70)
+        with pytest.raises(ValueError, match="END cannot be a start"):
+            builder.add_edge(END, "a")
+
+    def test_start_as_end_rejects(self):
+        """Test that START cannot be used as an end node."""
+        builder = StateGraph(State)
+        builder.add_node("a", dummy_node)
+
+        with pytest.raises(ValueError, match="START cannot be an end"):
+            builder.add_edge("a", START)
+
+
+class TestNegativeNodesIntegration:
+    """Test negative nodes integration with StateGraph."""
+
+    def test_negative_node_graph_compilation(self):
+        """Test that a graph with negative nodes can be compiled."""
+        builder = StateGraph(State)
+        builder.add_node("start", dummy_node)
+        builder.add_negative_node("decision", dummy_node)
+        builder.add_node("path_a", dummy_node)
+        builder.add_node("path_b", dummy_node)
+
+        builder.add_edge(START, "start")
+        builder.add_edge("start", ["decision"], nodes_prob_distribution=[1.0])
+        builder.add_edge(
+            "decision", ["path_a", "path_b"], nodes_prob_distribution=[0.5, 0.5]
+        )
+        builder.add_edge("path_a", END)
+        builder.add_edge("path_b", END)
+
+        # Should compile without errors
+        graph = builder.compile()
+        assert graph is not None
+
+    def test_negative_node_with_mixed_paths(self):
+        """Test negative node with multiple routing options."""
+        builder = StateGraph(State)
+        builder.add_negative_node("router", dummy_node)
+        builder.add_node("process_a", dummy_node)
+        builder.add_node("process_b", dummy_node)
+
+        builder.add_edge(START, "router")
+        builder.add_edge(
+            "router", ["process_a", "process_b"], nodes_prob_distribution=[0.7, 0.3]
+        )
+        builder.add_edge("process_a", END)
+        builder.add_edge("process_b", END)
+
+        graph = builder.compile()
+        assert graph is not None
+
+    def test_probability_distribution_list_format(self):
+        """Test that probability distribution can be specified as a list."""
+        builder = StateGraph(State)
+        builder.add_negative_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
+        builder.add_node("c", dummy_node)
+
+        # Should accept list format
+        builder.add_edge("a", ["b", "c"], nodes_prob_distribution=[0.6, 0.4])
+        graph = builder.compile()
+        assert graph is not None
+
+    def test_uniform_distribution(self):
+        """Test uniform probability distribution."""
+        builder = StateGraph(State)
+        builder.add_negative_node("a", dummy_node)
+        builder.add_node("b", dummy_node)
+        builder.add_node("c", dummy_node)
+        builder.add_node("d", dummy_node)
+
+        # Uniform distribution: equal probability for all paths
+        builder.add_edge(
+            "a", ["b", "c", "d"], nodes_prob_distribution=[1 / 3, 1 / 3, 1 / 3]
+        )
+        graph = builder.compile()
+        assert graph is not None
+
+    def test_asymmetric_distribution(self):
+        """Test asymmetric probability distribution."""
+        builder = StateGraph(State)
+        builder.add_negative_node("a", dummy_node)
+        builder.add_node("primary", dummy_node)
+        builder.add_node("fallback", dummy_node)
+
+        # Asymmetric: 95% to primary, 5% to fallback
+        builder.add_edge(
+            "a", ["primary", "fallback"], nodes_prob_distribution=[0.95, 0.05]
+        )
+        graph = builder.compile()
+        assert graph is not None
