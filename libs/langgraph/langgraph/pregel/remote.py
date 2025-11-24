@@ -395,6 +395,11 @@ class RemoteGraph(PregelProtocol):
 
         return sanitized
 
+    def _validate_context(self, context: Any):
+        if not isinstance(context, dict):
+            raise ValueError("Context must be a dictionary.")
+        return context
+
     def get_state(
         self,
         config: RunnableConfig,
@@ -687,6 +692,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: dict[str, Any] | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -726,12 +732,20 @@ class RemoteGraph(PregelProtocol):
         else:
             command = None
 
+        context = self._validate_context(context)
+        if context:
+            context.update(sanitized_config["configurable"])
+            sanitized_config.pop("configurable", None)
+
         for chunk in sync_client.runs.stream(
-            thread_id=sanitized_config["configurable"].get("thread_id"),
+            thread_id=context.get("thread_id")
+            if context
+            else sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.assistant_id,
             input=input,
             command=command,
             config=sanitized_config,
+            context=context,
             stream_mode=stream_modes,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
@@ -796,6 +810,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: dict[str, Any] | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -813,6 +828,8 @@ class RemoteGraph(PregelProtocol):
         Args:
             input: Input to the graph.
             config: A `RunnableConfig` for graph invocation.
+            context: Static context to add to the assistant.
+                !!! version-added "Added in version 0.6.0"
             stream_mode: Stream mode(s) to use.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
@@ -835,12 +852,20 @@ class RemoteGraph(PregelProtocol):
         else:
             command = None
 
+        context = self._validate_context(context)
+        if context:
+            context.update(sanitized_config["configurable"])
+            sanitized_config.pop("configurable", None)
+
         async for chunk in client.runs.stream(
-            thread_id=sanitized_config["configurable"].get("thread_id"),
+            thread_id=context.get("thread_id")
+            if context
+            else sanitized_config["configurable"].get("thread_id"),
             assistant_id=self.assistant_id,
             input=input,
             command=command,
             config=sanitized_config,
+            context=context,
             stream_mode=stream_modes,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
@@ -921,6 +946,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: dict[str, Any] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
@@ -932,6 +958,8 @@ class RemoteGraph(PregelProtocol):
         Args:
             input: Input to the graph.
             config: A `RunnableConfig` for graph invocation.
+            context: Static context to add to the assistant.
+                !!! version-added "Added in version 0.6.0"
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             headers: Additional headers to pass to the request.
@@ -943,6 +971,7 @@ class RemoteGraph(PregelProtocol):
         for chunk in self.stream(
             input,
             config=config,
+            context=context,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             headers=headers,
@@ -962,6 +991,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: dict[str, Any] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
@@ -973,6 +1003,8 @@ class RemoteGraph(PregelProtocol):
         Args:
             input: Input to the graph.
             config: A `RunnableConfig` for graph invocation.
+            context: Static context to add to the assistant.
+                !!! version-added "Added in version 0.6.0"
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             headers: Additional headers to pass to the request.
@@ -984,6 +1016,7 @@ class RemoteGraph(PregelProtocol):
         async for chunk in self.astream(
             input,
             config=config,
+            context=context,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             headers=headers,
