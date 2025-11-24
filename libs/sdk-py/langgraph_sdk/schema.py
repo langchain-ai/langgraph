@@ -413,6 +413,7 @@ CronSelectField = Literal[
     "next_run_date",
     "metadata",
     "now",
+    "on_run_completed",
 ]
 
 PrimitiveData = str | int | float | bool | None
