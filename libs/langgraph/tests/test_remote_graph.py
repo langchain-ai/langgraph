@@ -847,7 +847,7 @@ def test_invoke_sanitizes_thread_id():
     mock_sync_client.runs.stream.return_value = []
     remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
 
-    config = {"configurable": {"thread_id": "thread_1", "foo": "bar"}}
+    config = {"configurable": {"thread_id": "thread_1"}}
     remote_pregel.invoke(
         {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
     )
@@ -868,7 +868,7 @@ def test_stream_sanitizes_thread_id():
     mock_sync_client.runs.stream.return_value = []
     remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
 
-    config = {"configurable": {"thread_id": "thread_2", "baz": 123}}
+    config = {"configurable": {"thread_id": "thread_2"}}
     list(remote_pregel.stream({"input": {"messages": []}}, config))
 
     assert mock_sync_client.runs.stream.called
