@@ -1034,6 +1034,7 @@ class AssistantsClient:
         *,
         metadata: Json = None,
         graph_id: str | None = None,
+        name: str | None = None,
         limit: int = 10,
         offset: int = 0,
         sort_by: AssistantSortBy | None = None,
@@ -1048,6 +1049,8 @@ class AssistantsClient:
             metadata: Metadata to filter by. Exact match filter for each KV pair.
             graph_id: The ID of the graph to filter by.
                 The graph ID is normally set in your langgraph.json configuration.
+            name: The name of the assistant to filter by.
+                The filtering logic will match assistants where 'name' is a substring (case insensitive) of the assistant name.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             sort_by: The field to sort by.
@@ -1078,6 +1081,8 @@ class AssistantsClient:
             payload["metadata"] = metadata
         if graph_id:
             payload["graph_id"] = graph_id
+        if name:
+            payload["name"] = name
         if sort_by:
             payload["sort_by"] = sort_by
         if sort_order:
@@ -4290,6 +4295,7 @@ class SyncAssistantsClient:
         *,
         metadata: Json = None,
         graph_id: str | None = None,
+        name: str | None = None,
         limit: int = 10,
         offset: int = 0,
         sort_by: AssistantSortBy | None = None,
@@ -4304,6 +4310,8 @@ class SyncAssistantsClient:
             metadata: Metadata to filter by. Exact match filter for each KV pair.
             graph_id: The ID of the graph to filter by.
                 The graph ID is normally set in your langgraph.json configuration.
+            name: The name of the assistant to filter by.
+                The filtering logic will match assistants where 'name' is a substring (case insensitive) of the assistant name.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             headers: Optional custom headers to include with the request.
@@ -4331,6 +4339,8 @@ class SyncAssistantsClient:
             payload["metadata"] = metadata
         if graph_id:
             payload["graph_id"] = graph_id
+        if name:
+            payload["name"] = name
         if sort_by:
             payload["sort_by"] = sort_by
         if sort_order:
