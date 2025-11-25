@@ -81,44 +81,36 @@ logger = logging.getLogger(__name__)
 
 RESERVED_HEADERS = ("x-api-key",)
 
-
-class _SkipAutoLoad:
-    """Sentinel value to skip auto-loading API key from environment variables."""
-
-    def __repr__(self) -> str:
-        return "SKIP_AUTO_LOAD"
+NOT_PROVIDED = cast(None, object())
 
 
-SKIP_AUTO_LOAD = _SkipAutoLoad()
-
-
-def _get_api_key(api_key: str | _SkipAutoLoad | None = None) -> str | None:
+def _get_api_key(api_key: str | None = NOT_PROVIDED) -> str | None:
     """Get the API key from the environment.
     Precedence:
         1. explicit string argument
-        2. LANGGRAPH_API_KEY
-        3. LANGSMITH_API_KEY
-        4. LANGCHAIN_API_KEY
+        2. LANGGRAPH_API_KEY (if api_key not provided)
+        3. LANGSMITH_API_KEY (if api_key not provided)
+        4. LANGCHAIN_API_KEY (if api_key not provided)
 
     Args:
         api_key: The API key to use. Can be:
             - A string: use this exact API key
-            - SKIP_AUTO_LOAD sentinel: skip loading from environment
-            - None: auto-load from environment variables
+            - None: explicitly skip loading from environment
+            - NOT_PROVIDED (default): auto-load from environment variables
     """
     if isinstance(api_key, str):
         return api_key
-    if isinstance(api_key, _SkipAutoLoad):
-        return None
-    # api_key is None, try to load from environment
-    for prefix in ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"]:
-        if env := os.getenv(f"{prefix}_API_KEY"):
-            return env.strip().strip('"').strip("'")
-    return None  # type: ignore
+    if api_key is NOT_PROVIDED:
+        # api_key is not explicitly provided, try to load from environment
+        for prefix in ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"]:
+            if env := os.getenv(f"{prefix}_API_KEY"):
+                return env.strip().strip('"').strip("'")
+    # api_key is explicitly None, don't load from environment
+    return None
 
 
 def _get_headers(
-    api_key: str | _SkipAutoLoad | None,
+    api_key: str | None,
     custom_headers: Mapping[str, str] | None,
 ) -> dict[str, str]:
     """Combine api_key and custom user-provided headers."""
@@ -184,7 +176,7 @@ def _get_run_metadata_from_response(
 def get_client(
     *,
     url: str | None = None,
-    api_key: str | _SkipAutoLoad | None = None,
+    api_key: str | None = NOT_PROVIDED,
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
 ) -> LangGraphClient:
@@ -201,8 +193,8 @@ def get_client(
         api_key:
             API key for authentication. Can be:
               - A string: use this exact API key
-              - `SKIP_AUTO_LOAD` sentinel: skip loading from environment variables
-              - `None` (default): auto-load from environment in this order:
+              - `None`: explicitly skip loading from environment variables
+              - Not provided (default): auto-load from environment in this order:
                 1. `LANGGRAPH_API_KEY`
                 2. `LANGSMITH_API_KEY`
                 3. `LANGCHAIN_API_KEY`
@@ -250,12 +242,12 @@ def get_client(
     ???+ example "Skip auto-loading API key from environment:"
 
         ```python
-        from langgraph_sdk import get_client, SKIP_AUTO_LOAD
+        from langgraph_sdk import get_client
 
         # Don't load API key from environment variables
         client = get_client(
             url="http://localhost:8123",
-            api_key=SKIP_AUTO_LOAD
+            api_key=None
         )
         ```
     """
@@ -3504,7 +3496,7 @@ class StoreClient:
 def get_sync_client(
     *,
     url: str | None = None,
-    api_key: str | _SkipAutoLoad | None = None,
+    api_key: str | None = NOT_PROVIDED,
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
 ) -> SyncLangGraphClient:
@@ -3514,8 +3506,8 @@ def get_sync_client(
         url: The URL of the LangGraph API.
         api_key: API key for authentication. Can be:
             - A string: use this exact API key
-            - `SKIP_AUTO_LOAD` sentinel: skip loading from environment variables
-            - `None` (default): auto-load from environment in this order:
+            - `None`: explicitly skip loading from environment variables
+            - Not provided (default): auto-load from environment in this order:
                 1. `LANGGRAPH_API_KEY`
                 2. `LANGSMITH_API_KEY`
                 3. `LANGCHAIN_API_KEY`
@@ -3543,12 +3535,12 @@ def get_sync_client(
     ???+ example "Skip auto-loading API key from environment:"
 
         ```python
-        from langgraph_sdk import get_sync_client, SKIP_AUTO_LOAD
+        from langgraph_sdk import get_sync_client
 
         # Don't load API key from environment variables
         client = get_sync_client(
             url="http://localhost:8123",
-            api_key=SKIP_AUTO_LOAD
+            api_key=None
         )
         ```
     """

@@ -1,12 +1,12 @@
-"""Tests for SKIP_AUTO_LOAD sentinel value."""
+"""Tests for api_key parameter behavior."""
 
 import pytest
 
-from langgraph_sdk import SKIP_AUTO_LOAD, get_client, get_sync_client
+from langgraph_sdk import get_client, get_sync_client
 
 
 class TestSkipAutoLoadApiKey:
-    """Test the SKIP_AUTO_LOAD sentinel value."""
+    """Test the api_key parameter's auto-loading behavior."""
 
     @pytest.mark.asyncio
     async def test_get_client_loads_from_env_by_default(self, monkeypatch):
@@ -20,10 +20,10 @@ class TestSkipAutoLoadApiKey:
 
     @pytest.mark.asyncio
     async def test_get_client_skips_env_when_sentinel_used(self, monkeypatch):
-        """Test that API key is not loaded from environment when SKIP_AUTO_LOAD is used."""
+        """Test that API key is not loaded from environment when None is explicitly passed."""
         monkeypatch.setenv("LANGGRAPH_API_KEY", "test-key-from-env")
 
-        client = get_client(url="http://localhost:8123", api_key=SKIP_AUTO_LOAD)
+        client = get_client(url="http://localhost:8123", api_key=None)
         assert "x-api-key" not in client.http.client.headers
         await client.aclose()
 
@@ -40,17 +40,6 @@ class TestSkipAutoLoadApiKey:
         assert client.http.client.headers["x-api-key"] == "explicit-key"
         await client.aclose()
 
-    @pytest.mark.asyncio
-    async def test_get_client_no_key_when_skip_and_no_env(self, monkeypatch):
-        """Test that no API key is set when SKIP_AUTO_LOAD is used."""
-        # Clear any API key environment variables
-        for prefix in ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"]:
-            monkeypatch.delenv(f"{prefix}_API_KEY", raising=False)
-
-        client = get_client(url="http://localhost:8123", api_key=SKIP_AUTO_LOAD)
-        assert "x-api-key" not in client.http.client.headers
-        await client.aclose()
-
     def test_get_sync_client_loads_from_env_by_default(self, monkeypatch):
         """Test that sync client loads API key from environment by default."""
         monkeypatch.setenv("LANGGRAPH_API_KEY", "test-key-from-env")
@@ -61,10 +50,10 @@ class TestSkipAutoLoadApiKey:
         client.close()
 
     def test_get_sync_client_skips_env_when_sentinel_used(self, monkeypatch):
-        """Test that sync client doesn't load from environment when SKIP_AUTO_LOAD is used."""
+        """Test that sync client doesn't load from environment when None is explicitly passed."""
         monkeypatch.setenv("LANGGRAPH_API_KEY", "test-key-from-env")
 
-        client = get_sync_client(url="http://localhost:8123", api_key=SKIP_AUTO_LOAD)
+        client = get_sync_client(url="http://localhost:8123", api_key=None)
         assert "x-api-key" not in client.http.client.headers
         client.close()
 
@@ -79,7 +68,3 @@ class TestSkipAutoLoadApiKey:
         assert "x-api-key" in client.http.client.headers
         assert client.http.client.headers["x-api-key"] == "explicit-key"
         client.close()
-
-    def test_sentinel_repr(self):
-        """Test that SKIP_AUTO_LOAD has a useful repr."""
-        assert repr(SKIP_AUTO_LOAD) == "SKIP_AUTO_LOAD"

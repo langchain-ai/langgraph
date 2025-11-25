@@ -18,10 +18,8 @@ def get_class_methods(node: ast.ClassDef) -> List[str]:
 
 def find_classes(tree: ast.AST) -> List[Tuple[str, List[str]]]:
     classes = []
-    # Classes to exclude from sync/async parity checks (e.g., sentinel types, utility classes)
-    excluded_classes = {"_SkipAutoLoad"}
     for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef) and node.name not in excluded_classes:
+        if isinstance(node, ast.ClassDef):
             methods = get_class_methods(node)
             classes.append((node.name, methods))
     return classes
