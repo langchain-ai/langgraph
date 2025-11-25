@@ -24,7 +24,7 @@ Reddit = "https://www.reddit.com/r/LangChain/"
 
 [dependency-groups]
 test = [
-    "mypy>=1.18.2",
+    "mypy==1.18.2",
     "pytest",
     "pytest-asyncio",
     "pytest-mock",

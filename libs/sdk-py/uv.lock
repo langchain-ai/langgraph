@@ -177,6 +177,7 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "mypy" },
+    { name = "mypy", specifier = "==1.18.2" },
     { name = "mypy", specifier = ">=1.18.2" },
     { name = "pydantic", specifier = ">=2.12.4" },
     { name = "pytest" },
@@ -191,7 +192,7 @@ lint = [
     { name = "ruff" },
 ]
 test = [
-    { name = "mypy", specifier = ">=1.18.2" },
+    { name = "mypy", specifier = "==1.18.2" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
