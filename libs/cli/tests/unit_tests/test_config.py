@@ -48,6 +48,7 @@ def test_validate_config():
         "env": {},
         "store": None,
         "auth": None,
+        "encrypt": None,
         "checkpointer": None,
         "http": None,
         "ui": None,
@@ -74,6 +75,7 @@ def test_validate_config():
         "env": env,
         "store": None,
         "auth": None,
+        "encrypt": None,
         "checkpointer": None,
         "http": None,
         "ui": None,
@@ -746,6 +748,23 @@ RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not foun
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
+
+
+def test_config_to_docker_python_encrypt():
+    # Test that encrypt config is included in validation
+    graphs = {"agent": "./agent.py:graph"}
+    validated = validate_config(
+        {
+            "python_version": "3.11",
+            "graphs": graphs,
+            "dependencies": ["."],
+            "encrypt": {"path": "./encrypt.py:encrypt"},
+        }
+    )
+
+    # Verify that encrypt config is preserved after validation
+    assert validated.get("encrypt") is not None
+    assert validated["encrypt"]["path"] == "./encrypt.py:encrypt"
 
 
 def test_config_to_docker_nodejs_internal_docker_tag():
