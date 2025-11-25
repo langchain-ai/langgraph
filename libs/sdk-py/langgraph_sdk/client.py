@@ -82,16 +82,25 @@ logger = logging.getLogger(__name__)
 RESERVED_HEADERS = ("x-api-key",)
 
 
-def _get_api_key(api_key: str | None = None) -> str | None:
+def _get_api_key(
+    api_key: str | None = None, skip_auto_load: bool = False
+) -> str | None:
     """Get the API key from the environment.
     Precedence:
         1. explicit argument
-        2. LANGGRAPH_API_KEY
-        3. LANGSMITH_API_KEY
-        4. LANGCHAIN_API_KEY
+        2. LANGGRAPH_API_KEY (if skip_auto_load is False)
+        3. LANGSMITH_API_KEY (if skip_auto_load is False)
+        4. LANGCHAIN_API_KEY (if skip_auto_load is False)
+
+    Args:
+        api_key: The API key to use. If provided, this takes precedence.
+        skip_auto_load: If True, skip loading from environment variables
+            when api_key is not provided.
     """
     if api_key:
         return api_key
+    if skip_auto_load:
+        return None
     for prefix in ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"]:
         if env := os.getenv(f"{prefix}_API_KEY"):
             return env.strip().strip('"').strip("'")
@@ -99,7 +108,9 @@ def _get_api_key(api_key: str | None = None) -> str | None:
 
 
 def _get_headers(
-    api_key: str | None, custom_headers: Mapping[str, str] | None
+    api_key: str | None,
+    custom_headers: Mapping[str, str] | None,
+    skip_auto_load_api_key: bool = False,
 ) -> dict[str, str]:
     """Combine api_key and custom user-provided headers."""
     custom_headers = custom_headers or {}
@@ -111,7 +122,7 @@ def _get_headers(
         "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
         **custom_headers,
     }
-    api_key = _get_api_key(api_key)
+    api_key = _get_api_key(api_key, skip_auto_load=skip_auto_load_api_key)
     if api_key:
         headers["x-api-key"] = api_key
 
@@ -167,6 +178,7 @@ def get_client(
     api_key: str | None = None,
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
+    skip_auto_load_api_key: bool = False,
 ) -> LangGraphClient:
     """Create and configure a LangGraphClient.
 
@@ -179,8 +191,8 @@ def get_client(
             - If `None`, the client first attempts an in-process connection via ASGI transport.
               If that fails, it falls back to `http://localhost:8123`.
         api_key:
-            API key for authentication. If omitted, the client reads from environment
-            variables in the following order:
+            API key for authentication. If omitted and `skip_auto_load_api_key` is False,
+            the client reads from environment variables in the following order:
               1. Function argument
               2. `LANGGRAPH_API_KEY`
               3. `LANGSMITH_API_KEY`
@@ -193,6 +205,9 @@ def get_client(
               - float (total seconds)
               - tuple `(connect, read, write, pool)` in seconds
             Defaults: connect=5, read=300, write=300, pool=5.
+        skip_auto_load_api_key:
+            If True, skip automatically loading the API key from environment variables
+            when `api_key` is not explicitly provided. Defaults to False.
 
     Returns:
         LangGraphClient:
@@ -225,6 +240,19 @@ def get_client(
                 input={"messages": [{"role": "user", "content": "Foo"}]},
             )
         ```
+
+    ???+ example "Skip auto-loading API key from environment:"
+
+        ```python
+        from langgraph_sdk import get_client
+
+        # Only use explicitly provided API key, don't load from environment
+        client = get_client(
+            url="http://localhost:8123",
+            api_key="my-explicit-key",
+            skip_auto_load_api_key=True
+        )
+        ```
     """
 
     transport: httpx.AsyncBaseTransport | None = None
@@ -253,7 +281,7 @@ def get_client(
             if timeout is not None
             else httpx.Timeout(connect=5, read=300, write=300, pool=5)
         ),
-        headers=_get_headers(api_key, headers),
+        headers=_get_headers(api_key, headers, skip_auto_load_api_key),
     )
     return LangGraphClient(client)
 
@@ -3474,12 +3502,14 @@ def get_sync_client(
     api_key: str | None = None,
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
+    skip_auto_load_api_key: bool = False,
 ) -> SyncLangGraphClient:
     """Get a synchronous LangGraphClient instance.
 
     Args:
         url: The URL of the LangGraph API.
-        api_key: The API key. If not provided, it will be read from the environment.
+        api_key: The API key. If not provided and `skip_auto_load_api_key` is False,
+            it will be read from the environment.
             Precedence:
                 1. explicit argument
                 2. LANGGRAPH_API_KEY
@@ -3490,6 +3520,9 @@ def get_sync_client(
             Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts.
             Tuple format is (connect, read, write, pool)
             If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
+        skip_auto_load_api_key:
+            If True, skip automatically loading the API key from environment variables
+            when `api_key` is not explicitly provided. Defaults to False.
     Returns:
         SyncLangGraphClient: The top-level synchronous client for accessing AssistantsClient,
         ThreadsClient, RunsClient, and CronClient.
@@ -3505,6 +3538,19 @@ def get_sync_client(
         # example usage: client.<model>.<method_name>()
         assistant = client.assistants.get(assistant_id="some_uuid")
         ```
+
+    ???+ example "Skip auto-loading API key from environment:"
+
+        ```python
+        from langgraph_sdk import get_sync_client
+
+        # Only use explicitly provided API key, don't load from environment
+        client = get_sync_client(
+            url="http://localhost:8123",
+            api_key="my-explicit-key",
+            skip_auto_load_api_key=True
+        )
+        ```
     """
 
     if url is None:
@@ -3519,7 +3565,7 @@ def get_sync_client(
             if timeout is not None
             else httpx.Timeout(connect=5, read=300, write=300, pool=5)
         ),
-        headers=_get_headers(api_key, headers),
+        headers=_get_headers(api_key, headers, skip_auto_load_api_key),
     )
     return SyncLangGraphClient(client)
 
