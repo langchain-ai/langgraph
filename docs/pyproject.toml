@@ -26,7 +26,6 @@ docs = [
     "langgraph-checkpoint-postgres",
     "langgraph-sdk",
     "langgraph-supervisor",
-    "langgraph-swarm",
     "langchain-mcp-adapters",
     "langchain-ollama",
     "mkdocs",
