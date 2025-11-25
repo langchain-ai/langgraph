@@ -24,7 +24,7 @@ Reddit = "https://www.reddit.com/r/LangChain/"
 
 [dependency-groups]
 test = [
-    "mypy==1.18.2",
+    "mypy==1.17.1",
     "pytest",
     "pytest-asyncio",
     "pytest-mock",
@@ -34,7 +34,6 @@ lint = ["ruff", "codespell", "mypy"]
 dev = [
   { include-group = "test" },
   { include-group = "lint" },
-  "mypy>=1.18.2",
   "pydantic>=2.12.4",
 ]
 
