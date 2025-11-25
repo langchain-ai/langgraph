@@ -1,8 +1,10 @@
 import concurrent.futures
+import sys
 from dataclasses import dataclass
 from typing import runtime_checkable
 
 import mypy.api
+import pytest
 from pydantic import BaseModel
 
 from langgraph_sdk.schema import (
@@ -32,6 +34,10 @@ def test_dataclass_like():
     assert isinstance(MyDataclass(foo="test"), rc(_DataclassLike))
 
 
+@pytest.mark.skipif(
+    sys.version_info >= (3, 14),
+    reason="Using mypy as a library in py 3.14 gives internal dev errors",
+)
 def test_mypy_type():
     pydantic_example = """
 from langgraph_sdk import get_client
