@@ -96,9 +96,9 @@ def _get_api_key(api_key: str | _SkipAutoLoad | None = None) -> str | None:
     """Get the API key from the environment.
     Precedence:
         1. explicit string argument
-        2. LANGGRAPH_API_KEY (if api_key is None)
-        3. LANGSMITH_API_KEY (if api_key is None)
-        4. LANGCHAIN_API_KEY (if api_key is None)
+        2. LANGGRAPH_API_KEY
+        3. LANGSMITH_API_KEY
+        4. LANGCHAIN_API_KEY
 
     Args:
         api_key: The API key to use. Can be:
