@@ -26,7 +26,7 @@ class EncryptionContext:
         metadata: Additional context metadata that can be used for encryption decisions
     """
 
-    __slots__ = ("model", "metadata")
+    __slots__ = ("metadata", "model")
 
     def __init__(
         self,
@@ -40,32 +40,39 @@ class EncryptionContext:
         return f"EncryptionContext(model={self.model!r}, metadata={self.metadata!r})"
 
 
-BlobEncryptor = Callable[[EncryptionContext, bytes], bytes | Awaitable[bytes]]
+BlobEncryptor = Callable[[EncryptionContext, bytes], Awaitable[bytes]]
 """Handler for encrypting opaque blob data like checkpoints.
+
+Note: Must be an async function. Encryption typically involves I/O operations
+(calling external KMS services), which should be async.
 
 Args:
     ctx: Encryption context with model type and metadata
     blob: The raw bytes to encrypt
 
 Returns:
-    Encrypted bytes
+    Awaitable that resolves to encrypted bytes
 """
 
-BlobDecryptor = Callable[[EncryptionContext, bytes], bytes | Awaitable[bytes]]
+BlobDecryptor = Callable[[EncryptionContext, bytes], Awaitable[bytes]]
 """Handler for decrypting opaque blob data like checkpoints.
+
+Note: Must be an async function. Decryption typically involves I/O operations
+(calling external KMS services), which should be async.
 
 Args:
     ctx: Encryption context with model type and metadata
     blob: The encrypted bytes to decrypt
 
 Returns:
-    Decrypted bytes
+    Awaitable that resolves to decrypted bytes
 """
 
-MetadataEncryptor = Callable[
-    [EncryptionContext, Metadata], Metadata | Awaitable[Metadata]
-]
+MetadataEncryptor = Callable[[EncryptionContext, Metadata], Awaitable[Metadata]]
 """Handler for encrypting metadata key/value pairs.
+
+Note: Must be an async function. Encryption typically involves I/O operations
+(calling external KMS services), which should be async.
 
 Maps plaintext metadata fields to encrypted fields. A practical approach:
 - Keep "owner" field unencrypted for search/filtering
@@ -85,13 +92,14 @@ Args:
     metadata: The plaintext metadata dictionary
 
 Returns:
-    Encrypted metadata dictionary
+    Awaitable that resolves to encrypted metadata dictionary
 """
 
-MetadataDecryptor = Callable[
-    [EncryptionContext, Metadata], Metadata | Awaitable[Metadata]
-]
+MetadataDecryptor = Callable[[EncryptionContext, Metadata], Awaitable[Metadata]]
 """Handler for decrypting metadata key/value pairs.
+
+Note: Must be an async function. Decryption typically involves I/O operations
+(calling external KMS services), which should be async.
 
 Inverse of MetadataEncryptor. Must be able to decrypt metadata that
 was encrypted by the corresponding encryptor.
@@ -101,5 +109,5 @@ Args:
     metadata: The encrypted metadata dictionary
 
 Returns:
-    Decrypted metadata dictionary
+    Awaitable that resolves to decrypted metadata dictionary
 """

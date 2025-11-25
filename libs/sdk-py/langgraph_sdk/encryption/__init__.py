@@ -8,7 +8,6 @@ server-side.
 
 from __future__ import annotations
 
-import inspect
 import typing
 
 from langgraph_sdk.encryption import types
@@ -204,12 +203,12 @@ class Encrypt:
     """
 
     __slots__ = (
-        "encrypt",
-        "decrypt",
-        "_blob_encryptor",
         "_blob_decryptor",
-        "_metadata_encryptor",
+        "_blob_encryptor",
         "_metadata_decryptor",
+        "_metadata_encryptor",
+        "decrypt",
+        "encrypt",
     )
 
     types = types
