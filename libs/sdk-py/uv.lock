@@ -160,7 +160,6 @@ lint = [
     { name = "ruff" },
 ]
 test = [
-    { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
@@ -177,7 +176,6 @@ requires-dist = [
 dev = [
     { name = "codespell" },
     { name = "mypy" },
-    { name = "mypy", specifier = "==1.17.1" },
     { name = "pydantic", specifier = ">=2.12.4" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -191,7 +189,6 @@ lint = [
     { name = "ruff" },
 ]
 test = [
-    { name = "mypy", specifier = "==1.17.1" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },

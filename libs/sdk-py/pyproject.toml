@@ -24,7 +24,6 @@ Reddit = "https://www.reddit.com/r/LangChain/"
 
 [dependency-groups]
 test = [
-    "mypy==1.17.1",
     "pytest",
     "pytest-asyncio",
     "pytest-mock",
@@ -69,7 +68,6 @@ ignore = [
   "B006",   # mutable default arguments (sometimes intentional)
   "B904",   # raise without from inside except (sometimes intentional)
   "SIM102", # nested if statements (sometimes clearer)
-  "UP007",  # Union[X, Y] instead of x | y; not supported for old Python versions
 ]
 per-file-ignores = { "tests/**" = ["S101", "B017"] }
 
