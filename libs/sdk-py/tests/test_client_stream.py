@@ -59,7 +59,7 @@ def test_stream_see():
 
         decoder = SSEDecoder()
         for line in iter_lines_raw(groups):
-            sse = decoder.decode(line=line.rstrip(b"\n"))
+            sse = decoder.decode(line=line.rstrip(b"\n"))  # type: ignore
             if sse is not None:
                 parts.append(sse)
         if sse := decoder.decode(b""):
@@ -152,7 +152,7 @@ def test_sync_http_client_stream_recovers_after_disconnect():
     assert parts == [
         StreamPart(event="values", data={"step": 1}),
         StreamPart(event="values", data={"step": 2}),
-        StreamPart(event="end", data=None),
+        StreamPart(event="end", data=None),  # ty: ignore
     ]
 
 

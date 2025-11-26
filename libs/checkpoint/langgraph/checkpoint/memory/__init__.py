@@ -33,7 +33,7 @@ class InMemorySaver(
 ):
     """An in-memory checkpoint saver.
 
-    This checkpoint saver stores checkpoints in memory using a defaultdict.
+    This checkpoint saver stores checkpoints in memory using a `defaultdict`.
 
     Note:
         Only use `InMemorySaver` for debugging or testing purposes.
@@ -44,22 +44,23 @@ class InMemorySaver(
     Args:
         serde: The serializer to use for serializing and deserializing checkpoints.
 
-    Examples:
+    Example:
+        ```python
+        import asyncio
 
-            import asyncio
+        from langgraph.checkpoint.memory import InMemorySaver
+        from langgraph.graph import StateGraph
 
-            from langgraph.checkpoint.memory import InMemorySaver
-            from langgraph.graph import StateGraph
+        builder = StateGraph(int)
+        builder.add_node("add_one", lambda x: x + 1)
+        builder.set_entry_point("add_one")
+        builder.set_finish_point("add_one")
 
-            builder = StateGraph(int)
-            builder.add_node("add_one", lambda x: x + 1)
-            builder.set_entry_point("add_one")
-            builder.set_finish_point("add_one")
-
-            memory = InMemorySaver()
-            graph = builder.compile(checkpointer=memory)
-            coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
-            asyncio.run(coro)  # Output: 2
+        memory = InMemorySaver()
+        graph = builder.compile(checkpointer=memory)
+        coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
+        asyncio.run(coro)  # Output: 2
+        ```
     """
 
     # thread ID ->  checkpoint NS -> checkpoint ID -> checkpoint mapping

@@ -24,19 +24,28 @@ class APIError(httpx.HTTPStatusError, LangGraphError):
     type: str | None
 
     def __init__(
-        self, message: str, response: httpx.Response, *, body: object | None
+        self,
+        message: str,
+        response_or_request: httpx.Response | httpx.Request,
+        *,
+        body: object | None,
     ) -> None:
-        httpx.HTTPStatusError.__init__(
-            self, message, request=response.request, response=response
-        )
+        if isinstance(response_or_request, httpx.Response):
+            req = response_or_request.request
+            response = response_or_request
+        else:
+            req = response_or_request
+            response = None
+
+        httpx.HTTPStatusError.__init__(self, message, request=req, response=response)  # type: ignore[arg-type]
         LangGraphError.__init__(self)
 
-        self.request = response.request
+        self.request = req
         self.message = message
         self.body = body
 
         if isinstance(body, dict):
-            b = cast(dict[str, Any], body)
+            b = cast("dict[str, Any]", body)
             # Best-effort extraction of common fields if present
             code_val = b.get("code")
             self.code = code_val if isinstance(code_val, str) else None
@@ -88,7 +97,7 @@ class APIConnectionError(APIError):
     def __init__(
         self, *, message: str = "Connection error.", request: httpx.Request
     ) -> None:
-        super().__init__(message, request, body=None)
+        super().__init__(message, response_or_request=request, body=None)
 
 
 class APITimeoutError(APIConnectionError):
@@ -130,7 +139,7 @@ class InternalServerError(APIStatusError):
 
 def _extract_error_message(body: object | None, fallback: str) -> str:
     if isinstance(body, dict):
-        b = cast(dict[str, Any], body)
+        b = cast("dict[str, Any]", body)
         for key in ("message", "detail", "error"):
             val = b.get(key)
             if isinstance(val, str) and val:
@@ -138,7 +147,7 @@ def _extract_error_message(body: object | None, fallback: str) -> str:
         # Sometimes errors are structured like {"error": {"message": "..."}}
         err = b.get("error")
         if isinstance(err, dict):
-            e = cast(dict[str, Any], err)
+            e = cast("dict[str, Any]", err)
             for key in ("message", "detail"):
                 val = e.get(key)
                 if isinstance(val, str) and val:
@@ -196,7 +205,7 @@ def _map_status_error(response: httpx.Response, body: object | None) -> APIStatu
         return UnprocessableEntityError(message, response=response, body=body)
     if status == 429:
         return RateLimitError(message, response=response, body=body)
-    if 500 <= status:
+    if status >= 500:
         return InternalServerError(message, response=response, body=body)
     return APIStatusError(message, response=response, body=body)
 
