@@ -10,8 +10,8 @@ from __future__ import annotations
 import typing
 from collections.abc import Awaitable, Callable
 
-Metadata = dict[str, typing.Any]
-"""Metadata dictionary type for assistant/thread/run/store metadata."""
+Json = dict[str, typing.Any]
+"""JSON-serializable dictionary type for structured data encryption."""
 
 
 class EncryptionContext:
@@ -23,21 +23,24 @@ class EncryptionContext:
 
     Attributes:
         model: The model type being encrypted (e.g., "assistant", "thread", "run", "checkpoint")
+        field: The specific field being encrypted (e.g., "metadata", "context", "kwargs", "values")
         metadata: Additional context metadata that can be used for encryption decisions
     """
 
-    __slots__ = ("metadata", "model")
+    __slots__ = ("field", "metadata", "model")
 
     def __init__(
         self,
         model: str | None = None,
         metadata: dict[str, typing.Any] | None = None,
+        field: str | None = None,
     ):
         self.model = model
+        self.field = field
         self.metadata = metadata or {}
 
     def __repr__(self) -> str:
-        return f"EncryptionContext(model={self.model!r}, metadata={self.metadata!r})"
+        return f"EncryptionContext(model={self.model!r}, field={self.field!r}, metadata={self.metadata!r})"
 
 
 BlobEncryptor = Callable[[EncryptionContext, bytes], Awaitable[bytes]]
@@ -68,13 +71,16 @@ Returns:
     Awaitable that resolves to decrypted bytes
 """
 
-MetadataEncryptor = Callable[[EncryptionContext, Metadata], Awaitable[Metadata]]
-"""Handler for encrypting metadata key/value pairs.
+JsonEncryptor = Callable[[EncryptionContext, Json], Awaitable[Json]]
+"""Handler for encrypting structured JSON data.
 
 Note: Must be an async function. Encryption typically involves I/O operations
 (calling external KMS services), which should be async.
 
-Maps plaintext metadata fields to encrypted fields. A practical approach:
+Used for encrypting structured data like metadata, context, kwargs, values,
+and other JSON-serializable fields across different model types.
+
+Maps plaintext fields to encrypted fields. A practical approach:
 - Keep "owner" field unencrypted for search/filtering
 - Encrypt VALUES (not keys) for fields with specific prefix (e.g., "my.customer.org/")
 - Pass through all other fields unencrypted
@@ -88,26 +94,33 @@ encryption implementations use nonces (non-deterministic encryption).
 Only unencrypted fields can be used in search queries.
 
 Args:
-    ctx: Encryption context with model type and metadata
-    metadata: The plaintext metadata dictionary
+    ctx: Encryption context with model type, field name, and metadata
+    data: The plaintext JSON dictionary
 
 Returns:
-    Awaitable that resolves to encrypted metadata dictionary
+    Awaitable that resolves to encrypted JSON dictionary
 """
 
-MetadataDecryptor = Callable[[EncryptionContext, Metadata], Awaitable[Metadata]]
-"""Handler for decrypting metadata key/value pairs.
+JsonDecryptor = Callable[[EncryptionContext, Json], Awaitable[Json]]
+"""Handler for decrypting structured JSON data.
 
 Note: Must be an async function. Decryption typically involves I/O operations
 (calling external KMS services), which should be async.
 
-Inverse of MetadataEncryptor. Must be able to decrypt metadata that
+Inverse of JsonEncryptor. Must be able to decrypt data that
 was encrypted by the corresponding encryptor.
 
 Args:
-    ctx: Encryption context with model type and metadata
-    metadata: The encrypted metadata dictionary
+    ctx: Encryption context with model type, field name, and metadata
+    data: The encrypted JSON dictionary
 
 Returns:
-    Awaitable that resolves to decrypted metadata dictionary
+    Awaitable that resolves to decrypted JSON dictionary
 """
+
+# Deprecated aliases for backwards compatibility
+MetadataEncryptor = JsonEncryptor
+"""Deprecated alias for JsonEncryptor. Use JsonEncryptor instead."""
+
+MetadataDecryptor = JsonDecryptor
+"""Deprecated alias for JsonDecryptor. Use JsonDecryptor instead."""
