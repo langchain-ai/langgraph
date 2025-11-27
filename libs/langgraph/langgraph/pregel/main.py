@@ -2834,20 +2834,6 @@ class Pregel(
                     )
                 )
 
-            # set up custom stream mode
-            def stream_writer(c: Any) -> None:
-                aioloop.call_soon_threadsafe(
-                    stream.put_nowait,
-                    (
-                        tuple(
-                            get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[
-                                :-1
-                            ]
-                        ),
-                        "custom",
-                        c,
-                    ),
-                )
 
             if "custom" in stream_modes:
 
