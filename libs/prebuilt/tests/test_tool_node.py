@@ -335,6 +335,7 @@ async def test_tool_node_error_handling_tool_exception() -> None:
     assert tool_message.status == "error"
     assert tool_message.content == "Test error"
 
+
 async def test_tool_node_error_handling() -> None:
     def handle_all(e: ValueError | ToolException | ToolInvocationError):
         return TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
