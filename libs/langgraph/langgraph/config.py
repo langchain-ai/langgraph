@@ -32,8 +32,8 @@ def get_config() -> RunnableConfig:
 def get_store() -> BaseStore:
     """Access LangGraph store from inside a graph node or entrypoint task at runtime.
 
-    Can be called from inside any [StateGraph][langgraph.graph.StateGraph] node or
-    functional API [task][langgraph.func.task], as long as the StateGraph or the [entrypoint][langgraph.func.entrypoint]
+    Can be called from inside any [`StateGraph`][langgraph.graph.StateGraph] node or
+    functional API [`task`][langgraph.func.task], as long as the `StateGraph` or the [`entrypoint`][langgraph.func.entrypoint]
     was initialized with a store, e.g.:
 
     ```python
@@ -53,10 +53,10 @@ def get_store() -> BaseStore:
     !!! warning "Async with Python < 3.11"
 
         If you are using Python < 3.11 and are running LangGraph asynchronously,
-        `get_store()` won't work since it uses [contextvar](https://docs.python.org/3/library/contextvars.html) propagation (only available in [Python >= 3.11](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task)).
+        `get_store()` won't work since it uses [`contextvar`](https://docs.python.org/3/library/contextvars.html) propagation (only available in [Python >= 3.11](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task)).
 
 
-    Example: Using with StateGraph
+    Example: Using with `StateGraph`
         ```python
         from typing_extensions import TypedDict
         from langgraph.graph import StateGraph, START
@@ -124,17 +124,17 @@ def get_store() -> BaseStore:
 
 
 def get_stream_writer() -> StreamWriter:
-    """Access LangGraph [StreamWriter][langgraph.types.StreamWriter] from inside a graph node or entrypoint task at runtime.
+    """Access LangGraph [`StreamWriter`][langgraph.types.StreamWriter] from inside a graph node or entrypoint task at runtime.
 
-    Can be called from inside any [StateGraph][langgraph.graph.StateGraph] node or
-    functional API [task][langgraph.func.task].
+    Can be called from inside any [`StateGraph`][langgraph.graph.StateGraph] node or
+    functional API [`task`][langgraph.func.task].
 
     !!! warning "Async with Python < 3.11"
 
         If you are using Python < 3.11 and are running LangGraph asynchronously,
-        `get_stream_writer()` won't work since it uses [contextvar](https://docs.python.org/3/library/contextvars.html) propagation (only available in [Python >= 3.11](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task)).
+        `get_stream_writer()` won't work since it uses [`contextvar`](https://docs.python.org/3/library/contextvars.html) propagation (only available in [Python >= 3.11](https://docs.python.org/3/library/asyncio-task.html#asyncio.create_task)).
 
-    Example: Using with StateGraph
+    Example: Using with `StateGraph`
         ```python
         from typing_extensions import TypedDict
         from langgraph.graph import StateGraph, START
