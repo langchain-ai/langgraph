@@ -10,6 +10,7 @@ Store.
 from __future__ import annotations
 
 import asyncio
+import builtins
 import functools
 import logging
 import os
@@ -675,7 +676,7 @@ class AssistantsClient:
         xray: int | bool = False,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> dict[str, list[dict[str, Any]]]:
+    ) -> dict[str, builtins.list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
         Args:
@@ -1064,10 +1065,10 @@ class AssistantsClient:
         offset: int = 0,
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
-        select: list[AssistantSelectField] | None = None,
+        select: builtins.list[AssistantSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Assistant]:
+    ) -> builtins.list[Assistant]:
         """Search for assistants.
 
         Args:
@@ -1158,7 +1159,7 @@ class AssistantsClient:
         *,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[AssistantVersion]:
+    ) -> builtins.list[AssistantVersion]:
         """List all versions of an assistant.
 
         Args:
@@ -1462,10 +1463,10 @@ class ThreadsClient:
         offset: int = 0,
         sort_by: ThreadSortBy | None = None,
         sort_order: SortOrder | None = None,
-        select: list[ThreadSelectField] | None = None,
+        select: builtins.list[ThreadSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Thread]:
+    ) -> builtins.list[Thread]:
         """Search for threads.
 
         Args:
@@ -1794,7 +1795,7 @@ class ThreadsClient:
         checkpoint: Checkpoint | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[ThreadState]:
+    ) -> builtins.list[ThreadState]:
         """Get the state history of a thread.
 
         Args:
@@ -2356,11 +2357,11 @@ class RunsClient:
 
     async def create_batch(
         self,
-        payloads: list[RunCreate],
+        payloads: builtins.list[RunCreate],
         *,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Run]:
+    ) -> builtins.list[Run]:
         """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
@@ -2396,7 +2397,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> list[dict] | dict[str, Any]: ...
+    ) -> builtins.list[dict] | dict[str, Any]: ...
 
     @overload
     async def wait(
@@ -2421,7 +2422,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> list[dict] | dict[str, Any]: ...
+    ) -> builtins.list[dict] | dict[str, Any]: ...
 
     async def wait(
         self,
@@ -2449,7 +2450,7 @@ class RunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-    ) -> list[dict] | dict[str, Any]:
+    ) -> builtins.list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -2600,10 +2601,10 @@ class RunsClient:
         limit: int = 10,
         offset: int = 0,
         status: RunStatus | None = None,
-        select: list[RunSelectField] | None = None,
+        select: builtins.list[RunSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Run]:
+    ) -> builtins.list[Run]:
         """List runs.
 
         Args:
@@ -2906,8 +2907,8 @@ class CronClient:
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
-        interrupt_before: All | list[str] | None = None,
-        interrupt_after: All | list[str] | None = None,
+        interrupt_before: All | builtins.list[str] | None = None,
+        interrupt_after: All | builtins.list[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         headers: Mapping[str, str] | None = None,
@@ -2989,8 +2990,8 @@ class CronClient:
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
-        interrupt_before: All | list[str] | None = None,
-        interrupt_after: All | list[str] | None = None,
+        interrupt_before: All | builtins.list[str] | None = None,
+        interrupt_after: All | builtins.list[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         headers: Mapping[str, str] | None = None,
@@ -3094,10 +3095,10 @@ class CronClient:
         offset: int = 0,
         sort_by: CronSortBy | None = None,
         sort_order: SortOrder | None = None,
-        select: list[CronSelectField] | None = None,
+        select: builtins.list[CronSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Cron]:
+    ) -> builtins.list[Cron]:
         """Get a list of cron jobs.
 
         Args:
@@ -3218,7 +3219,7 @@ class StoreClient:
         /,
         key: str,
         value: Mapping[str, Any],
-        index: Literal[False] | list[str] | None = None,
+        index: Literal[False] | builtins.list[str] | None = None,
         ttl: int | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
@@ -3435,8 +3436,8 @@ class StoreClient:
 
     async def list_namespaces(
         self,
-        prefix: list[str] | None = None,
-        suffix: list[str] | None = None,
+        prefix: builtins.list[str] | None = None,
+        suffix: builtins.list[str] | None = None,
         max_depth: int | None = None,
         limit: int = 100,
         offset: int = 0,
@@ -3948,7 +3949,7 @@ class SyncAssistantsClient:
         xray: int | bool = False,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> dict[str, list[dict[str, Any]]]:
+    ) -> dict[str, builtins.list[dict[str, Any]]]:
         """Get the graph of an assistant by ID.
 
         Args:
@@ -4338,10 +4339,10 @@ class SyncAssistantsClient:
         offset: int = 0,
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
-        select: list[AssistantSelectField] | None = None,
+        select: builtins.list[AssistantSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Assistant]:
+    ) -> builtins.list[Assistant]:
         """Search for assistants.
 
         Args:
@@ -4429,7 +4430,7 @@ class SyncAssistantsClient:
         *,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[AssistantVersion]:
+    ) -> builtins.list[AssistantVersion]:
         """List all versions of an assistant.
 
         Args:
@@ -4724,10 +4725,10 @@ class SyncThreadsClient:
         offset: int = 0,
         sort_by: ThreadSortBy | None = None,
         sort_order: SortOrder | None = None,
-        select: list[ThreadSelectField] | None = None,
+        select: builtins.list[ThreadSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Thread]:
+    ) -> builtins.list[Thread]:
         """Search for threads.
 
         Args:
@@ -5045,7 +5046,7 @@ class SyncThreadsClient:
         checkpoint: Checkpoint | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[ThreadState]:
+    ) -> builtins.list[ThreadState]:
         """Get the state history of a thread.
 
         Args:
@@ -5605,11 +5606,11 @@ class SyncRunsClient:
 
     def create_batch(
         self,
-        payloads: list[RunCreate],
+        payloads: builtins.list[RunCreate],
         *,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Run]:
+    ) -> builtins.list[Run]:
         """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
@@ -5645,7 +5646,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> list[dict] | dict[str, Any]: ...
+    ) -> builtins.list[dict] | dict[str, Any]: ...
 
     @overload
     def wait(
@@ -5670,7 +5671,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> list[dict] | dict[str, Any]: ...
+    ) -> builtins.list[dict] | dict[str, Any]: ...
 
     def wait(
         self,
@@ -5698,7 +5699,7 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-    ) -> list[dict] | dict[str, Any]:
+    ) -> builtins.list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -5842,10 +5843,10 @@ class SyncRunsClient:
         limit: int = 10,
         offset: int = 0,
         status: RunStatus | None = None,
-        select: list[RunSelectField] | None = None,
+        select: builtins.list[RunSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Run]:
+    ) -> builtins.list[Run]:
         """List runs.
 
         Args:
@@ -6135,8 +6136,8 @@ class SyncCronClient:
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
-        interrupt_before: All | list[str] | None = None,
-        interrupt_after: All | list[str] | None = None,
+        interrupt_before: All | builtins.list[str] | None = None,
+        interrupt_after: All | builtins.list[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         headers: Mapping[str, str] | None = None,
@@ -6214,8 +6215,8 @@ class SyncCronClient:
         config: Config | None = None,
         context: Context | None = None,
         checkpoint_during: bool | None = None,
-        interrupt_before: All | list[str] | None = None,
-        interrupt_after: All | list[str] | None = None,
+        interrupt_before: All | builtins.list[str] | None = None,
+        interrupt_after: All | builtins.list[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         headers: Mapping[str, str] | None = None,
@@ -6318,10 +6319,10 @@ class SyncCronClient:
         offset: int = 0,
         sort_by: CronSortBy | None = None,
         sort_order: SortOrder | None = None,
-        select: list[CronSelectField] | None = None,
+        select: builtins.list[CronSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Cron]:
+    ) -> builtins.list[Cron]:
         """Get a list of cron jobs.
 
         Args:
@@ -6440,7 +6441,7 @@ class SyncStoreClient:
         /,
         key: str,
         value: Mapping[str, Any],
-        index: Literal[False] | list[str] | None = None,
+        index: Literal[False] | builtins.list[str] | None = None,
         ttl: int | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
@@ -6655,8 +6656,8 @@ class SyncStoreClient:
 
     def list_namespaces(
         self,
-        prefix: list[str] | None = None,
-        suffix: list[str] | None = None,
+        prefix: builtins.list[str] | None = None,
+        suffix: builtins.list[str] | None = None,
         max_depth: int | None = None,
         limit: int = 100,
         offset: int = 0,
@@ -6719,7 +6720,7 @@ def _provided_vals(d: Mapping[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
 
 
-_registered_transports: list[httpx.ASGITransport] = []
+_registered_transports: builtins.list[httpx.ASGITransport] = []
 
 
 # Do not move; this is used in the server.
