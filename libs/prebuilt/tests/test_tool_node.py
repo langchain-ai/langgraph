@@ -310,6 +310,31 @@ def test_tool_node_error_handling_default_exception() -> None:
         )
 
 
+async def test_tool_node_error_handling_tool_exception() -> None:
+    """Test that ToolException is handled by default."""
+    result = await ToolNode([tool2]).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool2",
+                            "args": {"some_val": 0, "some_other_val": "bar"},
+                            "id": "some id",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message: ToolMessage = result["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.status == "error"
+    assert tool_message.content == "Test error"
+
 async def test_tool_node_error_handling() -> None:
     def handle_all(e: ValueError | ToolException | ToolInvocationError):
         return TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
