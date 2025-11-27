@@ -1,13 +1,16 @@
-
 import asyncio
+from typing import Annotated
+
 import pytest
-from typing import Annotated, TypedDict, Any
-from langchain_core.tools import tool
 from langchain_core.messages import AIMessage, BaseMessage
-from langgraph.graph import StateGraph, START, END
+from langchain_core.tools import tool
 from langgraph.prebuilt import ToolNode
+from typing_extensions import TypedDict
+
 from langgraph.config import get_stream_writer
+from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
+
 
 @tool
 async def tool_a(query: str):
@@ -18,6 +21,7 @@ async def tool_a(query: str):
     writer({"type": "tool_a", "status": "end"})
     return "A"
 
+
 @tool
 async def tool_b(query: str):
     """Tool B."""
@@ -27,8 +31,10 @@ async def tool_b(query: str):
     writer({"type": "tool_b", "status": "end"})
     return "B"
 
+
 class State(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
+
 
 @pytest.mark.asyncio
 async def test_async_tool_node_streaming():
@@ -36,10 +42,17 @@ async def test_async_tool_node_streaming():
     tool_node = ToolNode(tools)
 
     async def agent(state: State):
-        return {"messages": [AIMessage(content="", tool_calls=[
-            {"name": "tool_a", "args": {"query": "a"}, "id": "1"},
-            {"name": "tool_b", "args": {"query": "b"}, "id": "2"}
-        ])]}
+        return {
+            "messages": [
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {"name": "tool_a", "args": {"query": "a"}, "id": "1"},
+                        {"name": "tool_b", "args": {"query": "b"}, "id": "2"},
+                    ],
+                )
+            ]
+        }
 
     workflow = StateGraph(State)
     workflow.add_node("agent", agent)

@@ -2834,7 +2834,6 @@ class Pregel(
                     )
                 )
 
-
             if "custom" in stream_modes:
 
                 def stream_writer(c: Any) -> None:
