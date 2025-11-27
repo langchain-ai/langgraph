@@ -1861,9 +1861,10 @@ async def test_tool_node_inject_async_all_types_with_schema() -> None:
         "tool_call_id=test_call_789"
     )
 
+
 async def test_tool_node_tool_runtime_generic() -> None:
     """Test that ToolRuntime with generic type arguments is correctly injected."""
-    
+
     @dataclasses.dataclass
     class MyContext:
         some_info: str
@@ -1876,7 +1877,7 @@ async def test_tool_node_tool_runtime_generic() -> None:
     # Create a mock runtime with context
     mock_runtime = _create_mock_runtime()
     mock_runtime.context = MyContext(some_info="test_info")
-    
+
     config = {"configurable": {"__pregel_runtime": mock_runtime}}
 
     result = await ToolNode([get_info]).ainvoke(
