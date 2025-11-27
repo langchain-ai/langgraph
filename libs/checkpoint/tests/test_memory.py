@@ -192,3 +192,14 @@ def test_memory_saver() -> None:
     from langgraph.checkpoint.memory import InMemorySaver
 
     assert isinstance(InMemorySaver(), InMemorySaver)
+
+
+async def test_memory_saver_context_manager_returns_self() -> None:
+    checkpointer = InMemorySaver()
+    async with checkpointer as saver:
+        assert saver is checkpointer
+        assert hasattr(saver, "get_next_version")
+
+    with checkpointer as saver:
+        assert saver is checkpointer
+        assert hasattr(saver, "get_next_version")
