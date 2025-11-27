@@ -976,17 +976,27 @@ class CompiledStateGraph(
                 k for k, v in self.builder.managed.items()
             ]
 
+        validators: dict[str, TypeAdapter] = {}
+        if isclass(self.builder.state_schema) and issubclass(
+            self.builder.state_schema, BaseModel
+        ):
+            for name, field in self.builder.state_schema.model_fields.items():
+                channel = self.builder.channels.get(name)
+                if isinstance(channel, (LastValue, LastValueAfterFinish)):
+                    validators[name] = TypeAdapter(field.annotation)
+
         def _get_updates(
             input: None | dict | Any,
         ) -> Sequence[tuple[str, Any]] | None:
+            updates: Sequence[tuple[str, Any]] | None = None
             if input is None:
                 return None
             elif isinstance(input, dict):
-                return [(k, v) for k, v in input.items() if k in output_keys]
+                updates = [(k, v) for k, v in input.items() if k in output_keys]
             elif isinstance(input, Command):
                 if input.graph == Command.PARENT:
                     return None
-                return [
+                updates = [
                     (k, v) for k, v in input._update_as_tuples() if k in output_keys
                 ]
             elif (
@@ -994,25 +1004,30 @@ class CompiledStateGraph(
                 and input
                 and any(isinstance(i, Command) for i in input)
             ):
-                updates: list[tuple[str, Any]] = []
+                updates_list: list[tuple[str, Any]] = []
                 for i in input:
                     if isinstance(i, Command):
                         if i.graph == Command.PARENT:
                             continue
-                        updates.extend(
-                            (k, v) for k, v in i._update_as_tuples() if k in output_keys
-                        )
+                        updates_list.extend(i._update_as_tuples())
                     else:
-                        updates.extend(_get_updates(i) or ())
-                return updates
+                        updates_list.extend(_get_updates(i) or ())
+                updates = updates_list
             elif (t := type(input)) and get_cached_annotated_keys(t):
-                return get_update_as_tuples(input, output_keys)
+                updates = get_update_as_tuples(input, output_keys)
             else:
                 msg = create_error_message(
                     message=f"Expected dict, got {input}",
                     error_code=ErrorCode.INVALID_GRAPH_NODE_RETURN_VALUE,
                 )
                 raise InvalidUpdateError(msg)
+
+            if updates and validators:
+                for k, v in updates:
+                    if validator := validators.get(k):
+                        validator.validate_python(v)
+
+            return updates
 
         # state updaters
         write_entries: tuple[ChannelWriteEntry | ChannelWriteTupleEntry, ...] = (
