@@ -1,0 +1,10 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "ifu_analysis": "./src/graph.py:create_analysis_graph"
+  },
+  "env": ".env",
+  "python_version": "3.11"
+}
