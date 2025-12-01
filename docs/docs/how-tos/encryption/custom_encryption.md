@@ -29,7 +29,7 @@ The encryption system provides a decorator-based API similar to the Auth system,
 
 ## How it works
 
-1. **Define handlers** - Create encryption and decryption functions decorated with `@encrypt.blob`, `@decrypt.blob`, `@encrypt.json`, and `@decrypt.json`
+1. **Define handlers** - Create encryption and decryption functions decorated with `@encrypt.encrypt.blob`, `@encrypt.decrypt.blob`, `@encrypt.encrypt.json`, and `@encrypt.decrypt.json`
 2. **Configure** - Add the path to your encryption module in `langgraph.json`
 3. **Pass context** - Send encryption context (like tenant ID and key ID) via the `X-Encryption-Context` header
 4. **Automatic encryption** - LangGraph automatically encrypts data before storing and decrypts on retrieval
@@ -51,7 +51,7 @@ encrypt = Encrypt()
 kms_client = boto3.client('kms')
 
 
-@encrypt.blob
+@encrypt.encrypt.blob
 async def encrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
     """Encrypt checkpoint blob data.
 
@@ -77,7 +77,7 @@ async def encrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
     return response['CiphertextBlob']
 
 
-@decrypt.blob
+@encrypt.decrypt.blob
 async def decrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
     """Decrypt checkpoint blob data.
 
@@ -102,7 +102,7 @@ async def decrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
     return response['Plaintext']
 
 
-@encrypt.json
+@encrypt.encrypt.json
 async def encrypt_json_data(ctx: EncryptionContext, data: dict) -> dict:
     """Encrypt JSON data fields.
 
@@ -144,7 +144,7 @@ async def encrypt_json_data(ctx: EncryptionContext, data: dict) -> dict:
     return encrypted_data
 
 
-@decrypt.json
+@encrypt.decrypt.json
 async def decrypt_json_data(ctx: EncryptionContext, data: dict) -> dict:
     """Decrypt JSON data fields.
 
@@ -323,7 +323,7 @@ retrieved = await client2.threads.get(thread["thread_id"])
 
 The encryption handlers are called for:
 
-**JSON encryption** (`@encrypt.json` / `@decrypt.json`):
+**JSON encryption** (`@encrypt.encrypt.json` / `@encrypt.decrypt.json`):
 - `thread.metadata`
 - `thread.values`
 - `assistant.metadata`
@@ -333,12 +333,12 @@ The encryption handlers are called for:
 - `cron.metadata`
 - `cron.payload`
 
-**Blob encryption** (`@encrypt.blob` / `@decrypt.blob`):
+**Blob encryption** (`@encrypt.encrypt.blob` / `@encrypt.decrypt.blob`):
 - Checkpoint blobs (complex state data)
 
 ### Model-specific handlers
 
-You can register different encryption handlers for different model types using `@encrypt.json.thread`, `@encrypt.json.assistant`, etc.:
+You can register different encryption handlers for different model types using `@encrypt.encrypt.json.thread`, `@encrypt.encrypt.json.assistant`, etc.:
 
 ```python
 from langgraph_sdk import Encrypt, EncryptionContext
@@ -346,26 +346,26 @@ from langgraph_sdk import Encrypt, EncryptionContext
 encrypt = Encrypt()
 
 # Default handler for models without specific handlers
-@encrypt.json
+@encrypt.encrypt.json
 async def default_encrypt(ctx: EncryptionContext, data: dict) -> dict:
     return standard_encrypt(data)
 
 # Thread-specific handler (uses different KMS key)
-@encrypt.json.thread
+@encrypt.encrypt.json.thread
 async def encrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
     return encrypt_with_thread_key(data)
 
 # Assistant-specific handler
-@encrypt.json.assistant
+@encrypt.encrypt.json.assistant
 async def encrypt_assistant(ctx: EncryptionContext, data: dict) -> dict:
     return encrypt_with_assistant_key(data)
 
 # Same pattern for decryption
-@decrypt.json
+@encrypt.decrypt.json
 async def default_decrypt(ctx: EncryptionContext, data: dict) -> dict:
     return standard_decrypt(data)
 
-@decrypt.json.thread
+@encrypt.decrypt.json.thread
 async def decrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
     return decrypt_with_thread_key(data)
 ```
@@ -396,7 +396,7 @@ TENANT_KEYS = {
     "customer-456": "arn:aws:kms:us-east-1:123456789:key/def-456",
 }
 
-@encrypt.json
+@encrypt.encrypt.json
 async def encrypt_json_data(ctx: EncryptionContext, data: dict) -> dict:
     tenant_id = ctx.metadata.get("tenant_id")
     if not tenant_id:
@@ -423,7 +423,7 @@ async def encrypt_json_data(ctx: EncryptionContext, data: dict) -> dict:
 
     return encrypted_data
 
-@decrypt.json
+@encrypt.decrypt.json
 async def decrypt_json_data(ctx: EncryptionContext, data: dict) -> dict:
     tenant_id = ctx.metadata.get("tenant_id")
     if not tenant_id:
