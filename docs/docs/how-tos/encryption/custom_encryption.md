@@ -20,7 +20,7 @@ This guide shows how to add custom at-rest encryption to your LangGraph Platform
 
 Custom at-rest encryption allows you to:
 
-- **Encrypt metadata fields** - Selectively encrypt metadata on assistants, threads, runs, and crons
+- **Encrypt JSON fields** - Selectively encrypt metadata, values, and other JSON data on assistants, threads, runs, and crons
 - **Encrypt checkpoint blobs** - Encrypt opaque checkpoint data stored during graph execution
 - **Use your own encryption service** - Integrate with AWS KMS, Google Cloud KMS, HashiCorp Vault, or any other encryption service
 - **Multi-tenant isolation** - Use different encryption keys per tenant or customer
@@ -29,7 +29,7 @@ The encryption system provides a decorator-based API similar to the Auth system,
 
 ## How it works
 
-1. **Define handlers** - Create encryption and decryption functions decorated with `@encrypt.encrypt.blob`, `@encrypt.decrypt.blob`, `@encrypt.encrypt.metadata`, and `@encrypt.decrypt.metadata`
+1. **Define handlers** - Create encryption and decryption functions decorated with `@encrypt.blob`, `@decrypt.blob`, `@encrypt.json`, and `@decrypt.json`
 2. **Configure** - Add the path to your encryption module in `langgraph.json`
 3. **Pass context** - Send encryption context (like tenant ID and key ID) via the `X-Encryption-Context` header
 4. **Automatic encryption** - LangGraph automatically encrypts data before storing and decrypts on retrieval
@@ -51,7 +51,7 @@ encrypt = Encrypt()
 kms_client = boto3.client('kms')
 
 
-@encrypt.encrypt.blob
+@encrypt.blob
 async def encrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
     """Encrypt checkpoint blob data.
 
@@ -77,7 +77,7 @@ async def encrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
     return response['CiphertextBlob']
 
 
-@encrypt.decrypt.blob
+@decrypt.blob
 async def decrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
     """Decrypt checkpoint blob data.
 
@@ -102,9 +102,9 @@ async def decrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
     return response['Plaintext']
 
 
-@encrypt.encrypt.metadata
-async def encrypt_metadata(ctx: EncryptionContext, metadata: dict) -> dict:
-    """Encrypt metadata key/value fields.
+@encrypt.json
+async def encrypt_json_data(ctx: EncryptionContext, data: dict) -> dict:
+    """Encrypt JSON data fields.
 
     This example demonstrates a practical encryption strategy:
     - "owner" field: Left unencrypted for search/filtering (indexed field)
@@ -116,16 +116,16 @@ async def encrypt_metadata(ctx: EncryptionContext, metadata: dict) -> dict:
 
     Args:
         ctx: Encryption context with metadata containing tenant_id and key_id
-        metadata: The plaintext metadata dictionary
+        data: The plaintext data dictionary
 
     Returns:
-        Encrypted metadata dictionary
+        Encrypted data dictionary
     """
     tenant_id = ctx.metadata.get("tenant_id", "default")
     key_id = ctx.metadata.get("key_id")
 
-    encrypted_metadata = {}
-    for key, value in metadata.items():
+    encrypted_data = {}
+    for key, value in data.items():
         if key.startswith("my.customer.org/"):
             # Encrypt the VALUE for customer-specific sensitive fields
             response = kms_client.encrypt(
@@ -134,21 +134,21 @@ async def encrypt_metadata(ctx: EncryptionContext, metadata: dict) -> dict:
                 EncryptionContext={'tenant_id': tenant_id}
             )
             import base64
-            encrypted_metadata[key] = base64.b64encode(
+            encrypted_data[key] = base64.b64encode(
                 response['CiphertextBlob']
             ).decode()
         else:
             # Pass through unencrypted (including "owner" for search)
-            encrypted_metadata[key] = value
+            encrypted_data[key] = value
 
-    return encrypted_metadata
+    return encrypted_data
 
 
-@encrypt.decrypt.metadata
-async def decrypt_metadata(ctx: EncryptionContext, metadata: dict) -> dict:
-    """Decrypt metadata key/value fields.
+@decrypt.json
+async def decrypt_json_data(ctx: EncryptionContext, data: dict) -> dict:
+    """Decrypt JSON data fields.
 
-    Inverse of `encrypt_metadata`. Decrypts VALUES for fields with
+    Inverse of `encrypt_json_data`. Decrypts VALUES for fields with
     "my.customer.org/" prefix, passes through all other fields.
 
     The encryption context (tenant_id, key_id) is automatically retrieved
@@ -156,15 +156,15 @@ async def decrypt_metadata(ctx: EncryptionContext, metadata: dict) -> dict:
 
     Args:
         ctx: Encryption context with stored metadata
-        metadata: The encrypted metadata dictionary
+        data: The encrypted data dictionary
 
     Returns:
-        Decrypted metadata dictionary
+        Decrypted data dictionary
     """
     tenant_id = ctx.metadata.get("tenant_id", "default")
 
-    decrypted_metadata = {}
-    for key, value in metadata.items():
+    decrypted_data = {}
+    for key, value in data.items():
         if key.startswith("my.customer.org/") and isinstance(value, str):
             # Decrypt the VALUE for customer-specific fields
             import base64
@@ -173,12 +173,12 @@ async def decrypt_metadata(ctx: EncryptionContext, metadata: dict) -> dict:
                 CiphertextBlob=ciphertext,
                 EncryptionContext={'tenant_id': tenant_id}
             )
-            decrypted_metadata[key] = response['Plaintext'].decode()
+            decrypted_data[key] = response['Plaintext'].decode()
         else:
             # Pass through unencrypted fields
-            decrypted_metadata[key] = value
+            decrypted_data[key] = value
 
-    return decrypted_metadata
+    return decrypted_data
 ```
 
 ### 2. Configure in langgraph.json
@@ -323,8 +323,9 @@ retrieved = await client2.threads.get(thread["thread_id"])
 
 The encryption handlers are called for:
 
-**Metadata encryption** (`@encrypt.encrypt.metadata` / `@encrypt.decrypt.metadata`):
+**JSON encryption** (`@encrypt.json` / `@decrypt.json`):
 - `thread.metadata`
+- `thread.values`
 - `assistant.metadata`
 - `assistant.context`
 - `run.metadata`
@@ -332,8 +333,42 @@ The encryption handlers are called for:
 - `cron.metadata`
 - `cron.payload`
 
-**Blob encryption** (`@encrypt.encrypt.blob` / `@encrypt.decrypt.blob`):
+**Blob encryption** (`@encrypt.blob` / `@decrypt.blob`):
 - Checkpoint blobs (complex state data)
+
+### Model-specific handlers
+
+You can register different encryption handlers for different model types using `@encrypt.json.thread`, `@encrypt.json.assistant`, etc.:
+
+```python
+from langgraph_sdk import Encrypt, EncryptionContext
+
+encrypt = Encrypt()
+
+# Default handler for models without specific handlers
+@encrypt.json
+async def default_encrypt(ctx: EncryptionContext, data: dict) -> dict:
+    return standard_encrypt(data)
+
+# Thread-specific handler (uses different KMS key)
+@encrypt.json.thread
+async def encrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
+    return encrypt_with_thread_key(data)
+
+# Assistant-specific handler
+@encrypt.json.assistant
+async def encrypt_assistant(ctx: EncryptionContext, data: dict) -> dict:
+    return encrypt_with_assistant_key(data)
+
+# Same pattern for decryption
+@decrypt.json
+async def default_decrypt(ctx: EncryptionContext, data: dict) -> dict:
+    return standard_decrypt(data)
+
+@decrypt.json.thread
+async def decrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
+    return decrypt_with_thread_key(data)
+```
 
 ### Security best practices
 
@@ -361,8 +396,8 @@ TENANT_KEYS = {
     "customer-456": "arn:aws:kms:us-east-1:123456789:key/def-456",
 }
 
-@encrypt.encrypt.metadata
-async def encrypt_metadata(ctx: EncryptionContext, metadata: dict) -> dict:
+@encrypt.json
+async def encrypt_json_data(ctx: EncryptionContext, data: dict) -> dict:
     tenant_id = ctx.metadata.get("tenant_id")
     if not tenant_id:
         raise ValueError("tenant_id is required in encryption context")
@@ -371,8 +406,8 @@ async def encrypt_metadata(ctx: EncryptionContext, metadata: dict) -> dict:
     if not key_id:
         raise ValueError(f"No encryption key found for tenant: {tenant_id}")
 
-    encrypted_metadata = {}
-    for key, value in metadata.items():
+    encrypted_data = {}
+    for key, value in data.items():
         if key.startswith("my.customer.org/"):
             response = kms_client.encrypt(
                 KeyId=key_id,
@@ -380,22 +415,22 @@ async def encrypt_metadata(ctx: EncryptionContext, metadata: dict) -> dict:
                 EncryptionContext={'tenant_id': tenant_id, 'field': key}
             )
             import base64
-            encrypted_metadata[key] = base64.b64encode(
+            encrypted_data[key] = base64.b64encode(
                 response['CiphertextBlob']
             ).decode()
         else:
-            encrypted_metadata[key] = value
+            encrypted_data[key] = value
 
-    return encrypted_metadata
+    return encrypted_data
 
-@encrypt.decrypt.metadata
-async def decrypt_metadata(ctx: EncryptionContext, metadata: dict) -> dict:
+@decrypt.json
+async def decrypt_json_data(ctx: EncryptionContext, data: dict) -> dict:
     tenant_id = ctx.metadata.get("tenant_id")
     if not tenant_id:
         raise ValueError("tenant_id is required in encryption context")
 
-    decrypted_metadata = {}
-    for key, value in metadata.items():
+    decrypted_data = {}
+    for key, value in data.items():
         if key.startswith("my.customer.org/") and isinstance(value, str):
             import base64
             ciphertext = base64.b64decode(value.encode())
@@ -403,11 +438,11 @@ async def decrypt_metadata(ctx: EncryptionContext, metadata: dict) -> dict:
                 CiphertextBlob=ciphertext,
                 EncryptionContext={'tenant_id': tenant_id, 'field': key}
             )
-            decrypted_metadata[key] = response['Plaintext'].decode()
+            decrypted_data[key] = response['Plaintext'].decode()
         else:
-            decrypted_metadata[key] = value
+            decrypted_data[key] = value
 
-    return decrypted_metadata
+    return decrypted_data
 ```
 
 ## Related resources
