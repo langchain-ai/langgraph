@@ -15,9 +15,7 @@ class UntypedSerializerProtocol(Protocol):
 class SerializerProtocol(Protocol):
     """Protocol for serialization and deserialization of objects.
 
-    - `dumps`: Serialize an object to bytes.
     - `dumps_typed`: Serialize an object to a tuple `(type, bytes)`.
-    - `loads`: Deserialize an object from bytes.
     - `loads_typed`: Deserialize an object from a tuple `(type, bytes)`.
 
     Valid implementations include the `pickle`, `json` and `orjson` modules.
