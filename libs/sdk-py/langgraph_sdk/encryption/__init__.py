@@ -9,7 +9,6 @@ server-side.
 from __future__ import annotations
 
 import typing
-import warnings
 
 from langgraph_sdk.encryption import types
 
@@ -188,16 +187,6 @@ class _EncryptDecorators:
         """
         return self._json
 
-    @property
-    def metadata(self) -> _JsonEncryptDecorators:
-        """Deprecated: Use @encrypt.json instead."""
-        warnings.warn(
-            "@encrypt.metadata is deprecated, use @encrypt.json instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self._json
-
 
 class _DecryptDecorators:
     """Decorators for decryption handlers.
@@ -255,16 +244,6 @@ class _DecryptDecorators:
                 return decrypt_thread_data(data)
             ```
         """
-        return self._json
-
-    @property
-    def metadata(self) -> _JsonDecryptDecorators:
-        """Deprecated: Use @decrypt.json instead."""
-        warnings.warn(
-            "@decrypt.metadata is deprecated, use @decrypt.json instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         return self._json
 
 
@@ -457,26 +436,6 @@ class Encrypt:
         if model and model in self._json_decryptors:
             return self._json_decryptors[model]
         return self._json_decryptor
-
-    @property
-    def _metadata_encryptor(self) -> types.JsonEncryptor | None:
-        """Deprecated: Use get_json_encryptor() instead."""
-        return self._json_encryptor
-
-    @_metadata_encryptor.setter
-    def _metadata_encryptor(self, value: types.JsonEncryptor | None) -> None:
-        """Deprecated: Use @encrypt.json instead."""
-        self._json_encryptor = value
-
-    @property
-    def _metadata_decryptor(self) -> types.JsonDecryptor | None:
-        """Deprecated: Use get_json_decryptor() instead."""
-        return self._json_decryptor
-
-    @_metadata_decryptor.setter
-    def _metadata_decryptor(self, value: types.JsonDecryptor | None) -> None:
-        """Deprecated: Use @decrypt.json instead."""
-        self._json_decryptor = value
 
     def __repr__(self) -> str:
         handlers = []
