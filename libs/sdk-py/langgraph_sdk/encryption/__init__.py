@@ -149,7 +149,7 @@ class _EncryptDecorators:
         Example:
             ```python
             @encrypt.blob
-            async def encrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
+            async def encrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
                 # Encrypt the blob using your encryption service
                 return encrypted_blob
             ```
@@ -218,7 +218,7 @@ class _DecryptDecorators:
         Example:
             ```python
             @decrypt.blob
-            async def decrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
+            async def decrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
                 # Decrypt the blob using your encryption service
                 return decrypted_blob
             ```
@@ -307,12 +307,12 @@ class Encrypt:
         my_encrypt = Encrypt()
 
         @my_encrypt.encrypt.blob
-        async def encrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
+        async def encrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
             # Call your encryption service
             return encrypted_blob
 
         @my_encrypt.decrypt.blob
-        async def decrypt_checkpoint(ctx: EncryptionContext, blob: bytes) -> bytes:
+        async def decrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
             # Call your decryption service
             return decrypted_blob
 
