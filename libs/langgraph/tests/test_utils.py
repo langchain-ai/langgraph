@@ -27,6 +27,7 @@ from langgraph._internal._runnable import is_async_callable, is_async_generator
 from langgraph.constants import END
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.types import Send, batch_send
 
 # ruff: noqa: UP045, UP007
 
@@ -317,3 +318,31 @@ def test_configurable_metadata():
     metadata = merged["metadata"]
     assert metadata.keys() == expected
     assert metadata["nooverride"] == 18
+
+
+def test_batch_send():
+    """Test batch_send creates multiple Send objects correctly."""
+    # Test with simple arguments
+    sends = batch_send("process_item", [1, 2, 3])
+    assert len(sends) == 3
+    assert all(isinstance(s, Send) for s in sends)
+    assert sends[0] == Send("process_item", 1)
+    assert sends[1] == Send("process_item", 2)
+    assert sends[2] == Send("process_item", 3)
+
+    # Test with dict arguments (common in state graphs)
+    dict_args = [{"id": 1}, {"id": 2}]
+    sends = batch_send("process_dict", dict_args)
+    assert len(sends) == 2
+    assert sends[0] == Send("process_dict", {"id": 1})
+    assert sends[1] == Send("process_dict", {"id": 2})
+
+    # Test with empty list
+    sends = batch_send("empty_node", [])
+    assert len(sends) == 0
+    assert sends == []
+
+    # Test with single argument
+    sends = batch_send("single_node", ["single"])
+    assert len(sends) == 1
+    assert sends[0] == Send("single_node", "single")

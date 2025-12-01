@@ -1,0 +1,4 @@
+---
+For every additional feature added, always make sure to add unit tests to the repository in it's respective place that test the happy paths and edge cases.
+alwaysApply: true
+---

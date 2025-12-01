@@ -56,6 +56,7 @@ __all__ = (
     "Durability",
     "interrupt",
     "Overwrite",
+    "batch_send",
 )
 
 Durability = Literal["sync", "async", "exit"]
@@ -566,3 +567,46 @@ class Overwrite:
 
     value: Any
     """The value to write directly to the channel, bypassing any reducer."""
+
+
+def batch_send(node: str, args: Sequence[Any]) -> list[Send]:
+    """Create multiple Send objects for the same node with different arguments.
+
+    This is a convenience function for map-reduce workflows where you want to
+    invoke the same node multiple times in parallel with different inputs.
+
+    Args:
+        node: The name of the target node to send all messages to.
+        args: A sequence of arguments, each will be sent to the node separately.
+
+    Returns:
+        A list of Send objects, one for each argument.
+
+    !!! example
+
+        ```python
+        from typing import Annotated
+        from langgraph.types import batch_send
+        from langgraph.graph import END, START, StateGraph
+        import operator
+
+        class OverallState(TypedDict):
+            subjects: list[str]
+            jokes: Annotated[list[str], operator.add]
+
+        def continue_to_jokes(state: OverallState):
+            # Instead of: [Send("generate_joke", {"subject": s}) for s in state["subjects"]]
+            return batch_send("generate_joke", [{"subject": s} for s in state["subjects"]])
+
+        builder = StateGraph(OverallState)
+        builder.add_node("generate_joke", lambda state: {"jokes": [f"Joke about {state['subject']}"]})
+        builder.add_conditional_edges(START, continue_to_jokes)
+        builder.add_edge("generate_joke", END)
+        graph = builder.compile()
+
+        # Invoking with two subjects results in a generated joke for each
+        graph.invoke({"subjects": ["cats", "dogs"]})
+        # {'subjects': ['cats', 'dogs'], 'jokes': ['Joke about cats', 'Joke about dogs']}
+        ```
+    """
+    return [Send(node, arg) for arg in args]
