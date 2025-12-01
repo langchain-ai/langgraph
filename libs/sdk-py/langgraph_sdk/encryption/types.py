@@ -117,10 +117,3 @@ Args:
 Returns:
     Awaitable that resolves to decrypted JSON dictionary
 """
-
-# Deprecated aliases for backwards compatibility
-MetadataEncryptor = JsonEncryptor
-"""Deprecated alias for JsonEncryptor. Use JsonEncryptor instead."""
-
-MetadataDecryptor = JsonDecryptor
-"""Deprecated alias for JsonDecryptor. Use JsonDecryptor instead."""
