@@ -30,7 +30,7 @@ class TestHandlerValidation:
         async def thread_enc(ctx, data):
             return data
 
-        @encrypt.decrypt.json("custom")
+        @encrypt.decrypt.json.custom
         async def custom_dec(ctx, data):
             return data
 
@@ -67,7 +67,7 @@ class TestHandlerValidation:
 
         with pytest.raises(DuplicateHandlerError):
 
-            @encrypt.decrypt.json("custom")
+            @encrypt.decrypt.json.custom
             async def dup(ctx, data):
                 return data
 

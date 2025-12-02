@@ -52,54 +52,29 @@ class _JsonEncryptDecorators:
     Supports both default and model-specific handlers:
     - @encrypt.json - default handler for all models
     - @encrypt.json.thread - handler for thread model
-    - @encrypt.json("custom") - handler for custom model name
     """
 
     def __init__(self, parent: Encrypt):
         self._parent = parent
 
-    def __call__(
-        self, fn_or_model: types.JsonEncryptor | str
-    ) -> (
-        types.JsonEncryptor
-        | typing.Callable[[types.JsonEncryptor], types.JsonEncryptor]
-    ):
-        """Register a JSON encryption handler.
-
-        Can be used as:
-        - @encrypt.json - register default handler
-        - @encrypt.json("model") - register model-specific handler
+    def __call__(self, fn: types.JsonEncryptor) -> types.JsonEncryptor:
+        """Register the default JSON encryption handler.
 
         Args:
-            fn_or_model: Either the handler function (default) or model name string
+            fn: The handler function
 
         Returns:
-            The registered handler function, or a decorator if model name provided
+            The registered handler function
 
         Raises:
             DuplicateHandlerError: If handler already registered
             TypeError: If handler has invalid signature
         """
-        if isinstance(fn_or_model, str):
-            model_name = fn_or_model
-
-            def decorator(fn: types.JsonEncryptor) -> types.JsonEncryptor:
-                if model_name in self._parent._json_encryptors:
-                    raise DuplicateHandlerError(
-                        f"JSON encryptor for model '{model_name}' already registered"
-                    )
-                _validate_handler(fn, f"JSON encryptor for model '{model_name}'")
-                self._parent._json_encryptors[model_name] = fn
-                return fn
-
-            return decorator
-        else:
-            if self._parent._json_encryptor is not None:
-                raise DuplicateHandlerError("Default JSON encryptor already registered")
-            fn = fn_or_model
-            _validate_handler(fn, "Default JSON encryptor")
-            self._parent._json_encryptor = fn
-            return fn
+        if self._parent._json_encryptor is not None:
+            raise DuplicateHandlerError("Default JSON encryptor already registered")
+        _validate_handler(fn, "Default JSON encryptor")
+        self._parent._json_encryptor = fn
+        return fn
 
     def __getattr__(
         self, model: str
@@ -131,54 +106,29 @@ class _JsonDecryptDecorators:
     Supports both default and model-specific handlers:
     - @decrypt.json - default handler for all models
     - @decrypt.json.thread - handler for thread model
-    - @decrypt.json("custom") - handler for custom model name
     """
 
     def __init__(self, parent: Encrypt):
         self._parent = parent
 
-    def __call__(
-        self, fn_or_model: types.JsonDecryptor | str
-    ) -> (
-        types.JsonDecryptor
-        | typing.Callable[[types.JsonDecryptor], types.JsonDecryptor]
-    ):
-        """Register a JSON decryption handler.
-
-        Can be used as:
-        - @decrypt.json - register default handler
-        - @decrypt.json("model") - register model-specific handler
+    def __call__(self, fn: types.JsonDecryptor) -> types.JsonDecryptor:
+        """Register the default JSON decryption handler.
 
         Args:
-            fn_or_model: Either the handler function (default) or model name string
+            fn: The handler function
 
         Returns:
-            The registered handler function, or a decorator if model name provided
+            The registered handler function
 
         Raises:
             DuplicateHandlerError: If handler already registered
             TypeError: If handler has invalid signature
         """
-        if isinstance(fn_or_model, str):
-            model_name = fn_or_model
-
-            def decorator(fn: types.JsonDecryptor) -> types.JsonDecryptor:
-                if model_name in self._parent._json_decryptors:
-                    raise DuplicateHandlerError(
-                        f"JSON decryptor for model '{model_name}' already registered"
-                    )
-                _validate_handler(fn, f"JSON decryptor for model '{model_name}'")
-                self._parent._json_decryptors[model_name] = fn
-                return fn
-
-            return decorator
-        else:
-            if self._parent._json_decryptor is not None:
-                raise DuplicateHandlerError("Default JSON decryptor already registered")
-            fn = fn_or_model
-            _validate_handler(fn, "Default JSON decryptor")
-            self._parent._json_decryptor = fn
-            return fn
+        if self._parent._json_decryptor is not None:
+            raise DuplicateHandlerError("Default JSON decryptor already registered")
+        _validate_handler(fn, "Default JSON decryptor")
+        self._parent._json_decryptor = fn
+        return fn
 
     def __getattr__(
         self, model: str
@@ -252,7 +202,6 @@ class _EncryptDecorators:
         - @encrypt.json - default handler for all models
         - @encrypt.json.thread - handler for thread model only
         - @encrypt.json.assistant - handler for assistant model only
-        - @encrypt.json("custom") - handler for custom model name
 
         Example:
             ```python
@@ -318,7 +267,6 @@ class _DecryptDecorators:
         - @decrypt.json - default handler for all models
         - @decrypt.json.thread - handler for thread model only
         - @decrypt.json.assistant - handler for assistant model only
-        - @decrypt.json("custom") - handler for custom model name
 
         Example:
             ```python
