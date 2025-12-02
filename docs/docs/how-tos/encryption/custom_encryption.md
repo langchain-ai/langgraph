@@ -287,6 +287,23 @@ When making requests to your deployment, include the `X-Encryption-Context` head
       }'
     ```
 
+### 4. (Optional) Derive context from authentication
+
+Instead of passing the `X-Encryption-Context` header, you can derive encryption context from the authenticated user using `@encrypt.context`:
+
+```python
+@encrypt.context
+async def get_encryption_context(user: BaseUser, ctx: EncryptionContext) -> dict:
+    """Called once per request after auth. Returns the new ctx.metadata."""
+    return {
+        **ctx.metadata,  # Preserve any header context
+        "tenant_id": getattr(user, "tenant_id", "default"),
+        "key_id": getattr(user, "key_id", None),
+    }
+```
+
+The handler receives the authenticated user and can extract tenant info from user attributes or JWT claims. This eliminates the need for clients to pass encryption context separately.
+
 ## Important considerations
 
 ### Searchability

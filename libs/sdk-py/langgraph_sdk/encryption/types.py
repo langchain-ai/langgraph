@@ -117,3 +117,31 @@ Args:
 Returns:
     Awaitable that resolves to decrypted JSON dictionary
 """
+
+if typing.TYPE_CHECKING:
+    from starlette.authentication import BaseUser
+
+ContextHandler = Callable[
+    ["BaseUser", EncryptionContext], Awaitable[dict[str, typing.Any]]
+]
+"""Handler for deriving encryption context from authenticated user info.
+
+Note: Must be an async function as it may involve I/O operations.
+
+The context handler is called once per request in middleware (after auth),
+allowing encryption context to be derived from JWT claims, user properties,
+or other auth-derived data instead of requiring a separate X-Encryption-Context header.
+
+The return value becomes ctx.metadata for subsequent encrypt/decrypt operations
+and is persisted with encrypted data for later decryption.
+
+Note: ctx.model and ctx.field will be None in context handlers since
+the handler runs once per request before any specific model/field is known.
+
+Args:
+    user: The authenticated user (from Starlette's AuthenticationMiddleware)
+    ctx: Current encryption context with metadata from X-Encryption-Context header
+
+Returns:
+    Awaitable that resolves to dict that becomes the new ctx.metadata
+"""

@@ -380,6 +380,7 @@ class Encrypt:
     __slots__ = (
         "_blob_decryptor",
         "_blob_encryptor",
+        "_context_handler",
         "_json_decryptor",
         "_json_decryptors",
         "_json_encryptor",
@@ -406,6 +407,44 @@ class Encrypt:
         self._json_decryptor: types.JsonDecryptor | None = None
         self._json_encryptors: dict[str, types.JsonEncryptor] = {}
         self._json_decryptors: dict[str, types.JsonDecryptor] = {}
+        self._context_handler: types.ContextHandler | None = None
+
+    def context(self, fn: types.ContextHandler) -> types.ContextHandler:
+        """Register a context handler to derive encryption context from auth.
+
+        The handler receives the authenticated user and current EncryptionContext,
+        and returns a dict that becomes ctx.metadata for encrypt/decrypt handlers.
+
+        This allows encryption context to be derived from JWT claims or other
+        auth-derived data instead of requiring a separate X-Encryption-Context header.
+
+        Note: The context handler is called once per request in middleware,
+        so ctx.model and ctx.field will be None in the handler.
+
+        Example:
+            ```python
+            from langgraph_sdk import Encrypt, EncryptionContext
+            from starlette.authentication import BaseUser
+
+            encrypt = Encrypt()
+
+            @encrypt.context
+            async def get_context(user: BaseUser, ctx: EncryptionContext) -> dict:
+                # Derive encryption context from authenticated user
+                return {
+                    **ctx.metadata,  # preserve X-Encryption-Context header if present
+                    "tenant_id": user.tenant_id,
+                }
+            ```
+
+        Args:
+            fn: The context handler function
+
+        Returns:
+            The registered handler function
+        """
+        self._context_handler = fn
+        return fn
 
     def get_json_encryptor(
         self, model: str | None = None
@@ -451,4 +490,6 @@ class Encrypt:
             handlers.append(f"json_encryptors({list(self._json_encryptors.keys())})")
         if self._json_decryptors:
             handlers.append(f"json_decryptors({list(self._json_decryptors.keys())})")
+        if self._context_handler:
+            handlers.append("context_handler")
         return f"Encrypt(handlers=[{', '.join(handlers)}])"
