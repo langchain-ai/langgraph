@@ -154,7 +154,7 @@ def validate_config(config: Config) -> Config:
         "env": config.get("env", {}),
         "store": config.get("store"),
         "auth": config.get("auth"),
-        "encrypt": config.get("encrypt"),
+        "encryption": config.get("encryption"),
         "http": config.get("http"),
         "checkpointer": config.get("checkpointer"),
         "ui": config.get("ui"),
@@ -229,12 +229,12 @@ def validate_config(config: Config) -> Config:
                     f"Invalid auth.path format: '{auth_conf['path']}'. "
                     "Must be in format './path/to/file.py:attribute_name'"
                 )
-    # Validate encrypt config
-    if encrypt_conf := config.get("encrypt"):
-        if "path" in encrypt_conf:
-            if ":" not in encrypt_conf["path"]:
+    # Validate encryption config
+    if encryption_conf := config.get("encryption"):
+        if "path" in encryption_conf:
+            if ":" not in encryption_conf["path"]:
                 raise ValueError(
-                    f"Invalid encrypt.path format: '{encrypt_conf['path']}'. "
+                    f"Invalid encryption.path format: '{encryption_conf['path']}'. "
                     "Must be in format './path/to/file.py:attribute_name'"
                 )
     if http_conf := config.get("http"):
@@ -623,12 +623,12 @@ def _update_auth_path(
     )
 
 
-def _update_encrypt_path(
+def _update_encryption_path(
     config_path: pathlib.Path, config: Config, local_deps: LocalDeps
 ) -> None:
-    """Update encrypt.path to use Docker container paths."""
-    encrypt_conf = config.get("encrypt")
-    if not encrypt_conf or not (path_str := encrypt_conf.get("path")):
+    """Update encryption.path to use Docker container paths."""
+    encryption_conf = config.get("encryption")
+    if not encryption_conf or not (path_str := encryption_conf.get("path")):
         return
 
     module_str, sep, attr_str = path_str.partition(":")
@@ -637,15 +637,17 @@ def _update_encrypt_path(
 
     resolved = config_path.parent / module_str
     if not resolved.exists():
-        raise FileNotFoundError(f"Encrypt file not found: {resolved} (from {path_str})")
+        raise FileNotFoundError(
+            f"Encryption file not found: {resolved} (from {path_str})"
+        )
     if not resolved.is_file():
-        raise IsADirectoryError(f"Encrypt path must be a file: {resolved}")
+        raise IsADirectoryError(f"Encryption path must be a file: {resolved}")
 
     # Check faux packages first (higher priority)
     for faux_path, (_, destpath) in local_deps.faux_pkgs.items():
         if resolved.is_relative_to(faux_path):
             new_path = f"{destpath}/{resolved.relative_to(faux_path)}:{attr_str}"
-            encrypt_conf["path"] = new_path
+            encryption_conf["path"] = new_path
             return
 
     # Check real packages
@@ -654,11 +656,11 @@ def _update_encrypt_path(
             new_path = (
                 f"/deps/{real_path.name}/{resolved.relative_to(real_path)}:{attr_str}"
             )
-            encrypt_conf["path"] = new_path
+            encryption_conf["path"] = new_path
             return
 
     raise ValueError(
-        f"Encrypt file '{resolved}' not covered by dependencies.\n"
+        f"Encryption file '{resolved}' not covered by dependencies.\n"
         "Add its parent directory to the 'dependencies' array in your config.\n"
         f"Current dependencies: {config['dependencies']}"
     )
@@ -859,8 +861,8 @@ def python_config_to_docker(
     _update_graph_paths(config_path, config, local_deps)
     # Rewrite auth path, so it points to the correct location in the Docker container
     _update_auth_path(config_path, config, local_deps)
-    # Rewrite encrypt path, so it points to the correct location in the Docker container
-    _update_encrypt_path(config_path, config, local_deps)
+    # Rewrite encryption path, so it points to the correct location in the Docker container
+    _update_encryption_path(config_path, config, local_deps)
     # Rewrite HTTP app path, so it points to the correct location in the Docker container
     _update_http_app_path(config_path, config, local_deps)
 
@@ -951,8 +953,8 @@ ADD {relpath} /deps/{name}
     if (auth_config := config.get("auth")) is not None:
         env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
 
-    if (encrypt_config := config.get("encrypt")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPT='{json.dumps(encrypt_config)}'")
+    if (encryption_config := config.get("encryption")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
 
     if (http_config := config.get("http")) is not None:
         env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
@@ -1077,8 +1079,8 @@ def node_config_to_docker(
     if (auth_config := config.get("auth")) is not None:
         env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
 
-    if (encrypt_config := config.get("encrypt")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPT='{json.dumps(encrypt_config)}'")
+    if (encryption_config := config.get("encryption")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
 
     if (http_config := config.get("http")) is not None:
         env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")

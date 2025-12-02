@@ -271,7 +271,7 @@ class AuthConfig(TypedDict, total=False):
     """
 
 
-class EncryptConfig(TypedDict, total=False):
+class EncryptionConfig(TypedDict, total=False):
     """Configuration for custom at-rest encryption logic.
 
     Allows you to implement custom encryption for sensitive data stored in the database,
@@ -279,14 +279,14 @@ class EncryptConfig(TypedDict, total=False):
     """
 
     path: str
-    """Required. Path to an instance of the Encrypt() class that implements custom encryption handlers.
+    """Required. Path to an instance of the Encryption() class that implements custom encryption handlers.
 
-    Format: "path/to/file.py:my_encrypt"
+    Format: "path/to/file.py:my_encryption"
 
     Example:
         {
-            "encrypt": {
-                "path": "./encrypt.py:my_encrypt"
+            "encryption": {
+                "path": "./encryption.py:my_encryption"
             }
         }
     """
@@ -549,7 +549,7 @@ class Config(TypedDict, total=False):
     the OpenAPI security definitions it uses.
     """
 
-    encrypt: EncryptConfig | None
+    encryption: EncryptionConfig | None
     """Optional. Custom at-rest encryption config, including the path to your Python encryption logic.
 
     Allows you to implement custom encryption for sensitive data stored in the database.
@@ -577,7 +577,7 @@ __all__ = [
     "StoreConfig",
     "CheckpointerConfig",
     "AuthConfig",
-    "EncryptConfig",
+    "EncryptionConfig",
     "HttpConfig",
     "MiddlewareOrders",
     "Distros",

@@ -48,7 +48,7 @@ def test_validate_config():
         "env": {},
         "store": None,
         "auth": None,
-        "encrypt": None,
+        "encryption": None,
         "checkpointer": None,
         "http": None,
         "ui": None,
@@ -75,7 +75,7 @@ def test_validate_config():
         "env": env,
         "store": None,
         "auth": None,
-        "encrypt": None,
+        "encryption": None,
         "checkpointer": None,
         "http": None,
         "ui": None,
@@ -750,39 +750,39 @@ RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not foun
     assert additional_contexts == {}
 
 
-def test_config_to_docker_python_encrypt():
-    # Test that encrypt config is included in validation
+def test_config_to_docker_python_encryption():
+    # Test that encryption config is included in validation
     graphs = {"agent": "./agent.py:graph"}
     validated = validate_config(
         {
             "python_version": "3.11",
             "graphs": graphs,
             "dependencies": ["."],
-            "encrypt": {"path": "./encrypt.py:encrypt"},
+            "encryption": {"path": "./encryption.py:encryption"},
         }
     )
 
-    # Verify that encrypt config is preserved after validation
-    assert validated.get("encrypt") is not None
-    assert validated["encrypt"]["path"] == "./encrypt.py:encrypt"
+    # Verify that encryption config is preserved after validation
+    assert validated.get("encryption") is not None
+    assert validated["encryption"]["path"] == "./encryption.py:encryption"
 
 
-def test_config_to_docker_python_encrypt_bad_path():
-    # Test that invalid encrypt path format raises ValueError
+def test_config_to_docker_python_encryption_bad_path():
+    # Test that invalid encryption path format raises ValueError
     graphs = {"agent": "./agent.py:graph"}
-    with pytest.raises(ValueError, match="Invalid encrypt.path format"):
+    with pytest.raises(ValueError, match="Invalid encryption.path format"):
         validate_config(
             {
                 "python_version": "3.11",
                 "graphs": graphs,
                 "dependencies": ["."],
-                "encrypt": {"path": "./encrypt.py"},  # Missing :attribute
+                "encryption": {"path": "./encryption.py"},  # Missing :attribute
             }
         )
 
 
-def test_config_to_docker_python_encrypt_formatted():
-    # Test that encrypt config is properly formatted in Docker output
+def test_config_to_docker_python_encryption_formatted():
+    # Test that encryption config is properly formatted in Docker output
     graphs = {"agent": "./graphs/agent.py:graph"}
     actual_docker_stdin, additional_contexts = config_to_docker(
         PATH_TO_CONFIG,
@@ -791,14 +791,14 @@ def test_config_to_docker_python_encrypt_formatted():
                 "python_version": "3.11",
                 "dependencies": ["."],
                 "graphs": graphs,
-                "encrypt": {"path": "./agent.py:my_encrypt"},
+                "encryption": {"path": "./agent.py:my_encryption"},
             }
         ),
         "langchain/langgraph-api",
     )
-    # Verify that LANGGRAPH_ENCRYPT is in the docker output with the correct path
-    assert "LANGGRAPH_ENCRYPT=" in actual_docker_stdin
-    assert "/deps/outer-unit_tests/unit_tests/agent.py:my_encrypt" in actual_docker_stdin
+    # Verify that LANGGRAPH_ENCRYPTION is in the docker output with the correct path
+    assert "LANGGRAPH_ENCRYPTION=" in actual_docker_stdin
+    assert "/deps/outer-unit_tests/unit_tests/agent.py:my_encryption" in actual_docker_stdin
 
 
 def test_config_to_docker_nodejs_internal_docker_tag():

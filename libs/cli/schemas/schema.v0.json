@@ -99,10 +99,10 @@
               },
               "description": "Optional. Additional Docker instructions that will be appended to your base Dockerfile.\n\nUseful for installing OS packages, setting environment variables, etc."
             },
-            "encrypt": {
+            "encryption": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/EncryptConfig"
+                  "$ref": "#/$defs/EncryptionConfig"
                 },
                 {
                   "type": "null"
@@ -303,10 +303,10 @@
               },
               "description": "Optional. Additional Docker instructions that will be appended to your base Dockerfile.\n\nUseful for installing OS packages, setting environment variables, etc."
             },
-            "encrypt": {
+            "encryption": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/EncryptConfig"
+                  "$ref": "#/$defs/EncryptionConfig"
                 },
                 {
                   "type": "null"
@@ -587,8 +587,8 @@
       },
       "required": []
     },
-    "EncryptConfig": {
-      "title": "EncryptConfig",
+    "EncryptionConfig": {
+      "title": "EncryptionConfig",
       "description": "Configuration for custom at-rest encryption logic.\n\n    Allows you to implement custom encryption for sensitive data stored in the database,\n    including metadata fields and checkpoint blobs.",
       "type": "object",
       "properties": {

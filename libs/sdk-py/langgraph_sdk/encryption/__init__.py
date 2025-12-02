@@ -54,7 +54,7 @@ class _JsonEncryptDecorators:
     - @encrypt.json.thread - handler for thread model
     """
 
-    def __init__(self, parent: Encrypt):
+    def __init__(self, parent: Encryption):
         self._parent = parent
 
     def __call__(self, fn: types.JsonEncryptor) -> types.JsonEncryptor:
@@ -81,7 +81,7 @@ class _JsonEncryptDecorators:
     ) -> typing.Callable[[types.JsonEncryptor], types.JsonEncryptor]:
         """Dynamic attribute access for model-specific handlers.
 
-        Allows @encrypt.json.thread, @encrypt.json.assistant, etc.
+        Allows @encryption.encrypt.json.thread, @encryption.encrypt.json.assistant, etc.
 
         Raises:
             DuplicateHandlerError: If handler already registered for this model
@@ -104,11 +104,11 @@ class _JsonDecryptDecorators:
     """Dynamic decorator factory for JSON decryption handlers.
 
     Supports both default and model-specific handlers:
-    - @decrypt.json - default handler for all models
-    - @decrypt.json.thread - handler for thread model
+    - @encryption.decrypt.json - default handler for all models
+    - @encryption.decrypt.json.thread - handler for thread model
     """
 
-    def __init__(self, parent: Encrypt):
+    def __init__(self, parent: Encryption):
         self._parent = parent
 
     def __call__(self, fn: types.JsonDecryptor) -> types.JsonDecryptor:
@@ -135,7 +135,7 @@ class _JsonDecryptDecorators:
     ) -> typing.Callable[[types.JsonDecryptor], types.JsonDecryptor]:
         """Dynamic attribute access for model-specific handlers.
 
-        Allows @decrypt.json.thread, @decrypt.json.assistant, etc.
+        Allows @encryption.decrypt.json.thread, @encryption.decrypt.json.assistant, etc.
 
         Raises:
             DuplicateHandlerError: If handler already registered for this model
@@ -157,11 +157,11 @@ class _JsonDecryptDecorators:
 class _EncryptDecorators:
     """Decorators for encryption handlers.
 
-    Provides @encrypt.blob and @encrypt.json decorators for
+    Provides @encryption.encrypt.blob and @encryption.encrypt.json decorators for
     registering encryption functions.
     """
 
-    def __init__(self, parent: Encrypt):
+    def __init__(self, parent: Encryption):
         self._parent = parent
         self._json = _JsonEncryptDecorators(parent)
 
@@ -172,7 +172,7 @@ class _EncryptDecorators:
 
         Example:
             ```python
-            @encrypt.blob
+            @encryption.encrypt.blob
             async def encrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
                 # Encrypt the blob using your encryption service
                 return encrypted_blob
@@ -199,18 +199,18 @@ class _EncryptDecorators:
         """Access JSON encryption decorators.
 
         Supports model-specific handlers:
-        - @encrypt.json - default handler for all models
-        - @encrypt.json.thread - handler for thread model only
-        - @encrypt.json.assistant - handler for assistant model only
+        - @encryption.encrypt.json - default handler for all models
+        - @encryption.encrypt.json.thread - handler for thread model only
+        - @encryption.encrypt.json.assistant - handler for assistant model only
 
         Example:
             ```python
-            @encrypt.json
+            @encryption.encrypt.json
             async def default_encrypt(ctx: EncryptionContext, data: dict) -> dict:
                 # Default encryption for all models
                 return encrypt_data(data)
 
-            @encrypt.json.thread
+            @encryption.encrypt.json.thread
             async def encrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
                 # Special encryption for thread model only
                 return encrypt_thread_data(data)
@@ -222,11 +222,11 @@ class _EncryptDecorators:
 class _DecryptDecorators:
     """Decorators for decryption handlers.
 
-    Provides @decrypt.blob and @decrypt.json decorators for
+    Provides @encryption.decrypt.blob and @encryption.decrypt.json decorators for
     registering decryption functions.
     """
 
-    def __init__(self, parent: Encrypt):
+    def __init__(self, parent: Encryption):
         self._parent = parent
         self._json = _JsonDecryptDecorators(parent)
 
@@ -237,7 +237,7 @@ class _DecryptDecorators:
 
         Example:
             ```python
-            @decrypt.blob
+            @encryption.decrypt.blob
             async def decrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
                 # Decrypt the blob using your encryption service
                 return decrypted_blob
@@ -264,18 +264,18 @@ class _DecryptDecorators:
         """Access JSON decryption decorators.
 
         Supports model-specific handlers:
-        - @decrypt.json - default handler for all models
-        - @decrypt.json.thread - handler for thread model only
-        - @decrypt.json.assistant - handler for assistant model only
+        - @encryption.decrypt.json - default handler for all models
+        - @encryption.decrypt.json.thread - handler for thread model only
+        - @encryption.decrypt.json.assistant - handler for assistant model only
 
         Example:
             ```python
-            @decrypt.json
+            @encryption.decrypt.json
             async def default_decrypt(ctx: EncryptionContext, data: dict) -> dict:
                 # Default decryption for all models
                 return decrypt_data(data)
 
-            @decrypt.json.thread
+            @encryption.decrypt.json.thread
             async def decrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
                 # Special decryption for thread model only
                 return decrypt_thread_data(data)
@@ -284,17 +284,17 @@ class _DecryptDecorators:
         return self._json
 
 
-class Encrypt:
+class Encryption:
     """Add custom at-rest encryption to your LangGraph application.
 
-    The Encrypt class provides a system for implementing custom encryption
+    The Encryption class provides a system for implementing custom encryption
     of data at rest in LangGraph applications. It supports encryption of
     both opaque blobs (like checkpoints) and structured JSON data (like
     metadata, context, kwargs, values, etc.).
 
     To use, create a separate Python file and add the path to the file to your
     LangGraph API configuration file (`langgraph.json`). Within that file, create
-    an instance of the Encrypt class and register encryption and decryption
+    an instance of the Encryption class and register encryption and decryption
     handlers as needed.
 
     Example `langgraph.json` file:
@@ -306,8 +306,8 @@ class Encrypt:
         "agent": "./my_agent/agent.py:graph"
       },
       "env": ".env",
-      "encrypt": {
-        "path": "./encrypt.py:my_encrypt"
+      "encryption": {
+        "path": "./encryption.py:my_encryption"
       }
     }
     ```
@@ -318,21 +318,21 @@ class Encrypt:
     ???+ example "Basic Usage"
 
         ```python
-        from langgraph_sdk import Encrypt, EncryptionContext
+        from langgraph_sdk import Encryption, EncryptionContext
 
-        my_encrypt = Encrypt()
+        my_encryption = Encryption()
 
-        @my_encrypt.encrypt.blob
+        @my_encryption.encrypt.blob
         async def encrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
             # Call your encryption service
             return encrypted_blob
 
-        @my_encrypt.decrypt.blob
+        @my_encryption.decrypt.blob
         async def decrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
             # Call your decryption service
             return decrypted_blob
 
-        @my_encrypt.encrypt.json
+        @my_encryption.encrypt.json
         async def encrypt_json(ctx: EncryptionContext, data: dict) -> dict:
             # Practical encryption strategy:
             # - "owner" field: unencrypted (for search/filtering)
@@ -348,7 +348,7 @@ class Encrypt:
                     encrypted[key] = value
             return encrypted
 
-        @my_encrypt.decrypt.json
+        @my_encryption.decrypt.json
         async def decrypt_json(ctx: EncryptionContext, data: dict) -> dict:
             # Decrypt VALUES for "my.customer.org/" prefixed fields
             decrypted = {}
@@ -366,31 +366,31 @@ class Encrypt:
         (thread, assistant, run, cron, checkpoint, etc.):
 
         ```python
-        from langgraph_sdk import Encrypt, EncryptionContext
+        from langgraph_sdk import Encryption, EncryptionContext
 
-        my_encrypt = Encrypt()
+        my_encryption = Encryption()
 
         # Default handler for models without specific handlers
-        @my_encrypt.encrypt.json
+        @my_encryption.encrypt.json
         async def default_encrypt(ctx: EncryptionContext, data: dict) -> dict:
             return standard_encrypt(data)
 
         # Thread-specific handler (uses different KMS key)
-        @my_encrypt.encrypt.json.thread
+        @my_encryption.encrypt.json.thread
         async def encrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
             return encrypt_with_thread_key(data)
 
         # Assistant-specific handler
-        @my_encrypt.encrypt.json.assistant
+        @my_encryption.encrypt.json.assistant
         async def encrypt_assistant(ctx: EncryptionContext, data: dict) -> dict:
             return encrypt_with_assistant_key(data)
 
         # Same pattern for decryption
-        @my_encrypt.decrypt.json
+        @my_encryption.decrypt.json
         async def default_decrypt(ctx: EncryptionContext, data: dict) -> dict:
             return standard_decrypt(data)
 
-        @my_encrypt.decrypt.json.thread
+        @my_encryption.decrypt.json.thread
         async def decrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
             return decrypt_with_thread_key(data)
         ```
@@ -401,7 +401,7 @@ class Encrypt:
         allowing different logic within the same model:
 
         ```python
-        @my_encrypt.encrypt.json.thread
+        @my_encryption.encrypt.json.thread
         async def encrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
             if ctx.field == "metadata":
                 # Thread metadata - standard encryption
@@ -435,7 +435,7 @@ class Encrypt:
     """
 
     def __init__(self) -> None:
-        """Initialize the Encrypt instance."""
+        """Initialize the Encryption instance."""
         self.encrypt = _EncryptDecorators(self)
         self.decrypt = _DecryptDecorators(self)
         self._blob_encryptor: types.BlobEncryptor | None = None
@@ -460,12 +460,12 @@ class Encrypt:
 
         Example:
             ```python
-            from langgraph_sdk import Encrypt, EncryptionContext
+            from langgraph_sdk import Encryption, EncryptionContext
             from starlette.authentication import BaseUser
 
-            encrypt = Encrypt()
+            encryption = Encryption()
 
-            @encrypt.context
+            @encryption.context
             async def get_context(user: BaseUser, ctx: EncryptionContext) -> dict:
                 # Derive encryption context from authenticated user
                 return {
@@ -529,4 +529,4 @@ class Encrypt:
             handlers.append(f"json_decryptors({list(self._json_decryptors.keys())})")
         if self._context_handler:
             handlers.append("context_handler")
-        return f"Encrypt(handlers=[{', '.join(handlers)}])"
+        return f"Encryption(handlers=[{', '.join(handlers)}])"
