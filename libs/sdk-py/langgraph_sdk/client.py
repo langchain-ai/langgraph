@@ -1067,7 +1067,7 @@ class AssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
-        include_pagination: Literal[True],
+        response_format: Literal["object"],
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> AssistantsSearchResponse: ...
@@ -1084,7 +1084,7 @@ class AssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
-        include_pagination: Literal[False] = False,
+        response_format: Literal["array"] = "array",
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Assistant]: ...
@@ -1100,7 +1100,7 @@ class AssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
-        include_pagination: bool = False,
+        response_format: Literal["array", "object"] = "array",
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> AssistantsSearchResponse | list[Assistant]:
@@ -1117,35 +1117,37 @@ class AssistantsClient:
             sort_by: The field to sort by.
             sort_order: The order to sort by.
             select: Specific assistant fields to include in the response.
-            include_pagination: When True, include the ``X-Pagination-Next`` header in the return value.
+            response_format: Controls the response shape. Use ``"array"`` (default)
+                to return a bare list of assistants, or ``"object"`` to return
+                a mapping containing assistants plus pagination metadata.
+                Defaults to "array", though this default will be changed to "object" in a future release.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
         Returns:
-            A list of assistants or, when ``include_pagination`` is True, a mapping
-            with the assistants and the next pagination cursor.
+            A list of assistants (when ``response_format=\"array\"``) or a mapping
+            with the assistants and the next pagination cursor (when
+            ``response_format=\"object\"``).
 
         ???+ example "Example Usage"
 
             ```python
             client = get_client(url="http://localhost:2024")
-            assistants = await client.assistants.search(
+            response = await client.assistants.search(
                 metadata = {"name":"my_name"},
                 graph_id="my_graph_id",
                 limit=5,
-                offset=5
+                offset=5,
+                response_format="object"
             )
-            ```
-
-        ???+ example "Include pagination metadata"
-
-            ```python
-            client = get_client(url="http://localhost:2024")
-            result = await client.assistants.search(include_pagination=True)
-            next_cursor = result["next"]
-            assistants = result["assistants"]
+            next_cursor = response["next"]
+            assistants = response["assistants"]
             ```
         """
+        if response_format not in ("array", "object"):
+            raise ValueError(
+                f"response_format must be 'array' or 'object', got {response_format!r}"
+            )
         payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
@@ -1175,10 +1177,10 @@ class AssistantsClient:
                 json=payload,
                 headers=headers,
                 params=params,
-                on_response=capture_pagination if include_pagination else None,
+                on_response=capture_pagination if response_format == "object" else None,
             ),
         )
-        if include_pagination:
+        if response_format == "object":
             return {"assistants": assistants, "next": next_cursor}
         return assistants
 
@@ -4401,7 +4403,7 @@ class SyncAssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
-        include_pagination: Literal[True],
+        response_format: Literal["object"],
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> AssistantsSearchResponse: ...
@@ -4418,7 +4420,7 @@ class SyncAssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
-        include_pagination: Literal[False] = False,
+        response_format: Literal["array"] = "array",
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Assistant]: ...
@@ -4434,7 +4436,7 @@ class SyncAssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
-        include_pagination: bool = False,
+        response_format: Literal["array", "object"] = "array",
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> AssistantsSearchResponse | list[Assistant]:
@@ -4451,34 +4453,34 @@ class SyncAssistantsClient:
             sort_by: The field to sort by.
             sort_order: The order to sort by.
             select: Specific assistant fields to include in the response.
-            include_pagination: When True, include the ``X-Pagination-Next`` header in the return value.
+            response_format: Controls the response shape. Use ``"array"`` (default)
+                to return a bare list of assistants, or ``"object"`` to return
+                a mapping containing assistants plus pagination metadata.
+                Defaults to "array", though this default will be changed to "object" in a future release.
             headers: Optional custom headers to include with the request.
 
         Returns:
-            A list of assistants or, when ``include_pagination`` is True, a mapping
-            with the assistants and the next pagination cursor.
+            A list of assistants (when ``response_format=\"array\"``) or a mapping
+            with the assistants and the next pagination cursor (when
+            ``response_format=\"object\"``).
 
         ???+ example "Example Usage"
 
             ```python
             client = get_sync_client(url="http://localhost:2024")
-            assistants = client.assistants.search(
+            response = client.assistants.search(
                 metadata = {"name":"my_name"},
                 graph_id="my_graph_id",
                 limit=5,
-                offset=5
+                offset=5,
+                response_format="object",
             )
-            ```
-
-        ???+ example "Include pagination metadata"
-
-            ```python
-            client = get_sync_client(url="http://localhost:2024")
-            result = client.assistants.search(include_pagination=True)
-            next_cursor = result["next"]
-            assistants = result["assistants"]
+            assistants = response["assistants"]
+            next_cursor = response["next"]
             ```
         """
+        if response_format not in ("array", "object"):
+            raise ValueError("response_format must be 'array' or 'object'")
         payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
@@ -4508,10 +4510,10 @@ class SyncAssistantsClient:
                 json=payload,
                 headers=headers,
                 params=params,
-                on_response=capture_pagination if include_pagination else None,
+                on_response=capture_pagination if response_format == "object" else None,
             ),
         )
-        if include_pagination:
+        if response_format == "object":
             return {"assistants": assistants, "next": next_cursor}
         return assistants
 

@@ -47,7 +47,7 @@ async def test_assistants_search_returns_list_by_default():
 
 
 @pytest.mark.asyncio
-async def test_assistants_search_can_include_pagination_metadata():
+async def test_assistants_search_can_return_object_with_pagination_metadata():
     assistant = _assistant_payload()
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -65,12 +65,12 @@ async def test_assistants_search_can_include_pagination_metadata():
     ) as client:
         http_client = HttpClient(client)
         assistants_client = AssistantsClient(http_client)
-        result = await assistants_client.search(include_pagination=True)
+        result = await assistants_client.search(response_format="object")
 
     assert result == {"assistants": [assistant], "next": "42"}
 
 
-def test_sync_assistants_search_can_include_pagination_metadata():
+def test_sync_assistants_search_can_return_object_with_pagination_metadata():
     assistant = _assistant_payload()
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -86,6 +86,6 @@ def test_sync_assistants_search_can_include_pagination_metadata():
     with httpx.Client(transport=transport, base_url="https://example.com") as client:
         http_client = SyncHttpClient(client)
         assistants_client = SyncAssistantsClient(http_client)
-        result = assistants_client.search(include_pagination=True)
+        result = assistants_client.search(response_format="object")
 
     assert result == {"assistants": [assistant], "next": "84"}
