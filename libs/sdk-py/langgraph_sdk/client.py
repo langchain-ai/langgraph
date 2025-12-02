@@ -35,6 +35,7 @@ from langgraph_sdk.schema import (
     Assistant,
     AssistantSelectField,
     AssistantSortBy,
+    AssistantsSearchResponse,
     AssistantVersion,
     CancelAction,
     Checkpoint,
@@ -1054,6 +1055,7 @@ class AssistantsClient:
             f"/assistants/{assistant_id}", headers=headers, params=params
         )
 
+    @overload
     async def search(
         self,
         *,
@@ -1065,9 +1067,43 @@ class AssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
+        response_format: Literal["object"],
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Assistant]:
+    ) -> AssistantsSearchResponse: ...
+
+    @overload
+    async def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        response_format: Literal["array"] = "array",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> list[Assistant]: ...
+
+    async def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        response_format: Literal["array", "object"] = "array",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> AssistantsSearchResponse | list[Assistant]:
         """Search for assistants.
 
         Args:
@@ -1080,24 +1116,38 @@ class AssistantsClient:
             offset: The number of results to skip.
             sort_by: The field to sort by.
             sort_order: The order to sort by.
+            select: Specific assistant fields to include in the response.
+            response_format: Controls the response shape. Use ``"array"`` (default)
+                to return a bare list of assistants, or ``"object"`` to return
+                a mapping containing assistants plus pagination metadata.
+                Defaults to "array", though this default will be changed to "object" in a future release.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
         Returns:
-            A list of assistants.
+            A list of assistants (when ``response_format=\"array\"``) or a mapping
+            with the assistants and the next pagination cursor (when
+            ``response_format=\"object\"``).
 
         ???+ example "Example Usage"
 
             ```python
             client = get_client(url="http://localhost:2024")
-            assistants = await client.assistants.search(
+            response = await client.assistants.search(
                 metadata = {"name":"my_name"},
                 graph_id="my_graph_id",
                 limit=5,
-                offset=5
+                offset=5,
+                response_format="object"
             )
+            next_cursor = response["next"]
+            assistants = response["assistants"]
             ```
         """
+        if response_format not in ("array", "object"):
+            raise ValueError(
+                f"response_format must be 'array' or 'object', got {response_format!r}"
+            )
         payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
@@ -1114,12 +1164,25 @@ class AssistantsClient:
             payload["sort_order"] = sort_order
         if select:
             payload["select"] = select
-        return await self.http.post(
-            "/assistants/search",
-            json=payload,
-            headers=headers,
-            params=params,
+        next_cursor: str | None = None
+
+        def capture_pagination(response: httpx.Response) -> None:
+            nonlocal next_cursor
+            next_cursor = response.headers.get("X-Pagination-Next")
+
+        assistants = cast(
+            list[Assistant],
+            await self.http.post(
+                "/assistants/search",
+                json=payload,
+                headers=headers,
+                params=params,
+                on_response=capture_pagination if response_format == "object" else None,
+            ),
         )
+        if response_format == "object":
+            return {"assistants": assistants, "next": next_cursor}
+        return assistants
 
     async def count(
         self,
@@ -4328,6 +4391,7 @@ class SyncAssistantsClient:
         """
         self.http.delete(f"/assistants/{assistant_id}", headers=headers, params=params)
 
+    @overload
     def search(
         self,
         *,
@@ -4339,9 +4403,43 @@ class SyncAssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
+        response_format: Literal["object"],
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Assistant]:
+    ) -> AssistantsSearchResponse: ...
+
+    @overload
+    def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        response_format: Literal["array"] = "array",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> list[Assistant]: ...
+
+    def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        response_format: Literal["array", "object"] = "array",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> AssistantsSearchResponse | list[Assistant]:
         """Search for assistants.
 
         Args:
@@ -4352,23 +4450,37 @@ class SyncAssistantsClient:
                 The filtering logic will match assistants where 'name' is a substring (case insensitive) of the assistant name.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            sort_by: The field to sort by.
+            sort_order: The order to sort by.
+            select: Specific assistant fields to include in the response.
+            response_format: Controls the response shape. Use ``"array"`` (default)
+                to return a bare list of assistants, or ``"object"`` to return
+                a mapping containing assistants plus pagination metadata.
+                Defaults to "array", though this default will be changed to "object" in a future release.
             headers: Optional custom headers to include with the request.
 
         Returns:
-            A list of assistants.
+            A list of assistants (when ``response_format=\"array\"``) or a mapping
+            with the assistants and the next pagination cursor (when
+            ``response_format=\"object\"``).
 
         ???+ example "Example Usage"
 
             ```python
             client = get_sync_client(url="http://localhost:2024")
-            assistants = client.assistants.search(
+            response = client.assistants.search(
                 metadata = {"name":"my_name"},
                 graph_id="my_graph_id",
                 limit=5,
-                offset=5
+                offset=5,
+                response_format="object",
             )
+            assistants = response["assistants"]
+            next_cursor = response["next"]
             ```
         """
+        if response_format not in ("array", "object"):
+            raise ValueError("response_format must be 'array' or 'object'")
         payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
@@ -4385,12 +4497,25 @@ class SyncAssistantsClient:
             payload["sort_order"] = sort_order
         if select:
             payload["select"] = select
-        return self.http.post(
-            "/assistants/search",
-            json=payload,
-            headers=headers,
-            params=params,
+        next_cursor: str | None = None
+
+        def capture_pagination(response: httpx.Response) -> None:
+            nonlocal next_cursor
+            next_cursor = response.headers.get("X-Pagination-Next")
+
+        assistants = cast(
+            list[Assistant],
+            self.http.post(
+                "/assistants/search",
+                json=payload,
+                headers=headers,
+                params=params,
+                on_response=capture_pagination if response_format == "object" else None,
+            ),
         )
+        if response_format == "object":
+            return {"assistants": assistants, "next": next_cursor}
+        return assistants
 
     def count(
         self,
