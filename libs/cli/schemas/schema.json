@@ -427,6 +427,10 @@
       "description": "Configuration for custom authentication logic and how it integrates into the OpenAPI spec.",
       "type": "object",
       "properties": {
+        "cache": {
+          "$ref": "#/$defs/CacheConfig",
+          "description": "Optional. Cache configuration for the server.\n"
+        },
         "disable_studio_auth": {
           "type": "boolean",
           "description": "Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio.\n\nDefaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header\nvalue is a valid API key for the deployment's workspace. If `True`, all requests will go through your custom\nauthentication logic, regardless of origin of the request.\n"
@@ -441,6 +445,29 @@
         }
       },
       "required": []
+    },
+    "CacheConfig": {
+      "title": "CacheConfig",
+      "type": "object",
+      "properties": {
+        "cache_keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional. List of header keys to use for caching.\n"
+        },
+        "max_size": {
+          "type": "integer",
+          "description": "Optional. Maximum size of the cache.\n"
+        },
+        "ttl_seconds": {
+          "type": "integer",
+          "description": "Optional. Time-to-live in seconds for cached items.\n"
+        }
+      },
+      "required": [],
+      "description": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)"
     },
     "SecurityConfig": {
       "title": "SecurityConfig",
@@ -629,13 +656,17 @@
           ],
           "description": "Optional. Defines CORS restrictions. If omitted, no special rules are set and\ncross-origin behavior depends on default server settings.\n"
         },
+        "disable_a2a": {
+          "type": "boolean",
+          "description": "Optional. If `True`, /a2a routes are removed, disabling default support to expose the deployment as an agent-to-agent (A2A) server.\n\nDefault is False.\n"
+        },
         "disable_assistants": {
           "type": "boolean",
           "description": "Optional. If `True`, /assistants routes are removed from the server.\n\nDefault is False (meaning /assistants is enabled).\n"
         },
         "disable_mcp": {
           "type": "boolean",
-          "description": "Optional. If `True`, /mcp routes are removed, disabling the MCP server.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /mcp routes are removed, disabling default support to expose the deployment as an MCP server.\n\nDefault is False.\n"
         },
         "disable_meta": {
           "type": "boolean",
@@ -652,6 +683,14 @@
         "disable_threads": {
           "type": "boolean",
           "description": "Optional. If `True`, /threads routes are removed.\n\nDefault is False.\n"
+        },
+        "disable_ui": {
+          "type": "boolean",
+          "description": "Optional. If `True`, /ui routes are removed, disabling the UI server.\n\nDefault is False.\n"
+        },
+        "disable_webhooks": {
+          "type": "boolean",
+          "description": "Optional. If `True`, webhooks are disabled. Runs created with an associated webhook will\nstill be executed, but the webhook event will not be sent.\n\nDefault is False.\n"
         },
         "enable_custom_route_auth": {
           "type": "boolean",
@@ -681,6 +720,10 @@
             }
           ],
           "description": "Optional. Defines the order in which to apply server customizations.\n"
+        },
+        "mount_prefix": {
+          "type": "string",
+          "description": "Optional. URL prefix to prepend to all the routes.\n"
         }
       },
       "required": []

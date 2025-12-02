@@ -233,6 +233,27 @@ class SecurityConfig(TypedDict, total=False):
     """
 
 
+class CacheConfig(TypedDict, total=False):
+    cache_keys: list[str]
+    """Optional. List of header keys to use for caching.
+    
+    Example:
+        ["user_id", "workspace_id"]
+    """
+    ttl_seconds: int
+    """Optional. Time-to-live in seconds for cached items.
+    
+    Example:
+        3600
+    """
+    max_size: int
+    """Optional. Maximum size of the cache.
+    
+    Example:
+        100
+    """
+
+
 class AuthConfig(TypedDict, total=False):
     """Configuration for custom authentication logic and how it integrates into the OpenAPI spec."""
 
@@ -267,6 +288,16 @@ class AuthConfig(TypedDict, total=False):
             "security": [
                 {"OAuth2": ["me"]}
             ]
+        }
+    """
+    cache: CacheConfig
+    """Optional. Cache configuration for the server.
+    
+    Example:
+        {
+            "cache_keys": ["user_id", "workspace_id"],
+            "ttl_seconds": 3600,
+            "max_size": 100
         }
     """
 
@@ -388,7 +419,12 @@ class HttpConfig(TypedDict, total=False):
     Default is False.
     """
     disable_mcp: bool
-    """Optional. If `True`, /mcp routes are removed, disabling the MCP server.
+    """Optional. If `True`, /mcp routes are removed, disabling default support to expose the deployment as an MCP server.
+    
+    Default is False.
+    """
+    disable_a2a: bool
+    """Optional. If `True`, /a2a routes are removed, disabling default support to expose the deployment as an agent-to-agent (A2A) server.
     
     Default is False.
     """
@@ -397,6 +433,17 @@ class HttpConfig(TypedDict, total=False):
     
     Set to True to disable the following endpoints: /openapi.json, /info, /metrics, /docs.
     This will also make the /ok endpoint skip any DB or other checks, always returning {"ok": True}.
+    
+    Default is False.
+    """
+    disable_ui: bool
+    """Optional. If `True`, /ui routes are removed, disabling the UI server.
+    
+    Default is False.
+    """
+    disable_webhooks: bool
+    """Optional. If `True`, webhooks are disabled. Runs created with an associated webhook will
+    still be executed, but the webhook event will not be sent.
     
     Default is False.
     """
@@ -429,6 +476,12 @@ class HttpConfig(TypedDict, total=False):
 
     Default is False. This flag only affects authentication behavior
     if `app` is provided and contains custom routes.
+    """
+    mount_prefix: str
+    """Optional. URL prefix to prepend to all the routes.
+    
+    Example:
+        "/api"
     """
 
 
