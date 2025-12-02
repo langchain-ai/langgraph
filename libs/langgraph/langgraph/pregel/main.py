@@ -210,8 +210,10 @@ class NodeBuilder:
         *channels: str,
         read: bool = True,
     ) -> Self:
-        """Add channels to subscribe to. Node will be invoked when any of these
-        channels are updated, with a dict of the channel values as input.
+        """Add channels to subscribe to.
+
+        Node will be invoked when any of these channels are updated, with a dict of the
+        channel values as input.
 
         Args:
             channels: Channel name(s) to subscribe to
@@ -270,8 +272,8 @@ class NodeBuilder:
         """Add channel writes.
 
         Args:
-            *channels: Channel names to write to
-            **kwargs: Channel name and value mappings
+            *channels: Channel names to write to.
+            **kwargs: Channel name and value mappings.
 
         Returns:
             Self for chaining
@@ -375,12 +377,12 @@ class Pregel(
     ### Advanced channels: Context and BinaryOperatorAggregate
 
     - `Context`: exposes the value of a context manager, managing its lifecycle.
-      Useful for accessing external resources that require setup and/or teardown. eg.
-      `client = Context(httpx.Client)`
+        Useful for accessing external resources that require setup and/or teardown. e.g.
+        `client = Context(httpx.Client)`
     - `BinaryOperatorAggregate`: stores a persistent value, updated by applying
-       a binary operator to the current value and each update
-       sent to the channel, useful for computing aggregates over multiple steps. eg.
-      `total = BinaryOperatorAggregate(int, operator.add)`
+        a binary operator to the current value and each update
+        sent to the channel, useful for computing aggregates over multiple steps. e.g.
+        `total = BinaryOperatorAggregate(int, operator.add)`
 
     ## Examples
 
@@ -495,7 +497,7 @@ class Pregel(
         {"c": ["foofoo", "foofoofoofoo"]}
         ```
 
-    Example: Using a BinaryOperatorAggregate channel
+    Example: Using a `BinaryOperatorAggregate` channel
         ```python
         from langgraph.channels import EphemeralValue, BinaryOperatorAggregate
         from langgraph.pregel import Pregel, NodeBuilder
@@ -541,8 +543,9 @@ class Pregel(
 
     Example: Introducing a cycle
         This example demonstrates how to introduce a cycle in the graph, by having
-        a chain write to a channel it subscribes to. Execution will continue
-        until a None value is written to the channel.
+        a chain write to a channel it subscribes to.
+
+        Execution will continue until a `None` value is written to the channel.
 
         ```python
         from langgraph.channels import EphemeralValue
@@ -1426,7 +1429,8 @@ class Pregel(
         Args:
             config: The config to apply the updates to.
             supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
-                        Each update is a tuple of the form `(values, as_node, task_id)` where `task_id` is optional.
+
+                Each update is a tuple of the form `(values, as_node, task_id)` where `task_id` is optional.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -1869,7 +1873,8 @@ class Pregel(
         Args:
             config: The config to apply the updates to.
             supersteps: A list of supersteps, each including a list of updates to apply sequentially to a graph state.
-                        Each update is a tuple of the form `(values, as_node, task_id)` where `task_id` is optional.
+
+                Each update is a tuple of the form `(values, as_node, task_id)` where `task_id` is optional.
 
         Raises:
             ValueError: If no checkpointer is set or no updates are provided.
@@ -2420,6 +2425,7 @@ class Pregel(
             context: The static context to use for the run.
                 !!! version-added "Added in version 0.6.0"
             stream_mode: The mode to stream output, defaults to `self.stream_mode`.
+
                 Options are:
 
                 - `"values"`: Emit all values in the state after each step, including interrupts.
@@ -2428,7 +2434,7 @@ class Pregel(
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
-                    Will be emitted as 2-tuples `(LLM token, metadata)`.
+                    - Will be emitted as 2-tuples `(LLM token, metadata)`.
                 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
                 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
@@ -2437,17 +2443,21 @@ class Pregel(
                 The streamed outputs will be tuples of `(mode, data)`.
 
                 See [LangGraph streaming guide](https://docs.langchain.com/oss/python/langgraph/streaming) for more details.
-            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes.
+
+                Does not affect the output of the graph in any way.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             durability: The durability mode for the graph execution, defaults to `"async"`.
+
                 Options are:
 
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
-            subgraphs: Whether to stream events from inside subgraphs, defaults to False.
+            subgraphs: Whether to stream events from inside subgraphs, defaults to `False`.
+
                 If `True`, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
                 where `namespace` is a tuple with the path to the node where a subgraph is invoked,
@@ -2689,6 +2699,7 @@ class Pregel(
             context: The static context to use for the run.
                 !!! version-added "Added in version 0.6.0"
             stream_mode: The mode to stream output, defaults to `self.stream_mode`.
+
                 Options are:
 
                 - `"values"`: Emit all values in the state after each step, including interrupts.
@@ -2697,7 +2708,7 @@ class Pregel(
                     If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are emitted separately.
                 - `"custom"`: Emit custom data from inside nodes or tasks using `StreamWriter`.
                 - `"messages"`: Emit LLM messages token-by-token together with metadata for any LLM invocations inside nodes or tasks.
-                    Will be emitted as 2-tuples `(LLM token, metadata)`.
+                    - Will be emitted as 2-tuples `(LLM token, metadata)`.
                 - `"checkpoints"`: Emit an event when a checkpoint is created, in the same format as returned by `get_state()`.
                 - `"tasks"`: Emit events when tasks start and finish, including their results and errors.
                 - `"debug"`: Emit debug events with as much information as possible for each step.
@@ -2706,17 +2717,21 @@ class Pregel(
                 The streamed outputs will be tuples of `(mode, data)`.
 
                 See [LangGraph streaming guide](https://docs.langchain.com/oss/python/langgraph/streaming) for more details.
-            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes.
+
+                Does not affect the output of the graph in any way.
             output_keys: The keys to stream, defaults to all non-context channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             durability: The durability mode for the graph execution, defaults to `"async"`.
+
                 Options are:
 
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
-            subgraphs: Whether to stream events from inside subgraphs, defaults to False.
+            subgraphs: Whether to stream events from inside subgraphs, defaults to `False`.
+
                 If `True`, the events will be emitted as tuples `(namespace, data)`,
                 or `(namespace, mode, data)` if `stream_mode` is a list,
                 where `namespace` is a tuple with the path to the node where a subgraph is invoked,
@@ -3025,11 +3040,14 @@ class Pregel(
             context: The static context to use for the run.
                 !!! version-added "Added in version 0.6.0"
             stream_mode: The stream mode for the graph run.
-            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes.
+
+                Does not affect the output of the graph in any way.
             output_keys: The output keys to retrieve from the graph run.
             interrupt_before: The nodes to interrupt the graph run before.
             interrupt_after: The nodes to interrupt the graph run after.
             durability: The durability mode for the graph execution, defaults to `"async"`.
+
                 Options are:
 
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
@@ -3112,11 +3130,14 @@ class Pregel(
             context: The static context to use for the run.
                 !!! version-added "Added in version 0.6.0"
             stream_mode: The stream mode for the graph run.
-            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes. Does not affect the output of the graph in any way.
+            print_mode: Accepts the same values as `stream_mode`, but only prints the output to the console, for debugging purposes.
+
+                Does not affect the output of the graph in any way.
             output_keys: The output keys to retrieve from the graph run.
             interrupt_before: The nodes to interrupt the graph run before.
             interrupt_after: The nodes to interrupt the graph run after.
             durability: The durability mode for the graph execution, defaults to `"async"`.
+
                 Options are:
 
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
