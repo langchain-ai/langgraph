@@ -11,64 +11,64 @@ class TestHandlerValidation:
         encryption = Encryption()
 
         @encryption.encrypt.blob
-        async def blob_enc(ctx, data):
+        async def blob_enc(_ctx, data):
             return data
 
         @encryption.decrypt.blob
-        async def blob_dec(ctx, data):
+        async def blob_dec(_ctx, data):
             return data
 
         @encryption.encrypt.json
-        async def json_enc(ctx, data):
+        async def json_enc(_ctx, data):
             return data
 
         @encryption.decrypt.json
-        async def json_dec(ctx, data):
+        async def json_dec(_ctx, data):
             return data
 
         @encryption.encrypt.json.thread
-        async def thread_enc(ctx, data):
+        async def thread_enc(_ctx, data):
             return data
 
         @encryption.decrypt.json.custom
-        async def custom_dec(ctx, data):
+        async def custom_dec(_ctx, data):
             return data
 
         # All duplicates should raise
         with pytest.raises(DuplicateHandlerError):
 
             @encryption.encrypt.blob
-            async def dup(ctx, data):
+            async def dup(_ctx, data):
                 return data
 
         with pytest.raises(DuplicateHandlerError):
 
             @encryption.decrypt.blob
-            async def dup(ctx, data):
+            async def dup(_ctx, data):
                 return data
 
         with pytest.raises(DuplicateHandlerError):
 
             @encryption.encrypt.json
-            async def dup(ctx, data):
+            async def dup(_ctx, data):
                 return data
 
         with pytest.raises(DuplicateHandlerError):
 
             @encryption.decrypt.json
-            async def dup(ctx, data):
+            async def dup(_ctx, data):
                 return data
 
         with pytest.raises(DuplicateHandlerError):
 
             @encryption.encrypt.json.thread
-            async def dup(ctx, data):
+            async def dup(_ctx, data):
                 return data
 
         with pytest.raises(DuplicateHandlerError):
 
             @encryption.decrypt.json.custom
-            async def dup(ctx, data):
+            async def dup(_ctx, data):
                 return data
 
     def test_handlers_must_be_async(self):
@@ -78,7 +78,7 @@ class TestHandlerValidation:
         with pytest.raises(TypeError, match="must be an async function"):
 
             @encryption.encrypt.blob
-            def sync_handler(ctx, data):
+            def sync_handler(_ctx, data):
                 return data
 
     def test_handlers_must_have_two_params(self):
