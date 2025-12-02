@@ -8,9 +8,42 @@ server-side.
 
 from __future__ import annotations
 
+import inspect
 import typing
 
 from langgraph_sdk.encryption import types
+
+
+class DuplicateHandlerError(Exception):
+    """Raised when attempting to register a duplicate encryption/decryption handler."""
+
+    pass
+
+
+def _validate_handler(fn: typing.Callable, handler_type: str) -> None:
+    """Validate that a handler function has the correct signature.
+
+    Args:
+        fn: The handler function to validate
+        handler_type: Description of the handler for error messages
+
+    Raises:
+        TypeError: If the handler is not an async function or has wrong parameter count
+    """
+    if not inspect.iscoroutinefunction(fn):
+        raise TypeError(f"{handler_type} must be an async function, got {type(fn)}")
+
+    sig = inspect.signature(fn)
+    params = [
+        p
+        for p in sig.parameters.values()
+        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+    ]
+    if len(params) != 2:
+        raise TypeError(
+            f"{handler_type} must accept exactly 2 parameters "
+            f"(ctx, data), got {len(params)}"
+        )
 
 
 class _JsonEncryptDecorators:
@@ -42,17 +75,29 @@ class _JsonEncryptDecorators:
 
         Returns:
             The registered handler function, or a decorator if model name provided
+
+        Raises:
+            DuplicateHandlerError: If handler already registered
+            TypeError: If handler has invalid signature
         """
         if isinstance(fn_or_model, str):
             model_name = fn_or_model
 
             def decorator(fn: types.JsonEncryptor) -> types.JsonEncryptor:
+                if model_name in self._parent._json_encryptors:
+                    raise DuplicateHandlerError(
+                        f"JSON encryptor for model '{model_name}' already registered"
+                    )
+                _validate_handler(fn, f"JSON encryptor for model '{model_name}'")
                 self._parent._json_encryptors[model_name] = fn
                 return fn
 
             return decorator
         else:
+            if self._parent._json_encryptor is not None:
+                raise DuplicateHandlerError("Default JSON encryptor already registered")
             fn = fn_or_model
+            _validate_handler(fn, "Default JSON encryptor")
             self._parent._json_encryptor = fn
             return fn
 
@@ -62,9 +107,18 @@ class _JsonEncryptDecorators:
         """Dynamic attribute access for model-specific handlers.
 
         Allows @encrypt.json.thread, @encrypt.json.assistant, etc.
+
+        Raises:
+            DuplicateHandlerError: If handler already registered for this model
+            TypeError: If handler has invalid signature
         """
 
         def decorator(fn: types.JsonEncryptor) -> types.JsonEncryptor:
+            if model in self._parent._json_encryptors:
+                raise DuplicateHandlerError(
+                    f"JSON encryptor for model '{model}' already registered"
+                )
+            _validate_handler(fn, f"JSON encryptor for model '{model}'")
             self._parent._json_encryptors[model] = fn
             return fn
 
@@ -100,17 +154,29 @@ class _JsonDecryptDecorators:
 
         Returns:
             The registered handler function, or a decorator if model name provided
+
+        Raises:
+            DuplicateHandlerError: If handler already registered
+            TypeError: If handler has invalid signature
         """
         if isinstance(fn_or_model, str):
             model_name = fn_or_model
 
             def decorator(fn: types.JsonDecryptor) -> types.JsonDecryptor:
+                if model_name in self._parent._json_decryptors:
+                    raise DuplicateHandlerError(
+                        f"JSON decryptor for model '{model_name}' already registered"
+                    )
+                _validate_handler(fn, f"JSON decryptor for model '{model_name}'")
                 self._parent._json_decryptors[model_name] = fn
                 return fn
 
             return decorator
         else:
+            if self._parent._json_decryptor is not None:
+                raise DuplicateHandlerError("Default JSON decryptor already registered")
             fn = fn_or_model
+            _validate_handler(fn, "Default JSON decryptor")
             self._parent._json_decryptor = fn
             return fn
 
@@ -120,9 +186,18 @@ class _JsonDecryptDecorators:
         """Dynamic attribute access for model-specific handlers.
 
         Allows @decrypt.json.thread, @decrypt.json.assistant, etc.
+
+        Raises:
+            DuplicateHandlerError: If handler already registered for this model
+            TypeError: If handler has invalid signature
         """
 
         def decorator(fn: types.JsonDecryptor) -> types.JsonDecryptor:
+            if model in self._parent._json_decryptors:
+                raise DuplicateHandlerError(
+                    f"JSON decryptor for model '{model}' already registered"
+                )
+            _validate_handler(fn, f"JSON decryptor for model '{model}'")
             self._parent._json_decryptors[model] = fn
             return fn
 
@@ -158,7 +233,14 @@ class _EncryptDecorators:
 
         Returns:
             The registered handler function
+
+        Raises:
+            DuplicateHandlerError: If blob encryptor already registered
+            TypeError: If handler has invalid signature
         """
+        if self._parent._blob_encryptor is not None:
+            raise DuplicateHandlerError("Blob encryptor already registered")
+        _validate_handler(fn, "Blob encryptor")
         self._parent._blob_encryptor = fn
         return fn
 
@@ -217,7 +299,14 @@ class _DecryptDecorators:
 
         Returns:
             The registered handler function
+
+        Raises:
+            DuplicateHandlerError: If blob decryptor already registered
+            TypeError: If handler has invalid signature
         """
+        if self._parent._blob_decryptor is not None:
+            raise DuplicateHandlerError("Blob decryptor already registered")
+        _validate_handler(fn, "Blob decryptor")
         self._parent._blob_decryptor = fn
         return fn
 
