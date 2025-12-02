@@ -87,6 +87,6 @@ class TestHandlerValidation:
 
         with pytest.raises(TypeError, match="must accept exactly 2 parameters"):
 
-            @encryption.encrypt.blob
+            @encryption.encrypt.blob  # type: ignore[arg-type]
             async def wrong_params(ctx):
                 return ctx
