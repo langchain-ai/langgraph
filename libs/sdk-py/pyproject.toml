@@ -29,7 +29,12 @@ test = [
     "pytest-mock",
     "pytest-watch",
 ]
-lint = ["ruff", "codespell", "mypy"]
+lint = [
+    "ruff==0.14.7",
+    "codespell",
+    "mypy==1.19.0",
+    "ty==0.0.1a27",
+]
 dev = [
   { include-group = "test" },
   { include-group = "lint" },
