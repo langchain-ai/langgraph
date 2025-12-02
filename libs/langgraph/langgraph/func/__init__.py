@@ -357,7 +357,7 @@ class entrypoint(Generic[ContextT]):
         my_workflow.invoke("hello", config)
         ```
 
-    Example: Using entrypoint.final to save a value
+    Example: Using `entrypoint.final` to save a value
         The `entrypoint.final` object allows you to return a value while saving
         a different value to the checkpoint. This value will be accessible
         in the next invocation of the entrypoint via the `previous` parameter, as

@@ -15,9 +15,7 @@ class UntypedSerializerProtocol(Protocol):
 class SerializerProtocol(Protocol):
     """Protocol for serialization and deserialization of objects.
 
-    - `dumps`: Serialize an object to bytes.
     - `dumps_typed`: Serialize an object to a tuple `(type, bytes)`.
-    - `loads`: Deserialize an object from bytes.
     - `loads_typed`: Deserialize an object from a tuple `(type, bytes)`.
 
     Valid implementations include the `pickle`, `json` and `orjson` modules.
@@ -52,12 +50,13 @@ def maybe_add_typed_methods(
 
 class CipherProtocol(Protocol):
     """Protocol for encryption and decryption of data.
+
     - `encrypt`: Encrypt plaintext.
     - `decrypt`: Decrypt ciphertext.
     """
 
     def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
-        """Encrypt plaintext. Returns a tuple (cipher name, ciphertext)."""
+        """Encrypt plaintext. Returns a tuple `(cipher name, ciphertext)`."""
         ...
 
     def decrypt(self, ciphername: str, ciphertext: bytes) -> bytes:

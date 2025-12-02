@@ -60,23 +60,28 @@ class Checkpoint(TypedDict):
     """State snapshot at a given point in time."""
 
     v: int
-    """The version of the checkpoint format. Currently 1."""
+    """The version of the checkpoint format. Currently `1`."""
     id: str
-    """The ID of the checkpoint. This is both unique and monotonically
-    increasing, so can be used for sorting checkpoints from first to last."""
+    """The ID of the checkpoint.
+    
+    This is both unique and monotonically increasing, so can be used for sorting
+    checkpoints from first to last."""
     ts: str
     """The timestamp of the checkpoint in ISO 8601 format."""
     channel_values: dict[str, Any]
     """The values of the channels at the time of the checkpoint.
+    
     Mapping from channel name to deserialized channel snapshot value.
     """
     channel_versions: ChannelVersions
     """The versions of the channels at the time of the checkpoint.
+    
     The keys are channel names and the values are monotonically increasing
     version strings for each channel.
     """
     versions_seen: dict[str, ChannelVersions]
     """Map from node ID to map from channel name to version seen.
+    
     This keeps track of the versions of the channels that each node has seen.
     Used to determine which nodes to execute next.
     """
@@ -352,8 +357,9 @@ class BaseCheckpointSaver(Generic[V]):
     def get_next_version(self, current: V | None, channel: None) -> V:
         """Generate the next version ID for a channel.
 
-        Default is to use integer versions, incrementing by `1`. If you override, you can use `str`/`int`/`float`
-        versions, as long as they are monotonically increasing.
+        Default is to use integer versions, incrementing by `1`.
+
+        If you override, you can use `str`/`int`/`float` versions, as long as they are monotonically increasing.
 
         Args:
             current: The current version identifier (`int`, `float`, or `str`).

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import AsyncIterator, Iterator
+from typing import cast
 
 import httpx
 import orjson
@@ -42,7 +44,7 @@ class BytesLineDecoder:
             return []  # pragma: no cover
 
         trailing_newline = text[-1] in NEWLINE_CHARS
-        lines = text.splitlines()
+        lines = cast(list[BytesLike], text.splitlines())
 
         if len(lines) == 1 and not trailing_newline:
             # No new lines, buffer the input and continue.
@@ -53,7 +55,7 @@ class BytesLineDecoder:
             # Include any existing buffer in the first portion of the
             # splitlines result.
             self.buffer.extend(lines[0])
-            lines = [self.buffer] + lines[1:]
+            lines = cast(list[BytesLike], [self.buffer, *lines[1:]])
             self.buffer = bytearray()
 
         if not trailing_newline:
@@ -87,7 +89,7 @@ class SSEDecoder:
         return self._last_event_id or None
 
     def decode(self, line: bytes) -> StreamPart | None:
-        # See: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation  # noqa: E501
+        # See: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
 
         if not line:
             if (
@@ -128,10 +130,8 @@ class SSEDecoder:
             else:
                 self._last_event_id = value.decode()
         elif fieldname == b"retry":
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 self._retry = int(value)
-            except (TypeError, ValueError):
-                pass
         else:
             pass  # Field is ignored.
 
