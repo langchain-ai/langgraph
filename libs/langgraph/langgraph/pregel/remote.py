@@ -725,9 +725,10 @@ class RemoteGraph(PregelProtocol):
             input = None
         else:
             command = None
+        thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
         for chunk in sync_client.runs.stream(
-            thread_id=sanitized_config["configurable"].get("thread_id"),
+            thread_id=thread_id,
             assistant_id=self.assistant_id,
             input=input,
             command=command,
@@ -834,9 +835,10 @@ class RemoteGraph(PregelProtocol):
             input = None
         else:
             command = None
+        thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
         async for chunk in client.runs.stream(
-            thread_id=sanitized_config["configurable"].get("thread_id"),
+            thread_id=thread_id,
             assistant_id=self.assistant_id,
             input=input,
             command=command,
