@@ -35,6 +35,7 @@ from langgraph_sdk.schema import (
     Assistant,
     AssistantSelectField,
     AssistantSortBy,
+    AssistantsSearchResponse,
     AssistantVersion,
     CancelAction,
     Checkpoint,
@@ -1054,6 +1055,7 @@ class AssistantsClient:
             f"/assistants/{assistant_id}", headers=headers, params=params
         )
 
+    @overload
     async def search(
         self,
         *,
@@ -1065,9 +1067,43 @@ class AssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
+        include_pagination: Literal[True],
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Assistant]:
+    ) -> AssistantsSearchResponse: ...
+
+    @overload
+    async def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        include_pagination: Literal[False] = False,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> list[Assistant]: ...
+
+    async def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        include_pagination: bool = False,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> AssistantsSearchResponse | list[Assistant]:
         """Search for assistants.
 
         Args:
@@ -1080,11 +1116,14 @@ class AssistantsClient:
             offset: The number of results to skip.
             sort_by: The field to sort by.
             sort_order: The order to sort by.
+            select: Specific assistant fields to include in the response.
+            include_pagination: When True, include the ``X-Pagination-Next`` header in the return value.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
         Returns:
-            A list of assistants.
+            A list of assistants or, when ``include_pagination`` is True, a mapping
+            with the assistants and the next pagination cursor.
 
         ???+ example "Example Usage"
 
@@ -1096,6 +1135,15 @@ class AssistantsClient:
                 limit=5,
                 offset=5
             )
+            ```
+
+        ???+ example "Include pagination metadata"
+
+            ```python
+            client = get_client(url="http://localhost:2024")
+            result = await client.assistants.search(include_pagination=True)
+            next_cursor = result["next"]
+            assistants = result["assistants"]
             ```
         """
         payload: dict[str, Any] = {
@@ -1114,12 +1162,25 @@ class AssistantsClient:
             payload["sort_order"] = sort_order
         if select:
             payload["select"] = select
-        return await self.http.post(
-            "/assistants/search",
-            json=payload,
-            headers=headers,
-            params=params,
+        next_cursor: str | None = None
+
+        def capture_pagination(response: httpx.Response) -> None:
+            nonlocal next_cursor
+            next_cursor = response.headers.get("X-Pagination-Next")
+
+        assistants = cast(
+            list[Assistant],
+            await self.http.post(
+                "/assistants/search",
+                json=payload,
+                headers=headers,
+                params=params,
+                on_response=capture_pagination if include_pagination else None,
+            ),
         )
+        if include_pagination:
+            return {"assistants": assistants, "next": next_cursor}
+        return assistants
 
     async def count(
         self,
@@ -4328,6 +4389,7 @@ class SyncAssistantsClient:
         """
         self.http.delete(f"/assistants/{assistant_id}", headers=headers, params=params)
 
+    @overload
     def search(
         self,
         *,
@@ -4339,9 +4401,43 @@ class SyncAssistantsClient:
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
+        include_pagination: Literal[True],
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Assistant]:
+    ) -> AssistantsSearchResponse: ...
+
+    @overload
+    def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        include_pagination: Literal[False] = False,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> list[Assistant]: ...
+
+    def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        include_pagination: bool = False,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> AssistantsSearchResponse | list[Assistant]:
         """Search for assistants.
 
         Args:
@@ -4352,10 +4448,15 @@ class SyncAssistantsClient:
                 The filtering logic will match assistants where 'name' is a substring (case insensitive) of the assistant name.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            sort_by: The field to sort by.
+            sort_order: The order to sort by.
+            select: Specific assistant fields to include in the response.
+            include_pagination: When True, include the ``X-Pagination-Next`` header in the return value.
             headers: Optional custom headers to include with the request.
 
         Returns:
-            A list of assistants.
+            A list of assistants or, when ``include_pagination`` is True, a mapping
+            with the assistants and the next pagination cursor.
 
         ???+ example "Example Usage"
 
@@ -4367,6 +4468,15 @@ class SyncAssistantsClient:
                 limit=5,
                 offset=5
             )
+            ```
+
+        ???+ example "Include pagination metadata"
+
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
+            result = client.assistants.search(include_pagination=True)
+            next_cursor = result["next"]
+            assistants = result["assistants"]
             ```
         """
         payload: dict[str, Any] = {
@@ -4385,12 +4495,25 @@ class SyncAssistantsClient:
             payload["sort_order"] = sort_order
         if select:
             payload["select"] = select
-        return self.http.post(
-            "/assistants/search",
-            json=payload,
-            headers=headers,
-            params=params,
+        next_cursor: str | None = None
+
+        def capture_pagination(response: httpx.Response) -> None:
+            nonlocal next_cursor
+            next_cursor = response.headers.get("X-Pagination-Next")
+
+        assistants = cast(
+            list[Assistant],
+            self.http.post(
+                "/assistants/search",
+                json=payload,
+                headers=headers,
+                params=params,
+                on_response=capture_pagination if include_pagination else None,
+            ),
         )
+        if include_pagination:
+            return {"assistants": assistants, "next": next_cursor}
+        return assistants
 
     def count(
         self,
