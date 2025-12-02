@@ -1800,12 +1800,14 @@ dev = [
     { name = "pytest-mock" },
     { name = "pytest-watch" },
     { name = "ruff", specifier = "==0.14.7" },
+    { name = "starlette" },
     { name = "ty", specifier = "==0.0.1a27" },
 ]
 lint = [
     { name = "codespell" },
     { name = "mypy", specifier = "==1.19.0" },
     { name = "ruff", specifier = "==0.14.7" },
+    { name = "starlette" },
     { name = "ty", specifier = "==0.0.1a27" },
 ]
 test = [
