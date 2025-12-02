@@ -15,6 +15,7 @@ import msgspec
 
 from langgraph_cli.schemas import (
     AuthConfig,
+    CacheConfig,
     CheckpointerConfig,
     Config,
     ConfigurableHeaderConfig,
@@ -111,6 +112,7 @@ def add_descriptions_to_schema(schema, cls):
                 SecurityConfig,
                 HttpConfig,
                 CorsConfig,
+                CacheConfig,
                 ThreadTTLConfig,
                 CheckpointerConfig,
                 SerdeConfig,
