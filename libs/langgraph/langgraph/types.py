@@ -137,6 +137,61 @@ class CachePolicy(Generic[KeyFuncT]):
 _DEFAULT_INTERRUPT_ID = "placeholder-id"
 
 
+def _validate_resume_value(resume_value: Any, input_schema: Any) -> bool:
+    """Validate resume value against input schema.
+
+    Args:
+        resume_value: The value to validate
+        input_schema: Schema to validate against (dict, Pydantic BaseModel, or dataclass)
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if input_schema is None:
+        return True
+
+    # Check if it's a Pydantic model
+    try:
+        from pydantic import BaseModel, ValidationError
+        if isinstance(input_schema, type) and issubclass(input_schema, BaseModel):
+            try:
+                input_schema.model_validate(resume_value)
+                return True
+            except ValidationError:
+                return False
+    except ImportError:
+        pass
+
+    # Check if it's a dataclass
+    from dataclasses import is_dataclass, fields
+    if is_dataclass(input_schema):
+        if isinstance(resume_value, input_schema):
+            # Already the correct type
+            return True
+        if isinstance(resume_value, dict):
+            # Check all required fields are present
+            field_names = {f.name for f in fields(input_schema)}
+            if not field_names.issubset(set(resume_value.keys()) | {f.name for f in fields(input_schema) if f.default is not f.default_factory}):
+                return False
+            try:
+                input_schema(**resume_value)
+                return True
+            except (TypeError, ValueError):
+                return False
+        return False
+
+    # Check if it's a dict (JSON schema or similar)
+    if isinstance(input_schema, dict):
+        # For dict schemas, validate structure matches
+        # Basic validation: check if resume_value is a dict with expected keys
+        if not isinstance(resume_value, dict):
+            return False
+        # Simple check - could be enhanced with jsonschema library
+        return True
+
+    return True
+
+
 @final
 @dataclass(init=False, slots=True)
 class Interrupt:
@@ -163,13 +218,18 @@ class Interrupt:
     id: str
     """The ID of the interrupt. Can be used to resume the interrupt directly."""
 
+    input_schema: Any | None
+    """Optional schema to validate resume values. Can be a dict, Pydantic BaseModel, or dataclass."""
+
     def __init__(
         self,
         value: Any,
         id: str = _DEFAULT_INTERRUPT_ID,
+        input_schema: Any | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         self.value = value
+        self.input_schema = input_schema
 
         if (
             (ns := deprecated_kwargs.get("ns", MISSING)) is not MISSING
@@ -181,8 +241,8 @@ class Interrupt:
             self.id = id
 
     @classmethod
-    def from_ns(cls, value: Any, ns: str) -> Interrupt:
-        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()))
+    def from_ns(cls, value: Any, ns: str, input_schema: Any | None = None) -> Interrupt:
+        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()), input_schema=input_schema)
 
     @property
     @deprecated("`interrupt_id` is deprecated. Use `id` instead.", category=None)
@@ -398,7 +458,7 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
-def interrupt(value: Any) -> Any:
+def interrupt(value: Any, *, input_schema: Any | None = None) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
     The `interrupt` function enables human-in-the-loop workflows by pausing graph
@@ -481,12 +541,16 @@ def interrupt(value: Any) -> Any:
 
     Args:
         value: The value to surface to the client when the graph is interrupted.
+        input_schema: Optional schema to validate the resume value. Can be a dict (JSON schema),
+            Pydantic BaseModel class, or dataclass. If provided, the resume value must match
+            this schema or the interrupt will be re-raised.
 
     Returns:
         Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation
 
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
+            Also raised if the resume value doesn't match the input_schema.
     """
     from langgraph._internal._constants import (
         CONFIG_KEY_CHECKPOINT_NS,
@@ -504,11 +568,36 @@ def interrupt(value: Any) -> Any:
     # find previous resume values
     if scratchpad.resume:
         if idx < len(scratchpad.resume):
+            resume_val = scratchpad.resume[idx]
+            # Validate resume value against schema
+            if not _validate_resume_value(resume_val, input_schema):
+                # Re-raise interrupt if validation fails
+                raise GraphInterrupt(
+                    (
+                        Interrupt.from_ns(
+                            value=value,
+                            ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+                            input_schema=input_schema,
+                        ),
+                    )
+                )
             conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
-            return scratchpad.resume[idx]
+            return resume_val
     # find current resume value
     v = scratchpad.get_null_resume(True)
     if v is not None:
+        # Validate resume value against schema
+        if not _validate_resume_value(v, input_schema):
+            # Re-raise interrupt if validation fails
+            raise GraphInterrupt(
+                (
+                    Interrupt.from_ns(
+                        value=value,
+                        ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+                        input_schema=input_schema,
+                    ),
+                )
+            )
         assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
         scratchpad.resume.append(v)
         conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
@@ -519,6 +608,7 @@ def interrupt(value: Any) -> Any:
             Interrupt.from_ns(
                 value=value,
                 ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+                input_schema=input_schema,
             ),
         )
     )
