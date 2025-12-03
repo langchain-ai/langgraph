@@ -245,6 +245,13 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 ),
             ),
         )
+    if obj.__class__.__module__ == "pydantic.networks" and hasattr(obj, "_url"):
+        return ormsgpack.Ext(
+            EXT_CONSTRUCTOR_SINGLE_ARG,
+            _msgpack_enc(
+                (obj.__class__.__module__, obj.__class__.__name__, str(obj)),
+            ),
+        )
     elif hasattr(obj, "dict") and callable(obj.dict):  # pydantic v1
         return ormsgpack.Ext(
             EXT_PYDANTIC_V1,
