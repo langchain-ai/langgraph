@@ -246,6 +246,15 @@ class Assistant(AssistantBase):
     """The last time the assistant was updated."""
 
 
+class AssistantsSearchResponse(TypedDict):
+    """Paginated response for assistant search results."""
+
+    assistants: list[Assistant]
+    """The assistants returned for the current search page."""
+    next: str | None
+    """Pagination cursor from the ``X-Pagination-Next`` response header."""
+
+
 class Interrupt(TypedDict):
     """Represents an interruption in the execution flow."""
 
