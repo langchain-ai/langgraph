@@ -840,6 +840,46 @@ def test_invoke():
     assert result == {"messages": [{"type": "human", "content": "world"}]}
 
 
+def test_invoke_sanitizes_thread_id():
+    # Ensure that invoking with thread_id passes thread_id as a top-level arg
+    # and removes it from the config body.
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = []
+    remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+
+    config = {"configurable": {"thread_id": "thread_1"}}
+    remote_pregel.invoke(
+        {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
+    )
+
+    assert mock_sync_client.runs.stream.called
+    _, kwargs = mock_sync_client.runs.stream.call_args
+    assert kwargs.get("thread_id") == "thread_1"
+    passed_config = kwargs.get("config") or {}
+    assert "configurable" in passed_config
+    assert "thread_id" not in passed_config["configurable"]
+    assert not passed_config["configurable"]
+
+
+def test_stream_sanitizes_thread_id():
+    # Ensure that streaming with thread_id passes thread_id as a top-level arg
+    # and removes it from the config body.
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = []
+    remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+
+    config = {"configurable": {"thread_id": "thread_2"}}
+    list(remote_pregel.stream({"input": {"messages": []}}, config))
+
+    assert mock_sync_client.runs.stream.called
+    _, kwargs = mock_sync_client.runs.stream.call_args
+    assert kwargs.get("thread_id") == "thread_2"
+    passed_config = kwargs.get("config") or {}
+    assert "configurable" in passed_config
+    assert "thread_id" not in passed_config["configurable"]
+    assert not passed_config["configurable"]
+
+
 @pytest.mark.anyio
 async def test_ainvoke():
     # set up test
