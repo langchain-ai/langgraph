@@ -153,6 +153,7 @@ def _validate_resume_value(resume_value: Any, input_schema: Any) -> bool:
     # Check if it's a Pydantic model
     try:
         from pydantic import BaseModel, ValidationError
+
         if isinstance(input_schema, type) and issubclass(input_schema, BaseModel):
             try:
                 input_schema.model_validate(resume_value)
@@ -163,7 +164,8 @@ def _validate_resume_value(resume_value: Any, input_schema: Any) -> bool:
         pass
 
     # Check if it's a dataclass
-    from dataclasses import is_dataclass, fields
+    from dataclasses import fields, is_dataclass
+
     if is_dataclass(input_schema):
         if isinstance(resume_value, input_schema):
             # Already the correct type
@@ -171,7 +173,14 @@ def _validate_resume_value(resume_value: Any, input_schema: Any) -> bool:
         if isinstance(resume_value, dict):
             # Check all required fields are present
             field_names = {f.name for f in fields(input_schema)}
-            if not field_names.issubset(set(resume_value.keys()) | {f.name for f in fields(input_schema) if f.default is not f.default_factory}):
+            if not field_names.issubset(
+                set(resume_value.keys())
+                | {
+                    f.name
+                    for f in fields(input_schema)
+                    if f.default is not f.default_factory
+                }
+            ):
                 return False
             try:
                 input_schema(**resume_value)
@@ -242,7 +251,9 @@ class Interrupt:
 
     @classmethod
     def from_ns(cls, value: Any, ns: str, input_schema: Any | None = None) -> Interrupt:
-        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()), input_schema=input_schema)
+        return cls(
+            value=value, id=xxh3_128_hexdigest(ns.encode()), input_schema=input_schema
+        )
 
     @property
     @deprecated("`interrupt_id` is deprecated. Use `id` instead.", category=None)
