@@ -35,6 +35,7 @@ from langgraph_sdk.schema import (
     Assistant,
     AssistantSelectField,
     AssistantSortBy,
+    AssistantsSearchResponse,
     AssistantVersion,
     CancelAction,
     Checkpoint,
@@ -48,6 +49,7 @@ from langgraph_sdk.schema import (
     Durability,
     GraphSchema,
     IfNotExists,
+    Input,
     Item,
     Json,
     ListNamespaceResponse,
@@ -80,25 +82,37 @@ logger = logging.getLogger(__name__)
 
 RESERVED_HEADERS = ("x-api-key",)
 
+NOT_PROVIDED = cast(None, object())
 
-def _get_api_key(api_key: str | None = None) -> str | None:
+
+def _get_api_key(api_key: str | None = NOT_PROVIDED) -> str | None:
     """Get the API key from the environment.
     Precedence:
-        1. explicit argument
-        2. LANGGRAPH_API_KEY
-        3. LANGSMITH_API_KEY
-        4. LANGCHAIN_API_KEY
+        1. explicit string argument
+        2. LANGGRAPH_API_KEY (if api_key not provided)
+        3. LANGSMITH_API_KEY (if api_key not provided)
+        4. LANGCHAIN_API_KEY (if api_key not provided)
+
+    Args:
+        api_key: The API key to use. Can be:
+            - A string: use this exact API key
+            - None: explicitly skip loading from environment
+            - NOT_PROVIDED (default): auto-load from environment variables
     """
-    if api_key:
+    if isinstance(api_key, str):
         return api_key
-    for prefix in ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"]:
-        if env := os.getenv(f"{prefix}_API_KEY"):
-            return env.strip().strip('"').strip("'")
-    return None  # type: ignore
+    if api_key is NOT_PROVIDED:
+        # api_key is not explicitly provided, try to load from environment
+        for prefix in ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"]:
+            if env := os.getenv(f"{prefix}_API_KEY"):
+                return env.strip().strip('"').strip("'")
+    # api_key is explicitly None, don't load from environment
+    return None
 
 
 def _get_headers(
-    api_key: str | None, custom_headers: Mapping[str, str] | None
+    api_key: str | None,
+    custom_headers: Mapping[str, str] | None,
 ) -> dict[str, str]:
     """Combine api_key and custom user-provided headers."""
     custom_headers = custom_headers or {}
@@ -110,9 +124,9 @@ def _get_headers(
         "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
         **custom_headers,
     }
-    api_key = _get_api_key(api_key)
-    if api_key:
-        headers["x-api-key"] = api_key
+    resolved_api_key = _get_api_key(api_key)
+    if resolved_api_key:
+        headers["x-api-key"] = resolved_api_key
 
     return headers
 
@@ -163,7 +177,7 @@ def _get_run_metadata_from_response(
 def get_client(
     *,
     url: str | None = None,
-    api_key: str | None = None,
+    api_key: str | None = NOT_PROVIDED,
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
 ) -> LangGraphClient:
@@ -178,12 +192,13 @@ def get_client(
             - If `None`, the client first attempts an in-process connection via ASGI transport.
               If that fails, it falls back to `http://localhost:8123`.
         api_key:
-            API key for authentication. If omitted, the client reads from environment
-            variables in the following order:
-              1. Function argument
-              2. `LANGGRAPH_API_KEY`
-              3. `LANGSMITH_API_KEY`
-              4. `LANGCHAIN_API_KEY`
+            API key for authentication. Can be:
+              - A string: use this exact API key
+              - `None`: explicitly skip loading from environment variables
+              - Not provided (default): auto-load from environment in this order:
+                1. `LANGGRAPH_API_KEY`
+                2. `LANGSMITH_API_KEY`
+                3. `LANGCHAIN_API_KEY`
         headers:
             Additional HTTP headers to include in requests. Merged with authentication headers.
         timeout:
@@ -223,6 +238,18 @@ def get_client(
                 assistant_id="agent",
                 input={"messages": [{"role": "user", "content": "Foo"}]},
             )
+        ```
+
+    ???+ example "Skip auto-loading API key from environment:"
+
+        ```python
+        from langgraph_sdk import get_client
+
+        # Don't load API key from environment variables
+        client = get_client(
+            url="http://localhost:8123",
+            api_key=None
+        )
         ```
     """
 
@@ -1028,47 +1055,99 @@ class AssistantsClient:
             f"/assistants/{assistant_id}", headers=headers, params=params
         )
 
+    @overload
     async def search(
         self,
         *,
         metadata: Json = None,
         graph_id: str | None = None,
+        name: str | None = None,
         limit: int = 10,
         offset: int = 0,
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
+        response_format: Literal["object"],
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Assistant]:
+    ) -> AssistantsSearchResponse: ...
+
+    @overload
+    async def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        response_format: Literal["array"] = "array",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> list[Assistant]: ...
+
+    async def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        response_format: Literal["array", "object"] = "array",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> AssistantsSearchResponse | list[Assistant]:
         """Search for assistants.
 
         Args:
             metadata: Metadata to filter by. Exact match filter for each KV pair.
             graph_id: The ID of the graph to filter by.
                 The graph ID is normally set in your langgraph.json configuration.
+            name: The name of the assistant to filter by.
+                The filtering logic will match assistants where 'name' is a substring (case insensitive) of the assistant name.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             sort_by: The field to sort by.
             sort_order: The order to sort by.
+            select: Specific assistant fields to include in the response.
+            response_format: Controls the response shape. Use ``"array"`` (default)
+                to return a bare list of assistants, or ``"object"`` to return
+                a mapping containing assistants plus pagination metadata.
+                Defaults to "array", though this default will be changed to "object" in a future release.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
         Returns:
-            A list of assistants.
+            A list of assistants (when ``response_format=\"array\"``) or a mapping
+            with the assistants and the next pagination cursor (when
+            ``response_format=\"object\"``).
 
         ???+ example "Example Usage"
 
             ```python
             client = get_client(url="http://localhost:2024")
-            assistants = await client.assistants.search(
+            response = await client.assistants.search(
                 metadata = {"name":"my_name"},
                 graph_id="my_graph_id",
                 limit=5,
-                offset=5
+                offset=5,
+                response_format="object"
             )
+            next_cursor = response["next"]
+            assistants = response["assistants"]
             ```
         """
+        if response_format not in ("array", "object"):
+            raise ValueError(
+                f"response_format must be 'array' or 'object', got {response_format!r}"
+            )
         payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
@@ -1077,18 +1156,33 @@ class AssistantsClient:
             payload["metadata"] = metadata
         if graph_id:
             payload["graph_id"] = graph_id
+        if name:
+            payload["name"] = name
         if sort_by:
             payload["sort_by"] = sort_by
         if sort_order:
             payload["sort_order"] = sort_order
         if select:
             payload["select"] = select
-        return await self.http.post(
-            "/assistants/search",
-            json=payload,
-            headers=headers,
-            params=params,
+        next_cursor: str | None = None
+
+        def capture_pagination(response: httpx.Response) -> None:
+            nonlocal next_cursor
+            next_cursor = response.headers.get("X-Pagination-Next")
+
+        assistants = cast(
+            list[Assistant],
+            await self.http.post(
+                "/assistants/search",
+                json=payload,
+                headers=headers,
+                params=params,
+                on_response=capture_pagination if response_format == "object" else None,
+            ),
         )
+        if response_format == "object":
+            return {"assistants": assistants, "next": next_cursor}
+        return assistants
 
     async def count(
         self,
@@ -1876,7 +1970,7 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -1906,7 +2000,7 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -1932,7 +2026,7 @@ class RunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -2091,7 +2185,7 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -2117,7 +2211,7 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -2144,7 +2238,7 @@ class RunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -2346,7 +2440,7 @@ class RunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -2373,7 +2467,7 @@ class RunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -2397,7 +2491,7 @@ class RunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -2870,7 +2964,7 @@ class CronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
@@ -2953,7 +3047,7 @@ class CronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
@@ -3465,7 +3559,7 @@ class StoreClient:
 def get_sync_client(
     *,
     url: str | None = None,
-    api_key: str | None = None,
+    api_key: str | None = NOT_PROVIDED,
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
 ) -> SyncLangGraphClient:
@@ -3473,12 +3567,13 @@ def get_sync_client(
 
     Args:
         url: The URL of the LangGraph API.
-        api_key: The API key. If not provided, it will be read from the environment.
-            Precedence:
-                1. explicit argument
-                2. LANGGRAPH_API_KEY
-                3. LANGSMITH_API_KEY
-                4. LANGCHAIN_API_KEY
+        api_key: API key for authentication. Can be:
+            - A string: use this exact API key
+            - `None`: explicitly skip loading from environment variables
+            - Not provided (default): auto-load from environment in this order:
+                1. `LANGGRAPH_API_KEY`
+                2. `LANGSMITH_API_KEY`
+                3. `LANGCHAIN_API_KEY`
         headers: Optional custom headers
         timeout: Optional timeout configuration for the HTTP client.
             Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts.
@@ -3498,6 +3593,18 @@ def get_sync_client(
 
         # example usage: client.<model>.<method_name>()
         assistant = client.assistants.get(assistant_id="some_uuid")
+        ```
+
+    ???+ example "Skip auto-loading API key from environment:"
+
+        ```python
+        from langgraph_sdk import get_sync_client
+
+        # Don't load API key from environment variables
+        client = get_sync_client(
+            url="http://localhost:8123",
+            api_key=None
+        )
         ```
     """
 
@@ -4284,44 +4391,96 @@ class SyncAssistantsClient:
         """
         self.http.delete(f"/assistants/{assistant_id}", headers=headers, params=params)
 
+    @overload
     def search(
         self,
         *,
         metadata: Json = None,
         graph_id: str | None = None,
+        name: str | None = None,
         limit: int = 10,
         offset: int = 0,
         sort_by: AssistantSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[AssistantSelectField] | None = None,
+        response_format: Literal["object"],
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Assistant]:
+    ) -> AssistantsSearchResponse: ...
+
+    @overload
+    def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        response_format: Literal["array"] = "array",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> list[Assistant]: ...
+
+    def search(
+        self,
+        *,
+        metadata: Json = None,
+        graph_id: str | None = None,
+        name: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+        sort_by: AssistantSortBy | None = None,
+        sort_order: SortOrder | None = None,
+        select: list[AssistantSelectField] | None = None,
+        response_format: Literal["array", "object"] = "array",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> AssistantsSearchResponse | list[Assistant]:
         """Search for assistants.
 
         Args:
             metadata: Metadata to filter by. Exact match filter for each KV pair.
             graph_id: The ID of the graph to filter by.
                 The graph ID is normally set in your langgraph.json configuration.
+            name: The name of the assistant to filter by.
+                The filtering logic will match assistants where 'name' is a substring (case insensitive) of the assistant name.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
+            sort_by: The field to sort by.
+            sort_order: The order to sort by.
+            select: Specific assistant fields to include in the response.
+            response_format: Controls the response shape. Use ``"array"`` (default)
+                to return a bare list of assistants, or ``"object"`` to return
+                a mapping containing assistants plus pagination metadata.
+                Defaults to "array", though this default will be changed to "object" in a future release.
             headers: Optional custom headers to include with the request.
 
         Returns:
-            A list of assistants.
+            A list of assistants (when ``response_format=\"array\"``) or a mapping
+            with the assistants and the next pagination cursor (when
+            ``response_format=\"object\"``).
 
         ???+ example "Example Usage"
 
             ```python
             client = get_sync_client(url="http://localhost:2024")
-            assistants = client.assistants.search(
+            response = client.assistants.search(
                 metadata = {"name":"my_name"},
                 graph_id="my_graph_id",
                 limit=5,
-                offset=5
+                offset=5,
+                response_format="object",
             )
+            assistants = response["assistants"]
+            next_cursor = response["next"]
             ```
         """
+        if response_format not in ("array", "object"):
+            raise ValueError("response_format must be 'array' or 'object'")
         payload: dict[str, Any] = {
             "limit": limit,
             "offset": offset,
@@ -4330,18 +4489,33 @@ class SyncAssistantsClient:
             payload["metadata"] = metadata
         if graph_id:
             payload["graph_id"] = graph_id
+        if name:
+            payload["name"] = name
         if sort_by:
             payload["sort_by"] = sort_by
         if sort_order:
             payload["sort_order"] = sort_order
         if select:
             payload["select"] = select
-        return self.http.post(
-            "/assistants/search",
-            json=payload,
-            headers=headers,
-            params=params,
+        next_cursor: str | None = None
+
+        def capture_pagination(response: httpx.Response) -> None:
+            nonlocal next_cursor
+            next_cursor = response.headers.get("X-Pagination-Next")
+
+        assistants = cast(
+            list[Assistant],
+            self.http.post(
+                "/assistants/search",
+                json=payload,
+                headers=headers,
+                params=params,
+                on_response=capture_pagination if response_format == "object" else None,
+            ),
         )
+        if response_format == "object":
+            return {"assistants": assistants, "next": next_cursor}
+        return assistants
 
     def count(
         self,
@@ -5111,7 +5285,7 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5140,7 +5314,7 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5167,7 +5341,7 @@ class SyncRunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5322,7 +5496,7 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5348,7 +5522,7 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5375,7 +5549,7 @@ class SyncRunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         stream_mode: StreamMode | Sequence[StreamMode] = "values",
         stream_subgraphs: bool = False,
@@ -5577,7 +5751,7 @@ class SyncRunsClient:
         thread_id: str,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -5604,7 +5778,7 @@ class SyncRunsClient:
         thread_id: None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -5628,7 +5802,7 @@ class SyncRunsClient:
         thread_id: str | None,
         assistant_id: str,
         *,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         command: Command | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
@@ -6081,7 +6255,7 @@ class SyncCronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
@@ -6160,7 +6334,7 @@ class SyncCronClient:
         assistant_id: str,
         *,
         schedule: str,
-        input: Mapping[str, Any] | None = None,
+        input: Input | None = None,
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,

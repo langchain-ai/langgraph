@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import Field
 from datetime import datetime
 from typing import (
     Any,
+    ClassVar,
     Literal,
     NamedTuple,
+    Protocol,
     TypeAlias,
-    TypedDict,
+    Union,
 )
+
+from typing_extensions import TypedDict
 
 Json = dict[str, Any] | None
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
@@ -143,8 +148,6 @@ SortOrder = Literal["asc", "desc"]
 The order to sort by.
 """
 
-Context: TypeAlias = dict[str, Any]
-
 
 class Config(TypedDict, total=False):
     """Configuration options for a call."""
@@ -241,6 +244,15 @@ class Assistant(AssistantBase):
 
     updated_at: datetime
     """The last time the assistant was updated."""
+
+
+class AssistantsSearchResponse(TypedDict):
+    """Paginated response for assistant search results."""
+
+    assistants: list[Assistant]
+    """The assistants returned for the current search page."""
+    next: str | None
+    """Pagination cursor from the ``X-Pagination-Next`` response header."""
 
 
 class Interrupt(TypedDict):
@@ -413,6 +425,7 @@ CronSelectField = Literal[
     "next_run_date",
     "metadata",
     "now",
+    "on_run_completed",
 ]
 
 PrimitiveData = str | int | float | bool | None
@@ -558,3 +571,54 @@ class RunCreateMetadata(TypedDict):
 
     thread_id: str | None
     """The ID of the thread."""
+
+
+class _TypedDictLikeV1(Protocol):
+    """Protocol to represent types that behave like TypedDicts
+
+    Version 1: using `ClassVar` for keys."""
+
+    __required_keys__: ClassVar[frozenset[str]]
+    __optional_keys__: ClassVar[frozenset[str]]
+
+
+class _TypedDictLikeV2(Protocol):
+    """Protocol to represent types that behave like TypedDicts
+
+    Version 2: not using `ClassVar` for keys."""
+
+    __required_keys__: frozenset[str]
+    __optional_keys__: frozenset[str]
+
+
+class _DataclassLike(Protocol):
+    """Protocol to represent types that behave like dataclasses.
+
+    Inspired by the private _DataclassT from dataclasses that uses a similar protocol as a bound.
+    """
+
+    __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
+
+
+class _BaseModelLike(Protocol):
+    """Protocol to represent types that behave like Pydantic `BaseModel`."""
+
+    model_config: ClassVar[dict[str, Any]]
+    __pydantic_core_schema__: ClassVar[Any]
+
+    def model_dump(
+        self,
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
+
+_JSONLike: TypeAlias = None | str | int | float | bool
+_JSONMap: TypeAlias = Mapping[
+    str, Union[_JSONLike, list[_JSONLike], "_JSONMap", list["_JSONMap"]]
+]
+
+Input: TypeAlias = (
+    _TypedDictLikeV1 | _TypedDictLikeV2 | _DataclassLike | _BaseModelLike | _JSONMap
+)
+
+Context: TypeAlias = Input
