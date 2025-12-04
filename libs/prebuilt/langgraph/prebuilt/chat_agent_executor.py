@@ -557,7 +557,7 @@ def create_react_agent(
     if not is_dynamic_model:
         if isinstance(model, str):
             try:
-                from langchain.chat_models import (  # type: ignore[import-not-found]
+                from langchain.chat_models import (
                     init_chat_model,
                 )
             except ImportError:
@@ -566,7 +566,7 @@ def create_react_agent(
                     "use '<provider>:<model>' string syntax for `model` parameter."
                 )
 
-            model = cast(BaseChatModel, init_chat_model(model))
+            model = init_chat_model(model)
 
         if (
             _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
