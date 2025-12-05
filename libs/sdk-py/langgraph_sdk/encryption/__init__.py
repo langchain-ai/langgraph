@@ -1,5 +1,8 @@
 """Custom encryption support for LangGraph.
 
+.. warning::
+    This API is in beta and may change in future versions.
+
 This module provides a framework for implementing custom at-rest encryption
 in LangGraph applications. Similar to the Auth system, it allows developers
 to define custom encryption and decryption handlers that are executed
@@ -8,10 +11,25 @@ server-side.
 
 from __future__ import annotations
 
+import functools
 import inspect
 import typing
+import warnings
 
 from langgraph_sdk.encryption import types
+
+
+class LangGraphBetaWarning(UserWarning):
+    """Warning for beta features in LangGraph SDK."""
+
+
+@functools.lru_cache(maxsize=1)
+def _warn_encryption_beta() -> None:
+    warnings.warn(
+        "The Encryption API is in beta and may change in future versions.",
+        LangGraphBetaWarning,
+        stacklevel=4,
+    )
 
 
 class DuplicateHandlerError(Exception):
@@ -287,6 +305,9 @@ class _DecryptDecorators:
 class Encryption:
     """Add custom at-rest encryption to your LangGraph application.
 
+    .. warning::
+        This API is in beta and may change in future versions.
+
     The Encryption class provides a system for implementing custom encryption
     of data at rest in LangGraph applications. It supports encryption of
     both opaque blobs (like checkpoints) and structured JSON data (like
@@ -436,6 +457,7 @@ class Encryption:
 
     def __init__(self) -> None:
         """Initialize the Encryption instance."""
+        _warn_encryption_beta()
         self.encrypt = _EncryptDecorators(self)
         self.decrypt = _DecryptDecorators(self)
         self._blob_encryptor: types.BlobEncryptor | None = None
