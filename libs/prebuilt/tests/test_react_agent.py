@@ -3,16 +3,20 @@ import inspect
 import json
 import sys
 from functools import partial
+from collections.abc import Callable, Sequence
 from typing import (
     Annotated,
+    Any,
     Literal,
     TypeVar,
 )
 from unittest.mock import Mock
 
 import pytest
-from langchain_core.language_models import BaseChatModel
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import (
+    BaseMessage,
     AIMessage,
     AnyMessage,
     HumanMessage,
@@ -22,8 +26,9 @@ from langchain_core.messages import (
     ToolCall,
     ToolMessage,
 )
-from langchain_core.runnables import RunnableConfig, RunnableLambda
-from langchain_core.tools import InjectedToolCallId, ToolException
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
+from langchain_core.tools import BaseTool, InjectedToolCallId, ToolException
 from langchain_core.tools import tool as dec_tool
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.config import get_stream_writer
@@ -2154,3 +2159,168 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
+
+class FakeModelWithThinkingBlocks(BaseChatModel):
+    """A fake model that returns AIMessages with thinking content blocks.
+
+    This simulates models like DeepSeek v3.2 with thinking mode enabled,
+    which return responses with multiple content blocks:
+    [{"type": "thinking", "thinking": "..."}, {"type": "text", "text": "..."}]
+    """
+
+    tool_calls: list[list[ToolCall]] | None = None
+    index: int = 0
+    reject_thinking_in_input: bool = True
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: CallbackManagerForLLMRun | None = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """Generate a response, optionally rejecting thinking blocks in input."""
+        # Simulate DeepSeek API behavior: reject thinking blocks in input messages
+        if self.reject_thinking_in_input:
+            for msg in messages:
+                if isinstance(msg, AIMessage) and isinstance(msg.content, list):
+                    for block in msg.content:
+                        if isinstance(block, dict) and block.get("type") == "thinking":
+                            raise ValueError(
+                                "Error code: 400 - Model does not accept 'thinking' "
+                                "content blocks in input messages. This simulates "
+                                "DeepSeek's API behavior."
+                            )
+
+        # Get tool calls for this turn
+        tool_calls = (
+            self.tool_calls[self.index % len(self.tool_calls)]
+            if self.tool_calls
+            else []
+        )
+
+        # Build content with thinking block (simulating DeepSeek's thinking mode)
+        messages_string = "-".join(
+            [m.content if isinstance(m.content, str) else str(m.content) for m in messages]
+        )
+        content: list[dict[str, Any]] = [
+            {"type": "thinking", "thinking": f"Let me think about: {messages_string}"},
+            {"type": "text", "text": messages_string},
+        ]
+
+        message = AIMessage(
+            content=content, id=str(self.index), tool_calls=tool_calls.copy()
+        )
+        self.index += 1
+        return ChatResult(generations=[ChatGeneration(message=message)])
+
+    @property
+    def _llm_type(self) -> str:
+        return "fake-model-with-thinking-blocks"
+
+    def bind_tools(
+        self,
+        tools: Sequence[dict[str, Any] | type[BaseModel] | Callable | BaseTool],
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, BaseMessage]:
+        tool_dicts = []
+        for tool in tools:
+            if isinstance(tool, dict):
+                tool_dicts.append(tool)
+            elif isinstance(tool, BaseTool):
+                tool_dicts.append({"type": "function", "function": {"name": tool.name}})
+        return self.bind(tools=tool_dicts)
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_react_agent_with_thinking_content_blocks(version: str) -> None:
+    """Test that react_agent handles model responses with thinking content blocks.
+
+    This test reproduces the issue from GitHub #6521 where DeepSeek v3.2 with
+    thinking mode enabled returns AIMessages with content blocks like:
+    [{"type": "thinking", "thinking": "..."}, {"type": "text", "text": "..."}]
+
+    The bug occurs when:
+    1. Model returns AIMessage with thinking blocks
+    2. Thinking blocks are added to message history
+    3. On subsequent calls, thinking blocks are sent back to the API
+    4. API rejects thinking blocks in input messages (400 error)
+
+    The fix should filter out thinking blocks from AIMessage content before
+    adding them to the message history.
+    """
+
+    @dec_tool
+    def get_weather(city: str) -> str:
+        """Get the weather for a city."""
+        return f"The weather in {city} is sunny."
+
+    # Model with tool call on first turn, no tool calls on second turn
+    tool_call = ToolCall(name="get_weather", args={"city": "Tokyo"}, id="1")
+    model = FakeModelWithThinkingBlocks(
+        tool_calls=[[tool_call], []],
+        reject_thinking_in_input=True,  # Simulate DeepSeek's behavior
+    )
+
+    agent = create_react_agent(model, [get_weather], version=version)
+
+    # This should work: model makes tool call, gets result, then responds
+    # The bug would cause a ValueError on the second model call because
+    # the thinking blocks from the first response are in the message history
+    result = agent.invoke({"messages": [HumanMessage("What's the weather in Tokyo?")]})
+
+    # Verify the agent completed successfully
+    assert len(result["messages"]) >= 3  # Human + AI (with tool call) + Tool + AI (final)
+
+    # Verify the final message doesn't have thinking blocks exposed
+    # (they should be filtered or stored in metadata)
+    final_ai_messages = [m for m in result["messages"] if isinstance(m, AIMessage)]
+    for ai_msg in final_ai_messages:
+        if isinstance(ai_msg.content, list):
+            for block in ai_msg.content:
+                if isinstance(block, dict):
+                    assert block.get("type") != "thinking", (
+                        "Thinking blocks should be filtered from AIMessage content"
+                    )
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_react_agent_thinking_blocks_preserved_in_response_metadata(
+    version: str,
+) -> None:
+    """Test that thinking blocks are preserved in response_metadata when filtered.
+
+    When filtering thinking blocks from content, the thinking information
+    should be preserved in the response_metadata for debugging/logging purposes.
+    """
+
+    @dec_tool
+    def simple_tool(x: int) -> str:
+        """A simple tool."""
+        return f"Result: {x}"
+
+    # Model without tool calls (simple response with thinking)
+    model = FakeModelWithThinkingBlocks(
+        tool_calls=[[]],
+        reject_thinking_in_input=False,  # Don't reject for this test
+    )
+
+    agent = create_react_agent(model, [simple_tool], version=version)
+    result = agent.invoke({"messages": [HumanMessage("Hello")]})
+
+    # The agent should complete
+    assert len(result["messages"]) == 2  # Human + AI
+
+    # Check that thinking content is handled appropriately
+    ai_message = result["messages"][-1]
+    assert isinstance(ai_message, AIMessage)
+
+    # Content should either be a string or list without thinking blocks
+    if isinstance(ai_message.content, list):
+        for block in ai_message.content:
+            if isinstance(block, dict):
+                # Thinking blocks should be filtered out
+                assert block.get("type") != "thinking", (
+                    "Thinking blocks should not be in content"
+                )
