@@ -194,13 +194,13 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     output_schema: type[OutputT]
 
     def __init__(
-        self,
-        state_schema: type[StateT],
-        context_schema: type[ContextT] | None = None,
-        *,
-        input_schema: type[InputT] | None = None,
-        output_schema: type[OutputT] | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
+            self,
+            state_schema: type[StateT],
+            context_schema: type[ContextT] | None = None,
+            *,
+            input_schema: type[InputT] | None = None,
+            output_schema: type[OutputT] | None = None,
+            **kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         if (config_schema := kwargs.get("config_schema", MISSING)) is not MISSING:
             warnings.warn(
@@ -287,16 +287,16 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     @overload
     def add_node(
-        self,
-        node: StateNode[NodeInputT, ContextT],
-        *,
-        defer: bool = False,
-        metadata: dict[str, Any] | None = None,
-        input_schema: None = None,
-        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
-        destinations: dict[str, str] | tuple[str, ...] | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
+            self,
+            node: StateNode[NodeInputT, ContextT],
+            *,
+            defer: bool = False,
+            metadata: dict[str, Any] | None = None,
+            input_schema: None = None,
+            retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+            cache_policy: CachePolicy | None = None,
+            destinations: dict[str, str] | tuple[str, ...] | None = None,
+            **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema.
         Will take the name of the function/runnable as the node name.
@@ -305,16 +305,16 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     @overload
     def add_node(
-        self,
-        node: StateNode[NodeInputT, ContextT],
-        *,
-        defer: bool = False,
-        metadata: dict[str, Any] | None = None,
-        input_schema: type[NodeInputT],
-        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
-        destinations: dict[str, str] | tuple[str, ...] | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
+            self,
+            node: StateNode[NodeInputT, ContextT],
+            *,
+            defer: bool = False,
+            metadata: dict[str, Any] | None = None,
+            input_schema: type[NodeInputT],
+            retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+            cache_policy: CachePolicy | None = None,
+            destinations: dict[str, str] | tuple[str, ...] | None = None,
+            **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is specified.
         Will take the name of the function/runnable as the node name.
@@ -323,50 +323,50 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     @overload
     def add_node(
-        self,
-        node: str,
-        action: StateNode[NodeInputT, ContextT],
-        *,
-        defer: bool = False,
-        metadata: dict[str, Any] | None = None,
-        input_schema: None = None,
-        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
-        destinations: dict[str, str] | tuple[str, ...] | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
+            self,
+            node: str,
+            action: StateNode[NodeInputT, ContextT],
+            *,
+            defer: bool = False,
+            metadata: dict[str, Any] | None = None,
+            input_schema: None = None,
+            retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+            cache_policy: CachePolicy | None = None,
+            destinations: dict[str, str] | tuple[str, ...] | None = None,
+            **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is inferred as the state schema."""
         ...
 
     @overload
     def add_node(
-        self,
-        node: str | StateNode[NodeInputT, ContextT],
-        action: StateNode[NodeInputT, ContextT] | None = None,
-        *,
-        defer: bool = False,
-        metadata: dict[str, Any] | None = None,
-        input_schema: type[NodeInputT],
-        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
-        destinations: dict[str, str] | tuple[str, ...] | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
+            self,
+            node: str | StateNode[NodeInputT, ContextT],
+            action: StateNode[NodeInputT, ContextT] | None = None,
+            *,
+            defer: bool = False,
+            metadata: dict[str, Any] | None = None,
+            input_schema: type[NodeInputT],
+            retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+            cache_policy: CachePolicy | None = None,
+            destinations: dict[str, str] | tuple[str, ...] | None = None,
+            **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`, input schema is specified."""
         ...
 
     def add_node(
-        self,
-        node: str | StateNode[NodeInputT, ContextT],
-        action: StateNode[NodeInputT, ContextT] | None = None,
-        *,
-        defer: bool = False,
-        metadata: dict[str, Any] | None = None,
-        input_schema: type[NodeInputT] | None = None,
-        retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-        cache_policy: CachePolicy | None = None,
-        destinations: dict[str, str] | tuple[str, ...] | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
+            self,
+            node: str | StateNode[NodeInputT, ContextT],
+            action: StateNode[NodeInputT, ContextT] | None = None,
+            *,
+            defer: bool = False,
+            metadata: dict[str, Any] | None = None,
+            input_schema: type[NodeInputT] | None = None,
+            retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+            cache_policy: CachePolicy | None = None,
+            destinations: dict[str, str] | tuple[str, ...] | None = None,
+            **kwargs: Unpack[DeprecatedKwargs],
     ) -> Self:
         """Add a new node to the `StateGraph`.
 
@@ -488,12 +488,12 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         ends: tuple[str, ...] | dict[str, str] = EMPTY_SEQ
         try:
             if (
-                isfunction(action)
-                or ismethod(action)
-                or ismethod(getattr(action, "__call__", None))
+                    isfunction(action)
+                    or ismethod(action)
+                    or ismethod(getattr(action, "__call__", None))
             ) and (
-                hints := get_type_hints(getattr(action, "__call__"))
-                or get_type_hints(action)
+                    hints := get_type_hints(getattr(action, "__call__"))
+                             or get_type_hints(action)
             ):
                 if input_schema is None:
                     first_parameter_name = next(
@@ -521,10 +521,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
                     # Check if it's a Command type
                     if (
-                        rtn_origin is Command
-                        and (rargs := get_args(rtn))
-                        and get_origin(rargs[0]) is Literal
-                        and (vals := get_args(rargs[0]))
+                            rtn_origin is Command
+                            and (rargs := get_args(rtn))
+                            and get_origin(rargs[0]) is Literal
+                            and (vals := get_args(rargs[0]))
                     ):
                         ends = vals
         except (NameError, TypeError, StopIteration):
@@ -601,7 +601,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
             # run this validation only for non-StateGraph graphs
             if not hasattr(self, "channels") and start_key in set(
-                start for start, _ in self.edges
+                    start for start, _ in self.edges
             ):
                 raise ValueError(
                     f"Already found path for node '{start_key}'.\n"
@@ -625,12 +625,12 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         return self
 
     def add_conditional_edges(
-        self,
-        source: str,
-        path: Callable[..., Hashable | Sequence[Hashable]]
-        | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
-        | Runnable[Any, Hashable | Sequence[Hashable]],
-        path_map: dict[Hashable, str] | list[str] | None = None,
+            self,
+            source: str,
+            path: Callable[..., Hashable | Sequence[Hashable]]
+                  | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
+                  | Runnable[Any, Hashable | Sequence[Hashable]],
+            path_map: dict[Hashable, str] | list[str] | None = None,
     ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
@@ -675,11 +675,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         return self
 
     def add_sequence(
-        self,
-        nodes: Sequence[
-            StateNode[NodeInputT, ContextT]
-            | tuple[str, StateNode[NodeInputT, ContextT]]
-        ],
+            self,
+            nodes: Sequence[
+                StateNode[NodeInputT, ContextT]
+                | tuple[str, StateNode[NodeInputT, ContextT]]
+                ],
     ) -> Self:
         """Add a sequence of nodes that will be executed in the provided order.
 
@@ -735,11 +735,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         return self.add_edge(START, key)
 
     def set_conditional_entry_point(
-        self,
-        path: Callable[..., Hashable | Sequence[Hashable]]
-        | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
-        | Runnable[Any, Hashable | Sequence[Hashable]],
-        path_map: dict[Hashable, str] | list[str] | None = None,
+            self,
+            path: Callable[..., Hashable | Sequence[Hashable]]
+                  | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
+                  | Runnable[Any, Hashable | Sequence[Hashable]],
+            path_map: dict[Hashable, str] | list[str] | None = None,
     ) -> Self:
         """Sets a conditional entry point in the graph.
 
@@ -821,15 +821,15 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         return self
 
     def compile(
-        self,
-        checkpointer: Checkpointer = None,
-        *,
-        cache: BaseCache | None = None,
-        store: BaseStore | None = None,
-        interrupt_before: All | list[str] | None = None,
-        interrupt_after: All | list[str] | None = None,
-        debug: bool = False,
-        name: str | None = None,
+            self,
+            checkpointer: Checkpointer = None,
+            *,
+            cache: BaseCache | None = None,
+            store: BaseStore | None = None,
+            interrupt_before: All | list[str] | None = None,
+            interrupt_after: All | list[str] | None = None,
+            debug: bool = False,
+            name: str | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -870,7 +870,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         output_channels = (
             "__root__"
             if len(self.schemas[self.output_schema]) == 1
-            and "__root__" in self.schemas[self.output_schema]
+               and "__root__" in self.schemas[self.output_schema]
             else [
                 key
                 for key, val in self.schemas[self.output_schema].items()
@@ -934,18 +934,18 @@ class CompiledStateGraph(
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
 
     def __init__(
-        self,
-        *,
-        builder: StateGraph[StateT, ContextT, InputT, OutputT],
-        schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None],
-        **kwargs: Any,
+            self,
+            *,
+            builder: StateGraph[StateT, ContextT, InputT, OutputT],
+            schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None],
+            **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self.builder = builder
         self.schema_to_mapper = schema_to_mapper
 
     def get_input_jsonschema(
-        self, config: RunnableConfig | None = None
+            self, config: RunnableConfig | None = None
     ) -> dict[str, Any]:
         return _get_json_schema(
             typ=self.builder.input_schema,
@@ -955,7 +955,7 @@ class CompiledStateGraph(
         )
 
     def get_output_jsonschema(
-        self, config: RunnableConfig | None = None
+            self, config: RunnableConfig | None = None
     ) -> dict[str, Any]:
         return _get_json_schema(
             typ=self.builder.output_schema,
@@ -976,7 +976,7 @@ class CompiledStateGraph(
                 k for k, v in self.builder.managed.items()
             ]
 
-        def _get_updates(
+        def __get_updates(
             input: None | dict | Any,
         ) -> Sequence[tuple[str, Any]] | None:
             if input is None:
@@ -1003,7 +1003,7 @@ class CompiledStateGraph(
                             (k, v) for k, v in i._update_as_tuples() if k in output_keys
                         )
                     else:
-                        updates.extend(_get_updates(i) or ())
+                        updates.extend(__get_updates(i) or ())
                 return updates
             elif (t := type(input)) and get_cached_annotated_keys(t):
                 return get_update_as_tuples(input, output_keys)
@@ -1013,6 +1013,24 @@ class CompiledStateGraph(
                     error_code=ErrorCode.INVALID_GRAPH_NODE_RETURN_VALUE,
                 )
                 raise InvalidUpdateError(msg)
+
+        def _get_updates(
+                input: None | dict | Any,
+        ) -> Sequence[tuple[str, Any]] | None:
+            updates = __get_updates(input)
+
+            if key in self.nodes and self.nodes[key].mapper is not None:
+                try:
+                    # Apply same validation as node input
+                    self.nodes[key].mapper({k: v for k, v in updates})
+                except Exception as exc:
+                    msg = create_error_message(
+                        message=f"Node '{key}' returned invalid state: {exc}",
+                        error_code=ErrorCode.INVALID_GRAPH_NODE_RETURN_VALUE
+                    )
+                    raise InvalidUpdateError(msg) from exc
+
+            return updates
 
         # state updaters
         write_entries: tuple[ChannelWriteEntry | ChannelWriteTupleEntry, ...] = (
@@ -1094,10 +1112,10 @@ class CompiledStateGraph(
                 )
 
     def attach_branch(
-        self, start: str, name: str, branch: BranchSpec, *, with_reader: bool = True
+            self, start: str, name: str, branch: BranchSpec, *, with_reader: bool = True
     ) -> None:
         def get_writes(
-            packets: Sequence[str | Send], static: bool = False
+                packets: Sequence[str | Send], static: bool = False
         ) -> Sequence[ChannelWriteEntry | Send]:
             writes = [
                 (
@@ -1249,7 +1267,7 @@ class CompiledStateGraph(
 
 
 def _pick_mapper(
-    state_keys: Sequence[str], schema: type[Any]
+        state_keys: Sequence[str], schema: type[Any]
 ) -> Callable[[Any], Any] | None:
     if state_keys == ["__root__"]:
         return None
@@ -1292,7 +1310,7 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
 
 
 def _control_static(
-    ends: tuple[str, ...] | dict[str, str],
+        ends: tuple[str, ...] | dict[str, str],
 ) -> Sequence[tuple[str, Any, str | None]]:
     if isinstance(ends, dict):
         return [
@@ -1311,9 +1329,9 @@ def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
             return ()
         return input._update_as_tuples()
     elif (
-        isinstance(input, (list, tuple))
-        and input
-        and any(isinstance(i, Command) for i in input)
+            isinstance(input, (list, tuple))
+            and input
+            and any(isinstance(i, Command) for i in input)
     ):
         updates: list[tuple[str, Any]] = []
         for i in input:
@@ -1329,7 +1347,7 @@ def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
 
 
 def _get_channels(
-    schema: type[dict],
+        schema: type[dict],
 ) -> tuple[dict[str, BaseChannel], dict[str, ManagedValueSpec], dict[str, Any]]:
     if not hasattr(schema, "__annotations__"):
         return (
@@ -1353,23 +1371,23 @@ def _get_channels(
 
 @overload
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: Literal[False]
+        name: str, annotation: Any, *, allow_managed: Literal[False]
 ) -> BaseChannel: ...
 
 
 @overload
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: Literal[True] = True
+        name: str, annotation: Any, *, allow_managed: Literal[True] = True
 ) -> BaseChannel | ManagedValueSpec: ...
 
 
 def _get_channel(
-    name: str, annotation: Any, *, allow_managed: bool = True
+        name: str, annotation: Any, *, allow_managed: bool = True
 ) -> BaseChannel | ManagedValueSpec:
     # Strip out Required and NotRequired wrappers
     if hasattr(annotation, "__origin__") and annotation.__origin__ in (
-        Required,
-        NotRequired,
+            Required,
+            NotRequired,
     ):
         annotation = annotation.__args__[0]
     if manager := _is_field_managed_value(name, annotation):
@@ -1410,11 +1428,11 @@ def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
             sig = signature(meta[-1])
             params = list(sig.parameters.values())
             if (
-                sum(
-                    p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
-                    for p in params
-                )
-                == 2
+                    sum(
+                        p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+                        for p in params
+                    )
+                    == 2
             ):
                 return BinaryOperatorAggregate(typ, meta[-1])
             else:
@@ -1434,9 +1452,9 @@ def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | Non
 
     # Handle Required, NotRequired, etc wrapped types by extracting the inner type
     if (
-        get_origin(typ) is not None
-        and (args := get_args(typ))
-        and (inner_type := args[0])
+            get_origin(typ) is not None
+            and (args := get_args(typ))
+            and (inner_type := args[0])
     ):
         return _is_field_managed_value(name, inner_type)
 
@@ -1444,10 +1462,10 @@ def _is_field_managed_value(name: str, typ: type[Any]) -> ManagedValueSpec | Non
 
 
 def _get_json_schema(
-    typ: type,
-    schemas: dict,
-    channels: dict,
-    name: str,
+        typ: type,
+        schemas: dict,
+        channels: dict,
+        name: str,
 ) -> dict[str, Any]:
     if isclass(typ) and issubclass(typ, BaseModel):
         return typ.model_json_schema()
