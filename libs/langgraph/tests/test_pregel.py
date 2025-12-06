@@ -4948,6 +4948,76 @@ def test_interrupt_loop(sync_checkpointer: BaseCheckpointSaver):
     ]
 
 
+def test_interrupt_resume_with_multiple_nodes(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Regression test for GitHub issue #6534.
+
+    When multiple nodes can interrupt, each should have a unique interrupt ID
+    based on their checkpoint namespace. This allows resume values to be
+    correctly routed using Command(resume={interrupt_id: value}).
+    """
+
+    class State(TypedDict):
+        value: str
+        step: int
+
+    def node_a(state: State) -> dict:
+        response = interrupt("Node A waiting")
+        return {"value": f"A:{response}", "step": state["step"] + 1}
+
+    def node_b(state: State) -> dict:
+        response = interrupt("Node B waiting")
+        return {"value": state["value"] + f",B:{response}", "step": state["step"] + 1}
+
+    def router(state: State) -> str:
+        if state["step"] == 0:
+            return "node_a"
+        elif state["step"] == 1:
+            return "node_b"
+        return END
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_conditional_edges(START, router, ["node_a", "node_b", END])
+    builder.add_edge("node_a", "router")
+    builder.add_node("router", lambda s: s)
+    builder.add_conditional_edges("router", router, ["node_a", "node_b", END])
+    builder.add_edge("node_b", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "test-multiple-node-interrupts"}}
+
+    # First invocation - node_a interrupts
+    graph.invoke({"value": "", "step": 0}, config)
+
+    state = graph.get_state(config)
+    assert state.next == ("node_a",)
+    assert len(state.tasks[0].interrupts) == 1
+    node_a_interrupt_id = state.tasks[0].interrupts[0].id
+
+    # Resume node_a - this should trigger node_b to interrupt next
+    graph.invoke(Command(resume={node_a_interrupt_id: "response_a"}), config)
+
+    state = graph.get_state(config)
+    assert state.next == ("node_b",)
+    assert len(state.tasks[0].interrupts) == 1
+    node_b_interrupt_id = state.tasks[0].interrupts[0].id
+
+    # Verify the interrupt IDs are different (different nodes have different namespaces)
+    assert node_a_interrupt_id != node_b_interrupt_id, (
+        "Different nodes should have different interrupt IDs"
+    )
+
+    # Resume node_b with its specific interrupt ID
+    result = graph.invoke(Command(resume={node_b_interrupt_id: "response_b"}), config)
+
+    # Verify both nodes completed with correct responses
+    assert "A:response_a" in result["value"]
+    assert "B:response_b" in result["value"]
+
+
 def test_interrupt_functional(
     sync_checkpointer: BaseCheckpointSaver, snapshot: SnapshotAssertion
 ) -> None:

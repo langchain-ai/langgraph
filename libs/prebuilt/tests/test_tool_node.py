@@ -23,9 +23,10 @@ from langchain_core.messages import (
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.tools import tool as dec_tool
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
-from langgraph.graph import START, MessagesState, StateGraph
+from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
@@ -615,6 +616,106 @@ def test_tool_node_node_interrupt() -> None:
                 config=_create_config_with_runtime(),
             )
             assert exc_info.value == "foo"
+
+
+def test_tool_node_parallel_interrupts(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Regression test for GitHub issue #6533.
+
+    When multiple tools in a ToolNode call interrupt(), each interrupt
+    should have a unique ID (even though they share the same task namespace).
+    This ensures resume values can be correctly routed to their respective tools.
+
+    Note: When tools run in parallel, only one interrupt is raised per execution
+    (since interrupt() raises an exception). The second tool interrupts on the
+    next execution after resuming the first.
+    """
+    from langgraph.types import interrupt
+
+    @dec_tool
+    def tool_a(val: str) -> str:
+        """Tool A that interrupts."""
+        response = interrupt({"tool": "a", "question": "Input for A?"})
+        return f"A got: {response}"
+
+    @dec_tool
+    def tool_b(val: str) -> str:
+        """Tool B that interrupts."""
+        response = interrupt({"tool": "b", "question": "Input for B?"})
+        return f"B got: {response}"
+
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    tool_node = ToolNode([tool_a, tool_b])
+
+    def call_tools(state: State) -> dict:
+        return {"messages": [state["messages"][-1]]}
+
+    builder = StateGraph(State)
+    builder.add_node("agent", call_tools)
+    builder.add_node("tools", tool_node)
+    builder.add_edge(START, "agent")
+    builder.add_edge("agent", "tools")
+    builder.add_edge("tools", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "test-parallel-interrupts"}}
+
+    # Create AI message with parallel tool calls
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "tool_a", "args": {"val": "x"}, "id": "call_a"},
+            {"name": "tool_b", "args": {"val": "y"}, "id": "call_b"},
+        ],
+    )
+
+    # First invocation - one tool interrupts first
+    graph.invoke({"messages": [HumanMessage("test"), ai_message]}, config)
+
+    state = graph.get_state(config)
+    assert state.next == ("tools",)
+
+    # Get the first interrupt
+    first_interrupts = state.tasks[0].interrupts
+    assert len(first_interrupts) == 1
+    first_interrupt_id = first_interrupts[0].id
+    first_tool = first_interrupts[0].value["tool"]
+
+    # Resume first tool - this should cause the second tool to interrupt
+    result2 = graph.invoke(
+        Command(resume={first_interrupt_id: f"response_for_{first_tool}"}), config
+    )
+
+    # The result should contain the second interrupt
+    assert "__interrupt__" in result2
+    second_interrupts = result2["__interrupt__"]
+    assert len(second_interrupts) == 1
+    second_interrupt_id = second_interrupts[0].id
+    second_tool = second_interrupts[0].value["tool"]
+
+    # Verify the two interrupts have DIFFERENT IDs (the core fix)
+    assert first_interrupt_id != second_interrupt_id, (
+        f"Interrupt IDs should be unique but both were {first_interrupt_id}"
+    )
+
+    # Resume second tool
+    result = graph.invoke(
+        Command(resume={second_interrupt_id: f"response_for_{second_tool}"}), config
+    )
+
+    # Verify both tools completed with correct responses
+    tool_messages = [m for m in result["messages"] if isinstance(m, ToolMessage)]
+    assert len(tool_messages) == 2
+
+    # Check that responses were routed correctly to each tool
+    tool_a_msg = next(m for m in tool_messages if m.name == "tool_a")
+    tool_b_msg = next(m for m in tool_messages if m.name == "tool_b")
+
+    assert "response_for_a" in tool_a_msg.content
+    assert "response_for_b" in tool_b_msg.content
 
 
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
