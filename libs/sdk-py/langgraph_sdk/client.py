@@ -190,7 +190,8 @@ def get_client(
         url:
             Base URL of the LangGraph API.
             - If `None`, the client first attempts an in-process connection via ASGI transport.
-              If that fails, it falls back to `http://localhost:8123`.
+              If that fails, it defers registration until after app initialization. This
+              only works if the client is used from within the Agent server.
         api_key:
             API key for authentication. Can be:
               - A string: use this exact API key
@@ -255,19 +256,22 @@ def get_client(
 
     transport: httpx.AsyncBaseTransport | None = None
     if url is None:
+        url = "http://api"
         if os.environ.get("__LANGGRAPH_DEFER_LOOPBACK_TRANSPORT") == "true":
             transport = get_asgi_transport()(app=None, root_path="/noauth")
             _registered_transports.append(transport)
-            url = "http://api"
         else:
             try:
                 from langgraph_api.server import app  # type: ignore
 
-                url = "http://api"
-
                 transport = get_asgi_transport()(app, root_path="/noauth")
             except Exception:
-                url = "http://localhost:8123"
+                logger.debug(
+                    "Failed to connect to in-process LangGraph server. Deferring configuration.",
+                    exc_info=True,
+                )
+                transport = get_asgi_transport()(app=None, root_path="/noauth")
+                _registered_transports.append(transport)
 
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)

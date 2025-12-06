@@ -34,6 +34,7 @@ lint = [
     "codespell",
     "mypy==1.19.0",
     "ty==0.0.1a27",
+    "starlette",
 ]
 dev = [
   { include-group = "test" },

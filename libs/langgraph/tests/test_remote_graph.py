@@ -919,8 +919,8 @@ async def test_langgraph_cloud_integration():
     from langgraph.graph import END, START, MessagesState, StateGraph
 
     # create RemotePregel instance
-    client = get_client()
-    sync_client = get_sync_client()
+    client = get_client(url="http://localhost:8123")
+    sync_client = get_sync_client(url="http://localhost:8123")
     remote_pregel = RemoteGraph(
         "agent",
         client=client,

@@ -302,6 +302,27 @@ class AuthConfig(TypedDict, total=False):
     """
 
 
+class EncryptionConfig(TypedDict, total=False):
+    """Configuration for custom at-rest encryption logic.
+
+    Allows you to implement custom encryption for sensitive data stored in the database,
+    including metadata fields and checkpoint blobs.
+    """
+
+    path: str
+    """Required. Path to an instance of the Encryption() class that implements custom encryption handlers.
+
+    Format: "path/to/file.py:my_encryption"
+
+    Example:
+        {
+            "encryption": {
+                "path": "./encryption.py:my_encryption"
+            }
+        }
+    """
+
+
 class CorsConfig(TypedDict, total=False):
     """Specifies Cross-Origin Resource Sharing (CORS) rules for your server.
 
@@ -577,8 +598,14 @@ class Config(TypedDict, total=False):
     """
 
     auth: AuthConfig | None
-    """Optional. Custom authentication config, including the path to your Python auth logic and 
+    """Optional. Custom authentication config, including the path to your Python auth logic and
     the OpenAPI security definitions it uses.
+    """
+
+    encryption: EncryptionConfig | None
+    """Optional. Custom at-rest encryption config, including the path to your Python encryption logic.
+
+    Allows you to implement custom encryption for sensitive data stored in the database.
     """
 
     http: HttpConfig | None
@@ -603,6 +630,7 @@ __all__ = [
     "StoreConfig",
     "CheckpointerConfig",
     "AuthConfig",
+    "EncryptionConfig",
     "HttpConfig",
     "MiddlewareOrders",
     "Distros",

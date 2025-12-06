@@ -99,6 +99,17 @@
               },
               "description": "Optional. Additional Docker instructions that will be appended to your base Dockerfile.\n\nUseful for installing OS packages, setting environment variables, etc."
             },
+            "encryption": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EncryptionConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom at-rest encryption config, including the path to your Python encryption logic.\n\nAllows you to implement custom encryption for sensitive data stored in the database.\n"
+            },
             "env": {
               "anyOf": [
                 {
@@ -291,6 +302,17 @@
                 "type": "string"
               },
               "description": "Optional. Additional Docker instructions that will be appended to your base Dockerfile.\n\nUseful for installing OS packages, setting environment variables, etc."
+            },
+            "encryption": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EncryptionConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom at-rest encryption config, including the path to your Python encryption logic.\n\nAllows you to implement custom encryption for sensitive data stored in the database.\n"
             },
             "env": {
               "anyOf": [
@@ -588,6 +610,17 @@
             }
           ],
           "description": "Interval in minutes between sweep iterations.\nIf omitted, a default interval will be used (typically ~ 5 minutes)."
+        }
+      },
+      "required": []
+    },
+    "EncryptionConfig": {
+      "title": "EncryptionConfig",
+      "description": "Configuration for custom at-rest encryption logic.\n\n    Allows you to implement custom encryption for sensitive data stored in the database,\n    including metadata fields and checkpoint blobs.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
         }
       },
       "required": []
