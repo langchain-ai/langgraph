@@ -518,7 +518,7 @@ def interrupt(value: Any) -> Any:
         (
             Interrupt.from_ns(
                 value=value,
-                ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+                ns=f"{conf[CONFIG_KEY_CHECKPOINT_NS]}|{idx}",
             ),
         )
     )
