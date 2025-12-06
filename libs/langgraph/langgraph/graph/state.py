@@ -14,6 +14,7 @@ from typing import (
     Any,
     Generic,
     Literal,
+    TypeVar,
     Union,
     cast,
     get_args,
@@ -85,6 +86,10 @@ from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedS
 __all__ = ("StateGraph", "CompiledStateGraph")
 
 logger = logging.getLogger(__name__)
+
+# TypeVar for path_map key type, bound to Hashable for type safety
+# This allows dict[str, str] to be passed where the path function returns str
+_PathReturnT = TypeVar("_PathReturnT", bound=Hashable)
 
 _CHANNEL_BRANCH_TO = "branch:to:{}"
 
@@ -627,10 +632,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     def add_conditional_edges(
         self,
         source: str,
-        path: Callable[..., Hashable | Sequence[Hashable]]
-        | Callable[..., Awaitable[Hashable | Sequence[Hashable]]]
-        | Runnable[Any, Hashable | Sequence[Hashable]],
-        path_map: dict[Hashable, str] | list[str] | None = None,
+        path: Callable[..., _PathReturnT | Sequence[_PathReturnT]]
+        | Callable[..., Awaitable[_PathReturnT | Sequence[_PathReturnT]]]
+        | Runnable[Any, _PathReturnT | Sequence[_PathReturnT]],
+        path_map: dict[_PathReturnT, str] | list[str] | None = None,
     ) -> Self:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
