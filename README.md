@@ -17,27 +17,21 @@ Trusted by companies shaping the future of agents – including Klarna, Replit, 
 
 ## Get started
 
-Install LangGraph:
-
-```
-pip install -U langgraph
-```
-
-Then, create an agent [using prebuilt components](https://langchain-ai.github.io/langgraph/agents/agents/):
+Then, create an agent [using Core components](https://docs.langchain.com/oss/python/langchain/agents):
 
 ```python
 # pip install -qU "langchain[anthropic]" to call the model
 
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 def get_weather(city: str) -> str:
     """Get weather for a given city."""
     return f"It's always sunny in {city}!"
 
-agent = create_react_agent(
+agent = create_agent(
     model="anthropic:claude-3-7-sonnet-latest",
     tools=[get_weather],
-    prompt="You are a helpful assistant"
+    system_prompt="You are a helpful assistant"
 )
 
 # Run the agent
