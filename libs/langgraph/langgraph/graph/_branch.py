@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Hashable, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Mapping, Sequence
 from inspect import (
     isfunction,
     ismethod,
@@ -12,6 +12,7 @@ from typing import (
     Any,
     Literal,
     NamedTuple,
+    TypeVar,
     cast,
     get_args,
     get_origin,
@@ -36,6 +37,10 @@ _Writer = Callable[
     [Sequence[str | Send], bool],
     Sequence[ChannelWriteEntry | Send],
 ]
+
+# TypeVar for path_map key type, bound to Hashable for type safety
+# This allows dict[str, str] to be passed where the path function returns str
+_PathReturnT = TypeVar("_PathReturnT", bound=Hashable)
 
 
 def _get_branch_path_input_schema(
@@ -88,15 +93,16 @@ class BranchSpec(NamedTuple):
     @classmethod
     def from_path(
         cls,
-        path: Runnable[Any, Hashable | list[Hashable]],
-        path_map: dict[Hashable, str] | list[str] | None,
+        path: Runnable[Any, _PathReturnT | list[_PathReturnT]],
+        path_map: Mapping[_PathReturnT, str] | list[str] | None,
         infer_schema: bool = False,
     ) -> BranchSpec:
         # coerce path_map to a dictionary
         path_map_: dict[Hashable, str] | None = None
         try:
-            if isinstance(path_map, dict):
-                path_map_ = path_map.copy()
+            if isinstance(path_map, Mapping):
+                # Cast is safe: _PathReturnT is bound to Hashable
+                path_map_ = cast(dict[Hashable, str], dict(path_map))
             elif isinstance(path_map, list):
                 path_map_ = {name: name for name in path_map}
             else:
@@ -117,7 +123,12 @@ class BranchSpec(NamedTuple):
         # infer input schema
         input_schema = _get_branch_path_input_schema(path) if infer_schema else None
         # create branch
-        return cls(path=path, ends=path_map_, input_schema=input_schema)
+        # Cast is safe: _PathReturnT is bound to Hashable
+        return cls(
+            path=cast(Runnable[Any, Hashable | list[Hashable]], path),
+            ends=path_map_,
+            input_schema=input_schema,
+        )
 
     def run(
         self,
