@@ -15,7 +15,7 @@ from typing import (
     Union,
 )
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 Json = dict[str, Any] | None
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
@@ -262,6 +262,8 @@ class Interrupt(TypedDict):
     """The value associated with the interrupt."""
     id: str
     """The ID of the interrupt. Can be used to resume the interrupt."""
+    response_schema: NotRequired[dict[str, Any]]
+    """JSON schema describing the expected response format, if specified."""
 
 
 class Thread(TypedDict):
