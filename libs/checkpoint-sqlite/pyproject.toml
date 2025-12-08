@@ -82,3 +82,7 @@ warn_unused_ignores = "True"
 warn_redundant_casts = "True"
 allow_redefinition = "True"
 disable_error_code = "typeddict-item, return-value"
+
+[tool.codespell]
+ignore-words-list = "langgraph,langchain,checkpointer,checkpointing,serializable,deserializable"
+skip = "*.lock"

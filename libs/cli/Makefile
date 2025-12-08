@@ -1,4 +1,4 @@
-.PHONY: test lint format test-integration update-schema
+.PHONY: test lint format test-integration update-schema spell_check spell_fix
 
 ######################
 # TESTING AND COVERAGE
@@ -32,6 +32,12 @@ lint lint_diff lint_package lint_tests:
 format format_diff:
 	uv run ruff format $(PYTHON_FILES)
 	uv run ruff check --select I --fix $(PYTHON_FILES)
+
+spell_check:
+	uv run codespell --toml pyproject.toml
+
+spell_fix:
+	uv run codespell --toml pyproject.toml -w
 
 update-schema:
 	uv run python generate_schema.py

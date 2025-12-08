@@ -71,6 +71,7 @@ test = [
 lint = [
     "mypy",
     "ruff",
+    "codespell",
     "types-requests",
 ]
 dev = [

@@ -66,3 +66,23 @@ test:
 			$(MAKE) -C $$dir test; \
 		fi; \
 	done
+
+# Spell check all projects
+.PHONY: spell_check
+spell_check:
+	@for dir in $(LIBS_DIRS); do \
+		if [ -f $$dir/Makefile ]; then \
+			echo "Running spell_check in $$dir"; \
+			$(MAKE) -C $$dir spell_check; \
+		fi; \
+	done
+
+# Fix spelling errors in all projects
+.PHONY: spell_fix
+spell_fix:
+	@for dir in $(LIBS_DIRS); do \
+		if [ -f $$dir/Makefile ]; then \
+			echo "Running spell_fix in $$dir"; \
+			$(MAKE) -C $$dir spell_fix; \
+		fi; \
+	done
