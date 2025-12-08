@@ -1,4 +1,4 @@
-.PHONY: lint format test
+.PHONY: lint format test spell_check spell_fix
 
 test:
 	uv run pytest tests
@@ -22,3 +22,9 @@ lint lint_diff:
 format format_diff:
 	uv run ruff check --select I --fix $(PYTHON_FILES)
 	uv run ruff format $(PYTHON_FILES)
+
+spell_check:
+	uv run codespell --toml pyproject.toml
+
+spell_fix:
+	uv run codespell --toml pyproject.toml -w

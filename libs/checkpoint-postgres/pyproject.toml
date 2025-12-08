@@ -84,3 +84,7 @@ now = true
 delay = 0.1
 runner_args = ["--ff", "-x", "-v", "--tb", "short"]
 patterns = ["*.py"]
+
+[tool.codespell]
+ignore-words-list = "langgraph,langchain,checkpointer,checkpointing,serializable,deserializable"
+skip = "*.lock"
