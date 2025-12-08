@@ -14,12 +14,7 @@ from contextlib import (
 from datetime import datetime, timezone
 from inspect import signature
 from types import TracebackType
-from typing import (
-    Any,
-    Literal,
-    TypeVar,
-    cast,
-)
+from typing import Any, Literal, TypeVar, cast
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
@@ -63,14 +58,8 @@ from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.constants import TAG_HIDDEN
-from langgraph.errors import (
-    EmptyInputError,
-    GraphInterrupt,
-)
-from langgraph.managed.base import (
-    ManagedValueMapping,
-    ManagedValueSpec,
-)
+from langgraph.errors import EmptyInputError, GraphInterrupt
+from langgraph.managed.base import ManagedValueMapping, ManagedValueSpec
 from langgraph.pregel._algo import (
     Call,
     GetNextVersion,
@@ -80,7 +69,7 @@ from langgraph.pregel._algo import (
     increment,
     prepare_next_tasks,
     prepare_single_task,
-    sanitize_untracked_values_in_send,
+    sanitize_untracked_values_in_send_fast,
     should_interrupt,
     task_path_str,
 )
@@ -201,6 +190,7 @@ class PregelLoop:
     tasks: dict[str, PregelExecutableTask]
     output: None | dict[str, Any] | Any = None
     updated_channels: set[str] | None = None
+    _untracked_keys: set[str]
 
     # public
 
@@ -300,6 +290,10 @@ class PregelLoop:
             else ()
         )
         self.prev_checkpoint_config = None
+        # Pre-compute untracked channel keys for O(1) lookup optimization
+        self._untracked_keys = {
+            k for k, v in specs.items() if isinstance(v, UntrackedValue)
+        }
 
     def put_writes(self, task_id: str, writes: WritesT) -> None:
         """Put writes for a task, to be read by the next tick."""
@@ -326,20 +320,21 @@ class PregelLoop:
             writes_to_save = writes
 
         # check if any writes are to an UntrackedValue channel
-        if any(
-            isinstance(channel, UntrackedValue) for channel in self.channels.values()
-        ):
+        if self._untracked_keys:
             # we do not persist untracked values in checkpoints
             writes_to_save = [
                 # sanitize UntrackedValues that are nested within Send packets
                 (
-                    (c, sanitize_untracked_values_in_send(v, self.channels))
+                    (
+                        c,
+                        sanitize_untracked_values_in_send_fast(v, self._untracked_keys),
+                    )
                     if c == TASKS and isinstance(v, Send)
                     else (c, v)
                 )
                 for c, v in writes_to_save
                 # dont persist UntrackedValue channel writes
-                if not isinstance(self.specs.get(c), UntrackedValue)
+                if c not in self._untracked_keys
             ]
 
         # save writes
@@ -755,13 +750,13 @@ class PregelLoop:
             updated_channels=self.updated_channels,
         )
         # sanitize TASK channel in the checkpoint before saving (durability=="exit")
-        if TASKS in self.checkpoint["channel_values"] and any(
-            isinstance(channel, UntrackedValue) for channel in self.channels.values()
-        ):
+        if TASKS in self.checkpoint["channel_values"] and self._untracked_keys:
             sanitized_tasks = [
-                sanitize_untracked_values_in_send(value, self.channels)
-                if isinstance(value, Send)
-                else value
+                (
+                    sanitize_untracked_values_in_send_fast(value, self._untracked_keys)
+                    if isinstance(value, Send)
+                    else value
+                )
                 for value in self.checkpoint["channel_values"][TASKS]
             ]
             self.checkpoint["channel_values"][TASKS] = sanitized_tasks
@@ -895,15 +890,17 @@ class PregelLoop:
                         self.checkpoint_ns,
                         "debug",
                         {
-                            "step": self.step - 1
-                            if mode == "checkpoints"
-                            else self.step,
+                            "step": (
+                                self.step - 1 if mode == "checkpoints" else self.step
+                            ),
                             "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "type": "checkpoint"
-                            if mode == "checkpoints"
-                            else "task_result"
-                            if "result" in v
-                            else "task",
+                            "type": (
+                                "checkpoint"
+                                if mode == "checkpoints"
+                                else "task_result"
+                                if "result" in v
+                                else "task"
+                            ),
                             "payload": v,
                         },
                     )
@@ -1121,9 +1118,11 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
         self.updated_channels = self._first(
             input_keys=self.input_keys,
-            updated_channels=set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
-            if self.checkpoint.get("updated_channels")
-            else None,
+            updated_channels=(
+                set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
+                if self.checkpoint.get("updated_channels")
+                else None
+            ),
         )
 
         return self
@@ -1302,9 +1301,11 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
         self.updated_channels = self._first(
             input_keys=self.input_keys,
-            updated_channels=set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
-            if self.checkpoint.get("updated_channels")
-            else None,
+            updated_channels=(
+                set(self.checkpoint.get("updated_channels"))  # type: ignore[arg-type]
+                if self.checkpoint.get("updated_channels")
+                else None
+            ),
         )
 
         return self

@@ -9,14 +9,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from copy import copy
 from functools import partial
 from hashlib import sha1
-from typing import (
-    Any,
-    Literal,
-    NamedTuple,
-    Protocol,
-    cast,
-    overload,
-)
+from typing import Any, Literal, NamedTuple, Protocol, cast, overload
 
 from langchain_core.callbacks import Callbacks
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
@@ -1230,4 +1223,31 @@ def sanitize_untracked_values_in_send(
         for k, v in packet.arg.items()
         if not isinstance(channels.get(k), UntrackedValue)
     }
+    return Send(node=packet.node, arg=sanitized_arg)
+
+
+def sanitize_untracked_values_in_send_fast(
+    packet: Send, untracked_keys: set[str]
+) -> Send:
+    """Pop any values belonging to UntrackedValue channels in Send.arg for safe checkpointing.
+
+    Optimized version that uses a pre-computed set of untracked channel keys for O(1) lookup
+    instead of checking channel types on each call.
+
+    Send is often called with state to be passed to the dest node, which may contain
+    UntrackedValues at the top level. Send is not typed and arg may be a nested dict.
+
+    Args:
+        packet: The Send packet to sanitize.
+        untracked_keys: Pre-computed set of channel keys that are UntrackedValue channels.
+
+    Returns:
+        A new Send packet with UntrackedValue channel keys removed from arg.
+    """
+    if not isinstance(packet.arg, dict):
+        # Command
+        return packet
+
+    # top level keys should be the channel names
+    sanitized_arg = {k: v for k, v in packet.arg.items() if k not in untracked_keys}
     return Send(node=packet.node, arg=sanitized_arg)
