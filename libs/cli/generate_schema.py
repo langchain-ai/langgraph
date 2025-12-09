@@ -27,6 +27,8 @@ from langgraph_cli.schemas import (
     StoreConfig,
     ThreadTTLConfig,
     TTLConfig,
+    WebhooksConfig,
+    WebhookUrlPolicy,
 )
 
 
@@ -118,6 +120,8 @@ def add_descriptions_to_schema(schema, cls):
                 SerdeConfig,
                 TTLConfig,
                 ConfigurableHeaderConfig,
+                WebhooksConfig,
+                WebhookUrlPolicy,
             ]:
                 if potential_cls.__name__ == def_name:
                     add_descriptions_to_schema(def_schema, potential_cls)

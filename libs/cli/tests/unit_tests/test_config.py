@@ -798,7 +798,10 @@ def test_config_to_docker_python_encryption_formatted():
     )
     # Verify that LANGGRAPH_ENCRYPTION is in the docker output with the correct path
     assert "LANGGRAPH_ENCRYPTION=" in actual_docker_stdin
-    assert "/deps/outer-unit_tests/unit_tests/agent.py:my_encryption" in actual_docker_stdin
+    assert (
+        "/deps/outer-unit_tests/unit_tests/agent.py:my_encryption"
+        in actual_docker_stdin
+    )
 
 
 def test_config_to_docker_nodejs_internal_docker_tag():
