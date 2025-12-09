@@ -15,7 +15,7 @@ FullKey = tuple[Namespace, str]
 class BaseCache(ABC, Generic[ValueT]):
     """Base class for a cache."""
 
-    serde: SerializerProtocol = JsonPlusSerializer(pickle_fallback=True)
+    serde: SerializerProtocol = JsonPlusSerializer(pickle_fallback=False)
 
     def __init__(self, *, serde: SerializerProtocol | None = None) -> None:
         """Initialize the cache with a serializer."""
