@@ -327,31 +327,36 @@ class BasePostgresStore(Generic[C]):
         embedding_request: tuple[str, Sequence[tuple[str, str, str, str]]] | None = None
         if inserts:
             values = []
-            insertion_params = []
+            insertion_params: list[Any] = []
             vector_values = []
             embedding_request_params = []
             # Handle TTL expiration
 
             # First handle main store insertions
             for op in inserts:
-                if op.ttl is not None:
-                    expires_at_str = f"NOW() + INTERVAL '{op.ttl * 60} seconds'"
-                    ttl_minutes = op.ttl
-                else:
-                    expires_at_str = "NULL"
-                    ttl_minutes = None
-
-                values.append(
-                    f"(%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, {expires_at_str}, %s)"
-                )
                 insertion_params.extend(
-                    [
+                    (
                         _namespace_to_text(op.namespace),
                         op.key,
                         Jsonb(cast(dict, op.value)),
-                        ttl_minutes,
-                    ]
+                    )
                 )
+                if op.ttl is not None:
+                    values.append(
+                        "(%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NOW() + %s::interval, %s)"
+                    )
+                    ttl_minutes = float(op.ttl)
+                    insertion_params.extend(
+                        (
+                            f"{ttl_minutes * 60} seconds",
+                            ttl_minutes,
+                        )
+                    )
+                else:
+                    values.append(
+                        "(%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, %s)"
+                    )
+                    insertion_params.append(None)
 
             # Then handle embeddings if configured
             if self.index_config:
@@ -465,6 +470,10 @@ class BasePostgresStore(Generic[C]):
                         cast(dict, self.index_config)["dims"],
                     )
                 else:
+                    if vector_type not in ("vector", "halfvec"):
+                        raise ValueError(
+                            f"Invalid vector_type for pgvector: {vector_type}"
+                        )
                     score_operator = score_operator % ("%s", vector_type)
 
                 vectors_per_doc_estimate = cast(dict, self.index_config)[
@@ -1122,6 +1131,27 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                             k: v(self) if v is not None and callable(v) else v
                             for k, v in migration.params.items()
                         }
+                        if "dims" in params:
+                            try:
+                                params["dims"] = int(params["dims"])
+                            except Exception as e:
+                                raise ValueError(
+                                    f"Invalid dims for vector index: {params['dims']}"
+                                ) from e
+                        if "vector_type" in params:
+                            vt = str(params["vector_type"])
+                            if vt not in ("vector", "halfvec"):
+                                raise ValueError(
+                                    f"Invalid vector_type for pgvector: {vt}"
+                                )
+                            params["vector_type"] = vt
+                        if "index_type" in params:
+                            it = str(params["index_type"])
+                            if it not in ("hnsw", "ivfflat"):
+                                raise ValueError(
+                                    f"Invalid index_type for pgvector: {it}"
+                                )
+                            params["index_type"] = it
                         sql = sql % params
                     cur.execute(sql)
                     cur.execute("INSERT INTO vector_migrations (v) VALUES (%s)", (v,))
