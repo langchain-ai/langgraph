@@ -3,7 +3,6 @@ from __future__ import annotations
 import concurrent.futures
 import datetime
 import logging
-import math
 import re
 import sqlite3
 import threading
