@@ -49,6 +49,7 @@ def test_validate_config():
         "store": None,
         "auth": None,
         "encryption": None,
+        "webhooks": None,
         "checkpointer": None,
         "http": None,
         "ui": None,
@@ -76,6 +77,7 @@ def test_validate_config():
         "store": None,
         "auth": None,
         "encryption": None,
+        "webhooks": None,
         "checkpointer": None,
         "http": None,
         "ui": None,
@@ -798,7 +800,10 @@ def test_config_to_docker_python_encryption_formatted():
     )
     # Verify that LANGGRAPH_ENCRYPTION is in the docker output with the correct path
     assert "LANGGRAPH_ENCRYPTION=" in actual_docker_stdin
-    assert "/deps/outer-unit_tests/unit_tests/agent.py:my_encryption" in actual_docker_stdin
+    assert (
+        "/deps/outer-unit_tests/unit_tests/agent.py:my_encryption"
+        in actual_docker_stdin
+    )
 
 
 def test_config_to_docker_nodejs_internal_docker_tag():
@@ -832,6 +837,85 @@ RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not foun
 
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
+
+
+def _extract_env_json(dockerfile: str, var_name: str) -> dict:
+    """Helper to extract and parse a JSON value from an ENV line in a Dockerfile."""
+    line_prefix = f"ENV {var_name}='"
+    for line in dockerfile.splitlines():
+        if line.startswith(line_prefix) and line.endswith("'"):
+            json_str = line[len(line_prefix) : -1]
+            return json.loads(json_str)
+    raise AssertionError(f"{var_name} not found in Dockerfile env lines")
+
+
+def test_config_to_docker_webhooks_python():
+    graphs = {"agent": "./agent.py:graph"}
+    webhooks = {
+        "env_prefix": "LG_WEBHOOK_",
+        "url": {
+            "require_https": True,
+            "allowed_domains": ["hooks.example.com", "*.example.org"],
+            "allowed_ports": [443],
+            "max_url_length": 1024,
+            "disable_loopback": False,
+        },
+        "headers": {
+            "x-auth": "${{ env.LG_WEBHOOK_TOKEN }}",
+            "x-mixed": "Bearer ${{ env.LG_WEBHOOK_TOKEN }}-suffix",
+        },
+    }
+
+    dockerfile, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": graphs,
+                "webhooks": webhooks,
+            }
+        ),
+        "langchain/langgraph-api",
+    )
+
+    # Ensure the ENV line is present and the payload round-trips via JSON
+    parsed = _extract_env_json(dockerfile, "LANGGRAPH_WEBHOOKS")
+    assert parsed == webhooks
+
+
+def test_config_to_docker_webhooks_node():
+    graphs = {"agent": "./graphs/agent.js:graph"}
+    webhooks = {
+        "env_prefix": "LG_WEBHOOK_",
+        "url": {"require_https": True},
+        "headers": {"x-auth": "${{ env.LG_WEBHOOK_TOKEN }}"},
+    }
+
+    dockerfile, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "node_version": "20",
+                "graphs": graphs,
+                "webhooks": webhooks,
+            }
+        ),
+        "langchain/langgraphjs-api",
+    )
+
+    parsed = _extract_env_json(dockerfile, "LANGGRAPH_WEBHOOKS")
+    assert parsed == webhooks
+
+
+def test_config_to_docker_no_webhooks():
+    graphs = {"agent": "./agent.py:graph"}
+    dockerfile, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs}),
+        "langchain/langgraph-api",
+    )
+
+    assert "ENV LANGGRAPH_WEBHOOKS=" not in dockerfile
 
 
 def test_config_to_docker_gen_ui_python():
