@@ -1095,7 +1095,9 @@ def test_sql_injection_filter_values(store: SqliteStore) -> None:
     # Test 4: Parameterized queries handle strings with null bytes and SQL injection attempts safely
     malicious_value = "public\x00' OR '1'='1"
     results = store.search(("docs",), filter={"access": malicious_value})
-    assert len(results) == 0, "Parameterized queries treat injection attempts as literal strings"
+    assert len(results) == 0, (
+        "Parameterized queries treat injection attempts as literal strings"
+    )
 
     # Test 5: Multiple single quotes
     malicious_value = "''''"
