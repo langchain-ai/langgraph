@@ -12,7 +12,7 @@ readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
-    "langgraph-checkpoint>=3,<4.0.0",
+    "langgraph-checkpoint>=3,<5.0.0",
     "aiosqlite>=0.20",
     "sqlite-vec>=0.1.6",
 ]
