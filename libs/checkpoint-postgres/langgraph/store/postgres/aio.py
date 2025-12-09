@@ -266,7 +266,6 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                             k: v(self) if v is not None and callable(v) else v
                             for k, v in migration.params.items()
                         }
-                        # Sanitize migration parameters used in string formatting
                         if "dims" in params:
                             try:
                                 params["dims"] = int(params["dims"])

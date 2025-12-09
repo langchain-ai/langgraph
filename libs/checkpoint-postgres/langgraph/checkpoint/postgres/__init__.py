@@ -146,7 +146,7 @@ class PostgresSaver(BasePostgresSaver):
         params = list(args)
         if limit is not None:
             query += " LIMIT %s"
-            params.append(limit)
+            params.append(int(limit))
         # if we change this to use .stream() we need to make sure to close the cursor
         with self._cursor() as cur:
             cur.execute(query, params)

@@ -275,7 +275,7 @@ class ShallowPostgresSaver(BasePostgresSaver):
         params = list(args)
         if limit is not None:
             query += " LIMIT %s"
-            params.append(limit)
+            params.append(int(limit))
         with self._cursor() as cur:
             cur.execute(query, params, binary=True)
             for value in cur:
@@ -641,7 +641,7 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         params = list(args)
         if limit is not None:
             query += " LIMIT %s"
-            params.append(limit)
+            params.append(int(limit))
         async with self._cursor() as cur:
             await cur.execute(query, params, binary=True)
             async for value in cur:
