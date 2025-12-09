@@ -1205,15 +1205,44 @@ def _get_vector_type_ops(store: BasePostgresStore) -> str:
 
 
 def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
-    """Get the index type and configuration based on config."""
+    """Get a sanitized index type and configuration based on config.
+
+    Only allow known-safe kinds and integer parameters to avoid SQL injection
+    when constructing DDL strings for index creation.
+    """
     if not store.index_config:
         return "hnsw", {}
 
     config = cast(PostgresIndexConfig, store.index_config)
-    index_config = config.get("ann_index_config", _DEFAULT_ANN_CONFIG).copy()
-    kind = index_config.pop("kind", "hnsw")
-    index_config.pop("vector_type", None)
-    return kind, index_config
+    raw = config.get("ann_index_config", _DEFAULT_ANN_CONFIG).copy()
+
+    kind = str(raw.pop("kind", "hnsw"))
+    if kind not in ("hnsw", "ivfflat", "flat"):
+        raise ValueError(
+            f"Invalid index kind for pgvector: {kind}. Expected 'hnsw', 'ivfflat', or 'flat'."
+        )
+
+    raw.pop("vector_type", None)
+
+    if kind == "hnsw":
+        allowed_keys = {"m", "ef_construction"}
+    else:  # ivfflat/flat
+        allowed_keys = {"lists", "nlist"}
+
+    sanitized: dict[str, int] = {}
+    for k, v in list(raw.items()):
+        if k not in allowed_keys:
+            continue
+        key = "lists" if k == "nlist" else k
+        try:
+            ivalue = int(v)  # type: ignore[call-overload]
+        except Exception as e:
+            raise ValueError(f"Invalid index parameter value for {k}: {v}") from e
+        if ivalue <= 0:
+            continue
+        sanitized[key] = ivalue
+
+    return kind, sanitized
 
 
 def _namespace_to_text(
