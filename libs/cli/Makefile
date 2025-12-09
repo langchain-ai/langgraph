@@ -1,4 +1,4 @@
-.PHONY: test lint format test-integration update-schema
+.PHONY: test lint format test-integration update-schema bump-version
 
 ######################
 # TESTING AND COVERAGE
@@ -35,3 +35,6 @@ format format_diff:
 
 update-schema:
 	uv run python generate_schema.py
+
+bump-version:
+	uv run hatch version patch
