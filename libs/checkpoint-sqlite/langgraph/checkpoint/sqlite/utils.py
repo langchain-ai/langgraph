@@ -1,11 +1,31 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import get_checkpoint_id
+
+_FILTER_PATTERN = re.compile(r"^[a-zA-Z0-9_.-]+$")
+
+
+def _validate_filter_key(key: str) -> None:
+    """Validate that a filter key is safe for use in SQL queries.
+
+    Args:
+        key: The filter key to validate
+
+    Raises:
+        ValueError: If the key contains invalid characters that could enable SQL injection
+    """
+    # Allow alphanumeric characters, underscores, dots, and hyphens
+    # This covers typical JSON property names while preventing SQL injection
+    if not _FILTER_PATTERN.match(key):
+        raise ValueError(
+            f"Invalid filter key: '{key}'. Filter keys must contain only alphanumeric characters, underscores, dots, and hyphens."
+        )
 
 
 def _metadata_predicate(
@@ -43,6 +63,7 @@ def _metadata_predicate(
 
     # process metadata query
     for query_key, query_value in metadata_filter.items():
+        _validate_filter_key(query_key)
         operator, param_value = _where_value(query_value)
         predicates.append(
             f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {operator}"
