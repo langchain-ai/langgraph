@@ -132,11 +132,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
-        if limit:
-            query += f" LIMIT {limit}"
+        params = list(args)
+        if limit is not None:
+            query += " LIMIT %s"
+            params.append(limit)
         # if we change this to use .stream() we need to make sure to close the cursor
         async with self._cursor() as cur:
-            await cur.execute(query, args, binary=True)
+            await cur.execute(query, params, binary=True)
             values = await cur.fetchall()
             if not values:
                 return

@@ -143,11 +143,13 @@ class PostgresSaver(BasePostgresSaver):
         """
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
-        if limit:
-            query += f" LIMIT {limit}"
+        params = list(args)
+        if limit is not None:
+            query += " LIMIT %s"
+            params.append(limit)
         # if we change this to use .stream() we need to make sure to close the cursor
         with self._cursor() as cur:
-            cur.execute(query, args)
+            cur.execute(query, params)
             values = cur.fetchall()
             if not values:
                 return

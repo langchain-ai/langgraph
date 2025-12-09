@@ -272,10 +272,12 @@ class ShallowPostgresSaver(BasePostgresSaver):
         """
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where
-        if limit:
-            query += f" LIMIT {limit}"
+        params = list(args)
+        if limit is not None:
+            query += " LIMIT %s"
+            params.append(limit)
         with self._cursor() as cur:
-            cur.execute(self.SELECT_SQL + where, args, binary=True)
+            cur.execute(query, params, binary=True)
             for value in cur:
                 checkpoint: Checkpoint = {
                     **value["checkpoint"],
@@ -636,10 +638,12 @@ class AsyncShallowPostgresSaver(BasePostgresSaver):
         """
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where
-        if limit:
-            query += f" LIMIT {limit}"
+        params = list(args)
+        if limit is not None:
+            query += " LIMIT %s"
+            params.append(limit)
         async with self._cursor() as cur:
-            await cur.execute(self.SELECT_SQL + where, args, binary=True)
+            await cur.execute(query, params, binary=True)
             async for value in cur:
                 checkpoint: Checkpoint = {
                     **value["checkpoint"],

@@ -334,21 +334,17 @@ class BasePostgresStore(Generic[C]):
 
             # First handle main store insertions
             for op in inserts:
-                if op.ttl is not None:
-                    expires_at_str = f"NOW() + INTERVAL '{op.ttl * 60} seconds'"
-                    ttl_minutes = op.ttl
-                else:
-                    expires_at_str = "NULL"
-                    ttl_minutes = None
-
+                ttl_minutes = op.ttl if op.ttl is not None else None
+                # Use parameterized interval to prevent SQL injection
                 values.append(
-                    f"(%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, {expires_at_str}, %s)"
+                    "(%s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NOW() + %s::interval, %s)"
                 )
                 insertion_params.extend(
                     [
                         _namespace_to_text(op.namespace),
                         op.key,
                         Jsonb(cast(dict, op.value)),
+                        (f"{int(op.ttl * 60)} seconds" if op.ttl is not None else None),
                         ttl_minutes,
                     ]
                 )
@@ -465,6 +461,11 @@ class BasePostgresStore(Generic[C]):
                         cast(dict, self.index_config)["dims"],
                     )
                 else:
+                    # Only allow valid vector types to be substituted into SQL
+                    if vector_type not in ("vector", "halfvec"):
+                        raise ValueError(
+                            f"Invalid vector_type for pgvector: {vector_type}"
+                        )
                     score_operator = score_operator % ("%s", vector_type)
 
                 vectors_per_doc_estimate = cast(dict, self.index_config)[
@@ -1122,6 +1123,28 @@ class PostgresStore(BaseStore, BasePostgresStore[_pg_internal.Conn]):
                             k: v(self) if v is not None and callable(v) else v
                             for k, v in migration.params.items()
                         }
+                        # Sanitize migration parameters used in string formatting
+                        if "dims" in params:
+                            try:
+                                params["dims"] = int(params["dims"])
+                            except Exception as e:
+                                raise ValueError(
+                                    f"Invalid dims for vector index: {params['dims']}"
+                                ) from e
+                        if "vector_type" in params:
+                            vt = str(params["vector_type"])
+                            if vt not in ("vector", "halfvec"):
+                                raise ValueError(
+                                    f"Invalid vector_type for pgvector: {vt}"
+                                )
+                            params["vector_type"] = vt
+                        if "index_type" in params:
+                            it = str(params["index_type"])
+                            if it not in ("hnsw", "ivfflat"):
+                                raise ValueError(
+                                    f"Invalid index_type for pgvector: {it}"
+                                )
+                            params["index_type"] = it
                         sql = sql % params
                     cur.execute(sql)
                     cur.execute("INSERT INTO vector_migrations (v) VALUES (%s)", (v,))
@@ -1175,15 +1198,49 @@ def _get_vector_type_ops(store: BasePostgresStore) -> str:
 
 
 def _get_index_params(store: Any) -> tuple[str, dict[str, Any]]:
-    """Get the index type and configuration based on config."""
+    """Get a sanitized index type and configuration based on config.
+
+    Only allow known-safe kinds and integer parameters to avoid SQL injection
+    when constructing DDL strings for index creation.
+    """
     if not store.index_config:
         return "hnsw", {}
 
     config = cast(PostgresIndexConfig, store.index_config)
-    index_config = config.get("ann_index_config", _DEFAULT_ANN_CONFIG).copy()
-    kind = index_config.pop("kind", "hnsw")
-    index_config.pop("vector_type", None)
-    return kind, index_config
+    raw = config.get("ann_index_config", _DEFAULT_ANN_CONFIG).copy()
+
+    kind = str(raw.pop("kind", "hnsw"))
+    if kind not in ("hnsw", "ivfflat"):
+        raise ValueError(
+            f"Invalid index kind for pgvector: {kind}. Expected 'hnsw' or 'ivfflat'."
+        )
+
+    # Remove unrelated keys
+    raw.pop("vector_type", None)
+
+    # Whitelist acceptable parameter keys per index kind and coerce values to int
+    if kind == "hnsw":
+        allowed_keys = {"m", "ef_construction"}
+    else:  # ivfflat
+        # pgvector expects 'lists'; accept 'nlist' alias and map to 'lists'
+        allowed_keys = {"lists", "nlist"}
+
+    sanitized: dict[str, int] = {}
+    for k, v in list(raw.items()):
+        if k not in allowed_keys:
+            continue
+        # Map alias 'nlist' to 'lists'
+        key = "lists" if k == "nlist" else k
+        try:
+            ivalue = int(v)  # type: ignore[call-overload]
+        except Exception as e:
+            raise ValueError(f"Invalid index parameter value for {k}: {v}") from e
+        if ivalue <= 0:
+            # Non-positive values are not meaningful for these params
+            continue
+        sanitized[key] = ivalue
+
+    return kind, sanitized
 
 
 def _namespace_to_text(
