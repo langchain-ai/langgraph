@@ -1193,6 +1193,7 @@ class AssistantsClient:
         *,
         metadata: Json = None,
         graph_id: str | None = None,
+        name: str | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> int:
@@ -1201,6 +1202,8 @@ class AssistantsClient:
         Args:
             metadata: Metadata to filter by. Exact match for each key/value.
             graph_id: Optional graph id to filter by.
+            name: Optional name to filter by.
+                The filtering logic will match assistants where 'name' is a substring (case insensitive) of the assistant name.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -1212,6 +1215,8 @@ class AssistantsClient:
             payload["metadata"] = metadata
         if graph_id:
             payload["graph_id"] = graph_id
+        if name:
+            payload["name"] = name
         return await self.http.post(
             "/assistants/count", json=payload, headers=headers, params=params
         )
@@ -4526,6 +4531,7 @@ class SyncAssistantsClient:
         *,
         metadata: Json = None,
         graph_id: str | None = None,
+        name: str | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> int:
@@ -4534,6 +4540,8 @@ class SyncAssistantsClient:
         Args:
             metadata: Metadata to filter by. Exact match for each key/value.
             graph_id: Optional graph id to filter by.
+            name: Optional name to filter by.
+                The filtering logic will match assistants where 'name' is a substring (case insensitive) of the assistant name.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -4545,6 +4553,8 @@ class SyncAssistantsClient:
             payload["metadata"] = metadata
         if graph_id:
             payload["graph_id"] = graph_id
+        if name:
+            payload["name"] = name
         return self.http.post(
             "/assistants/count", json=payload, headers=headers, params=params
         )
