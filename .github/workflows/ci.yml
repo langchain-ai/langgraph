@@ -116,13 +116,13 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - "3.11"
+          - "3.13"
     steps:
       - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python-version }}
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.11"
+          python-version: "3.13"
           enable-cache: true
           cache-suffix: "schema-check-cli"
       - name: Install CLI dependencies
