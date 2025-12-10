@@ -17,7 +17,7 @@ from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import START, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel._log import logger
-from langgraph.types import Command, PregelExecutableTask, Send
+from langgraph.types import Command, Goto, PregelExecutableTask, Send
 
 
 def read_channel(
@@ -53,29 +53,47 @@ def read_channels(
         return values
 
 
-def map_command(cmd: Command) -> Iterator[tuple[str, str, Any]]:
-    """Map input chunk to a sequence of pending writes in the form (channel, value)."""
+def map_command(cmd: Command) -> Iterator[tuple[str, str | None, str, Any]]:
+    """Map input chunk to a sequence of pending writes.
+
+    Returns tuples of (task_id, target_graph, channel, value) where:
+    - task_id: ID of the task (NULL_TASK_ID for command writes)
+    - target_graph: Always None (cross-graph navigation is handled by _control_branch)
+    - channel: Channel name to write to
+    - value: Value to write
+    """
     if cmd.graph == Command.PARENT:
         raise InvalidUpdateError("There is no parent graph")
-    if cmd.goto:
+
+    # Apply local updates (current graph)
+    if cmd.update:
+        for k, v in cmd._update_as_tuples():
+            yield (NULL_TASK_ID, None, k, v)
+
+    # Process goto - but only for same-graph navigation
+    # Cross-graph Goto objects are handled by _control_branch which raises ParentCommand    if cmd.goto:
         if isinstance(cmd.goto, (tuple, list)):
             sends = cmd.goto
         else:
             sends = [cmd.goto]
+
         for send in sends:
-            if isinstance(send, Send):
-                yield (NULL_TASK_ID, TASKS, send)
+            if isinstance(send, Goto):
+                # Goto objects are handled by _control_branch, not here
+                # Skip them in map_command
+                pass
+            elif isinstance(send, Send):
+                yield (NULL_TASK_ID, None, TASKS, send)
             elif isinstance(send, str):
-                yield (NULL_TASK_ID, f"branch:to:{send}", START)
+                yield (NULL_TASK_ID, None, f"branch:to:{send}", START)
             else:
                 raise TypeError(
-                    f"In Command.goto, expected Send/str, got {type(send).__name__}"
+                    f"In Command.goto, expected Send/str/Goto, got {type(send).__name__}"
                 )
+
+    # Process resume values
     if cmd.resume is not None:
-        yield (NULL_TASK_ID, RESUME, cmd.resume)
-    if cmd.update:
-        for k, v in cmd._update_as_tuples():
-            yield (NULL_TASK_ID, k, v)
+        yield (NULL_TASK_ID, None, RESUME, cmd.resume)
 
 
 def map_input(
