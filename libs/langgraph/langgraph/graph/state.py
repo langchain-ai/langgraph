@@ -70,6 +70,8 @@ from langgraph.pregel._write import (
     ChannelWrite,
     ChannelWriteEntry,
     ChannelWriteTupleEntry,
+    PASSTHROUGH,
+    SKIP_WRITE,
 )
 from langgraph.types import (
     All,
@@ -1073,7 +1075,13 @@ class CompiledStateGraph(
             if end != END:
                 self.nodes[starts].writers.append(
                     ChannelWrite(
-                        (ChannelWriteEntry(_CHANNEL_BRANCH_TO.format(end), None),)
+                        (
+                            ChannelWriteEntry(
+                                _CHANNEL_BRANCH_TO.format(end),
+                                PASSTHROUGH,
+                                mapper=_skip_branch_if_goto,
+                            ),
+                        )
                     )
                 )
         elif end != END:
@@ -1090,7 +1098,17 @@ class CompiledStateGraph(
             # publish to channel
             for start in starts:
                 self.nodes[start].writers.append(
-                    ChannelWrite((ChannelWriteEntry(channel_name, start),))
+                    ChannelWrite(
+                        (
+                            ChannelWriteEntry(
+                                channel_name,
+                                PASSTHROUGH,
+                                mapper=lambda v, s=start: None
+                                if _has_goto(v)
+                                else s,
+                            ),
+                        )
+                    )
                 )
 
     def attach_branch(
@@ -1102,7 +1120,9 @@ class CompiledStateGraph(
             writes = [
                 (
                     ChannelWriteEntry(
-                        p if p == END else _CHANNEL_BRANCH_TO.format(p), None
+                        p if p == END else _CHANNEL_BRANCH_TO.format(p),
+                        PASSTHROUGH,
+                        mapper=_skip_branch_if_goto,
                     )
                     if not isinstance(p, Send)
                     else p
@@ -1303,6 +1323,21 @@ def _control_static(
         return [
             (e if e == END else _CHANNEL_BRANCH_TO.format(e), None, None) for e in ends
         ]
+
+
+def _has_goto(value: Any) -> bool:
+    if isinstance(value, Command) and value.goto:
+        return True
+    if isinstance(value, (list, tuple)):
+        return any(isinstance(v, Command) and v.goto for v in value)
+    return False
+
+
+def _skip_branch_if_goto(value: Any) -> Any:
+    # If a Command with goto is present, skip the default branch write
+    if _has_goto(value):
+        return SKIP_WRITE
+    return None
 
 
 def _get_root(input: Any) -> Sequence[tuple[str, Any]] | None:
