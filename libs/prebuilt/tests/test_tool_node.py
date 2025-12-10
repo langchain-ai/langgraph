@@ -1860,3 +1860,43 @@ async def test_tool_node_inject_async_all_types_with_schema() -> None:
         "foo_from_runtime=foo_value, "
         "tool_call_id=test_call_789"
     )
+
+
+async def test_tool_node_with_functools_partial():
+    """Test that ToolNode works with tools whose func attribute is a functools.partial.
+
+    This is a regression test for issue #6477 where create_retriever_tool creates
+    tools with functools.partial as the func/coroutine attributes, which caused
+    get_type_hints() to fail with a TypeError.
+    """
+
+    def base_function(query: str, retriever: Any) -> str:
+        return f"Result for: {query}"
+
+    # Create a tool with functools.partial as its func attribute (similar to retriever tools)
+    partial_func = partial(base_function, retriever="mock_retriever")
+
+    class PartialTool(BaseTool):
+        name: str = "partial_tool"
+        description: str = "A tool that uses functools.partial"
+        func: Any = partial_func
+
+        def _run(self, query: str) -> str:
+            return self.func(query=query)
+
+    # This should not raise TypeError about functools.partial not being supported
+    tool_node = ToolNode([PartialTool()])
+
+    tool_call = {
+        "name": "partial_tool",
+        "args": {"query": "test query"},
+        "id": "test_call",
+        "type": "tool_call",
+    }
+    msg = AIMessage("test", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime()
+    result = await tool_node.ainvoke({"messages": [msg]}, config=config)
+
+    tool_message = result["messages"][-1]
+    assert "Result for: test query" in tool_message.content
