@@ -390,6 +390,64 @@ def test_reducer_before_first_node() -> None:
     }
 
 
+def test_dataclass_default_values_with_reducer() -> None:
+    """Test that dataclass default values are preserved with reducer channels.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6569
+    """
+
+    def my_reducer(left: int | None, right: int | None) -> int | None:
+        return right
+
+    @dataclass
+    class MyState:
+        # Non-nullable type with default - previously broken
+        my_value_1: Annotated[int, my_reducer] = 5
+        # Nullable type with default - always worked
+        my_value_2: Annotated[int | None, my_reducer] = 5
+
+    results: dict[str, Any] = {}
+
+    def sample_node(state: MyState) -> dict[str, Any]:
+        results["my_value_1"] = state.my_value_1
+        results["my_value_2"] = state.my_value_2
+        return {}
+
+    builder = StateGraph(MyState)
+    builder.add_node("sample", sample_node)
+    builder.add_edge(START, "sample")
+    builder.add_edge("sample", END)
+
+    graph = builder.compile()
+    graph.invoke({})
+
+    # Both should preserve the dataclass default value of 5
+    assert results["my_value_1"] == 5
+    assert results["my_value_2"] == 5
+
+
+def test_dataclass_default_with_add_reducer() -> None:
+    """Test that reducer aggregation works correctly with dataclass defaults."""
+
+    @dataclass
+    class CounterState:
+        count: Annotated[int, operator.add] = 10
+
+    def increment(state: CounterState) -> dict[str, Any]:
+        return {"count": 1}
+
+    builder = StateGraph(CounterState)
+    builder.add_node("increment", increment)
+    builder.add_edge(START, "increment")
+    builder.add_edge("increment", END)
+
+    graph = builder.compile()
+    result = graph.invoke({})
+
+    # Default 10 + increment 1 = 11
+    assert result["count"] == 11
+
+
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = NodeBuilder().subscribe_only("input").do(add_one).write_to("output")
