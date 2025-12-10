@@ -23,30 +23,9 @@ Install LangGraph:
 pip install -U langgraph
 ```
 
-Then, create an agent [using prebuilt components](https://langchain-ai.github.io/langgraph/agents/agents/):
+Get started with the [LangGraph Quickstart](https://langchain-ai.github.io/langgraph/tutorials/get-started/1-build-basic-chatbot/).
 
-```python
-# pip install -qU "langchain[anthropic]" to call the model
-
-from langgraph.prebuilt import create_react_agent
-
-def get_weather(city: str) -> str:
-    """Get weather for a given city."""
-    return f"It's always sunny in {city}!"
-
-agent = create_react_agent(
-    model="anthropic:claude-3-7-sonnet-latest",
-    tools=[get_weather],
-    prompt="You are a helpful assistant"
-)
-
-# Run the agent
-agent.invoke(
-    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
-)
-```
-
-For more information, see the [Quickstart](https://langchain-ai.github.io/langgraph/agents/agents/). Or, to learn how to build an [agent workflow](https://langchain-ai.github.io/langgraph/concepts/low_level/) with a customizable architecture, long-term memory, and other complex task handling, see the [LangGraph basics tutorials](https://langchain-ai.github.io/langgraph/tutorials/get-started/1-build-basic-chatbot/).
+To quickly build agents with LangChain's `create_agent` (built on LangGraph), see the [LangChain Agents documentation](https://docs.langchain.com/oss/python/langchain/agents).
 
 ## Core benefits
 
