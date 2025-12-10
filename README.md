@@ -23,47 +23,30 @@ Install LangGraph:
 pip install -U langgraph
 ```
 
-Then, create a stateful workflow:
+Then, create an agent [using prebuilt components](https://langchain-ai.github.io/langgraph/agents/agents/):
 
 ```python
-from typing import Literal
-from typing_extensions import TypedDict
+# pip install -qU "langchain[anthropic]" to call the model
 
-from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import create_react_agent
 
+def get_weather(city: str) -> str:
+    """Get weather for a given city."""
+    return f"It's always sunny in {city}!"
 
-class State(TypedDict):
-    query: str
-    answer: str
+agent = create_react_agent(
+    model="anthropic:claude-3-7-sonnet-latest",
+    tools=[get_weather],
+    prompt="You are a helpful assistant"
+)
 
-
-def call_llm(state: State) -> State:
-    """Call an LLM to generate an answer (replace with actual LLM call)."""
-    return {"answer": f"The answer to '{state['query']}' is 42."}
-
-
-def human_review(state: State) -> Literal["pass", "fail"]:
-    """Determine if the answer passes human review."""
-    return "pass" if "42" in state["answer"] else "fail"
-
-
-# Build the graph
-graph = StateGraph(State)
-graph.add_node("call_llm", call_llm)
-graph.add_edge(START, "call_llm")
-graph.add_conditional_edges("call_llm", human_review, {"pass": END, "fail": "call_llm"})
-
-# Compile and run
-app = graph.compile()
-result = app.invoke({"query": "what is the meaning of life"})
-# {'query': 'what is the meaning of life', 'answer': "The answer to 'what is the meaning of life' is 42."}
+# Run the agent
+agent.invoke(
+    {"messages": [{"role": "user", "content": "what is the weather in sf"}]}
+)
 ```
 
-For more information, see the [LangGraph basics tutorials](https://langchain-ai.github.io/langgraph/tutorials/get-started/1-build-basic-chatbot/).
-
-### Using LangGraph with LangChain
-
-Looking to build an agent with tool calling? See the LangChain [agents documentation](https://docs.langchain.com/docs/concepts/agents/) for how to use `create_agent` with LangGraph.
+For more information, see the [Quickstart](https://langchain-ai.github.io/langgraph/agents/agents/). Or, to learn how to build an [agent workflow](https://langchain-ai.github.io/langgraph/concepts/low_level/) with a customizable architecture, long-term memory, and other complex task handling, see the [LangGraph basics tutorials](https://langchain-ai.github.io/langgraph/tutorials/get-started/1-build-basic-chatbot/).
 
 ## Core benefits
 
