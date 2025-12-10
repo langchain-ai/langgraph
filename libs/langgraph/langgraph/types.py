@@ -163,13 +163,18 @@ class Interrupt:
     id: str
     """The ID of the interrupt. Can be used to resume the interrupt directly."""
 
+    response_schema: dict[str, Any] | None
+    """JSON schema describing the expected response format, if specified."""
+
     def __init__(
         self,
         value: Any,
         id: str = _DEFAULT_INTERRUPT_ID,
+        response_schema: dict[str, Any] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         self.value = value
+        self.response_schema = response_schema
 
         if (
             (ns := deprecated_kwargs.get("ns", MISSING)) is not MISSING
@@ -181,8 +186,17 @@ class Interrupt:
             self.id = id
 
     @classmethod
-    def from_ns(cls, value: Any, ns: str) -> Interrupt:
-        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()))
+    def from_ns(
+        cls,
+        value: Any,
+        ns: str,
+        response_schema: dict[str, Any] | None = None,
+    ) -> Interrupt:
+        return cls(
+            value=value,
+            id=xxh3_128_hexdigest(ns.encode()),
+            response_schema=response_schema,
+        )
 
     @property
     @deprecated("`interrupt_id` is deprecated. Use `id` instead.", category=None)
@@ -398,7 +412,11 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
-def interrupt(value: Any) -> Any:
+# Type variable for type-safe response typing in interrupt()
+_ResponseT = TypeVar("_ResponseT")
+
+
+def interrupt(value: Any, *, response_type: type[_ResponseT] | None = None) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
     The `interrupt` function enables human-in-the-loop workflows by pausing graph
@@ -420,7 +438,7 @@ def interrupt(value: Any) -> Any:
     To use an `interrupt`, you must enable a checkpointer, as the feature relies
     on persisting the graph state.
 
-    !!! example
+    !!! example "Basic usage"
 
         ```python
         import uuid
@@ -468,7 +486,7 @@ def interrupt(value: Any) -> Any:
         for chunk in graph.stream({\"foo\": \"abc\"}, config):
             print(chunk)
 
-        # > {'__interrupt__': (Interrupt(value='what is your age?', id='45fda8478b2ef754419799e10992af06'),)}
+        # > {'__interrupt__': (Interrupt(value='what is your age?', id='...', response_schema=None),)}
 
         command = Command(resume=\"some input from a human!!!\")
 
@@ -479,14 +497,43 @@ def interrupt(value: Any) -> Any:
         # > {'node': {'human_value': 'some input from a human!!!'}}
         ```
 
+    !!! example "With response schema"
+
+        ```python
+        from pydantic import BaseModel
+
+
+        class HumanResponse(BaseModel):
+            name: str
+            age: int
+
+
+        def node(state: State):
+            # The response_type generates a JSON schema that is included
+            # in the Interrupt, which can be used by UIs to render forms.
+            answer = interrupt(
+                {\"question\": \"Please provide your information\"},
+                response_type=HumanResponse,
+            )
+            # answer will be the raw resume value (not validated)
+            return {\"human_value\": answer}
+        ```
+
     Args:
         value: The value to surface to the client when the graph is interrupted.
+        response_type: Optional type for the expected response. Can be a Pydantic
+            BaseModel, TypedDict, dataclass, or any type supported by Pydantic's
+            TypeAdapter. When provided, a JSON schema is generated and included
+            in the Interrupt for UI consumption.
 
     Returns:
-        Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation
+        On subsequent invocations within the same node (same task to be precise),
+        returns the resume value provided via Command.
 
     Raises:
-        GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
+        GraphInterrupt: On the first invocation within the node, halts execution
+            and surfaces the provided value to the client.
+        TypeError: If response_type cannot be converted to a JSON schema.
     """
     from langgraph._internal._constants import (
         CONFIG_KEY_CHECKPOINT_NS,
@@ -494,8 +541,14 @@ def interrupt(value: Any) -> Any:
         CONFIG_KEY_SEND,
         RESUME,
     )
+    from langgraph._internal._pydantic import get_json_schema
     from langgraph.config import get_config
     from langgraph.errors import GraphInterrupt
+
+    # Generate JSON schema from response_type if provided
+    response_schema: dict[str, Any] | None = None
+    if response_type is not None:
+        response_schema = get_json_schema(response_type)
 
     conf = get_config()["configurable"]
     # track interrupt index
@@ -519,6 +572,7 @@ def interrupt(value: Any) -> Any:
             Interrupt.from_ns(
                 value=value,
                 ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+                response_schema=response_schema,
             ),
         )
     )
