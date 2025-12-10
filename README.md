@@ -23,6 +23,35 @@ Install LangGraph:
 pip install -U langgraph
 ```
 
+Create a simple workflow:
+
+```python
+from langgraph.graph import START, StateGraph
+from typing_extensions import TypedDict
+
+
+class State(TypedDict):
+    text: str
+
+
+def node_a(state: State) -> dict:
+    return {"text": state["text"] + "a"}
+
+
+def node_b(state: State) -> dict:
+    return {"text": state["text"] + "b"}
+
+
+graph = StateGraph(State)
+graph.add_node("node_a", node_a)
+graph.add_node("node_b", node_b)
+graph.add_edge(START, "node_a")
+graph.add_edge("node_a", "node_b")
+
+print(graph.compile().invoke({"text": ""}))
+# {'text': 'ab'}
+```
+
 Get started with the [LangGraph Quickstart](https://docs.langchain.com/oss/python/langgraph/quickstart).
 
 To quickly build agents with LangChain's `create_agent` (built on LangGraph), see the [LangChain Agents documentation](https://docs.langchain.com/oss/python/langchain/agents).
