@@ -210,6 +210,17 @@
                 }
               ],
               "description": "Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.\n"
+            },
+            "webhooks": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WebhooksConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Webhooks configuration for outbound event delivery.\n\nForwarded into the container as `LANGGRAPH_WEBHOOKS`. See `WebhooksConfig`\nfor URL policy and header templating details.\n"
             }
           },
           "required": [
@@ -413,6 +424,17 @@
                 }
               ],
               "description": "Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.\n"
+            },
+            "webhooks": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WebhooksConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Webhooks configuration for outbound event delivery.\n\nForwarded into the container as `LANGGRAPH_WEBHOOKS`. See `WebhooksConfig`\nfor URL policy and header templating details.\n"
             }
           },
           "required": [
@@ -616,7 +638,7 @@
     },
     "EncryptionConfig": {
       "title": "EncryptionConfig",
-      "description": "Configuration for custom at-rest encryption logic.\n\n    Allows you to implement custom encryption for sensitive data stored in the database,\n    including metadata fields and checkpoint blobs.",
+      "description": "Configuration for custom at-rest encryption logic.\n\nAllows you to implement custom encryption for sensitive data stored in the database,\nincluding metadata fields and checkpoint blobs.",
       "type": "object",
       "properties": {
         "path": {
@@ -759,13 +781,10 @@
               "type": "null"
             }
           ],
-          "description": "Headers to include (if not also matches against an 'exludes' pattern.\n"
+          "description": "Headers to include (if not also matched against an 'excludes' pattern).\n"
         }
       },
-      "required": [
-        "excludes",
-        "includes"
-      ]
+      "required": []
     },
     "CorsConfig": {
       "title": "CorsConfig",
@@ -908,6 +927,63 @@
         }
       },
       "required": []
+    },
+    "WebhooksConfig": {
+      "title": "WebhooksConfig",
+      "type": "object",
+      "properties": {
+        "env_prefix": {
+          "type": "string",
+          "description": "Required prefix for environment variables referenced in header templates.\n\nActs as an allowlist boundary to prevent leaking arbitrary environment\nvariables. Defaults to \"LG_WEBHOOK_\" when omitted.\n"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Static headers to include with webhook requests.\n\nValues may contain templates of the form \"${{ env.VAR }}\". On startup, these\nare resolved via the process environment after verifying `VAR` starts with\n`env_prefix`. Mixed literals and multiple templates are allowed.\n"
+        },
+        "url": {
+          "$ref": "#/$defs/WebhookUrlPolicy",
+          "description": "URL validation policy for user-supplied webhook endpoints."
+        }
+      },
+      "required": [],
+      "description": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)"
+    },
+    "WebhookUrlPolicy": {
+      "title": "WebhookUrlPolicy",
+      "type": "object",
+      "properties": {
+        "allowed_domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Hostname allowlist. Supports exact hosts and wildcard subdomains.\n\nUse entries like \"hooks.example.com\" or \"*.mycorp.com\". The wildcard only\nmatches subdomains (\"foo.mycorp.com\"), not the apex (\"mycorp.com\"). When\nempty or omitted, any public host is allowed (subject to SSRF IP checks).\n"
+        },
+        "allowed_ports": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Explicit port allowlist for absolute URLs.\n\nIf set, requests must use one of these ports. Defaults are respected when\na port is not present in the URL (443 for https, 80 for http).\n"
+        },
+        "disable_loopback": {
+          "type": "boolean",
+          "description": "Disallow relative URLs (internal loopback calls) when true."
+        },
+        "max_url_length": {
+          "type": "integer",
+          "description": "Maximum permitted URL length in characters; longer inputs are rejected early."
+        },
+        "require_https": {
+          "type": "boolean",
+          "description": "Enforce HTTPS scheme for absolute URLs; reject `http://` when true."
+        }
+      },
+      "required": [],
+      "description": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)"
     }
   },
   "title": "LangGraph CLI Configuration",

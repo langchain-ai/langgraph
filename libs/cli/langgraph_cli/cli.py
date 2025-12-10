@@ -760,6 +760,7 @@ def dev(
         http=config_json.get("http"),
         ui=config_json.get("ui"),
         ui_config=config_json.get("ui_config"),
+        webhooks=config_json.get("webhooks"),
         studio_url=studio_url,
         allow_blocking=allow_blocking,
         tunnel=tunnel,

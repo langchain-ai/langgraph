@@ -156,6 +156,8 @@ def validate_config(config: Config) -> Config:
         "auth": config.get("auth"),
         "encryption": config.get("encryption"),
         "http": config.get("http"),
+        # Pass through webhooks config so it can be injected into the image
+        "webhooks": config.get("webhooks"),
         "checkpointer": config.get("checkpointer"),
         "ui": config.get("ui"),
         "ui_config": config.get("ui_config"),
@@ -959,6 +961,10 @@ ADD {relpath} /deps/{name}
     if (http_config := config.get("http")) is not None:
         env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
 
+    # Inject webhooks configuration if provided
+    if (webhooks_config := config.get("webhooks")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
+
     if (checkpointer_config := config.get("checkpointer")) is not None:
         env_vars.append(
             f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
@@ -1084,6 +1090,10 @@ def node_config_to_docker(
 
     if (http_config := config.get("http")) is not None:
         env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
+
+    # Inject webhooks configuration if provided
+    if (webhooks_config := config.get("webhooks")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
 
     if (checkpointer_config := config.get("checkpointer")) is not None:
         env_vars.append(
