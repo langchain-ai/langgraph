@@ -48,19 +48,19 @@ npm install @langchain/langgraph @langchain/core @langchain/anthropic
 ## 2. Create an agent
 
 :::python
-To create an agent, use @[`create_react_agent`][create_react_agent]:
+To create an agent, use @[`create_agent`][create_agent]:
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 def get_weather(city: str) -> str:  # (1)!
     """Get weather for a given city."""
     return f"It's always sunny in {city}!"
 
-agent = create_react_agent(
+agent = create_agent(
     model="anthropic:claude-3-7-sonnet-latest",  # (2)!
     tools=[get_weather],  # (3)!
-    prompt="You are a helpful assistant"  # (4)!
+    system_prompt="You are a helpful assistant"  # (4)!
 )
 
 # Run the agent
@@ -123,7 +123,7 @@ To configure an LLM with specific parameters, such as temperature, use [init_cha
 
 ```python
 from langchain.chat_models import init_chat_model
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 # highlight-next-line
 model = init_chat_model(
@@ -132,7 +132,7 @@ model = init_chat_model(
     temperature=0
 )
 
-agent = create_react_agent(
+agent = create_agent(
     # highlight-next-line
     model=model,
     tools=[get_weather],
@@ -179,14 +179,14 @@ Prompts instruct the LLM how to behave. Add one of the following types of prompt
 
     :::python
     ```python
-    from langgraph.prebuilt import create_react_agent
+    from langchain.agents import create_agent
 
-    agent = create_react_agent(
+    agent = create_agent(
         model="anthropic:claude-3-7-sonnet-latest",
         tools=[get_weather],
         # A static prompt that never changes
         # highlight-next-line
-        prompt="Never answer questions about the weather."
+        system_prompt="Never answer questions about the weather."
     )
 
     agent.invoke(
@@ -223,7 +223,7 @@ Prompts instruct the LLM how to behave. Add one of the following types of prompt
     from langchain_core.messages import AnyMessage
     from langchain_core.runnables import RunnableConfig
     from langgraph.prebuilt.chat_agent_executor import AgentState
-    from langgraph.prebuilt import create_react_agent
+    from langchain.agents import create_agent
 
     # highlight-next-line
     def prompt(state: AgentState, config: RunnableConfig) -> list[AnyMessage]:  # (1)!
@@ -231,11 +231,11 @@ Prompts instruct the LLM how to behave. Add one of the following types of prompt
         system_msg = f"You are a helpful assistant. Address the user as {user_name}."
         return [{"role": "system", "content": system_msg}] + state["messages"]
 
-    agent = create_react_agent(
+    agent = create_agent(
         model="anthropic:claude-3-7-sonnet-latest",
         tools=[get_weather],
         # highlight-next-line
-        prompt=prompt
+        system_prompt=prompt
     )
 
     agent.invoke(
@@ -299,13 +299,13 @@ To allow multi-turn conversations with an agent, you need to enable [persistence
 :::python
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 from langgraph.checkpoint.memory import InMemorySaver
 
 # highlight-next-line
 checkpointer = InMemorySaver()
 
-agent = create_react_agent(
+agent = create_agent(
     model="anthropic:claude-3-7-sonnet-latest",
     tools=[get_weather],
     # highlight-next-line
@@ -385,12 +385,12 @@ To produce structured responses conforming to a schema, use the `response_format
 
 ```python
 from pydantic import BaseModel
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 class WeatherResponse(BaseModel):
     conditions: str
 
-agent = create_react_agent(
+agent = create_agent(
     model="anthropic:claude-3-7-sonnet-latest",
     tools=[get_weather],
     # highlight-next-line
