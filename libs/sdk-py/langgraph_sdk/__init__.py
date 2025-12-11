@@ -1,6 +1,8 @@
 from langgraph_sdk.auth import Auth
 from langgraph_sdk.client import get_client, get_sync_client
+from langgraph_sdk.encryption import Encryption
+from langgraph_sdk.encryption.types import EncryptionContext
 
-__version__ = "0.2.12"
+__version__ = "0.2.15"
 
-__all__ = ["Auth", "get_client", "get_sync_client"]
+__all__ = ["Auth", "Encryption", "EncryptionContext", "get_client", "get_sync_client"]

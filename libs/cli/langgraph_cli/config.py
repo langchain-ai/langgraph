@@ -154,7 +154,10 @@ def validate_config(config: Config) -> Config:
         "env": config.get("env", {}),
         "store": config.get("store"),
         "auth": config.get("auth"),
+        "encryption": config.get("encryption"),
         "http": config.get("http"),
+        # Pass through webhooks config so it can be injected into the image
+        "webhooks": config.get("webhooks"),
         "checkpointer": config.get("checkpointer"),
         "ui": config.get("ui"),
         "ui_config": config.get("ui_config"),
@@ -226,6 +229,14 @@ def validate_config(config: Config) -> Config:
             if ":" not in auth_conf["path"]:
                 raise ValueError(
                     f"Invalid auth.path format: '{auth_conf['path']}'. "
+                    "Must be in format './path/to/file.py:attribute_name'"
+                )
+    # Validate encryption config
+    if encryption_conf := config.get("encryption"):
+        if "path" in encryption_conf:
+            if ":" not in encryption_conf["path"]:
+                raise ValueError(
+                    f"Invalid encryption.path format: '{encryption_conf['path']}'. "
                     "Must be in format './path/to/file.py:attribute_name'"
                 )
     if http_conf := config.get("http"):
@@ -614,6 +625,49 @@ def _update_auth_path(
     )
 
 
+def _update_encryption_path(
+    config_path: pathlib.Path, config: Config, local_deps: LocalDeps
+) -> None:
+    """Update encryption.path to use Docker container paths."""
+    encryption_conf = config.get("encryption")
+    if not encryption_conf or not (path_str := encryption_conf.get("path")):
+        return
+
+    module_str, sep, attr_str = path_str.partition(":")
+    if not sep or not module_str.startswith("."):
+        return  # Already validated or absolute path
+
+    resolved = config_path.parent / module_str
+    if not resolved.exists():
+        raise FileNotFoundError(
+            f"Encryption file not found: {resolved} (from {path_str})"
+        )
+    if not resolved.is_file():
+        raise IsADirectoryError(f"Encryption path must be a file: {resolved}")
+
+    # Check faux packages first (higher priority)
+    for faux_path, (_, destpath) in local_deps.faux_pkgs.items():
+        if resolved.is_relative_to(faux_path):
+            new_path = f"{destpath}/{resolved.relative_to(faux_path)}:{attr_str}"
+            encryption_conf["path"] = new_path
+            return
+
+    # Check real packages
+    for real_path in local_deps.real_pkgs:
+        if resolved.is_relative_to(real_path):
+            new_path = (
+                f"/deps/{real_path.name}/{resolved.relative_to(real_path)}:{attr_str}"
+            )
+            encryption_conf["path"] = new_path
+            return
+
+    raise ValueError(
+        f"Encryption file '{resolved}' not covered by dependencies.\n"
+        "Add its parent directory to the 'dependencies' array in your config.\n"
+        f"Current dependencies: {config['dependencies']}"
+    )
+
+
 def _update_http_app_path(
     config_path: pathlib.Path, config: Config, local_deps: LocalDeps
 ) -> None:
@@ -809,6 +863,8 @@ def python_config_to_docker(
     _update_graph_paths(config_path, config, local_deps)
     # Rewrite auth path, so it points to the correct location in the Docker container
     _update_auth_path(config_path, config, local_deps)
+    # Rewrite encryption path, so it points to the correct location in the Docker container
+    _update_encryption_path(config_path, config, local_deps)
     # Rewrite HTTP app path, so it points to the correct location in the Docker container
     _update_http_app_path(config_path, config, local_deps)
 
@@ -899,8 +955,15 @@ ADD {relpath} /deps/{name}
     if (auth_config := config.get("auth")) is not None:
         env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
 
+    if (encryption_config := config.get("encryption")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
+
     if (http_config := config.get("http")) is not None:
         env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
+
+    # Inject webhooks configuration if provided
+    if (webhooks_config := config.get("webhooks")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
 
     if (checkpointer_config := config.get("checkpointer")) is not None:
         env_vars.append(
@@ -1022,8 +1085,15 @@ def node_config_to_docker(
     if (auth_config := config.get("auth")) is not None:
         env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
 
+    if (encryption_config := config.get("encryption")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
+
     if (http_config := config.get("http")) is not None:
         env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
+
+    # Inject webhooks configuration if provided
+    if (webhooks_config := config.get("webhooks")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
 
     if (checkpointer_config := config.get("checkpointer")) is not None:
         env_vars.append(

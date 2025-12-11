@@ -302,6 +302,27 @@ class AuthConfig(TypedDict, total=False):
     """
 
 
+class EncryptionConfig(TypedDict, total=False):
+    """Configuration for custom at-rest encryption logic.
+
+    Allows you to implement custom encryption for sensitive data stored in the database,
+    including metadata fields and checkpoint blobs.
+    """
+
+    path: str
+    """Required. Path to an instance of the Encryption() class that implements custom encryption handlers.
+
+    Format: "path/to/file.py:my_encryption"
+
+    Example:
+        {
+            "encryption": {
+                "path": "./encryption.py:my_encryption"
+            }
+        }
+    """
+
+
 class CorsConfig(TypedDict, total=False):
     """Specifies Cross-Origin Resource Sharing (CORS) rules for your server.
 
@@ -341,7 +362,7 @@ class CorsConfig(TypedDict, total=False):
     """
 
 
-class ConfigurableHeaderConfig(TypedDict):
+class ConfigurableHeaderConfig(TypedDict, total=False):
     """Customize which headers to include as configurable values in your runs.
 
     By default, omits x-api-key, x-tenant-id, and x-service-key.
@@ -352,7 +373,7 @@ class ConfigurableHeaderConfig(TypedDict):
     """
 
     includes: list[str] | None
-    """Headers to include (if not also matches against an 'exludes' pattern.
+    """Headers to include (if not also matched against an 'excludes' pattern).
 
     Examples:
         - 'user-agent'
@@ -461,6 +482,46 @@ class HttpConfig(TypedDict, total=False):
     
     Example:
         "/api"
+    """
+
+
+class WebhookUrlPolicy(TypedDict, total=False):
+    require_https: bool
+    """Enforce HTTPS scheme for absolute URLs; reject `http://` when true."""
+    allowed_domains: list[str]
+    """Hostname allowlist. Supports exact hosts and wildcard subdomains.
+
+    Use entries like "hooks.example.com" or "*.mycorp.com". The wildcard only
+    matches subdomains ("foo.mycorp.com"), not the apex ("mycorp.com"). When
+    empty or omitted, any public host is allowed (subject to SSRF IP checks).
+    """
+    allowed_ports: list[int]
+    """Explicit port allowlist for absolute URLs.
+
+    If set, requests must use one of these ports. Defaults are respected when
+    a port is not present in the URL (443 for https, 80 for http).
+    """
+    max_url_length: int
+    """Maximum permitted URL length in characters; longer inputs are rejected early."""
+    disable_loopback: bool
+    """Disallow relative URLs (internal loopback calls) when true."""
+
+
+class WebhooksConfig(TypedDict, total=False):
+    env_prefix: str
+    """Required prefix for environment variables referenced in header templates.
+
+    Acts as an allowlist boundary to prevent leaking arbitrary environment
+    variables. Defaults to "LG_WEBHOOK_" when omitted.
+    """
+    url: WebhookUrlPolicy
+    """URL validation policy for user-supplied webhook endpoints."""
+    headers: dict[str, str]
+    """Static headers to include with webhook requests.
+
+    Values may contain templates of the form "${{ env.VAR }}". On startup, these
+    are resolved via the process environment after verifying `VAR` starts with
+    `env_prefix`. Mixed literals and multiple templates are allowed.
     """
 
 
@@ -577,13 +638,26 @@ class Config(TypedDict, total=False):
     """
 
     auth: AuthConfig | None
-    """Optional. Custom authentication config, including the path to your Python auth logic and 
+    """Optional. Custom authentication config, including the path to your Python auth logic and
     the OpenAPI security definitions it uses.
+    """
+
+    encryption: EncryptionConfig | None
+    """Optional. Custom at-rest encryption config, including the path to your Python encryption logic.
+
+    Allows you to implement custom encryption for sensitive data stored in the database.
     """
 
     http: HttpConfig | None
     """Optional. Configuration for the built-in HTTP server, controlling which custom routes are exposed
     and how cross-origin requests are handled.
+    """
+
+    webhooks: WebhooksConfig | None
+    """Optional. Webhooks configuration for outbound event delivery.
+
+    Forwarded into the container as `LANGGRAPH_WEBHOOKS`. See `WebhooksConfig`
+    for URL policy and header templating details.
     """
 
     ui: dict[str, str] | None
@@ -603,6 +677,7 @@ __all__ = [
     "StoreConfig",
     "CheckpointerConfig",
     "AuthConfig",
+    "EncryptionConfig",
     "HttpConfig",
     "MiddlewareOrders",
     "Distros",
