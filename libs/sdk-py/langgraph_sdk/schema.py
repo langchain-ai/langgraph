@@ -519,7 +519,7 @@ class StreamPart(NamedTuple):
     """The type of event for this stream part."""
     data: dict
     """The data payload associated with the event."""
-    id: str | None
+    id: str | None = None
     """The ID of the event."""
 
 
