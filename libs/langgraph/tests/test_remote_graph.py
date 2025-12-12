@@ -567,9 +567,9 @@ def test_stream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        ("updates", {"chunk": "data3"}, "1"),
-        ("updates", {"chunk": "data4"}, "2"),
-        ("updates", {"__interrupt__": ()}, "2"),
+        ("updates", {"chunk": "data3"}, None),
+        ("updates", {"chunk": "data4"}, None),
+        ("updates", {"__interrupt__": ()}, None),
     ]
 
     # subgraphs + list modes
@@ -583,9 +583,9 @@ def test_stream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        ((), "updates", {"chunk": "data3"}, "1"),
-        ((), "updates", {"chunk": "data4"}, "2"),
-        ((), "updates", {"__interrupt__": ()}, "2"),
+        ((), "updates", {"chunk": "data3"}),
+        ((), "updates", {"chunk": "data4"}),
+        ((), "updates", {"__interrupt__": ()}),
     ]
 
     # subgraphs + single mode
@@ -598,9 +598,9 @@ def test_stream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        ((), {"chunk": "data3"}, "1"),
-        ((), {"chunk": "data4"}, "2"),
-        ((), {"__interrupt__": ()}, "2"),
+        ((), {"chunk": "data3"}),
+        ((), {"chunk": "data4"}),
+        ((), {"__interrupt__": ()}),
     ]
 
 
@@ -739,9 +739,9 @@ async def test_astream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        ("updates", {"chunk": "data3"}, "1"),
-        ("updates", {"chunk": "data4"}, "2"),
-        ("updates", {"__interrupt__": ()}, "2"),
+        ("updates", {"chunk": "data3"}, None),
+        ("updates", {"chunk": "data4"}, None),
+        ("updates", {"__interrupt__": ()}, None),
     ]
 
     # subgraphs + list modes
@@ -755,9 +755,9 @@ async def test_astream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        ((), "updates", {"chunk": "data3"}, "1"),
-        ((), "updates", {"chunk": "data4"}, "2"),
-        ((), "updates", {"__interrupt__": ()}, "2"),
+        ((), "updates", {"chunk": "data3"}),
+        ((), "updates", {"chunk": "data4"}),
+        ((), "updates", {"__interrupt__": ()}),
     ]
 
     # subgraphs + single mode
@@ -770,9 +770,9 @@ async def test_astream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        ((), {"chunk": "data3"}, "1"),
-        ((), {"chunk": "data4"}, "2"),
-        ((), {"__interrupt__": ()}, "2"),
+        ((), {"chunk": "data3"}),
+        ((), {"chunk": "data4"}),
+        ((), {"__interrupt__": ()}),
     ]
 
     async_iter = MagicMock()
@@ -794,9 +794,9 @@ async def test_astream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        (("my", "subgraph"), "updates", {"chunk": "data3"}, "1"),
-        (("hello", "subgraph"), "updates", {"chunk": "data4"}, "2"),
-        (("bye", "subgraph"), "updates", {"__interrupt__": ()}, "2"),
+        (("my", "subgraph"), "updates", {"chunk": "data3"}),
+        (("hello", "subgraph"), "updates", {"chunk": "data4"}),
+        (("bye", "subgraph"), "updates", {"__interrupt__": ()}),
     ]
 
     # subgraphs + single mode
@@ -809,9 +809,9 @@ async def test_astream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        (("my", "subgraph"), {"chunk": "data3"}, "1"),
-        (("hello", "subgraph"), {"chunk": "data4"}, "2"),
-        (("bye", "subgraph"), {"__interrupt__": ()}, "2"),
+        (("my", "subgraph"), {"chunk": "data3"}),
+        (("hello", "subgraph"), {"chunk": "data4"}),
+        (("bye", "subgraph"), {"__interrupt__": ()}),
     ]
 
 
