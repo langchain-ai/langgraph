@@ -957,7 +957,16 @@ def create_react_agent(
     )
 
     def route_tool_responses(state: StateSchema) -> str:
-        for m in reversed(_get_state_value(state, "messages")):
+        messages = _get_state_value(state, "messages")
+        last_message = messages[-1]
+
+        # If the last message is an AIMessage, it means a tool used Command to add it.
+        # This indicates the tool wants to end the conversation (e.g., Command(goto="__end__")).
+        # We should respect this and route to END instead of continuing the agent loop.
+        if isinstance(last_message, AIMessage):
+            return END
+
+        for m in reversed(messages):
             if not isinstance(m, ToolMessage):
                 break
             if m.name in should_return_direct:
@@ -971,12 +980,11 @@ def create_react_agent(
 
         return entrypoint
 
-    if should_return_direct:
-        workflow.add_conditional_edges(
-            "tools", route_tool_responses, path_map=[entrypoint, END]
-        )
-    else:
-        workflow.add_edge("tools", entrypoint)
+    # Always use conditional edges to allow Command(goto="__end__") from tools
+    # to be respected. The path_map must include END to enable this.
+    workflow.add_conditional_edges(
+        "tools", route_tool_responses, path_map=[entrypoint, END]
+    )
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
