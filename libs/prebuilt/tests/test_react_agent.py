@@ -53,7 +53,6 @@ from langgraph.prebuilt.chat_agent_executor import (
 from langgraph.prebuilt.tool_node import (
     InjectedState,
     InjectedStore,
-    _get_state_args,
     _infer_handled_types,
 )
 from tests.any_str import AnyStr
@@ -639,8 +638,9 @@ def test_react_agent_parallel_tool_calls(
     for event in agent.stream(
         {"messages": [("user", query)]}, config, stream_mode="values"
     ):
-        if messages := event.get("messages"):
-            message_types.append([m.type for m in messages])
+        if "__interrupt__" not in event: 
+            if messages := event.get("messages"):
+                message_types.append([m.type for m in messages])
 
     if version == "v1":
         assert message_types == [
@@ -1082,21 +1082,6 @@ async def test_return_direct(version: str) -> None:
             id=result["messages"][3].id,
         ),
     ]
-
-
-def test__get_state_args() -> None:
-    class Schema1(BaseModel):
-        a: Annotated[str, InjectedState]
-
-    class Schema2(Schema1):
-        b: Annotated[int, InjectedState("bar")]
-
-    @dec_tool(args_schema=Schema2)
-    def foo(a: str, b: int) -> float:
-        """return"""
-        return 0.0
-
-    assert _get_state_args(foo) == {"a": None, "b": "bar"}
 
 
 def test_inspect_react() -> None:

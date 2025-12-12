@@ -129,11 +129,25 @@ REDIRECT_MAP = {
     "how-tos/human_in_the_loop/edit-graph-state.ipynb": "https://docs.langchain.com/oss/python/langgraph/use-time-travel",
 
     # LGP mintlify migration redirects
+    "examples/index.md": "https://docs.langchain.com/oss/python/learn",
+    "guides/index.md": "https://docs.langchain.com/oss/python/langgraph/overview",
+    "concepts/index.md": "https://docs.langchain.com/oss/python/langgraph/overview",
+    "tutorials/index.md": "https://docs.langchain.com/oss/python/learn",
+    "llms-txt-overview.md": "https://docs.langchain.com/llms.txt",
+    "tutorials/rag/langgraph_adaptive_rag.md": "https://docs.langchain.com/oss/python/langgraph/agentic-rag",
+    "tutorials/multi_agent/multi-agent-collaboration.ipynb": "https://docs.langchain.com/oss/python/langchain/multi-agent",
+    "how-tos/create-react-agent-manage-message-history.ipynb": "https://docs.langchain.com/oss/python/langgraph/add-memory",
+    "how-tos/many-tools.ipynb": "https://docs.langchain.com/oss/python/langchain/tools",
+    "tutorials/customer-support/customer-support.ipynb": "https://docs.langchain.com/oss/python/langgraph/agentic-rag",
+    "how-tos/react-agent-structured-output.ipynb": "https://docs.langchain.com/oss/python/langchain/agents#structured-output",
+    "tutorials/code_assistant/langgraph_code_assistant.ipynb": "https://docs.langchain.com/oss/python/langgraph/agentic-rag",
+    "tutorials/multi_agent/hierarchical_agent_teams.ipynb": "https://docs.langchain.com/oss/python/langchain/supervisor",
     "tutorials/auth/getting_started.md": "https://docs.langchain.com/langsmith/auth",
     "tutorials/auth/resource_auth.md": "https://docs.langchain.com/langsmith/resource-auth",
     "tutorials/auth/add_auth_server.md": "https://docs.langchain.com/langsmith/add-auth-server",
     "how-tos/use-remote-graph.md": "https://docs.langchain.com/langsmith/use-remote-graph",
     "how-tos/autogen-integration.md": "https://docs.langchain.com/langsmith/autogen-integration",
+    "how-tos/human_in_the_loop/wait-user-input.ipynb": "https://docs.langchain.com/oss/python/langgraph/interrupts",
     "cloud/how-tos/use_stream_react.md": "https://docs.langchain.com/langsmith/use-stream-react",
     "cloud/how-tos/generative_ui_react.md": "https://docs.langchain.com/langsmith/generative-ui-react",
     "concepts/langgraph_platform.md": "https://docs.langchain.com/langsmith/deployments",
@@ -219,12 +233,15 @@ REDIRECT_MAP = {
     "tutorials/get-started/6-time-travel.md": "https://docs.langchain.com/oss/python/langgraph/quickstart",
     "tutorials/langsmith/local-server.md": "https://docs.langchain.com/oss/python/langgraph/local-server",
     "tutorials/workflows.md": "https://docs.langchain.com/oss/python/langgraph/workflows-agents",
+    "tutorials/plan-and-execute/plan-and-execute.ipynb": "https://docs.langchain.com/oss/python/langchain/middleware/built-in#to-do-list",
+    "tutorials/langgraph-platform/local-server/local-server.md": "https://docs.langchain.com/langsmith/local-server",
     "concepts/agentic_concepts.md": "https://docs.langchain.com/oss/python/langgraph/workflows-agents",
     "guides/index.md": "https://docs.langchain.com/oss/python/langchain/overview",
     "agents/overview.md": "https://docs.langchain.com/oss/python/langchain/agents",
     "agents/run_agents.md": "https://docs.langchain.com/oss/python/langgraph/quickstart",
     "concepts/low_level.md": "https://docs.langchain.com/oss/python/langgraph/graph-api",
     "how-tos/graph-api.md": "https://docs.langchain.com/oss/python/langgraph/graph-api",
+    "how-tos/react-agent-from-scratch.ipynb": "https://docs.langchain.com/oss/python/langchain/quickstart",
     "concepts/functional_api.md": "https://docs.langchain.com/oss/python/langgraph/functional-api",
     "how-tos/use-functional-api.md": "https://docs.langchain.com/oss/python/langgraph/functional-api",
     "concepts/pregel.md": "https://docs.langchain.com/oss/python/langgraph/pregel",
@@ -282,8 +299,8 @@ REDIRECT_MAP = {
     "reference/supervisor.md": "https://reference.langchain.com/python/langgraph/supervisor/",
     "reference/swarm.md": "https://reference.langchain.com/python/langgraph/swarm/",
     "reference/mcp.md": "https://reference.langchain.com/python/langgraph/mcp/",
-    "cloud/reference/sdk/python_sdk_ref.md": "https://reference.langchain.com/python/platform/python_sdk/",
-    "reference/remote_graph.md": "https://reference.langchain.com/python/platform/remote_graph/",
+    "cloud/reference/sdk/python_sdk_ref.md": "https://reference.langchain.com/python/langsmith/deployment/sdk/",
+    "reference/remote_graph.md": "https://reference.langchain.com/python/langsmith/deployment/remote_graph/",
 
     # additional exclude-search entries from mkdocs.yml
     "additional-resources/index.md": "https://docs.langchain.com/oss/python/langchain/overview",
@@ -793,6 +810,17 @@ def on_post_build(config):
     # Track which paths have explicit redirects
     redirected_paths = set()
 
+    # Collect all existing HTML files in the site
+    all_html_files = set()
+    for root, dirs, files in os.walk(site_dir):
+        for file in files:
+            if file.endswith(".html"):
+                # Get relative path from site_dir
+                html_path = os.path.relpath(os.path.join(root, file), site_dir)
+                # Normalize path separators to forward slashes
+                html_path = html_path.replace(os.sep, "/")
+                all_html_files.add(html_path)
+
     # Process explicit redirects from REDIRECT_MAP
     for page_old, page_new in REDIRECT_MAP.items():
         # Convert .ipynb to .md for path calculation
@@ -846,6 +874,24 @@ def on_post_build(config):
                 new_html_path += hash + suffix
 
             _write_html(site_dir, old_html_path, new_html_path)
+
+    # Create catch-all redirects for any HTML files not explicitly redirected
+    catchall_url = "https://docs.langchain.com/oss/python/langgraph/overview"
+    for html_file in all_html_files:
+        # Skip if this file is already explicitly redirected
+        if html_file in redirected_paths:
+            continue
+
+        # Skip the root index.html (we handle that separately)
+        if html_file == "index.html":
+            continue
+
+        # Skip reference documentation (keep those accessible)
+        if html_file.startswith("reference/"):
+            continue
+
+        # Create redirect for this unmapped file
+        _write_html(site_dir, html_file, catchall_url)
 
     # Create root index.html redirect
     root_redirect_html = """<!doctype html>

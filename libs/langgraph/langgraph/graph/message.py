@@ -88,8 +88,8 @@ def add_messages(
         If a message in `right` has the same ID as a message in `left`, the
             message from `right` will replace the message from `left`.
 
-    Example:
-        ```python title="Basic usage"
+    Example: Basic usage
+        ```python
         from langchain_core.messages import AIMessage, HumanMessage
 
         msgs1 = [HumanMessage(content="Hello", id="1")]
@@ -98,14 +98,16 @@ def add_messages(
         # [HumanMessage(content='Hello', id='1'), AIMessage(content='Hi there!', id='2')]
         ```
 
-        ```python title="Overwrite existing message"
+    Example: Overwrite existing message
+        ```python
         msgs1 = [HumanMessage(content="Hello", id="1")]
         msgs2 = [HumanMessage(content="Hello again", id="1")]
         add_messages(msgs1, msgs2)
         # [HumanMessage(content='Hello again', id='1')]
         ```
 
-        ```python title="Use in a StateGraph"
+    Example: Use in a StateGraph
+        ```python
         from typing import Annotated
         from typing_extensions import TypedDict
         from langgraph.graph import StateGraph
@@ -124,7 +126,8 @@ def add_messages(
         # {'messages': [AIMessage(content='Hello', id=...)]}
         ```
 
-        ```python title="Use OpenAI message format"
+    Example: Use OpenAI message format
+        ```python
         from typing import Annotated
         from typing_extensions import TypedDict
         from langgraph.graph import StateGraph, add_messages

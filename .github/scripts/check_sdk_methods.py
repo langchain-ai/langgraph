@@ -38,7 +38,7 @@ def main():
         tree = ast.parse(file.read())
 
     classes = find_classes(tree)
-  
+
     def is_sync(class_spec: Tuple[str, List[str]]) -> bool:
         return class_spec[0].startswith("Sync")
 
