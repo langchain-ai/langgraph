@@ -44,7 +44,7 @@ import inspect
 import json
 from collections.abc import Awaitable, Callable
 from copy import copy, deepcopy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from types import UnionType
 from typing import (
     TYPE_CHECKING,
@@ -1003,7 +1003,8 @@ class ToolNode(RunnableCallable):
             runtime=tool_runtime,
         )
 
-        config = tool_runtime.config
+        # ToolNode always creates ToolRuntime with a valid config, so this is safe
+        config = cast("RunnableConfig", tool_runtime.config)
 
         if self._wrap_tool_call is None:
             # No wrapper - execute directly
@@ -1156,7 +1157,8 @@ class ToolNode(RunnableCallable):
             runtime=tool_runtime,
         )
 
-        config = tool_runtime.config
+        # ToolNode always creates ToolRuntime with a valid config, so this is safe
+        config = cast("RunnableConfig", tool_runtime.config)
 
         if self._awrap_tool_call is None and self._wrap_tool_call is None:
             # No wrapper - execute directly
@@ -1515,11 +1517,10 @@ def tools_condition(
 
 @dataclass
 class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
-    """Runtime context automatically injected into tools.
+    """Runtime context automatically injected into tools by `ToolNode`.
 
-    When a tool function has a parameter named `tool_runtime` with type hint
-    `ToolRuntime`, the tool execution system will automatically inject an instance
-    containing:
+    When a tool function has a parameter with type hint `ToolRuntime`, the
+    `ToolNode` will automatically inject an instance containing:
 
     - `state`: The current graph state
     - `tool_call_id`: The ID of the current tool call
@@ -1531,6 +1532,22 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     No `Annotated` wrapper is needed - just use `runtime: ToolRuntime`
     as a parameter.
 
+    All fields default to `None` to allow instantiation without arguments.
+    When used with `ToolNode`, all fields will be properly populated with
+    runtime values.
+
+    !!! important
+        Tools with `ToolRuntime` parameters **must** be invoked through `ToolNode`
+        for proper runtime injection. If you need to invoke tools directly with
+        a custom tool node, use a default value:
+        ```python
+        @tool
+        def my_tool(x: int, runtime: ToolRuntime = None) -> str:
+            if runtime is None:
+                # Handle case when invoked outside ToolNode
+                ...
+        ```
+
     Example:
         ```python
         from langchain_core.tools import tool
@@ -1540,22 +1557,22 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
         def my_tool(x: int, runtime: ToolRuntime) -> str:
             \"\"\"Tool that accesses runtime context.\"\"\"
             # Access state
-            messages = tool_runtime.state["messages"]
+            messages = runtime.state["messages"]
 
             # Access tool_call_id
-            print(f"Tool call ID: {tool_runtime.tool_call_id}")
+            print(f"Tool call ID: {runtime.tool_call_id}")
 
             # Access config
-            print(f"Run ID: {tool_runtime.config.get('run_id')}")
+            print(f"Run ID: {runtime.config.get('run_id')}")
 
             # Access runtime context
-            user_id = tool_runtime.context.get("user_id")
+            user_id = runtime.context.get("user_id")
 
             # Access store
-            tool_runtime.store.put(("metrics",), "count", 1)
+            runtime.store.put(("metrics",), "count", 1)
 
             # Stream output
-            tool_runtime.stream_writer.write("Processing...")
+            runtime.stream_writer.write("Processing...")
 
             return f"Processed {x}"
         ```
@@ -1565,12 +1582,40 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
         The actual runtime object will be constructed during tool execution.
     """
 
-    state: StateT
-    context: ContextT
-    config: RunnableConfig
-    stream_writer: StreamWriter
-    tool_call_id: str | None
-    store: BaseStore | None
+    state: StateT = field(default=None)  # type: ignore[assignment]
+    context: ContextT = field(default=None)  # type: ignore[assignment]
+    config: RunnableConfig | None = field(default=None)
+    stream_writer: StreamWriter | None = field(default=None)
+    tool_call_id: str | None = field(default=None)
+    store: BaseStore | None = field(default=None)
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls,
+        source_type: Any,
+        handler: Any,
+    ) -> Any:
+        """Customize pydantic schema to make ToolRuntime optional with None default.
+
+        This allows tools with ToolRuntime parameters to pass pydantic validation
+        when invoked directly (outside of ToolNode). The runtime parameter will
+        default to None if not provided.
+
+        Note: Even with this schema customization, tools invoked directly (not
+        through ToolNode) need to declare a default value in their function
+        signature (e.g., `runtime: ToolRuntime = None`) for the actual function
+        call to work.
+        """
+        from pydantic_core import core_schema
+
+        # Get the default schema for the dataclass
+        default_schema = handler(source_type)
+
+        # Wrap with a schema that accepts None or ToolRuntime, defaulting to None
+        return core_schema.with_default_schema(
+            core_schema.nullable_schema(default_schema),
+            default=None,
+        )
 
 
 class InjectedState(InjectedToolArg):
