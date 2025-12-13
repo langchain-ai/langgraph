@@ -957,26 +957,48 @@ def create_react_agent(
     )
 
     def route_tool_responses(state: StateSchema) -> str:
-        for m in reversed(_get_state_value(state, "messages")):
-            if not isinstance(m, ToolMessage):
+        messages = _get_state_value(state, "messages")
+
+        # Check for any messages added by tools that are NOT ToolMessages.
+        # If a tool returns a Command(update={"messages": [...]}), it can add any type of message.
+        # If we see a non-ToolMessage (e.g. AIMessage) after the last tool call request,
+        # it means a tool used Command to update state, likely with goto="node" or goto=END.
+        # In this case, we should respect the tool's intent and stop the loop (return END).
+        for m in reversed(messages):
+            if isinstance(m, AIMessage) and m.tool_calls:
+                # We reached the message that triggered the tool calls.
+                # If we're here, it means we scanned back through the tool outputs
+                # and didn't find any non-ToolMessages.
                 break
+                
+            if not isinstance(m, ToolMessage):
+                # Found a non-ToolMessage (e.g. AIMessage) injected by a tool.
+                return END
+            
+            # Existing check for return_direct
             if m.name in should_return_direct:
                 return END
 
         # handle a case of parallel tool calls where
         # the tool w/ `return_direct` was executed in a different `Send`
-        if isinstance(m, AIMessage) and m.tool_calls:
-            if any(call["name"] in should_return_direct for call in m.tool_calls):
-                return END
+        # and the tool message is not yet in the state
+        # Note: This logic seems to rely on 'm' persisting from the loop which is risky if loop doesn't run.
+        # But 'messages' should not be empty here if we are routing tool responses.
+        # Let's be safer and re-find the last AIMessage.
+        try:
+             last_ai_message = next(m for m in reversed(messages) if isinstance(m, AIMessage) and m.tool_calls)
+             if any(call["name"] in should_return_direct for call in last_ai_message.tool_calls):
+                 return END
+        except StopIteration:
+            pass
 
         return entrypoint
 
-    if should_return_direct:
-        workflow.add_conditional_edges(
-            "tools", route_tool_responses, path_map=[entrypoint, END]
-        )
-    else:
-        workflow.add_edge("tools", entrypoint)
+    # Always use conditional edges to allow Command(goto="__end__") from tools
+    # to be respected. The path_map must include END to enable this.
+    workflow.add_conditional_edges(
+        "tools", route_tool_responses, path_map=[entrypoint, END]
+    )
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,

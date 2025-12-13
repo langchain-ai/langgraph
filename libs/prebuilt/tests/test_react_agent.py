@@ -638,7 +638,7 @@ def test_react_agent_parallel_tool_calls(
     for event in agent.stream(
         {"messages": [("user", query)]}, config, stream_mode="values"
     ):
-        if "__interrupt__" not in event: 
+        if "__interrupt__" not in event:
             if messages := event.get("messages"):
                 message_types.append([m.type for m in messages])
 
@@ -2093,6 +2093,62 @@ def test_post_model_hook_with_structured_output() -> None:
             }
         },
     ]
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_tool_command_goto_end(version: Literal["v1", "v2"]) -> None:
+    """Test that Command(goto="__end__") from a tool terminates the graph.
+
+    Regression test for issue #6578: Command(goto="__end__") returned from tool
+    does not stop agent loop in create_agent.
+    """
+    from langgraph.prebuilt.tool_node import ToolRuntime
+
+    @dec_tool
+    def clarify_user(
+        question: str,
+        runtime: ToolRuntime,
+    ) -> Command:
+        """Request clarification from the user when intent is ambiguous."""
+        return Command(
+            goto="__end__",
+            update={
+                "messages": [
+                    ToolMessage(
+                        content="success",
+                        tool_call_id=runtime.tool_call_id,
+                        name="clarify_user",
+                    ),
+                    AIMessage(content=question),
+                ],
+            },
+        )
+
+    tool_calls = [
+        [{"args": {"question": "What do you mean?"}, "id": "1", "name": "clarify_user"}]
+    ]
+    model = FakeToolCallingModel(tool_calls=tool_calls)
+
+    agent = create_react_agent(
+        model,
+        tools=[clarify_user],
+        version=version,
+    )
+
+    # This should terminate after clarify_user returns Command(goto="__end__")
+    result = agent.invoke({"messages": [HumanMessage(content="hello")]})
+
+    # The graph should have terminated after the tool execution
+    # We should have: HumanMessage, AIMessage (with tool call), ToolMessage, AIMessage
+    assert len(result["messages"]) == 4
+    assert isinstance(result["messages"][0], HumanMessage)
+    assert isinstance(result["messages"][1], AIMessage)
+    assert result["messages"][1].tool_calls  # AI requested the tool call
+    assert isinstance(result["messages"][2], ToolMessage)
+    assert result["messages"][2].content == "success"
+    # The final message is the AIMessage injected by the Command
+    assert isinstance(result["messages"][3], AIMessage)
+    assert result["messages"][3].content == "What do you mean?"
 
 
 @pytest.mark.parametrize(
