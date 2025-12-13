@@ -399,6 +399,26 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
+        # Wait for pending batch operations to complete
+        if hasattr(self, "_aqueue") and hasattr(self, "_task"):
+            # Wait for the queue to be empty (all pending operations processed)
+            while not self._aqueue.empty():
+                await asyncio.sleep(0.01)
+
+            # Give a brief moment for any recently dequeued operations to complete
+            # This prevents race conditions where items were just removed from queue
+            # but are still being processed
+            if self._task is not None and not self._task.done():
+                await asyncio.sleep(0.05)
+
+            # Cancel the background batch task
+            if self._task is not None and not self._task.done():
+                self._task.cancel()
+                try:
+                    await self._task
+                except asyncio.CancelledError:
+                    pass
+
         # Ensure the TTL sweeper task is stopped when exiting the context
         if hasattr(self, "_ttl_sweeper_task") and self._ttl_sweeper_task is not None:
             # Set the event to signal the task to stop
