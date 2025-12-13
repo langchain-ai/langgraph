@@ -958,25 +958,39 @@ def create_react_agent(
 
     def route_tool_responses(state: StateSchema) -> str:
         messages = _get_state_value(state, "messages")
-        last_message = messages[-1]
 
-        # If the last message is an AIMessage, it means a tool used Command to add it.
-        # This indicates the tool wants to end the conversation (e.g., Command(goto="__end__")).
-        # We should respect this and route to END instead of continuing the agent loop.
-        if isinstance(last_message, AIMessage):
-            return END
-
+        # Check for any messages added by tools that are NOT ToolMessages.
+        # If a tool returns a Command(update={"messages": [...]}), it can add any type of message.
+        # If we see a non-ToolMessage (e.g. AIMessage) after the last tool call request,
+        # it means a tool used Command to update state, likely with goto="node" or goto=END.
+        # In this case, we should respect the tool's intent and stop the loop (return END).
         for m in reversed(messages):
-            if not isinstance(m, ToolMessage):
+            if isinstance(m, AIMessage) and m.tool_calls:
+                # We reached the message that triggered the tool calls.
+                # If we're here, it means we scanned back through the tool outputs
+                # and didn't find any non-ToolMessages.
                 break
+                
+            if not isinstance(m, ToolMessage):
+                # Found a non-ToolMessage (e.g. AIMessage) injected by a tool.
+                return END
+            
+            # Existing check for return_direct
             if m.name in should_return_direct:
                 return END
 
         # handle a case of parallel tool calls where
         # the tool w/ `return_direct` was executed in a different `Send`
-        if isinstance(m, AIMessage) and m.tool_calls:
-            if any(call["name"] in should_return_direct for call in m.tool_calls):
-                return END
+        # and the tool message is not yet in the state
+        # Note: This logic seems to rely on 'm' persisting from the loop which is risky if loop doesn't run.
+        # But 'messages' should not be empty here if we are routing tool responses.
+        # Let's be safer and re-find the last AIMessage.
+        try:
+             last_ai_message = next(m for m in reversed(messages) if isinstance(m, AIMessage) and m.tool_calls)
+             if any(call["name"] in should_return_direct for call in last_ai_message.tool_calls):
+                 return END
+        except StopIteration:
+            pass
 
         return entrypoint
 
