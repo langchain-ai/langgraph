@@ -266,6 +266,79 @@ def _validate_chat_history(
     raise ValueError(error_message)
 
 
+# Content block types that should be filtered from AIMessage responses
+# These are internal reasoning blocks that some models (e.g., DeepSeek with thinking mode,
+# Claude with extended thinking) return but that cannot be sent back in subsequent requests.
+THINKING_CONTENT_BLOCK_TYPES = frozenset({"thinking"})
+
+
+def _filter_thinking_blocks(response: AIMessage) -> AIMessage:
+    """Filter out thinking/reasoning content blocks from an AIMessage.
+
+    Some models (e.g., DeepSeek with thinking mode enabled) return AIMessages
+    with content blocks like:
+    [{"type": "thinking", "thinking": "..."}, {"type": "text", "text": "..."}]
+
+    These thinking blocks cannot be sent back to the API in subsequent requests,
+    causing 400 errors. This function filters them out while preserving the
+    thinking content in response_metadata for debugging/logging purposes.
+
+    Args:
+        response: The AIMessage response from the model.
+
+    Returns:
+        The AIMessage with thinking blocks filtered from content and
+        preserved in response_metadata.
+    """
+    if not isinstance(response.content, list):
+        return response
+
+    # Separate thinking blocks from other content
+    thinking_blocks = []
+    filtered_content: list[str | dict] = []
+
+    for block in response.content:
+        if isinstance(block, dict) and block.get("type") in THINKING_CONTENT_BLOCK_TYPES:
+            thinking_blocks.append(block)
+        else:
+            filtered_content.append(block)
+
+    # If no thinking blocks found, return original response
+    if not thinking_blocks:
+        return response
+
+    # Determine the new content value
+    new_content: str | list[str | dict]
+    if len(filtered_content) == 0:
+        # All content was thinking blocks - use empty string
+        new_content = ""
+    elif len(filtered_content) == 1 and isinstance(filtered_content[0], dict):
+        # Single text block - extract the text if it's a text type block
+        single_block = filtered_content[0]
+        if single_block.get("type") == "text" and "text" in single_block:
+            new_content = single_block["text"]
+        else:
+            new_content = filtered_content
+    else:
+        new_content = filtered_content
+
+    # Preserve thinking blocks in response_metadata
+    new_metadata = dict(response.response_metadata) if response.response_metadata else {}
+    new_metadata["thinking_blocks"] = thinking_blocks
+
+    # Create new AIMessage with filtered content
+    return AIMessage(
+        content=new_content,
+        additional_kwargs=response.additional_kwargs,
+        response_metadata=new_metadata,
+        name=response.name,
+        id=response.id,
+        tool_calls=response.tool_calls,
+        invalid_tool_calls=response.invalid_tool_calls,
+        usage_metadata=response.usage_metadata,
+    )
+
+
 @deprecated(
     "create_react_agent has been moved to `langchain.agents`. Please update your import to `from langchain.agents import create_agent`.",
     category=LangGraphDeprecatedSinceV10,
@@ -667,6 +740,11 @@ def create_react_agent(
         else:
             response = cast(AIMessage, static_model.invoke(model_input, config))  # type: ignore[union-attr]
 
+        # Filter out thinking blocks from the response content
+        # (e.g., from DeepSeek with thinking mode, Claude extended thinking)
+        # to prevent them from being sent back to the API in subsequent requests
+        response = _filter_thinking_blocks(response)
+
         # add agent name to the AIMessage
         response.name = name
 
@@ -694,6 +772,11 @@ def create_react_agent(
             response = cast(AIMessage, await dynamic_model.ainvoke(model_input, config))  # type: ignore[arg-type]
         else:
             response = cast(AIMessage, await static_model.ainvoke(model_input, config))  # type: ignore[union-attr]
+
+        # Filter out thinking blocks from the response content
+        # (e.g., from DeepSeek with thinking mode, Claude extended thinking)
+        # to prevent them from being sent back to the API in subsequent requests
+        response = _filter_thinking_blocks(response)
 
         # add agent name to the AIMessage
         response.name = name
