@@ -281,8 +281,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         async with self.lock:
             if self.is_setup:
                 return
-            if not self.conn.is_alive():
-                await self.conn
             async with self.conn.executescript(
                 """
                 PRAGMA journal_mode=WAL;
