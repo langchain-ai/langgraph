@@ -32,7 +32,7 @@ test = [
 lint = [
     "ruff==0.14.7",
     "codespell",
-    "mypy==1.19.0",
+    "mypy==1.19.1",
     "ty==0.0.1a27",
     "starlette",
 ]
