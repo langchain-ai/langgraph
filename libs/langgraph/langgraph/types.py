@@ -87,6 +87,7 @@ def ensure_valid_checkpointer(checkpointer: Checkpointer) -> Checkpointer:
         )
     return checkpointer
 
+
 StreamMode = Literal[
     "values", "updates", "checkpoints", "tasks", "debug", "messages", "custom"
 ]
