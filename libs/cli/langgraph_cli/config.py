@@ -1205,9 +1205,9 @@ def _calculate_relative_workdir(config_path: pathlib.Path, build_context: str) -
 def config_to_docker(
     config_path: pathlib.Path,
     config: Config,
+    *,
     base_image: str | None = None,
     api_version: str | None = None,
-    *,
     install_command: str | None = None,
     build_command: str | None = None,
     build_context: str | None = None,
@@ -1217,17 +1217,21 @@ def config_to_docker(
 
     if config.get("node_version") and not config.get("python_version"):
         return node_config_to_docker(
-            config_path,
-            config,
-            base_image,
-            api_version,
-            install_command,
-            build_command,
-            build_context,
+            config_path=config_path,
+            config=config,
+            base_image=base_image,
+            api_version=api_version,
+            install_command=install_command,
+            build_command=build_command,
+            build_context=build_context,
         )
 
     return python_config_to_docker(
-        config_path, config, base_image, api_version, escape_variables=escape_variables
+        config_path=config_path,
+        config=config,
+        base_image=base_image,
+        api_version=api_version,
+        escape_variables=escape_variables,
     )
 
 
@@ -1272,7 +1276,11 @@ def config_to_compose(
 
     else:
         dockerfile, additional_contexts = config_to_docker(
-            config_path, config, base_image, api_version, escape_variables=True,
+            config_path=config_path,
+            config=config,
+            base_image=base_image,
+            api_version=api_version,
+            escape_variables=True,
         )
 
         additional_contexts_str = "\n".join(

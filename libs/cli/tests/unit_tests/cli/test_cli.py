@@ -66,7 +66,6 @@ def test_prepare_args_and_stdin() -> None:
         debugger_port=debugger_port,
         debugger_base_url=debugger_graph_url,
         watch=True,
-        
     )
 
     expected_args = [
