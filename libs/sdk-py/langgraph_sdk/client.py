@@ -190,7 +190,8 @@ def get_client(
         url:
             Base URL of the LangGraph API.
             - If `None`, the client first attempts an in-process connection via ASGI transport.
-              If that fails, it falls back to `http://localhost:8123`.
+              If that fails, it defers registration until after app initialization. This
+              only works if the client is used from within the Agent server.
         api_key:
             API key for authentication. Can be:
               - A string: use this exact API key
@@ -255,19 +256,22 @@ def get_client(
 
     transport: httpx.AsyncBaseTransport | None = None
     if url is None:
+        url = "http://api"
         if os.environ.get("__LANGGRAPH_DEFER_LOOPBACK_TRANSPORT") == "true":
             transport = get_asgi_transport()(app=None, root_path="/noauth")
             _registered_transports.append(transport)
-            url = "http://api"
         else:
             try:
                 from langgraph_api.server import app  # type: ignore
 
-                url = "http://api"
-
                 transport = get_asgi_transport()(app, root_path="/noauth")
             except Exception:
-                url = "http://localhost:8123"
+                logger.debug(
+                    "Failed to connect to in-process LangGraph server. Deferring configuration.",
+                    exc_info=True,
+                )
+                transport = get_asgi_transport()(app=None, root_path="/noauth")
+                _registered_transports.append(transport)
 
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
@@ -1189,6 +1193,7 @@ class AssistantsClient:
         *,
         metadata: Json = None,
         graph_id: str | None = None,
+        name: str | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> int:
@@ -1197,6 +1202,8 @@ class AssistantsClient:
         Args:
             metadata: Metadata to filter by. Exact match for each key/value.
             graph_id: Optional graph id to filter by.
+            name: Optional name to filter by.
+                The filtering logic will match assistants where 'name' is a substring (case insensitive) of the assistant name.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -1208,6 +1215,8 @@ class AssistantsClient:
             payload["metadata"] = metadata
         if graph_id:
             payload["graph_id"] = graph_id
+        if name:
+            payload["name"] = name
         return await self.http.post(
             "/assistants/count", json=payload, headers=headers, params=params
         )
@@ -4522,6 +4531,7 @@ class SyncAssistantsClient:
         *,
         metadata: Json = None,
         graph_id: str | None = None,
+        name: str | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> int:
@@ -4530,6 +4540,8 @@ class SyncAssistantsClient:
         Args:
             metadata: Metadata to filter by. Exact match for each key/value.
             graph_id: Optional graph id to filter by.
+            name: Optional name to filter by.
+                The filtering logic will match assistants where 'name' is a substring (case insensitive) of the assistant name.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -4541,6 +4553,8 @@ class SyncAssistantsClient:
             payload["metadata"] = metadata
         if graph_id:
             payload["graph_id"] = graph_id
+        if name:
+            payload["name"] = name
         return self.http.post(
             "/assistants/count", json=payload, headers=headers, params=params
         )
