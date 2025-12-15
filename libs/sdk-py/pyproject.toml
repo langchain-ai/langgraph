@@ -30,7 +30,7 @@ test = [
     "pytest-watch",
 ]
 lint = [
-    "ruff==0.14.7",
+    "ruff==0.14.9",
     "codespell",
     "mypy==1.19.0",
     "ty==0.0.1a27",
