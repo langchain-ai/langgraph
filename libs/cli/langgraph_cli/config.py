@@ -824,6 +824,8 @@ def python_config_to_docker(
     config: Config,
     base_image: str,
     api_version: str | None = None,
+    *,
+    escape_variables: bool = False,
 ) -> tuple[str, dict[str, str]]:
     """Generate a Dockerfile from the configuration."""
     pip_installer = config.get("pip_installer", "auto")
@@ -1003,6 +1005,7 @@ ADD {relpath} /deps/{name}
         )
 
     # Add main dockerfile content
+    dep_vname = "$$dep" if escape_variables else "$dep"
     docker_file_contents.extend(
         [
             f"FROM {image_str}",
@@ -1013,10 +1016,10 @@ ADD {relpath} /deps/{name}
             "",
             "# -- Installing all local dependencies --",
             f"""RUN for dep in /deps/*; do \
-            echo "Installing $dep"; \
-            if [ -d "$dep" ]; then \
-                echo "Installing $dep"; \
-                (cd "$dep" && {global_reqs_pip_install} -e .); \
+            echo "Installing {dep_vname}"; \
+            if [ -d "{dep_vname}" ]; then \
+                echo "Installing {dep_vname}"; \
+                (cd "{dep_vname}" && {global_reqs_pip_install} -e .); \
             fi; \
         done""",
             "# -- End of local dependencies install --",
@@ -1202,26 +1205,34 @@ def _calculate_relative_workdir(config_path: pathlib.Path, build_context: str) -
 def config_to_docker(
     config_path: pathlib.Path,
     config: Config,
+    *,
     base_image: str | None = None,
     api_version: str | None = None,
     install_command: str | None = None,
     build_command: str | None = None,
     build_context: str | None = None,
+    escape_variables: bool = False,
 ) -> tuple[str, dict[str, str]]:
     base_image = base_image or default_base_image(config)
 
     if config.get("node_version") and not config.get("python_version"):
         return node_config_to_docker(
-            config_path,
-            config,
-            base_image,
-            api_version,
-            install_command,
-            build_command,
-            build_context,
+            config_path=config_path,
+            config=config,
+            base_image=base_image,
+            api_version=api_version,
+            install_command=install_command,
+            build_command=build_command,
+            build_context=build_context,
         )
 
-    return python_config_to_docker(config_path, config, base_image, api_version)
+    return python_config_to_docker(
+        config_path=config_path,
+        config=config,
+        base_image=base_image,
+        api_version=api_version,
+        escape_variables=escape_variables,
+    )
 
 
 def config_to_compose(
@@ -1265,7 +1276,11 @@ def config_to_compose(
 
     else:
         dockerfile, additional_contexts = config_to_docker(
-            config_path, config, base_image, api_version
+            config_path=config_path,
+            config=config,
+            base_image=base_image,
+            api_version=api_version,
+            escape_variables=True,
         )
 
         additional_contexts_str = "\n".join(
