@@ -336,6 +336,27 @@ class Encryption:
     Then the LangGraph server will load your encryption file and use it to
     encrypt/decrypt data at rest.
 
+    !!! warning "JSON Encryptors Must Preserve Keys"
+
+        JSON encryptors **must not add or remove keys** from the input dict.
+        Only values may be transformed. This constraint exists because SQL JSONB
+        merge operations (used for partial updates) work at the key level.
+
+        **Correct (per-key encryption):**
+        ```python
+        # Input:  {"secret": "value", "plain": "x"}
+        # Output: {"secret": "<encrypted>", "plain": "x"}  ✓ Keys preserved
+        ```
+
+        **Incorrect (key consolidation):**
+        ```python
+        # Input:  {"secret": "value", "plain": "x"}
+        # Output: {"__encrypted__": "<blob>", "plain": "x"}  ✗ Key changed
+        ```
+
+        If your encryptor needs to store auxiliary data (DEK, IV, etc.), embed it
+        within the encrypted value itself, not as separate keys.
+
     ???+ example "Basic Usage"
 
         ```python
@@ -343,42 +364,36 @@ class Encryption:
 
         my_encryption = Encryption()
 
+        SKIP_FIELDS = {"tenant_id", "owner", "thread_id", "assistant_id"}
+        ENCRYPTED_PREFIX = "encrypted:"
+
         @my_encryption.encrypt.blob
         async def encrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
-            # Call your encryption service
-            return encrypted_blob
+            return your_encrypt_bytes(blob)
 
         @my_encryption.decrypt.blob
         async def decrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
-            # Call your decryption service
-            return decrypted_blob
+            return your_decrypt_bytes(blob)
 
         @my_encryption.encrypt.json
         async def encrypt_json(ctx: EncryptionContext, data: dict) -> dict:
-            # Practical encryption strategy:
-            # - "owner" field: unencrypted (for search/filtering)
-            # - "my.customer.org/" prefixed fields: encrypt VALUES only
-            # - All other fields: pass through unencrypted
-            encrypted = {}
-            for key, value in data.items():
-                if key.startswith("my.customer.org/"):
-                    # Encrypt VALUE for sensitive customer data
-                    encrypted[key] = encrypt_value(value)
+            result = {}
+            for k, v in data.items():
+                if k in SKIP_FIELDS or v is None:
+                    result[k] = v
                 else:
-                    # Pass through (including "owner" for search)
-                    encrypted[key] = value
-            return encrypted
+                    result[k] = ENCRYPTED_PREFIX + your_encrypt_string(v)
+            return result
 
         @my_encryption.decrypt.json
         async def decrypt_json(ctx: EncryptionContext, data: dict) -> dict:
-            # Decrypt VALUES for "my.customer.org/" prefixed fields
-            decrypted = {}
-            for key, value in data.items():
-                if key.startswith("my.customer.org/"):
-                    decrypted[key] = decrypt_value(value)
+            result = {}
+            for k, v in data.items():
+                if isinstance(v, str) and v.startswith(ENCRYPTED_PREFIX):
+                    result[k] = your_decrypt_string(v[len(ENCRYPTED_PREFIX):])
                 else:
-                    decrypted[key] = value
-            return decrypted
+                    result[k] = v
+            return result
         ```
 
     ???+ example "Model-Specific Handlers"
