@@ -269,7 +269,7 @@ jobs:
           enable-cache: true
           cache-suffix: "release"
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           name: dist
           path: ${{ inputs.working-directory }}/dist/
@@ -310,7 +310,7 @@ jobs:
           enable-cache: true
           cache-suffix: "release"
 
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           name: dist
           path: ${{ inputs.working-directory }}/dist/
