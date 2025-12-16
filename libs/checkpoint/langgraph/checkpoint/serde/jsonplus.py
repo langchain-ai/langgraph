@@ -13,6 +13,12 @@ from collections import deque
 from collections.abc import Callable, Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
+
+try:
+    from enum import StrEnum
+except ImportError:
+    # StrEnum was added in Python 3.11
+    StrEnum = None
 from inspect import isclass
 from ipaddress import (
     IPv4Address,
@@ -387,6 +393,8 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             ),
         )
     elif isinstance(obj, Enum):
+        # Handle both regular Enum and StrEnum (which is also a str subclass)
+        # StrEnum instances should be serialized as Enum to preserve type information
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
