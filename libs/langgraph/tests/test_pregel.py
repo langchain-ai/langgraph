@@ -5725,6 +5725,50 @@ def test_multiple_interrupts_functional(sync_checkpointer: BaseCheckpointSaver):
     assert counter == 3
 
 
+def test_interrupt_functional_return_values_pattern(
+    sync_checkpointer: BaseCheckpointSaver,
+):
+    """Test that using return values (not side effects) works correctly with interrupts.
+
+    This test demonstrates the correct pattern for accumulating state with interrupts:
+    tasks should RETURN updated state rather than modifying mutable arguments.
+
+    Related to: https://github.com/langchain-ai/langgraph/issues/6577
+    """
+
+    @task
+    def append_item(items: list, item: str) -> list:
+        """Correct pattern: return new state instead of mutating."""
+        interrupt("continue?")
+        return items + [item]
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def graph(inputs: dict) -> dict:
+        items: list = []
+        items = append_item(items, "1").result()
+        items = append_item(items, "2").result()
+        items = append_item(items, "3").result()
+        return {"items": items}
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # First invoke - interrupted at first task
+    result = graph.invoke({}, config)
+    assert "__interrupt__" in result
+
+    # Resume first - completes first task, interrupted at second
+    result = graph.invoke(Command(resume="ok"), config)
+    assert "__interrupt__" in result
+
+    # Resume second - completes second task, interrupted at third
+    result = graph.invoke(Command(resume="ok"), config)
+    assert "__interrupt__" in result
+
+    # Resume third - completes, returns final result
+    result = graph.invoke(Command(resume="ok"), config)
+    assert result == {"items": ["1", "2", "3"]}
+
+
 def test_multiple_interrupts_functional_cache(
     sync_checkpointer: BaseCheckpointSaver, cache: BaseCache
 ):
