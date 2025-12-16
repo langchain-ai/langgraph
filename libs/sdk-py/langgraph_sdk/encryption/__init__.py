@@ -421,12 +421,14 @@ class Encryption:
         return fn
 
     def get_json_encryptor(
-        self, _model: str | None = None
+        self,
+        _model: str | None = None,  # kept for langgraph-api compat
     ) -> types.JsonEncryptor | None:
         """Get the JSON encryptor.
 
         Args:
-            model: Ignored. Kept for backwards compatibility.
+            _model: Ignored. Kept for backwards compatibility with langgraph-api
+                which passes model_type to this method.
 
         Returns:
             The JSON encryptor, or None if not registered.
@@ -434,12 +436,14 @@ class Encryption:
         return self._json_encryptor
 
     def get_json_decryptor(
-        self, _model: str | None = None
+        self,
+        _model: str | None = None,  # kept for langgraph-api compat
     ) -> types.JsonDecryptor | None:
         """Get the JSON decryptor.
 
         Args:
-            model: Ignored. Kept for backwards compatibility.
+            _model: Ignored. Kept for backwards compatibility with langgraph-api
+                which passes model_type to this method.
 
         Returns:
             The JSON decryptor, or None if not registered.
