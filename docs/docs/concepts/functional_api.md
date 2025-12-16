@@ -584,6 +584,51 @@ Resuming an execution after an @[interrupt][interrupt] can be done by passing a 
 
 :::
 
+!!! warning "Understanding resumption behavior"
+
+    When resuming after an interrupt, the **entire entrypoint function re-executes from the beginning**. 
+    However, **task results are cached** - previously completed tasks return their cached results instead of re-executing.
+
+    This has an important implication: **side effects are NOT preserved**. If a task modifies a mutable 
+    object (like appending to a list), that modification only happens when the task actually executes, 
+    not when returning a cached result.
+
+    **Anti-pattern** (relies on side effects - doesn't work correctly):
+
+    ```python
+    @task
+    def add_item(items: list, item: str) -> None:
+        items.append(item)  # Side effect - modifying the list
+        interrupt("continue?")
+        # No return value!
+
+    @entrypoint(checkpointer=checkpointer)
+    def workflow(inputs):
+        items = []  # Created fresh on EVERY resume!
+        add_item(items, "a").result()  # First resume: task runs, items=["a"]
+        add_item(items, "b").result()  # Second resume: task returns cached None, items stays []!
+        return items  # Will NOT contain all items!
+    ```
+
+    **Correct pattern** (uses return values):
+
+    ```python
+    @task
+    def add_item(items: list, item: str) -> list:
+        interrupt("continue?")
+        return items + [item]  # Return new list with item added
+
+    @entrypoint(checkpointer=checkpointer)
+    def workflow(inputs):
+        items = []
+        items = add_item(items, "a").result()  # Returns ["a"] (cached on subsequent runs)
+        items = add_item(items, "b").result()  # Returns ["a", "b"]
+        return items  # Correctly contains all items!
+    ```
+
+    The key principle: **always use return values from tasks to build up state**, rather than 
+    relying on side effects on mutable objects.
+
 :::python
 
 **Resuming after an error**
