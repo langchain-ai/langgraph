@@ -421,7 +421,7 @@ class Encryption:
         return fn
 
     def get_json_encryptor(
-        self, model: str | None = None
+        self, _model: str | None = None
     ) -> types.JsonEncryptor | None:
         """Get the JSON encryptor.
 
@@ -434,7 +434,7 @@ class Encryption:
         return self._json_encryptor
 
     def get_json_decryptor(
-        self, model: str | None = None
+        self, _model: str | None = None
     ) -> types.JsonDecryptor | None:
         """Get the JSON decryptor.
 
