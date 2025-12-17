@@ -235,8 +235,9 @@ class Encryption:
     !!! warning "JSON Encryptors Must Preserve Keys"
 
         JSON encryptors **must not add or remove keys** from the input dict.
-        Only values may be transformed. This constraint exists because SQL JSONB
-        merge operations (used for partial updates) work at the key level.
+        Only values may be transformed. This constraint is **enforced at runtime
+        by the server** and exists because SQL JSONB merge operations (used for
+        partial updates) work at the key level.
 
         **Correct (per-key encryption):**
         ```python
