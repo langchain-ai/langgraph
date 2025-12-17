@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Sequence
 from typing import Any, Generic, cast
 
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -18,6 +18,24 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
     @abstractmethod
     def with_config(
         self, config: RunnableConfig | None = None, **kwargs: Any
+    ) -> Self: ...
+
+    @abstractmethod
+    def with_listeners(
+        self,
+        *,
+        on_start: Callable[[Any], Any] | None = None,
+        on_end: Callable[[Any], Any] | None = None,
+        on_error: Callable[[Any], Any] | None = None,
+    ) -> Self: ...
+
+    @abstractmethod
+    def with_alisteners(
+        self,
+        *,
+        on_start: Callable[[Any], Awaitable[Any]] | None = None,
+        on_end: Callable[[Any], Awaitable[Any]] | None = None,
+        on_error: Callable[[Any], Awaitable[Any]] | None = None,
     ) -> Self: ...
 
     @abstractmethod

@@ -654,6 +654,8 @@ class Pregel(
         name: str = "LangGraph",
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
+        root_listeners = deprecated_kwargs.pop("_root_listeners", None)
+        aroot_listeners = deprecated_kwargs.pop("_aroot_listeners", None)
         if (
             config_type := deprecated_kwargs.get("config_type", MISSING)
         ) is not MISSING:
@@ -698,6 +700,14 @@ class Pregel(
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.name = name
+        self._root_listeners = cast(
+            "tuple[Callable[[Any], Any] | None, Callable[[Any], Any] | None, Callable[[Any], Any] | None] | None",
+            root_listeners,
+        )
+        self._aroot_listeners = cast(
+            "tuple[Callable[[Any], Awaitable[Any]] | None, Callable[[Any], Awaitable[Any]] | None, Callable[[Any], Awaitable[Any]] | None] | None",
+            aroot_listeners,
+        )
         if auto_validate:
             self.validate()
 
@@ -788,6 +798,26 @@ class Pregel(
         return self.copy(
             {"config": merge_configs(self.config, config, cast(RunnableConfig, kwargs))}
         )
+
+    def with_listeners(
+        self,
+        *,
+        on_start: Callable[[Any], Any] | None = None,
+        on_end: Callable[[Any], Any] | None = None,
+        on_error: Callable[[Any], Any] | None = None,
+    ) -> Self:
+        """Create a copy of the Pregel object with updated sync listeners."""
+        return self.copy({"_root_listeners": (on_start, on_end, on_error)})
+
+    def with_alisteners(
+        self,
+        *,
+        on_start: Callable[[Any], Awaitable[Any]] | None = None,
+        on_end: Callable[[Any], Awaitable[Any]] | None = None,
+        on_error: Callable[[Any], Awaitable[Any]] | None = None,
+    ) -> Self:
+        """Create a copy of the Pregel object with updated async listeners."""
+        return self.copy({"_aroot_listeners": (on_start, on_end, on_error)})
 
     def validate(self) -> Self:
         validate_graph(
@@ -2497,6 +2527,26 @@ class Pregel(
         stream = SyncQueue()
 
         config = ensure_config(self.config, config)
+        if self._root_listeners is not None:
+            on_start, on_end, on_error = self._root_listeners
+            from langchain_core.tracers.root_listeners import RootListenersTracer
+
+            tracer = RootListenersTracer(
+                config=config,
+                on_start=on_start,
+                on_end=on_end,
+                on_error=on_error,
+            )
+            existing_callbacks = config.get("callbacks")
+            config = config.copy()
+            if existing_callbacks is None:
+                config["callbacks"] = [tracer]
+            elif isinstance(existing_callbacks, list):
+                config["callbacks"] = [*existing_callbacks, tracer]
+            else:
+                callbacks_manager = existing_callbacks.copy()
+                callbacks_manager.add_handler(tracer, inherit=True)
+                config["callbacks"] = callbacks_manager
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
             None,
@@ -2776,6 +2826,46 @@ class Pregel(
         )
 
         config = ensure_config(self.config, config)
+        if self._root_listeners is not None:
+            on_start, on_end, on_error = self._root_listeners
+            from langchain_core.tracers.root_listeners import RootListenersTracer
+
+            sync_tracer = RootListenersTracer(
+                config=config,
+                on_start=on_start,
+                on_end=on_end,
+                on_error=on_error,
+            )
+            existing_callbacks = config.get("callbacks")
+            config = config.copy()
+            if existing_callbacks is None:
+                config["callbacks"] = [sync_tracer]
+            elif isinstance(existing_callbacks, list):
+                config["callbacks"] = [*existing_callbacks, sync_tracer]
+            else:
+                callbacks_manager = existing_callbacks.copy()
+                callbacks_manager.add_handler(sync_tracer, inherit=True)
+                config["callbacks"] = callbacks_manager
+        if self._aroot_listeners is not None:
+            on_start, on_end, on_error = self._aroot_listeners
+            from langchain_core.tracers.root_listeners import AsyncRootListenersTracer
+
+            async_tracer = AsyncRootListenersTracer(
+                config=config,
+                on_start=on_start,
+                on_end=on_end,
+                on_error=on_error,
+            )
+            existing_callbacks = config.get("callbacks")
+            config = config.copy()
+            if existing_callbacks is None:
+                config["callbacks"] = [async_tracer]
+            elif isinstance(existing_callbacks, list):
+                config["callbacks"] = [*existing_callbacks, async_tracer]
+            else:
+                callbacks_manager = existing_callbacks.copy()
+                callbacks_manager.add_handler(async_tracer, inherit=True)
+                config["callbacks"] = callbacks_manager
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
             None,

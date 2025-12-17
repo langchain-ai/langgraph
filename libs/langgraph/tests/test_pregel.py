@@ -252,6 +252,64 @@ def test_context_json_schema() -> None:
     }
 
 
+def test_pregel_with_listeners() -> None:
+    chain = NodeBuilder().subscribe_only("input").do(lambda x: x + 1).write_to("output")
+
+    app = Pregel(
+        nodes={"one": chain},
+        channels={
+            "input": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
+
+    events: list[tuple[str, list[str] | None]] = []
+
+    def on_start(_: Any, config: RunnableConfig) -> None:
+        events.append(("start", list(config.get("tags") or [])))
+
+    def on_end(_: Any, config: RunnableConfig) -> None:
+        events.append(("end", list(config.get("tags") or [])))
+
+    out = app.with_listeners(on_start=on_start, on_end=on_end).invoke(
+        1, {"tags": ["tag-a"]}
+    )
+
+    assert out == 2
+    assert events == [("start", ["tag-a"]), ("end", ["tag-a"])]
+
+
+async def test_pregel_with_alisteners() -> None:
+    chain = NodeBuilder().subscribe_only("input").do(lambda x: x + 1).write_to("output")
+
+    app = Pregel(
+        nodes={"one": chain},
+        channels={
+            "input": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
+
+    events: list[tuple[str, list[str] | None]] = []
+
+    async def on_start(_: Any, config: RunnableConfig) -> None:
+        events.append(("start", list(config.get("tags") or [])))
+
+    async def on_end(_: Any, config: RunnableConfig) -> None:
+        events.append(("end", list(config.get("tags") or [])))
+
+    out = await app.with_alisteners(on_start=on_start, on_end=on_end).ainvoke(
+        1, {"tags": ["tag-a"]}
+    )
+
+    assert out == 2
+    assert events == [("start", ["tag-a"]), ("end", ["tag-a"])]
+
+
 def test_node_schemas_custom_output() -> None:
     class State(TypedDict):
         hello: str
