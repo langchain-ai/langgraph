@@ -78,6 +78,7 @@ from langgraph.types import (
     Command,
     RetryPolicy,
     Send,
+    ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
@@ -853,6 +854,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
         """
+        checkpointer = ensure_valid_checkpointer(checkpointer)
+
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
