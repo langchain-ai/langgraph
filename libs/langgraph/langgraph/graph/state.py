@@ -1250,6 +1250,65 @@ class CompiledStateGraph(
                     if INTERRUPT in seen:
                         seen[INTERRUPT].pop(k, MISSING)
 
+    def invoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
+    ) -> OutputT:
+        """Run the graph with a single input and config.
+
+        Overrides parent to reconstruct Pydantic output_schema if needed.
+        """
+        result = super().invoke(input, config, **kwargs)
+        return self._reconstruct_output(result)
+
+    async def ainvoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
+    ) -> OutputT:
+        """Run the graph asynchronously with a single input and config.
+
+        Overrides parent to reconstruct Pydantic output_schema if needed.
+        """
+        result = await super().ainvoke(input, config, **kwargs)
+        return self._reconstruct_output(result)
+
+    def _reconstruct_output(self, result: dict[str, Any] | Any) -> OutputT:
+        """Reconstruct Pydantic model from dict if output_schema is a Pydantic model.
+
+        This fixes issue #6607 where Pydantic models returned by nodes were
+        silently converted to dicts instead of being returned as the Pydantic
+        instance specified by output_schema.
+
+        Args:
+            result: The result from invoke/ainvoke (typically a dict)
+
+        Returns:
+            Either a reconstructed Pydantic model or the original result
+
+        Raises:
+            ValidationError: If the result dict cannot be validated against
+                the Pydantic output_schema. This indicates the graph produced
+                invalid state and should fail fast rather than silently coerce.
+        """
+        from pydantic import BaseModel
+
+        # Only reconstruct if:
+        # 1. output_schema is a Pydantic BaseModel subclass (not TypedDict, etc.)
+        # 2. result is a dict (not already a Pydantic instance or other type)
+        # 3. output_channels is a list (not a single "__root__" channel)
+        if (
+            isinstance(self.builder.output_schema, type)
+            and issubclass(self.builder.output_schema, BaseModel)
+            and isinstance(result, dict)
+            and isinstance(self.output_channels, list)
+        ):
+            return self.builder.output_schema.model_validate(result)
+        return result
+
 
 def _pick_mapper(
     state_keys: Sequence[str], schema: type[Any]

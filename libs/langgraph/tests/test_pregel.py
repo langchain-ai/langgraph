@@ -8893,3 +8893,91 @@ def test_fork_does_not_apply_pending_writes(
 
     # Should be: 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+def test_output_schema_pydantic_reconstruction() -> None:
+    """Test that output_schema with Pydantic models returns instances, not dicts.
+
+    Regression test for issue #6607.
+    """
+    class OutputModel(BaseModel):
+        message: str
+        count: int = 0
+
+    class InputState(TypedDict):
+        input: str
+
+    def process(state: InputState) -> OutputModel:
+        return OutputModel(message=f"Processed: {state['input']}", count=42)
+
+    graph = StateGraph(InputState, output_schema=OutputModel)
+    graph.add_node("process", process)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+    compiled = graph.compile()
+
+    result = compiled.invoke({"input": "test"})
+
+    # Result should be a Pydantic instance, not a dict
+    assert isinstance(result, OutputModel), f"Expected OutputModel, got {type(result)}"
+    assert result.message == "Processed: test"
+    assert result.count == 42
+
+    # Should have attribute access
+    assert hasattr(result, "message")
+    assert hasattr(result, "count")
+
+
+async def test_output_schema_pydantic_reconstruction_async() -> None:
+    """Test that output_schema with Pydantic models returns instances in async mode.
+
+    Regression test for issue #6607.
+    """
+    class OutputModel(BaseModel):
+        message: str
+        value: int
+
+    class InputState(TypedDict):
+        input: str
+
+    async def process(state: InputState) -> OutputModel:
+        return OutputModel(message=f"Async: {state['input']}", value=99)
+
+    graph = StateGraph(InputState, output_schema=OutputModel)
+    graph.add_node("process", process)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+    compiled = graph.compile()
+
+    result = await compiled.ainvoke({"input": "async_test"})
+
+    # Result should be a Pydantic instance, not a dict
+    assert isinstance(result, OutputModel), f"Expected OutputModel, got {type(result)}"
+    assert result.message == "Async: async_test"
+    assert result.value == 99
+
+
+def test_output_schema_dict_backwards_compat() -> None:
+    """Test that dict output_schema still works (backwards compatibility)."""
+    class OutputSchema(TypedDict):
+        message: str
+        count: int
+
+    class InputState(TypedDict):
+        input: str
+
+    def process(state: InputState) -> dict:
+        return {"message": f"Processed: {state['input']}", "count": 42}
+
+    graph = StateGraph(InputState, output_schema=OutputSchema)
+    graph.add_node("process", process)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+    compiled = graph.compile()
+
+    result = compiled.invoke({"input": "test"})
+
+    # Result should be a dict when output_schema is TypedDict
+    assert isinstance(result, dict)
+    assert result["message"] == "Processed: test"
+    assert result["count"] == 42
