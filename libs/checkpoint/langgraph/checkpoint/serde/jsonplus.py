@@ -37,6 +37,42 @@ LC_REVIVER = Reviver()
 EMPTY_BYTES = b""
 logger = logging.getLogger(__name__)
 
+SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
+    {
+        # datetime types
+        ("datetime", "datetime"),
+        ("datetime", "date"),
+        ("datetime", "time"),
+        ("datetime", "timedelta"),
+        ("datetime", "timezone"),
+        # uuid
+        ("uuid", "UUID"),
+        # numeric
+        ("decimal", "Decimal"),
+        # collections
+        ("builtins", "set"),
+        ("builtins", "frozenset"),
+        ("collections", "deque"),
+        # ip addresses
+        ("ipaddress", "IPv4Address"),
+        ("ipaddress", "IPv4Interface"),
+        ("ipaddress", "IPv4Network"),
+        ("ipaddress", "IPv6Address"),
+        ("ipaddress", "IPv6Interface"),
+        ("ipaddress", "IPv6Network"),
+        # pathlib
+        ("pathlib", "Path"),
+        ("pathlib", "PosixPath"),
+        ("pathlib", "WindowsPath"),
+        # langgraph
+        ("langgraph.types", "Send"),
+        ("langgraph.types", "Interrupt"),
+        ("langgraph.types", "Command"),
+        ("langgraph.types", "StateSnapshot"),
+        ("langgraph.types", "PregelTask"),
+    }
+)
+
 
 class JsonPlusSerializer(SerializerProtocol):
     """Serializer that uses ormsgpack, with optional fallbacks.
@@ -54,18 +90,29 @@ class JsonPlusSerializer(SerializerProtocol):
         *,
         pickle_fallback: bool = False,
         allowed_json_modules: Sequence[tuple[str, ...]] | Literal[True] | None = None,
+        # TODO: change default to None once users have had time to configure allowlists
+        allowed_msgpack_modules: Sequence[tuple[str, ...]]
+        | Literal[True]
+        | None = True,
         __unpack_ext_hook__: Callable[[int, bytes], Any] | None = None,
     ) -> None:
         self.pickle_fallback = pickle_fallback
-        self._allowed_modules = (
+        # JSON allowlist
+        self._allowed_json_modules: set[tuple[str, ...]] | Literal[True] | None = (
             {mod_and_name for mod_and_name in allowed_json_modules}
             if allowed_json_modules and allowed_json_modules is not True
             else (allowed_json_modules if allowed_json_modules is True else None)
         )
+        # Msgpack allowlist
+        self._allowed_msgpack_modules: set[tuple[str, ...]] | Literal[True] | None = (
+            {mod_and_name for mod_and_name in allowed_msgpack_modules}
+            if allowed_msgpack_modules and allowed_msgpack_modules is not True
+            else (allowed_msgpack_modules if allowed_msgpack_modules is True else None)
+        )
         self._unpack_ext_hook = (
             __unpack_ext_hook__
             if __unpack_ext_hook__ is not None
-            else _msgpack_ext_hook
+            else _create_msgpack_ext_hook(self._allowed_msgpack_modules)
         )
 
     def _encode_constructor_args(
@@ -90,7 +137,7 @@ class JsonPlusSerializer(SerializerProtocol):
         return out
 
     def _reviver(self, value: dict[str, Any]) -> Any:
-        if self._allowed_modules and (
+        if self._allowed_json_modules and (
             value.get("lc", None) == 2
             and value.get("type", None) == "constructor"
             and value.get("id", None) is not None
@@ -107,7 +154,7 @@ class JsonPlusSerializer(SerializerProtocol):
         return LC_REVIVER(value)
 
     def _revive_lc2(self, value: dict[str, Any]) -> Any:
-        self._check_allowed_modules(value)
+        self._check_allowed_json_modules(value)
 
         [*module, name] = value["id"]
         try:
@@ -139,7 +186,7 @@ class JsonPlusSerializer(SerializerProtocol):
         except Exception:
             return None
 
-    def _check_allowed_modules(self, value: dict[str, Any]) -> None:
+    def _check_allowed_json_modules(self, value: dict[str, Any]) -> None:
         needed = tuple(value["id"])
         method = value.get("method")
         if isinstance(method, list):
@@ -150,7 +197,7 @@ class JsonPlusSerializer(SerializerProtocol):
             method_display = "<init>"
 
         dotted = ".".join(needed)
-        if not self._allowed_modules:
+        if not self._allowed_json_modules:
             raise InvalidModuleError(
                 f"Refused to deserialize JSON constructor: {dotted} (method: {method_display}). "
                 "No allowed_json_modules configured.\n\n"
@@ -161,9 +208,9 @@ class JsonPlusSerializer(SerializerProtocol):
                 "or plain-JSON representations revived without import-time side effects."
             )
 
-        if self._allowed_modules is True:
+        if self._allowed_json_modules is True:
             return
-        if needed in self._allowed_modules:
+        if needed in self._allowed_json_modules:
             return
 
         raise InvalidModuleError(
@@ -448,92 +495,158 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         raise TypeError(f"Object of type {obj.__class__.__name__} is not serializable")
 
 
-def _msgpack_ext_hook(code: int, data: bytes) -> Any:
-    if code == EXT_CONSTRUCTOR_SINGLE_ARG:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, arg
-            return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
-        except Exception:
-            return
-    elif code == EXT_CONSTRUCTOR_POS_ARGS:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, args
-            return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
-        except Exception:
-            return
-    elif code == EXT_CONSTRUCTOR_KW_ARGS:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, args
-            return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
-        except Exception:
-            return
-    elif code == EXT_METHOD_SINGLE_ARG:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, arg, method
-            return getattr(getattr(importlib.import_module(tup[0]), tup[1]), tup[3])(
-                tup[2]
-            )
-        except Exception:
-            return
-    elif code == EXT_PYDANTIC_V1:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, kwargs
-            cls = getattr(importlib.import_module(tup[0]), tup[1])
-            try:
-                return cls(**tup[2])
-            except Exception:
-                return cls.construct(**tup[2])
-        except Exception:
-            # for pydantic objects we can't find/reconstruct
-            # let's return the kwargs dict instead
-            try:
-                return tup[2]
-            except NameError:
-                return
-    elif code == EXT_PYDANTIC_V2:
-        try:
-            tup = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
-            )
-            # module, name, kwargs, method
-            cls = getattr(importlib.import_module(tup[0]), tup[1])
-            try:
-                return cls(**tup[2])
-            except Exception:
-                return cls.model_construct(**tup[2])
-        except Exception:
-            # for pydantic objects we can't find/reconstruct
-            # let's return the kwargs dict instead
-            try:
-                return tup[2]
-            except NameError:
-                return
-    elif code == EXT_NUMPY_ARRAY:
-        try:
-            import numpy as _np
+def _create_msgpack_ext_hook(
+    allowed_modules: set[tuple[str, ...]] | Literal[True] | None,
+) -> Callable[[int, bytes], Any]:
+    """Create msgpack ext hook with allowlist.
 
-            dtype_str, shape, order, buf = ormsgpack.unpackb(
-                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+    Args:
+        allowed_modules: Set of (module, name) tuples that are allowed to be
+        deserialized, or True to allow all with warnings for unregistered types, or None to only allow safe types.
+
+    Returns:
+        An ext_hook function for use with ormsgpack.unpackb.
+    """
+
+    def _check_allowed(module: str, name: str) -> bool:
+        """Check if type is allowed. Returns True if allowed, False if blocked."""
+        key = (module, name)
+
+        if key in SAFE_MSGPACK_TYPES:
+            return True
+
+        if allowed_modules is not None and allowed_modules is not True:
+            if key in allowed_modules:
+                return True
+
+        if allowed_modules is True:
+            # default is to warn but allow unregistered types
+            logger.warning(
+                "Deserializing unregistered type %s.%s from checkpoint. "
+                "This will be blocked in a future version. "
+                "Add to allowed_msgpack_modules to silence: [(%r, %r)]",
+                module,
+                name,
+                module,
+                name,
             )
-            arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
-            return arr.reshape(shape, order=order)
-        except Exception:
-            return
+            return True
+        else:
+            # strict mode blocks unregistered types
+            logger.warning(
+                "Blocked deserialization of %s.%s - not in allowed_msgpack_modules. "
+                "Add to allowed_msgpack_modules to allow: [(%r, %r)]",
+                module,
+                name,
+                module,
+                name,
+            )
+            return False
+
+    def ext_hook(code: int, data: bytes) -> Any:
+        if code == EXT_CONSTRUCTOR_SINGLE_ARG:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed(tup[0], tup[1]):
+                    return None
+                # module, name, arg
+                return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+            except Exception:
+                return None
+        elif code == EXT_CONSTRUCTOR_POS_ARGS:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed(tup[0], tup[1]):
+                    return None
+                # module, name, args
+                return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
+            except Exception:
+                return None
+        elif code == EXT_CONSTRUCTOR_KW_ARGS:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed(tup[0], tup[1]):
+                    return None
+                # module, name, kwargs
+                return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+            except Exception:
+                return None
+        elif code == EXT_METHOD_SINGLE_ARG:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed(tup[0], tup[1]):
+                    return None
+                # module, name, arg, method
+                return getattr(
+                    getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
+                )(tup[2])
+            except Exception:
+                return None
+        elif code == EXT_PYDANTIC_V1:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed(tup[0], tup[1]):
+                    return None
+                # module, name, kwargs
+                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                try:
+                    return cls(**tup[2])
+                except Exception:
+                    return cls.construct(**tup[2])
+            except Exception:
+                # for pydantic objects we can't find/reconstruct
+                # let's return the kwargs dict instead
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
+        elif code == EXT_PYDANTIC_V2:
+            try:
+                tup = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                if not _check_allowed(tup[0], tup[1]):
+                    return None
+                # module, name, kwargs, method
+                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                try:
+                    return cls(**tup[2])
+                except Exception:
+                    return cls.model_construct(**tup[2])
+            except Exception:
+                # for pydantic objects we can't find/reconstruct
+                # let's return the kwargs dict instead
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
+        elif code == EXT_NUMPY_ARRAY:
+            try:
+                import numpy as _np
+
+                dtype_str, shape, order, buf = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
+                return arr.reshape(shape, order=order)
+            except Exception:
+                return None
+        return None
+
+    return ext_hook
+
+
+_msgpack_ext_hook = _create_msgpack_ext_hook(allowed_modules=None)
 
 
 def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:

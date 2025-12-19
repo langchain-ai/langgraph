@@ -512,5 +512,88 @@ def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
 
     assert dumped[0] == "pickle"
     result = serde.loads_typed(dumped)
-
     assert result.equals(series)
+
+
+def test_msgpack_safe_types_no_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """Test safe types deserialize without warnings."""
+
+    serde = JsonPlusSerializer()
+
+    safe_objects = [
+        datetime.now(),
+        date.today(),
+        time(12, 30),
+        timezone.utc,
+        uuid.uuid4(),
+        Decimal("123.45"),
+        {1, 2, 3},
+        frozenset([1, 2, 3]),
+        deque([1, 2, 3]),
+        IPv4Address("192.168.1.1"),
+        pathlib.Path("/tmp/test"),
+    ]
+
+    for obj in safe_objects:
+        caplog.clear()
+        dumped = serde.dumps_typed(obj)
+        result = serde.loads_typed(dumped)
+        assert "unregistered type" not in caplog.text.lower(), (
+            f"Unexpected warning for {type(obj)}"
+        )
+        assert result is not None
+
+
+def test_msgpack_pydantic_warns_by_default(caplog: pytest.LogCaptureFixture) -> None:
+    """Pydantic models not in allowlist should log warning but still deserialize.
+
+    TODO: We'll want to change this to block unregistered types in the future."""
+
+    serde = JsonPlusSerializer()
+
+    obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
+
+    caplog.clear()
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+
+    assert "unregistered type" in caplog.text.lower()
+    assert "allowed_msgpack_modules" in caplog.text
+    assert result == obj
+
+
+def test_msgpack_allowlist_silences_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """Types in allowed_msgpack_modules should deserialize without warnings."""
+
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[
+            ("tests.test_jsonplus", "MyPydantic"),
+            ("tests.test_jsonplus", "InnerPydantic"),
+        ]
+    )
+
+    obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
+
+    caplog.clear()
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+
+    assert "unregistered type" not in caplog.text.lower()
+    assert result == obj
+
+
+def test_msgpack_none_blocks_unregistered(caplog: pytest.LogCaptureFixture) -> None:
+    """allowed_msgpack_modules=None should block unregistered types.
+
+    TODO: This will be the default behavior in the future."""
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+
+    obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
+
+    caplog.clear()
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+
+    assert "blocked" in caplog.text.lower()
+    assert result is None

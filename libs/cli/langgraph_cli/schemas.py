@@ -126,7 +126,7 @@ class SerdeConfig(TypedDict, total=False):
     If omitted, no serde is set up (the object store will still be present, however)."""
 
     allowed_json_modules: list[list[str]] | bool | None
-    """Optional. List of allowed python modules to de-serialize custom objects from.
+    """Optional. List of allowed python modules to de-serialize custom objects from JSON.
     
     If provided, only the specified modules will be allowed to be deserialized.
     If omitted, no modules are allowed, and the object returned will simply be a json object OR
@@ -146,7 +146,34 @@ class SerdeConfig(TypedDict, total=False):
     Example:
     {...
         "serde": {
-            "allowed_json_modules": true
+            "allowed_json_modules": True
+        }
+    }
+
+    """
+    allowed_msgpack_modules: list[list[str]] | bool | None
+    """Optional. List of allowed python modules to de-serialize custom objects from msgpack.
+
+    Known safe types (langgraph.checkpoint.serde.jsonplus.SAFE_MSGPACK_TYPES) are always
+    allowed regardless of this setting. Use this to allowlist your custom Pydantic models,
+    dataclasses, and other user-defined types.
+
+    If True (default), unregistered types will log a warning but still be deserialized.
+    If None, only known safe types will be deserialized; unregistered types will be blocked.
+
+    Example - allowlist specific types (no warnings for these):
+    {...
+        "serde": {
+            "allowed_msgpack_modules": [
+                ["my_agent", "models", "MyState"],
+            ]
+        }
+    }
+
+    Example - strict mode (only safe types allowed):
+    {...
+        "serde": {
+            "allowed_msgpack_modules": null
         }
     }
     
