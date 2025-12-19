@@ -331,10 +331,9 @@ class AuthConfig(TypedDict, total=False):
 
 class EncryptionConfig(TypedDict, total=False):
     """Configuration for custom at-rest encryption logic.
-
+    
     Allows you to implement custom encryption for sensitive data stored in the database,
-    including metadata fields and checkpoint blobs.
-    """
+    including metadata fields and checkpoint blobs."""
 
     path: str
     """Required. Path to an instance of the Encryption() class that implements custom encryption handlers.
