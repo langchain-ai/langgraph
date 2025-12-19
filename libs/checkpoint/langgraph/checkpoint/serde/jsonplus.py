@@ -64,6 +64,10 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
         ("pathlib", "Path"),
         ("pathlib", "PosixPath"),
         ("pathlib", "WindowsPath"),
+        # pathlib in Python 3.13+
+        ("pathlib._local", "Path"),
+        ("pathlib._local", "PosixPath"),
+        ("pathlib._local", "WindowsPath"),
         # langgraph
         ("langgraph.types", "Send"),
         ("langgraph.types", "Interrupt"),
