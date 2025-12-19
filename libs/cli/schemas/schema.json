@@ -658,7 +658,7 @@
     },
     "EncryptionConfig": {
       "title": "EncryptionConfig",
-      "description": "Configuration for custom at-rest encryption logic.\n\n    Allows you to implement custom encryption for sensitive data stored in the database,\n    including metadata fields and checkpoint blobs.",
+      "description": "Configuration for custom at-rest encryption logic.\n\nAllows you to implement custom encryption for sensitive data stored in the database,\nincluding metadata fields and checkpoint blobs.",
       "type": "object",
       "properties": {
         "path": {
