@@ -44,6 +44,8 @@ from langgraph.warnings import LangGraphDeprecatedSinceV10
 from pydantic import BaseModel
 from typing_extensions import NotRequired, TypedDict, deprecated
 
+from langgraph.prebuilt.reasoning import ReActStep, add_reasoning_steps
+from langgraph.prebuilt.reasoning_helpers import ReasoningCapture
 from langgraph.prebuilt.tool_node import ToolCallWithContext, ToolNode
 
 StructuredResponse = dict | BaseModel
@@ -89,6 +91,29 @@ with warnings.catch_warnings():
         """The state of the agent with a structured response."""
 
         structured_response: StructuredResponse
+
+
+class AgentStateWithReasoning(TypedDict):
+    """Agent state with messages and reasoning trace."""
+
+    messages: Annotated[Sequence[BaseMessage], add_messages]
+    reasoning_trace: Annotated[Sequence[ReActStep], add_reasoning_steps]
+    remaining_steps: NotRequired[RemainingSteps]
+
+
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        category=LangGraphDeprecatedSinceV10,
+        message="AgentState has been moved to `langchain.agents`.*",
+    )
+
+    class AgentStateWithStructuredResponseAndReasoning(
+        AgentStateWithStructuredResponse
+    ):
+        """Agent state with messages, structured response, and reasoning trace."""
+
+        reasoning_trace: Annotated[Sequence[ReActStep], add_reasoning_steps]
 
 
 with warnings.catch_warnings():
@@ -297,6 +322,7 @@ def create_react_agent(
     interrupt_before: list[str] | None = None,
     interrupt_after: list[str] | None = None,
     debug: bool = False,
+    reasoning: bool = False,
     version: Literal["v1", "v2"] = "v2",
     name: str | None = None,
     **deprecated_kwargs: Any,
@@ -442,6 +468,37 @@ def create_react_agent(
 
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
+        reasoning: If True, automatically captures reasoning traces (Thought→Action→Observation steps)
+            into `state["reasoning_trace"]`. This enables observability, debugging, and evaluation of
+            agent decision-making. Each trace contains:
+
+            - `action`: The tool call that was executed
+            - `observation`: Detailed results including success status, timing, and output
+
+            Incompatible with pre-built `ToolNode` instances - pass a list of tools instead.
+            Defaults to False.
+
+            !!! example "Using reasoning traces"
+
+                ```python
+                from langchain_anthropic import ChatAnthropic
+                from langchain.agents import create_agent
+
+                agent = create_agent(
+                    model=ChatAnthropic(model="claude-sonnet-4-5-20250929"),
+                    tools=[get_weather, search],
+                    reasoning=True
+                )
+
+                result = agent.invoke({"messages": [HumanMessage("What's the weather in Paris?")]})
+
+                # Access reasoning trace
+                for step in result["reasoning_trace"]:
+                    print(f"Tool: {step.action['name']}")
+                    print(f"Success: {step.observation.success}")
+                    print(f"Duration: {step.observation.duration_ms:.2f}ms")
+                ```
+
         version: Determines the version of the graph to create.
 
             Can be one of:
@@ -528,20 +585,65 @@ def create_react_agent(
         required_keys = {"messages", "remaining_steps"}
         if response_format is not None:
             required_keys.add("structured_response")
+        if reasoning:
+            required_keys.add("reasoning_trace")
 
         schema_keys = set(get_type_hints(state_schema))
         if missing_keys := required_keys - set(schema_keys):
             raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
     if state_schema is None:
-        state_schema = (
-            AgentStateWithStructuredResponse
-            if response_format is not None
-            else AgentState
-        )
+        if reasoning:
+            state_schema = (
+                AgentStateWithStructuredResponseAndReasoning
+                if response_format is not None
+                else AgentStateWithReasoning
+            )
+        else:
+            state_schema = (
+                AgentStateWithStructuredResponse
+                if response_format is not None
+                else AgentState
+            )
 
     llm_builtin_tools: list[dict] = []
-    if isinstance(tools, ToolNode):
+    tool_node: Any  # Can be ToolNode or callable when reasoning=True
+    if reasoning:
+        if isinstance(tools, ToolNode):
+            raise ValueError(
+                "Cannot use reasoning=True with a pre-built ToolNode. "
+                "Pass a list of tools instead so ReasoningCapture can be integrated automatically."
+            )
+        llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
+        capture = ReasoningCapture()
+        base_tool_node = ToolNode(
+            [t for t in tools if not isinstance(t, dict)],
+            wrap_tool_call=capture.wrap_tool_call,
+        )
+        tool_classes = list(base_tool_node.tools_by_name.values())
+
+        # Wrap tool node to extract and return reasoning steps
+        def tool_node_with_reasoning(state: dict) -> dict:
+            """Execute tools and capture reasoning trace.
+
+            Thought extraction happens in call_model before this is called.
+            This function just executes tools and returns the captured steps.
+            """
+            # Execute tools - wrap_tool_call will capture each tool execution
+            # The pending thought (if any) was set by call_model
+            result = base_tool_node.invoke(state)
+
+            # Get and clear the captured steps for this tool execution
+            steps = capture.get_steps()
+            capture.clear()  # Clear for next iteration
+
+            return {
+                "messages": result["messages"],
+                "reasoning_trace": steps,
+            }
+
+        tool_node = tool_node_with_reasoning
+    elif isinstance(tools, ToolNode):
         tool_classes = list(tools.tools_by_name.values())
         tool_node = tools
     else:
@@ -660,6 +762,73 @@ def create_react_agent(
 
         model_input = _get_model_input_state(state)
 
+        # When reasoning=True, capture explicit thoughts before tool calls
+        if reasoning and tool_calling_enabled:
+            from langchain_core.messages import SystemMessage
+
+            from langgraph.prebuilt.reasoning import Thought
+
+            # Step 1: Get reasoning/thought (without tool calling)
+            # Try to extract explicit thought - gracefully skip if model doesn't support it
+            try:
+                # Create a model without tool bindings for thought extraction
+                base_model_raw: Any
+                if is_dynamic_model:
+                    base_model_raw = model(state, runtime)  # type: ignore[operator]
+                else:
+                    # Get the base model without tool bindings
+                    if isinstance(model, str):
+                        from langchain.chat_models import init_chat_model
+
+                        base_model_raw = init_chat_model(model)
+                    else:
+                        base_model_raw = model
+
+                # Apply prompt if present
+                thinking_model = _get_prompt_runnable(prompt) | base_model_raw
+
+                # Add instruction to think step-by-step
+                thinking_messages = list(model_input.get("messages", []))  # type: ignore[arg-type,union-attr]
+                thinking_messages.append(
+                    SystemMessage(
+                        content="Before taking any action, briefly explain your reasoning and what you plan to do. "
+                        "Think step-by-step about how to address this request."
+                    )
+                )
+
+                # Get thought response
+                thought_input = dict(model_input)  # type: ignore[arg-type]
+                thought_input["messages"] = thinking_messages
+                thought_response = cast(
+                    AIMessage, thinking_model.invoke(thought_input, config)
+                )
+
+                # Extract thought text
+                thought_text = None
+                if thought_response.content:
+                    if isinstance(thought_response.content, str):
+                        thought_text = thought_response.content.strip()
+                    elif isinstance(thought_response.content, list):
+                        text_blocks = [
+                            block.get("text", "")
+                            if isinstance(block, dict)
+                            else str(block)
+                            for block in thought_response.content
+                            if (isinstance(block, dict) and block.get("type") == "text")
+                        ]
+                        thought_text = (
+                            " ".join(text_blocks).strip() if text_blocks else None
+                        )
+
+                # Store the thought for the next tool execution
+                if thought_text:
+                    capture.set_pending_thought(Thought(content=thought_text))
+            except Exception:
+                # If thought extraction fails (e.g., with test models), continue without it
+                # The observation will still be captured
+                pass
+
+        # Step 2: Get tool calls (normal execution)
         if is_dynamic_model:
             # Resolve dynamic model at runtime and apply prompt
             dynamic_model = _resolve_model(state, runtime)
@@ -687,6 +856,75 @@ def create_react_agent(
     ) -> StateSchema:
         model_input = _get_model_input_state(state)
 
+        # When reasoning=True, capture explicit thoughts before tool calls
+        if reasoning and tool_calling_enabled:
+            from langchain_core.messages import SystemMessage
+
+            from langgraph.prebuilt.reasoning import Thought
+
+            # Step 1: Get reasoning/thought (without tool calling)
+            # Try to extract explicit thought - gracefully skip if model doesn't support it
+            try:
+                # Create a model without tool bindings for thought extraction
+                base_model_raw: Any
+                if is_async_dynamic_model:
+                    base_model_raw = await model(state, runtime)  # type: ignore[operator,misc]
+                elif is_dynamic_model:
+                    base_model_raw = model(state, runtime)  # type: ignore[operator]
+                else:
+                    # Get the base model without tool bindings
+                    if isinstance(model, str):
+                        from langchain.chat_models import init_chat_model
+
+                        base_model_raw = init_chat_model(model)
+                    else:
+                        base_model_raw = model
+
+                # Apply prompt if present
+                thinking_model = _get_prompt_runnable(prompt) | base_model_raw
+
+                # Add instruction to think step-by-step
+                thinking_messages = list(model_input.get("messages", []))  # type: ignore[arg-type,union-attr]
+                thinking_messages.append(
+                    SystemMessage(
+                        content="Before taking any action, briefly explain your reasoning and what you plan to do. "
+                        "Think step-by-step about how to address this request."
+                    )
+                )
+
+                # Get thought response
+                thought_input = dict(model_input)  # type: ignore[arg-type]
+                thought_input["messages"] = thinking_messages
+                thought_response = cast(
+                    AIMessage, await thinking_model.ainvoke(thought_input, config)
+                )
+
+                # Extract thought text
+                thought_text = None
+                if thought_response.content:
+                    if isinstance(thought_response.content, str):
+                        thought_text = thought_response.content.strip()
+                    elif isinstance(thought_response.content, list):
+                        text_blocks = [
+                            block.get("text", "")
+                            if isinstance(block, dict)
+                            else str(block)
+                            for block in thought_response.content
+                            if (isinstance(block, dict) and block.get("type") == "text")
+                        ]
+                        thought_text = (
+                            " ".join(text_blocks).strip() if text_blocks else None
+                        )
+
+                # Store the thought for the next tool execution
+                if thought_text:
+                    capture.set_pending_thought(Thought(content=thought_text))
+            except Exception:
+                # If thought extraction fails (e.g., with test models), continue without it
+                # The observation will still be captured
+                pass
+
+        # Step 2: Get tool calls (normal execution)
         if is_dynamic_model:
             # Resolve dynamic model at runtime and apply prompt
             # (supports both sync and async)
