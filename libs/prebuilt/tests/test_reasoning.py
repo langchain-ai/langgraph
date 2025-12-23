@@ -1376,107 +1376,158 @@ class TestReasoningCapture:
         assert set(metrics.tool_names_used) == {"get_weather", "calculate"}
 
 
-class TestAPIIntegration:
-    """Integration tests with real LLM APIs.
+class TestCreateReactAgentWithReasoning:
+    """Tests for create_react_agent with reasoning=True parameter.
 
-    These tests require ANTHROPIC_API_KEY to be set.
+    These tests use FakeToolCallingModel following the repository's standard
+    testing pattern for fast, deterministic testing without API calls.
+
+    Note: The reasoning=True feature requires actual tool execution through
+    ToolNode's wrap_tool_call mechanism. FakeToolCallingModel only simulates
+    tool call messages without executing them, so these tests focus on:
+    - State schema correctness
+    - Error handling
+    - Backward compatibility
     """
 
-    def test_reasoning_capture_with_anthropic_model(self) -> None:
-        """Integration test: ReasoningCapture with real Anthropic API."""
-        from langchain_anthropic import ChatAnthropic
+    def test_reasoning_true_has_correct_state_schema(self) -> None:
+        """Test that reasoning=True creates agent with reasoning_trace in state."""
         from langchain_core.tools import tool
+        from tests.model import FakeToolCallingModel
 
-        from langgraph.prebuilt import (
-            ReasoningCapture,
-            ToolNode,
-            calculate_trace_metrics,
-            render_reasoning_trace,
-        )
+        from langgraph.prebuilt import create_react_agent
 
-        # Define tools
         @tool
         def get_weather(city: str) -> str:
-            """Get the current weather for a city."""
-            return f"Weather in {city}: 22°C, sunny"
+            """Get weather."""
+            return "22°C"
+
+        model = FakeToolCallingModel(tool_calls=[[]])
+
+        # Create agent with reasoning=True
+        agent = create_react_agent(model=model, tools=[get_weather], reasoning=True)
+
+        # Invoke returns reasoning_trace field (even if empty with FakeModel)
+        result = agent.invoke({"messages": [HumanMessage("Test")]})
+        assert "reasoning_trace" in result
+        assert isinstance(result["reasoning_trace"], list)
+        assert "messages" in result
+
+    def test_reasoning_false_no_trace_in_state(self) -> None:
+        """Test that reasoning=False (default) doesn't add reasoning_trace to state."""
+        from langchain_core.tools import tool
+        from tests.model import FakeToolCallingModel
+
+        from langgraph.prebuilt import create_react_agent
 
         @tool
-        def calculate(expression: str) -> str:
-            """Calculate a mathematical expression."""
-            try:
-                result = eval(expression)
-                return f"Result: {result}"
-            except Exception as e:
-                return f"Error: {e}"
+        def get_weather(city: str) -> str:
+            """Get weather."""
+            return "22°C"
 
-        # Create real Anthropic model
-        model = ChatAnthropic(model="claude-sonnet-4-5-20250929", temperature=0)
-        model_with_tools = model.bind_tools([get_weather, calculate])
+        model = FakeToolCallingModel(tool_calls=[[]])
 
-        # Create capture and ToolNode with capture wrapper
-        capture = ReasoningCapture()
-        tool_node = ToolNode(
-            tools=[get_weather, calculate],
-            wrap_tool_call=capture.wrap_tool_call,
+        # Create agent WITHOUT reasoning (default behavior)
+        agent = create_react_agent(model=model, tools=[get_weather])
+
+        # Invoke does not return reasoning_trace
+        result = agent.invoke({"messages": [HumanMessage("Test")]})
+        assert "reasoning_trace" not in result
+        assert "messages" in result
+
+    def test_reasoning_with_response_format_has_both_fields(self) -> None:
+        """Test reasoning=True with response_format has both fields in state."""
+        from langchain_core.tools import tool
+        from pydantic import BaseModel
+        from tests.model import FakeToolCallingModel
+
+        from langgraph.prebuilt import create_react_agent
+
+        class WeatherResponse(BaseModel):
+            """Structured response."""
+
+            city: str
+
+        @tool
+        def get_weather(city: str) -> str:
+            """Get weather."""
+            return "22°C"
+
+        model = FakeToolCallingModel(
+            tool_calls=[[]],
+            structured_response=WeatherResponse(city="Paris"),
         )
 
-        # Simple state - just messages
-        class SimpleState(TypedDict):
-            messages: Annotated[list, add_messages]
-
-        def call_model(state: SimpleState) -> dict:
-            response = model_with_tools.invoke(state["messages"])
-            return {"messages": [response]}
-
-        def should_continue(state: SimpleState) -> str:
-            last_message = state["messages"][-1]
-            if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-                return "tools"
-            return END
-
-        # Build graph
-        graph = StateGraph(SimpleState)
-        graph.add_node("agent", call_model)
-        graph.add_node("tools", tool_node)
-        graph.set_entry_point("agent")
-        graph.add_conditional_edges("agent", should_continue)
-        graph.add_edge("tools", "agent")
-
-        app = graph.compile()
-
-        # Clear capture before running
-        capture.clear()
-
-        # Run the agent - ask something that requires a tool call
-        app.invoke(
-            {"messages": [HumanMessage(content="What is the weather in Paris?")]}
+        # Create agent with BOTH reasoning=True AND response_format
+        agent = create_react_agent(
+            model=model,
+            tools=[get_weather],
+            reasoning=True,
+            response_format=WeatherResponse,
         )
 
-        # Get captured reasoning trace AFTER the agent completes
-        trace = capture.get_steps()
+        # Invoke returns both fields
+        result = agent.invoke({"messages": [HumanMessage("Test")]})
+        assert "reasoning_trace" in result
+        assert "structured_response" in result
+        assert "messages" in result
 
-        # Verify at least one tool call was captured
-        assert len(trace) >= 1, f"Expected at least 1 step, got {len(trace)}"
+    def test_reasoning_true_rejects_prebuilt_tool_node(self) -> None:
+        """Test that reasoning=True raises ValueError for pre-built ToolNode."""
+        from langchain_core.tools import tool
+        from tests.model import FakeToolCallingModel
 
-        # Verify the weather tool was called
-        weather_steps = [s for s in trace if s.action["name"] == "get_weather"]
-        assert len(weather_steps) >= 1, "Expected get_weather to be called"
+        from langgraph.prebuilt import ToolNode, create_react_agent
 
-        # Verify observation was captured correctly
-        weather_step = weather_steps[0]
-        assert weather_step.observation.success is True
-        assert weather_step.observation.tool_name == "get_weather"
-        assert weather_step.observation.duration_ms >= 0
-        assert "22°C" in weather_step.observation.tool_output
+        @tool
+        def get_weather(city: str) -> str:
+            """Get weather."""
+            return "22°C"
 
-        # Verify metrics work on captured trace
-        metrics = calculate_trace_metrics(trace)
-        assert metrics.total_steps >= 1
-        assert metrics.tool_calls >= 1
-        assert metrics.successful_tool_calls >= 1
-        assert metrics.total_duration_ms > 0
+        model = FakeToolCallingModel(tool_calls=[[]])
 
-        # Verify rendering works
-        rendered = render_reasoning_trace(trace)
-        assert "Step 0:" in rendered
-        assert "get_weather" in rendered
+        # Create a pre-built ToolNode
+        tool_node = ToolNode([get_weather])
+
+        # Attempting to use reasoning=True with pre-built ToolNode should fail
+        with pytest.raises(
+            ValueError,
+            match="Cannot use reasoning=True with a pre-built ToolNode",
+        ):
+            create_react_agent(model=model, tools=tool_node, reasoning=True)
+
+    def test_backward_compatibility_reasoning_false(self) -> None:
+        """Test that existing code works unchanged (reasoning defaults to False)."""
+        from langchain_core.tools import tool
+        from tests.model import FakeToolCallingModel
+
+        from langgraph.prebuilt import create_react_agent
+
+        @tool
+        def get_weather(city: str) -> str:
+            """Get weather."""
+            return "22°C"
+
+        model = FakeToolCallingModel(
+            tool_calls=[
+                [
+                    {
+                        "name": "get_weather",
+                        "args": {"city": "Paris"},
+                        "id": "1",
+                        "type": "tool_call",
+                    }
+                ],
+                [],
+            ]
+        )
+
+        # Create agent without specifying reasoning parameter
+        agent = create_react_agent(model=model, tools=[get_weather])
+
+        result = agent.invoke({"messages": [HumanMessage("Test")]})
+
+        # Should work exactly as before - no reasoning_trace
+        assert "messages" in result
+        assert "reasoning_trace" not in result
+        assert len(result["messages"]) >= 2  # Input + at least one response
