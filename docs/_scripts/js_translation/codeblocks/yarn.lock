@@ -505,23 +505,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@langchain/core@npm:^0.3.66":
-  version: 0.3.66
-  resolution: "@langchain/core@npm:0.3.66"
+"@langchain/core@npm:^0.3.80":
+  version: 0.3.80
+  resolution: "@langchain/core@npm:0.3.80"
   dependencies:
     "@cfworker/json-schema": "npm:^4.0.2"
     ansi-styles: "npm:^5.0.0"
     camelcase: "npm:6"
     decamelize: "npm:1.2.0"
     js-tiktoken: "npm:^1.0.12"
-    langsmith: "npm:^0.3.46"
+    langsmith: "npm:^0.3.67"
     mustache: "npm:^4.2.0"
     p-queue: "npm:^6.6.2"
     p-retry: "npm:4"
     uuid: "npm:^10.0.0"
     zod: "npm:^3.25.32"
     zod-to-json-schema: "npm:^3.22.3"
-  checksum: 10c0/c6689e860ac037e799cb41f6ca756086b8673f5c1ae9090db1a060934755c832827f6bb317ec0fe7677505549b1ae40e1bf0bd45778f8bab34bb2e52e87bef11
+  checksum: 10c0/c24a4641c11ddda77f89109800e59bdcd68b48f3dc0c485e6594e79ec494fc4b28e7c7b4013937e40e4edf12435dc09f7d5c0b3de5e63c8641fe81f6b17d7698
   languageName: node
   linkType: hard
 
@@ -1082,7 +1082,7 @@ __metadata:
   dependencies:
     "@eslint/js": "npm:^9.32.0"
     "@langchain/anthropic": "npm:^0.3.24"
-    "@langchain/core": "npm:^0.3.66"
+    "@langchain/core": "npm:^0.3.80"
     "@langchain/langgraph": "npm:^0.3.11"
     "@langchain/langgraph-api": "npm:^0.0.52"
     "@langchain/langgraph-sdk": "npm:^0.0.102"
@@ -2057,8 +2057,8 @@ __metadata:
   linkType: hard
 
 "glob@npm:^10.2.2":
-  version: 10.4.5
-  resolution: "glob@npm:10.4.5"
+  version: 10.5.0
+  resolution: "glob@npm:10.5.0"
   dependencies:
     foreground-child: "npm:^3.1.0"
     jackspeak: "npm:^3.1.2"
@@ -2068,7 +2068,7 @@ __metadata:
     path-scurry: "npm:^1.11.1"
   bin:
     glob: dist/esm/bin.mjs
-  checksum: 10c0/19a9759ea77b8e3ca0a43c2f07ecddc2ad46216b786bb8f993c445aee80d345925a21e5280c7b7c6c59e860a0154b84e4b2b60321fea92cd3c56b4a7489f160e
+  checksum: 10c0/100705eddbde6323e7b35e1d1ac28bcb58322095bd8e63a7d0bef1a2cdafe0d0f7922a981b2b48369a4f8c1b077be5c171804534c3509dfe950dde15fbe6d828
   languageName: node
   linkType: hard
 
@@ -2394,7 +2394,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"langsmith@npm:^0.3.33, langsmith@npm:^0.3.46":
+"langsmith@npm:^0.3.33":
   version: 0.3.49
   resolution: "langsmith@npm:0.3.49"
   dependencies:
@@ -2420,6 +2420,34 @@ __metadata:
     openai:
       optional: true
   checksum: 10c0/7152988844b04403c6e5b1e7b321eba12d62f273c9fcd554f04cfc5f905df85c126cb81238315210a282e53b6cafe11af53878ab4a82c1cef3ad196974419782
+  languageName: node
+  linkType: hard
+
+"langsmith@npm:^0.3.67":
+  version: 0.3.87
+  resolution: "langsmith@npm:0.3.87"
+  dependencies:
+    "@types/uuid": "npm:^10.0.0"
+    chalk: "npm:^4.1.2"
+    console-table-printer: "npm:^2.12.1"
+    p-queue: "npm:^6.6.2"
+    semver: "npm:^7.6.3"
+    uuid: "npm:^10.0.0"
+  peerDependencies:
+    "@opentelemetry/api": "*"
+    "@opentelemetry/exporter-trace-otlp-proto": "*"
+    "@opentelemetry/sdk-trace-base": "*"
+    openai: "*"
+  peerDependenciesMeta:
+    "@opentelemetry/api":
+      optional: true
+    "@opentelemetry/exporter-trace-otlp-proto":
+      optional: true
+    "@opentelemetry/sdk-trace-base":
+      optional: true
+    openai:
+      optional: true
+  checksum: 10c0/eb1ac6baea51063b881a9dc9a61d2d699bfc9b7aa3443865e575775abe084d94704344275958c94f4e1f03154103e9dd896cde7285797e4afb6af570da6db3b8
   languageName: node
   linkType: hard
 

@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@langchain/anthropic": "^0.3.24",
-    "@langchain/core": "^0.3.66",
+    "@langchain/core": "^0.3.80",
     "@langchain/langgraph": "^0.3.11",
     "@langchain/langgraph-api": "^0.0.52",
     "@langchain/langgraph-sdk": "^0.0.102",
