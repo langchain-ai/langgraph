@@ -567,9 +567,9 @@ def test_stream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        ("updates", {"chunk": "data3"}),
-        ("updates", {"chunk": "data4"}),
-        ("updates", {"__interrupt__": ()}),
+        ("updates", {"chunk": "data3"}, None),
+        ("updates", {"chunk": "data4"}, None),
+        ("updates", {"__interrupt__": ()}, None),
     ]
 
     # subgraphs + list modes
@@ -739,9 +739,9 @@ async def test_astream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        ("updates", {"chunk": "data3"}),
-        ("updates", {"chunk": "data4"}),
-        ("updates", {"__interrupt__": ()}),
+        ("updates", {"chunk": "data3"}, None),
+        ("updates", {"chunk": "data4"}, None),
+        ("updates", {"__interrupt__": ()}, None),
     ]
 
     # subgraphs + list modes
