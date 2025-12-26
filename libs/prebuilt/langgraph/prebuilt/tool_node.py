@@ -42,7 +42,8 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
+from concurrent.futures import as_completed
 from copy import copy, deepcopy
 from dataclasses import dataclass, replace
 from types import UnionType
@@ -82,10 +83,10 @@ from langchain_core.tools.base import (
     get_all_basemodel_annotations,
 )
 from langgraph._internal._runnable import RunnableCallable
-from langgraph.errors import GraphBubbleUp
+from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.store.base import BaseStore  # noqa: TC002
-from langgraph.types import Command, Send, StreamWriter
+from langgraph.types import Command, Interrupt, Send, StreamWriter
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypeVar, Unpack
 
@@ -115,6 +116,15 @@ TOOL_INVOCATION_ERROR_TEMPLATE = (
     " {error}\n"
     " Please fix the error and try again."
 )
+
+
+def _interrupts_from_exception(exc: GraphInterrupt) -> list[Interrupt]:
+    """Extract interrupt payloads from a GraphInterrupt."""
+    if exc.args:
+        payload = exc.args[0]
+        if isinstance(payload, Sequence):
+            return list(payload)
+    return []
 
 
 class _ToolCallRequestOverrides(TypedDict, total=False):
@@ -780,10 +790,10 @@ class ToolNode(RunnableCallable):
         config_list = get_config_list(config, len(tool_calls))
 
         # Construct ToolRuntime instances at the top level for each tool call
-        tool_runtimes = []
+        tool_runtimes: list[ToolRuntime[Any, Any]] = []
         for call, cfg in zip(tool_calls, config_list, strict=False):
             state = self._extract_state(input)
-            tool_runtime = ToolRuntime(
+            tool_runtime: ToolRuntime[Any, Any] = ToolRuntime(
                 state=state,
                 tool_call_id=call["id"],
                 config=cfg,
@@ -793,13 +803,46 @@ class ToolNode(RunnableCallable):
             )
             tool_runtimes.append(tool_runtime)
 
-        # Pass original tool calls without injection
-        input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
-            outputs = list(
-                executor.map(self._run_one, tool_calls, input_types, tool_runtimes)
-            )
+            future_to_index = {}
+            for idx, call in enumerate(tool_calls):
+                future = executor.submit(
+                    self._run_one,
+                    call,
+                    input_type,
+                    tool_runtimes[idx],
+                )
+                future_to_index[future] = idx
+            ordered_results: dict[int, ToolMessage | Command] = {}
+            interrupts: list[Interrupt] = []
+            bubble_up_exc: GraphBubbleUp | None = None
+            first_error: BaseException | None = None
 
+            for future in as_completed(future_to_index):
+                idx = future_to_index[future]
+                try:
+                    result = future.result()
+                except GraphInterrupt as exc:
+                    interrupts.extend(_interrupts_from_exception(exc))
+                except GraphBubbleUp as exc:
+                    if bubble_up_exc is None:
+                        bubble_up_exc = exc
+                except Exception as exc:  # noqa: BLE001
+                    if first_error is None:
+                        first_error = exc
+                else:
+                    ordered_results[idx] = result
+
+        if interrupts:
+            raise GraphInterrupt(tuple(interrupts))
+        if bubble_up_exc:
+            raise bubble_up_exc
+        if first_error:
+            raise first_error
+
+        outputs = [
+            ordered_results[i] for i in range(len(tool_calls)) if i in ordered_results
+        ]
         return self._combine_tool_outputs(outputs, input_type)
 
     async def _afunc(
@@ -826,10 +869,39 @@ class ToolNode(RunnableCallable):
             tool_runtimes.append(tool_runtime)
 
         # Pass original tool calls without injection
-        coros = []
-        for call, tool_runtime in zip(tool_calls, tool_runtimes, strict=False):
-            coros.append(self._arun_one(call, input_type, tool_runtime))  # type: ignore[arg-type]
-        outputs = await asyncio.gather(*coros)
+        coros = [
+            self._arun_one(
+                call,
+                input_type,
+                cast(ToolRuntime[Any, Any], tool_runtimes[idx]),
+            )
+            for idx, call in enumerate(tool_calls)
+        ]
+        results = await asyncio.gather(*coros, return_exceptions=True)
+
+        interrupts: list[Interrupt] = []
+        bubble_up_exc: GraphBubbleUp | None = None
+        first_error: BaseException | None = None
+        outputs: list[ToolMessage | Command] = []
+
+        for result in results:
+            if isinstance(result, GraphInterrupt):
+                interrupts.extend(_interrupts_from_exception(result))
+            elif isinstance(result, GraphBubbleUp):
+                if bubble_up_exc is None:
+                    bubble_up_exc = result
+            elif isinstance(result, Exception):
+                if first_error is None:
+                    first_error = result
+            else:
+                outputs.append(cast(ToolMessage | Command[Any], result))
+
+        if interrupts:
+            raise GraphInterrupt(tuple(interrupts))
+        if bubble_up_exc:
+            raise bubble_up_exc
+        if first_error:
+            raise first_error
 
         return self._combine_tool_outputs(outputs, input_type)
 
