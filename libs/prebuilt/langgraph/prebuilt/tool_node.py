@@ -575,6 +575,11 @@ class _InjectedArgs:
             or None if no store injection is needed.
         runtime: Name of the tool parameter where the runtime should be injected,
             or None if no runtime injection is needed.
+        runtime_state_field: Specification for what to inject into runtime.state.
+            Can be:
+            - None: Inject entire state (default behavior)
+            - str: Single field name to extract and inject
+            - list[str]: Multiple field names to extract into a dict
 
     Example:
         For a tool with signature:
@@ -584,7 +589,7 @@ class _InjectedArgs:
             messages: Annotated[list, InjectedState("messages")],
             full_state: Annotated[dict, InjectedState()],
             store: Annotated[BaseStore, InjectedStore()],
-            runtime: ToolRuntime,
+            runtime: Annotated[ToolRuntime, RuntimeStateField("messages")],
         ) -> str:
             ...
         ```
@@ -598,6 +603,7 @@ class _InjectedArgs:
             },
             store="store",               # Inject into "store" parameter
             runtime="runtime",           # Inject into "runtime" parameter
+            runtime_state_field="messages",  # Only inject messages field into runtime.state
         )
         ```
     """
@@ -605,6 +611,7 @@ class _InjectedArgs:
     state: dict[str, str | None]
     store: str | None
     runtime: str | None
+    runtime_state_field: str | list[str] | None
 
 
 class ToolNode(RunnableCallable):
@@ -1355,10 +1362,110 @@ class ToolNode(RunnableCallable):
 
         # Inject runtime
         if injected.runtime:
-            injected_args[injected.runtime] = tool_runtime
+            # Check if we need to filter the state in the runtime
+            if injected.runtime_state_field is not None:
+                filtered_state = self._extract_runtime_state(
+                    tool_runtime.state, injected.runtime_state_field, tool_call["name"]
+                )
+                # Create a new ToolRuntime with filtered state
+                filtered_runtime = replace(tool_runtime, state=filtered_state)
+                injected_args[injected.runtime] = filtered_runtime
+            else:
+                # Inject runtime with full state (default behavior)
+                injected_args[injected.runtime] = tool_runtime
 
         tool_call_copy["args"] = {**tool_call_copy["args"], **injected_args}
         return tool_call_copy
+
+    def _extract_runtime_state(
+        self,
+        state: Any,
+        field_spec: str | list[str],
+        tool_name: str,
+    ) -> Any:
+        """Extract specific field(s) from state for ToolRuntime injection.
+
+        Args:
+            state: The full graph state (dict, BaseModel, or list).
+            field_spec: Single field name (str) or multiple field names (list[str]).
+            tool_name: Name of the tool for error messages.
+
+        Returns:
+            - For single field (str): The value of that field
+            - For multiple fields (list[str]): Dict with only those fields
+
+        Raises:
+            ValueError: If state format is incompatible or field is missing.
+        """
+        # Handle list state by converting to dict
+        if isinstance(state, list):
+            # For list state, only allow messages_key field
+            if isinstance(field_spec, str):
+                if field_spec == self._messages_key:
+                    return state
+                err_msg = (
+                    f"Tool {tool_name} with RuntimeStateField requires dict state, "
+                    f"but received list state. When using list state, only "
+                    f"RuntimeStateField('{self._messages_key}') is allowed."
+                )
+                raise ValueError(err_msg)
+            else:
+                # Multiple fields not supported with list state
+                err_msg = (
+                    f"Tool {tool_name} with RuntimeStateField(fields=...) requires "
+                    f"dict state, but received list state."
+                )
+                raise ValueError(err_msg)
+
+        # Handle single field extraction
+        if isinstance(field_spec, str):
+            if isinstance(state, dict):
+                if field_spec not in state:
+                    err_msg = (
+                        f"Tool {tool_name} requires state field '{field_spec}', "
+                        f"but it was not found in state. Available fields: "
+                        f"{', '.join(state.keys())}"
+                    )
+                    raise ValueError(err_msg)
+                return state[field_spec]
+            else:
+                # BaseModel or other object
+                if not hasattr(state, field_spec):
+                    err_msg = (
+                        f"Tool {tool_name} requires state field '{field_spec}', "
+                        f"but it was not found in state."
+                    )
+                    raise ValueError(err_msg)
+                return getattr(state, field_spec)
+
+        # Handle multiple fields extraction
+        if isinstance(field_spec, list):
+            result = {}
+            if isinstance(state, dict):
+                for field in field_spec:
+                    if field not in state:
+                        err_msg = (
+                            f"Tool {tool_name} requires state field '{field}', "
+                            f"but it was not found in state. Available fields: "
+                            f"{', '.join(state.keys())}"
+                        )
+                        raise ValueError(err_msg)
+                    result[field] = state[field]
+            else:
+                # BaseModel or other object
+                for field in field_spec:
+                    if not hasattr(state, field):
+                        err_msg = (
+                            f"Tool {tool_name} requires state field '{field}', "
+                            f"but it was not found in state."
+                        )
+                        raise ValueError(err_msg)
+                    result[field] = getattr(state, field)
+            return result
+
+        # Should never reach here
+        msg = f"Invalid field_spec type: {type(field_spec)}"
+        raise TypeError(msg)
 
     def _validate_tool_command(
         self,
@@ -1521,17 +1628,20 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     `ToolRuntime`, the tool execution system will automatically inject an instance
     containing:
 
-    - `state`: The current graph state
+    - `state`: The current graph state (or specific field(s) if using `RuntimeStateField`)
     - `tool_call_id`: The ID of the current tool call
     - `config`: `RunnableConfig` for the current execution
     - `context`: Runtime context (from langgraph `Runtime`)
     - `store`: `BaseStore` instance for persistent storage (from langgraph `Runtime`)
     - `stream_writer`: `StreamWriter` for streaming output (from langgraph `Runtime`)
 
-    No `Annotated` wrapper is needed - just use `runtime: ToolRuntime`
-    as a parameter.
+    No `Annotated` wrapper is needed for basic usage - just use `runtime: ToolRuntime`
+    as a parameter to receive the entire state. To inject only specific state field(s),
+    use `Annotated[ToolRuntime, RuntimeStateField(...)]`.
 
     Example:
+        Basic usage with entire state:
+
         ```python
         from langchain_core.tools import tool
         from langchain.tools import ToolRuntime
@@ -1539,30 +1649,68 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
         @tool
         def my_tool(x: int, runtime: ToolRuntime) -> str:
             \"\"\"Tool that accesses runtime context.\"\"\"
-            # Access state
-            messages = tool_runtime.state["messages"]
+            # Access entire state
+            messages = runtime.state["messages"]
+            foo = runtime.state["foo"]
 
             # Access tool_call_id
-            print(f"Tool call ID: {tool_runtime.tool_call_id}")
+            print(f"Tool call ID: {runtime.tool_call_id}")
 
             # Access config
-            print(f"Run ID: {tool_runtime.config.get('run_id')}")
+            print(f"Run ID: {runtime.config.get('run_id')}")
 
             # Access runtime context
-            user_id = tool_runtime.context.get("user_id")
+            user_id = runtime.context.get("user_id")
 
             # Access store
-            tool_runtime.store.put(("metrics",), "count", 1)
+            runtime.store.put(("metrics",), "count", 1)
 
             # Stream output
-            tool_runtime.stream_writer.write("Processing...")
+            runtime.stream_writer.write("Processing...")
 
             return f"Processed {x}"
         ```
 
+        Inject only specific state field (makes dependencies explicit):
+
+        ```python
+        from typing_extensions import Annotated
+        from langchain_core.tools import tool
+        from langchain.tools import ToolRuntime, RuntimeStateField
+
+        @tool
+        def messages_tool(
+            x: int,
+            runtime: Annotated[ToolRuntime, RuntimeStateField("messages")]
+        ) -> str:
+            \"\"\"Tool that only needs messages from state.\"\"\"
+            # runtime.state is just the messages list, not the full state dict
+            messages = runtime.state
+            return f"Found {len(messages)} messages"
+        ```
+
+        Inject multiple specific state fields:
+
+        ```python
+        @tool
+        def multi_field_tool(
+            x: int,
+            runtime: Annotated[ToolRuntime, RuntimeStateField(fields=["messages", "foo"])]
+        ) -> str:
+            \"\"\"Tool that needs specific fields from state.\"\"\"
+            # runtime.state is a dict with only the requested fields
+            messages = runtime.state["messages"]
+            foo = runtime.state["foo"]
+            return f"Processed {x} with {foo}"
+        ```
+
     !!! note
-        This is a marker class used for type checking and detection.
-        The actual runtime object will be constructed during tool execution.
+        - This is a marker class used for type checking and detection.
+        - The actual runtime object will be constructed during tool execution.
+        - Using `RuntimeStateField` makes tool dependencies explicit in the signature
+          and reduces unnecessary data passing.
+        - All other runtime attributes (`context`, `config`, `store`, etc.) are
+          unaffected by `RuntimeStateField` - only `state` is filtered.
     """
 
     state: StateT
@@ -1724,6 +1872,87 @@ class InjectedStore(InjectedToolArg):
     """
 
 
+class RuntimeStateField:
+    """Annotation for specifying which state field(s) to inject into ToolRuntime.
+
+    This annotation allows tools to declare specific state dependencies when using
+    `ToolRuntime`, making the function signature more explicit about what state
+    data the tool needs. Without this annotation, `ToolRuntime.state` contains
+    the entire graph state.
+
+    Args:
+        field: Single field name to extract from state. When specified, `runtime.state`
+            will contain only the value of this field. Mutually exclusive with `fields`.
+        fields: Multiple field names to extract from state. When specified,
+            `runtime.state` will be a dict containing only these fields.
+            Mutually exclusive with `field`.
+
+    Raises:
+        ValueError: If both `field` and `fields` are specified.
+
+    Example:
+        ```python
+        from typing_extensions import Annotated
+        from langchain_core.tools import tool
+        from langchain.tools import ToolRuntime, RuntimeStateField
+
+        # Inject entire state (default behavior without annotation)
+        @tool
+        def tool_with_full_state(x: int, runtime: ToolRuntime) -> str:
+            \"\"\"Tool that receives entire state.\"\"\"
+            messages = runtime.state["messages"]
+            foo = runtime.state["foo"]
+            return f"Processed {x}"
+
+        # Inject single field - runtime.state is just the messages list
+        @tool
+        def tool_with_messages(
+            x: int,
+            runtime: Annotated[ToolRuntime, RuntimeStateField("messages")]
+        ) -> str:
+            \"\"\"Tool that only needs messages.\"\"\"
+            messages = runtime.state  # This is the messages list directly
+            return f"Found {len(messages)} messages"
+
+        # Inject multiple fields - runtime.state is a dict with only these fields
+        @tool
+        def tool_with_specific_fields(
+            x: int,
+            runtime: Annotated[ToolRuntime, RuntimeStateField(fields=["messages", "foo"])]
+        ) -> str:
+            \"\"\"Tool that needs specific fields.\"\"\"
+            messages = runtime.state["messages"]
+            foo = runtime.state["foo"]
+            return f"Processed {x} with {foo}"
+        ```
+
+    !!! note
+        - This annotation only affects what is injected into `runtime.state`
+        - Other `ToolRuntime` attributes (`context`, `config`, `store`, etc.) are unaffected
+        - The annotation is automatically detected by `ToolNode` during initialization
+        - For single field injection, the field value is injected directly
+        - For multiple field injection, a dict with only those fields is created
+    """
+
+    def __init__(
+        self, field: str | None = None, *, fields: list[str] | None = None
+    ) -> None:
+        """Initialize the RuntimeStateField annotation.
+
+        Args:
+            field: Single field name to inject, or None for entire state.
+            fields: Multiple field names to inject (mutually exclusive with field).
+
+        Raises:
+            ValueError: If both field and fields are specified.
+        """
+        if field is not None and fields is not None:
+            msg = "Cannot specify both 'field' and 'fields' parameters"
+            raise ValueError(msg)
+        self.field = field
+        self.fields = fields
+
+
 def _is_injection(
     type_arg: Any,
     injection_type: type[InjectedState | InjectedStore | ToolRuntime],
@@ -1781,6 +2010,26 @@ def _get_injection_from_type(
     return None
 
 
+def _get_runtime_state_field_from_type(type_: Any) -> str | list[str] | None:
+    """Extract RuntimeStateField specification from a type annotation.
+
+    Args:
+        type_: The type annotation to check for RuntimeStateField.
+
+    Returns:
+        - str: Single field name if RuntimeStateField(field="...") is found
+        - list[str]: Multiple field names if RuntimeStateField(fields=[...]) is found
+        - None: If no RuntimeStateField annotation or if entire state should be injected
+    """
+    type_args = get_args(type_)
+    for arg in type_args:
+        if isinstance(arg, RuntimeStateField):
+            if arg.fields is not None:
+                return arg.fields
+            return arg.field
+    return None
+
+
 def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
     """Extract all injected arguments from tool in a single pass.
 
@@ -1808,11 +2057,14 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
     state_args: dict[str, str | None] = {}
     store_arg: str | None = None
     runtime_arg: str | None = None
+    runtime_state_field: str | list[str] | None = None
 
     for name, type_ in all_annotations.items():
         # Check for runtime (special case: parameter named "runtime")
         if name == "runtime":
             runtime_arg = name
+            # Check if runtime has RuntimeStateField annotation
+            runtime_state_field = _get_runtime_state_field_from_type(type_)
 
         # Check for InjectedState
         if state_inj := _get_injection_from_type(type_, InjectedState):
@@ -1828,9 +2080,13 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
         # Check for ToolRuntime
         if _get_injection_from_type(type_, ToolRuntime):
             runtime_arg = name
+            # Check if runtime has RuntimeStateField annotation
+            if runtime_state_field is None:
+                runtime_state_field = _get_runtime_state_field_from_type(type_)
 
     return _InjectedArgs(
         state=state_args,
         store=store_arg,
         runtime=runtime_arg,
+        runtime_state_field=runtime_state_field,
     )
