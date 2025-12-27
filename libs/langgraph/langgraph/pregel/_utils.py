@@ -214,5 +214,10 @@ class NonLocals(ast.NodeVisitor):
 
 
 def is_xxh3_128_hexdigest(value: str) -> bool:
-    """Check if the given string matches the format of xxh3_128_hexdigest."""
-    return bool(re.fullmatch(r"[0-9a-f]{32}", value))
+    """Check if the given string matches the format of xxh3_128_hexdigest or interrupt ID.
+
+    Matches both:
+    - Legacy format: 32 hex characters (e.g., "a61a86efc1202990625a73c5591eee22")
+    - New format with interrupt index: 32 hex chars + ":" + digits (e.g., "a61a86efc1202990625a73c5591eee22:0")
+    """
+    return bool(re.fullmatch(r"[0-9a-f]{32}(:\d+)?", value))

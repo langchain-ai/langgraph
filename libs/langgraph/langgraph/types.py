@@ -196,8 +196,11 @@ class Interrupt:
             self.id = id
 
     @classmethod
-    def from_ns(cls, value: Any, ns: str) -> Interrupt:
-        return cls(value=value, id=xxh3_128_hexdigest(ns.encode()))
+    def from_ns(cls, value: Any, ns: str, idx: int = 0) -> Interrupt:
+        # ID format: {namespace_hash}:{idx}
+        # This allows matching resume values by namespace hash while keeping IDs unique per interrupt
+        base_id = xxh3_128_hexdigest(ns.encode())
+        return cls(value=value, id=f"{base_id}:{idx}")
 
     @property
     @deprecated("`interrupt_id` is deprecated. Use `id` instead.", category=None)
@@ -534,6 +537,7 @@ def interrupt(value: Any) -> Any:
             Interrupt.from_ns(
                 value=value,
                 ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+                idx=idx,
             ),
         )
     )
