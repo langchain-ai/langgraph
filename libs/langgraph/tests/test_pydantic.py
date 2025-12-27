@@ -8,6 +8,7 @@ import uuid
 from enum import Enum
 from typing import Annotated, Literal, Optional
 
+import pytest
 from pydantic import (
     BaseModel,
     ByteSize,
@@ -312,3 +313,203 @@ def test_pydantic_state_field_validator():
     g = builder.compile()
     res = g.invoke(input_state)
     assert res["text"] == "Hello, Validated John!"
+
+
+def test_pydantic_aliased_fields():
+    """Test that Pydantic state with aliased fields works correctly.
+
+    When using Field(alias=...), the graph should accept input using either
+    the alias or the field name.
+
+    This addresses GitHub issue #2555.
+    """
+
+    class State(BaseModel):
+        foo: str = Field(alias="bar")
+        other: str = Field(default="default")
+
+    def node_fn(state: State) -> dict:
+        # The state should have the correct value
+        assert state.foo == "hello"
+        assert state.other == "default"
+        return {"other": "updated"}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias key
+    result = graph.invoke({"bar": "hello"})
+    assert result["foo"] == "hello"
+    assert result["other"] == "updated"
+
+
+def test_pydantic_multiple_aliased_fields():
+    """Test multiple aliased fields work correctly."""
+
+    class State(BaseModel):
+        first_name: str = Field(alias="firstName")
+        last_name: str = Field(alias="lastName")
+        age: int = Field(alias="userAge")
+
+    def node_fn(state: State) -> dict:
+        assert state.first_name == "John"
+        assert state.last_name == "Doe"
+        assert state.age == 30
+        return {"age": 31}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias keys (camelCase)
+    result = graph.invoke({"firstName": "John", "lastName": "Doe", "userAge": 30})
+    assert result["first_name"] == "John"
+    assert result["last_name"] == "Doe"
+    assert result["age"] == 31
+
+
+def test_pydantic_mixed_alias_and_fieldname():
+    """Test mixing aliased and non-aliased fields."""
+
+    class State(BaseModel):
+        aliased_field: str = Field(alias="aliasedField")
+        normal_field: str
+
+    def node_fn(state: State) -> dict:
+        assert state.aliased_field == "alias_value"
+        assert state.normal_field == "normal_value"
+        return {}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias for aliased field and field name for normal field
+    result = graph.invoke(
+        {"aliasedField": "alias_value", "normal_field": "normal_value"}
+    )
+    assert result["aliased_field"] == "alias_value"
+    assert result["normal_field"] == "normal_value"
+
+
+def test_pydantic_alias_with_reducer():
+    """Test aliased fields work with reducers."""
+
+    def concat_reducer(a: list[str], b: str | list[str]) -> list[str]:
+        if isinstance(b, list):
+            return a + b
+        return a + [b]
+
+    class State(BaseModel):
+        messages: Annotated[list[str], concat_reducer] = Field(
+            default_factory=list, alias="msgs"
+        )
+
+    def node_fn(state: State) -> dict:
+        return {"messages": "processed"}
+
+    builder = StateGraph(State)
+    builder.add_node("process", node_fn)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test with alias key and list initial value
+    result = graph.invoke({"msgs": ["hello"]})
+    assert result["messages"] == ["hello", "processed"]
+
+
+def test_pydantic_aliased_fields_multinode_with_checkpointer():
+    """Integration test: aliased fields with multiple nodes and checkpointing."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    class State(BaseModel):
+        user_name: str = Field(alias="userName")
+        step_count: int = Field(default=0, alias="stepCount")
+        processed_by: Annotated[list[str], lambda a, b: a + [b]] = Field(
+            default_factory=list, alias="processedBy"
+        )
+
+    def node_a(state: State) -> dict:
+        assert state.user_name == "Alice"
+        return {"step_count": state.step_count + 1, "processed_by": "node_a"}
+
+    def node_b(state: State) -> dict:
+        assert state.user_name == "Alice"
+        assert state.step_count == 1
+        assert "node_a" in state.processed_by
+        return {"step_count": state.step_count + 1, "processed_by": "node_b"}
+
+    def node_c(state: State) -> dict:
+        assert state.step_count == 2
+        assert state.processed_by == ["node_a", "node_b"]
+        return {"step_count": state.step_count + 1, "processed_by": "node_c"}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_node("node_c", node_c)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_b", "node_c")
+    builder.add_edge("node_c", END)
+
+    # Test without checkpointer - full run
+    graph = builder.compile()
+    result = graph.invoke({"userName": "Alice"})
+    assert result["user_name"] == "Alice"
+    assert result["step_count"] == 3
+    assert result["processed_by"] == ["node_a", "node_b", "node_c"]
+
+    # Test with checkpointer and interrupt
+    checkpointer = InMemorySaver()
+    graph_with_cp = builder.compile(
+        checkpointer=checkpointer, interrupt_after=["node_a"]
+    )
+
+    config = {"configurable": {"thread_id": "test-1"}}
+
+    # First invocation - should stop after node_a
+    result1 = graph_with_cp.invoke({"userName": "Alice"}, config)
+    assert result1["step_count"] == 1
+    assert result1["processed_by"] == ["node_a"]
+
+    # Check state
+    state = graph_with_cp.get_state(config)
+    assert state.next == ("node_b",)
+
+    # Resume - should complete
+    result2 = graph_with_cp.invoke(None, config)
+    assert result2["step_count"] == 3
+    assert result2["processed_by"] == ["node_a", "node_b", "node_c"]
+
+
+@pytest.mark.anyio
+async def test_pydantic_aliased_fields_async():
+    """Integration test: aliased fields with async graph."""
+
+    class State(BaseModel):
+        query: str = Field(alias="q")
+        result: str = Field(default="", alias="res")
+
+    async def process(state: State) -> dict:
+        assert state.query == "hello"
+        return {"result": f"processed: {state.query}"}
+
+    builder = StateGraph(State)
+    builder.add_node("process", process)
+    builder.add_edge(START, "process")
+    builder.add_edge("process", END)
+    graph = builder.compile()
+
+    # Test async invoke with alias
+    result = await graph.ainvoke({"q": "hello"})
+    assert result["query"] == "hello"
+    assert result["result"] == "processed: hello"

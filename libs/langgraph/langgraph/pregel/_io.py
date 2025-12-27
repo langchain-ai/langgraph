@@ -81,8 +81,18 @@ def map_command(cmd: Command) -> Iterator[tuple[str, str, Any]]:
 def map_input(
     input_channels: str | Sequence[str],
     chunk: dict[str, Any] | Any | None,
+    *,
+    alias_map: dict[str, str] | None = None,
 ) -> Iterator[tuple[str, Any]]:
-    """Map input chunk to a sequence of pending writes in the form (channel, value)."""
+    """Map input chunk to a sequence of pending writes in the form (channel, value).
+
+    Args:
+        input_channels: The channel(s) to write to.
+        chunk: The input chunk to map.
+        alias_map: Optional mapping of alias -> field_name for Pydantic models with
+            aliased fields. When provided, input keys are first checked against
+            this map to translate aliases to their corresponding field names.
+    """
     if chunk is None:
         return
     elif isinstance(input_channels, str):
@@ -91,8 +101,10 @@ def map_input(
         if not isinstance(chunk, dict):
             raise TypeError(f"Expected chunk to be a dict, got {type(chunk).__name__}")
         for k in chunk:
-            if k in input_channels:
-                yield (k, chunk[k])
+            # Translate alias to field name if alias_map is provided
+            channel_key = alias_map.get(k, k) if alias_map else k
+            if channel_key in input_channels:
+                yield (channel_key, chunk[k])
             else:
                 logger.warning(f"Input channel {k} not found in {input_channels}")
 
