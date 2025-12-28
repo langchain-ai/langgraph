@@ -260,6 +260,49 @@ async def test_tool_node_tool_call_input() -> None:
     ]
 
 
+async def test_tool_node_direct_invoke_without_config() -> None:
+    """Test invoking ToolNode directly without config (issue #6397).
+
+    When invoking a ToolNode programmatically outside of a graph context,
+    it should use DEFAULT_RUNTIME rather than raising an error.
+    """
+
+    @dec_tool
+    def get_instructions() -> str:
+        """Get instructions."""
+        return "Instructions."
+
+    tool_node = ToolNode(tools=[get_instructions])
+    tool_calls = [
+        {
+            "name": "get_instructions",
+            "args": {},
+            "id": "call_35db3afc-3232-4278-b5c1-4fb54ae6cbe7",
+            "type": "tool_call",
+        }
+    ]
+
+    # Invoke without config - should work without raising ValueError
+    result = tool_node.invoke(tool_calls)
+    assert result["messages"] == [
+        ToolMessage(
+            content="Instructions.",
+            tool_call_id="call_35db3afc-3232-4278-b5c1-4fb54ae6cbe7",
+            name="get_instructions",
+        ),
+    ]
+
+    # Also test async invoke
+    result = await tool_node.ainvoke(tool_calls)
+    assert result["messages"] == [
+        ToolMessage(
+            content="Instructions.",
+            tool_call_id="call_35db3afc-3232-4278-b5c1-4fb54ae6cbe7",
+            name="get_instructions",
+        ),
+    ]
+
+
 def test_tool_node_error_handling_default_invocation() -> None:
     tn = ToolNode([tool1])
     result = tn.invoke(
