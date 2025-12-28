@@ -637,6 +637,18 @@ def create_react_agent(
         if messages is None:
             raise ValueError(error_msg)
 
+        # Remove trailing AI messages (without tool calls) to support regeneration.
+        # This handles the case where the graph is re-invoked with an AI message
+        # that should be regenerated (e.g., when the agent is used as a subgraph
+        # or when regenerate is triggered in LangGraph Studio).
+        messages = list(messages)
+        while (
+            messages
+            and isinstance(messages[-1], AIMessage)
+            and not messages[-1].tool_calls
+        ):
+            messages.pop()
+
         _validate_chat_history(messages)
         # we're passing messages under `messages` key, as this is expected by the prompt
         if isinstance(state_schema, type) and issubclass(state_schema, BaseModel):
