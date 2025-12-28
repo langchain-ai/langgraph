@@ -142,6 +142,7 @@ from langgraph.types import (
     StateSnapshot,
     StateUpdate,
     StreamMode,
+    ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV10
@@ -642,7 +643,7 @@ class Pregel(
         input_channels: str | Sequence[str],
         step_timeout: float | None = None,
         debug: bool | None = None,
-        checkpointer: BaseCheckpointSaver | None = None,
+        checkpointer: Checkpointer = None,
         store: BaseStore | None = None,
         cache: BaseCache | None = None,
         retry_policy: RetryPolicy | Sequence[RetryPolicy] = (),
@@ -664,6 +665,8 @@ class Pregel(
 
             if context_schema is None:
                 context_schema = cast(type[ContextT], config_type)
+
+        checkpointer = ensure_valid_checkpointer(checkpointer)
 
         self.nodes = {
             k: v.build() if isinstance(v, NodeBuilder) else v for k, v in nodes.items()

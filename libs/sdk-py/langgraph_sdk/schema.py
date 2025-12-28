@@ -167,7 +167,7 @@ class Config(TypedDict, total=False):
     """
     Runtime values for attributes previously made configurable on this Runnable,
     or sub-Runnables, through .configurable_fields() or .configurable_alternatives().
-    Check .output_schema() for a description of the attributes that have been made 
+    Check .output_schema() for a description of the attributes that have been made
     configurable.
     """
 
@@ -301,7 +301,7 @@ class ThreadState(TypedDict):
     values: list[dict] | dict[str, Any]
     """The state values."""
     next: Sequence[str]
-    """The next nodes to execute. If empty, the thread is done until new input is 
+    """The next nodes to execute. If empty, the thread is done until new input is
     received."""
     checkpoint: Checkpoint
     """The ID of the checkpoint."""
@@ -476,7 +476,7 @@ class Item(TypedDict):
     """The namespace of the item. A namespace is analogous to a document's directory."""
     key: str
     """The unique identifier of the item within its namespace.
-    
+
     In general, keys needn't be globally unique.
     """
     value: dict[str, Any]
@@ -519,6 +519,8 @@ class StreamPart(NamedTuple):
     """The type of event for this stream part."""
     data: dict
     """The data payload associated with the event."""
+    id: str | None = None
+    """The ID of the event."""
 
 
 class Send(TypedDict):

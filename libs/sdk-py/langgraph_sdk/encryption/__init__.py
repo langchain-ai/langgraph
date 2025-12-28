@@ -64,114 +64,6 @@ def _validate_handler(fn: typing.Callable, handler_type: str) -> None:
         )
 
 
-class _JsonEncryptDecorators:
-    """Dynamic decorator factory for JSON encryption handlers.
-
-    Supports both default and model-specific handlers:
-    - @encrypt.json - default handler for all models
-    - @encrypt.json.thread - handler for thread model
-    """
-
-    def __init__(self, parent: Encryption):
-        self._parent = parent
-
-    def __call__(self, fn: types.JsonEncryptor) -> types.JsonEncryptor:
-        """Register the default JSON encryption handler.
-
-        Args:
-            fn: The handler function
-
-        Returns:
-            The registered handler function
-
-        Raises:
-            DuplicateHandlerError: If handler already registered
-            TypeError: If handler has invalid signature
-        """
-        if self._parent._json_encryptor is not None:
-            raise DuplicateHandlerError("Default JSON encryptor already registered")
-        _validate_handler(fn, "Default JSON encryptor")
-        self._parent._json_encryptor = fn
-        return fn
-
-    def __getattr__(
-        self, model: str
-    ) -> typing.Callable[[types.JsonEncryptor], types.JsonEncryptor]:
-        """Dynamic attribute access for model-specific handlers.
-
-        Allows @encryption.encrypt.json.thread, @encryption.encrypt.json.assistant, etc.
-
-        Raises:
-            DuplicateHandlerError: If handler already registered for this model
-            TypeError: If handler has invalid signature
-        """
-
-        def decorator(fn: types.JsonEncryptor) -> types.JsonEncryptor:
-            if model in self._parent._json_encryptors:
-                raise DuplicateHandlerError(
-                    f"JSON encryptor for model '{model}' already registered"
-                )
-            _validate_handler(fn, f"JSON encryptor for model '{model}'")
-            self._parent._json_encryptors[model] = fn
-            return fn
-
-        return decorator
-
-
-class _JsonDecryptDecorators:
-    """Dynamic decorator factory for JSON decryption handlers.
-
-    Supports both default and model-specific handlers:
-    - @encryption.decrypt.json - default handler for all models
-    - @encryption.decrypt.json.thread - handler for thread model
-    """
-
-    def __init__(self, parent: Encryption):
-        self._parent = parent
-
-    def __call__(self, fn: types.JsonDecryptor) -> types.JsonDecryptor:
-        """Register the default JSON decryption handler.
-
-        Args:
-            fn: The handler function
-
-        Returns:
-            The registered handler function
-
-        Raises:
-            DuplicateHandlerError: If handler already registered
-            TypeError: If handler has invalid signature
-        """
-        if self._parent._json_decryptor is not None:
-            raise DuplicateHandlerError("Default JSON decryptor already registered")
-        _validate_handler(fn, "Default JSON decryptor")
-        self._parent._json_decryptor = fn
-        return fn
-
-    def __getattr__(
-        self, model: str
-    ) -> typing.Callable[[types.JsonDecryptor], types.JsonDecryptor]:
-        """Dynamic attribute access for model-specific handlers.
-
-        Allows @encryption.decrypt.json.thread, @encryption.decrypt.json.assistant, etc.
-
-        Raises:
-            DuplicateHandlerError: If handler already registered for this model
-            TypeError: If handler has invalid signature
-        """
-
-        def decorator(fn: types.JsonDecryptor) -> types.JsonDecryptor:
-            if model in self._parent._json_decryptors:
-                raise DuplicateHandlerError(
-                    f"JSON decryptor for model '{model}' already registered"
-                )
-            _validate_handler(fn, f"JSON decryptor for model '{model}'")
-            self._parent._json_decryptors[model] = fn
-            return fn
-
-        return decorator
-
-
 class _EncryptDecorators:
     """Decorators for encryption handlers.
 
@@ -181,7 +73,6 @@ class _EncryptDecorators:
 
     def __init__(self, parent: Encryption):
         self._parent = parent
-        self._json = _JsonEncryptDecorators(parent)
 
     def blob(self, fn: types.BlobEncryptor) -> types.BlobEncryptor:
         """Register a blob encryption handler.
@@ -212,29 +103,32 @@ class _EncryptDecorators:
         self._parent._blob_encryptor = fn
         return fn
 
-    @property
-    def json(self) -> _JsonEncryptDecorators:
-        """Access JSON encryption decorators.
-
-        Supports model-specific handlers:
-        - @encryption.encrypt.json - default handler for all models
-        - @encryption.encrypt.json.thread - handler for thread model only
-        - @encryption.encrypt.json.assistant - handler for assistant model only
+    def json(self, fn: types.JsonEncryptor) -> types.JsonEncryptor:
+        """Register the JSON encryption handler.
 
         Example:
             ```python
             @encryption.encrypt.json
-            async def default_encrypt(ctx: EncryptionContext, data: dict) -> dict:
-                # Default encryption for all models
+            async def encrypt_json(ctx: EncryptionContext, data: dict) -> dict:
+                # Encrypt the data
                 return encrypt_data(data)
-
-            @encryption.encrypt.json.thread
-            async def encrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
-                # Special encryption for thread model only
-                return encrypt_thread_data(data)
             ```
+
+        Args:
+            fn: The encryption handler function
+
+        Returns:
+            The registered handler function
+
+        Raises:
+            DuplicateHandlerError: If JSON encryptor already registered
+            TypeError: If handler has invalid signature
         """
-        return self._json
+        if self._parent._json_encryptor is not None:
+            raise DuplicateHandlerError("JSON encryptor already registered")
+        _validate_handler(fn, "JSON encryptor")
+        self._parent._json_encryptor = fn
+        return fn
 
 
 class _DecryptDecorators:
@@ -246,7 +140,6 @@ class _DecryptDecorators:
 
     def __init__(self, parent: Encryption):
         self._parent = parent
-        self._json = _JsonDecryptDecorators(parent)
 
     def blob(self, fn: types.BlobDecryptor) -> types.BlobDecryptor:
         """Register a blob decryption handler.
@@ -277,29 +170,32 @@ class _DecryptDecorators:
         self._parent._blob_decryptor = fn
         return fn
 
-    @property
-    def json(self) -> _JsonDecryptDecorators:
-        """Access JSON decryption decorators.
-
-        Supports model-specific handlers:
-        - @encryption.decrypt.json - default handler for all models
-        - @encryption.decrypt.json.thread - handler for thread model only
-        - @encryption.decrypt.json.assistant - handler for assistant model only
+    def json(self, fn: types.JsonDecryptor) -> types.JsonDecryptor:
+        """Register the JSON decryption handler.
 
         Example:
             ```python
             @encryption.decrypt.json
-            async def default_decrypt(ctx: EncryptionContext, data: dict) -> dict:
-                # Default decryption for all models
+            async def decrypt_json(ctx: EncryptionContext, data: dict) -> dict:
+                # Decrypt the data
                 return decrypt_data(data)
-
-            @encryption.decrypt.json.thread
-            async def decrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
-                # Special decryption for thread model only
-                return decrypt_thread_data(data)
             ```
+
+        Args:
+            fn: The decryption handler function
+
+        Returns:
+            The registered handler function
+
+        Raises:
+            DuplicateHandlerError: If JSON decryptor already registered
+            TypeError: If handler has invalid signature
         """
-        return self._json
+        if self._parent._json_decryptor is not None:
+            raise DuplicateHandlerError("JSON decryptor already registered")
+        _validate_handler(fn, "JSON decryptor")
+        self._parent._json_decryptor = fn
+        return fn
 
 
 class Encryption:
@@ -336,6 +232,28 @@ class Encryption:
     Then the LangGraph server will load your encryption file and use it to
     encrypt/decrypt data at rest.
 
+    !!! warning "JSON Encryptors Must Preserve Keys"
+
+        JSON encryptors **must not add or remove keys** from the input dict.
+        Only values may be transformed. This constraint is **enforced at runtime
+        by the server** and exists because SQL JSONB merge operations (used for
+        partial updates) work at the key level.
+
+        **Correct (per-key encryption):**
+        ```python
+        # Input:  {"secret": "value", "plain": "x"}
+        # Output: {"secret": "<encrypted>", "plain": "x"}  ✓ Keys preserved
+        ```
+
+        **Incorrect (key consolidation):**
+        ```python
+        # Input:  {"secret": "value", "plain": "x"}
+        # Output: {"__encrypted__": "<blob>", "plain": "x"}  ✗ Key changed
+        ```
+
+        If your encryptor needs to store auxiliary data (DEK, IV, etc.), embed it
+        within the encrypted value itself, not as separate keys.
+
     ???+ example "Basic Usage"
 
         ```python
@@ -343,89 +261,48 @@ class Encryption:
 
         my_encryption = Encryption()
 
+        SKIP_FIELDS = {"tenant_id", "owner", "thread_id", "assistant_id"}
+        ENCRYPTED_PREFIX = "encrypted:"
+
         @my_encryption.encrypt.blob
         async def encrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
-            # Call your encryption service
-            return encrypted_blob
+            return your_encrypt_bytes(blob)
 
         @my_encryption.decrypt.blob
         async def decrypt_blob(ctx: EncryptionContext, blob: bytes) -> bytes:
-            # Call your decryption service
-            return decrypted_blob
+            return your_decrypt_bytes(blob)
 
         @my_encryption.encrypt.json
         async def encrypt_json(ctx: EncryptionContext, data: dict) -> dict:
-            # Practical encryption strategy:
-            # - "owner" field: unencrypted (for search/filtering)
-            # - "my.customer.org/" prefixed fields: encrypt VALUES only
-            # - All other fields: pass through unencrypted
-            encrypted = {}
-            for key, value in data.items():
-                if key.startswith("my.customer.org/"):
-                    # Encrypt VALUE for sensitive customer data
-                    encrypted[key] = encrypt_value(value)
+            result = {}
+            for k, v in data.items():
+                if k in SKIP_FIELDS or v is None:
+                    result[k] = v
                 else:
-                    # Pass through (including "owner" for search)
-                    encrypted[key] = value
-            return encrypted
+                    result[k] = ENCRYPTED_PREFIX + your_encrypt_string(v)
+            return result
 
         @my_encryption.decrypt.json
         async def decrypt_json(ctx: EncryptionContext, data: dict) -> dict:
-            # Decrypt VALUES for "my.customer.org/" prefixed fields
-            decrypted = {}
-            for key, value in data.items():
-                if key.startswith("my.customer.org/"):
-                    decrypted[key] = decrypt_value(value)
+            result = {}
+            for k, v in data.items():
+                if isinstance(v, str) and v.startswith(ENCRYPTED_PREFIX):
+                    result[k] = your_decrypt_string(v[len(ENCRYPTED_PREFIX):])
                 else:
-                    decrypted[key] = value
-            return decrypted
-        ```
-
-    ???+ example "Model-Specific Handlers"
-
-        You can register different encryption handlers for different model types
-        (thread, assistant, run, cron, checkpoint, etc.):
-
-        ```python
-        from langgraph_sdk import Encryption, EncryptionContext
-
-        my_encryption = Encryption()
-
-        # Default handler for models without specific handlers
-        @my_encryption.encrypt.json
-        async def default_encrypt(ctx: EncryptionContext, data: dict) -> dict:
-            return standard_encrypt(data)
-
-        # Thread-specific handler (uses different KMS key)
-        @my_encryption.encrypt.json.thread
-        async def encrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
-            return encrypt_with_thread_key(data)
-
-        # Assistant-specific handler
-        @my_encryption.encrypt.json.assistant
-        async def encrypt_assistant(ctx: EncryptionContext, data: dict) -> dict:
-            return encrypt_with_assistant_key(data)
-
-        # Same pattern for decryption
-        @my_encryption.decrypt.json
-        async def default_decrypt(ctx: EncryptionContext, data: dict) -> dict:
-            return standard_decrypt(data)
-
-        @my_encryption.decrypt.json.thread
-        async def decrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
-            return decrypt_with_thread_key(data)
+                    result[k] = v
+            return result
         ```
 
     ???+ example "Field-Specific Logic"
 
-        The `ctx.field` attribute tells you which specific field is being encrypted,
-        allowing different logic within the same model:
+        The `ctx.model` and `ctx.field` attributes tell you which model type and
+        specific field is being encrypted, allowing different logic:
 
         ```python
-        @my_encryption.encrypt.json.thread
-        async def encrypt_thread(ctx: EncryptionContext, data: dict) -> dict:
+        @my_encryption.encrypt.json
+        async def encrypt_json(ctx: EncryptionContext, data: dict) -> dict:
             if ctx.field == "metadata":
-                # Thread metadata - standard encryption
+                # Metadata - standard encryption
                 return encrypt_standard(data)
             elif ctx.field == "values":
                 # Thread values - more sensitive, use stronger encryption
@@ -433,6 +310,49 @@ class Encryption:
             else:
                 return encrypt_standard(data)
         ```
+
+        !!! warning "Model/Field May Differ Between Encrypt and Decrypt"
+
+            Data encrypted with one `(model, field)` pair is **not guaranteed**
+            to be decrypted with the same pair. The server performs SQL JSONB
+            merges that can move encrypted values between models (e.g., cron
+            metadata → run metadata). Your decryption logic must handle data
+            regardless of the `ctx.model` or `ctx.field` values at decrypt time.
+
+            **Safe:** Use `ctx.model`/`ctx.field` for logging or metrics only.
+
+            **Safe:** Encrypt different keys based on `ctx.field`, but use a
+            single decrypt handler that decrypts any value with the encrypted
+            prefix (and passes through plaintext unchanged):
+
+            ```python
+            ENCRYPTED_PREFIX = "enc:"
+
+            @my_encryption.encrypt.json
+            async def encrypt_json(ctx: EncryptionContext, data: dict) -> dict:
+                # Encrypt different keys depending on the field
+                if ctx.field == "context":
+                    keys_to_encrypt = {"api_key", "secret_token"}
+                else:
+                    keys_to_encrypt = {"email", "ssn"}
+                return {
+                    k: ENCRYPTED_PREFIX + encrypt(v) if k in keys_to_encrypt else v
+                    for k, v in data.items()
+                }
+
+            @my_encryption.decrypt.json
+            async def decrypt_json(ctx: EncryptionContext, data: dict) -> dict:
+                # Decrypt ANY value with the prefix, regardless of model/field
+                return {
+                    k: decrypt(v[len(ENCRYPTED_PREFIX):])
+                       if isinstance(v, str) and v.startswith(ENCRYPTED_PREFIX)
+                       else v
+                    for k, v in data.items()
+                }
+            ```
+
+            **Unsafe:** Using different encryption keys or algorithms based on
+            `ctx.model`/`ctx.field` will cause decryption failures.
     """
 
     __slots__ = (
@@ -440,9 +360,7 @@ class Encryption:
         "_blob_encryptor",
         "_context_handler",
         "_json_decryptor",
-        "_json_decryptors",
         "_json_encryptor",
-        "_json_encryptors",
         "decrypt",
         "encrypt",
     )
@@ -464,8 +382,6 @@ class Encryption:
         self._blob_decryptor: types.BlobDecryptor | None = None
         self._json_encryptor: types.JsonEncryptor | None = None
         self._json_decryptor: types.JsonDecryptor | None = None
-        self._json_encryptors: dict[str, types.JsonEncryptor] = {}
-        self._json_decryptors: dict[str, types.JsonDecryptor] = {}
         self._context_handler: types.ContextHandler | None = None
 
     def context(self, fn: types.ContextHandler) -> types.ContextHandler:
@@ -506,33 +422,33 @@ class Encryption:
         return fn
 
     def get_json_encryptor(
-        self, model: str | None = None
+        self,
+        _model: str | None = None,  # kept for langgraph-api compat
     ) -> types.JsonEncryptor | None:
-        """Get the JSON encryptor for a specific model.
+        """Get the JSON encryptor.
 
         Args:
-            model: The model type (e.g., "thread", "assistant"). If None, returns default.
+            _model: Ignored. Kept for backwards compatibility with langgraph-api
+                which passes model_type to this method.
 
         Returns:
-            Model-specific encryptor if registered, otherwise default encryptor, or None.
+            The JSON encryptor, or None if not registered.
         """
-        if model and model in self._json_encryptors:
-            return self._json_encryptors[model]
         return self._json_encryptor
 
     def get_json_decryptor(
-        self, model: str | None = None
+        self,
+        _model: str | None = None,  # kept for langgraph-api compat
     ) -> types.JsonDecryptor | None:
-        """Get the JSON decryptor for a specific model.
+        """Get the JSON decryptor.
 
         Args:
-            model: The model type (e.g., "thread", "assistant"). If None, returns default.
+            _model: Ignored. Kept for backwards compatibility with langgraph-api
+                which passes model_type to this method.
 
         Returns:
-            Model-specific decryptor if registered, otherwise default decryptor, or None.
+            The JSON decryptor, or None if not registered.
         """
-        if model and model in self._json_decryptors:
-            return self._json_decryptors[model]
         return self._json_decryptor
 
     def __repr__(self) -> str:
@@ -545,10 +461,6 @@ class Encryption:
             handlers.append("json_encryptor")
         if self._json_decryptor:
             handlers.append("json_decryptor")
-        if self._json_encryptors:
-            handlers.append(f"json_encryptors({list(self._json_encryptors.keys())})")
-        if self._json_decryptors:
-            handlers.append(f"json_decryptors({list(self._json_decryptors.keys())})")
         if self._context_handler:
             handlers.append("context_handler")
         return f"Encryption(handlers=[{', '.join(handlers)}])"
