@@ -52,7 +52,6 @@
   	__start__ --> agent;
   	agent --> post_model_hook;
   	post_model_hook -.-> __end__;
-  	post_model_hook -.-> agent;
   	post_model_hook -.-> tools;
   	tools --> agent;
   
@@ -74,7 +73,6 @@
   	__start__ --> pre_model_hook;
   	agent --> post_model_hook;
   	post_model_hook -.-> __end__;
-  	post_model_hook -.-> pre_model_hook;
   	post_model_hook -.-> tools;
   	pre_model_hook --> agent;
   	tools --> pre_model_hook;
@@ -138,7 +136,6 @@
   graph TD;
   	__start__ --> agent;
   	agent --> post_model_hook;
-  	post_model_hook -.-> agent;
   	post_model_hook -.-> generate_structured_response;
   	post_model_hook -.-> tools;
   	tools --> agent;
@@ -163,7 +160,6 @@
   	__start__ --> pre_model_hook;
   	agent --> post_model_hook;
   	post_model_hook -.-> generate_structured_response;
-  	post_model_hook -.-> pre_model_hook;
   	post_model_hook -.-> tools;
   	pre_model_hook --> agent;
   	tools --> pre_model_hook;

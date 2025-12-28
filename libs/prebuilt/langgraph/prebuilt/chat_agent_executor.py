@@ -874,7 +874,7 @@ def create_react_agent(
     workflow.set_entry_point(entrypoint)
 
     agent_paths = []
-    post_model_hook_paths = [entrypoint, "tools"]
+    post_model_hook_paths = ["tools"]
 
     # Add a post model hook node if post_model_hook is provided
     if post_model_hook is not None:
@@ -937,8 +937,6 @@ def create_react_agent(
                     )
                     for call in pending_tool_calls
                 ]
-            elif isinstance(messages[-1], ToolMessage):
-                return entrypoint
             elif response_format is not None:
                 return "generate_structured_response"
             else:
