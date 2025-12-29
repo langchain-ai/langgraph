@@ -336,13 +336,13 @@ def _build(
 
     # apply config
     stdin, additional_contexts = langgraph_cli.config.config_to_docker(
-        config,
-        config_json,
-        base_image,
-        api_version,
-        install_command,
-        build_command,
-        build_context,
+        config_path=config,
+        config=config_json,
+        base_image=base_image,
+        api_version=api_version,
+        install_command=install_command,
+        build_command=build_command,
+        build_context=build_context,
     )
     # add additional_contexts
     if additional_contexts:
@@ -522,8 +522,8 @@ def dockerfile(
 
     secho(f"📝 Generating Dockerfile at {save_path}", fg="yellow")
     dockerfile, additional_contexts = langgraph_cli.config.config_to_docker(
-        config,
-        config_json,
+        config_path=config,
+        config=config_json,
         base_image=base_image,
         api_version=api_version,
     )
