@@ -14,6 +14,7 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.graph.state import (
     StateGraph,
+    _coerce_state,
     _get_node_name,
     _is_field_channel,
     _warn_invalid_state_schema,
@@ -371,3 +372,28 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+def test_coerce_state_pydantic_valid_input() -> None:
+    """Pydantic model with valid input uses normal validation."""
+
+    class MyState(BaseModel):
+        name: str
+        count: int = 0
+
+    result = _coerce_state(MyState, {"name": "test"})
+    assert isinstance(result, MyState)
+    assert result.name == "test"
+    assert result.count == 0  # default applied
+
+
+def test_coerce_state_pydantic_falls_back_to_model_construct() -> None:
+    """Validation failure falls back to model_construct (like TypedDict)."""
+
+    class MyState(BaseModel):
+        name: str
+        new_field: str  # no default - would fail validation
+
+    result = _coerce_state(MyState, {"name": "test"})
+    assert isinstance(result, MyState)
+    assert result.name == "test"
