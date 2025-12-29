@@ -3038,7 +3038,7 @@ def test_message_graph(
     # add an extra message as if it came from "tools" node
     app_w_interrupt.update_state(config, ("ai", "an extra message"), as_node="tools")
 
-    # extra message is coerced BaseMessge and appended
+    # extra message is coerced BaseMessage and appended
     # now the next node is "agent" per the graph edges
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
@@ -3762,7 +3762,7 @@ def test_root_graph(
     # add an extra message as if it came from "tools" node
     app_w_interrupt.update_state(config, ("ai", "an extra message"), as_node="tools")
 
-    # extra message is coerced BaseMessge and appended
+    # extra message is coerced BaseMessage and appended
     # now the next node is "agent" per the graph edges
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
