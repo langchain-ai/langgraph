@@ -3029,7 +3029,7 @@ class Pregel(
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
-        version: Literal["v1", "v2"],
+        version: Literal["v2"],
         include_names: Sequence[str] | None = None,
         include_types: Sequence[str] | None = None,
         include_tags: Sequence[str] | None = None,
@@ -3047,9 +3047,8 @@ class Pregel(
             input: The input to the graph.
             config: The configuration to use for the run.
             context: The static context to use for the run.
-                !!! version-added "Added in version 0.6.0"
-            version: The version of the event stream schema to use ("v1" or "v2").
-                Use "v2" for the latest version.
+                !!! version-added "Added in version 1.0.6"
+            version: The version of the event stream schema to use ("v2").
             include_names: Only include events from runnables with matching names.
             include_types: Only include events from runnables with matching types.
             include_tags: Only include events from runnables with matching tags.
