@@ -14,6 +14,7 @@ import functools
 import logging
 import os
 import re
+import ssl
 import sys
 import warnings
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
@@ -180,6 +181,7 @@ def get_client(
     api_key: str | None = NOT_PROVIDED,
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
+    verify: VerifyTypes | None = NOT_PROVIDED,
 ) -> LangGraphClient:
     """Create and configure a LangGraphClient.
 
@@ -208,6 +210,13 @@ def get_client(
               - float (total seconds)
               - tuple `(connect, read, write, pool)` in seconds
             Defaults: connect=5, read=300, write=300, pool=5.
+        verify:
+            SSL certificate verification. May be:
+              - `True`: verify SSL certificates using system CA bundle
+              - `False`: disable SSL verification (not recommended for production)
+              - `str`: path to a CA bundle file or directory
+              - `ssl.SSLContext`: custom SSL context for full control
+              - Not provided (default): uses httpx default
 
     Returns:
         LangGraphClient:
@@ -274,7 +283,10 @@ def get_client(
                 _registered_transports.append(transport)
 
     if transport is None:
-        transport = httpx.AsyncHTTPTransport(retries=5)
+        transport_kwargs: dict[str, Any] = {"retries": 5}
+        if verify is not NOT_PROVIDED:
+            transport_kwargs["verify"] = verify
+        transport = httpx.AsyncHTTPTransport(**transport_kwargs)
     client = httpx.AsyncClient(
         base_url=url,
         transport=transport,
@@ -3571,6 +3583,7 @@ def get_sync_client(
     api_key: str | None = NOT_PROVIDED,
     headers: Mapping[str, str] | None = None,
     timeout: TimeoutTypes | None = None,
+    verify: VerifyTypes | None = NOT_PROVIDED,
 ) -> SyncLangGraphClient:
     """Get a synchronous LangGraphClient instance.
 
@@ -3588,6 +3601,12 @@ def get_sync_client(
             Accepts an httpx.Timeout instance, a float (seconds), or a tuple of timeouts.
             Tuple format is (connect, read, write, pool)
             If not provided, defaults to connect=5s, read=300s, write=300s, and pool=5s.
+        verify: SSL certificate verification. Can be:
+            - `True`: verify SSL certificates using system CA bundle
+            - `False`: disable SSL verification (not recommended for production)
+            - `str`: path to a CA bundle file or directory
+            - `ssl.SSLContext`: custom SSL context for full control
+            - Not provided (default): uses httpx default
     Returns:
         SyncLangGraphClient: The top-level synchronous client for accessing AssistantsClient,
         ThreadsClient, RunsClient, and CronClient.
@@ -3620,7 +3639,10 @@ def get_sync_client(
     if url is None:
         url = "http://localhost:8123"
 
-    transport = httpx.HTTPTransport(retries=5)
+    transport_kwargs: dict[str, Any] = {"retries": 5}
+    if verify is not NOT_PROVIDED:
+        transport_kwargs["verify"] = verify
+    transport = httpx.HTTPTransport(**transport_kwargs)
     client = httpx.Client(
         base_url=url,
         transport=transport,
@@ -6885,3 +6907,5 @@ TimeoutTypes = (
     | tuple[float | None, float | None, float | None, float | None]
     | httpx.Timeout
 )
+
+VerifyTypes = bool | str | ssl.SSLContext
