@@ -907,6 +907,7 @@ class RemoteGraph(PregelProtocol):
         input: Any,
         config: RunnableConfig | None = None,
         *,
+        context: Any = None,
         version: Literal["v1", "v2"],
         include_names: Sequence[All] | None = None,
         include_types: Sequence[All] | None = None,
