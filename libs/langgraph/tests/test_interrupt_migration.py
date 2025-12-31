@@ -18,7 +18,29 @@ def test_interrupt_legacy_ns() -> None:
 
         new_interrupt = Interrupt.from_ns(value="abc", ns="a:b|c:d")
         assert new_interrupt.value == old_interrupt.value
-        assert new_interrupt.id == old_interrupt.id
+        # Note: IDs are intentionally different now.
+        # from_ns includes the interrupt index in the hash to ensure unique IDs
+        # for parallel interrupts within the same namespace.
+        # Legacy interrupts (from deprecated constructor) preserve their original IDs.
+        assert old_interrupt.id  # verify old constructor still generates an ID
+        assert new_interrupt.id  # verify from_ns still generates an ID
+        assert old_interrupt.id != new_interrupt.id  # they should differ due to idx
+
+
+def test_from_ns_unique_ids_for_different_indices() -> None:
+    """Test that from_ns generates unique IDs for different interrupt indices."""
+    interrupt_0 = Interrupt.from_ns(value="test", ns="same_ns", idx=0)
+    interrupt_1 = Interrupt.from_ns(value="test", ns="same_ns", idx=1)
+    interrupt_2 = Interrupt.from_ns(value="test", ns="same_ns", idx=2)
+
+    # All should have unique IDs
+    assert interrupt_0.id != interrupt_1.id
+    assert interrupt_1.id != interrupt_2.id
+    assert interrupt_0.id != interrupt_2.id
+
+    # Same idx should produce same ID
+    interrupt_0_again = Interrupt.from_ns(value="test", ns="same_ns", idx=0)
+    assert interrupt_0.id == interrupt_0_again.id
 
 
 serializer = JsonPlusSerializer(allowed_json_modules=True)

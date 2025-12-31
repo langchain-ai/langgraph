@@ -1082,9 +1082,24 @@ def _scratchpad(
         del w
 
         # find namespace and task-specific resume value
-        if resume_map and namespace_hash in resume_map:
-            mapped_resume_write = resume_map[namespace_hash]
-            task_resume_write.append(mapped_resume_write)
+        # Interrupt IDs now have format: {namespace_hash}:{idx}
+        # So we need to match resume values by iterating through possible idx values
+        if resume_map:
+            # First check for backward compatibility: old format (namespace_hash only)
+            if namespace_hash in resume_map:
+                mapped_resume_write = resume_map[namespace_hash]
+                task_resume_write.append(mapped_resume_write)
+            else:
+                # New format: look for {namespace_hash}:{idx} entries
+                idx = 0
+                while True:
+                    interrupt_id = f"{namespace_hash}:{idx}"
+                    if interrupt_id in resume_map:
+                        mapped_resume_write = resume_map[interrupt_id]
+                        task_resume_write.append(mapped_resume_write)
+                        idx += 1
+                    else:
+                        break
 
     else:
         null_resume_write = None
