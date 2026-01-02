@@ -567,9 +567,9 @@ def test_stream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        ("updates", {"chunk": "data3"}),
-        ("updates", {"chunk": "data4"}),
-        ("updates", {"__interrupt__": ()}),
+        ("updates", {"chunk": "data3"}, None),
+        ("updates", {"chunk": "data4"}, None),
+        ("updates", {"__interrupt__": ()}, None),
     ]
 
     # subgraphs + list modes
@@ -739,9 +739,9 @@ async def test_astream():
         stream_parts.append(stream_part)
 
     assert stream_parts == [
-        ("updates", {"chunk": "data3"}),
-        ("updates", {"chunk": "data4"}),
-        ("updates", {"__interrupt__": ()}),
+        ("updates", {"chunk": "data3"}, None),
+        ("updates", {"chunk": "data4"}, None),
+        ("updates", {"__interrupt__": ()}, None),
     ]
 
     # subgraphs + list modes
@@ -919,8 +919,8 @@ async def test_langgraph_cloud_integration():
     from langgraph.graph import END, START, MessagesState, StateGraph
 
     # create RemotePregel instance
-    client = get_client()
-    sync_client = get_sync_client()
+    client = get_client(url="http://localhost:8123")
+    sync_client = get_sync_client(url="http://localhost:8123")
     remote_pregel = RemoteGraph(
         "agent",
         client=client,

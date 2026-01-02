@@ -425,8 +425,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         FROM checkpoints
         {where}
         ORDER BY checkpoint_id DESC"""
-        if limit:
-            query += f" LIMIT {limit}"
+        if limit is not None:
+            query += " LIMIT ?"
+            params = (*params, limit)
         async with (
             self.lock,
             self.conn.execute(query, params) as cur,
