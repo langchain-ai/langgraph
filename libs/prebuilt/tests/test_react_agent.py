@@ -2154,3 +2154,57 @@ def test_create_react_agent_inject_vars_with_post_model_hook(
         AIMessage("hi-hi-6", id="1"),
     ]
     assert result["foo"] == 2
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_handle_tool_errors_default_true(version: str) -> None:
+    """Test that tool errors are handled by default (handle_tool_errors=True).
+
+    This tests the fix for issue #6486 where tool errors were not being handled
+    by default after version 1.0.1, causing agents to crash instead of returning
+    error messages to the LLM.
+    """
+
+    @dec_tool
+    def failing_tool() -> str:
+        """A tool that always fails."""
+        raise ValueError("Tool execution failed!")
+
+    tool_call = ToolCall(name="failing_tool", args={}, id="test-call")
+    model = FakeToolCallingModel(tool_calls=[[tool_call], []])
+
+    # Default behavior: errors should be handled
+    agent = create_react_agent(model, [failing_tool], version=version)
+
+    result = agent.invoke({"messages": [HumanMessage("Call the tool")]})
+
+    # The agent should complete without raising, and the error should be in messages
+    messages = result["messages"]
+    # Find the tool message with the error
+    tool_messages = [m for m in messages if isinstance(m, ToolMessage)]
+    assert len(tool_messages) == 1
+    assert (
+        "Error" in tool_messages[0].content
+        or "error" in tool_messages[0].content.lower()
+    )
+
+
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+def test_handle_tool_errors_false_propagates(version: str) -> None:
+    """Test that tool errors propagate when handle_tool_errors=False."""
+
+    @dec_tool
+    def failing_tool() -> str:
+        """A tool that always fails."""
+        raise ValueError("Tool execution failed!")
+
+    tool_call = ToolCall(name="failing_tool", args={}, id="test-call")
+    model = FakeToolCallingModel(tool_calls=[[tool_call], []])
+
+    # Explicitly disable error handling
+    agent = create_react_agent(
+        model, [failing_tool], version=version, handle_tool_errors=False
+    )
+
+    with pytest.raises(ValueError, match="Tool execution failed!"):
+        agent.invoke({"messages": [HumanMessage("Call the tool")]})

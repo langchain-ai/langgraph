@@ -299,6 +299,7 @@ def create_react_agent(
     debug: bool = False,
     version: Literal["v1", "v2"] = "v2",
     name: str | None = None,
+    handle_tool_errors: bool = True,
     **deprecated_kwargs: Any,
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
@@ -455,6 +456,11 @@ def create_react_agent(
         name: An optional name for the `CompiledStateGraph`.
             This name will be automatically used when adding ReAct agent graph to another graph as a subgraph node -
             particularly useful for building multi-agent systems.
+        handle_tool_errors: Whether to handle tool errors. If `True` (default), tool errors
+            will be caught and returned as error messages to the LLM. If `False`, tool errors
+            will propagate and the agent execution will fail. This parameter is only used when
+            `tools` is a list; if a `ToolNode` is passed directly, its error handling configuration
+            is preserved.
 
     !!! warning "`config_schema` Deprecated"
         The `config_schema` parameter is deprecated in v0.6.0 and support will be removed in v2.0.0.
@@ -546,7 +552,10 @@ def create_react_agent(
         tool_node = tools
     else:
         llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
-        tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
+        tool_node = ToolNode(
+            [t for t in tools if not isinstance(t, dict)],
+            handle_tool_errors=handle_tool_errors,
+        )
         tool_classes = list(tool_node.tools_by_name.values())
 
     is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
