@@ -13,9 +13,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 from langgraph.a2a.capabilities import A2ACapabilities
+from langgraph.types import _DC_KWARGS
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(**_DC_KWARGS)
 class AgentEndpoint:
     """
     Describes an endpoint where an agent can be reached.
@@ -53,7 +54,7 @@ class AgentEndpoint:
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(**_DC_KWARGS)
 class AgentCard:
     """
     A2A Agent Card - standardized agent identity and capability descriptor.
