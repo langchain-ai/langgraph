@@ -151,6 +151,7 @@ class PoolConfig(TypedDict, total=False):
     """Connection pool settings for PostgreSQL connections.
 
     Controls connection lifecycle and resource utilization:
+
     - Small pools (1-5) suit low-concurrency workloads
     - Larger pools handle concurrent requests but consume more resources
     - Setting max_size prevents resource exhaustion under load
@@ -166,6 +167,7 @@ class PoolConfig(TypedDict, total=False):
     """Additional connection arguments passed to each connection in the pool.
     
     Default kwargs set automatically:
+
     - autocommit: True
     - prepare_threshold: 0
     - row_factory: dict_row
