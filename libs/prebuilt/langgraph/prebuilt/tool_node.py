@@ -15,12 +15,12 @@ The module implements design patterns for:
 
 Key Components:
 
-- `ToolNode`: Main class for executing tools in LangGraph workflows
-- `InjectedState`: Annotation for injecting graph state into tools
-- `InjectedStore`: Annotation for injecting persistent store into tools
-- `ToolRuntime`: Runtime information for tools, bundling together `state`, `context`,
+- [`ToolNode`][langgraph.prebuilt.ToolNode]: Main class for executing tools in LangGraph workflows
+- [`InjectedState`][langgraph.prebuilt.InjectedState]: Annotation for injecting graph state into tools
+- [`InjectedStore`][langgraph.prebuilt.InjectedStore]: Annotation for injecting persistent store into tools
+- [`ToolRuntime`][langgraph.prebuilt.ToolRuntime]: Runtime information for tools, bundling together `state`, `context`,
     `config`, `stream_writer`, `tool_call_id`, and `store`
-- `tools_condition`: Utility function for conditional routing based on tool calls
+- [`tools_condition`][langgraph.prebuilt.tools_condition]: Utility function for conditional routing based on tool calls
 
 Typical Usage:
     ```python
@@ -613,6 +613,14 @@ class ToolNode(RunnableCallable):
     Handles tool execution patterns including function calls, state injection,
     persistent storage, and control flow. Manages parallel execution,
     error handling.
+
+    Use `ToolNode` when building custom workflows that require fine-grained control over
+    tool execution—for example, custom routing logic, specialized error handling, or
+    non-standard agent architectures.
+
+    For standard ReAct-style agents, use [`create_agent`][langchain.agents.create_agent]
+    instead. It uses `ToolNode` internally with sensible defaults for the agent loop,
+    conditional routing, and error handling.
 
     Input Formats:
         1. Graph state with `messages` key that has a list of messages:
