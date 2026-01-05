@@ -615,7 +615,7 @@ class ToolNode(RunnableCallable):
     error handling.
 
     Input Formats:
-        1. Graph state with `messages` key that has a list of messages:
+        1. **Graph state** with `messages` key that has a list of messages:
             - Common representation for agentic workflows
             - Supports custom messages key via `messages_key` parameter
 
