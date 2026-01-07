@@ -1147,6 +1147,7 @@ def test_config_to_compose_simple_config():
         PATH_TO_CONFIG,
         validate_config({"dependencies": ["."], "graphs": graphs}),
         "langchain/langgraph-api",
+        topology="single",
     )
     assert (
         clean_empty_lines(actual_compose_stdin).strip()
@@ -1195,6 +1196,7 @@ def test_config_to_compose_env_vars():
             }
         ),
         "langchain/langgraph-api-custom",
+        topology="single",
     )
     assert clean_empty_lines(actual_compose_stdin) == expected_compose_stdin
 
@@ -1233,6 +1235,7 @@ def test_config_to_compose_env_file():
         PATH_TO_CONFIG,
         validate_config({"dependencies": ["."], "graphs": graphs, "env": ".env"}),
         "langchain/langgraph-api",
+        topology="single",
     )
     assert clean_empty_lines(actual_compose_stdin) == expected_compose_stdin
 
@@ -1279,6 +1282,7 @@ def test_config_to_compose_watch():
         validate_config({"dependencies": ["."], "graphs": graphs}),
         "langchain/langgraph-api",
         watch=True,
+        topology="single",
     )
     assert clean_empty_lines(actual_compose_stdin) == expected_compose_stdin
 
@@ -1326,6 +1330,7 @@ def test_config_to_compose_end_to_end():
         validate_config({"dependencies": ["."], "graphs": graphs, "env": ".env"}),
         "langchain/langgraph-api",
         watch=True,
+        topology="single",
     )
     assert clean_empty_lines(actual_compose_stdin) == expected_compose_stdin
 

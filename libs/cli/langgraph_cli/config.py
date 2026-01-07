@@ -1242,6 +1242,8 @@ def config_to_compose(
     api_version: str | None = None,
     image: str | None = None,
     watch: bool = False,
+    topology: str = "split",
+    postgres_uri: str | None = None,
 ) -> str:
     base_image = base_image or default_base_image(config)
 
@@ -1268,11 +1270,20 @@ def config_to_compose(
     else:
         watch_str = ""
     if image:
-        return f"""
+        api_config = f"""
 {textwrap.indent(env_vars_str, "            ")}
         {env_file_str}
         {watch_str}
 """
+        # For split topology with pre-built image, worker also needs env vars
+        if topology == "split":
+            worker_config = f"""
+    langgraph-worker:
+{textwrap.indent(env_vars_str, "            ")}
+        {env_file_str}
+"""
+            return api_config + worker_config
+        return api_config
 
     else:
         dockerfile, additional_contexts = config_to_docker(
@@ -1292,7 +1303,7 @@ def config_to_compose(
             additional_contexts:
 {additional_contexts_str}"""
 
-        return f"""
+        api_config = f"""
 {textwrap.indent(env_vars_str, "            ")}
         {env_file_str}
         pull_policy: build
@@ -1302,3 +1313,43 @@ def config_to_compose(
 {textwrap.indent(dockerfile, "                ")}
         {watch_str}
 """
+        # For split topology, add complete worker service definition with build config
+        # (worker service is NOT added in docker.py when building from Dockerfile)
+        if topology == "split":
+            # Import here to avoid circular dependency
+            from langgraph_cli.docker import DEFAULT_POSTGRES_URI
+
+            # Determine if using internal postgres (include_db) based on postgres_uri
+            include_db = postgres_uri is None
+            effective_postgres_uri = postgres_uri or DEFAULT_POSTGRES_URI
+
+            # Build depends_on based on whether we have internal postgres
+            if include_db:
+                worker_depends_on = """depends_on:
+            langgraph-redis:
+                condition: service_healthy
+            langgraph-postgres:
+                condition: service_healthy"""
+            else:
+                worker_depends_on = """depends_on:
+            langgraph-redis:
+                condition: service_healthy"""
+
+            worker_config = f"""
+    langgraph-worker:
+        {worker_depends_on}
+        environment:
+            REDIS_URI: redis://langgraph-redis:6379
+            POSTGRES_URI: {effective_postgres_uri}
+{textwrap.indent(env_vars_str, "            ")}
+        {env_file_str}
+        entrypoint:
+            - /storage/queue_entrypoint.sh
+        pull_policy: build
+        build:
+            context: .{additional_contexts_str}
+            dockerfile_inline: |
+{textwrap.indent(dockerfile, "                ")}
+"""
+            return api_config + worker_config
+        return api_config

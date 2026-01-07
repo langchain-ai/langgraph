@@ -66,6 +66,7 @@ def test_prepare_args_and_stdin() -> None:
         debugger_port=debugger_port,
         debugger_base_url=debugger_graph_url,
         watch=True,
+        topology="single",
     )
 
     expected_args = [
@@ -189,6 +190,7 @@ def test_prepare_args_and_stdin_with_image() -> None:
         debugger_base_url=debugger_graph_url,
         watch=True,
         image="my-cool-image",
+        topology="single",
     )
 
     expected_args = [

@@ -20,6 +20,7 @@ class Version(NamedTuple):
 
 
 DockerComposeType = Literal["plugin", "standalone"]
+TopologyType = Literal["single", "split"]
 
 
 class DockerCapabilities(NamedTuple):
@@ -149,6 +150,8 @@ def compose_as_dict(
     base_image: str | None = None,
     # API version of the base image
     api_version: str | None = None,
+    # Deployment topology: "single" (combined) or "split" (separate API/worker)
+    topology: TopologyType = "split",
 ) -> dict:
     """Create a docker compose file as a dictionary in YML style."""
     if postgres_uri is None:
@@ -207,15 +210,20 @@ def compose_as_dict(
         )["langgraph-debugger"]
 
     # Add langgraph-api service
+    api_environment = {
+        "REDIS_URI": "redis://langgraph-redis:6379",
+        "POSTGRES_URI": postgres_uri,
+    }
+    # In split mode, disable queue processing in the API server
+    if topology == "split":
+        api_environment["N_JOBS_PER_WORKER"] = "0"
+
     services["langgraph-api"] = {
         "ports": [f'"{port}:8000"'],
         "depends_on": {
             "langgraph-redis": {"condition": "service_healthy"},
         },
-        "environment": {
-            "REDIS_URI": "redis://langgraph-redis:6379",
-            "POSTGRES_URI": postgres_uri,
-        },
+        "environment": api_environment,
     }
     if image:
         services["langgraph-api"]["image"] = image
@@ -234,6 +242,37 @@ def compose_as_dict(
             "start_interval": "1s",
             "start_period": "10s",
         }
+
+    # Add langgraph-worker service in split mode ONLY when using pre-built image
+    # When building from Dockerfile, the worker service is added in config_to_compose
+    # to avoid duplicate service key issues with YAML concatenation
+    if topology == "split" and image:
+        services["langgraph-worker"] = {
+            "depends_on": {
+                "langgraph-redis": {"condition": "service_healthy"},
+            },
+            "environment": {
+                "REDIS_URI": "redis://langgraph-redis:6379",
+                "POSTGRES_URI": postgres_uri,
+            },
+            "entrypoint": ["/storage/queue_entrypoint.sh"],
+            "image": image,
+        }
+
+        # If Postgres is included, add it to the dependencies of langgraph-worker
+        if include_db:
+            services["langgraph-worker"]["depends_on"]["langgraph-postgres"] = {
+                "condition": "service_healthy"
+            }
+
+        # Additional healthcheck for langgraph-worker if supported
+        if capabilities.healthcheck_start_interval:
+            services["langgraph-worker"]["healthcheck"] = {
+                "test": "python /api/healthcheck.py",
+                "interval": "60s",
+                "start_interval": "1s",
+                "start_period": "10s",
+            }
 
     # Final compose dictionary with volumes included if needed
     compose_dict = {}
@@ -255,6 +294,8 @@ def compose(
     image: str | None = None,
     base_image: str | None = None,
     api_version: str | None = None,
+    # Deployment topology: "single" (combined) or "split" (separate API/worker)
+    topology: TopologyType = "split",
 ) -> str:
     """Create a docker compose file as a string."""
     compose_content = compose_as_dict(
@@ -266,6 +307,7 @@ def compose(
         image=image,
         base_image=base_image,
         api_version=api_version,
+        topology=topology,
     )
     compose_str = dict_to_yaml(compose_content)
     return compose_str

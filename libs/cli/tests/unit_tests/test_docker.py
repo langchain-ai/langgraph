@@ -20,7 +20,10 @@ def test_compose_with_no_debugger_and_custom_db():
     port = 8123
     custom_postgres_uri = "custom_postgres_uri"
     actual_compose_str = compose(
-        DEFAULT_DOCKER_CAPABILITIES, port=port, postgres_uri=custom_postgres_uri
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
+        postgres_uri=custom_postgres_uri,
+        topology="single",
     )
     expected_compose_str = f"""services:
     langgraph-redis:
@@ -49,6 +52,7 @@ def test_compose_with_no_debugger_and_custom_db_with_healthcheck():
         DEFAULT_DOCKER_CAPABILITIES._replace(healthcheck_start_interval=True),
         port=port,
         postgres_uri=custom_postgres_uri,
+        topology="single",
     )
     expected_compose_str = f"""services:
     langgraph-redis:
@@ -82,6 +86,7 @@ def test_compose_with_debugger_and_custom_db():
         DEFAULT_DOCKER_CAPABILITIES,
         port=port,
         postgres_uri=custom_postgres_uri,
+        topology="single",
     )
     expected_compose_str = f"""services:
     langgraph-redis:
@@ -105,7 +110,9 @@ def test_compose_with_debugger_and_custom_db():
 
 def test_compose_with_debugger_and_default_db():
     port = 8123
-    actual_compose_str = compose(DEFAULT_DOCKER_CAPABILITIES, port=port)
+    actual_compose_str = compose(
+        DEFAULT_DOCKER_CAPABILITIES, port=port, topology="single"
+    )
     expected_compose_str = f"""volumes:
     langgraph-data:
         driver: local
@@ -157,7 +164,10 @@ def test_compose_with_api_version():
     api_version = "0.2.74"
 
     actual_compose_str = compose(
-        DEFAULT_DOCKER_CAPABILITIES, port=port, api_version=api_version
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
+        api_version=api_version,
+        topology="single",
     )
 
     # The compose function should generate a compose file that doesn't directly
@@ -219,6 +229,7 @@ def test_compose_with_api_version_and_base_image():
         port=port,
         api_version=api_version,
         base_image=base_image,
+        topology="single",
     )
 
     # Similar to the previous test - the compose function doesn't directly embed
@@ -280,6 +291,7 @@ def test_compose_with_api_version_and_custom_postgres():
         port=port,
         api_version=api_version,
         postgres_uri=custom_postgres_uri,
+        topology="single",
     )
 
     expected_compose_str = f"""services:
@@ -313,6 +325,7 @@ def test_compose_with_api_version_and_debugger():
         port=port,
         api_version=api_version,
         debugger_port=debugger_port,
+        topology="single",
     )
 
     expected_compose_str = f"""volumes:
@@ -366,6 +379,101 @@ services:
             REDIS_URI: redis://langgraph-redis:6379
             POSTGRES_URI: {DEFAULT_POSTGRES_URI}"""
     assert clean_empty_lines(actual_compose_str) == expected_compose_str
+
+
+def test_compose_with_single_topology():
+    """Test compose function with single topology (legacy behavior)."""
+    port = 8123
+    custom_postgres_uri = "custom_postgres_uri"
+    actual_compose_str = compose(
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
+        postgres_uri=custom_postgres_uri,
+        topology="single",
+    )
+    # Assert langgraph-worker service is NOT present
+    assert "langgraph-worker" not in actual_compose_str
+    assert "/storage/queue_entrypoint.sh" not in actual_compose_str
+    # Assert N_JOBS_PER_WORKER is NOT set (queue runs in API container)
+    assert "N_JOBS_PER_WORKER" not in actual_compose_str
+
+
+def test_compose_with_split_topology():
+    """Test compose function with split topology when using pre-built image."""
+    port = 8123
+    custom_postgres_uri = "custom_postgres_uri"
+    image = "my-custom-image:latest"
+    actual_compose_str = compose(
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
+        postgres_uri=custom_postgres_uri,
+        topology="split",
+        image=image,
+    )
+    # Assert langgraph-worker service is present when using image
+    assert "langgraph-worker" in actual_compose_str
+    assert "/storage/queue_entrypoint.sh" in actual_compose_str
+    # Assert N_JOBS_PER_WORKER is set to 0 on API service
+    assert "N_JOBS_PER_WORKER" in actual_compose_str
+
+
+def test_compose_split_topology_is_default():
+    """Test that split topology is the default (N_JOBS_PER_WORKER set on api)."""
+    port = 8123
+    custom_postgres_uri = "custom_postgres_uri"
+    # Call without specifying topology
+    actual_compose_str = compose(
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
+        postgres_uri=custom_postgres_uri,
+    )
+    # In split mode without image, worker is NOT in compose (added in config_to_compose)
+    # But N_JOBS_PER_WORKER should be set on api service
+    assert "N_JOBS_PER_WORKER" in actual_compose_str
+
+
+def test_compose_split_topology_with_image():
+    """Test that worker service uses the same image as api in split mode."""
+    port = 8123
+    image = "my-custom-image:latest"
+    actual_compose_str = compose(
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
+        image=image,
+        topology="split",
+    )
+    # Both services should reference the same image
+    assert actual_compose_str.count(f"image: {image}") == 2
+
+
+def test_compose_split_topology_with_postgres():
+    """Test split topology includes postgres service (worker added when image provided)."""
+    port = 8123
+    image = "my-custom-image:latest"
+    actual_compose_str = compose(
+        DEFAULT_DOCKER_CAPABILITIES,
+        port=port,
+        topology="split",
+        image=image,
+    )
+    # Worker should be present when image is provided
+    assert "langgraph-worker" in actual_compose_str
+    # The compose should include langgraph-postgres service
+    assert "langgraph-postgres" in actual_compose_str
+
+
+def test_compose_split_topology_with_healthcheck():
+    """Test split topology with healthcheck capabilities when using image."""
+    port = 8123
+    image = "my-custom-image:latest"
+    actual_compose_str = compose(
+        DEFAULT_DOCKER_CAPABILITIES._replace(healthcheck_start_interval=True),
+        port=port,
+        topology="split",
+        image=image,
+    )
+    # Both api and worker should have healthchecks
+    assert actual_compose_str.count("python /api/healthcheck.py") == 2
 
 
 @pytest.mark.parametrize(

@@ -158,6 +158,25 @@ OPT_API_VERSION = click.option(
     help="API server version to use for the base image. If unspecified, the latest version will be used.",
 )
 
+OPT_TOPOLOGY = click.option(
+    "--topology",
+    type=click.Choice(["single", "split"]),
+    default="split",
+    show_default=True,
+    help="""Deployment topology for the LangGraph services.
+
+    \b
+    - 'single': Run API server and queue worker in the same container (legacy behavior)
+    - 'split': Run API server and queue worker in separate containers (recommended)
+    Other topologies (e.g., 'distributed') coming soon.
+
+    \b
+    Example:
+        langgraph up --topology single
+    \b
+    """,
+)
+
 
 @click.group()
 @click.version_option(version=__version__, prog_name="LangGraph CLI")
@@ -176,6 +195,7 @@ def cli():
 @OPT_WATCH
 @OPT_POSTGRES_URI
 @OPT_API_VERSION
+@OPT_TOPOLOGY
 @click.option(
     "--image",
     type=str,
@@ -210,6 +230,7 @@ def up(
     debugger_base_url: str | None,
     postgres_uri: str | None,
     api_version: str | None,
+    topology: str,
     image: str | None,
     base_image: str | None,
 ):
@@ -233,6 +254,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             debugger_base_url=debugger_base_url,
             postgres_uri=postgres_uri,
             api_version=api_version,
+            topology=topology,
             image=image,
             base_image=base_image,
         )
@@ -557,6 +579,7 @@ def dockerfile(
                 capabilities,
                 port=8123,
                 base_image=base_image,
+                topology="split",
             )
             # Add .env file to the docker-compose.yml for the langgraph-api service
             compose_dict["services"]["langgraph-api"]["env_file"] = [".env"]
@@ -570,6 +593,17 @@ def dockerfile(
                 compose_dict["services"]["langgraph-api"]["build"]["args"] = {
                     "BASE_IMAGE": base_image
                 }
+            # Also configure the worker service with the same build context
+            if "langgraph-worker" in compose_dict["services"]:
+                compose_dict["services"]["langgraph-worker"]["env_file"] = [".env"]
+                compose_dict["services"]["langgraph-worker"]["build"] = {
+                    "context": ".",
+                    "dockerfile": save_path.name,
+                }
+                if base_image:
+                    compose_dict["services"]["langgraph-worker"]["build"]["args"] = {
+                        "BASE_IMAGE": base_image
+                    }
             f.write(langgraph_cli.docker.dict_to_yaml(compose_dict))
             secho("✅ Created: docker-compose.yml", fg="green")
 
@@ -793,6 +827,8 @@ def prepare_args_and_stdin(
     debugger_base_url: str | None = None,
     postgres_uri: str | None = None,
     api_version: str | None = None,
+    # Deployment topology: "single" (combined) or "split" (separate API/worker)
+    topology: str = "split",
     # Like "my-tag" (if you already built it locally)
     image: str | None = None,
     # Like "langchain/langgraphjs-api" or "langchain/langgraph-api
@@ -809,6 +845,7 @@ def prepare_args_and_stdin(
         image=image,  # Pass image to compose YAML generator
         base_image=base_image,
         api_version=api_version,
+        topology=topology,
     )
     args = [
         "--project-directory",
@@ -826,6 +863,8 @@ def prepare_args_and_stdin(
         base_image=langgraph_cli.config.default_base_image(config),
         api_version=api_version,
         image=image,
+        topology=topology,
+        postgres_uri=postgres_uri,
     )
     return args, stdin
 
@@ -844,6 +883,7 @@ def prepare(
     debugger_base_url: str | None = None,
     postgres_uri: str | None = None,
     api_version: str | None = None,
+    topology: str = "split",
     image: str | None = None,
     base_image: str | None = None,
 ) -> tuple[list[str], str]:
@@ -872,6 +912,7 @@ def prepare(
         debugger_base_url=debugger_base_url or f"http://127.0.0.1:{port}",
         postgres_uri=postgres_uri,
         api_version=api_version,
+        topology=topology,
         image=image,
         base_image=base_image,
     )
