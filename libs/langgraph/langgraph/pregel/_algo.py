@@ -29,7 +29,16 @@ from langgraph.checkpoint.base import (
     V,
 )
 from langgraph.store.base import BaseStore
-from xxhash import xxh3_128_hexdigest
+
+try:
+    from xxhash import xxh3_128_hexdigest  # type: ignore[import-not-found]
+except ImportError:
+    import hashlib
+
+    def xxh3_128_hexdigest(data: bytes) -> str:
+        """Fallback using MD5 for environments without xxhash (e.g., Pyodide/WASM)."""
+        return hashlib.md5(data, usedforsecurity=False).hexdigest()
+
 
 from langgraph._internal._config import merge_configs, patch_config
 from langgraph._internal._constants import (
