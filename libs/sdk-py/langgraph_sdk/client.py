@@ -1523,6 +1523,48 @@ class ThreadsClient:
         """
         await self.http.delete(f"/threads/{thread_id}", headers=headers, params=params)
 
+    async def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: Literal["delete", "keep_latest"] = "delete",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> dict[str, int]:
+        """Prune threads by ID.
+
+        Args:
+            thread_ids: List of thread IDs to prune.
+            strategy: Prune strategy. Defaults to "delete".
+                - "delete": Remove threads entirely.
+                - "keep_latest": Prune old checkpoints but keep threads and their
+                  latest state. Requires `FF_USE_CORE_API=true` on the server.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            Dictionary with `pruned_count` key indicating how many threads were pruned.
+
+        ???+ example "Example Usage"
+
+            ```python
+            client = get_client(url="http://localhost:2024")
+            result = await client.threads.prune(
+                thread_ids=["thread-1", "thread-2"],
+                strategy="delete"
+            )
+            print(result)  # {"pruned_count": 2}
+            ```
+
+        """
+        payload: dict[str, Any] = {
+            "thread_ids": list(thread_ids),
+            "strategy": strategy,
+        }
+        return await self.http.post(
+            "/threads/prune", json=payload, headers=headers, params=params
+        )
+
     async def search(
         self,
         *,
@@ -4851,6 +4893,48 @@ class SyncThreadsClient:
 
         """
         self.http.delete(f"/threads/{thread_id}", headers=headers, params=params)
+
+    def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: Literal["delete", "keep_latest"] = "delete",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> dict[str, int]:
+        """Prune threads by ID.
+
+        Args:
+            thread_ids: List of thread IDs to prune.
+            strategy: Prune strategy. Defaults to "delete".
+                - "delete": Remove threads entirely.
+                - "keep_latest": Prune old checkpoints but keep threads and their
+                  latest state. Requires `FF_USE_CORE_API=true` on the server.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            Dictionary with `pruned_count` key indicating how many threads were pruned.
+
+        ???+ example "Example Usage"
+
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
+            result = client.threads.prune(
+                thread_ids=["thread-1", "thread-2"],
+                strategy="delete"
+            )
+            print(result)  # {"pruned_count": 2}
+            ```
+
+        """
+        payload: dict[str, Any] = {
+            "thread_ids": list(thread_ids),
+            "strategy": strategy,
+        }
+        return self.http.post(
+            "/threads/prune", json=payload, headers=headers, params=params
+        )
 
     def search(
         self,
