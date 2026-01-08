@@ -65,7 +65,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def _safe_process_inputs(processor: Callable[[Any], Any] | None, inputs: Any) -> Any:
+def _process_inputs(processor: Callable[[Any], Any] | None, inputs: Any) -> Any:
     """Safely process trace inputs, returning error placeholder on failure."""
     if processor is None:
         return inputs
@@ -76,7 +76,7 @@ def _safe_process_inputs(processor: Callable[[Any], Any] | None, inputs: Any) ->
         return {"error": "<trace_inputs processing failed>"}
 
 
-def _safe_process_outputs(processor: Callable[[Any], Any] | None, outputs: Any) -> Any:
+def _process_outputs(processor: Callable[[Any], Any] | None, outputs: Any) -> Any:
     """Safely process trace outputs, returning error placeholder on failure."""
     if processor is None:
         return outputs
@@ -664,7 +664,7 @@ class RunnableSeq(Runnable):
             # start the root run
             run_manager = callback_manager.on_chain_start(
                 None,
-                _safe_process_inputs(self.trace_inputs, input),
+                _process_inputs(self.trace_inputs, input),
                 name=config.get("run_name") or self.get_name(),
                 run_id=config.pop("run_id", None),
             )
@@ -695,9 +695,7 @@ class RunnableSeq(Runnable):
                 run_manager.on_chain_error(e)
                 raise
             else:
-                run_manager.on_chain_end(
-                    _safe_process_outputs(self.trace_outputs, input)
-                )
+                run_manager.on_chain_end(_process_outputs(self.trace_outputs, input))
                 return input
         else:
             for i, step in enumerate(self.steps):
@@ -723,7 +721,7 @@ class RunnableSeq(Runnable):
             # start the root run
             run_manager = await callback_manager.on_chain_start(
                 None,
-                _safe_process_inputs(self.trace_inputs, input),
+                _process_inputs(self.trace_inputs, input),
                 name=config.get("run_name") or self.get_name(),
                 run_id=config.pop("run_id", None),
             )
@@ -762,7 +760,7 @@ class RunnableSeq(Runnable):
                 raise
             else:
                 await run_manager.on_chain_end(
-                    _safe_process_outputs(self.trace_outputs, input)
+                    _process_outputs(self.trace_outputs, input)
                 )
                 return input
         else:
@@ -788,7 +786,7 @@ class RunnableSeq(Runnable):
             # start the root run
             run_manager = callback_manager.on_chain_start(
                 None,
-                _safe_process_inputs(self.trace_inputs, input),
+                _process_inputs(self.trace_inputs, input),
                 name=config.get("run_name") or self.get_name(),
                 run_id=config.pop("run_id", None),
             )
@@ -836,7 +834,7 @@ class RunnableSeq(Runnable):
                     raise
                 else:
                     run_manager.on_chain_end(
-                        _safe_process_outputs(self.trace_outputs, output)
+                        _process_outputs(self.trace_outputs, output)
                     )
         else:
             # No tracing - just execute the steps directly
@@ -863,7 +861,7 @@ class RunnableSeq(Runnable):
             # start the root run
             run_manager = await callback_manager.on_chain_start(
                 None,
-                _safe_process_inputs(self.trace_inputs, input),
+                _process_inputs(self.trace_inputs, input),
                 name=config.get("run_name") or self.get_name(),
                 run_id=config.pop("run_id", None),
             )
@@ -919,7 +917,7 @@ class RunnableSeq(Runnable):
                         raise
                     else:
                         await run_manager.on_chain_end(
-                            _safe_process_outputs(self.trace_outputs, output)
+                            _process_outputs(self.trace_outputs, output)
                         )
             else:
                 try:
@@ -951,7 +949,7 @@ class RunnableSeq(Runnable):
                     raise
                 else:
                     await run_manager.on_chain_end(
-                        _safe_process_outputs(self.trace_outputs, output)
+                        _process_outputs(self.trace_outputs, output)
                     )
         else:
             # No tracing - just execute the steps directly
