@@ -390,6 +390,68 @@ class PostgresSaver(BasePostgresSaver):
                 (str(thread_id),),
             )
 
+    def cleanup_old_threads(self, retention_days: int) -> int:
+        """Delete all threads whose latest checkpoint is older than the retention period.
+
+        This removes data from:
+          - checkpoints
+          - checkpoint_blobs
+          - checkpoint_writes
+
+        Args:
+            retention_days: Number of days to retain threads. Threads with all
+                checkpoints older than this will be deleted.
+
+        Returns:
+            Number of threads deleted.
+
+        Examples:
+
+            >>> from langgraph.checkpoint.postgres import PostgresSaver
+            >>> DB_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+            >>> with PostgresSaver.from_conn_string(DB_URI) as memory:
+            ...     # Delete threads older than 30 days
+            ...     deleted_count = memory.cleanup_old_threads(retention_days=30)
+            ...     print(f"Deleted {deleted_count} expired threads")
+        """
+        from datetime import datetime, timedelta, timezone
+
+        cutoff_date = (
+            datetime.now(timezone.utc) - timedelta(days=retention_days)
+        ).isoformat()
+
+        # Find thread_ids whose latest checkpoint timestamp is older than cutoff
+        find_expired_query = """
+            SELECT thread_id
+            FROM checkpoints
+            GROUP BY thread_id
+            HAVING MAX(checkpoint ->> 'ts') < %s
+        """
+
+        with self._cursor() as cur:
+            cur.execute(find_expired_query, (cutoff_date,))
+            thread_ids = [row["thread_id"] for row in cur.fetchall()]
+
+            if not thread_ids:
+                return 0
+
+            # Bulk delete all related data
+            with self._cursor(pipeline=True) as del_cur:
+                del_cur.execute(
+                    "DELETE FROM checkpoints WHERE thread_id = ANY(%s)",
+                    (thread_ids,),
+                )
+                del_cur.execute(
+                    "DELETE FROM checkpoint_blobs WHERE thread_id = ANY(%s)",
+                    (thread_ids,),
+                )
+                del_cur.execute(
+                    "DELETE FROM checkpoint_writes WHERE thread_id = ANY(%s)",
+                    (thread_ids,),
+                )
+
+            return len(thread_ids)
+
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
         """Create a database cursor as a context manager.
