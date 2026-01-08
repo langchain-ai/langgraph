@@ -41,11 +41,13 @@ def _validate_traceable_config(raw: Any) -> TraceableConfig | None:
     """
     if not isinstance(raw, dict):
         return None
+    # Support both "__unwrapped__" (langsmith) and "wrapped" (legacy) keys
+    unwrapped = raw.get("__unwrapped__") or raw.get("wrapped")
     return {
         "process_inputs": raw.get("process_inputs"),
         "process_outputs": raw.get("process_outputs"),
         "enabled": raw.get("enabled"),  # None means use external context
-        "wrapped": raw.get("wrapped"),
+        "__unwrapped__": unwrapped,
     }
 
 
