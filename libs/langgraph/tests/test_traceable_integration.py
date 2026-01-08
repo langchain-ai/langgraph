@@ -1048,3 +1048,41 @@ async def test_astream_events_traceable_filters_traced_inputs():
         if e["event"] == "on_chain_end" and e["name"] == "LangGraph"
     )
     assert final_event["data"]["output"] == {"value": "b_a_secret_data"}
+
+
+# =============================================================================
+# get_config() Compatibility Tests
+# =============================================================================
+
+
+def test_traceable_enabled_false_allows_get_config():
+    """Test that nodes with enabled=False can still call get_config().
+
+    This is a regression test for a bug where the trace=False path in
+    RunnableSeq skipped set_config_context(), breaking get_config() calls.
+    """
+    from langgraph.config import get_config
+
+    config_thread_id = None
+
+    def my_node(state: SimpleState) -> SimpleState:
+        nonlocal config_thread_id
+        config = get_config()  # This should work even with enabled=False!
+        config_thread_id = config.get("configurable", {}).get("thread_id")
+        return {"value": f"got_config_{state['value']}"}
+
+    _set_traceable_config(my_node, enabled=False)
+
+    builder = StateGraph(SimpleState)
+    builder.add_node("my_node", my_node)
+    builder.add_edge("__start__", "my_node")
+    graph = builder.compile()
+
+    result = graph.invoke(
+        {"value": "test"}, {"configurable": {"thread_id": "test-thread-123"}}
+    )
+
+    assert result == {"value": "got_config_test"}
+    assert config_thread_id == "test-thread-123", (
+        f"Expected thread_id 'test-thread-123', got {config_thread_id}"
+    )

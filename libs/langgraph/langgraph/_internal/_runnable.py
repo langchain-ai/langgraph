@@ -422,7 +422,9 @@ class RunnableCallable(Runnable):
             else:
                 run_manager.on_chain_end(ret)
         else:
-            ret = self.func(*args, **kwargs)
+            # Still need to set config context for get_config() to work
+            with set_config_context(config, None) as context:
+                ret = context.run(self.func, *args, **kwargs)
         if self.recurse and isinstance(ret, Runnable):
             return ret.invoke(input, config)
         return ret
@@ -495,7 +497,13 @@ class RunnableCallable(Runnable):
             else:
                 await run_manager.on_chain_end(ret)
         else:
-            ret = await self.afunc(*args, **kwargs)
+            # Still need to set config context for get_config() to work
+            coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
+            if ASYNCIO_ACCEPTS_CONTEXT:
+                with set_config_context(config, None) as context:
+                    ret = await asyncio.create_task(coro, context=context)
+            else:
+                ret = await coro
         if self.recurse and isinstance(ret, Runnable):
             return await ret.ainvoke(input, config)
         return ret
@@ -698,12 +706,14 @@ class RunnableSeq(Runnable):
                 run_manager.on_chain_end(_process_outputs(self.trace_outputs, input))
                 return input
         else:
-            for i, step in enumerate(self.steps):
-                input = (
-                    step.invoke(input, config, **kwargs)
-                    if i == 0
-                    else step.invoke(input, config)
-                )
+            # Still need to set config context for get_config() to work
+            with set_config_context(config, None) as context:
+                for i, step in enumerate(self.steps):
+                    input = (
+                        context.run(step.invoke, input, config, **kwargs)
+                        if i == 0
+                        else step.invoke(input, config)
+                    )
             return input
 
     async def ainvoke(
@@ -764,11 +774,22 @@ class RunnableSeq(Runnable):
                 )
                 return input
         else:
-            for i, step in enumerate(self.steps):
-                if i == 0:
-                    input = await step.ainvoke(input, config, **kwargs)
-                else:
-                    input = await step.ainvoke(input, config)
+            # Still need to set config context for get_config() to work
+            if ASYNCIO_ACCEPTS_CONTEXT:
+                with set_config_context(config, None) as context:
+                    for i, step in enumerate(self.steps):
+                        if i == 0:
+                            input = await asyncio.create_task(
+                                step.ainvoke(input, config, **kwargs), context=context
+                            )
+                        else:
+                            input = await step.ainvoke(input, config)
+            else:
+                for i, step in enumerate(self.steps):
+                    if i == 0:
+                        input = await step.ainvoke(input, config, **kwargs)
+                    else:
+                        input = await step.ainvoke(input, config)
             return input
 
     def stream(
@@ -837,13 +858,14 @@ class RunnableSeq(Runnable):
                         _process_outputs(self.trace_outputs, output)
                     )
         else:
-            # No tracing - just execute the steps directly
-            for idx, step in enumerate(self.steps):
-                if idx == 0:
-                    iterator = step.stream(input, config, **kwargs)
-                else:
-                    iterator = step.transform(iterator, config)
-            _consume_iter(iterator)
+            # No tracing - still need to set config context for get_config() to work
+            with set_config_context(config, None) as context:
+                for idx, step in enumerate(self.steps):
+                    if idx == 0:
+                        iterator = step.stream(input, config, **kwargs)
+                    else:
+                        iterator = step.transform(iterator, config)
+                context.run(_consume_iter, iterator)
             yield
 
     async def astream(
