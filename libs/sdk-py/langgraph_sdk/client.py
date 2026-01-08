@@ -3064,6 +3064,7 @@ class CronClient:
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
+        on_run_completed: OnCompletionBehavior | None = None,
         multitask_strategy: str | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
@@ -3083,6 +3084,10 @@ class CronClient:
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
+            on_run_completed: What to do with the thread after the run completes.
+                Must be one of 'delete' (default) or 'keep'. 'delete' removes the thread
+                after execution. 'keep' creates a new thread for each execution but does not
+                clean them up. Clients are responsible for cleaning up kept threads.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             headers: Optional custom headers to include with the request.
@@ -3120,6 +3125,7 @@ class CronClient:
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "webhook": webhook,
+            "on_run_completed": on_run_completed,
         }
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
@@ -6356,6 +6362,7 @@ class SyncCronClient:
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
+        on_run_completed: OnCompletionBehavior | None = None,
         multitask_strategy: str | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
@@ -6375,6 +6382,10 @@ class SyncCronClient:
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
+            on_run_completed: What to do with the thread after the run completes.
+                Must be one of 'delete' (default) or 'keep'. 'delete' removes the thread
+                after execution. 'keep' creates a new thread for each execution but does not
+                clean them up. Clients are responsible for cleaning up kept threads.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             headers: Optional custom headers to include with the request.
@@ -6412,6 +6423,7 @@ class SyncCronClient:
             "interrupt_after": interrupt_after,
             "webhook": webhook,
             "checkpoint_during": checkpoint_during,
+            "on_run_completed": on_run_completed,
             "multitask_strategy": multitask_strategy,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
