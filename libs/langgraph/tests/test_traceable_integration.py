@@ -18,6 +18,7 @@ from typing_extensions import TypedDict
 from langgraph._internal._runnable import ASYNCIO_ACCEPTS_CONTEXT
 from langgraph.func import entrypoint, task
 from langgraph.graph import StateGraph
+from tests.any_str import AnyStr
 from tests.fake_tracer import FakeTracer
 
 pytestmark = pytest.mark.anyio
@@ -833,3 +834,217 @@ def test_task_with_real_traceable_decorator():
     assert task_runs[0].inputs == {"value": "[LANGSMITH_REDACTED]"}, (
         f"Expected inputs to be filtered, got {task_runs[0].inputs}"
     )
+
+
+# =============================================================================
+# astream_events Tests
+# =============================================================================
+
+
+def _normalize_event(event: dict[str, Any]) -> dict[str, Any]:
+    """Normalize an event for comparison by replacing dynamic values with AnyStr."""
+    normalized = {}
+    for key, value in event.items():
+        if key in ("run_id", "parent_ids"):
+            # These are always dynamic UUIDs
+            if isinstance(value, str):
+                normalized[key] = AnyStr()
+            elif isinstance(value, list):
+                normalized[key] = [AnyStr() for _ in value]
+            else:
+                normalized[key] = value
+        elif key == "metadata" and isinstance(value, dict):
+            # Normalize checkpoint_ns in metadata
+            normalized[key] = {
+                k: AnyStr() if k == "langgraph_checkpoint_ns" else v
+                for k, v in value.items()
+            }
+        else:
+            normalized[key] = value
+    return normalized
+
+
+def _create_graph_for_astream_events(use_traceable: bool) -> StateGraph:
+    """Create a simple graph, optionally with traceable config."""
+
+    def node_a(state: SimpleState) -> SimpleState:
+        return {"value": f"a_{state['value']}"}
+
+    def node_b(state: SimpleState) -> SimpleState:
+        return {"value": f"b_{state['value']}"}
+
+    if use_traceable:
+        # Apply traceable config with process_inputs filter
+        def filter_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
+            return {"state": "[FILTERED]"}
+
+        _set_traceable_config(node_a, process_inputs=filter_inputs)
+        _set_traceable_config(node_b, process_inputs=filter_inputs)
+
+    builder = StateGraph(SimpleState)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge("__start__", "node_a")
+    builder.add_edge("node_a", "node_b")
+
+    return builder.compile()
+
+
+@pytest.mark.skipif(
+    not ASYNCIO_ACCEPTS_CONTEXT,
+    reason="Requires Python 3.11+ for async context propagation",
+)
+@pytest.mark.parametrize("use_traceable", [False, True], ids=["plain", "traceable"])
+async def test_astream_events_with_traceable_config(use_traceable: bool):
+    """Test that astream_events produces consistent event structure with/without traceable."""
+    graph = _create_graph_for_astream_events(use_traceable)
+
+    events = [e async for e in graph.astream_events({"value": "test"}, version="v2")]
+
+    # Should have chain events for the graph and both nodes
+    chain_start_events = [e for e in events if e["event"] == "on_chain_start"]
+    chain_end_events = [e for e in events if e["event"] == "on_chain_end"]
+
+    # Verify we have start/end events for main graph and both nodes
+    start_names = [e["name"] for e in chain_start_events]
+    end_names = [e["name"] for e in chain_end_events]
+
+    assert "LangGraph" in start_names, f"Missing LangGraph start event: {start_names}"
+    assert "node_a" in start_names, f"Missing node_a start event: {start_names}"
+    assert "node_b" in start_names, f"Missing node_b start event: {start_names}"
+
+    assert "LangGraph" in end_names, f"Missing LangGraph end event: {end_names}"
+    assert "node_a" in end_names, f"Missing node_a end event: {end_names}"
+    assert "node_b" in end_names, f"Missing node_b end event: {end_names}"
+
+    # Verify final output is correct (traceable shouldn't affect execution)
+    final_event = next(
+        e
+        for e in reversed(events)
+        if e["event"] == "on_chain_end" and e["name"] == "LangGraph"
+    )
+    assert final_event["data"]["output"] == {"value": "b_a_test"}
+
+
+@pytest.mark.skipif(
+    not ASYNCIO_ACCEPTS_CONTEXT,
+    reason="Requires Python 3.11+ for async context propagation",
+)
+async def test_astream_events_traceable_vs_plain_structure_match():
+    """Test that traceable config doesn't change the event structure, only input/output values."""
+    plain_graph = _create_graph_for_astream_events(use_traceable=False)
+    traceable_graph = _create_graph_for_astream_events(use_traceable=True)
+
+    # Use FakeTracer to collect callback invocations
+    plain_tracer = FakeTracer()
+    traceable_tracer = FakeTracer()
+
+    plain_events = [
+        e
+        async for e in plain_graph.astream_events(
+            {"value": "test"}, version="v2", config={"callbacks": [plain_tracer]}
+        )
+    ]
+    traceable_events = [
+        e
+        async for e in traceable_graph.astream_events(
+            {"value": "test"}, version="v2", config={"callbacks": [traceable_tracer]}
+        )
+    ]
+
+    # Verify callback handlers were invoked for both - get run names in order
+    plain_runs = plain_tracer.flattened_runs()
+    traceable_runs = traceable_tracer.flattened_runs()
+
+    plain_run_names = [r.name for r in plain_runs]
+    traceable_run_names = [r.name for r in traceable_runs]
+
+    # Same runs should be recorded by the callback handler
+    assert plain_run_names == traceable_run_names, (
+        f"Callback run names mismatch:\nplain={plain_run_names}\n"
+        f"traceable={traceable_run_names}"
+    )
+
+    # Verify we actually got runs for our nodes
+    assert "node_a" in plain_run_names, f"node_a not in runs: {plain_run_names}"
+    assert "node_b" in plain_run_names, f"node_b not in runs: {plain_run_names}"
+
+    # Same number of events
+    assert len(plain_events) == len(traceable_events), (
+        f"Event count mismatch: plain={len(plain_events)}, "
+        f"traceable={len(traceable_events)}"
+    )
+
+    # Same event types in same order
+    plain_types = [(e["event"], e.get("name")) for e in plain_events]
+    traceable_types = [(e["event"], e.get("name")) for e in traceable_events]
+    assert plain_types == traceable_types, (
+        f"Event types mismatch:\nplain={plain_types}\ntraceable={traceable_types}"
+    )
+
+    # For each event pair, compare structure (ignoring dynamic values and traced data)
+    for i, (plain_e, traceable_e) in enumerate(zip(plain_events, traceable_events)):
+        # Event type and name must match
+        assert plain_e["event"] == traceable_e["event"], f"Event {i}: type mismatch"
+        assert plain_e.get("name") == traceable_e.get("name"), (
+            f"Event {i}: name mismatch"
+        )
+
+        # Tags should match
+        assert plain_e.get("tags") == traceable_e.get("tags"), (
+            f"Event {i}: tags mismatch"
+        )
+
+        # parent_ids length should match (IDs themselves will differ)
+        plain_parents = plain_e.get("parent_ids", [])
+        traceable_parents = traceable_e.get("parent_ids", [])
+        assert len(plain_parents) == len(traceable_parents), (
+            f"Event {i}: parent_ids length mismatch"
+        )
+
+    # Verify both graphs produce the same final result
+    plain_final = next(
+        e
+        for e in reversed(plain_events)
+        if e["event"] == "on_chain_end" and e["name"] == "LangGraph"
+    )
+    traceable_final = next(
+        e
+        for e in reversed(traceable_events)
+        if e["event"] == "on_chain_end" and e["name"] == "LangGraph"
+    )
+    assert plain_final["data"]["output"] == traceable_final["data"]["output"]
+
+
+@pytest.mark.skipif(
+    not ASYNCIO_ACCEPTS_CONTEXT,
+    reason="Requires Python 3.11+ for async context propagation",
+)
+async def test_astream_events_traceable_filters_traced_inputs():
+    """Test that traceable process_inputs actually filters the traced input data."""
+    traceable_graph = _create_graph_for_astream_events(use_traceable=True)
+
+    events = [
+        e
+        async for e in traceable_graph.astream_events(
+            {"value": "secret_data"}, version="v2"
+        )
+    ]
+
+    # Find node_a start event - its input should be filtered
+    node_a_start = next(
+        e for e in events if e["event"] == "on_chain_start" and e["name"] == "node_a"
+    )
+
+    # The input should be filtered by process_inputs
+    assert node_a_start["data"]["input"] == {"state": "[FILTERED]"}, (
+        f"Expected filtered input, got {node_a_start['data']['input']}"
+    )
+
+    # But the actual execution should still work with real data
+    final_event = next(
+        e
+        for e in reversed(events)
+        if e["event"] == "on_chain_end" and e["name"] == "LangGraph"
+    )
+    assert final_event["data"]["output"] == {"value": "b_a_secret_data"}
