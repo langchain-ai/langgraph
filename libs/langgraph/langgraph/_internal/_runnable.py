@@ -66,32 +66,24 @@ logger = logging.getLogger(__name__)
 
 
 def _safe_process_inputs(processor: Callable[[Any], Any] | None, inputs: Any) -> Any:
-    """Safely process trace inputs, returning error placeholder on failure.
-
-    This prevents PII leakage if a filter function crashes - we return an error
-    indicator instead of the raw (potentially sensitive) inputs.
-    """
+    """Safely process trace inputs, returning error placeholder on failure."""
     if processor is None:
         return inputs
     try:
         return processor(inputs)
     except Exception:
-        logger.warning("trace_inputs filter failed", exc_info=True)
+        logger.exception("trace_inputs filter failed")
         return {"error": "<trace_inputs processing failed>"}
 
 
 def _safe_process_outputs(processor: Callable[[Any], Any] | None, outputs: Any) -> Any:
-    """Safely process trace outputs, returning error placeholder on failure.
-
-    This prevents PII leakage if a filter function crashes - we return an error
-    indicator instead of the raw (potentially sensitive) outputs.
-    """
+    """Safely process trace outputs, returning error placeholder on failure."""
     if processor is None:
         return outputs
     try:
         return processor(outputs)
     except Exception:
-        logger.warning("trace_outputs filter failed", exc_info=True)
+        logger.exception("trace_outputs filter failed")
         return {"error": "<trace_outputs processing failed>"}
 
 
@@ -708,7 +700,6 @@ class RunnableSeq(Runnable):
                 )
                 return input
         else:
-            # No tracing - just execute the steps directly
             for i, step in enumerate(self.steps):
                 input = (
                     step.invoke(input, config, **kwargs)
@@ -775,7 +766,6 @@ class RunnableSeq(Runnable):
                 )
                 return input
         else:
-            # No tracing - just execute the steps directly
             for i, step in enumerate(self.steps):
                 if i == 0:
                     input = await step.ainvoke(input, config, **kwargs)
@@ -855,7 +845,6 @@ class RunnableSeq(Runnable):
                     iterator = step.stream(input, config, **kwargs)
                 else:
                     iterator = step.transform(iterator, config)
-            # consume into final output
             _consume_iter(iterator)
             yield
 

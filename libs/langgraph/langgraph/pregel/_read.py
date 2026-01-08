@@ -11,7 +11,11 @@ from typing_extensions import TypedDict
 
 from langgraph._internal._config import merge_configs
 from langgraph._internal._constants import CONF, CONFIG_KEY_READ
-from langgraph._internal._runnable import RunnableCallable, RunnableSeq
+from langgraph._internal._runnable import (
+    RunnableCallable,
+    RunnableSeq,
+    coerce_to_runnable,
+)
 from langgraph.pregel._utils import find_subgraph_pregel
 from langgraph.pregel._write import ChannelWrite
 from langgraph.pregel.protocol import PregelProtocol
@@ -26,7 +30,8 @@ class TraceableConfig(TypedDict, total=False):
 
     process_inputs: Callable[[Any], Any] | None
     process_outputs: Callable[[Any], Any] | None
-    enabled: bool | None  # None = honor external tracing context
+    enabled: bool | None
+    __unwrapped__: Callable[[Any], Any] | None
 
 
 def _validate_traceable_config(raw: Any) -> TraceableConfig | None:
@@ -239,11 +244,12 @@ class PregelNode:
             return None
 
         raw_config = getattr(func, "__traceable_config__", None)
+        if raw_config is None:
+            return None
         config = _validate_traceable_config(raw_config)
         if config is None:
             return None
 
-        # Get the unwrapped original function (set by functools.wraps)
         unwrapped = getattr(func, "__wrapped__", None)
         if unwrapped:
             config["__unwrapped__"] = unwrapped
@@ -253,38 +259,31 @@ class PregelNode:
     @cached_property
     def node(self) -> Runnable[Any, Any] | None:
         """Get a runnable that combines `bound` and `writers`."""
-        from langgraph._internal._runnable import coerce_to_runnable
-
         writers = self.flat_writers
+        if self.bound is DEFAULT_BOUND and not writers:
+            return None
+        elif self.bound is DEFAULT_BOUND and len(writers) == 1:
+            return writers[0]
+        elif self.bound is DEFAULT_BOUND:
+            return RunnableSeq(*writers)
+        elif not writers:
+            return self.bound
         tc = self._traceable_config
 
-        # Build RunnableSeq kwargs from traceable config
         seq_kwargs: dict[str, Any] = {}
         if tc:
             # Only disable tracing if explicitly set to False
-            # None means honor external context (keep default trace=True)
             if tc.get("enabled") is False:
                 seq_kwargs["trace"] = False
-            # trace_inputs/trace_outputs map to @traceable's process_inputs/process_outputs
             seq_kwargs["trace_inputs"] = tc.get("process_inputs")
             seq_kwargs["trace_outputs"] = tc.get("process_outputs")
 
-        # Get the bound to use (unwrapped if traceable)
         bound = self.bound
-        if tc and tc.get("__unwrapped__"):
-            # Replace bound with unwrapped function to avoid double-tracing
-            bound = coerce_to_runnable(tc["__unwrapped__"], name=None, trace=False)
+        if tc and (unwrapped := tc.get("__unwrapped__")):
+            # We want to avoid double-tracing.
+            bound = coerce_to_runnable(unwrapped, name=None, trace=False)
 
-        if bound is DEFAULT_BOUND and not writers:
-            return None
-        elif bound is DEFAULT_BOUND and len(writers) == 1:
-            return writers[0]
-        elif bound is DEFAULT_BOUND:
-            return RunnableSeq(*writers, **seq_kwargs)
-        elif writers:
-            return RunnableSeq(bound, *writers, **seq_kwargs)
-        else:
-            return bound
+        return RunnableSeq(bound, *writers, **seq_kwargs)
 
     @cached_property
     def input_cache_key(self) -> INPUT_CACHE_KEY_TYPE:
@@ -292,9 +291,11 @@ class PregelNode:
         This is used to avoid calculating the same input multiple times."""
         return (
             self.mapper,
-            tuple(self.channels)
-            if isinstance(self.channels, list)
-            else (self.channels,),
+            (
+                tuple(self.channels)
+                if isinstance(self.channels, list)
+                else (self.channels,)
+            ),
         )
 
     def invoke(
