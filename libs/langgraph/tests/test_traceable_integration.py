@@ -50,6 +50,7 @@ def _set_traceable_config(
             "process_inputs": process_inputs,
             "process_outputs": process_outputs,
             "enabled": enabled,
+            "wrapped": func,
         },
     )
     return func

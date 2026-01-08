@@ -45,6 +45,7 @@ def _validate_traceable_config(raw: Any) -> TraceableConfig | None:
         "process_inputs": raw.get("process_inputs"),
         "process_outputs": raw.get("process_outputs"),
         "enabled": raw.get("enabled"),  # None means use external context
+        "wrapped": raw.get("wrapped"),
     }
 
 
@@ -249,11 +250,6 @@ class PregelNode:
         config = _validate_traceable_config(raw_config)
         if config is None:
             return None
-
-        unwrapped = getattr(func, "__wrapped__", None)
-        if unwrapped:
-            config["__unwrapped__"] = unwrapped
-
         return config
 
     @cached_property
