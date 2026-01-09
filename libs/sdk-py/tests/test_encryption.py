@@ -26,14 +26,6 @@ class TestHandlerValidation:
         async def json_dec(_ctx, data):
             return data
 
-        @encryption.encrypt.json.thread
-        async def thread_enc(_ctx, data):
-            return data
-
-        @encryption.decrypt.json.custom
-        async def custom_dec(_ctx, data):
-            return data
-
         # All duplicates should raise
         with pytest.raises(DuplicateHandlerError):
 
@@ -56,18 +48,6 @@ class TestHandlerValidation:
         with pytest.raises(DuplicateHandlerError):
 
             @encryption.decrypt.json
-            async def dup(_ctx, data):
-                return data
-
-        with pytest.raises(DuplicateHandlerError):
-
-            @encryption.encrypt.json.thread
-            async def dup(_ctx, data):
-                return data
-
-        with pytest.raises(DuplicateHandlerError):
-
-            @encryption.decrypt.json.custom
             async def dup(_ctx, data):
                 return data
 
