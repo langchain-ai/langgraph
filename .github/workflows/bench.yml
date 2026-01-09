@@ -30,7 +30,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --group test
       - name: Download baseline
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           key: ${{ runner.os }}-benchmark-baseline
           restore-keys: |
