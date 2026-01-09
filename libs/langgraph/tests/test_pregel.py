@@ -7939,8 +7939,8 @@ def test_parent_command_goto_deeply_nested(
     When jump_level is "parent", Command.PARENT should jump to sub_child_3 in
     the immediate parent (sub_graph).
 
-    When jump_level is "grandparent", two consecutive Command.PARENT calls should
-    bubble up to grandparent_node in the main_graph.
+    When jump_level is "grandparent", Command.PARENT.PARENT should jump directly
+    to grandparent_node in the main_graph, skipping the middle graph entirely.
 
     Note: With operator.add, subgraph state (including its input) is merged with
     parent state, causing the input to appear multiple times. This is expected.
@@ -7959,10 +7959,10 @@ def test_parent_command_goto_deeply_nested(
         )
 
     def sub_sub_child_to_grandparent(state):
-        # Jump to grandparent (main_graph) by targeting parent first
+        # Jump directly to grandparent (main_graph) using PARENT.PARENT
         return Command(
-            graph=Command.PARENT,
-            goto="sub_child_jump_to_grandparent",
+            graph=Command.PARENT.PARENT,
+            goto="grandparent_node",
             update={"dialog_state": ["sub_sub_child"]},
         )
 
@@ -7983,14 +7983,6 @@ def test_parent_command_goto_deeply_nested(
     def sub_child_3(state):
         return {"dialog_state": ["sub_child_3"]}
 
-    def sub_child_jump_to_grandparent(state):
-        # This node forwards the jump to grandparent
-        return Command(
-            graph=Command.PARENT,
-            goto="grandparent_node",
-            update={"dialog_state": ["sub_child_jump"]},
-        )
-
     sub_builder = StateGraph(State)
     sub_builder.add_node("sub_child_1", sub_child_1)
     if jump_level == "parent":
@@ -7998,13 +7990,9 @@ def test_parent_command_goto_deeply_nested(
             "sub_child_2", sub_sub_graph, destinations=("sub_child_3",)
         )
     else:
-        sub_builder.add_node(
-            "sub_child_2",
-            sub_sub_graph,
-            destinations=("sub_child_jump_to_grandparent",),
-        )
+        # No destinations needed in middle graph - PARENT.PARENT jumps directly to grandparent
+        sub_builder.add_node("sub_child_2", sub_sub_graph)
     sub_builder.add_node("sub_child_3", sub_child_3)
-    sub_builder.add_node("sub_child_jump_to_grandparent", sub_child_jump_to_grandparent)
     sub_builder.add_edge(START, "sub_child_1")
     sub_builder.add_edge("sub_child_1", "sub_child_2")
     sub_graph = sub_builder.compile(name="sub_graph", checkpointer=subgraph_persist)
@@ -8043,13 +8031,12 @@ def test_parent_command_goto_deeply_nested(
             ]
         }
     else:
-        # Two Command.PARENT calls: sub_sub_child -> sub_child_jump -> grandparent_node
-        # First jump goes to sub_graph, second jump goes to main_graph
+        # Command.PARENT.PARENT jumps directly from sub_sub_child to grandparent_node
         assert result == {
             "dialog_state": [
                 "init",
                 "child_1",
-                "sub_child_jump",
+                "sub_sub_child",
                 "grandparent_node",
             ]
         }
