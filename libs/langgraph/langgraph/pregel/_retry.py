@@ -44,7 +44,7 @@ def run_with_retry(
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
             # strip task_ids from namespace for comparison (ns format: "node1|node2:task_id")
-            if cmd.graph in (recast_checkpoint_ns(ns), task.name):
+            if cmd.graph in (ns, recast_checkpoint_ns(ns), task.name):
                 # this command is for the current graph, handle it
                 for w in task.writers:
                     w.invoke(cmd, config)
@@ -140,7 +140,7 @@ async def arun_with_retry(
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
             # strip task_ids from namespace for comparison (ns format: "node1|node2:task_id")
-            if cmd.graph in (recast_checkpoint_ns(ns), task.name):
+            if cmd.graph in (ns, recast_checkpoint_ns(ns), task.name):
                 # this command is for the current graph, handle it
                 for w in task.writers:
                     w.invoke(cmd, config)
