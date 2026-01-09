@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from typing import Any
 
-from langgraph._internal._config import patch_configurable
+from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
@@ -43,7 +43,8 @@ def run_with_retry(
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
-            if cmd.graph in (ns, task.name):
+            # strip task_ids from namespace for comparison (ns format: "node1|node2:task_id")
+            if cmd.graph in (ns, recast_checkpoint_ns(ns), task.name):
                 # this command is for the current graph, handle it
                 for w in task.writers:
                     w.invoke(cmd, config)
@@ -138,7 +139,8 @@ async def arun_with_retry(
         except ParentCommand as exc:
             ns: str = config[CONF][CONFIG_KEY_CHECKPOINT_NS]
             cmd = exc.args[0]
-            if cmd.graph in (ns, task.name):
+            # strip task_ids from namespace for comparison (ns format: "node1|node2:task_id")
+            if cmd.graph in (ns, recast_checkpoint_ns(ns), task.name):
                 # this command is for the current graph, handle it
                 for w in task.writers:
                     w.invoke(cmd, config)

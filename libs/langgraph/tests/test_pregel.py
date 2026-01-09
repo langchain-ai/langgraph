@@ -7927,6 +7927,134 @@ def test_parent_command_goto(
     }
 
 
+@pytest.mark.parametrize("subgraph_persist", [True, False])
+@pytest.mark.parametrize("jump_level", ["parent", "grandparent"])
+def test_parent_command_goto_deeply_nested(
+    sync_checkpointer: BaseCheckpointSaver,
+    subgraph_persist: bool,
+    jump_level: str,
+) -> None:
+    """Test Command.PARENT in a 3-level nested subgraph.
+
+    When jump_level is "parent", Command.PARENT should jump to sub_child_3 in
+    the immediate parent (sub_graph).
+
+    When jump_level is "grandparent", two consecutive Command.PARENT calls should
+    bubble up to grandparent_node in the main_graph.
+
+    Note: With operator.add, subgraph state (including its input) is merged with
+    parent state, causing the input to appear multiple times. This is expected.
+    """
+
+    class State(TypedDict):
+        dialog_state: Annotated[list[str], operator.add]
+
+    # Level 3: Deepest subgraph that issues Command.PARENT
+    def sub_sub_child_to_parent(state):
+        # Jump to immediate parent (sub_graph)
+        return Command(
+            graph=Command.PARENT,
+            goto="sub_child_3",
+            update={"dialog_state": ["sub_sub_child"]},
+        )
+
+    def sub_sub_child_to_grandparent(state):
+        # Jump to grandparent (main_graph) by targeting parent first
+        return Command(
+            graph=Command.PARENT,
+            goto="sub_child_jump_to_grandparent",
+            update={"dialog_state": ["sub_sub_child"]},
+        )
+
+    sub_sub_builder = StateGraph(State)
+    if jump_level == "parent":
+        sub_sub_builder.add_node("sub_sub_child", sub_sub_child_to_parent)
+    else:
+        sub_sub_builder.add_node("sub_sub_child", sub_sub_child_to_grandparent)
+    sub_sub_builder.add_edge(START, "sub_sub_child")
+    sub_sub_graph = sub_sub_builder.compile(
+        name="sub_sub_graph", checkpointer=subgraph_persist
+    )
+
+    # Level 2: Middle subgraph containing Level 3
+    def sub_child_1(state):
+        return {"dialog_state": ["sub_child_1"]}
+
+    def sub_child_3(state):
+        return {"dialog_state": ["sub_child_3"]}
+
+    def sub_child_jump_to_grandparent(state):
+        # This node forwards the jump to grandparent
+        return Command(
+            graph=Command.PARENT,
+            goto="grandparent_node",
+            update={"dialog_state": ["sub_child_jump"]},
+        )
+
+    sub_builder = StateGraph(State)
+    sub_builder.add_node("sub_child_1", sub_child_1)
+    if jump_level == "parent":
+        sub_builder.add_node(
+            "sub_child_2", sub_sub_graph, destinations=("sub_child_3",)
+        )
+    else:
+        sub_builder.add_node(
+            "sub_child_2",
+            sub_sub_graph,
+            destinations=("sub_child_jump_to_grandparent",),
+        )
+    sub_builder.add_node("sub_child_3", sub_child_3)
+    sub_builder.add_node("sub_child_jump_to_grandparent", sub_child_jump_to_grandparent)
+    sub_builder.add_edge(START, "sub_child_1")
+    sub_builder.add_edge("sub_child_1", "sub_child_2")
+    sub_graph = sub_builder.compile(name="sub_graph", checkpointer=subgraph_persist)
+
+    # Level 1: Main graph containing Level 2
+    def child_1(state):
+        return {"dialog_state": ["child_1"]}
+
+    def grandparent_node(state):
+        return {"dialog_state": ["grandparent_node"]}
+
+    builder = StateGraph(State)
+    builder.add_node("child_1", child_1)
+    builder.add_node("child_2", sub_graph, destinations=("grandparent_node",))
+    builder.add_node("grandparent_node", grandparent_node)
+    builder.add_edge(START, "child_1")
+    builder.add_edge("child_1", "child_2")
+    graph = builder.compile(name="main_graph", checkpointer=sync_checkpointer)
+
+    config = {"configurable": {"thread_id": 1}}
+
+    result = graph.invoke(input={"dialog_state": ["init"]}, config=config)
+
+    if jump_level == "parent":
+        # Command.PARENT from sub_sub_child jumps to sub_child_3 in immediate parent
+        # State duplication occurs due to operator.add merging behavior
+        assert result == {
+            "dialog_state": [
+                "init",
+                "child_1",
+                "init",
+                "child_1",
+                "sub_child_1",
+                "sub_sub_child",
+                "sub_child_3",
+            ]
+        }
+    else:
+        # Two Command.PARENT calls: sub_sub_child -> sub_child_jump -> grandparent_node
+        # First jump goes to sub_graph, second jump goes to main_graph
+        assert result == {
+            "dialog_state": [
+                "init",
+                "child_1",
+                "sub_child_jump",
+                "grandparent_node",
+            ]
+        }
+
+
 @pytest.mark.parametrize("with_timeout", [True, False])
 def test_timeout_with_parent_command(
     sync_checkpointer: BaseCheckpointSaver, with_timeout: bool
