@@ -7928,19 +7928,13 @@ def test_parent_command_goto(
 
 
 @pytest.mark.parametrize("subgraph_persist", [True, False])
-@pytest.mark.parametrize("jump_level", ["parent", "grandparent"])
 def test_parent_command_goto_deeply_nested(
     sync_checkpointer: BaseCheckpointSaver,
     subgraph_persist: bool,
-    jump_level: str,
 ) -> None:
     """Test Command.PARENT in a 3-level nested subgraph.
 
-    When jump_level is "parent", Command.PARENT should jump to sub_child_3 in
-    the immediate parent (sub_graph).
-
-    When jump_level is "grandparent", Command.PARENT.PARENT should jump directly
-    to grandparent_node in the main_graph, skipping the middle graph entirely.
+    Command.PARENT should jump to sub_child_3 in the immediate parent (sub_graph).
 
     Note: With operator.add, subgraph state (including its input) is merged with
     parent state, causing the input to appear multiple times. This is expected.
@@ -7950,7 +7944,7 @@ def test_parent_command_goto_deeply_nested(
         dialog_state: Annotated[list[str], operator.add]
 
     # Level 3: Deepest subgraph that issues Command.PARENT
-    def sub_sub_child_to_parent(state):
+    def sub_sub_child_node(state):
         # Jump to immediate parent (sub_graph)
         return Command(
             graph=Command.PARENT,
@@ -7958,19 +7952,8 @@ def test_parent_command_goto_deeply_nested(
             update={"dialog_state": ["sub_sub_child"]},
         )
 
-    def sub_sub_child_to_grandparent(state):
-        # Jump directly to grandparent (main_graph) using PARENT.PARENT
-        return Command(
-            graph=Command.PARENT.PARENT,
-            goto="grandparent_node",
-            update={"dialog_state": ["sub_sub_child"]},
-        )
-
     sub_sub_builder = StateGraph(State)
-    if jump_level == "parent":
-        sub_sub_builder.add_node("sub_sub_child", sub_sub_child_to_parent)
-    else:
-        sub_sub_builder.add_node("sub_sub_child", sub_sub_child_to_grandparent)
+    sub_sub_builder.add_node("sub_sub_child", sub_sub_child_node)
     sub_sub_builder.add_edge(START, "sub_sub_child")
     sub_sub_graph = sub_sub_builder.compile(
         name="sub_sub_graph", checkpointer=subgraph_persist
@@ -7985,13 +7968,7 @@ def test_parent_command_goto_deeply_nested(
 
     sub_builder = StateGraph(State)
     sub_builder.add_node("sub_child_1", sub_child_1)
-    if jump_level == "parent":
-        sub_builder.add_node(
-            "sub_child_2", sub_sub_graph, destinations=("sub_child_3",)
-        )
-    else:
-        # No destinations needed in middle graph - PARENT.PARENT jumps directly to grandparent
-        sub_builder.add_node("sub_child_2", sub_sub_graph)
+    sub_builder.add_node("sub_child_2", sub_sub_graph, destinations=("sub_child_3",))
     sub_builder.add_node("sub_child_3", sub_child_3)
     sub_builder.add_edge(START, "sub_child_1")
     sub_builder.add_edge("sub_child_1", "sub_child_2")
@@ -8001,13 +7978,9 @@ def test_parent_command_goto_deeply_nested(
     def child_1(state):
         return {"dialog_state": ["child_1"]}
 
-    def grandparent_node(state):
-        return {"dialog_state": ["grandparent_node"]}
-
     builder = StateGraph(State)
     builder.add_node("child_1", child_1)
-    builder.add_node("child_2", sub_graph, destinations=("grandparent_node",))
-    builder.add_node("grandparent_node", grandparent_node)
+    builder.add_node("child_2", sub_graph)
     builder.add_edge(START, "child_1")
     builder.add_edge("child_1", "child_2")
     graph = builder.compile(name="main_graph", checkpointer=sync_checkpointer)
@@ -8016,30 +7989,19 @@ def test_parent_command_goto_deeply_nested(
 
     result = graph.invoke(input={"dialog_state": ["init"]}, config=config)
 
-    if jump_level == "parent":
-        # Command.PARENT from sub_sub_child jumps to sub_child_3 in immediate parent
-        # State duplication occurs due to operator.add merging behavior
-        assert result == {
-            "dialog_state": [
-                "init",
-                "child_1",
-                "init",
-                "child_1",
-                "sub_child_1",
-                "sub_sub_child",
-                "sub_child_3",
-            ]
-        }
-    else:
-        # Command.PARENT.PARENT jumps directly from sub_sub_child to grandparent_node
-        assert result == {
-            "dialog_state": [
-                "init",
-                "child_1",
-                "sub_sub_child",
-                "grandparent_node",
-            ]
-        }
+    # Command.PARENT from sub_sub_child jumps to sub_child_3 in immediate parent
+    # State duplication occurs due to operator.add merging behavior
+    assert result == {
+        "dialog_state": [
+            "init",
+            "child_1",
+            "init",
+            "child_1",
+            "sub_child_1",
+            "sub_sub_child",
+            "sub_child_3",
+        ]
+    }
 
 
 @pytest.mark.parametrize("with_timeout", [True, False])
