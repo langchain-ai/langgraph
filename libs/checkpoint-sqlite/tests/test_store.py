@@ -1069,6 +1069,141 @@ def test_sql_injection_vulnerability(store: SqliteStore) -> None:
         store.search(("docs",), filter={malicious_key: "dummy"})
 
 
+def test_sql_injection_filter_values(store: SqliteStore) -> None:
+    """Test that SQL injection via malicious filter values is properly escaped."""
+    # Setup: Create documents with different access levels
+    store.put(("docs",), "doc1", {"access": "public", "title": "Public Document"})
+    store.put(("docs",), "doc2", {"access": "private", "title": "Private Document"})
+    store.put(("docs",), "doc3", {"access": "secret", "title": "Secret Document"})
+
+    # Test 1: Basic SQL injection attempt with single quote
+    malicious_value = "public' OR '1'='1"
+    results = store.search(("docs",), filter={"access": malicious_value})
+    # Should return 0 results because the malicious value is escaped and won't match anything
+    assert len(results) == 0, "SQL injection via string value should be blocked"
+
+    # Test 2: SQL injection with comment
+    malicious_value = "public'; --"
+    results = store.search(("docs",), filter={"access": malicious_value})
+    assert len(results) == 0, "SQL comment injection should be blocked"
+
+    # Test 3: UNION injection attempt
+    malicious_value = "public' UNION SELECT * FROM store --"
+    results = store.search(("docs",), filter={"access": malicious_value})
+    assert len(results) == 0, "UNION injection should be blocked"
+
+    # Test 4: Parameterized queries handle strings with null bytes and SQL injection attempts safely
+    malicious_value = "public\x00' OR '1'='1"
+    results = store.search(("docs",), filter={"access": malicious_value})
+    assert len(results) == 0, (
+        "Parameterized queries treat injection attempts as literal strings"
+    )
+
+    # Test 5: Multiple single quotes
+    malicious_value = "''''"
+    results = store.search(("docs",), filter={"access": malicious_value})
+    assert len(results) == 0, "Multiple quotes should be handled safely"
+
+    # Test 6: Legitimate value with single quote should work
+    store.put(("docs",), "doc4", {"title": "O'Brien's Document", "access": "public"})
+    results = store.search(("docs",), filter={"title": "O'Brien's Document"})
+    assert len(results) == 1, "Legitimate single quotes should work"
+    assert results[0].value["title"] == "O'Brien's Document"
+
+    # Test 7: Unicode characters with injection attempt
+    malicious_value = "public' OR 'א'='א"
+    results = store.search(("docs",), filter={"access": malicious_value})
+    assert len(results) == 0, "Unicode-based injection should be blocked"
+
+
+def test_numeric_filter_safety(store: SqliteStore) -> None:
+    """Test that numeric filter values are handled safely."""
+    # Setup: Create documents with numeric fields
+    store.put(("items",), "item1", {"price": 10, "quantity": 5})
+    store.put(("items",), "item2", {"price": 20, "quantity": 3})
+    store.put(("items",), "item3", {"price": 30, "quantity": 1})
+
+    # Test 1: Normal numeric comparison
+    results = store.search(("items",), filter={"price": {"$gt": 15}})
+    assert len(results) == 2
+    assert all(r.value["price"] > 15 for r in results)
+
+    # Test 2: Special float values (infinity)
+    results = store.search(("items",), filter={"price": {"$lt": float("inf")}})
+    assert len(results) == 3, "All finite values should be less than infinity"
+
+    # Test 3: Special float values (negative infinity)
+    results = store.search(("items",), filter={"price": {"$gt": float("-inf")}})
+    assert len(results) == 3, (
+        "All finite values should be greater than negative infinity"
+    )
+
+    # Test 4: NaN handling - NaN comparisons should not cause errors
+    try:
+        results = store.search(("items",), filter={"price": {"$eq": float("nan")}})
+        # NaN never equals anything, including itself, so should return 0 results
+        assert len(results) == 0
+    except Exception as e:
+        pytest.fail(f"NaN handling should not raise exception: {e}")
+
+    # Test 5: Very large numbers
+    results = store.search(("items",), filter={"price": {"$lt": 10**100}})
+    assert len(results) == 3, "Very large numbers should be handled safely"
+
+    # Test 6: Negative numbers
+    store.put(("items",), "item4", {"price": -10, "quantity": 0})
+    results = store.search(("items",), filter={"price": {"$lt": 0}})
+    assert len(results) == 1
+    assert results[0].key == "item4"
+
+
+def test_boolean_filter_safety(store: SqliteStore) -> None:
+    """Test that boolean filter values are handled safely."""
+    store.put(("flags",), "flag1", {"active": True, "name": "Feature A"})
+    store.put(("flags",), "flag2", {"active": False, "name": "Feature B"})
+    store.put(("flags",), "flag3", {"active": True, "name": "Feature C"})
+
+    # Test boolean filters
+    results = store.search(("flags",), filter={"active": True})
+    assert len(results) == 2
+    assert all(r.value["active"] is True for r in results)
+
+    results = store.search(("flags",), filter={"active": False})
+    assert len(results) == 1
+    assert results[0].value["active"] is False
+
+
+def test_filter_keys_with_hyphens_and_digits(store: SqliteStore) -> None:
+    """Keys with hyphens or leading digits should be queryable via filters.
+
+    Current unquoted JSON path construction (e.g., '$.access-level' or '$.123abc')
+    is not valid JSON1 syntax, so this test will catch regressions in path handling.
+    """
+    # Documents with top-level and nested keys requiring bracket-quoted JSON paths
+    store.put(
+        ("docs",),
+        "hyphen",
+        {"access-level": "public", "user": {"access-level": "nested"}},
+    )
+    store.put(("docs",), "digit", {"123abc": "ok", "user": {"123abc": "ok2"}})
+
+    # Top-level hyphenated key
+    results = store.search(("docs",), filter={"access-level": "public"})
+    assert [r.key for r in results] == ["hyphen"]
+
+    # Nested hyphenated key via dotted path
+    results = store.search(("docs",), filter={"user.access-level": "nested"})
+    assert [r.key for r in results] == ["hyphen"]
+
+    # Top-level digit-starting key
+    results = store.search(("docs",), filter={"123abc": "ok"})
+    assert [r.key for r in results] == ["digit"]
+
+    # Nested digit-starting key via dotted path
+    results = store.search(("docs",), filter={"user.123abc": "ok2"})
+    assert [r.key for r in results] == ["digit"]
+
+
 @pytest.mark.parametrize("distance_type", VECTOR_TYPES)
 def test_non_ascii(
     fake_embeddings: CharacterEmbeddings,

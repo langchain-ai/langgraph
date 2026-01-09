@@ -31,7 +31,7 @@ jobs:
           - "3.12"
     name: "lint #${{ matrix.python-version }}"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Get changed files
         id: changed-files
         uses: Ana06/get-changed-files@v2.3.0
@@ -52,7 +52,7 @@ jobs:
 
       - name: Get .mypy_cache to speed up mypy
         if: steps.changed-files.outputs.all
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
         with:
@@ -78,7 +78,7 @@ jobs:
 
       - name: Get .mypy_cache_test to speed up mypy
         if: steps.changed-files.outputs.all
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
         with:

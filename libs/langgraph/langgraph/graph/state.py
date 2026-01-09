@@ -78,6 +78,7 @@ from langgraph.types import (
     Command,
     RetryPolicy,
     Send,
+    ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, NodeInputT, OutputT, StateT
 from langgraph.warnings import LangGraphDeprecatedSinceV05, LangGraphDeprecatedSinceV10
@@ -127,6 +128,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
     Args:
         state_schema: The schema class that defines the state.
         context_schema: The schema class that defines the runtime context.
+
             Use this to expose immutable context data to your nodes, like `user_id`, `db_conn`, etc.
         input_schema: The schema class that defines the input to the graph.
         output_schema: The schema class that defines the output from the graph.
@@ -371,18 +373,23 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         Args:
             node: The function or runnable this node will run.
+
                 If a string is provided, it will be used as the node name, and action will be used as the function or runnable.
             action: The action associated with the node.
                 Will be used as the node function or runnable if `node` is a string (node name).
             defer: Whether to defer the execution of the node until the run is about to end.
             metadata: The metadata associated with the node.
-            input_schema: The input schema for the node. (default: the graph's state schema)
+            input_schema: The input schema for the node. (Default: the graph's state schema)
             retry_policy: The retry policy for the node.
+
                 If a sequence is provided, the first matching policy will be applied.
             cache_policy: The cache policy for the node.
             destinations: Destinations that indicate where a node can route to.
-                This is useful for edgeless graphs with nodes that return `Command` objects.
+
+                Useful for edgeless graphs with nodes that return `Command` objects.
+
                 If a `dict` is provided, the keys will be used as the target node names and the values will be used as the labels for the edges.
+
                 If a `tuple` is provided, the values will be used as the target node names.
 
                 !!! note
@@ -631,11 +638,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         Args:
             source: The starting node. This conditional edge will run when
                 exiting this node.
-            path: The callable that determines the next
-                node or nodes. If not specifying `path_map` it should return one or
-                more nodes. If it returns `'END'`, the graph will stop execution.
-            path_map: Optional mapping of paths to node
-                names. If omitted the paths returned by `path` should be node names.
+            path: The callable that determines the next node or nodes.
+
+                If not specifying `path_map` it should return one or more nodes.
+
+                If it returns `'END'`, the graph will stop execution.
+            path_map: Optional mapping of paths to node names.
+
+                If omitted the paths returned by `path` should be node names.
 
         Returns:
             Self: The instance of the graph, allowing for method chaining.
@@ -676,7 +686,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         Args:
             nodes: A sequence of `StateNode` (callables that accept a `state` arg) or `(name, StateNode)` tuples.
+
                 If no names are provided, the name will be inferred from the node object (e.g. a `Runnable` or a `Callable` name).
+
                 Each node will be executed in the order provided.
 
         Raises:
@@ -733,11 +745,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         """Sets a conditional entry point in the graph.
 
         Args:
-            path: The callable that determines the next
-                node or nodes. If not specifying `path_map` it should return one or
-                more nodes. If it returns END, the graph will stop execution.
-            path_map: Optional mapping of paths to node
-                names. If omitted the paths returned by `path` should be node names.
+            path: The callable that determines the next node or nodes.
+
+                If not specifying `path_map` it should return one or more nodes.
+
+                If it returns END, the graph will stop execution.
+            path_map: Optional mapping of paths to node names.
+
+                If omitted the paths returned by `path` should be node names.
 
         Returns:
             Self: The instance of the graph, allowing for method chaining.
@@ -824,9 +839,12 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         Args:
             checkpointer: A checkpoint saver object or flag.
+
                 If provided, this `Checkpointer` serves as a fully versioned "short-term memory" for the graph,
                 allowing it to be paused, resumed, and replayed from any point.
+
                 If `None`, it may inherit the parent graph's checkpointer when used as a subgraph.
+
                 If `False`, it will not use or inherit any checkpointer.
             interrupt_before: An optional list of node names to interrupt before.
             interrupt_after: An optional list of node names to interrupt after.
@@ -836,6 +854,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
         """
+        checkpointer = ensure_valid_checkpointer(checkpointer)
+
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []

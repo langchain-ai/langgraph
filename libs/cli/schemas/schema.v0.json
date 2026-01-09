@@ -99,6 +99,17 @@
               },
               "description": "Optional. Additional Docker instructions that will be appended to your base Dockerfile.\n\nUseful for installing OS packages, setting environment variables, etc."
             },
+            "encryption": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EncryptionConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom at-rest encryption config, including the path to your Python encryption logic.\n\nAllows you to implement custom encryption for sensitive data stored in the database.\n"
+            },
             "env": {
               "anyOf": [
                 {
@@ -199,6 +210,17 @@
                 }
               ],
               "description": "Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.\n"
+            },
+            "webhooks": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WebhooksConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Webhooks configuration for outbound event delivery.\n\nForwarded into the container as `LANGGRAPH_WEBHOOKS`. See `WebhooksConfig`\nfor URL policy and header templating details.\n"
             }
           },
           "required": [
@@ -291,6 +313,17 @@
                 "type": "string"
               },
               "description": "Optional. Additional Docker instructions that will be appended to your base Dockerfile.\n\nUseful for installing OS packages, setting environment variables, etc."
+            },
+            "encryption": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EncryptionConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Custom at-rest encryption config, including the path to your Python encryption logic.\n\nAllows you to implement custom encryption for sensitive data stored in the database.\n"
             },
             "env": {
               "anyOf": [
@@ -391,6 +424,17 @@
                 }
               ],
               "description": "Optional. Named definitions of UI components emitted by the agent, each pointing to a JS/TS file.\n"
+            },
+            "webhooks": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/WebhooksConfig"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional. Webhooks configuration for outbound event delivery.\n\nForwarded into the container as `LANGGRAPH_WEBHOOKS`. See `WebhooksConfig`\nfor URL policy and header templating details.\n"
             }
           },
           "required": [
@@ -405,6 +449,10 @@
       "description": "Configuration for custom authentication logic and how it integrates into the OpenAPI spec.",
       "type": "object",
       "properties": {
+        "cache": {
+          "$ref": "#/$defs/CacheConfig",
+          "description": "Optional. Cache configuration for the server.\n"
+        },
         "disable_studio_auth": {
           "type": "boolean",
           "description": "Optional. Whether to disable LangSmith API-key authentication for requests originating the Studio.\n\nDefaults to False, meaning that if a particular header is set, the server will verify the `x-api-key` header\nvalue is a valid API key for the deployment's workspace. If `True`, all requests will go through your custom\nauthentication logic, regardless of origin of the request.\n"
@@ -419,6 +467,29 @@
         }
       },
       "required": []
+    },
+    "CacheConfig": {
+      "title": "CacheConfig",
+      "type": "object",
+      "properties": {
+        "cache_keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional. List of header keys to use for caching.\n"
+        },
+        "max_size": {
+          "type": "integer",
+          "description": "Optional. Maximum size of the cache.\n"
+        },
+        "ttl_seconds": {
+          "type": "integer",
+          "description": "Optional. Time-to-live in seconds for cached items.\n"
+        }
+      },
+      "required": [],
+      "description": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)"
     },
     "SecurityConfig": {
       "title": "SecurityConfig",
@@ -565,6 +636,17 @@
       },
       "required": []
     },
+    "EncryptionConfig": {
+      "title": "EncryptionConfig",
+      "description": "Configuration for custom at-rest encryption logic.\n\nAllows you to implement custom encryption for sensitive data stored in the database,\nincluding metadata fields and checkpoint blobs.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
     "HttpConfig": {
       "title": "HttpConfig",
       "description": "Configuration for the built-in HTTP server that powers your deployment's routes and endpoints.",
@@ -596,13 +678,17 @@
           ],
           "description": "Optional. Defines CORS restrictions. If omitted, no special rules are set and\ncross-origin behavior depends on default server settings.\n"
         },
+        "disable_a2a": {
+          "type": "boolean",
+          "description": "Optional. If `True`, /a2a routes are removed, disabling default support to expose the deployment as an agent-to-agent (A2A) server.\n\nDefault is False.\n"
+        },
         "disable_assistants": {
           "type": "boolean",
           "description": "Optional. If `True`, /assistants routes are removed from the server.\n\nDefault is False (meaning /assistants is enabled).\n"
         },
         "disable_mcp": {
           "type": "boolean",
-          "description": "Optional. If `True`, /mcp routes are removed, disabling the MCP server.\n\nDefault is False.\n"
+          "description": "Optional. If `True`, /mcp routes are removed, disabling default support to expose the deployment as an MCP server.\n\nDefault is False.\n"
         },
         "disable_meta": {
           "type": "boolean",
@@ -619,6 +705,14 @@
         "disable_threads": {
           "type": "boolean",
           "description": "Optional. If `True`, /threads routes are removed.\n\nDefault is False.\n"
+        },
+        "disable_ui": {
+          "type": "boolean",
+          "description": "Optional. If `True`, /ui routes are removed, disabling the UI server.\n\nDefault is False.\n"
+        },
+        "disable_webhooks": {
+          "type": "boolean",
+          "description": "Optional. If `True`, webhooks are disabled. Runs created with an associated webhook will\nstill be executed, but the webhook event will not be sent.\n\nDefault is False.\n"
         },
         "enable_custom_route_auth": {
           "type": "boolean",
@@ -648,6 +742,10 @@
             }
           ],
           "description": "Optional. Defines the order in which to apply server customizations.\n"
+        },
+        "mount_prefix": {
+          "type": "string",
+          "description": "Optional. URL prefix to prepend to all the routes.\n"
         }
       },
       "required": []
@@ -683,13 +781,10 @@
               "type": "null"
             }
           ],
-          "description": "Headers to include (if not also matches against an 'exludes' pattern.\n"
+          "description": "Headers to include (if not also matched against an 'excludes' pattern).\n"
         }
       },
-      "required": [
-        "excludes",
-        "includes"
-      ]
+      "required": []
     },
     "CorsConfig": {
       "title": "CorsConfig",
@@ -832,6 +927,63 @@
         }
       },
       "required": []
+    },
+    "WebhooksConfig": {
+      "title": "WebhooksConfig",
+      "type": "object",
+      "properties": {
+        "env_prefix": {
+          "type": "string",
+          "description": "Required prefix for environment variables referenced in header templates.\n\nActs as an allowlist boundary to prevent leaking arbitrary environment\nvariables. Defaults to \"LG_WEBHOOK_\" when omitted.\n"
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Static headers to include with webhook requests.\n\nValues may contain templates of the form \"${{ env.VAR }}\". On startup, these\nare resolved via the process environment after verifying `VAR` starts with\n`env_prefix`. Mixed literals and multiple templates are allowed.\n"
+        },
+        "url": {
+          "$ref": "#/$defs/WebhookUrlPolicy",
+          "description": "URL validation policy for user-supplied webhook endpoints."
+        }
+      },
+      "required": [],
+      "description": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)"
+    },
+    "WebhookUrlPolicy": {
+      "title": "WebhookUrlPolicy",
+      "type": "object",
+      "properties": {
+        "allowed_domains": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Hostname allowlist. Supports exact hosts and wildcard subdomains.\n\nUse entries like \"hooks.example.com\" or \"*.mycorp.com\". The wildcard only\nmatches subdomains (\"foo.mycorp.com\"), not the apex (\"mycorp.com\"). When\nempty or omitted, any public host is allowed (subject to SSRF IP checks).\n"
+        },
+        "allowed_ports": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Explicit port allowlist for absolute URLs.\n\nIf set, requests must use one of these ports. Defaults are respected when\na port is not present in the URL (443 for https, 80 for http).\n"
+        },
+        "disable_loopback": {
+          "type": "boolean",
+          "description": "Disallow relative URLs (internal loopback calls) when true."
+        },
+        "max_url_length": {
+          "type": "integer",
+          "description": "Maximum permitted URL length in characters; longer inputs are rejected early."
+        },
+        "require_https": {
+          "type": "boolean",
+          "description": "Enforce HTTPS scheme for absolute URLs; reject `http://` when true."
+        }
+      },
+      "required": [],
+      "description": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)"
     }
   },
   "title": "LangGraph CLI Configuration",

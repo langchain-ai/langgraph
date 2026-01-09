@@ -21,7 +21,7 @@
     
         steps:
           - name: Checkout
-            uses: actions/checkout@v5
+            uses: actions/checkout@v6
     
           - name: Install Dependencies
             run: |
@@ -34,7 +34,7 @@
             id: extract_ignore_words
     
           - name: Codespell
-            uses: codespell-project/actions-codespell@v2.1
+            uses: codespell-project/actions-codespell@v2.2
             with:
               skip: '*.ambr,*.lock,*.ipynb,*.yaml,*.zlib,*.css.map,*.js.map'
               ignore_words_list: ${{ steps.extract_ignore_words.outputs.ignore_words_list }}
