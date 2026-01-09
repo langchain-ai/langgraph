@@ -354,6 +354,8 @@ class Cron(TypedDict):
     """The ID of the assistant."""
     thread_id: str | None
     """The ID of the thread."""
+    on_run_completed: OnCompletionBehavior | None
+    """What to do with the thread after the run completes. Only applicable for stateless crons."""
     end_time: datetime | None
     """The end date to stop running the cron."""
     schedule: str
