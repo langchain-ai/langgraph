@@ -135,7 +135,11 @@ def test_traceable_config_process_outputs():
 
 
 def test_traceable_config_enabled_false():
-    """Test that __traceable_config__ with enabled=False skips trace creation."""
+    """Test that enabled=False skips LangSmith but custom handlers still receive events.
+
+    Note: enabled=False filters out LangChainTracer (LangSmith) specifically,
+    but custom callback handlers like FakeTracer still receive events.
+    """
     tracer = FakeTracer()
 
     def hidden_node(state: SimpleState) -> SimpleState:
@@ -162,12 +166,12 @@ def test_traceable_config_enabled_false():
     runs = tracer.flattened_runs()
     run_names = [r.name for r in runs]
 
-    # visible_node should be traced
+    # Both nodes should be traced to FakeTracer (a custom handler)
+    # enabled=False only filters LangChainTracer, not custom handlers
     assert "visible_node" in run_names, f"Expected visible_node in {run_names}"
-
-    # hidden_node should NOT be traced (enabled=False)
-    assert "hidden_node" not in run_names, (
-        f"hidden_node should not be traced but found in {run_names}"
+    assert "hidden_node" in run_names, (
+        f"hidden_node should be traced to custom handlers, "
+        f"enabled=False only filters LangSmith. Got: {run_names}"
     )
 
 
@@ -498,7 +502,11 @@ def test_entrypoint_traceable_config_process_outputs():
 
 
 def test_entrypoint_traceable_config_enabled_false():
-    """Test that @entrypoint with enabled=False skips trace creation."""
+    """Test that @entrypoint with enabled=False still fires custom callbacks.
+
+    Note: enabled=False filters out LangChainTracer (LangSmith) specifically,
+    but custom callback handlers like FakeTracer still receive events.
+    """
     tracer = FakeTracer()
 
     def hidden_entrypoint(value: str) -> str:
@@ -515,9 +523,11 @@ def test_entrypoint_traceable_config_enabled_false():
     runs = tracer.flattened_runs()
     run_names = [r.name for r in runs]
 
-    # The entrypoint node should NOT be traced (enabled=False)
-    assert "hidden_entrypoint" not in run_names, (
-        f"hidden_entrypoint should not be traced but found in {run_names}"
+    # The entrypoint should still be traced to custom handlers
+    # enabled=False only filters LangChainTracer, not custom handlers
+    assert "hidden_entrypoint" in run_names, (
+        f"hidden_entrypoint should be traced to custom handlers, "
+        f"enabled=False only filters LangSmith. Got: {run_names}"
     )
 
 
@@ -619,7 +629,11 @@ def test_task_traceable_config_process_outputs():
 
 
 def test_task_traceable_config_enabled_false():
-    """Test that @task with enabled=False skips trace creation."""
+    """Test that @task with enabled=False still fires custom callbacks.
+
+    Note: enabled=False filters out LangChainTracer (LangSmith) specifically,
+    but custom callback handlers like FakeTracer still receive events.
+    """
     tracer = FakeTracer()
 
     def hidden_task_func(value: str) -> str:
@@ -647,14 +661,14 @@ def test_task_traceable_config_enabled_false():
     runs = tracer.flattened_runs()
     run_names = [r.name for r in runs]
 
-    # visible_task_func should be traced
+    # Both tasks should be traced to FakeTracer (a custom handler)
+    # enabled=False only filters LangChainTracer, not custom handlers
     assert "visible_task_func" in run_names, (
         f"Expected visible_task_func in {run_names}"
     )
-
-    # hidden_task_func should NOT be traced (enabled=False)
-    assert "hidden_task_func" not in run_names, (
-        f"hidden_task_func should not be traced but found in {run_names}"
+    assert "hidden_task_func" in run_names, (
+        f"hidden_task_func should be traced to custom handlers, "
+        f"enabled=False only filters LangSmith. Got: {run_names}"
     )
 
 
@@ -1085,4 +1099,39 @@ def test_traceable_enabled_false_allows_get_config():
     assert result == {"value": "got_config_test"}
     assert config_thread_id == "test-thread-123", (
         f"Expected thread_id 'test-thread-123', got {config_thread_id}"
+    )
+
+
+def test_traceable_enabled_false_still_fires_custom_callbacks():
+    """Test that enabled=False skips LangSmith but fires callbacks to custom handlers.
+
+    This verifies that on_chain_start and on_chain_end are still called for
+    custom callback handlers even when the node has enabled=False in its
+    traceable config.
+    """
+    tracer = FakeTracer()
+
+    def my_node(state: SimpleState) -> SimpleState:
+        return {"value": f"processed_{state['value']}"}
+
+    _set_traceable_config(my_node, enabled=False)
+
+    builder = StateGraph(SimpleState)
+    builder.add_node("my_node", my_node)
+    builder.add_edge("__start__", "my_node")
+    graph = builder.compile()
+
+    result = graph.invoke({"value": "test"}, {"callbacks": [tracer]})
+
+    # Verify the graph executed correctly
+    assert result == {"value": "processed_test"}
+
+    # Verify custom callback handler received events for the node
+    runs = tracer.flattened_runs()
+    run_names = [r.name for r in runs]
+
+    assert "LangGraph" in run_names, f"Missing LangGraph run: {run_names}"
+    assert "my_node" in run_names, (
+        f"enabled=False should still fire callbacks to custom handlers. "
+        f"Got runs: {run_names}"
     )

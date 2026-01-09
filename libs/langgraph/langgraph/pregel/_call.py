@@ -272,8 +272,9 @@ def get_runnable_for_task(func: Callable[..., Any]) -> Runnable:
             "trace_inputs": trace_inputs,
         }
         if traceable_config:
+            # Filter out LangChainTracer (skip LangSmith) but keep other callbacks
             if traceable_config.get("enabled") is False:
-                seq_kwargs["trace"] = False
+                seq_kwargs["skip_langsmith"] = True
             if traceable_config.get("process_outputs"):
                 seq_kwargs["trace_outputs"] = traceable_config["process_outputs"]
 

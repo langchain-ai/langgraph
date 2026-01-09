@@ -26,6 +26,7 @@ from typing import (
     cast,
 )
 
+from langchain_core.callbacks import AsyncCallbackManager, CallbackManager
 from langchain_core.runnables.base import (
     Runnable,
     RunnableConfig,
@@ -85,6 +86,62 @@ def _process_outputs(processor: Callable[[Any], Any] | None, outputs: Any) -> An
     except Exception:
         logger.exception("trace_outputs filter failed")
         return {"error": "<trace_outputs processing failed>"}
+
+
+def _filter_langsmith_handlers(
+    callback_manager: CallbackManager,
+) -> CallbackManager:
+    """Filter out LangChainTracer handlers from a callback manager.
+
+    Used when traceable config has enabled=False - we want to fire callbacks
+    to custom handlers but skip LangSmith tracing.
+    """
+    filtered_handlers = [
+        h for h in callback_manager.handlers if not isinstance(h, LangChainTracer)
+    ]
+    filtered_inheritable = [
+        h
+        for h in callback_manager.inheritable_handlers
+        if not isinstance(h, LangChainTracer)
+    ]
+    # Create a new callback manager with filtered handlers
+    return CallbackManager(
+        handlers=filtered_handlers,
+        inheritable_handlers=filtered_inheritable,
+        parent_run_id=callback_manager.parent_run_id,
+        tags=callback_manager.tags,
+        inheritable_tags=callback_manager.inheritable_tags,
+        metadata=callback_manager.metadata,
+        inheritable_metadata=callback_manager.inheritable_metadata,
+    )
+
+
+def _filter_langsmith_handlers_async(
+    callback_manager: AsyncCallbackManager,
+) -> AsyncCallbackManager:
+    """Filter out LangChainTracer handlers from an async callback manager.
+
+    Used when traceable config has enabled=False - we want to fire callbacks
+    to custom handlers but skip LangSmith tracing.
+    """
+    filtered_handlers = [
+        h for h in callback_manager.handlers if not isinstance(h, LangChainTracer)
+    ]
+    filtered_inheritable = [
+        h
+        for h in callback_manager.inheritable_handlers
+        if not isinstance(h, LangChainTracer)
+    ]
+    # Create a new callback manager with filtered handlers
+    return AsyncCallbackManager(
+        handlers=filtered_handlers,
+        inheritable_handlers=filtered_inheritable,
+        parent_run_id=callback_manager.parent_run_id,
+        tags=callback_manager.tags,
+        inheritable_tags=callback_manager.inheritable_tags,
+        metadata=callback_manager.metadata,
+        inheritable_metadata=callback_manager.inheritable_metadata,
+    )
 
 
 def _set_config_context(
@@ -579,6 +636,7 @@ class RunnableSeq(Runnable):
         trace_inputs: Callable[[Any], Any] | None = None,
         trace_outputs: Callable[[Any], Any] | None = None,
         trace: bool = True,
+        skip_langsmith: bool = False,
     ) -> None:
         """Create a new RunnableSeq.
 
@@ -588,6 +646,8 @@ class RunnableSeq(Runnable):
             trace_inputs: Optional function to transform inputs before tracing.
             trace_outputs: Optional function to transform outputs before tracing.
             trace: Whether to trace this sequence. Defaults to True.
+            skip_langsmith: If True, filter out LangChainTracer handlers but keep
+                other callbacks. Used when traceable config has enabled=False.
 
         Raises:
             ValueError: If the sequence has less than 2 steps.
@@ -609,6 +669,7 @@ class RunnableSeq(Runnable):
         self.trace_inputs = trace_inputs
         self.trace_outputs = trace_outputs
         self.trace = trace
+        self.skip_langsmith = skip_langsmith
 
     def __or__(
         self,
@@ -669,6 +730,9 @@ class RunnableSeq(Runnable):
         if self.trace:
             # setup callbacks and context
             callback_manager = get_callback_manager_for_config(config)
+            # Filter out LangChainTracer if skip_langsmith is set
+            if self.skip_langsmith:
+                callback_manager = _filter_langsmith_handlers(callback_manager)
             # start the root run
             run_manager = callback_manager.on_chain_start(
                 None,
@@ -728,6 +792,9 @@ class RunnableSeq(Runnable):
         if self.trace:
             # setup callbacks
             callback_manager = get_async_callback_manager_for_config(config)
+            # Filter out LangChainTracer if skip_langsmith is set
+            if self.skip_langsmith:
+                callback_manager = _filter_langsmith_handlers_async(callback_manager)
             # start the root run
             run_manager = await callback_manager.on_chain_start(
                 None,
@@ -804,6 +871,9 @@ class RunnableSeq(Runnable):
         if self.trace:
             # setup callbacks
             callback_manager = get_callback_manager_for_config(config)
+            # Filter out LangChainTracer if skip_langsmith is set
+            if self.skip_langsmith:
+                callback_manager = _filter_langsmith_handlers(callback_manager)
             # start the root run
             run_manager = callback_manager.on_chain_start(
                 None,
@@ -880,6 +950,9 @@ class RunnableSeq(Runnable):
         if self.trace:
             # setup callbacks
             callback_manager = get_async_callback_manager_for_config(config)
+            # Filter out LangChainTracer if skip_langsmith is set
+            if self.skip_langsmith:
+                callback_manager = _filter_langsmith_handlers_async(callback_manager)
             # start the root run
             run_manager = await callback_manager.on_chain_start(
                 None,

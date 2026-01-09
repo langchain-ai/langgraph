@@ -270,9 +270,9 @@ class PregelNode:
 
         seq_kwargs: dict[str, Any] = {}
         if tc:
-            # Only disable tracing if explicitly set to False
+            # Filter out LangChainTracer (skip LangSmith) but keep other callbacks
             if tc.get("enabled") is False:
-                seq_kwargs["trace"] = False
+                seq_kwargs["skip_langsmith"] = True
             seq_kwargs["trace_inputs"] = tc.get("process_inputs")
             seq_kwargs["trace_outputs"] = tc.get("process_outputs")
 
