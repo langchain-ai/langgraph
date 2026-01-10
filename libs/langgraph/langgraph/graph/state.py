@@ -1261,8 +1261,18 @@ def _pick_mapper(
     return partial(_coerce_state, schema)
 
 
-def _coerce_state(schema: type[Any], input: dict[str, Any]) -> dict[str, Any]:
-    return schema(**input)
+def _coerce_state(schema: type[Any], input: dict[str, Any]) -> Any:
+    """Coerce dict to schema class.
+
+    For Pydantic models, falls back to model_construct() if validation fails,
+    aligning with TypedDict's lenient parsing behavior.
+    """
+    try:
+        return schema(**input)
+    except Exception:
+        if hasattr(schema, "model_construct"):
+            return schema.model_construct(**input)
+        raise
 
 
 def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
