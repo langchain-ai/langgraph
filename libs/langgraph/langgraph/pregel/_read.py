@@ -7,10 +7,15 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from typing_extensions import TypedDict
 
 from langgraph._internal._config import merge_configs
 from langgraph._internal._constants import CONF, CONFIG_KEY_READ
-from langgraph._internal._runnable import RunnableCallable, RunnableSeq
+from langgraph._internal._runnable import (
+    RunnableCallable,
+    RunnableSeq,
+    coerce_to_runnable,
+)
 from langgraph.pregel._utils import find_subgraph_pregel
 from langgraph.pregel._write import ChannelWrite
 from langgraph.pregel.protocol import PregelProtocol
@@ -18,6 +23,32 @@ from langgraph.types import CachePolicy, RetryPolicy
 
 READ_TYPE = Callable[[str | Sequence[str], bool], Any | dict[str, Any]]
 INPUT_CACHE_KEY_TYPE = tuple[Callable[..., Any], tuple[str, ...]]
+
+
+class TraceableConfig(TypedDict, total=False):
+    """Configuration extracted from @traceable decorated functions."""
+
+    process_inputs: Callable[[Any], Any] | None
+    process_outputs: Callable[[Any], Any] | None
+    enabled: bool | None
+    __unwrapped__: Callable[[Any], Any] | None
+
+
+def _validate_traceable_config(raw: Any) -> TraceableConfig | None:
+    """Validate __traceable_config__ has expected structure.
+
+    Returns validated config dict or None if invalid.
+    """
+    if not isinstance(raw, dict):
+        return None
+    # Support both "__unwrapped__" (langsmith) and "wrapped" (legacy) keys
+    unwrapped = raw.get("__unwrapped__") or raw.get("wrapped")
+    return {
+        "process_inputs": raw.get("process_inputs"),
+        "process_outputs": raw.get("process_outputs"),
+        "enabled": raw.get("enabled"),  # None means use external context
+        "__unwrapped__": unwrapped,
+    }
 
 
 class ChannelRead(RunnableCallable):
@@ -176,6 +207,7 @@ class PregelNode:
         attrs = {**self.__dict__, **update}
         # Drop the cached properties
         attrs.pop("flat_writers", None)
+        attrs.pop("_traceable_config", None)
         attrs.pop("node", None)
         attrs.pop("input_cache_key", None)
         return PregelNode(**attrs)
@@ -198,6 +230,31 @@ class PregelNode:
         return writers
 
     @cached_property
+    def _traceable_config(self) -> TraceableConfig | None:
+        """Extract @traceable config if bound wraps a traceable function.
+
+        Returns validated TraceableConfig with:
+        - process_inputs: Optional input processing function
+        - process_outputs: Optional output processing function
+        - enabled: Whether tracing is enabled (None = honor external context)
+        - __unwrapped__: The original unwrapped function (if available)
+        """
+        if not isinstance(self.bound, RunnableCallable):
+            return None
+
+        func = self.bound.func or self.bound.afunc
+        if func is None:
+            return None
+
+        raw_config = getattr(func, "__traceable_config__", None)
+        if raw_config is None:
+            return None
+        config = _validate_traceable_config(raw_config)
+        if config is None:
+            return None
+        return config
+
+    @cached_property
     def node(self) -> Runnable[Any, Any] | None:
         """Get a runnable that combines `bound` and `writers`."""
         writers = self.flat_writers
@@ -207,10 +264,24 @@ class PregelNode:
             return writers[0]
         elif self.bound is DEFAULT_BOUND:
             return RunnableSeq(*writers)
-        elif writers:
-            return RunnableSeq(self.bound, *writers)
-        else:
+        elif not writers:
             return self.bound
+        tc = self._traceable_config
+
+        seq_kwargs: dict[str, Any] = {}
+        if tc:
+            # Filter out LangChainTracer (skip LangSmith) but keep other callbacks
+            if tc.get("enabled") is False:
+                seq_kwargs["skip_langsmith"] = True
+            seq_kwargs["trace_inputs"] = tc.get("process_inputs")
+            seq_kwargs["trace_outputs"] = tc.get("process_outputs")
+
+        bound = self.bound
+        if tc and (unwrapped := tc.get("__unwrapped__")):
+            # We want to avoid double-tracing.
+            bound = coerce_to_runnable(unwrapped, name=None, trace=False)
+
+        return RunnableSeq(bound, *writers, **seq_kwargs)
 
     @cached_property
     def input_cache_key(self) -> INPUT_CACHE_KEY_TYPE:
@@ -218,9 +289,11 @@ class PregelNode:
         This is used to avoid calculating the same input multiple times."""
         return (
             self.mapper,
-            tuple(self.channels)
-            if isinstance(self.channels, list)
-            else (self.channels,),
+            (
+                tuple(self.channels)
+                if isinstance(self.channels, list)
+                else (self.channels,)
+            ),
         )
 
     def invoke(
