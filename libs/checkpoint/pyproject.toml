@@ -13,8 +13,12 @@ license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
     "langchain-core>=0.2.38",
-    "ormsgpack>=1.12.0",
+    "msgpack>=1.0.0",
 ]
+
+[project.optional-dependencies]
+# Install ormsgpack for faster serialization on native Python
+fast = ["ormsgpack>=1.12.0"]
 
 [project.urls]
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint"

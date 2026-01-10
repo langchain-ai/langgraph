@@ -19,7 +19,16 @@ from warnings import warn
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from typing_extensions import Unpack, deprecated
-from xxhash import xxh3_128_hexdigest
+
+try:
+    from xxhash import xxh3_128_hexdigest  # type: ignore[import-not-found]
+except ImportError:
+    import hashlib
+
+    def xxh3_128_hexdigest(data: bytes) -> str:
+        """Fallback using MD5 for environments without xxhash (e.g., Pyodide/WASM)."""
+        return hashlib.md5(data, usedforsecurity=False).hexdigest()
+
 
 from langgraph._internal._cache import default_cache_key
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
