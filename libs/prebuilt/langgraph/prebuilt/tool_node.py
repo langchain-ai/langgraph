@@ -40,6 +40,7 @@ Typical Usage:
 from __future__ import annotations
 
 import asyncio
+import functools
 import inspect
 import json
 from collections.abc import Awaitable, Callable
@@ -1811,6 +1812,10 @@ def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
     schema_annotations = get_all_basemodel_annotations(full_schema)
 
     func = getattr(tool, "func", None) or getattr(tool, "coroutine", None)
+    # Unwrap functools.partial to get the underlying function, since
+    # get_type_hints() doesn't support partial objects (e.g., retriever tools)
+    while isinstance(func, functools.partial):
+        func = func.func
     func_annotations = get_type_hints(func, include_extras=True) if func else {}
 
     # Combine both annotation sources, preferring schema annotations
