@@ -172,9 +172,9 @@ class ToolCallRequest:
 
         Args:
             **overrides: Keyword arguments for attributes to override.
-            
+
                 Supported keys:
-                
+
                 - tool_call: Tool call dict with `name`, `args`, and `id`
                 - state: Agent state (`dict`, `list`, or `BaseModel`)
 
