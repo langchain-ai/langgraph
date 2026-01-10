@@ -23,13 +23,14 @@ from langchain_core.messages import (
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.tools import BaseTool, ToolException
 from langchain_core.tools import tool as dec_tool
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
-from langgraph.graph import START, MessagesState, StateGraph
+from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
-from langgraph.types import Command, Send
+from langgraph.types import Command, Send, interrupt
 from pydantic import BaseModel
 from pydantic.v1 import BaseModel as BaseModelV1
 from typing_extensions import TypedDict
@@ -50,6 +51,8 @@ from .messages import _AnyIdHumanMessage, _AnyIdToolMessage
 from .model import FakeToolCallingModel
 
 pytestmark = pytest.mark.anyio
+
+SHAPES = ("circle", "square", "triangle")
 
 
 def _create_mock_runtime(store: BaseStore | None = None) -> Mock:
@@ -615,6 +618,110 @@ def test_tool_node_node_interrupt() -> None:
                 config=_create_config_with_runtime(),
             )
             assert exc_info.value == "foo"
+
+
+def _build_interrupt_tool_calls(tool_name: str = "interrupt_tool") -> list[ToolCall]:
+    return [
+        {
+            "name": tool_name,
+            "args": {"shape_id": label},
+            "id": f"call_{label}",
+        }
+        for label in SHAPES
+    ]
+
+
+@dec_tool
+def interrupt_tool(shape_id: str) -> str:
+    """Tool that always interrupts and waits for resume."""
+    resume_value = interrupt({"shape_id": shape_id})
+    return f"shape:{shape_id}:resume:{resume_value['shape_id']}"
+
+
+@dec_tool
+async def async_interrupt_tool(shape_id: str) -> str:
+    """Async tool that always interrupts."""
+    resume_value = interrupt({"shape_id": shape_id})
+    return f"async:{shape_id}:{resume_value['shape_id']}"
+
+
+def _build_interrupt_graph(tool: BaseTool) -> Any:
+    memory = InMemorySaver()
+    builder = StateGraph(MessagesState)
+    builder.add_node("tools", ToolNode([tool]))
+    builder.add_edge(START, "tools")
+    builder.add_edge("tools", END)
+    return builder.compile(checkpointer=memory)
+
+
+def _initial_interrupt_messages(tool_name: str = "interrupt_tool") -> list[AnyMessage]:
+    return [
+        HumanMessage("please draw shapes"),
+        AIMessage(
+            "make shapes",
+            tool_calls=_build_interrupt_tool_calls(tool_name),
+        ),
+    ]
+
+
+def test_tool_node_collects_parallel_interrupts() -> None:
+    graph = _build_interrupt_graph(interrupt_tool)
+    config = {"configurable": {"thread_id": "sync-interrupt"}}
+    result = graph.invoke({"messages": _initial_interrupt_messages()}, config=config)
+    interrupts = result.get("__interrupt__")
+    assert interrupts is not None
+    assert len(interrupts) == 3
+    assert {intr.value["shape_id"] for intr in interrupts} == {
+        "circle",
+        "square",
+        "triangle",
+    }
+
+
+async def test_tool_node_collects_parallel_interrupts_async() -> None:
+    graph = _build_interrupt_graph(async_interrupt_tool)
+    config = {"configurable": {"thread_id": "async-interrupt"}}
+    result = await graph.ainvoke(
+        {"messages": _initial_interrupt_messages("async_interrupt_tool")},
+        config=config,
+    )
+    interrupts = result.get("__interrupt__")
+    assert interrupts is not None
+    assert len(interrupts) == 3
+    assert {intr.value["shape_id"] for intr in interrupts} == {
+        "circle",
+        "square",
+        "triangle",
+    }
+
+
+def test_tool_node_parallel_interrupt_resume_round_trip() -> None:
+    graph = _build_interrupt_graph(interrupt_tool)
+    config = {"configurable": {"thread_id": "interrupt-thread"}}
+
+    result = graph.invoke({"messages": _initial_interrupt_messages()}, config=config)
+    interrupts = result.get("__interrupt__")
+    assert interrupts is not None
+    assert len(interrupts) == len(SHAPES)
+
+    for idx, shape_id in enumerate(SHAPES):
+        result = graph.invoke(
+            Command(resume={"shape_id": shape_id}),
+            config=config,
+        )
+        remaining = result.get("__interrupt__")
+        if idx < len(SHAPES) - 1:
+            assert remaining is not None
+            assert len(remaining) == len(SHAPES) - (idx + 1)
+        else:
+            assert remaining is None
+    tool_messages = [msg for msg in result["messages"] if isinstance(msg, ToolMessage)]
+    assert len(tool_messages) == len(SHAPES)
+    assert {msg.content for msg in tool_messages} == {
+        "shape:circle:resume:circle",
+        "shape:square:resume:square",
+        "shape:triangle:resume:triangle",
+    }
 
 
 @pytest.mark.parametrize("input_type", ["dict", "tool_calls"])
