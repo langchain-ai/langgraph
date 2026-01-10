@@ -3,7 +3,6 @@ from __future__ import annotations
 import random
 import warnings
 from collections.abc import Sequence
-from importlib.metadata import version as get_version
 from typing import Any, cast
 
 from langchain_core.runnables import RunnableConfig
@@ -19,7 +18,12 @@ from psycopg.types.json import Jsonb
 MetadataInput = dict[str, Any] | None
 
 try:
-    major, minor = get_version("langgraph").split(".")[:2]
+    # Import version directly from langgraph package if available
+    from langgraph.version import (  # type: ignore[import-untyped]
+        __version__ as langgraph_version,
+    )
+
+    major, minor = langgraph_version.split(".")[:2]
     if int(major) == 0 and int(minor) < 5:
         warnings.warn(
             "You're using incompatible versions of langgraph and checkpoint-postgres. Please upgrade langgraph to avoid unexpected behavior.",
@@ -27,7 +31,7 @@ try:
             stacklevel=2,
         )
 except Exception:
-    # skip version check if running from source
+    # skip version check if langgraph not installed or running from source
     pass
 
 """
