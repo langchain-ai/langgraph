@@ -109,6 +109,13 @@ class PregelNode:
     mapper: Callable[[Any], Any] | None
     """A function to transform the input before passing it to `bound`."""
 
+    mapper_output: Callable[[Any], Any] | None
+    """A function to validate the output state before saving to checkpoint.
+
+    If validation fails, InvalidUpdateError is raised and the checkpoint
+    is not saved, preventing permanently corrupted checkpoints.
+    """
+
     writers: list[Runnable]
     """A list of writers that will be executed after `bound`, responsible for
     taking the output of `bound` and writing it to the appropriate channels."""
@@ -138,6 +145,7 @@ class PregelNode:
         channels: str | list[str],
         triggers: Sequence[str],
         mapper: Callable[[Any], Any] | None = None,
+        mapper_output: Callable[[Any], Any] | None = None,
         writers: list[Runnable] | None = None,
         tags: list[str] | None = None,
         metadata: Mapping[str, Any] | None = None,
@@ -149,6 +157,7 @@ class PregelNode:
         self.channels = channels
         self.triggers = list(triggers)
         self.mapper = mapper
+        self.mapper_output = mapper_output
         self.writers = writers or []
         self.bound = bound if bound is not None else DEFAULT_BOUND
         self.cache_policy = cache_policy
