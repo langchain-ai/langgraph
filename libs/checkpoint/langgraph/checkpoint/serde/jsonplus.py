@@ -641,6 +641,7 @@ _option = (
     | ormsgpack.OPT_PASSTHROUGH_DATACLASS
     | ormsgpack.OPT_PASSTHROUGH_DATETIME
     | ormsgpack.OPT_PASSTHROUGH_ENUM
+    | ormsgpack.OPT_PASSTHROUGH_SUBCLASS  # Pass str/int subclasses (like StrEnum, IntEnum) to default handler
     | ormsgpack.OPT_PASSTHROUGH_UUID
     | ormsgpack.OPT_REPLACE_SURROGATES
 )
