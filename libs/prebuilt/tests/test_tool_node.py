@@ -41,6 +41,7 @@ from langgraph.prebuilt import (
 )
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
+    RuntimeStateField,
     ToolInvocationError,
     ToolRuntime,
     tools_condition,
@@ -1860,3 +1861,328 @@ async def test_tool_node_inject_async_all_types_with_schema() -> None:
         "foo_from_runtime=foo_value, "
         "tool_call_id=test_call_789"
     )
+
+
+async def test_runtime_state_field_single_field() -> None:
+    """Test ToolRuntime with RuntimeStateField for single field injection."""
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    @dec_tool
+    def tool_with_single_field(
+        x: int,
+        runtime: Annotated[ToolRuntime, RuntimeStateField("foo")],
+    ) -> str:
+        """Tool that only needs foo field from state."""
+        # runtime.state should be just the foo value, not the full state
+        foo_value = runtime.state
+        assert isinstance(foo_value, str)
+        return f"x={x}, foo={foo_value}"
+
+    node = ToolNode([tool_with_single_field])
+    tool_call = {
+        "name": "tool_with_single_field",
+        "args": {"x": 10},
+        "id": "call_1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime()
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "foo_value", "bar": 42}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "x=10, foo=foo_value"
+
+
+async def test_runtime_state_field_multiple_fields() -> None:
+    """Test ToolRuntime with RuntimeStateField for multiple field injection."""
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+        baz: str
+
+    @dec_tool
+    def tool_with_multiple_fields(
+        x: int,
+        runtime: Annotated[ToolRuntime, RuntimeStateField(fields=["foo", "bar"])],
+    ) -> str:
+        """Tool that needs foo and bar fields from state."""
+        # runtime.state should be a dict with only foo and bar
+        assert isinstance(runtime.state, dict)
+        assert set(runtime.state.keys()) == {"foo", "bar"}
+        foo_value = runtime.state["foo"]
+        bar_value = runtime.state["bar"]
+        return f"x={x}, foo={foo_value}, bar={bar_value}"
+
+    node = ToolNode([tool_with_multiple_fields])
+    tool_call = {
+        "name": "tool_with_multiple_fields",
+        "args": {"x": 20},
+        "id": "call_2",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime()
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "foo_val", "bar": 99, "baz": "should_not_appear"},
+        config=config,
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "x=20, foo=foo_val, bar=99"
+
+
+async def test_runtime_state_field_full_state_backward_compat() -> None:
+    """Test that ToolRuntime without RuntimeStateField still gets full state."""
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    @dec_tool
+    def tool_with_full_state(
+        x: int,
+        runtime: ToolRuntime,
+    ) -> str:
+        """Tool that gets full state (backward compatibility)."""
+        # runtime.state should be the full state dict
+        assert isinstance(runtime.state, dict)
+        assert "messages" in runtime.state
+        assert "foo" in runtime.state
+        assert "bar" in runtime.state
+        return f"x={x}, foo={runtime.state['foo']}, bar={runtime.state['bar']}"
+
+    node = ToolNode([tool_with_full_state])
+    tool_call = {
+        "name": "tool_with_full_state",
+        "args": {"x": 30},
+        "id": "call_3",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime()
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "full_foo", "bar": 123}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "x=30, foo=full_foo, bar=123"
+
+
+async def test_runtime_state_field_with_basemodel_state() -> None:
+    """Test RuntimeStateField with BaseModel state."""
+
+    class TestState(BaseModel):
+        messages: list
+        foo: str
+        bar: int
+
+    @dec_tool
+    def tool_with_basemodel_field(
+        x: int,
+        runtime: Annotated[ToolRuntime, RuntimeStateField("foo")],
+    ) -> str:
+        """Tool that extracts field from BaseModel state."""
+        foo_value = runtime.state
+        return f"x={x}, foo={foo_value}"
+
+    node = ToolNode([tool_with_basemodel_field])
+    tool_call = {
+        "name": "tool_with_basemodel_field",
+        "args": {"x": 40},
+        "id": "call_4",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    state = TestState(messages=[msg], foo="basemodel_foo", bar=456)
+    config = _create_config_with_runtime()
+    result = await node.ainvoke(state, config=config)
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "x=40, foo=basemodel_foo"
+
+
+async def test_runtime_state_field_missing_field_error() -> None:
+    """Test that missing field raises helpful error."""
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+
+    @dec_tool
+    def tool_with_missing_field(
+        x: int,
+        runtime: Annotated[ToolRuntime, RuntimeStateField("nonexistent")],
+    ) -> str:
+        """Tool that requests nonexistent field."""
+        return f"x={x}"
+
+    node = ToolNode([tool_with_missing_field])
+    tool_call = {
+        "name": "tool_with_missing_field",
+        "args": {"x": 50},
+        "id": "call_5",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime()
+    with pytest.raises(ValueError, match="requires state field 'nonexistent'"):
+        await node.ainvoke({"messages": [msg], "foo": "bar"}, config=config)
+
+
+async def test_runtime_state_field_list_state_messages() -> None:
+    """Test RuntimeStateField with list state for messages field."""
+
+    @dec_tool
+    def tool_with_list_state(
+        x: int,
+        runtime: Annotated[ToolRuntime, RuntimeStateField("messages")],
+    ) -> str:
+        """Tool that gets messages from list state."""
+        messages = runtime.state
+        assert isinstance(messages, list)
+        return f"x={x}, message_count={len(messages)}"
+
+    node = ToolNode([tool_with_list_state])
+    tool_call = {
+        "name": "tool_with_list_state",
+        "args": {"x": 60},
+        "id": "call_6",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime()
+    result = await node.ainvoke([msg], config=config)
+
+    tool_message = result[-1]
+    assert tool_message.content == "x=60, message_count=1"
+
+
+async def test_runtime_state_field_list_state_non_messages_error() -> None:
+    """Test that list state with non-messages field raises error."""
+
+    @dec_tool
+    def tool_with_invalid_list_field(
+        x: int,
+        runtime: Annotated[ToolRuntime, RuntimeStateField("foo")],
+    ) -> str:
+        """Tool that requests non-messages field from list state."""
+        return f"x={x}"
+
+    node = ToolNode([tool_with_invalid_list_field])
+    tool_call = {
+        "name": "tool_with_invalid_list_field",
+        "args": {"x": 70},
+        "id": "call_7",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime()
+    with pytest.raises(ValueError, match="requires dict state"):
+        await node.ainvoke([msg], config=config)
+
+
+async def test_runtime_state_field_sync_tool() -> None:
+    """Test RuntimeStateField with synchronous tool."""
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    @dec_tool
+    def sync_tool_with_field(
+        x: int,
+        runtime: Annotated[ToolRuntime, RuntimeStateField("foo")],
+    ) -> str:
+        """Sync tool that uses RuntimeStateField."""
+        foo_value = runtime.state
+        return f"sync: x={x}, foo={foo_value}"
+
+    node = ToolNode([sync_tool_with_field])
+    tool_call = {
+        "name": "sync_tool_with_field",
+        "args": {"x": 80},
+        "id": "call_8",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime()
+    result = node.invoke(
+        {"messages": [msg], "foo": "sync_foo", "bar": 789}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "sync: x=80, foo=sync_foo"
+
+
+async def test_runtime_state_field_with_other_runtime_attrs() -> None:
+    """Test that RuntimeStateField only affects state, not other runtime attributes."""
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "key", {"data": "test_data"})
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+
+    @dec_tool
+    def tool_checking_runtime_attrs(
+        x: int,
+        runtime: Annotated[ToolRuntime, RuntimeStateField("foo")],
+    ) -> str:
+        """Tool that checks all runtime attributes."""
+        # State should be filtered
+        foo_value = runtime.state
+        assert isinstance(foo_value, str)
+
+        # Other attributes should be unaffected
+        assert runtime.tool_call_id == "call_9"
+        assert runtime.config is not None
+        assert runtime.store is not None
+        assert runtime.context is None
+        assert runtime.stream_writer is not None
+
+        # Verify store works
+        store_value = runtime.store.get(namespace, "key").value["data"]
+
+        return f"x={x}, foo={foo_value}, store={store_value}"
+
+    node = ToolNode([tool_checking_runtime_attrs])
+    tool_call = {
+        "name": "tool_checking_runtime_attrs",
+        "args": {"x": 90},
+        "id": "call_9",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime(store=store)
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "filtered_foo"}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "x=90, foo=filtered_foo, store=test_data"
+
+
+async def test_runtime_state_field_invalid_both_params() -> None:
+    """Test that specifying both field and fields raises error."""
+    with pytest.raises(ValueError, match="Cannot specify both 'field' and 'fields'"):
+        RuntimeStateField(field="foo", fields=["bar", "baz"])
