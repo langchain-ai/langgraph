@@ -403,10 +403,15 @@ class AsyncPostgresSaver(BasePostgresSaver):
             including its configuration, metadata, parent checkpoint (if any),
             and pending writes.
         """
+        # Ensure thread_id is a string (psycopg3 may return bytes/memoryview in some cases)
+        thread_id = value["thread_id"]
+        if isinstance(thread_id, (bytes, memoryview)):
+            thread_id = bytes(thread_id).decode("utf-8")
+
         return CheckpointTuple(
             {
                 "configurable": {
-                    "thread_id": value["thread_id"],
+                    "thread_id": thread_id,
                     "checkpoint_ns": value["checkpoint_ns"],
                     "checkpoint_id": value["checkpoint_id"],
                 }
@@ -422,7 +427,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             (
                 {
                     "configurable": {
-                        "thread_id": value["thread_id"],
+                        "thread_id": thread_id,
                         "checkpoint_ns": value["checkpoint_ns"],
                         "checkpoint_id": value["parent_checkpoint_id"],
                     }
