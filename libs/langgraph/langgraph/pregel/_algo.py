@@ -604,7 +604,7 @@ def prepare_single_task(
                 config[CONF].get(CONFIG_KEY_SCRATCHPAD),
                 pending_writes,
                 task_id,
-                xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+                task_checkpoint_ns,
                 config[CONF].get(CONFIG_KEY_RESUME_MAP),
                 step,
                 stop,
@@ -807,7 +807,7 @@ def prepare_push_task_functional(
             configurable.get(CONFIG_KEY_SCRATCHPAD),
             pending_writes,
             task_id,
-            xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+            task_checkpoint_ns,
             configurable.get(CONFIG_KEY_RESUME_MAP),
             step,
             stop,
@@ -959,7 +959,7 @@ def prepare_push_task_send(
             config[CONF].get(CONFIG_KEY_SCRATCHPAD),
             pending_writes,
             task_id,
-            xxh3_128_hexdigest(task_checkpoint_ns.encode()),
+            task_checkpoint_ns,
             config[CONF].get(CONFIG_KEY_RESUME_MAP),
             step,
             stop,
@@ -1054,7 +1054,7 @@ def _scratchpad(
     parent_scratchpad: PregelScratchpad | None,
     pending_writes: list[PendingWrite],
     task_id: str,
-    namespace_hash: str,
+    task_checkpoint_ns: str,
     resume_map: dict[str, Any] | None,
     step: int,
     stop: int,
@@ -1081,10 +1081,18 @@ def _scratchpad(
             task_resume_write = []
         del w
 
-        # find namespace and task-specific resume value
-        if resume_map and namespace_hash in resume_map:
-            mapped_resume_write = resume_map[namespace_hash]
-            task_resume_write.append(mapped_resume_write)
+        # find namespace and task-specific resume values (iterate through counter indices)
+        # Start from the current length of task_resume_write (which may have values from
+        # previous RESUME writes) and look for new resume values at subsequent indices
+        if resume_map:
+            i = len(task_resume_write)
+            while True:
+                interrupt_id = xxh3_128_hexdigest(f"{task_checkpoint_ns}|{i}".encode())
+                if interrupt_id in resume_map:
+                    task_resume_write.append(resume_map[interrupt_id])
+                    i += 1
+                else:
+                    break
 
     else:
         null_resume_write = None
