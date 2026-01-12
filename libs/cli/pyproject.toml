@@ -19,7 +19,7 @@ dependencies = [
 path = "langgraph_cli/__init__.py"
 [project.optional-dependencies]
 inmem = [
-    "langgraph-api>=0.4,<0.6.0 ; python_version >= '3.11'",
+    "langgraph-api>=0.5.35,<0.7.0 ; python_version >= '3.11'",
     "langgraph-runtime-inmem>=0.7 ; python_version >= '3.11'",
     "python-dotenv>=0.8.0",
 ]
@@ -49,6 +49,7 @@ lint = [
 dev = [
     {include-group = "test"},
     {include-group = "lint"},
+    "hatch>=1.16.2",
 ]
 
 [tool.uv]
