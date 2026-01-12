@@ -1,0 +1,5 @@
+[codespell]
+skip = .git,*.lock,*.pyc,__pycache__,*.egg-info,node_modules,.venv,venv,*.whl
+ignore-words-list = te,nd,ot,fo,fro,ue,ro,socio
+count =
+quiet-level = 3

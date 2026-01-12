@@ -66,3 +66,15 @@ test:
 			$(MAKE) -C $$dir test; \
 		fi; \
 	done
+
+# Spell check all projects using codespell
+.PHONY: spell
+spell:
+	@echo "Running codespell across all projects..."
+	@codespell --config .codespellrc .
+
+# Spell check and automatically fix typos
+.PHONY: spell-fix
+spell-fix:
+	@echo "Running codespell with auto-fix..."
+	@codespell --config .codespellrc --write-changes .
