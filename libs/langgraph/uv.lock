@@ -747,6 +747,19 @@ wheels = [
 ]
 
 [[package]]
+name = "grpcio-health-checking"
+version = "1.76.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "grpcio", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
+    { name = "protobuf", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3e/96/5a52dcf21078b47ffa0c2ed613c3153a06f138edb6133792bace5f1ccc1d/grpcio_health_checking-1.76.0.tar.gz", hash = "sha256:b7a99d74096b3ab3a59987fc02374068e1c180a352e8d1f79f10e5a23727098d", size = 16784, upload-time = "2025-10-21T16:28:55.204Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/65/e6/746dffa51399827e38bb3f3f1ad656a3d8c1255039b256a6f76593368768/grpcio_health_checking-1.76.0-py3-none-any.whl", hash = "sha256:9743f345a855ba030cc7c381361606870b79d33bb71d7756efa47b6faa970f81", size = 18910, upload-time = "2025-10-21T16:27:26.332Z" },
+]
+
+[[package]]
 name = "grpcio-tools"
 version = "1.75.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1345,7 +1358,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "1.0.5"
+version = "1.0.6"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },
@@ -1488,12 +1501,13 @@ test = [
 
 [[package]]
 name = "langgraph-api"
-version = "0.5.35"
+version = "0.6.32"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
     { name = "cryptography", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
     { name = "grpcio", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
+    { name = "grpcio-health-checking", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
     { name = "grpcio-tools", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
     { name = "httpx", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
     { name = "jsonschema-rs", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
@@ -1518,14 +1532,14 @@ dependencies = [
     { name = "uvicorn", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
     { name = "watchfiles", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5a/27/4dd4287ec65690e3a212d7154e20504b4e88e861fd62625053be8903bc57/langgraph_api-0.5.35.tar.gz", hash = "sha256:b5687a5201ff365e1bc016042a7103ed8a2c2440f57b71f8480c223585bbfca1", size = 378029, upload-time = "2025-12-09T00:37:35.091Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/85/d2/f26cfc06c904535c994f751bf60cebf3d1368c3d6bdde0d2683434a49c86/langgraph_api-0.6.32.tar.gz", hash = "sha256:2ec5be13b75a88a072be8b54d8c9ba7034669be1decade70bd55ce987b1008b7", size = 436186, upload-time = "2026-01-11T22:56:22.381Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5a/80/296db2db262a90b0fe3cb2562790025e018e33da9d171cc64f12076e5911/langgraph_api-0.5.35-py3-none-any.whl", hash = "sha256:6aaf967c52ff719861b80e4dc8066968baa185d9daae8433f0d84b5a27708a65", size = 305523, upload-time = "2025-12-09T00:37:34.001Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/43/848e40f1f85073b8f7a3419f485ba75cd54d5fa404058149221b92de67af/langgraph_api-0.6.32-py3-none-any.whl", hash = "sha256:79adddc25db90ef8693f2d1da16f24c239735562d1abef8c8230798eeed5fb16", size = 342693, upload-time = "2026-01-11T22:56:20.877Z" },
 ]
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "3.0.1"
+version = "4.0.0"
 source = { editable = "../checkpoint" }
 dependencies = [
     { name = "langchain-core" },
@@ -1572,7 +1586,7 @@ test = [
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "3.0.2"
+version = "3.0.3"
 source = { editable = "../checkpoint-postgres" }
 dependencies = [
     { name = "langgraph-checkpoint" },
@@ -1619,7 +1633,7 @@ test = [
 
 [[package]]
 name = "langgraph-checkpoint-sqlite"
-version = "3.0.1"
+version = "3.0.2"
 source = { editable = "../checkpoint-sqlite" }
 dependencies = [
     { name = "aiosqlite" },
@@ -1712,7 +1726,7 @@ test = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "1.0.5"
+version = "1.0.6"
 source = { editable = "../prebuilt" }
 dependencies = [
     { name = "langchain-core" },
@@ -1763,7 +1777,7 @@ test = [
 
 [[package]]
 name = "langgraph-runtime-inmem"
-version = "0.19.1"
+version = "0.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "blockbuster", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
@@ -1773,9 +1787,9 @@ dependencies = [
     { name = "starlette", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
     { name = "structlog", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f4/9e/6e7b321ef02834059983d6d5a635cc20f9987b19fe6a4666332c8b9b0ede/langgraph_runtime_inmem-0.19.1.tar.gz", hash = "sha256:573d576cf38392fcace76d772be9adc4d54b2af129ae54cb9780bab4fb55ee69", size = 98975, upload-time = "2025-12-04T07:01:40.105Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fc/4e/1658cfe871c2cd02013e97663cb64e734b531b3102cebbe50523f9f839ae/langgraph_runtime_inmem-0.22.0.tar.gz", hash = "sha256:8c50ccdfe2654a8524c3729d24f83705360c03b7d6a1c362584e0546abaeb32b", size = 103368, upload-time = "2026-01-08T02:03:28.315Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8d/32/2230e8f4bd1a61518b594aefda60a14ea0fdf50b4bb14da7962f8590fa45/langgraph_runtime_inmem-0.19.1-py3-none-any.whl", hash = "sha256:5aba07ba358a493a8f40590fad8e5342d1141a479410289ca5ae6f6b4fa6ab84", size = 35100, upload-time = "2025-12-04T07:01:38.758Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/f9/09de2d2e09e122a93b4145487f1a4cd5923242ed4d3e3edfcea6fd6673cd/langgraph_runtime_inmem-0.22.0-py3-none-any.whl", hash = "sha256:46994bfebadc824e3b20374ed8ae151fa6da40eed3e43dd44c2a66d0185cb8ef", size = 37473, upload-time = "2026-01-08T02:03:27.372Z" },
 ]
 
 [[package]]
