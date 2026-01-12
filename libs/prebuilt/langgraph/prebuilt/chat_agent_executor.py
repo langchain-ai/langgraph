@@ -562,7 +562,7 @@ def create_react_agent(
     if not is_dynamic_model:
         if isinstance(model, str):
             try:
-                from langchain.chat_models import (
+                from langchain.chat_models import (  # type: ignore[import-not-found]
                     init_chat_model,
                 )
             except ImportError:
