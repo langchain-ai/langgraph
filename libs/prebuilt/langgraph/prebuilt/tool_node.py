@@ -1761,6 +1761,12 @@ def _is_injection(
     origin_ = get_origin(type_arg)
     if origin_ is Union or origin_ is Annotated:
         return any(_is_injection(ta, injection_type) for ta in get_args(type_arg))
+
+    if origin_ is not None and (
+        origin_ is injection_type
+        or (isinstance(origin_, type) and issubclass(origin_, injection_type))
+    ):
+        return True
     return False
 
 
