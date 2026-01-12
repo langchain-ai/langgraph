@@ -121,6 +121,7 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
     """Possible overrides for ToolCallRequest.override() method."""
 
     tool_call: ToolCall
+    state: Any
 
 
 @dataclass
@@ -170,8 +171,12 @@ class ToolCallRequest:
         This follows an immutable pattern, leaving the original request unchanged.
 
         Args:
-            **overrides: Keyword arguments for attributes to override. Supported keys:
-                - tool_call: Tool call dict with name, args, and id
+            **overrides: Keyword arguments for attributes to override.
+
+                Supported keys:
+
+                - tool_call: Tool call dict with `name`, `args`, and `id`
+                - state: Agent state (`dict`, `list`, or `BaseModel`)
 
         Returns:
             New ToolCallRequest instance with specified overrides applied.
@@ -1985,6 +1990,12 @@ def _is_injection(
     origin_ = get_origin(type_arg)
     if origin_ is Union or origin_ is Annotated:
         return any(_is_injection(ta, injection_type) for ta in get_args(type_arg))
+
+    if origin_ is not None and (
+        origin_ is injection_type
+        or (isinstance(origin_, type) and issubclass(origin_, injection_type))
+    ):
+        return True
     return False
 
 

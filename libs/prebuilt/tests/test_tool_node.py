@@ -1934,6 +1934,39 @@ async def test_runtime_state_field_multiple_fields() -> None:
     config = _create_config_with_runtime()
     result = await node.ainvoke(
         {"messages": [msg], "foo": "foo_val", "bar": 99, "baz": "should_not_appear"},
+async def test_tool_node_tool_runtime_generic() -> None:
+    """Test that ToolRuntime with generic type arguments is correctly injected."""
+
+    @dataclasses.dataclass
+    class MyContext:
+        some_info: str
+
+    @dec_tool
+    def get_info(rt: ToolRuntime[MyContext]):
+        """This tool returns info from context."""
+        return rt.context.some_info
+
+    # Create a mock runtime with context
+    mock_runtime = _create_mock_runtime()
+    mock_runtime.context = MyContext(some_info="test_info")
+
+    config = {"configurable": {"__pregel_runtime": mock_runtime}}
+
+    result = await ToolNode([get_info]).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "call tool",
+                    tool_calls=[
+                        {
+                            "name": "get_info",
+                            "args": {},
+                            "id": "call_1",
+                        }
+                    ],
+                )
+            ]
+        },
         config=config,
     )
 
@@ -2186,3 +2219,6 @@ async def test_runtime_state_field_invalid_both_params() -> None:
     """Test that specifying both field and fields raises error."""
     with pytest.raises(ValueError, match="Cannot specify both 'field' and 'fields'"):
         RuntimeStateField(field="foo", fields=["bar", "baz"])
+    assert tool_message.type == "tool"
+    assert tool_message.content == "test_info"
+    assert tool_message.tool_call_id == "call_1"

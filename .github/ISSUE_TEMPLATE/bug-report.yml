@@ -14,7 +14,6 @@ body:
 
         * [LangChain Forum](https://forum.langchain.com/),
         * [LangGraph Github Issues](https://github.com/langchain-ai/langgraph/issues),
-        * [LangGraph how-to guides](https://langchain-ai.github.io/langgraph/how-tos/).
         * [LangChain documentation with the integrated search](https://docs.langchain.com/),
         * [GitHub search](https://github.com/langchain-ai/langgraph),
   - type: checkboxes

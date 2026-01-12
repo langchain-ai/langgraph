@@ -108,8 +108,13 @@ with warnings.catch_warnings():
         structured_response: StructuredResponse
 
 
-StateSchema = TypeVar("StateSchema", bound=AgentState | AgentStatePydantic)
-StateSchemaType = type[StateSchema]
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        category=LangGraphDeprecatedSinceV10,
+    )
+    StateSchema = TypeVar("StateSchema", bound=AgentState | AgentStatePydantic)
+    StateSchemaType = type[StateSchema]
 
 PROMPT_RUNNABLE_NAME = "Prompt"
 
