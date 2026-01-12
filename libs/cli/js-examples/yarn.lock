@@ -291,6 +291,11 @@
   resolved "https://registry.yarnpkg.com/@bcoe/v8-coverage/-/v8-coverage-0.2.3.tgz#75a2e8b51cb758a7553d6804a5932d7aace75c39"
   integrity sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==
 
+"@cfworker/json-schema@^4.0.2":
+  version "4.1.1"
+  resolved "https://registry.yarnpkg.com/@cfworker/json-schema/-/json-schema-4.1.1.tgz#4a2a3947ee9fa7b7c24be981422831b8674c3be6"
+  integrity sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==
+
 "@eslint-community/eslint-utils@^4.2.0":
   version "4.4.0"
   resolved "https://registry.yarnpkg.com/@eslint-community/eslint-utils/-/eslint-utils-4.4.0.tgz#a23514e8fb9af1269d5f7788aa556798d61c6b59"
@@ -602,21 +607,22 @@
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
 
-"@langchain/core@^0.3.2":
-  version "0.3.2"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.2.tgz#aff6d83149a40e0e735910f583aca0f1dd7d1bab"
-  integrity sha512-FeoDOStP8l1YdxgykpXnVoEnl4lxGNSOdYzUJN/EdFtkc6cIjDDS5+xewajme0+egaUsO4tGLezKaFpoWxAyQA==
+"@langchain/core@^0.3.80":
+  version "0.3.80"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-0.3.80.tgz#c494a6944e53ab28bf32dc531e257b17cfc8f797"
+  integrity sha512-vcJDV2vk1AlCwSh3aBm/urQ1ZrlXFFBocv11bz/NBUfLWD5/UDNMzwPdaAd2dKvNmTWa9FM2lirLU3+JCf4cRA==
   dependencies:
+    "@cfworker/json-schema" "^4.0.2"
     ansi-styles "^5.0.0"
     camelcase "6"
     decamelize "1.2.0"
     js-tiktoken "^1.0.12"
-    langsmith "^0.1.56"
+    langsmith "^0.3.67"
     mustache "^4.2.0"
     p-queue "^6.6.2"
     p-retry "4"
     uuid "^10.0.0"
-    zod "^3.22.4"
+    zod "^3.25.32"
     zod-to-json-schema "^3.22.3"
 
 "@langchain/langgraph-checkpoint@~0.0.17":
@@ -1214,7 +1220,7 @@ chalk@^2.4.2:
     escape-string-regexp "^1.0.5"
     supports-color "^5.3.0"
 
-chalk@^4.0.0, chalk@^4.0.2:
+chalk@^4.0.0, chalk@^4.0.2, chalk@^4.1.2:
   version "4.1.2"
   resolved "https://registry.yarnpkg.com/chalk/-/chalk-4.1.2.tgz#aac4e2b7734a740867aeb16bf02aad556a1e7a01"
   integrity sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==
@@ -1280,15 +1286,17 @@ color-name@~1.1.4:
   resolved "https://registry.yarnpkg.com/color-name/-/color-name-1.1.4.tgz#c2a09a87acbde69543de6f63fa3995c826c536a2"
   integrity sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==
 
-commander@^10.0.1:
-  version "10.0.1"
-  resolved "https://registry.yarnpkg.com/commander/-/commander-10.0.1.tgz#881ee46b4f77d1c1dccc5823433aa39b022cbe06"
-  integrity sha512-y4Mg2tXshplEbSGzx7amzPwKKOCGuoSRP/CjEdwwk0FOGlUbq6lKuoyDZTNZkmxHdJtp54hdfY/JUrdL7Xfdug==
-
 concat-map@0.0.1:
   version "0.0.1"
   resolved "https://registry.yarnpkg.com/concat-map/-/concat-map-0.0.1.tgz#d8a96bd77fd68df7793a73036a3ba0d5405d477b"
   integrity sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==
+
+console-table-printer@^2.12.1:
+  version "2.15.0"
+  resolved "https://registry.yarnpkg.com/console-table-printer/-/console-table-printer-2.15.0.tgz#5c808204640b8f024d545bde8aabe5d344dfadc1"
+  integrity sha512-SrhBq4hYVjLCkBVOWaTzceJalvn5K1Zq5aQA6wXC/cYjI3frKWNPEMK3sZsJfNNQApvCQmgBcc13ZKmFj8qExw==
+  dependencies:
+    simple-wcswidth "^1.1.2"
 
 convert-source-map@^2.0.0:
   version "2.0.0"
@@ -2808,15 +2816,15 @@ kleur@^3.0.3:
   resolved "https://registry.yarnpkg.com/kleur/-/kleur-3.0.3.tgz#a79c9ecc86ee1ce3fa6206d1216c501f147fc07e"
   integrity sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==
 
-langsmith@^0.1.56:
-  version "0.1.58"
-  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.1.58.tgz#502aa6c22fecd15fa65c14ffbe7fcc4643201f47"
-  integrity sha512-crbJbfw6hLBbVDQlMRWRVYwppApiDMncsqqBtTP1udUvilAsw4btIpBq0Tf+Jr8iQs6cEpZr/h7lGr5DdzAGew==
+langsmith@^0.3.67:
+  version "0.3.87"
+  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.3.87.tgz#f1c991c93a5d4d226a31671be7e4443b4b8673b1"
+  integrity sha512-XXR1+9INH8YX96FKWc5tie0QixWz6tOqAsAKfcJyPkE0xPep+NDz0IQLR32q4bn10QK3LqD2HN6T3n6z1YLW7Q==
   dependencies:
     "@types/uuid" "^10.0.0"
-    commander "^10.0.1"
+    chalk "^4.1.2"
+    console-table-printer "^2.12.1"
     p-queue "^6.6.2"
-    p-retry "4"
     semver "^7.6.3"
     uuid "^10.0.0"
 
@@ -3383,6 +3391,11 @@ signal-exit@^3.0.3, signal-exit@^3.0.7:
   resolved "https://registry.yarnpkg.com/signal-exit/-/signal-exit-3.0.7.tgz#a9a1767f8af84155114eaabd73f99273c8f59ad9"
   integrity sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ==
 
+simple-wcswidth@^1.1.2:
+  version "1.1.2"
+  resolved "https://registry.yarnpkg.com/simple-wcswidth/-/simple-wcswidth-1.1.2.tgz#66722f37629d5203f9b47c5477b1225b85d6525b"
+  integrity sha512-j7piyCjAeTDSjzTSQ7DokZtMNwNlEAyxqSZeCS+CXH7fJ4jx3FuJ/mTW3mE+6JLs4VJBbcll0Kjn+KXI5t21Iw==
+
 sisteransi@^1.0.5:
   version "1.0.5"
   resolved "https://registry.yarnpkg.com/sisteransi/-/sisteransi-1.0.5.tgz#134d681297756437cc05ca01370d3a7a571075ed"
@@ -3805,12 +3818,7 @@ zod-to-json-schema@^3.22.3:
   resolved "https://registry.yarnpkg.com/zod-to-json-schema/-/zod-to-json-schema-3.23.2.tgz#bc7e379c8050462538383e382964c03d8fe008f9"
   integrity sha512-uSt90Gzc/tUfyNqxnjlfBs8W6WSGpNBv0rVsNxP/BVSMHMKGdthPYff4xtCHYloJGM0CFxFsb3NbC0eqPhfImw==
 
-zod@^3.22.4:
-  version "3.23.8"
-  resolved "https://registry.yarnpkg.com/zod/-/zod-3.23.8.tgz#e37b957b5d52079769fb8097099b592f0ef4067d"
-  integrity sha512-XBx9AXhXktjUqnepgTiE5flcKIYWi/rme0Eaj+5Y0lftuGBq+jyRu/md4WnuxqgP1ubdpNCsYEYPxrzVHD8d6g==
-
-zod@^3.23.8:
-  version "3.24.3"
-  resolved "https://registry.yarnpkg.com/zod/-/zod-3.24.3.tgz#1f40f750a05e477396da64438e0e1c0995dafd87"
-  integrity sha512-HhY1oqzWCQWuUqvBFnsyrtZRhyPeR7SUGv+C4+MsisMuVfSPx8HpwWqH8tRahSlt6M3PiFAcoeFhZAqIXTxoSg==
+zod@^3.23.8, zod@^3.25.32:
+  version "3.25.76"
+  resolved "https://registry.yarnpkg.com/zod/-/zod-3.25.76.tgz#26841c3f6fd22a6a2760e7ccb719179768471e34"
+  integrity sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==
