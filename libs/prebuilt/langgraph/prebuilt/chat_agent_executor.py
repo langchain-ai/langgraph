@@ -571,7 +571,7 @@ def create_react_agent(
                     "use '<provider>:<model>' string syntax for `model` parameter."
                 )
 
-            model = init_chat_model(model)
+            model = cast(BaseChatModel, init_chat_model(model))
 
         if (
             _should_bind_tools(model, tool_classes, num_builtin=len(llm_builtin_tools))  # type: ignore[arg-type]
