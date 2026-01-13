@@ -17,6 +17,7 @@ import re
 import sys
 import warnings
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from datetime import datetime
 from types import TracebackType
 from typing import (
     Any,
@@ -2982,6 +2983,7 @@ class CronClient:
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: str | None = None,
+        end_time: datetime | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -3005,6 +3007,7 @@ class CronClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -3040,6 +3043,7 @@ class CronClient:
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "webhook": webhook,
+            "end_time": end_time.isoformat() if end_time else None,
         }
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
@@ -3066,6 +3070,7 @@ class CronClient:
         webhook: str | None = None,
         on_run_completed: OnCompletionBehavior | None = None,
         multitask_strategy: str | None = None,
+        end_time: datetime | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -3090,6 +3095,7 @@ class CronClient:
                 clean them up. Clients are responsible for cleaning up kept threads.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -3126,6 +3132,7 @@ class CronClient:
             "interrupt_after": interrupt_after,
             "webhook": webhook,
             "on_run_completed": on_run_completed,
+            "end_time": end_time.isoformat() if end_time else None,
         }
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
@@ -6284,6 +6291,7 @@ class SyncCronClient:
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: str | None = None,
+        end_time: datetime | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -6305,6 +6313,7 @@ class SyncCronClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             headers: Optional custom headers to include with the request.
 
         Returns:
@@ -6340,6 +6349,7 @@ class SyncCronClient:
             "checkpoint_during": checkpoint_during,
             "webhook": webhook,
             "multitask_strategy": multitask_strategy,
+            "end_time": end_time.isoformat() if end_time else None,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(
@@ -6364,6 +6374,7 @@ class SyncCronClient:
         webhook: str | None = None,
         on_run_completed: OnCompletionBehavior | None = None,
         multitask_strategy: str | None = None,
+        end_time: datetime | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -6388,6 +6399,7 @@ class SyncCronClient:
                 clean them up. Clients are responsible for cleaning up kept threads.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             headers: Optional custom headers to include with the request.
 
         Returns:
@@ -6425,6 +6437,7 @@ class SyncCronClient:
             "checkpoint_during": checkpoint_during,
             "on_run_completed": on_run_completed,
             "multitask_strategy": multitask_strategy,
+            "end_time": end_time.isoformat() if end_time else None,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(
