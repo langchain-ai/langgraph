@@ -611,7 +611,7 @@
               "type": "null"
             }
           ],
-          "description": "Optional. List of allowed python modules to de-serialize custom objects from msgpack.\n\nKnown safe types (langgraph.checkpoint.serde.jsonplus.SAFE_MSGPACK_TYPES) are always\nallowed regardless of this setting. Use this to allowlist your custom Pydantic models,\ndataclasses, and other user-defined types.\n\nIf True (default), unregistered types will log a warning but still be deserialized.\nIf None, only known safe types will be deserialized; unregistered types will be blocked.\n\n{...\n[\"my_agent\", \"models\", \"MyState\"],\n]\n}\n}\n\n{...\n}\n}\n\n"
+          "description": "Optional. List of allowed python modules to de-serialize custom objects from msgpack.\n\nKnown safe types (langgraph.checkpoint.serde.jsonplus.SAFE_MSGPACK_TYPES) are always\nallowed regardless of this setting. Use this to allowlist your custom Pydantic models,\ndataclasses, and other user-defined types.\n\nIf True (default), unregistered types will log a warning but still be deserialized.\nIf None, only known safe types will be deserialized; unregistered types will be blocked.\n\n{...\n[\"my_agent.models\", \"MyState\"],\n]\n}\n}\n\n{...\n}\n}\n\n"
         },
         "pickle_fallback": {
           "type": "boolean",

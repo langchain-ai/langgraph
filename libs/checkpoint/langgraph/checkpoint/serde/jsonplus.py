@@ -68,6 +68,8 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
         ("pathlib._local", "Path"),
         ("pathlib._local", "PosixPath"),
         ("pathlib._local", "WindowsPath"),
+        # regex
+        ("re", "compile"),
         # langgraph
         ("langgraph.types", "Send"),
         ("langgraph.types", "Interrupt"),

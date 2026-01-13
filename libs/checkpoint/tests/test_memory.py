@@ -1,7 +1,9 @@
+import logging
 from typing import Any
 
 import pytest
 from langchain_core.runnables import RunnableConfig
+from pydantic import BaseModel
 
 from langgraph.checkpoint.base import (
     Checkpoint,
@@ -10,6 +12,11 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+
+class MemoryPydantic(BaseModel):
+    foo: str
 
 
 class TestMemorySaver:
@@ -199,3 +206,77 @@ async def test_memory_saver() -> None:
 
     with memory_saver as sync_memory_saver:
         assert sync_memory_saver is memory_saver
+
+
+def test_memory_saver_warns_on_unregistered_msgpack(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    serde = JsonPlusSerializer()
+    memory_saver = InMemorySaver(serde=serde)
+    obj = MemoryPydantic(foo="bar")
+
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"] = {"foo": obj}
+    checkpoint["channel_versions"] = {"foo": 1}
+
+    config: RunnableConfig = {
+        "configurable": {"thread_id": "thread-1", "checkpoint_ns": ""}
+    }
+
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+    new_config = memory_saver.put(config, checkpoint, {}, {"foo": 1})
+    result = memory_saver.get_tuple(new_config)
+
+    assert result is not None
+    assert "unregistered type" in caplog.text.lower()
+    assert result.checkpoint["channel_values"]["foo"] == obj
+
+
+def test_memory_saver_allowlist_silences_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("tests.test_memory", "MemoryPydantic")]
+    )
+    memory_saver = InMemorySaver(serde=serde)
+    obj = MemoryPydantic(foo="bar")
+
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"] = {"foo": obj}
+    checkpoint["channel_versions"] = {"foo": 1}
+
+    config: RunnableConfig = {
+        "configurable": {"thread_id": "thread-1", "checkpoint_ns": ""}
+    }
+
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+    new_config = memory_saver.put(config, checkpoint, {}, {"foo": 1})
+    result = memory_saver.get_tuple(new_config)
+
+    assert result is not None
+    assert "unregistered type" not in caplog.text.lower()
+    assert result.checkpoint["channel_values"]["foo"] == obj
+
+
+def test_memory_saver_strict_blocks_unregistered(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    memory_saver = InMemorySaver(serde=serde)
+    obj = MemoryPydantic(foo="bar")
+
+    checkpoint = empty_checkpoint()
+    checkpoint["channel_values"] = {"foo": obj}
+    checkpoint["channel_versions"] = {"foo": 1}
+
+    config: RunnableConfig = {
+        "configurable": {"thread_id": "thread-1", "checkpoint_ns": ""}
+    }
+
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+    new_config = memory_saver.put(config, checkpoint, {}, {"foo": 1})
+    result = memory_saver.get_tuple(new_config)
+
+    assert result is not None
+    assert "blocked" in caplog.text.lower()
+    assert result.checkpoint["channel_values"]["foo"] is None

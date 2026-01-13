@@ -165,7 +165,7 @@ class SerdeConfig(TypedDict, total=False):
     {...
         "serde": {
             "allowed_msgpack_modules": [
-                ["my_agent", "models", "MyState"],
+                ["my_agent.models", "MyState"],
             ]
         }
     }
