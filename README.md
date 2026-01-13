@@ -79,7 +79,7 @@ While LangGraph can be used standalone, it also integrates seamlessly with any L
 
 ## Additional resources
 
-- [Guides](https://docs.langchain.com/oss/python/langgraph/guides): Quick, actionable code snippets for topics such as streaming, adding memory & persistence, and design patterns (e.g. branching, subgraphs, etc.).
+- [Guides](https://docs.langchain.com/oss/python/langgraph/overview): Quick, actionable code snippets for topics such as streaming, adding memory & persistence, and design patterns (e.g. branching, subgraphs, etc.).
 - [Reference](https://reference.langchain.com/python/langgraph/): Detailed reference on core classes, methods, how to use the graph and checkpointing APIs, and higher-level prebuilt components.
 - [Examples](https://docs.langchain.com/oss/python/langgraph/agentic-rag): Guided examples on getting started with LangGraph.
 - [LangChain Forum](https://forum.langchain.com/): Connect with the community and share all of your technical questions, ideas, and feedback.
