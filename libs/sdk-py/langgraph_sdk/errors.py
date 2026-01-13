@@ -38,7 +38,7 @@ class APIError(httpx.HTTPStatusError, LangGraphError):
             response = None
 
         httpx.HTTPStatusError.__init__(self, message, request=req, response=response)  # type: ignore[arg-type]
-        LangGraphError.__init__(self)
+        LangGraphError.__init__(self, message)
 
         self.request = req
         self.message = message

@@ -15,12 +15,12 @@ The module implements design patterns for:
 
 Key Components:
 
-- `ToolNode`: Main class for executing tools in LangGraph workflows
-- `InjectedState`: Annotation for injecting graph state into tools
-- `InjectedStore`: Annotation for injecting persistent store into tools
-- `ToolRuntime`: Runtime information for tools, bundling together `state`, `context`,
+- [`ToolNode`][langgraph.prebuilt.ToolNode]: Main class for executing tools in LangGraph workflows
+- [`InjectedState`][langgraph.prebuilt.InjectedState]: Annotation for injecting graph state into tools
+- [`InjectedStore`][langgraph.prebuilt.InjectedStore]: Annotation for injecting persistent store into tools
+- [`ToolRuntime`][langgraph.prebuilt.ToolRuntime]: Runtime information for tools, bundling together `state`, `context`,
     `config`, `stream_writer`, `tool_call_id`, and `store`
-- `tools_condition`: Utility function for conditional routing based on tool calls
+- [`tools_condition`][langgraph.prebuilt.tools_condition]: Utility function for conditional routing based on tool calls
 
 Typical Usage:
     ```python
@@ -121,6 +121,7 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
     """Possible overrides for ToolCallRequest.override() method."""
 
     tool_call: ToolCall
+    state: Any
 
 
 @dataclass
@@ -170,8 +171,12 @@ class ToolCallRequest:
         This follows an immutable pattern, leaving the original request unchanged.
 
         Args:
-            **overrides: Keyword arguments for attributes to override. Supported keys:
-                - tool_call: Tool call dict with name, args, and id
+            **overrides: Keyword arguments for attributes to override.
+
+                Supported keys:
+
+                - tool_call: Tool call dict with `name`, `args`, and `id`
+                - state: Agent state (`dict`, `list`, or `BaseModel`)
 
         Returns:
             New ToolCallRequest instance with specified overrides applied.
@@ -614,8 +619,16 @@ class ToolNode(RunnableCallable):
     persistent storage, and control flow. Manages parallel execution,
     error handling.
 
+    Use `ToolNode` when building custom workflows that require fine-grained control over
+    tool execution—for example, custom routing logic, specialized error handling, or
+    non-standard agent architectures.
+
+    For standard ReAct-style agents, use [`create_agent`][langchain.agents.create_agent]
+    instead. It uses `ToolNode` internally with sensible defaults for the agent loop,
+    conditional routing, and error handling.
+
     Input Formats:
-        1. Graph state with `messages` key that has a list of messages:
+        1. **Graph state** with `messages` key that has a list of messages:
             - Common representation for agentic workflows
             - Supports custom messages key via `messages_key` parameter
 
@@ -1748,6 +1761,12 @@ def _is_injection(
     origin_ = get_origin(type_arg)
     if origin_ is Union or origin_ is Annotated:
         return any(_is_injection(ta, injection_type) for ta in get_args(type_arg))
+
+    if origin_ is not None and (
+        origin_ is injection_type
+        or (isinstance(origin_, type) and issubclass(origin_, injection_type))
+    ):
+        return True
     return False
 
 
