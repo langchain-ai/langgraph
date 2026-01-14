@@ -33,6 +33,11 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import SendProtocol
 from langgraph.store.base import Item
 
+try:  # langchain_core is optional
+    from langchain_core.messages import BaseMessage
+except ImportError:
+    BaseMessage = None  # type: ignore[assignment, misc]
+
 LC_REVIVER = Reviver()
 EMPTY_BYTES = b""
 logger = logging.getLogger(__name__)
@@ -223,13 +228,28 @@ EXT_NUMPY_ARRAY = 6
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
+        dumped = obj.model_dump()
+
+        for field_name in dumped:
+            field_value = getattr(obj, field_name)
+
+            if BaseMessage and isinstance(field_value, BaseMessage):
+                dumped[field_name] = field_value.model_dump()
+            elif isinstance(field_value, (list, tuple)) and field_value:
+                dumped[field_name] = [
+                    msg.model_dump()
+                    if BaseMessage and isinstance(msg, BaseMessage)
+                    else msg
+                    for msg in field_value
+                ]
+
         return ormsgpack.Ext(
             EXT_PYDANTIC_V2,
             _msgpack_enc(
                 (
                     obj.__class__.__module__,
                     obj.__class__.__name__,
-                    obj.model_dump(),
+                    dumped,
                     "model_validate_json",
                 ),
             ),
