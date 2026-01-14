@@ -15,6 +15,14 @@ import dataclasses_json
 import numpy as np
 import pandas as pd
 import pytest
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolCall,
+    ToolMessage,
+)
 from pydantic import BaseModel, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
@@ -514,3 +522,120 @@ def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
     result = serde.loads_typed(dumped)
 
     assert result.equals(series)
+
+
+def test_serde_jsonplus_langchain_ai_message() -> None:
+    serde = JsonPlusSerializer()
+
+    ai_msg = AIMessage(
+        content="Using tools to help",
+        tool_calls=[
+            ToolCall(
+                id="call_123",
+                args={"query": "test query", "limit": 5},
+                name="search_tool",
+            ),
+            ToolCall(
+                id="call_456",
+                args={"x": 10, "y": 20},
+                name="calculator",
+            ),
+        ],
+    )
+
+    dumped_msg = serde.dumps_typed(ai_msg)
+    loaded_msg = serde.loads_typed(dumped_msg)
+
+    assert loaded_msg == ai_msg
+
+
+def test_serde_jsonplus_langchain_state_with_messages() -> None:
+    class State(BaseModel):
+        messages: list[BaseMessage]
+        other_field: str = "test"
+
+    serde = JsonPlusSerializer()
+
+    state = State(
+        messages=[
+            SystemMessage(content="You are a helpful assistant"),
+            HumanMessage(content="Hello"),
+            AIMessage(
+                content="Using tools to help",
+                tool_calls=[
+                    ToolCall(
+                        id="call_123",
+                        args={"query": "test query", "limit": 5},
+                        name="search_tool",
+                    ),
+                ],
+            ),
+            ToolMessage(
+                content="Search results: ...",
+                tool_call_id="call_123",
+            ),
+        ],
+        other_field="custom_value",
+    )
+
+    dumped_state = serde.dumps_typed(state)
+    loaded_state = serde.loads_typed(dumped_state)
+
+    # State class is defined locally, so it deserializes as a dict
+    assert isinstance(loaded_state, dict)
+
+    assert loaded_state["messages"][0]["content"] == "You are a helpful assistant"
+    assert loaded_state["messages"][1]["content"] == "Hello"
+    assert loaded_state["messages"][2]["content"] == "Using tools to help"
+    assert loaded_state["messages"][2]["tool_calls"][0]["id"] == "call_123"
+    assert loaded_state["messages"][3]["tool_call_id"] == "call_123"
+    assert loaded_state["other_field"] == "custom_value"
+
+
+def test_serde_jsonplus_langchain_state_with_empty_messages() -> None:
+    class State(BaseModel):
+        messages: list[BaseMessage]
+
+    serde = JsonPlusSerializer()
+    state = State(messages=[])
+
+    loaded_state = serde.loads_typed(serde.dumps_typed(state))
+
+    assert isinstance(loaded_state, dict)
+    assert loaded_state["messages"] == []
+
+
+def test_serde_jsonplus_langchain_state_with_complex_ai_message() -> None:
+    class State(BaseModel):
+        messages: list[BaseMessage]
+
+    serde = JsonPlusSerializer()
+    ai_msg = AIMessage(
+        content="Complex tool call with metadata",
+        tool_calls=[
+            ToolCall(
+                id="nested_call",
+                args={
+                    "nested_obj": {"key1": "value1", "key2": [1, 2, 3]},
+                    "list_arg": ["a", "b", "c"],
+                },
+                name="complex_tool",
+            )
+        ],
+        response_metadata={"model": "gpt-4", "usage": {"tokens": 100}},
+        additional_kwargs={"custom_key": "custom_value"},
+    )
+
+    state = State(messages=[ai_msg])
+    loaded_state = serde.loads_typed(serde.dumps_typed(state))
+
+    # State class is defined locally, so it deserializes as a dict
+    assert isinstance(loaded_state, dict)
+
+    msg = loaded_state["messages"][0]
+    assert msg["content"] == "Complex tool call with metadata"
+    assert msg["tool_calls"][0]["id"] == "nested_call"
+    assert msg["tool_calls"][0]["args"]["nested_obj"]["key2"] == [1, 2, 3]
+    assert msg["tool_calls"][0]["args"]["list_arg"] == ["a", "b", "c"]
+    assert msg["response_metadata"]["model"] == "gpt-4"
+    assert msg["additional_kwargs"]["custom_key"] == "custom_value"
