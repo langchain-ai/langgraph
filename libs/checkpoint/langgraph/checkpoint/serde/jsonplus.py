@@ -26,7 +26,73 @@ from typing import Any, Literal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-import ormsgpack
+try:
+    import ormsgpack  # type: ignore[import-not-found]
+
+    _ORMSGPACK_AVAILABLE = True
+except ImportError:
+    import msgpack  # type: ignore[import-untyped]
+
+    _ORMSGPACK_AVAILABLE = False
+
+    def _pairs_hook(pairs: list[tuple[Any, Any]]) -> dict[Any, Any]:
+        """Convert list keys to tuples during dict construction (for hashability)."""
+        return {(tuple(k) if isinstance(k, list) else k): v for k, v in pairs}
+
+    # Create ormsgpack-compatible interface using msgpack
+    class _OrmsgpackCompat:
+        """Compatibility layer for msgpack to match ormsgpack interface."""
+
+        # Option flags (no-ops for msgpack, but needed for API compatibility)
+        OPT_NON_STR_KEYS = 0
+        OPT_PASSTHROUGH_DATACLASS = 0
+        OPT_PASSTHROUGH_DATETIME = 0
+        OPT_PASSTHROUGH_ENUM = 0
+        OPT_PASSTHROUGH_UUID = 0
+        OPT_REPLACE_SURROGATES = 0
+
+        class MsgpackEncodeError(TypeError):
+            """Compatibility exception for ormsgpack.MsgpackEncodeError."""
+
+            pass
+
+        class Ext(msgpack.ExtType):
+            """Compatibility wrapper for ormsgpack.Ext."""
+
+            def __new__(cls, code: int, data: bytes) -> msgpack.ExtType:
+                return msgpack.ExtType(code, data)
+
+        @staticmethod
+        def packb(
+            data: Any,
+            default: Any = None,
+            option: int | None = None,
+        ) -> bytes:
+            """Pack data using msgpack with ormsgpack-compatible interface."""
+            try:
+                return msgpack.packb(data, default=default, strict_types=False)
+            except (TypeError, ValueError) as e:
+                raise _OrmsgpackCompat.MsgpackEncodeError(str(e)) from e
+
+        @staticmethod
+        def unpackb(
+            data: bytes,
+            ext_hook: Any = None,
+            option: int | None = None,
+        ) -> Any:
+            """Unpack data using msgpack with ormsgpack-compatible interface."""
+            # Use object_pairs_hook to convert list keys to tuples during dict construction
+            # This is needed because msgpack returns lists for arrays, but lists can't be dict keys
+            return msgpack.unpackb(
+                data,
+                ext_hook=ext_hook,
+                strict_map_key=False,
+                object_pairs_hook=_pairs_hook,
+            )
+
+    # Use the compatibility module as ormsgpack
+    ormsgpack = _OrmsgpackCompat
+
 from langchain_core.load.load import Reviver
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
