@@ -28,6 +28,19 @@ class _RuntimeOverrides(TypedDict, Generic[ContextT], total=False):
 class Runtime(Generic[ContextT]):
     """Convenience class that bundles run-scoped context and other runtime utilities.
 
+    This class is injected into graph nodes and middleware. It provides access to
+    `context`, `store`, `stream_writer`, and `previous`.
+    
+    !!! note "Accessing `config`"`
+    
+        Runtime` does not include `config` - use `get_config()` from `langgraph.config`
+        if you need access to the `RunnableConfig`.
+
+    !!! note
+        This is distinct from `ToolRuntime` (from `langgraph.prebuilt`), which is
+        injected into tools and includes additional attributes like `config`, `state`,
+        and `tool_call_id`.
+
     !!! version-added "Added in version v0.6.0"
 
     Example:
