@@ -47,7 +47,7 @@ def _add_messages_wrapper(func: Callable) -> Callable[[Messages, Messages], Mess
         elif left is not None or right is not None:
             msg = (
                 f"Must specify non-null arguments for both 'left' and 'right'. Only "
-                f"received: '{'left' if left else 'right'}'."
+                f"received: '{'left' if left is not None else 'right'}'."
             )
             raise ValueError(msg)
         else:
