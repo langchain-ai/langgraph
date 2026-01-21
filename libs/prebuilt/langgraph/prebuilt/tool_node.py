@@ -738,7 +738,9 @@ class ToolNode(RunnableCallable):
 
     def __init__(
         self,
-        tools: Sequence[BaseTool | Callable] | Callable[[], Sequence[BaseTool]],
+        tools: Sequence[BaseTool | Callable]
+        | Callable[[], Sequence[BaseTool]]
+        | Callable[[], Awaitable[Sequence[BaseTool]]],
         *,
         name: str = "tools",
         tags: list[str] | None = None,
@@ -773,11 +775,19 @@ class ToolNode(RunnableCallable):
         self._awrap_tool_call = awrap_tool_call
 
         self._tools_provider: Callable[[], Sequence[BaseTool]] | None = None
+        self._async_tools_provider: (
+            Callable[[], Awaitable[Sequence[BaseTool]]] | None
+        ) = None
         self._tools_by_name: dict[str, BaseTool] = {}
 
         if callable(tools) and not isinstance(tools, (list, tuple)):
             # It's a dynamic tools provider
-            self._tools_provider = tools
+            if inspect.iscoroutinefunction(tools):
+                self._async_tools_provider = cast(
+                    "Callable[[], Awaitable[Sequence[BaseTool]]]", tools
+                )
+            else:
+                self._tools_provider = cast("Callable[[], Sequence[BaseTool]]", tools)
         else:
             # It's a sequence of tools - process them statically
             self._tools_by_name = self._build_tools_mapping(tools)
@@ -823,7 +833,33 @@ class ToolNode(RunnableCallable):
 
         Returns:
             Dictionary mapping tool names to BaseTool instances.
+
+        Raises:
+            TypeError: If an async tools provider is used in synchronous context.
         """
+        if self._async_tools_provider is not None:
+            msg = (
+                "Cannot use async tools provider in synchronous context. "
+                "Use ainvoke() instead of invoke()."
+            )
+            raise TypeError(msg)
+        if self._tools_provider is not None:
+            tools = self._tools_provider()
+            return self._build_tools_mapping(tools, convert_callables=False)
+        return self._tools_by_name
+
+    async def _aget_tools(self) -> dict[str, BaseTool]:
+        """Get the current tools mapping asynchronously.
+
+        If an async or sync tools provider was configured, calls it to get
+        the current tools. Otherwise, returns the statically configured tools.
+
+        Returns:
+            Dictionary mapping tool names to BaseTool instances.
+        """
+        if self._async_tools_provider is not None:
+            tools = await self._async_tools_provider()
+            return self._build_tools_mapping(tools, convert_callables=False)
         if self._tools_provider is not None:
             tools = self._tools_provider()
             return self._build_tools_mapping(tools, convert_callables=False)
@@ -833,8 +869,10 @@ class ToolNode(RunnableCallable):
     def tools_by_name(self) -> dict[str, BaseTool]:
         """Mapping from tool name to BaseTool instance.
 
-        Note: If a dynamic tools provider was configured, this property
+        Note: If a sync dynamic tools provider was configured, this property
         calls the provider to get the current tools on each access.
+        If an async tools provider was configured, this property will raise
+        a TypeError - use ainvoke() instead.
         """
         return self._get_tools()
 
@@ -889,7 +927,7 @@ class ToolNode(RunnableCallable):
         config_list = get_config_list(config, len(tool_calls))
 
         # Get tools once at the start of invocation (supports dynamic tools)
-        tools_by_name = self._get_tools()
+        tools_by_name = await self._aget_tools()
 
         # Construct ToolRuntime instances at the top level for each tool call
         tool_runtimes = []

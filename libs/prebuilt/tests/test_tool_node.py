@@ -2083,3 +2083,141 @@ def test_tool_node_dynamic_tools_type_error() -> None:
             },
             config=_create_config_with_runtime(),
         )
+
+
+async def test_tool_node_async_tools_provider() -> None:
+    """Test ToolNode with an async tools provider callable."""
+
+    @dec_tool
+    def add(a: int, b: int) -> int:
+        """Add two numbers."""
+        return a + b
+
+    @dec_tool
+    def multiply(a: int, b: int) -> int:
+        """Multiply two numbers."""
+        return a * b
+
+    @dec_tool
+    def subtract(a: int, b: int) -> int:
+        """Subtract two numbers."""
+        return a - b
+
+    # Track which tools are available
+    available_tools: list[BaseTool] = [add, multiply]
+
+    async def get_tools_async() -> list[BaseTool]:
+        # Simulate async operation (e.g., fetching tools from a database)
+        return available_tools
+
+    # Create ToolNode with async dynamic tools provider
+    tool_node = ToolNode(get_tools_async)
+
+    # Test invoking a tool asynchronously
+    result = await tool_node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "test",
+                    tool_calls=[
+                        {"name": "add", "args": {"a": 2, "b": 3}, "id": "call_1"}
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "5"
+
+    # Test invoking another tool
+    result = await tool_node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "test",
+                    tool_calls=[
+                        {"name": "multiply", "args": {"a": 4, "b": 5}, "id": "call_2"}
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "20"
+
+    # Change the available tools dynamically
+    available_tools.clear()
+    available_tools.extend([subtract])
+
+    # Test that the new tool works
+    result = await tool_node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "test",
+                    tool_calls=[
+                        {"name": "subtract", "args": {"a": 10, "b": 3}, "id": "call_4"}
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "7"
+
+
+def test_tool_node_async_tools_provider_sync_context_error() -> None:
+    """Test that async tools provider raises TypeError in sync context."""
+
+    @dec_tool
+    def add(a: int, b: int) -> int:
+        """Add two numbers."""
+        return a + b
+
+    async def get_tools_async() -> list[BaseTool]:
+        return [add]
+
+    tool_node = ToolNode(get_tools_async)
+
+    # Should raise TypeError when trying to invoke synchronously
+    with pytest.raises(
+        TypeError,
+        match="Cannot use async tools provider in synchronous context",
+    ):
+        tool_node.invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "test",
+                        tool_calls=[
+                            {"name": "add", "args": {"a": 2, "b": 3}, "id": "call_1"}
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        )
+
+
+def test_tool_node_async_tools_provider_tools_by_name_error() -> None:
+    """Test that tools_by_name raises TypeError with async tools provider."""
+
+    @dec_tool
+    def add(a: int, b: int) -> int:
+        """Add two numbers."""
+        return a + b
+
+    async def get_tools_async() -> list[BaseTool]:
+        return [add]
+
+    tool_node = ToolNode(get_tools_async)
+
+    # Should raise TypeError when accessing tools_by_name
+    with pytest.raises(
+        TypeError,
+        match="Cannot use async tools provider in synchronous context",
+    ):
+        _ = tool_node.tools_by_name

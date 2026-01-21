@@ -287,7 +287,10 @@ def create_react_agent(
         [StateSchema, Runtime[ContextT]],
         Awaitable[Runnable[LanguageModelInput, BaseMessage]],
     ],
-    tools: Sequence[BaseTool | Callable | dict[str, Any]] | ToolNode,
+    tools: Sequence[BaseTool | Callable | dict[str, Any]]
+    | Callable[[], Sequence[BaseTool]]
+    | Callable[[], Awaitable[Sequence[BaseTool]]]
+    | ToolNode,
     *,
     prompt: Prompt | None = None,
     response_format: StructuredResponseSchema
@@ -355,8 +358,9 @@ def create_react_agent(
                 `.bind_tools()` and support required functionality. Bound tools
                 must be a subset of those specified in the `tools` parameter.
 
-        tools: A list of tools or a `ToolNode` instance.
+        tools: A list of tools, a `ToolNode` instance, or a callable that returns tools.
             If an empty list is provided, the agent will consist of a single LLM node without tool calling.
+            Callable tools providers (both sync and async) enable dynamic tool selection at runtime.
         prompt: An optional prompt for the LLM. Can take a few different forms:
 
             - `str`: This is converted to a `SystemMessage` and added to the beginning of the list of messages in `state["messages"]`.
@@ -546,18 +550,30 @@ def create_react_agent(
         )
 
     llm_builtin_tools: list[dict] = []
+    is_dynamic_tools = callable(tools) and not isinstance(tools, ToolNode)
     if isinstance(tools, ToolNode):
         tool_classes = list(tools.tools_by_name.values())
         tool_node = tools
+    elif is_dynamic_tools:
+        # Dynamic tools provider - pass directly to ToolNode
+        tool_node = ToolNode(
+            cast(
+                "Callable[[], Sequence[BaseTool]] | Callable[[], Awaitable[Sequence[BaseTool]]]",
+                tools,
+            )
+        )
+        # For dynamic tools, we can't know the tools at compile time
+        tool_classes = []
     else:
-        llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
-        tool_node = ToolNode([t for t in tools if not isinstance(t, dict)])
+        tools_seq = cast("Sequence[BaseTool | Callable | dict[str, Any]]", tools)
+        llm_builtin_tools = [t for t in tools_seq if isinstance(t, dict)]
+        tool_node = ToolNode([t for t in tools_seq if not isinstance(t, dict)])
         tool_classes = list(tool_node.tools_by_name.values())
 
     is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
     is_async_dynamic_model = is_dynamic_model and inspect.iscoroutinefunction(model)
 
-    tool_calling_enabled = len(tool_classes) > 0
+    tool_calling_enabled = len(tool_classes) > 0 or is_dynamic_tools
 
     if not is_dynamic_model:
         if isinstance(model, str):
