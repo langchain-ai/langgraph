@@ -1902,3 +1902,184 @@ async def test_tool_node_tool_runtime_generic() -> None:
     assert tool_message.type == "tool"
     assert tool_message.content == "test_info"
     assert tool_message.tool_call_id == "call_1"
+
+
+async def test_tool_node_dynamic_tools() -> None:
+    """Test ToolNode with a dynamic tools provider callable."""
+
+    @dec_tool
+    def add(a: int, b: int) -> int:
+        """Add two numbers."""
+        return a + b
+
+    @dec_tool
+    def multiply(a: int, b: int) -> int:
+        """Multiply two numbers."""
+        return a * b
+
+    @dec_tool
+    def subtract(a: int, b: int) -> int:
+        """Subtract two numbers."""
+        return a - b
+
+    # Track which tools are available
+    available_tools: list[BaseTool] = [add, multiply]
+
+    def get_tools() -> list[BaseTool]:
+        return available_tools
+
+    # Create ToolNode with dynamic tools provider
+    tool_node = ToolNode(get_tools)
+
+    # Test that tools_by_name returns the current tools
+    assert set(tool_node.tools_by_name.keys()) == {"add", "multiply"}
+
+    # Test invoking a tool
+    result = tool_node.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "test",
+                    tool_calls=[
+                        {"name": "add", "args": {"a": 2, "b": 3}, "id": "call_1"}
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "5"
+
+    # Test invoking another tool
+    result = await tool_node.ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "test",
+                    tool_calls=[
+                        {"name": "multiply", "args": {"a": 4, "b": 5}, "id": "call_2"}
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "20"
+
+    # Change the available tools dynamically
+    available_tools.clear()
+    available_tools.extend([subtract])
+
+    # Verify tools_by_name reflects the change
+    assert set(tool_node.tools_by_name.keys()) == {"subtract"}
+
+    # Test that the old tool is no longer available
+    result = tool_node.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "test",
+                    tool_calls=[
+                        {"name": "add", "args": {"a": 2, "b": 3}, "id": "call_3"}
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.status == "error"
+    assert "add is not a valid tool" in tool_message.content
+
+    # Test that the new tool works
+    result = tool_node.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "test",
+                    tool_calls=[
+                        {"name": "subtract", "args": {"a": 10, "b": 3}, "id": "call_4"}
+                    ],
+                )
+            ]
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "7"
+
+
+async def test_tool_node_dynamic_tools_with_injection() -> None:
+    """Test dynamic tools with state injection."""
+
+    class TestState(TypedDict):
+        messages: list
+        multiplier: int
+
+    @dec_tool
+    def scale(
+        value: int,
+        multiplier: Annotated[int, InjectedState("multiplier")],
+    ) -> int:
+        """Scale a value by the multiplier from state."""
+        return value * multiplier
+
+    available_tools: list[BaseTool] = [scale]
+
+    def get_tools() -> list[BaseTool]:
+        return available_tools
+
+    tool_node = ToolNode(get_tools)
+
+    result = tool_node.invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "test",
+                    tool_calls=[
+                        {"name": "scale", "args": {"value": 5}, "id": "call_1"}
+                    ],
+                )
+            ],
+            "multiplier": 3,
+        },
+        config=_create_config_with_runtime(),
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "15"
+
+
+def test_tool_node_dynamic_tools_type_error() -> None:
+    """Test that dynamic tools provider must return BaseTool instances."""
+
+    def bad_tool_provider():
+        # Returns a plain function instead of BaseTool
+        def not_a_base_tool(x: int) -> int:
+            return x
+
+        return [not_a_base_tool]
+
+    tool_node = ToolNode(bad_tool_provider)
+
+    # Should raise TypeError when trying to invoke since the provider returns
+    # a function instead of BaseTool
+    with pytest.raises(TypeError, match="must return BaseTool instances"):
+        tool_node.invoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "test",
+                        tool_calls=[
+                            {
+                                "name": "not_a_base_tool",
+                                "args": {"x": 1},
+                                "id": "call_1",
+                            }
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        )

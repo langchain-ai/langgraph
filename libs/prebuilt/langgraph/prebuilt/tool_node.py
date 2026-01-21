@@ -42,7 +42,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from copy import copy, deepcopy
 from dataclasses import dataclass, replace
 from types import UnionType
@@ -90,8 +90,6 @@ from pydantic import BaseModel, ValidationError
 from typing_extensions import TypeVar, Unpack
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
     from langgraph.runtime import Runtime
     from pydantic_core import ErrorDetails
 
@@ -653,9 +651,14 @@ class ToolNode(RunnableCallable):
         - `Command` can update state, trigger navigation, or send messages
 
     Args:
-        tools: A sequence of tools that can be invoked by this node.
+        tools: Tools that can be invoked by this node. Can be either:
 
-            Supports:
+            - **A sequence of tools**: A list/tuple of tools (static)
+            - **A callable**: A function that returns a sequence of tools (dynamic).
+              The callable is invoked on each invocation of the ToolNode, allowing
+              the available tools to change between invocations.
+
+            Each tool in the sequence supports:
 
             - **BaseTool instances**: Tools with schemas and metadata
             - **Plain functions**: Automatically converted to tools with inferred schemas
@@ -735,7 +738,7 @@ class ToolNode(RunnableCallable):
 
     def __init__(
         self,
-        tools: Sequence[BaseTool | Callable],
+        tools: Sequence[BaseTool | Callable] | Callable[[], Sequence[BaseTool]],
         *,
         name: str = "tools",
         tags: list[str] | None = None,
@@ -751,7 +754,8 @@ class ToolNode(RunnableCallable):
         """Initialize `ToolNode` with tools and configuration.
 
         Args:
-            tools: Sequence of tools to make available for execution.
+            tools: Tools to make available for execution. Can be a sequence of tools
+                or a callable that returns a sequence of tools (for dynamic tools).
             name: Node name for graph identification.
             tags: Optional metadata tags.
             handle_tool_errors: Error handling configuration.
@@ -763,25 +767,108 @@ class ToolNode(RunnableCallable):
                 If not provided, falls back to wrap_tool_call for async execution.
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
-        self._tools_by_name: dict[str, BaseTool] = {}
-        self._injected_args: dict[str, _InjectedArgs] = {}
         self._handle_tool_errors = handle_tool_errors
         self._messages_key = messages_key
         self._wrap_tool_call = wrap_tool_call
         self._awrap_tool_call = awrap_tool_call
+
+        # Check if tools is a callable (dynamic tools provider)
+        # We need to distinguish between:
+        # - A callable that returns tools (tools provider)
+        # - A callable that IS a tool (plain function to be converted to tool)
+        # A tools provider is a callable that takes no arguments
+        self._tools_provider: Callable[[], Sequence[BaseTool | Callable]] | None = None
+        self._tools_by_name: dict[str, BaseTool] = {}
+        self._injected_args: dict[str, _InjectedArgs] = {}
+
+        if callable(tools) and not isinstance(tools, (list, tuple)):
+            # Check if it's a tools provider (callable with no required args)
+            sig = inspect.signature(tools)
+            required_params = [
+                p
+                for p in sig.parameters.values()
+                if p.default is inspect.Parameter.empty
+                and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
+            ]
+            if not required_params:
+                # It's a tools provider - store it for dynamic resolution
+                self._tools_provider = tools
+            else:
+                # It's a single tool function - convert it
+                tool_ = create_tool(cast("type[BaseTool]", tools))
+                self._tools_by_name[tool_.name] = tool_
+                self._injected_args[tool_.name] = _get_all_injected_args(tool_)
+        else:
+            # It's a sequence of tools - process them statically
+            self._build_tools_mapping(tools)
+
+    def _build_tools_mapping(
+        self,
+        tools: Sequence[BaseTool | Callable],
+        *,
+        convert_callables: bool = True,
+    ) -> tuple[dict[str, BaseTool], dict[str, _InjectedArgs]]:
+        """Build tools_by_name and injected_args mappings from a sequence of tools.
+
+        Args:
+            tools: Sequence of tools to process.
+            convert_callables: Whether to convert plain callables to BaseTools.
+                Set to False when processing tools from a dynamic provider
+                (which should already be BaseTools).
+
+        Returns:
+            Tuple of (tools_by_name, injected_args) dictionaries.
+        """
+        tools_by_name: dict[str, BaseTool] = {}
+        injected_args: dict[str, _InjectedArgs] = {}
         for tool in tools:
             if not isinstance(tool, BaseTool):
-                tool_ = create_tool(cast("type[BaseTool]", tool))
+                if convert_callables:
+                    tool_ = create_tool(cast("type[BaseTool]", tool))
+                else:
+                    msg = (
+                        f"Dynamic tools provider must return BaseTool instances, "
+                        f"got {type(tool).__name__}"
+                    )
+                    raise TypeError(msg)
             else:
                 tool_ = tool
-            self._tools_by_name[tool_.name] = tool_
-            # Build injected args mapping once during initialization in a single pass
-            self._injected_args[tool_.name] = _get_all_injected_args(tool_)
+            tools_by_name[tool_.name] = tool_
+            injected_args[tool_.name] = _get_all_injected_args(tool_)
+
+        # If not using dynamic tools, also populate the instance attributes
+        if self._tools_provider is None:
+            self._tools_by_name = tools_by_name
+            self._injected_args = injected_args
+
+        return tools_by_name, injected_args
+
+    def _get_tools(
+        self,
+    ) -> tuple[dict[str, BaseTool], dict[str, _InjectedArgs]]:
+        """Get the current tools mapping.
+
+        If a tools provider was configured, calls it to get the current tools.
+        Otherwise, returns the statically configured tools.
+
+        Returns:
+            Tuple of (tools_by_name, injected_args) dictionaries.
+        """
+        if self._tools_provider is not None:
+            tools = self._tools_provider()
+            # Dynamic provider returns BaseTools directly, no conversion needed
+            return self._build_tools_mapping(tools, convert_callables=False)
+        return self._tools_by_name, self._injected_args
 
     @property
     def tools_by_name(self) -> dict[str, BaseTool]:
-        """Mapping from tool name to BaseTool instance."""
-        return self._tools_by_name
+        """Mapping from tool name to BaseTool instance.
+
+        Note: If a dynamic tools provider was configured, this property
+        calls the provider to get the current tools on each access.
+        """
+        tools_by_name, _ = self._get_tools()
+        return tools_by_name
 
     def _func(
         self,
@@ -791,6 +878,9 @@ class ToolNode(RunnableCallable):
     ) -> Any:
         tool_calls, input_type = self._parse_input(input)
         config_list = get_config_list(config, len(tool_calls))
+
+        # Get tools once at the start of invocation (supports dynamic tools)
+        tools_by_name, injected_args = self._get_tools()
 
         # Construct ToolRuntime instances at the top level for each tool call
         tool_runtimes = []
@@ -807,10 +897,19 @@ class ToolNode(RunnableCallable):
             tool_runtimes.append(tool_runtime)
 
         # Pass original tool calls without injection
+        def run_one_with_tools(
+            call: ToolCall,
+            input_type: Literal["list", "dict", "tool_calls"],
+            tool_runtime: ToolRuntime,
+        ) -> ToolMessage | Command:
+            return self._run_one(
+                call, input_type, tool_runtime, tools_by_name, injected_args
+            )
+
         input_types = [input_type] * len(tool_calls)
         with get_executor_for_config(config) as executor:
             outputs = list(
-                executor.map(self._run_one, tool_calls, input_types, tool_runtimes)
+                executor.map(run_one_with_tools, tool_calls, input_types, tool_runtimes)
             )
 
         return self._combine_tool_outputs(outputs, input_type)
@@ -823,6 +922,9 @@ class ToolNode(RunnableCallable):
     ) -> Any:
         tool_calls, input_type = self._parse_input(input)
         config_list = get_config_list(config, len(tool_calls))
+
+        # Get tools once at the start of invocation (supports dynamic tools)
+        tools_by_name, injected_args = self._get_tools()
 
         # Construct ToolRuntime instances at the top level for each tool call
         tool_runtimes = []
@@ -841,7 +943,15 @@ class ToolNode(RunnableCallable):
         # Pass original tool calls without injection
         coros = []
         for call, tool_runtime in zip(tool_calls, tool_runtimes, strict=False):
-            coros.append(self._arun_one(call, input_type, tool_runtime))  # type: ignore[arg-type]
+            coros.append(
+                self._arun_one(
+                    call,
+                    input_type,
+                    tool_runtime,  # type: ignore[arg-type]
+                    tools_by_name,
+                    injected_args,
+                )
+            )
         outputs = await asyncio.gather(*coros)
 
         return self._combine_tool_outputs(outputs, input_type)
@@ -895,6 +1005,8 @@ class ToolNode(RunnableCallable):
         request: ToolCallRequest,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
+        tools_by_name: dict[str, BaseTool],
+        injected_args: dict[str, _InjectedArgs],
     ) -> ToolMessage | Command:
         """Execute tool call with configured error handling.
 
@@ -902,6 +1014,8 @@ class ToolNode(RunnableCallable):
             request: Tool execution request.
             input_type: Input format.
             config: Runnable configuration.
+            tools_by_name: Mapping from tool name to BaseTool.
+            injected_args: Mapping from tool name to injected args config.
 
         Returns:
             ToolMessage or Command.
@@ -914,14 +1028,16 @@ class ToolNode(RunnableCallable):
 
         # Validate tool exists when we actually need to execute it
         if tool is None:
-            if invalid_tool_message := self._validate_tool_call(call):
+            if invalid_tool_message := self._validate_tool_call(call, tools_by_name):
                 return invalid_tool_message
             # This should never happen if validation works correctly
             msg = f"Tool {call['name']} is not registered with ToolNode"
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime)
+        injected_call = self._inject_tool_args(
+            call, request.runtime, tools_by_name, injected_args
+        )
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
@@ -929,7 +1045,7 @@ class ToolNode(RunnableCallable):
                 response = tool.invoke(call_args, config)
             except ValidationError as exc:
                 # Filter out errors for injected arguments
-                injected = self._injected_args.get(call["name"])
+                injected = injected_args.get(call["name"])
                 filtered_errors = _filter_validation_errors(exc, injected)
                 # Use original call["args"] without injected values for error reporting
                 raise ToolInvocationError(
@@ -993,6 +1109,8 @@ class ToolNode(RunnableCallable):
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         tool_runtime: ToolRuntime,
+        tools_by_name: dict[str, BaseTool],
+        injected_args: dict[str, _InjectedArgs],
     ) -> ToolMessage | Command:
         """Execute single tool call with wrap_tool_call wrapper if configured.
 
@@ -1000,13 +1118,15 @@ class ToolNode(RunnableCallable):
             call: Tool call dict.
             input_type: Input format.
             tool_runtime: Tool runtime.
+            tools_by_name: Mapping from tool name to BaseTool.
+            injected_args: Mapping from tool name to injected args config.
 
         Returns:
             ToolMessage or Command.
         """
         # Validation is deferred to _execute_tool_sync to allow interceptors
         # to short-circuit requests for unregistered tools
-        tool = self.tools_by_name.get(call["name"])
+        tool = tools_by_name.get(call["name"])
 
         # Create the tool request with state and runtime
         tool_request = ToolCallRequest(
@@ -1020,12 +1140,16 @@ class ToolNode(RunnableCallable):
 
         if self._wrap_tool_call is None:
             # No wrapper - execute directly
-            return self._execute_tool_sync(tool_request, input_type, config)
+            return self._execute_tool_sync(
+                tool_request, input_type, config, tools_by_name, injected_args
+            )
 
         # Define execute callable that can be called multiple times
         def execute(req: ToolCallRequest) -> ToolMessage | Command:
             """Execute tool with given request. Can be called multiple times."""
-            return self._execute_tool_sync(req, input_type, config)
+            return self._execute_tool_sync(
+                req, input_type, config, tools_by_name, injected_args
+            )
 
         # Call wrapper with request and execute callable
         try:
@@ -1048,6 +1172,8 @@ class ToolNode(RunnableCallable):
         request: ToolCallRequest,
         input_type: Literal["list", "dict", "tool_calls"],
         config: RunnableConfig,
+        tools_by_name: dict[str, BaseTool],
+        injected_args: dict[str, _InjectedArgs],
     ) -> ToolMessage | Command:
         """Execute tool call asynchronously with configured error handling.
 
@@ -1055,6 +1181,8 @@ class ToolNode(RunnableCallable):
             request: Tool execution request.
             input_type: Input format.
             config: Runnable configuration.
+            tools_by_name: Mapping from tool name to BaseTool.
+            injected_args: Mapping from tool name to injected args config.
 
         Returns:
             ToolMessage or Command.
@@ -1067,14 +1195,16 @@ class ToolNode(RunnableCallable):
 
         # Validate tool exists when we actually need to execute it
         if tool is None:
-            if invalid_tool_message := self._validate_tool_call(call):
+            if invalid_tool_message := self._validate_tool_call(call, tools_by_name):
                 return invalid_tool_message
             # This should never happen if validation works correctly
             msg = f"Tool {call['name']} is not registered with ToolNode"
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime)
+        injected_call = self._inject_tool_args(
+            call, request.runtime, tools_by_name, injected_args
+        )
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
@@ -1082,7 +1212,7 @@ class ToolNode(RunnableCallable):
                 response = await tool.ainvoke(call_args, config)
             except ValidationError as exc:
                 # Filter out errors for injected arguments
-                injected = self._injected_args.get(call["name"])
+                injected = injected_args.get(call["name"])
                 filtered_errors = _filter_validation_errors(exc, injected)
                 # Use original call["args"] without injected values for error reporting
                 raise ToolInvocationError(
@@ -1146,6 +1276,8 @@ class ToolNode(RunnableCallable):
         call: ToolCall,
         input_type: Literal["list", "dict", "tool_calls"],
         tool_runtime: ToolRuntime,
+        tools_by_name: dict[str, BaseTool],
+        injected_args: dict[str, _InjectedArgs],
     ) -> ToolMessage | Command:
         """Execute single tool call asynchronously with awrap_tool_call wrapper if configured.
 
@@ -1153,13 +1285,15 @@ class ToolNode(RunnableCallable):
             call: Tool call dict.
             input_type: Input format.
             tool_runtime: Tool runtime.
+            tools_by_name: Mapping from tool name to BaseTool.
+            injected_args: Mapping from tool name to injected args config.
 
         Returns:
             ToolMessage or Command.
         """
         # Validation is deferred to _execute_tool_async to allow interceptors
         # to short-circuit requests for unregistered tools
-        tool = self.tools_by_name.get(call["name"])
+        tool = tools_by_name.get(call["name"])
 
         # Create the tool request with state and runtime
         tool_request = ToolCallRequest(
@@ -1173,16 +1307,22 @@ class ToolNode(RunnableCallable):
 
         if self._awrap_tool_call is None and self._wrap_tool_call is None:
             # No wrapper - execute directly
-            return await self._execute_tool_async(tool_request, input_type, config)
+            return await self._execute_tool_async(
+                tool_request, input_type, config, tools_by_name, injected_args
+            )
 
         # Define async execute callable that can be called multiple times
         async def execute(req: ToolCallRequest) -> ToolMessage | Command:
             """Execute tool with given request. Can be called multiple times."""
-            return await self._execute_tool_async(req, input_type, config)
+            return await self._execute_tool_async(
+                req, input_type, config, tools_by_name, injected_args
+            )
 
         def _sync_execute(req: ToolCallRequest) -> ToolMessage | Command:
             """Sync execute fallback for sync wrapper."""
-            return self._execute_tool_sync(req, input_type, config)
+            return self._execute_tool_sync(
+                req, input_type, config, tools_by_name, injected_args
+            )
 
         # Call wrapper with request and execute callable
         try:
@@ -1248,10 +1388,12 @@ class ToolNode(RunnableCallable):
         tool_calls = list(latest_ai_message.tool_calls)
         return tool_calls, input_type
 
-    def _validate_tool_call(self, call: ToolCall) -> ToolMessage | None:
+    def _validate_tool_call(
+        self, call: ToolCall, tools_by_name: dict[str, BaseTool]
+    ) -> ToolMessage | None:
         requested_tool = call["name"]
-        if requested_tool not in self.tools_by_name:
-            all_tool_names = list(self.tools_by_name.keys())
+        if requested_tool not in tools_by_name:
+            all_tool_names = list(tools_by_name.keys())
             content = INVALID_TOOL_NAME_ERROR_TEMPLATE.format(
                 requested_tool=requested_tool,
                 available_tools=", ".join(all_tool_names),
@@ -1280,6 +1422,8 @@ class ToolNode(RunnableCallable):
         self,
         tool_call: ToolCall,
         tool_runtime: ToolRuntime,
+        tools_by_name: dict[str, BaseTool],
+        injected_args_mapping: dict[str, _InjectedArgs],
     ) -> ToolCall:
         """Inject graph state, store, and runtime into tool call arguments.
 
@@ -1298,6 +1442,8 @@ class ToolNode(RunnableCallable):
                 Must contain 'name', 'args', 'id', and 'type' fields.
             tool_runtime: The ToolRuntime instance containing all runtime context
                 (state, config, store, context, stream_writer) to inject into tools.
+            tools_by_name: Mapping from tool name to BaseTool.
+            injected_args_mapping: Mapping from tool name to injected args config.
 
         Returns:
             A new ToolCall dictionary with the same structure as the input but with
@@ -1311,10 +1457,10 @@ class ToolNode(RunnableCallable):
             This method is called automatically during tool execution. It should not
             be called from outside the `ToolNode`.
         """
-        if tool_call["name"] not in self.tools_by_name:
+        if tool_call["name"] not in tools_by_name:
             return tool_call
 
-        injected = self._injected_args.get(tool_call["name"])
+        injected = injected_args_mapping.get(tool_call["name"])
         if not injected:
             return tool_call
 
