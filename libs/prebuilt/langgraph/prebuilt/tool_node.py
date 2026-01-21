@@ -772,32 +772,13 @@ class ToolNode(RunnableCallable):
         self._wrap_tool_call = wrap_tool_call
         self._awrap_tool_call = awrap_tool_call
 
-        # Check if tools is a callable (dynamic tools provider)
-        # We need to distinguish between:
-        # - A callable that returns tools (tools provider)
-        # - A callable that IS a tool (plain function to be converted to tool)
-        # A tools provider is a callable that takes no arguments
-        self._tools_provider: Callable[[], Sequence[BaseTool | Callable]] | None = None
+        self._tools_provider: Callable[[], Sequence[BaseTool]] | None = None
         self._tools_by_name: dict[str, BaseTool] = {}
         self._injected_args: dict[str, _InjectedArgs] = {}
 
         if callable(tools) and not isinstance(tools, (list, tuple)):
-            # Check if it's a tools provider (callable with no required args)
-            sig = inspect.signature(tools)
-            required_params = [
-                p
-                for p in sig.parameters.values()
-                if p.default is inspect.Parameter.empty
-                and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
-            ]
-            if not required_params:
-                # It's a tools provider - store it for dynamic resolution
-                self._tools_provider = tools
-            else:
-                # It's a single tool function - convert it
-                tool_ = create_tool(cast("type[BaseTool]", tools))
-                self._tools_by_name[tool_.name] = tool_
-                self._injected_args[tool_.name] = _get_all_injected_args(tool_)
+            # It's a dynamic tools provider
+            self._tools_provider = tools
         else:
             # It's a sequence of tools - process them statically
             self._build_tools_mapping(tools)
