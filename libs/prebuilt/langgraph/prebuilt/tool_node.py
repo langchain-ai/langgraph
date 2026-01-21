@@ -655,8 +655,19 @@ class ToolNode(RunnableCallable):
 
             - **A sequence of tools**: A list/tuple of tools (static)
             - **A callable**: A function that returns a sequence of tools (dynamic).
-              The callable is invoked on each invocation of the ToolNode, allowing
-              the available tools to change between invocations.
+              The callable is invoked on every `invoke()` or `ainvoke()` call,
+              allowing the available tools to change between invocations.
+
+              **Invocation semantics for dynamic tools callables:**
+
+              - Called once at the start of each ToolNode invocation
+              - Should return a consistent set of tools for a given invocation
+                (i.e., idempotent within a single invocation)
+              - Stochastic behavior (returning different tools across invocations)
+                is supported but be aware the model may reference tools that are
+                no longer available
+              - Must return `BaseTool` instances (not plain callables) to avoid
+                expensive introspection on every invocation
 
             Each tool in the sequence supports:
 
@@ -815,6 +826,11 @@ class ToolNode(RunnableCallable):
                 if convert_callables:
                     tool_ = create_tool(cast("type[BaseTool]", tool))
                 else:
+                    # Dynamic tools providers must return BaseTool instances, not plain
+                    # callables. Converting callables to tools requires calling
+                    # create_tool() which performs introspection. Doing this on every
+                    # invocation would be expensive and could have unexpected side effects.
+                    # Users should convert their callables to tools once upfront.
                     msg = (
                         f"Dynamic tools provider must return BaseTool instances, "
                         f"got {type(tool).__name__}"
@@ -1005,10 +1021,12 @@ class ToolNode(RunnableCallable):
         """Execute tool call with configured error handling.
 
         Args:
-            request: Tool execution request.
+            request: Tool execution request (includes the specific tool to execute).
             input_type: Input format.
             config: Runnable configuration.
-            tools_by_name: Mapping from tool name to BaseTool.
+            tools_by_name: Mapping from tool name to BaseTool. Used only for
+                validation error messages when the requested tool doesn't exist,
+                to list available tools in the error response.
 
         Returns:
             ToolMessage or Command.
@@ -1164,10 +1182,12 @@ class ToolNode(RunnableCallable):
         """Execute tool call asynchronously with configured error handling.
 
         Args:
-            request: Tool execution request.
+            request: Tool execution request (includes the specific tool to execute).
             input_type: Input format.
             config: Runnable configuration.
-            tools_by_name: Mapping from tool name to BaseTool.
+            tools_by_name: Mapping from tool name to BaseTool. Used only for
+                validation error messages when the requested tool doesn't exist,
+                to list available tools in the error response.
 
         Returns:
             ToolMessage or Command.

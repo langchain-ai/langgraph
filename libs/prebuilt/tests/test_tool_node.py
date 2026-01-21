@@ -2221,3 +2221,37 @@ def test_tool_node_async_tools_provider_tools_by_name_error() -> None:
         match="Cannot use async tools provider in synchronous context",
     ):
         _ = tool_node.tools_by_name
+
+
+async def test_tool_node_async_tools_provider_type_error() -> None:
+    """Test that async tools provider must return BaseTool instances."""
+
+    async def bad_tool_provider():
+        # Returns a plain function instead of BaseTool
+        def not_a_base_tool(x: int) -> int:
+            return x
+
+        return [not_a_base_tool]
+
+    tool_node = ToolNode(bad_tool_provider)
+
+    # Should raise TypeError when trying to invoke since the provider returns
+    # a function instead of BaseTool
+    with pytest.raises(TypeError, match="must return BaseTool instances"):
+        await tool_node.ainvoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "test",
+                        tool_calls=[
+                            {
+                                "name": "not_a_base_tool",
+                                "args": {"x": 1},
+                                "id": "call_1",
+                            }
+                        ],
+                    )
+                ]
+            },
+            config=_create_config_with_runtime(),
+        )
