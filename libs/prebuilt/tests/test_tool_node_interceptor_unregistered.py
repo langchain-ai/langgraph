@@ -220,7 +220,10 @@ def test_unregistered_tool_error_when_interceptor_calls_execute() -> None:
     )
     # Should get validation error message
     assert result[0].status == "error"
-    assert "is not a valid tool" in result[0].content
+    assert (
+        result[0].content
+        == "Error: unregistered_tool is not a valid tool, try one of [registered_tool]."
+    )
     assert result[0].tool_call_id == "2"
 
 
@@ -690,9 +693,10 @@ def test_graceful_failure_when_hook_does_not_override_unregistered_tool_sync() -
 
     assert result[0].status == "error"
     assert result[0].tool_call_id == "1"
-    assert "nonexistent" in result[0].content
-    assert "is not a valid tool" in result[0].content
-    assert "registered_tool" in result[0].content
+    assert (
+        result[0].content
+        == "Error: nonexistent is not a valid tool, try one of [registered_tool]."
+    )
 
 
 def test_graceful_failure_even_when_handle_errors_disabled_sync() -> None:
@@ -723,8 +727,10 @@ def test_graceful_failure_even_when_handle_errors_disabled_sync() -> None:
     )
 
     assert result[0].status == "error"
-    assert "missing" in result[0].content
-    assert "is not a valid tool" in result[0].content
+    assert (
+        result[0].content
+        == "Error: missing is not a valid tool, try one of [registered_tool]."
+    )
 
 
 async def test_graceful_failure_when_hook_does_not_override_unregistered_tool_async() -> (
@@ -758,8 +764,10 @@ async def test_graceful_failure_when_hook_does_not_override_unregistered_tool_as
 
     assert result[0].status == "error"
     assert result[0].tool_call_id == "1"
-    assert "unknown" in result[0].content
-    assert "is not a valid tool" in result[0].content
+    assert (
+        result[0].content
+        == "Error: unknown is not a valid tool, try one of [registered_tool]."
+    )
 
 
 async def test_graceful_failure_even_when_handle_errors_disabled_async() -> None:
@@ -790,5 +798,7 @@ async def test_graceful_failure_even_when_handle_errors_disabled_async() -> None
     )
 
     assert result[0].status == "error"
-    assert "missing" in result[0].content
-    assert "is not a valid tool" in result[0].content
+    assert (
+        result[0].content
+        == "Error: missing is not a valid tool, try one of [registered_tool]."
+    )
