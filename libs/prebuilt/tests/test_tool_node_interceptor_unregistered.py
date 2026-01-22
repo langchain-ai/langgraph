@@ -582,19 +582,20 @@ def test_wrap_tool_call_override_unregistered_tool_with_custom_impl() -> None:
     """Test that wrap_tool_call can provide custom implementation for unregistered tool."""
     called = False
 
+    @dec_tool
+    def custom_tool_impl() -> str:
+        """Custom tool implementation."""
+        nonlocal called
+        called = True
+        return "custom result"
+
     def hook(
         request: ToolCallRequest,
         execute: Callable[[ToolCallRequest], ToolMessage | Command],
     ) -> ToolMessage | Command:
-        nonlocal called
         if request.tool_call["name"] == "custom_tool":
             assert request.tool is None  # Unregistered tools have tool=None
-            called = True
-            return ToolMessage(
-                content="custom result",
-                tool_call_id=request.tool_call["id"],
-                name="custom_tool",
-            )
+            return execute(request.override(tool=custom_tool_impl))
         return execute(request)
 
     node = ToolNode([registered_tool], wrap_tool_call=hook)
@@ -620,19 +621,20 @@ async def test_awrap_tool_call_override_unregistered_tool_with_custom_impl() -> 
     """Test that awrap_tool_call can provide custom implementation for unregistered tool."""
     called = False
 
+    @dec_tool
+    def custom_async_tool_impl() -> str:
+        """Custom async tool implementation."""
+        nonlocal called
+        called = True
+        return "async custom result"
+
     async def hook(
         request: ToolCallRequest,
         execute: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
     ) -> ToolMessage | Command:
-        nonlocal called
         if request.tool_call["name"] == "custom_async_tool":
             assert request.tool is None  # Unregistered tools have tool=None
-            called = True
-            return ToolMessage(
-                content="async custom result",
-                tool_call_id=request.tool_call["id"],
-                name="custom_async_tool",
-            )
+            return await execute(request.override(tool=custom_async_tool_impl))
         return await execute(request)
 
     node = ToolNode([registered_tool], awrap_tool_call=hook)
