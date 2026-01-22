@@ -59,6 +59,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         conn_string: str,
         *,
         pipeline: bool = False,
+        prepare_threshold: int | None = 0,
         serde: SerializerProtocol | None = None,
     ) -> AsyncIterator[AsyncPostgresSaver]:
         """Create a new AsyncPostgresSaver instance from a connection string.
@@ -66,12 +67,19 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Args:
             conn_string: The Postgres connection info string.
             pipeline: whether to use AsyncPipeline
+            prepare_threshold: Threshold for prepared statements. Set to None to disable
+                prepared statements (required for external connection poolers like PgBouncer
+                in transaction mode or Google Cloud SQL connection pooler). Defaults to 0.
+            serde: Custom serializer for checkpoint data.
 
         Returns:
             AsyncPostgresSaver: A new AsyncPostgresSaver instance.
         """
         async with await AsyncConnection.connect(
-            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            conn_string,
+            autocommit=True,
+            prepare_threshold=prepare_threshold,
+            row_factory=dict_row,
         ) as conn:
             if pipeline:
                 async with conn.pipeline() as pipe:
