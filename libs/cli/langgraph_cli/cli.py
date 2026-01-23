@@ -697,6 +697,15 @@ def dev(
     server_log_level: str,
 ):
     """CLI entrypoint for running the LangGraph API server."""
+    # Validate LANGGRAPH_RUNTIME_EDITION before importing langgraph_api
+    runtime_edition = os.environ.get("LANGGRAPH_RUNTIME_EDITION", "").lower()
+    if runtime_edition and runtime_edition not in ("inmem", ""):
+        raise click.UsageError(
+            f"LANGGRAPH_RUNTIME_EDITION={runtime_edition!r} is not supported.\n"
+            "Currently, only 'inmem' runtime is available for local development.\n"
+            "For production deployment with PostgreSQL, please use the LangGraph API server "
+            "as a containerized service (see: https://docs.langchain.com/langgraph/cloud/deploy)."
+        )
     try:
         from langgraph_api.cli import run_server  # type: ignore
     except ImportError:

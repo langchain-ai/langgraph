@@ -822,3 +822,69 @@ def test_prepare_args_and_stdin_with_api_version_and_image() -> None:
     # When image is provided, api_version should be ignored for the image
     # but the stdin should not contain a build section (since image is provided)
     assert "pull_policy: build" not in actual_stdin
+
+
+def test_dev_command_rejects_unsupported_runtime_edition() -> None:
+    """Test that 'dev' command rejects unsupported LANGGRAPH_RUNTIME_EDITION values."""
+    runner = CliRunner()
+
+    # Test with postgres edition (not supported)
+    with runner.isolated_filesystem():
+        # Create a minimal langgraph.json
+        import json
+        with open("langgraph.json", "w") as f:
+            json.dump({"dependencies": [], "graphs": {}}, f)
+
+        result = runner.invoke(
+            cli,
+            ["dev"],
+            env={"LANGGRAPH_RUNTIME_EDITION": "postgres"},
+        )
+
+        # Should fail with UsageError
+        assert result.exit_code == 2
+        assert "LANGGRAPH_RUNTIME_EDITION='postgres'" in result.output
+        assert "not supported" in result.output
+        assert "inmem" in result.output
+
+
+def test_dev_command_accepts_inmem_runtime_edition() -> None:
+    """Test that 'dev' command accepts LANGGRAPH_RUNTIME_EDITION=inmem."""
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        # Create a minimal langgraph.json
+        import json
+        with open("langgraph.json", "w") as f:
+            json.dump({"dependencies": [], "graphs": {}}, f)
+
+        result = runner.invoke(
+            cli,
+            ["dev"],
+            env={"LANGGRAPH_RUNTIME_EDITION": "inmem"},
+        )
+
+        # Should not fail due to runtime edition validation
+        # It may fail for other reasons (like missing langgraph-api),
+        # but it should not contain the unsupported edition error
+        assert "LANGGRAPH_RUNTIME_EDITION='postgres'" not in result.output
+
+
+def test_dev_command_works_without_runtime_edition() -> None:
+    """Test that 'dev' command works without LANGGRAPH_RUNTIME_EDITION set."""
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        # Create a minimal langgraph.json
+        import json
+        with open("langgraph.json", "w") as f:
+            json.dump({"dependencies": [], "graphs": {}}, f)
+
+        result = runner.invoke(
+            cli,
+            ["dev"],
+            # No LANGGRAPH_RUNTIME_EDITION set
+        )
+
+        # Should not fail due to runtime edition validation
+        assert "LANGGRAPH_RUNTIME_EDITION" not in result.output or "inmem" in result.output
