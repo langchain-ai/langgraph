@@ -44,6 +44,35 @@ def test_prepare_next_tasks() -> None:
     # TODO: add more tests
 
 
+def test_prepare_next_tasks_with_processes() -> None:
+    from unittest.mock import MagicMock
+    from langgraph.pregel._read import PregelNode
+    
+    # Setup standard mocks
+    config = {}
+    checkpoint = empty_checkpoint()
+    channels, managed = channels_from_checkpoint({}, checkpoint)
+    
+    # Create a mock process
+    process_node = MagicMock(spec=PregelNode)
+    process_node.triggers = ["some_channel"]
+    processes = {"node_a": process_node}
+    
+    # Case 1: No triggers, empty result expected
+    result = prepare_next_tasks(
+        checkpoint,
+        {},
+        processes,
+        channels,
+        managed,
+        config,
+        0,
+        -1,
+        for_execution=False,
+    )
+    assert result == {}
+
+
 def test_tuple_str() -> None:
     push_path_a = (PUSH, 2)
     pull_path_a = (PULL, "abc")
