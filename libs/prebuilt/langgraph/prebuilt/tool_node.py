@@ -121,6 +121,7 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
     """Possible overrides for ToolCallRequest.override() method."""
 
     tool_call: ToolCall
+    tool: BaseTool
     state: Any
 
 
