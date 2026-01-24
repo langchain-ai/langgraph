@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-sqlite"
-version = "3.0.2"
+version = "3.0.3"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 authors = []
 requires-python = ">=3.10"
@@ -19,7 +19,7 @@ dependencies = [
 
 [project.urls]
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint-sqlite"
-Twitter = "https://x.com/LangChainAI"
+Twitter = "https://x.com/LangChain"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
