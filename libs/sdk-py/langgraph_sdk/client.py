@@ -2994,6 +2994,7 @@ class CronClient:
             assistant_id: The assistant ID or graph name to use for the cron job.
                 If using graph name, will default to first assistant created from that graph.
             schedule: The cron schedule to execute this job on.
+                Schedules are interpreted in UTC.
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
@@ -3080,6 +3081,7 @@ class CronClient:
             assistant_id: The assistant ID or graph name to use for the cron job.
                 If using graph name, will default to first assistant created from that graph.
             schedule: The cron schedule to execute this job on.
+                Schedules are interpreted in UTC.
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
@@ -6302,6 +6304,7 @@ class SyncCronClient:
             assistant_id: The assistant ID or graph name to use for the cron job.
                 If using graph name, will default to first assistant created from that graph.
             schedule: The cron schedule to execute this job on.
+                Schedules are interpreted in UTC.
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
@@ -6384,6 +6387,7 @@ class SyncCronClient:
             assistant_id: The assistant ID or graph name to use for the cron job.
                 If using graph name, will default to first assistant created from that graph.
             schedule: The cron schedule to execute this job on.
+                Schedules are interpreted in UTC.
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
