@@ -30,16 +30,18 @@ class Runtime(Generic[ContextT]):
 
     This class is injected into graph nodes and middleware. It provides access to
     `context`, `store`, `stream_writer`, and `previous`.
-    
-    !!! note "Accessing `config`"`
-    
-        Runtime` does not include `config` - use `get_config()` from `langgraph.config`
-        if you need access to the `RunnableConfig`.
+
+    !!! note "Accessing `config`"
+
+        `Runtime` does not include `config`. To access `RunnableConfig`, you can inject
+        it directly by adding a `config: RunnableConfig` parameter to your node function
+        (recommended), or use `get_config()` from `langgraph.config`.
 
     !!! note
-        This is distinct from `ToolRuntime` (from `langgraph.prebuilt`), which is
-        injected into tools and includes additional attributes like `config`, `state`,
-        and `tool_call_id`.
+        `ToolRuntime` (from `langgraph.prebuilt`) is a subclass that provides similar
+        functionality but is designed specifically for tools. It shares `context`, `store`,
+        and `stream_writer` with `Runtime`, and adds tool-specific attributes like `config`,
+        `state`, and `tool_call_id`.
 
     !!! version-added "Added in version v0.6.0"
 
