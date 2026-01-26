@@ -1532,7 +1532,7 @@ class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     """Runtime context automatically injected into tools.
 
     !!! note
-    
+
         This is distinct from `Runtime` (from `langgraph.runtime`), which is injected
         into graph nodes and middleware. `ToolRuntime` includes additional tool-specific
         attributes like `config`, `state`, and `tool_call_id` that `Runtime` does not
