@@ -846,7 +846,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
                 If `False`, it will not use or inherit any checkpointer.
 
-                **Important**: When a checkpointer is enabled, you must pass a `thread_id`
+                **Important**: When a checkpointer is enabled, you should pass a `thread_id`
                 in the config when invoking the graph:
 
                 ```python
