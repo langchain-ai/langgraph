@@ -1531,16 +1531,23 @@ def tools_condition(
 class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     """Runtime context automatically injected into tools.
 
-    When a tool function has a parameter named `tool_runtime` with type hint
+    !!! note
+
+        This is distinct from `Runtime` (from `langgraph.runtime`), which is injected
+        into graph nodes and middleware. `ToolRuntime` includes additional tool-specific
+        attributes like `config`, `state`, and `tool_call_id` that `Runtime` does not
+        have.
+
+    When a tool function has a parameter named `runtime` with type hint
     `ToolRuntime`, the tool execution system will automatically inject an instance
     containing:
 
     - `state`: The current graph state
     - `tool_call_id`: The ID of the current tool call
     - `config`: `RunnableConfig` for the current execution
-    - `context`: Runtime context (from langgraph `Runtime`)
-    - `store`: `BaseStore` instance for persistent storage (from langgraph `Runtime`)
-    - `stream_writer`: `StreamWriter` for streaming output (from langgraph `Runtime`)
+    - `context`: Runtime context (shared with `Runtime`)
+    - `store`: `BaseStore` instance for persistent storage (shared with `Runtime`)
+    - `stream_writer`: `StreamWriter` for streaming output (shared with `Runtime`)
 
     No `Annotated` wrapper is needed - just use `runtime: ToolRuntime`
     as a parameter.
