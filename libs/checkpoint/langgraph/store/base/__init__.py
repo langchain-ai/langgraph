@@ -531,6 +531,9 @@ class PutOp(NamedTuple):
     refreshes on both read operations (get/search) and write operations (put/update).
     When the TTL expires, the item will be scheduled for deletion on a best-effort basis.
     Defaults to `None` (no expiration).
+    
+    You can accept `timedelta` or `datetime` objects in `put/aput`, which will be
+    converted to minutes automatically.
     """
 
 
