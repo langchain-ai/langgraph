@@ -796,6 +796,18 @@ class ToolNode(RunnableCallable):
         # Construct ToolRuntime instances at the top level for each tool call
         tool_runtimes = []
         for call, cfg in zip(tool_calls, config_list, strict=False):
+            # Update checkpoint_ns to include tool_call_id.
+            # This ensures that if the tool is a subgraph, its events will be
+            # namespaced with the tool_call_id, allowing correlation in the UI.
+            if "configurable" not in cfg:
+                cfg["configurable"] = {}
+
+            parent_ns = cfg["configurable"].get("checkpoint_ns", "")
+            if parent_ns:
+                cfg["configurable"]["checkpoint_ns"] = f"{parent_ns}|{call['id']}"
+            else:
+                cfg["configurable"]["checkpoint_ns"] = call["id"]
+
             state = self._extract_state(input)
             tool_runtime = ToolRuntime(
                 state=state,
@@ -828,6 +840,18 @@ class ToolNode(RunnableCallable):
         # Construct ToolRuntime instances at the top level for each tool call
         tool_runtimes = []
         for call, cfg in zip(tool_calls, config_list, strict=False):
+            # Update checkpoint_ns to include tool_call_id.
+            # This ensures that if the tool is a subgraph, its events will be
+            # namespaced with the tool_call_id, allowing correlation in the UI.
+            if "configurable" not in cfg:
+                cfg["configurable"] = {}
+
+            parent_ns = cfg["configurable"].get("checkpoint_ns", "")
+            if parent_ns:
+                cfg["configurable"]["checkpoint_ns"] = f"{parent_ns}|{call['id']}"
+            else:
+                cfg["configurable"]["checkpoint_ns"] = call["id"]
+
             state = self._extract_state(input)
             tool_runtime = ToolRuntime(
                 state=state,
