@@ -1108,7 +1108,7 @@ class BaseStore(ABC):
         value: dict[str, Any],
         index: Literal[False] | list[str] | None = None,
         *,
-        ttl: float | None | NotProvided = NOT_PROVIDED,
+        ttl: float | timedelta | datetime | None | NotProvided = NOT_PROVIDED,
     ) -> None:
         """Asynchronously store or update an item in the store.
 
