@@ -10,7 +10,7 @@ When you modify code in any library, run the following commands in that library'
 
 To run a particular test file or to pass additional pytest options you can specify the `TEST` variable:
 
-```
+```txt
 TEST=path/to/test.py make test
 ```
 
