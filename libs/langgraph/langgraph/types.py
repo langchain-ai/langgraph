@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import inspect
 import sys
 from collections import deque
-from collections.abc import Callable, Hashable, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Sequence
 from dataclasses import asdict, dataclass
 from typing import (
     TYPE_CHECKING,
@@ -13,6 +14,7 @@ from typing import (
     NamedTuple,
     TypeVar,
     final,
+    overload,
 )
 from warnings import warn
 
@@ -47,6 +49,7 @@ __all__ = (
     "RetryPolicy",
     "CachePolicy",
     "Interrupt",
+    "DeferredValue",
     "StateUpdate",
     "PregelTask",
     "PregelExecutableTask",
@@ -55,6 +58,7 @@ __all__ = (
     "Command",
     "Durability",
     "interrupt",
+    "async_interrupt",
     "Overwrite",
     "ensure_valid_checkpointer",
 )
@@ -139,6 +143,7 @@ class RetryPolicy(NamedTuple):
 
 
 KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., str | bytes])
+InterruptValueT = TypeVar("InterruptValueT")
 
 
 @dataclass(**_DC_KWARGS)
@@ -212,6 +217,20 @@ class Interrupt:
             stacklevel=2,
         )
         return self.id
+
+
+@dataclass(frozen=True, slots=True)
+class DeferredValue:
+    """Wrap a callable to lazily compute an interrupt value.
+
+    The callable may be sync or async. Use `async_interrupt` if the deferred
+    value returns an awaitable.
+    """
+
+    func: Callable[[], Any] | Callable[[], Awaitable[Any]]
+
+    def __call__(self) -> Any | Awaitable[Any]:
+        return self.func()
 
 
 class StateUpdate(NamedTuple):
@@ -417,7 +436,41 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
-def interrupt(value: Any) -> Any:
+def _get_resume_value(conf: dict[str, Any]) -> tuple[bool, Any | None]:
+    # NOTE: This mutates scratchpad.resume and emits RESUME writes.
+    from langgraph._internal._constants import (
+        CONFIG_KEY_SCRATCHPAD,
+        CONFIG_KEY_SEND,
+        RESUME,
+    )
+
+    # track interrupt index
+    scratchpad = conf[CONFIG_KEY_SCRATCHPAD]
+    idx = scratchpad.interrupt_counter()
+    # find previous resume values
+    if scratchpad.resume:
+        if idx < len(scratchpad.resume):
+            conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
+            return True, scratchpad.resume[idx]
+    # find current resume value
+    v = scratchpad.get_null_resume(True)
+    if v is not None:
+        assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
+        scratchpad.resume.append(v)
+        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
+        return True, v
+    return False, None
+
+
+@overload
+def interrupt(value: DeferredValue) -> Any: ...
+
+
+@overload
+def interrupt(value: InterruptValueT) -> InterruptValueT: ...
+
+
+def interrupt(value: Any | DeferredValue) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
     The `interrupt` function enables human-in-the-loop workflows by pausing graph
@@ -500,6 +553,7 @@ def interrupt(value: Any) -> Any:
 
     Args:
         value: The value to surface to the client when the graph is interrupted.
+            Pass `DeferredValue(...)` to compute this value only if no resume value is found.
 
     Returns:
         Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation
@@ -507,36 +561,76 @@ def interrupt(value: Any) -> Any:
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
     """
-    from langgraph._internal._constants import (
-        CONFIG_KEY_CHECKPOINT_NS,
-        CONFIG_KEY_SCRATCHPAD,
-        CONFIG_KEY_SEND,
-        RESUME,
-    )
+    from langgraph._internal._constants import CONFIG_KEY_CHECKPOINT_NS
     from langgraph.config import get_config
     from langgraph.errors import GraphInterrupt
 
     conf = get_config()["configurable"]
-    # track interrupt index
-    scratchpad = conf[CONFIG_KEY_SCRATCHPAD]
-    idx = scratchpad.interrupt_counter()
-    # find previous resume values
-    if scratchpad.resume:
-        if idx < len(scratchpad.resume):
-            conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
-            return scratchpad.resume[idx]
-    # find current resume value
-    v = scratchpad.get_null_resume(True)
-    if v is not None:
-        assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
-        scratchpad.resume.append(v)
-        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
-        return v
+    has_resume, resume_value = _get_resume_value(conf)
+    if has_resume:
+        return resume_value
     # no resume value found
+    interrupt_value = value() if isinstance(value, DeferredValue) else value
+    if inspect.isawaitable(interrupt_value):
+        if hasattr(interrupt_value, "close"):
+            interrupt_value.close()
+        raise TypeError(
+            "interrupt() received an awaitable; use async_interrupt() instead."
+        )
     raise GraphInterrupt(
         (
             Interrupt.from_ns(
-                value=value,
+                value=interrupt_value,
+                ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+            ),
+        )
+    )
+
+
+@overload
+async def async_interrupt(value: DeferredValue) -> Any: ...
+
+
+@overload
+async def async_interrupt(value: InterruptValueT) -> InterruptValueT: ...
+
+
+async def async_interrupt(value: Any | DeferredValue) -> Any:
+    """Async version of `interrupt`, supporting lazy and awaitable values.
+
+    Use this when your interrupt value needs async work (DB/API calls) or when
+    you want to lazily compute the value only if the graph actually interrupts.
+    Wrap a callable in `DeferredValue(...)` to defer its execution until no resume value
+    is found for the current interrupt index.
+    This function must be awaited.
+
+    Args:
+        value: A value to surface, or a `DeferredValue` wrapper whose callable returns
+            the interrupt value (sync or awaitable).
+
+    Returns:
+        Any: On subsequent invocations within the same node (same task),
+            returns the resume value.
+
+    Raises:
+        GraphInterrupt: On the first invocation within the node, halts execution
+            and surfaces the value to the client.
+    """
+    from langgraph._internal._constants import CONFIG_KEY_CHECKPOINT_NS
+    from langgraph.config import get_config
+    from langgraph.errors import GraphInterrupt
+
+    conf = get_config()["configurable"]
+    has_resume, resume_value = _get_resume_value(conf)
+    if has_resume:
+        return resume_value
+    interrupt_value = value() if isinstance(value, DeferredValue) else value
+    if inspect.isawaitable(interrupt_value):
+        interrupt_value = await interrupt_value
+    raise GraphInterrupt(
+        (
+            Interrupt.from_ns(
+                value=interrupt_value,
                 ns=conf[CONFIG_KEY_CHECKPOINT_NS],
             ),
         )
