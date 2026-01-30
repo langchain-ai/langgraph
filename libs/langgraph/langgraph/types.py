@@ -13,6 +13,7 @@ from typing import (
     Literal,
     NamedTuple,
     TypeVar,
+    cast,
     final,
     overload,
 )
@@ -50,7 +51,6 @@ __all__ = (
     "RetryPolicy",
     "CachePolicy",
     "Interrupt",
-    "DeferredValue",
     "StateUpdate",
     "PregelTask",
     "PregelExecutableTask",
@@ -218,20 +218,6 @@ class Interrupt:
             stacklevel=2,
         )
         return self.id
-
-
-@dataclass(frozen=True, slots=True)
-class DeferredValue:
-    """Wrap a callable to lazily compute an interrupt value.
-
-    The callable may be sync or async. Use `ainterrupt` if the deferred
-    value returns an awaitable.
-    """
-
-    func: Callable[[], Any] | Callable[[], Awaitable[Any]]
-
-    def __call__(self) -> Any | Awaitable[Any]:
-        return self.func()
 
 
 class StateUpdate(NamedTuple):
@@ -438,14 +424,16 @@ class Command(Generic[N], ToolOutputMixin):
 
 
 @overload
-def interrupt(value: DeferredValue) -> Any: ...
-
-
-@overload
 def interrupt(value: InterruptValueT) -> InterruptValueT: ...
 
 
-def interrupt(value: Any | DeferredValue) -> Any:
+@overload
+def interrupt(*, deferred: Callable[[], InterruptValueT]) -> InterruptValueT: ...
+
+
+def interrupt(
+    value: Any = MISSING, *, deferred: Callable[[], Any] | object = MISSING
+) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
     The `interrupt` function enables human-in-the-loop workflows by pausing graph
@@ -528,7 +516,8 @@ def interrupt(value: Any | DeferredValue) -> Any:
 
     Args:
         value: The value to surface to the client when the graph is interrupted.
-            Pass `DeferredValue(...)` to compute this value only if no resume value is found.
+        deferred: Callable to lazily compute the interrupt value. Only invoked
+            when no resume value is found for the current interrupt index.
 
     Returns:
         Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation
@@ -545,7 +534,15 @@ def interrupt(value: Any | DeferredValue) -> Any:
     if has_resume:
         return resume_value
     # no resume value found
-    interrupt_value = value() if isinstance(value, DeferredValue) else value
+    if value is MISSING and deferred is MISSING:
+        raise TypeError("interrupt() requires either value or deferred.")
+    if value is not MISSING and deferred is not MISSING:
+        raise TypeError("interrupt() accepts either value or deferred, not both.")
+    if deferred is not MISSING:
+        deferred_callable = cast(Callable[[], Any], deferred)
+        interrupt_value = deferred_callable()
+    else:
+        interrupt_value = value
     if inspect.isawaitable(interrupt_value):
         if hasattr(interrupt_value, "close"):
             interrupt_value.close()
@@ -561,25 +558,30 @@ def interrupt(value: Any | DeferredValue) -> Any:
 
 
 @overload
-async def ainterrupt(value: DeferredValue) -> Any: ...
-
-
-@overload
 async def ainterrupt(value: InterruptValueT) -> InterruptValueT: ...
 
 
-async def ainterrupt(value: Any | DeferredValue) -> Any:
+@overload
+async def ainterrupt(
+    *,
+    deferred: Callable[[], Awaitable[InterruptValueT]] | Callable[[], InterruptValueT],
+) -> InterruptValueT: ...
+
+
+async def ainterrupt(
+    value: Any = MISSING, *, deferred: Callable[[], Any] | object = MISSING
+) -> Any:
     """Async version of `interrupt`, supporting lazy and awaitable values.
 
     Use this when your interrupt value needs async work (DB/API calls) or when
     you want to lazily compute the value only if the graph actually interrupts.
-    Wrap a callable in `DeferredValue(...)` to defer its execution until no resume value
-    is found for the current interrupt index.
+    Use `deferred=` to defer execution until no resume value is found
+    for the current interrupt index.
     This function must be awaited.
 
     Args:
-        value: A value to surface, or a `DeferredValue` wrapper whose callable returns
-            the interrupt value (sync or awaitable).
+        value: A value to surface.
+        deferred: Callable that returns the interrupt value (sync or awaitable).
 
     Returns:
         Any: On subsequent invocations within the same node (same task),
@@ -597,7 +599,15 @@ async def ainterrupt(value: Any | DeferredValue) -> Any:
     has_resume, resume_value = _get_resume_value(conf)
     if has_resume:
         return resume_value
-    interrupt_value = value() if isinstance(value, DeferredValue) else value
+    if value is MISSING and deferred is MISSING:
+        raise TypeError("ainterrupt() requires either value or deferred.")
+    if value is not MISSING and deferred is not MISSING:
+        raise TypeError("ainterrupt() accepts either value or deferred, not both.")
+    if deferred is not MISSING:
+        deferred_callable = cast(Callable[[], Any], deferred)
+        interrupt_value = deferred_callable()
+    else:
+        interrupt_value = value
     if inspect.isawaitable(interrupt_value):
         interrupt_value = await interrupt_value
     raise GraphInterrupt(

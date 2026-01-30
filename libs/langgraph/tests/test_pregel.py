@@ -59,7 +59,6 @@ from langgraph.pregel._runner import PregelRunner
 from langgraph.types import (
     CachePolicy,
     Command,
-    DeferredValue,
     Durability,
     Interrupt,
     Overwrite,
@@ -1298,7 +1297,7 @@ def test_interrupt_callable_lazy(
 
     @entrypoint(checkpointer=sync_checkpointer)
     def graph(input: str) -> str:
-        answer = interrupt(DeferredValue(lazy_value))
+        answer = interrupt(deferred=lazy_value)
         return input + answer
 
     thread = {"configurable": {"thread_id": "1"}}
@@ -1321,7 +1320,7 @@ def test_interrupt_rejects_async_callable(
 
     @entrypoint(checkpointer=sync_checkpointer)
     def graph(input: str) -> str:
-        interrupt(DeferredValue(lazy_async))
+        interrupt(deferred=lazy_async)
         return input
 
     thread = {"configurable": {"thread_id": "lazy-async-1"}}
@@ -1337,7 +1336,7 @@ def test_lazy_interrupt_callable_raises(
 
     @entrypoint(checkpointer=sync_checkpointer)
     def graph(input: str) -> str:
-        interrupt(DeferredValue(lazy_value))
+        interrupt(deferred=lazy_value)
         return input
 
     thread = {"configurable": {"thread_id": "lazy-raise-1"}}
@@ -1360,8 +1359,8 @@ def test_multiple_lazy_interrupts_in_node(
 
     @entrypoint(checkpointer=sync_checkpointer)
     def graph(input: str) -> str:
-        first = interrupt(DeferredValue(lazy_first))
-        second = interrupt(DeferredValue(lazy_second))
+        first = interrupt(deferred=lazy_first)
+        second = interrupt(deferred=lazy_second)
         return f"{input}:{first}:{second}"
 
     thread = {"configurable": {"thread_id": "lazy-multi-1"}}

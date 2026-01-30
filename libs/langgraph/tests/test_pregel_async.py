@@ -58,7 +58,6 @@ from langgraph.pregel._runner import PregelRunner
 from langgraph.types import (
     CachePolicy,
     Command,
-    DeferredValue,
     Durability,
     Interrupt,
     PregelTask,
@@ -733,7 +732,7 @@ async def test_async_interrupt_callable_lazy(
         value: str
 
     async def node(state: State) -> State:
-        answer = await ainterrupt(DeferredValue(lazy_value))
+        answer = await ainterrupt(deferred=lazy_value)
         return {"value": state["value"] + answer}
 
     builder = StateGraph(State)
@@ -768,7 +767,7 @@ async def test_async_interrupt_with_sync_callable(
         value: str
 
     async def node(state: State) -> State:
-        answer = await ainterrupt(DeferredValue(lazy_value))
+        answer = await ainterrupt(deferred=lazy_value)
         return {"value": state["value"] + answer}
 
     builder = StateGraph(State)
@@ -824,7 +823,7 @@ async def test_async_interrupt_callable_raises(
         value: str
 
     async def node(state: State) -> State:
-        answer = await ainterrupt(DeferredValue(lazy_value))
+        answer = await ainterrupt(deferred=lazy_value)
         return {"value": state["value"] + answer}
 
     builder = StateGraph(State)
@@ -858,8 +857,8 @@ async def test_async_multiple_lazy_interrupts_in_node(
         value: str
 
     async def node(state: State) -> State:
-        first = await ainterrupt(DeferredValue(lazy_first))
-        second = await ainterrupt(DeferredValue(lazy_second))
+        first = await ainterrupt(deferred=lazy_first)
+        second = await ainterrupt(deferred=lazy_second)
         return {"value": f"{state['value']}:{first}:{second}"}
 
     builder = StateGraph(State)
