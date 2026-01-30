@@ -67,7 +67,7 @@ from langgraph.types import (
     StateSnapshot,
     StateUpdate,
     StreamWriter,
-    async_interrupt,
+    ainterrupt,
     interrupt,
 )
 from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
@@ -733,7 +733,7 @@ async def test_async_interrupt_callable_lazy(
         value: str
 
     async def node(state: State) -> State:
-        answer = await async_interrupt(DeferredValue(lazy_value))
+        answer = await ainterrupt(DeferredValue(lazy_value))
         return {"value": state["value"] + answer}
 
     builder = StateGraph(State)
@@ -768,7 +768,7 @@ async def test_async_interrupt_with_sync_callable(
         value: str
 
     async def node(state: State) -> State:
-        answer = await async_interrupt(DeferredValue(lazy_value))
+        answer = await ainterrupt(DeferredValue(lazy_value))
         return {"value": state["value"] + answer}
 
     builder = StateGraph(State)
@@ -796,7 +796,7 @@ async def test_async_interrupt_with_plain_value(
         value: str
 
     async def node(state: State) -> State:
-        answer = await async_interrupt("question")
+        answer = await ainterrupt("question")
         return {"value": state["value"] + answer}
 
     builder = StateGraph(State)
@@ -824,7 +824,7 @@ async def test_async_interrupt_callable_raises(
         value: str
 
     async def node(state: State) -> State:
-        answer = await async_interrupt(DeferredValue(lazy_value))
+        answer = await ainterrupt(DeferredValue(lazy_value))
         return {"value": state["value"] + answer}
 
     builder = StateGraph(State)
@@ -858,8 +858,8 @@ async def test_async_multiple_lazy_interrupts_in_node(
         value: str
 
     async def node(state: State) -> State:
-        first = await async_interrupt(DeferredValue(lazy_first))
-        second = await async_interrupt(DeferredValue(lazy_second))
+        first = await ainterrupt(DeferredValue(lazy_first))
+        second = await ainterrupt(DeferredValue(lazy_second))
         return {"value": f"{state['value']}:{first}:{second}"}
 
     builder = StateGraph(State)

@@ -1325,7 +1325,7 @@ def test_interrupt_rejects_async_callable(
         return input
 
     thread = {"configurable": {"thread_id": "lazy-async-1"}}
-    with pytest.raises(TypeError, match="use async_interrupt"):
+    with pytest.raises(TypeError, match="use ainterrupt"):
         graph.invoke("hi", thread, durability=durability)
 
 

@@ -26,6 +26,7 @@ from xxhash import xxh3_128_hexdigest
 from langgraph._internal._cache import default_cache_key
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
+from langgraph._internal._types import _get_resume_value
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
@@ -58,7 +59,7 @@ __all__ = (
     "Command",
     "Durability",
     "interrupt",
-    "async_interrupt",
+    "ainterrupt",
     "Overwrite",
     "ensure_valid_checkpointer",
 )
@@ -223,7 +224,7 @@ class Interrupt:
 class DeferredValue:
     """Wrap a callable to lazily compute an interrupt value.
 
-    The callable may be sync or async. Use `async_interrupt` if the deferred
+    The callable may be sync or async. Use `ainterrupt` if the deferred
     value returns an awaitable.
     """
 
@@ -436,32 +437,6 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
-def _get_resume_value(conf: dict[str, Any]) -> tuple[bool, Any | None]:
-    # NOTE: This mutates scratchpad.resume and emits RESUME writes.
-    from langgraph._internal._constants import (
-        CONFIG_KEY_SCRATCHPAD,
-        CONFIG_KEY_SEND,
-        RESUME,
-    )
-
-    # track interrupt index
-    scratchpad = conf[CONFIG_KEY_SCRATCHPAD]
-    idx = scratchpad.interrupt_counter()
-    # find previous resume values
-    if scratchpad.resume:
-        if idx < len(scratchpad.resume):
-            conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
-            return True, scratchpad.resume[idx]
-    # find current resume value
-    v = scratchpad.get_null_resume(True)
-    if v is not None:
-        assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
-        scratchpad.resume.append(v)
-        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
-        return True, v
-    return False, None
-
-
 @overload
 def interrupt(value: DeferredValue) -> Any: ...
 
@@ -574,9 +549,7 @@ def interrupt(value: Any | DeferredValue) -> Any:
     if inspect.isawaitable(interrupt_value):
         if hasattr(interrupt_value, "close"):
             interrupt_value.close()
-        raise TypeError(
-            "interrupt() received an awaitable; use async_interrupt() instead."
-        )
+        raise TypeError("interrupt() received an awaitable; use ainterrupt() instead.")
     raise GraphInterrupt(
         (
             Interrupt.from_ns(
@@ -588,14 +561,14 @@ def interrupt(value: Any | DeferredValue) -> Any:
 
 
 @overload
-async def async_interrupt(value: DeferredValue) -> Any: ...
+async def ainterrupt(value: DeferredValue) -> Any: ...
 
 
 @overload
-async def async_interrupt(value: InterruptValueT) -> InterruptValueT: ...
+async def ainterrupt(value: InterruptValueT) -> InterruptValueT: ...
 
 
-async def async_interrupt(value: Any | DeferredValue) -> Any:
+async def ainterrupt(value: Any | DeferredValue) -> Any:
     """Async version of `interrupt`, supporting lazy and awaitable values.
 
     Use this when your interrupt value needs async work (DB/API calls) or when
