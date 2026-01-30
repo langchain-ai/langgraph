@@ -898,6 +898,8 @@ def create_react_agent(
                 agenerate_structured_response,
             ),
         )
+        # After generating structured response, the graph should end
+        workflow.add_edge("generate_structured_response", END)
         if post_model_hook is not None:
             post_model_hook_paths.append("generate_structured_response")
         else:
