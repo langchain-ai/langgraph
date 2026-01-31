@@ -21,7 +21,7 @@
     "test:all": "yarn test && yarn test:int && yarn lint:langgraph"
   },
   "dependencies": {
-    "@langchain/core": "^0.3.2",
+    "@langchain/core": "^0.3.80",
     "@langchain/langgraph": "^0.2.5"
   },
   "devDependencies": {
