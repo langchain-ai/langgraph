@@ -551,8 +551,9 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
                 If pipeline mode is not supported, will fall back to using transaction context manager.
         """
         is_pooled_conn = isinstance(self.conn, AsyncConnectionPool)
-        # when using pooled connections, connections are never shared across threads/coroutines,
-        # so we don't need to acquire the shared lock.
+        # With AsyncConnectionPool, each _cursor() call checks out its own connection.
+        # The pool does not hand out the same connection concurrently, so a shared lock
+        # across calls is unnecessary here.
         lock = asyncio.Lock() if is_pooled_conn else self.lock
         async with _ainternal.get_connection(self.conn) as conn:
             if self.pipe:
