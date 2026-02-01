@@ -818,13 +818,9 @@ async def test_astream():
 def test_invoke():
     # set up test
     mock_sync_client = MagicMock()
-    mock_sync_client.runs.stream.return_value = [
-        StreamPart(event="values", data={"chunk": "data1"}),
-        StreamPart(event="values", data={"chunk": "data2"}),
-        StreamPart(
-            event="values", data={"messages": [{"type": "human", "content": "world"}]}
-        ),
-    ]
+    mock_sync_client.runs.wait.return_value = {
+        "messages": [{"type": "human", "content": "world"}]
+    }
 
     # call method / assertions
     remote_pregel = RemoteGraph(
@@ -838,13 +834,19 @@ def test_invoke():
     )
 
     assert result == {"messages": [{"type": "human", "content": "world"}]}
+    # verify runs.wait was called with expected args
+    assert mock_sync_client.runs.wait.called
+    _, kwargs = mock_sync_client.runs.wait.call_args
+    assert kwargs.get("thread_id") == "thread_1"
+    assert kwargs.get("assistant_id") == "test_graph_id"
+    assert kwargs.get("if_not_exists") == "create"
 
 
 def test_invoke_sanitizes_thread_id():
     # Ensure that invoking with thread_id passes thread_id as a top-level arg
     # and removes it from the config body.
     mock_sync_client = MagicMock()
-    mock_sync_client.runs.stream.return_value = []
+    mock_sync_client.runs.wait.return_value = {}
     remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
 
     config = {"configurable": {"thread_id": "thread_1"}}
@@ -852,8 +854,8 @@ def test_invoke_sanitizes_thread_id():
         {"input": {"messages": [{"type": "human", "content": "hello"}]}}, config
     )
 
-    assert mock_sync_client.runs.stream.called
-    _, kwargs = mock_sync_client.runs.stream.call_args
+    assert mock_sync_client.runs.wait.called
+    _, kwargs = mock_sync_client.runs.wait.call_args
     assert kwargs.get("thread_id") == "thread_1"
     passed_config = kwargs.get("config") or {}
     assert "configurable" in passed_config
@@ -883,16 +885,10 @@ def test_stream_sanitizes_thread_id():
 @pytest.mark.anyio
 async def test_ainvoke():
     # set up test
-    mock_async_client = MagicMock()
-    async_iter = MagicMock()
-    async_iter.__aiter__.return_value = [
-        StreamPart(event="values", data={"chunk": "data1"}),
-        StreamPart(event="values", data={"chunk": "data2"}),
-        StreamPart(
-            event="values", data={"messages": [{"type": "human", "content": "world"}]}
-        ),
-    ]
-    mock_async_client.runs.stream.return_value = async_iter
+    mock_async_client = AsyncMock()
+    mock_async_client.runs.wait.return_value = {
+        "messages": [{"type": "human", "content": "world"}]
+    }
 
     # call method / assertions
     remote_pregel = RemoteGraph(
@@ -906,6 +902,12 @@ async def test_ainvoke():
     )
 
     assert result == {"messages": [{"type": "human", "content": "world"}]}
+    # verify runs.wait was called with expected args
+    assert mock_async_client.runs.wait.called
+    _, kwargs = mock_async_client.runs.wait.call_args
+    assert kwargs.get("thread_id") == "thread_1"
+    assert kwargs.get("assistant_id") == "test_graph_id"
+    assert kwargs.get("if_not_exists") == "create"
 
 
 @pytest.mark.skip(
@@ -1241,12 +1243,18 @@ async def test_include_headers(
     async_iter.__aiter__.return_value = return_value
     astream_mock = mock_async_client.runs.stream
     astream_mock.return_value = async_iter
+    # Mock for ainvoke which uses runs.wait
+    await_mock = AsyncMock(return_value={"chunk": "data1"})
+    mock_async_client.runs.wait = await_mock
 
     mock_sync_client = MagicMock()
     sync_iter = MagicMock()
     sync_iter.__iter__.return_value = return_value
     stream_mock = mock_sync_client.runs.stream
     stream_mock.return_value = async_iter
+    # Mock for invoke which uses runs.wait
+    wait_mock = MagicMock(return_value={"chunk": "data1"})
+    mock_sync_client.runs.wait = wait_mock
 
     remote_pregel = RemoteGraph(
         "test_graph_id",
@@ -1279,8 +1287,12 @@ async def test_include_headers(
         expected["langsmith-trace"] = AnyStr()
         expected["baggage"] = AnyStr("langsmith-metadata=")
 
-    assert astream_mock.call_args.kwargs["headers"] == expected
+    if stream:
+        assert astream_mock.call_args.kwargs["headers"] == expected
+    else:
+        assert await_mock.call_args.kwargs["headers"] == expected
     stream_mock.assert_not_called()
+    wait_mock.assert_not_called()
 
     with ls.tracing_context(enabled=True, client=MagicMock()):
         with ls.trace("foo"):
@@ -1298,4 +1310,7 @@ async def test_include_headers(
                     config,
                     headers=headers,
                 )
-    assert stream_mock.call_args.kwargs["headers"] == expected
+    if stream:
+        assert stream_mock.call_args.kwargs["headers"] == expected
+    else:
+        assert wait_mock.call_args.kwargs["headers"] == expected
