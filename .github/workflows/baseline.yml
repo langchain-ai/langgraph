@@ -30,7 +30,7 @@ jobs:
       - name: Run benchmarks
         run: OUTPUT=out/benchmark-baseline.json make -s benchmark
       - name: Save outputs
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           key: ${{ runner.os }}-benchmark-baseline-${{ env.SHA }}
           path: |

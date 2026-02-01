@@ -50,7 +50,7 @@ def iter_lines_raw(payload: list[bytes]) -> Iterator[BytesLike]:
     yield from decoder.flush()
 
 
-def test_stream_see():
+def test_stream_sse():
     for groups in (
         [RESPONSE_PAYLOAD],
         RESPONSE_PAYLOAD.splitlines(keepends=True),
@@ -150,9 +150,9 @@ def test_sync_http_client_stream_recovers_after_disconnect():
 
     assert call_count == 2
     assert parts == [
-        StreamPart(event="values", data={"step": 1}),
-        StreamPart(event="values", data={"step": 2}),
-        StreamPart(event="end", data=None),  # ty: ignore
+        StreamPart(event="values", data={"step": 1}, id="1"),
+        StreamPart(event="values", data={"step": 2}, id="2"),
+        StreamPart(event="end", data=None, id="2"),
     ]
 
 
@@ -222,9 +222,9 @@ async def test_http_client_stream_recovers_after_disconnect():
 
     assert call_count == 2
     assert parts == [
-        StreamPart(event="values", data={"step": 1}),
-        StreamPart(event="values", data={"step": 2}),
-        StreamPart(event="end", data=None),
+        StreamPart(event="values", data={"step": 1}, id="1"),
+        StreamPart(event="values", data={"step": 2}, id="2"),
+        StreamPart(event="end", data=None, id="2"),
     ]
 
 

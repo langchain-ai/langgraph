@@ -119,6 +119,25 @@ class BaseCheckpointSaver(Generic[V]):
     Checkpointers allow LangGraph agents to persist their state
     within and across multiple interactions.
 
+    When a checkpointer is configured, you should pass a `thread_id` in the config when
+    invoking the graph:
+
+    ```python
+    config = {"configurable": {"thread_id": "my-thread"}}
+    graph.invoke(inputs, config)
+    ```
+
+    The `thread_id` is the primary key used to store and retrieve checkpoints. Without
+    it, the checkpointer cannot save state, resume from interrupts, or enable
+    time-travel debugging.
+
+    How you choose ``thread_id`` depends on your use case:
+
+    - **Single-shot workflows**: Use a unique ID (e.g., uuid4) for each run when
+        executions are independent.
+    - **Conversational memory**: Reuse the same `thread_id` across invocations
+        to accumulate state (e.g., chat history) within a conversation.
+
     Attributes:
         serde (SerializerProtocol): Serializer for encoding/decoding checkpoints.
 

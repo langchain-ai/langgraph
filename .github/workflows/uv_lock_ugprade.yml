@@ -30,7 +30,7 @@ jobs:
         run: make lock-upgrade
           
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore(deps): upgrade dependencies with `uv lock --upgrade`"

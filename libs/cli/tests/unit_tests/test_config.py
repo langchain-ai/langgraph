@@ -49,6 +49,7 @@ def test_validate_config():
         "store": None,
         "auth": None,
         "encryption": None,
+        "webhooks": None,
         "checkpointer": None,
         "http": None,
         "ui": None,
@@ -76,6 +77,7 @@ def test_validate_config():
         "store": None,
         "auth": None,
         "encryption": None,
+        "webhooks": None,
         "checkpointer": None,
         "http": None,
         "ui": None,
@@ -418,7 +420,7 @@ def test_config_to_docker_simple():
                 "http": {"app": "../../examples/my_app.py:app"},
             }
         ),
-        "langchain/langgraph-api",
+        base_image="langchain/langgraph-api",
     )
     expected_docker_stdin = f"""\
 # syntax=docker/dockerfile:1.4
@@ -481,7 +483,7 @@ def test_config_to_docker_outside_path():
     actual_docker_stdin, additional_contexts = config_to_docker(
         PATH_TO_CONFIG,
         validate_config({"dependencies": [".", ".."], "graphs": graphs}),
-        "langchain/langgraph-api",
+        base_image="langchain/langgraph-api",
     )
     expected_docker_stdin = (
         """\
@@ -542,7 +544,7 @@ def test_config_to_docker_pipconfig():
                 "pip_config_file": "pipconfig.txt",
             }
         ),
-        "langchain/langgraph-api",
+        base_image="langchain/langgraph-api",
     )
     expected_docker_stdin = (
         """\
@@ -583,7 +585,7 @@ def test_config_to_docker_invalid_inputs():
         config_to_docker(
             PATH_TO_CONFIG,
             validate_config({"dependencies": ["./missing"], "graphs": graphs}),
-            "langchain/langgraph-api",
+            base_image="langchain/langgraph-api",
         )
 
     # test missing local module
@@ -592,7 +594,7 @@ def test_config_to_docker_invalid_inputs():
         config_to_docker(
             PATH_TO_CONFIG,
             validate_config({"dependencies": ["."], "graphs": graphs}),
-            "langchain/langgraph-api",
+            base_image="langchain/langgraph-api",
         )
 
 
@@ -606,7 +608,7 @@ def test_config_to_docker_local_deps():
                 "graphs": graphs,
             }
         ),
-        "langchain/langgraph-api-custom",
+        base_image="langchain/langgraph-api-custom",
     )
     expected_docker_stdin = f"""\
 FROM langchain/langgraph-api-custom:3.11
@@ -652,7 +654,7 @@ dependencies = ["langchain"]"""
                 "graphs": graphs,
             }
         ),
-        "langchain/langgraph-api",
+        base_image="langchain/langgraph-api",
     )
     os.remove(pyproject_path)
     expected_docker_stdin = (
@@ -687,7 +689,7 @@ def test_config_to_docker_end_to_end():
                 "dockerfile_lines": ["ARG meow", "ARG foo"],
             }
         ),
-        "langchain/langgraph-api",
+        base_image="langchain/langgraph-api",
     )
     expected_docker_stdin = f"""FROM langchain/langgraph-api:3.12
 ARG meow
@@ -732,7 +734,7 @@ def test_config_to_docker_nodejs():
                 "ui_config": {"shared": ["nuqs"]},
             }
         ),
-        "langchain/langgraphjs-api",
+        base_image="langchain/langgraphjs-api",
     )
     expected_docker_stdin = """FROM langchain/langgraphjs-api:20
 ARG meow
@@ -784,7 +786,7 @@ def test_config_to_docker_python_encryption_bad_path():
 def test_config_to_docker_python_encryption_formatted():
     # Test that encryption config is properly formatted in Docker output
     graphs = {"agent": "./graphs/agent.py:graph"}
-    actual_docker_stdin, additional_contexts = config_to_docker(
+    actual_docker_stdin, _ = config_to_docker(
         PATH_TO_CONFIG,
         validate_config(
             {
@@ -794,11 +796,14 @@ def test_config_to_docker_python_encryption_formatted():
                 "encryption": {"path": "./agent.py:my_encryption"},
             }
         ),
-        "langchain/langgraph-api",
+        base_image="langchain/langgraph-api",
     )
     # Verify that LANGGRAPH_ENCRYPTION is in the docker output with the correct path
     assert "LANGGRAPH_ENCRYPTION=" in actual_docker_stdin
-    assert "/deps/outer-unit_tests/unit_tests/agent.py:my_encryption" in actual_docker_stdin
+    assert (
+        "/deps/outer-unit_tests/unit_tests/agent.py:my_encryption"
+        in actual_docker_stdin
+    )
 
 
 def test_config_to_docker_nodejs_internal_docker_tag():
@@ -816,7 +821,7 @@ def test_config_to_docker_nodejs_internal_docker_tag():
                 "_INTERNAL_docker_tag": "my-tag",
             }
         ),
-        "langchain/langgraphjs-api",
+        base_image="langchain/langgraphjs-api",
     )
     expected_docker_stdin = """FROM langchain/langgraphjs-api:my-tag
 ARG meow
@@ -834,6 +839,85 @@ RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not foun
     assert additional_contexts == {}
 
 
+def _extract_env_json(dockerfile: str, var_name: str) -> dict:
+    """Helper to extract and parse a JSON value from an ENV line in a Dockerfile."""
+    line_prefix = f"ENV {var_name}='"
+    for line in dockerfile.splitlines():
+        if line.startswith(line_prefix) and line.endswith("'"):
+            json_str = line[len(line_prefix) : -1]
+            return json.loads(json_str)
+    raise AssertionError(f"{var_name} not found in Dockerfile env lines")
+
+
+def test_config_to_docker_webhooks_python():
+    graphs = {"agent": "./agent.py:graph"}
+    webhooks = {
+        "env_prefix": "LG_WEBHOOK_",
+        "url": {
+            "require_https": True,
+            "allowed_domains": ["hooks.example.com", "*.example.org"],
+            "allowed_ports": [443],
+            "max_url_length": 1024,
+            "disable_loopback": False,
+        },
+        "headers": {
+            "x-auth": "${{ env.LG_WEBHOOK_TOKEN }}",
+            "x-mixed": "Bearer ${{ env.LG_WEBHOOK_TOKEN }}-suffix",
+        },
+    }
+
+    dockerfile, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": graphs,
+                "webhooks": webhooks,
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+
+    # Ensure the ENV line is present and the payload round-trips via JSON
+    parsed = _extract_env_json(dockerfile, "LANGGRAPH_WEBHOOKS")
+    assert parsed == webhooks
+
+
+def test_config_to_docker_webhooks_node():
+    graphs = {"agent": "./graphs/agent.js:graph"}
+    webhooks = {
+        "env_prefix": "LG_WEBHOOK_",
+        "url": {"require_https": True},
+        "headers": {"x-auth": "${{ env.LG_WEBHOOK_TOKEN }}"},
+    }
+
+    dockerfile, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "node_version": "20",
+                "graphs": graphs,
+                "webhooks": webhooks,
+            }
+        ),
+        base_image="langchain/langgraphjs-api",
+    )
+
+    parsed = _extract_env_json(dockerfile, "LANGGRAPH_WEBHOOKS")
+    assert parsed == webhooks
+
+
+def test_config_to_docker_no_webhooks():
+    graphs = {"agent": "./agent.py:graph"}
+    dockerfile, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs}),
+        base_image="langchain/langgraph-api",
+    )
+
+    assert "ENV LANGGRAPH_WEBHOOKS=" not in dockerfile
+
+
 def test_config_to_docker_gen_ui_python():
     graphs = {"agent": "./agent.py:graph"}
     actual_docker_stdin, additional_contexts = config_to_docker(
@@ -846,7 +930,7 @@ def test_config_to_docker_gen_ui_python():
                 "ui_config": {"shared": ["nuqs"]},
             }
         ),
-        "langchain/langgraph-api",
+        base_image="langchain/langgraph-api",
     )
 
     expected_docker_stdin = f"""FROM langchain/langgraph-api:3.11
@@ -892,7 +976,7 @@ def test_config_to_docker_multiplatform():
         validate_config(
             {"node_version": "22", "dependencies": ["."], "graphs": graphs}
         ),
-        "langchain/langgraph-api",
+        base_image="langchain/langgraph-api",
     )
 
     expected_docker_stdin = f"""FROM langchain/langgraph-api:3.11
@@ -940,7 +1024,7 @@ def test_config_to_docker_pip_installer():
         {**copy.deepcopy(base_config), "pip_installer": "auto"}
     )
     docker_auto, _ = config_to_docker(
-        PATH_TO_CONFIG, config_auto, "langchain/langgraph-api:0.2.47"
+        PATH_TO_CONFIG, config_auto, base_image="langchain/langgraph-api:0.2.47"
     )
     assert "uv pip install --system " in docker_auto
     assert "rm /usr/bin/uv /usr/bin/uvx" in docker_auto
@@ -948,7 +1032,7 @@ def test_config_to_docker_pip_installer():
     # Test explicit pip setting
     config_pip = validate_config({**copy.deepcopy(base_config), "pip_installer": "pip"})
     docker_pip, _ = config_to_docker(
-        PATH_TO_CONFIG, config_pip, "langchain/langgraph-api:0.2.47"
+        PATH_TO_CONFIG, config_pip, base_image="langchain/langgraph-api:0.2.47"
     )
     assert "uv pip install --system " not in docker_pip
     assert "pip install" in docker_pip
@@ -957,7 +1041,7 @@ def test_config_to_docker_pip_installer():
     # Test explicit uv setting
     config_uv = validate_config({**copy.deepcopy(base_config), "pip_installer": "uv"})
     docker_uv, _ = config_to_docker(
-        PATH_TO_CONFIG, config_uv, "langchain/langgraph-api:0.2.47"
+        PATH_TO_CONFIG, config_uv, base_image="langchain/langgraph-api:0.2.47"
     )
     assert "uv pip install --system " in docker_uv
     assert "rm /usr/bin/uv /usr/bin/uvx" in docker_uv
@@ -967,7 +1051,7 @@ def test_config_to_docker_pip_installer():
         {**copy.deepcopy(base_config), "pip_installer": "auto"}
     )
     docker_auto_old, _ = config_to_docker(
-        PATH_TO_CONFIG, config_auto_old, "langchain/langgraph-api:0.2.46"
+        PATH_TO_CONFIG, config_auto_old, base_image="langchain/langgraph-api:0.2.46"
     )
     assert "uv pip install --system " not in docker_auto_old
     assert "pip install" in docker_auto_old
@@ -976,7 +1060,7 @@ def test_config_to_docker_pip_installer():
     # Test that missing pip_installer defaults to auto behavior
     config_default = validate_config(copy.deepcopy(base_config))
     docker_default, _ = config_to_docker(
-        PATH_TO_CONFIG, config_default, "langchain/langgraph-api:0.2.47"
+        PATH_TO_CONFIG, config_default, base_image="langchain/langgraph-api:0.2.47"
     )
     assert "uv pip install --system " in docker_default
 
@@ -992,7 +1076,7 @@ def test_config_retain_build_tools():
         {**copy.deepcopy(base_config), "keep_pkg_tools": True}
     )
     docker_true, _ = config_to_docker(
-        PATH_TO_CONFIG, config_true, "langchain/langgraph-api:0.2.47"
+        PATH_TO_CONFIG, config_true, base_image="langchain/langgraph-api:0.2.47"
     )
     assert not any(
         "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_true
@@ -1003,7 +1087,7 @@ def test_config_retain_build_tools():
         {**copy.deepcopy(base_config), "keep_pkg_tools": False}
     )
     docker_false, _ = config_to_docker(
-        PATH_TO_CONFIG, config_false, "langchain/langgraph-api:0.2.47"
+        PATH_TO_CONFIG, config_false, base_image="langchain/langgraph-api:0.2.47"
     )
     assert all(
         "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_false
@@ -1014,7 +1098,7 @@ def test_config_retain_build_tools():
         {**copy.deepcopy(base_config), "keep_pkg_tools": ["pip", "setuptools"]}
     )
     docker_list, _ = config_to_docker(
-        PATH_TO_CONFIG, config_list, "langchain/langgraph-api:0.2.47"
+        PATH_TO_CONFIG, config_list, base_image="langchain/langgraph-api:0.2.47"
     )
     assert all(
         "/usr/local/lib/python*/site-packages/" + pckg + "*" in docker_list
@@ -1053,7 +1137,7 @@ def test_config_to_compose_simple_config():
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -1094,7 +1178,7 @@ def test_config_to_compose_env_vars():
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -1139,7 +1223,7 @@ def test_config_to_compose_env_file():
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -1177,7 +1261,7 @@ def test_config_to_compose_watch():
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -1224,7 +1308,7 @@ def test_config_to_compose_end_to_end():
                     done
                 # -- End of non-package dependency unit_tests --
                 # -- Installing all local dependencies --
-                RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
+                RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
                 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
@@ -1535,7 +1619,7 @@ def test_config_to_docker_with_api_version():
     actual_docker_stdin, additional_contexts = config_to_docker(
         PATH_TO_CONFIG,
         validate_config({"dependencies": ["."], "graphs": graphs}),
-        "langchain/langgraph-api",
+        base_image="langchain/langgraph-api",
         api_version="0.2.74",
     )
 
@@ -1549,7 +1633,7 @@ def test_config_to_docker_with_api_version():
     actual_docker_stdin, additional_contexts = config_to_docker(
         PATH_TO_CONFIG,
         validate_config({"node_version": "20", "graphs": graphs}),
-        "langchain/langgraphjs-api",
+        base_image="langchain/langgraphjs-api",
         api_version="0.2.74",
     )
 
