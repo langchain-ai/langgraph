@@ -1222,8 +1222,7 @@ async def test_remote_graph_stream_messages_tuple(
     coerced_events = [get_message_dict(e) for e in events]
     coerced_inmem_events = [get_message_dict(e) for e in inmem_events]
     assert coerced_events == coerced_inmem_events
-    # TODO: Fix the namespace matching in the next api release.
-    # assert namespaces == inmem_namespaces
+    assert namespaces == inmem_namespaces
 
 
 @pytest.mark.anyio
