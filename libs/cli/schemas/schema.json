@@ -554,6 +554,17 @@
           ],
           "description": "Optional. Defines the serde configuration.\n\nIf provided, the checkpointer will apply serde settings according to the configuration.\nIf omitted, no serde behavior is configured.\n\nThis configuration requires server version 0.5 or later to take effect.\n"
         },
+        "sweep_limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Maximum number of threads to process per sweep iteration. Defaults to 1000."
+        },
         "ttl": {
           "anyOf": [
             {

@@ -179,6 +179,8 @@ class CheckpointerConfig(TypedDict, total=False):
 
     This configuration requires server version 0.5 or later to take effect.
     """
+    sweep_limit: int | None
+    """Maximum number of threads to process per sweep iteration. Defaults to 1000."""
 
 
 class SecurityConfig(TypedDict, total=False):
