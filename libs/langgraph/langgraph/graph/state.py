@@ -4,9 +4,9 @@ import inspect
 import logging
 import typing
 import warnings
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable, Hashable, Sequence
-from functools import partial
+from functools import cached_property, partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
 from types import NoneType as NoneType
@@ -253,6 +253,87 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         return self.edges | {
             (start, end) for starts, end in self.waiting_edges for start in starts
         }
+
+    @cached_property
+    def _adjacency(self) -> dict[str, set[str]]:
+        """An adjacency list mapping each source node to its neighbors.
+
+        This includes:
+        - Direct edges
+        - Conditional branches
+        - Command destinations (from node specs)
+
+        Returns:
+            The adjacency dictionnary.
+        """
+        adjacency: dict[str, set[str]] = defaultdict(set)
+
+        # Add direct edges
+        for src, dst in self._all_edges:
+            adjacency[src].add(dst)
+
+        # Add conditional branch targets
+        # If a branch has no explicit ends, then it's considered as having no neighbors.
+        for src, branches in self.branches.items():
+            for branch in branches.values():
+                if branch.ends is not None:
+                    for dst in branch.ends.values():
+                        adjacency[src].add(dst)
+
+        # Add Command destinations from node specs
+        # If a node has no explicit ends, then it's considered as having no neighbors.
+        for src, spec in self.nodes.items():
+            if spec.ends:
+                # When spec.ends is a dict, keys are node names and values are labels
+                # When spec.ends is a tuple, the values are node names directly
+                dsts = spec.ends.keys() if isinstance(spec.ends, dict) else spec.ends
+                for dst in dsts:
+                    adjacency[src].add(dst)
+
+        return adjacency
+
+    @cached_property
+    def _reverse_adjacency(self) -> dict[str, set[str]]:
+        """A reverse adjacency list mapping each target node to its predecessors."""
+        reverse_adjacency: dict[str, set[str]] = defaultdict(set)
+        for src, dsts in self._adjacency.items():
+            for dst in dsts:
+                reverse_adjacency[dst].add(src)
+        return reverse_adjacency
+
+    def _nodes_reachable_from_start(self) -> set[str]:
+        """Find all nodes reachable from START."""
+        reachable: set[str] = set()
+        queue: deque[str] = deque([START])
+
+        # BFS to find all nodes reachable from START
+        while queue:
+            node = queue.popleft()
+            if node in reachable:
+                continue
+            reachable.add(node)
+            for neighbor in self._adjacency.get(node, ()):
+                if neighbor not in reachable:
+                    queue.append(neighbor)
+
+        return reachable
+
+    def _unreachable_nodes(self) -> set[str]:
+        """Find all nodes that are not reachable from START."""
+        all_nodes = set(self.nodes.keys())
+        reachable_from_start = self._nodes_reachable_from_start()
+        unreachable = all_nodes - reachable_from_start
+        return unreachable
+
+    def _sink_nodes(self) -> set[str]:
+        """Nodes with no outgoing edges."""
+        return {node for node in self.nodes.keys() if not self._adjacency.get(node)}
+
+    def _dead_end_nodes(self) -> set[str]:
+        """Nodes that cannot reach the exit point (i.e., END)."""
+        sink_nodes = self._sink_nodes()
+        dead_end_nodes = sink_nodes - {END}
+        return dead_end_nodes
 
     def _add_schema(self, schema: type[Any], /, allow_managed: bool = True) -> None:
         if schema not in self.schemas:
@@ -983,7 +1064,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         """
         return self.add_edge(key, END)
 
-    def validate(self, interrupt: Sequence[str] | None = None) -> Self:
+    def validate(
+        self,
+        interrupt: Sequence[str] | None = None,
+        on_detached_nodes: Literal["warn", "raise", "ignore"] = "warn",
+    ) -> Self:
         # assemble sources
         all_sources = {src for src, _ in self._all_edges}
         for start, branches in self.branches.items():
@@ -1029,6 +1114,25 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 if node not in self.nodes:
                     raise ValueError(f"Interrupt node `{node}` not found")
 
+        # Check for detached nodes: unreachable nodes and dead end nodes.
+        if on_detached_nodes != "ignore":
+            if self._unreachable_nodes():
+                errmsg: str = (
+                    f"Found unreachable node(s): {list(self._unreachable_nodes())}."
+                )
+                match on_detached_nodes:
+                    case "warn":
+                        logger.warning(errmsg)
+                    case "raise":
+                        raise ValueError(errmsg)
+            if self._dead_end_nodes():
+                errmsg = f"Found dead end node(s): {list(self._dead_end_nodes())}."
+                match on_detached_nodes:
+                    case "warn":
+                        logger.warning(errmsg)
+                    case "raise":
+                        raise ValueError(errmsg)
+
         self.compiled = True
         return self
 
@@ -1042,6 +1146,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
+        on_detached_nodes: Literal["warn", "raise", "ignore"] = "warn",
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1074,9 +1179,21 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
+            on_detached_nodes: How to handle detached nodes.
+
+                This argument can be used to detect and handle detached nodes as follows:
+                - `"warn"`: Log a warning.
+                - `"raise"`: Raise a `ValueError`.
+                - `"ignore"`: Disables the detection of detached nodes.
+
+                **Important**: For proper detection, you must set the `destinations` argument when adding a node to the graph.
+                This is particularly important for nodes that use conditional edges or Command objects for routing.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
+
+        Raises:
+            ValueError: If the graph has orphan nodes and `on_orphans` is set to `"raise"`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
 
@@ -1090,7 +1207,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 (interrupt_before if interrupt_before != "*" else []) + interrupt_after
                 if interrupt_after != "*"
                 else []
-            )
+            ),
+            on_detached_nodes=on_detached_nodes,
         )
 
         # prepare output channels
