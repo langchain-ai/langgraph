@@ -581,7 +581,7 @@ class BasePostgresStore(Generic[C]):
                                 (SELECT STRING_AGG(part, '.' ORDER BY idx)
                                  FROM (
                                      SELECT part, ROW_NUMBER() OVER () AS idx
-                                     FROM UNNEST(REGEXP_SPLIT_TO_ARRAY(prefix, '\.')) AS part
+                                     FROM UNNEST(REGEXP_SPLIT_TO_ARRAY(prefix, '\\.')) AS part
                                      LIMIT %s::integer
                                  ) subquery
                                 )
