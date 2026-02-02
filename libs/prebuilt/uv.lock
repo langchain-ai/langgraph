@@ -268,7 +268,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "1.0.6"
+version = "1.0.7"
 source = { editable = "../langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -399,7 +399,7 @@ test = [
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "3.0.3"
+version = "3.0.4"
 source = { editable = "../checkpoint-postgres" }
 dependencies = [
     { name = "langgraph-checkpoint" },
@@ -489,7 +489,7 @@ test = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "1.0.6"
+version = "1.0.7"
 source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },
@@ -597,14 +597,14 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watch" },
-    { name = "ruff", specifier = "==0.14.7" },
+    { name = "ruff", specifier = "==0.14.11" },
     { name = "starlette" },
     { name = "ty", specifier = "==0.0.1a27" },
 ]
 lint = [
     { name = "codespell" },
     { name = "mypy", specifier = "==1.19.0" },
-    { name = "ruff", specifier = "==0.14.7" },
+    { name = "ruff", specifier = "==0.14.11" },
     { name = "starlette" },
     { name = "ty", specifier = "==0.0.1a27" },
 ]
