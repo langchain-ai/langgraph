@@ -1,43 +1,60 @@
 name: "\U0001F41B Bug Report"
-description: Report a bug in LangGraph. To report a security issue, please instead use the security option below. For questions, please use the LangChain Forum at forum.langchain.com.
-labels: [pending, bug]
+description: Report a bug in LangGraph. To report a security issue, please instead use the security option (below). For questions, please use the LangChain forum (below).
+labels: ["bug"]
+type: bug
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for taking the time to file a bug report. 
+        Thank you for taking the time to file a bug report.
 
-        Use this to report BUGS in LangGraph. For usage questions, feature requests and general design questions, please use the [LangChain Forum](https://forum.langchain.com/).
+        For usage questions, feature requests and general design questions, please use the [LangChain Forum](https://forum.langchain.com/).
 
-        Relevant links to check before filing a bug report to see if your issue has already been reported, fixed or
-        if there's another way to solve your problem:
+        Check these before submitting to see if your issue has already been reported, fixed or if there's another way to solve your problem:
 
-        * [LangChain Forum](https://forum.langchain.com/),
-        * [LangGraph Github Issues](https://github.com/langchain-ai/langgraph/issues),
-        * [LangChain documentation with the integrated search](https://docs.langchain.com/),
+        * [Documentation](https://docs.langchain.com/oss/python/langgraph/overview),
+        * [API Reference Documentation](https://reference.langchain.com/python/),
+        * [LangChain ChatBot](https://chat.langchain.com/)
         * [GitHub search](https://github.com/langchain-ai/langgraph),
+        * [LangChain Forum](https://forum.langchain.com/),
   - type: checkboxes
     id: checks
     attributes:
       label: Checked other resources
-      description: Before submitting this issue, please confirm that you have completed all the steps below by checking each option. These steps help ensure your issue is well-defined, relevant, and actionable.
+      description: Please confirm and check all the following options.
       options:
-        - label: This is a bug, not a usage question. For questions, please use the LangChain Forum (https://forum.langchain.com/).
+        - label: This is a bug, not a usage question.
           required: true
-        - label: I added a clear and detailed title that summarizes the issue.
+        - label: I added a clear and descriptive title that summarizes this issue.
           required: true
-        - label: I read what a minimal reproducible example is (https://stackoverflow.com/help/minimal-reproducible-example).
+        - label: I used the GitHub search to find a similar question and didn't find it.
           required: true
-        - label: I included a self-contained, minimal example that demonstrates the issue INCLUDING all the relevant imports. The code run AS IS to reproduce the issue.
+        - label: I am sure that this is a bug in LangGraph rather than my code.
+          required: true
+        - label: The bug is not resolved by updating to the latest stable version of LangGraph (or the specific integration package).
+          required: true
+        - label: This is not related to the langchain-community package.
+          required: true
+        - label: I posted a self-contained, minimal, reproducible example. A maintainer can copy it and run it AS IS.
           required: true
   - type: textarea
     id: reproduction
     validations:
       required: true
     attributes:
-      label: Example Code
+      label: Reproduction Steps / Example Code (Python)
       description: |
-        Please add a self-contained, [minimal, reproducible, example](https://stackoverflow.com/help/minimal-reproducible-example) with your use case. Replace this code with your own!
+        Please add a self-contained, [minimal, reproducible, example](https://stackoverflow.com/help/minimal-reproducible-example) with your use case.
+
+        If a maintainer can copy it, run it, and see it right away, there's a much higher chance that you'll be able to get help.
+
+        **Important!**
+
+        * Avoid screenshots, as they are hard to read and (more importantly) don't allow others to copy-and-paste your code.
+        * Reduce your code to the minimum required to reproduce the issue if possible.
+
+        (This will be automatically formatted into code, so no need for backticks.)
+      render: python
       placeholder: |
         from langgraph.graph import StateGraph
 
@@ -46,17 +63,13 @@ body:
           
         chain = StateGraph(list)
         chain.invoke('Hello!')
-      render: python
   - type: textarea
-    id: error
-    validations:
-      required: false
     attributes:
       label: Error Message and Stack Trace (if applicable)
       description: |
-        If you are reporting an error, please include the full error message and stack trace.
-      placeholder: |
-        Exception + full stack trace
+        If you are reporting an error, please copy and paste the full error message and
+        stack trace.
+        (This will be automatically formatted into code, so no need for backticks.)
       render: shell
   - type: textarea
     id: description
@@ -77,7 +90,18 @@ body:
     attributes:
       label: System Info
       description: |
-        Run on your machine: `python -m langchain_core.sys_info`
+        Please share your system info with us.
+
+        Run the following command in your terminal and paste the output here:
+
+        `python -m langchain_core.sys_info`
+
+        or if you have an existing python interpreter running:
+
+        ```python
+        from langchain_core import sys_info
+        sys_info.print_sys_info()
+        ```
       placeholder: |
         python -m langchain_core.sys_info
     validations:
