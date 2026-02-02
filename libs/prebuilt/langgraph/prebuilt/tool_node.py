@@ -115,6 +115,7 @@ TOOL_INVOCATION_ERROR_TEMPLATE = (
     " {error}\n"
     " Please fix the error and try again."
 )
+TOOL_CANCELLED_ERROR_TEMPLATE = "Tool execution was cancelled."
 
 
 class _ToolCallRequestOverrides(TypedDict, total=False):
@@ -1090,6 +1091,19 @@ class ToolNode(RunnableCallable):
                     call["name"], exc, call["args"], filtered_errors
                 ) from exc
 
+        # asyncio.CancelledError inherits from BaseException, not Exception,
+        # so it must be caught explicitly to create an error ToolMessage.
+        # Without this, cancelled tool calls leave the message history invalid
+        # (AIMessage with tool_calls but no corresponding ToolMessage).
+        except asyncio.CancelledError:
+            if self._handle_tool_errors:
+                return ToolMessage(
+                    content=TOOL_CANCELLED_ERROR_TEMPLATE,
+                    name=call["name"],
+                    tool_call_id=call["id"],
+                    status="error",
+                )
+            raise
         # GraphInterrupt is a special exception that will always be raised.
         # It can be triggered in the following scenarios,
         # Where GraphInterrupt(GraphBubbleUp) is raised from an `interrupt` invocation
@@ -1192,6 +1206,16 @@ class ToolNode(RunnableCallable):
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
             return self._wrap_tool_call(tool_request, _sync_execute)
+        except asyncio.CancelledError:
+            # asyncio.CancelledError inherits from BaseException, not Exception
+            if self._handle_tool_errors:
+                return ToolMessage(
+                    content=TOOL_CANCELLED_ERROR_TEMPLATE,
+                    name=tool_request.tool_call["name"],
+                    tool_call_id=tool_request.tool_call["id"],
+                    status="error",
+                )
+            raise
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:

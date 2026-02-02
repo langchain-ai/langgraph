@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import dataclasses
 import json
@@ -41,6 +42,7 @@ from langgraph.prebuilt import (
 )
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
+    TOOL_CANCELLED_ERROR_TEMPLATE,
     ToolInvocationError,
     ToolRuntime,
     tools_condition,
@@ -1902,3 +1904,118 @@ async def test_tool_node_tool_runtime_generic() -> None:
     assert tool_message.type == "tool"
     assert tool_message.content == "test_info"
     assert tool_message.tool_call_id == "call_1"
+
+
+async def test_tool_node_cancelled_error_handled() -> None:
+    """Test that asyncio.CancelledError is handled when handle_tool_errors=True."""
+
+    @dec_tool
+    async def slow_tool(x: int) -> str:
+        """A slow tool that can be cancelled."""
+        await asyncio.sleep(10)
+        return str(x)
+
+    node = ToolNode([slow_tool], handle_tool_errors=True)
+
+    tool_call = {
+        "name": "slow_tool",
+        "args": {"x": 1},
+        "id": "test_id",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    async def run_and_cancel():
+        task = asyncio.create_task(
+            node.ainvoke(
+                {"messages": [msg]},
+                config=_create_config_with_runtime(),
+            )
+        )
+        await asyncio.sleep(0.05)
+        task.cancel()
+        try:
+            return await task
+        except asyncio.CancelledError:
+            return None
+
+    result = await run_and_cancel()
+
+    # With handle_tool_errors=True, we should get a ToolMessage with error status
+    assert result is not None
+    tool_message = result["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.status == "error"
+    assert tool_message.content == TOOL_CANCELLED_ERROR_TEMPLATE
+    assert tool_message.tool_call_id == "test_id"
+
+
+async def test_tool_node_cancelled_error_not_handled() -> None:
+    """Test that asyncio.CancelledError is raised when handle_tool_errors=False."""
+
+    @dec_tool
+    async def slow_tool(x: int) -> str:
+        """A slow tool that can be cancelled."""
+        await asyncio.sleep(10)
+        return str(x)
+
+    node = ToolNode([slow_tool], handle_tool_errors=False)
+
+    tool_call = {
+        "name": "slow_tool",
+        "args": {"x": 1},
+        "id": "test_id",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    async def run_and_cancel():
+        task = asyncio.create_task(
+            node.ainvoke(
+                {"messages": [msg]},
+                config=_create_config_with_runtime(),
+            )
+        )
+        await asyncio.sleep(0.05)
+        task.cancel()
+        return await task
+
+    with pytest.raises(asyncio.CancelledError):
+        await run_and_cancel()
+
+
+async def test_tool_node_cancelled_error_in_wrapper() -> None:
+    """Test that asyncio.CancelledError in awrap_tool_call is handled."""
+
+    @dec_tool
+    async def simple_tool(x: int) -> str:
+        """Simple tool."""
+        return str(x)
+
+    async def cancelling_wrapper(request, execute):
+        raise asyncio.CancelledError()
+
+    node = ToolNode(
+        [simple_tool],
+        handle_tool_errors=True,
+        awrap_tool_call=cancelling_wrapper,
+    )
+
+    tool_call = {
+        "name": "simple_tool",
+        "args": {"x": 1},
+        "id": "test_id",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    result = await node.ainvoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.status == "error"
+    assert tool_message.content == TOOL_CANCELLED_ERROR_TEMPLATE
+    assert tool_message.tool_call_id == "test_id"
