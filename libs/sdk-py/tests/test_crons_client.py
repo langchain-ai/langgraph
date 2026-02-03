@@ -278,8 +278,16 @@ def test_sync_create_with_end_time():
     assert result == cron
 
 
-def test_sync_create_with_enabled():
-    """Test that SyncCronClient.create includes enabled in the payload."""
+@pytest.mark.parametrize(
+    "enabled_value",
+    [
+        True,
+        False
+    ],
+    ids=["enabled", "disabled"],
+)
+def test_sync_create_with_enabled_parameter(enabled_value):
+    """Test that SyncCronClient.create includes enabled parameter in the payload."""
     cron = _cron_payload()
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -289,7 +297,7 @@ def test_sync_create_with_enabled():
         body = json.loads(request.content)
         assert body["schedule"] == "0 12 * * *"
         assert body["assistant_id"] == "asst_456"
-        assert body["enabled"]
+        assert body["enabled"] == enabled_value
 
         return httpx.Response(200, json=cron)
 
@@ -300,7 +308,7 @@ def test_sync_create_with_enabled():
         result = cron_client.create(
             assistant_id="asst_456",
             schedule="0 12 * * *",
-            enabled=True,
+            enabled=enabled_value,
         )
 
     assert result == cron
