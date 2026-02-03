@@ -364,7 +364,7 @@ async def test_async_update():
 
 @pytest.mark.asyncio
 async def test_async_update_with_end_time():
-    """Test that CronClient.patch includes end_time in the payload."""
+    """Test that CronClient.update includes end_time in the payload."""
     cron = _cron_response()
     end_time = datetime(2025, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
 
@@ -397,7 +397,7 @@ async def test_async_update_with_end_time():
 
 
 def test_sync_update():
-    """Test that SyncCronClient.patch works with schedule and enabled parameters."""
+    """Test that SyncCronClient.update works with schedule and enabled parameters."""
     cron = _cron_response()
 
     def handler(request: httpx.Request) -> httpx.Response:
