@@ -280,10 +280,7 @@ def test_sync_create_with_end_time():
 
 @pytest.mark.parametrize(
     "enabled_value",
-    [
-        True,
-        False
-    ],
+    [True, False],
     ids=["enabled", "disabled"],
 )
 def test_sync_create_with_enabled_parameter(enabled_value):
