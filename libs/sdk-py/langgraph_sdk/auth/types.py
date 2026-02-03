@@ -737,6 +737,7 @@ class CronsCreate(typing.TypedDict, total=False):
 
         ```python
         create_params = {
+            "assistant_id": UUID("123e4567-e89b-12d3-a456-426614173999")
             "payload": {"key": "value"},
             "schedule": "0 0 * * *",
             "cron_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
@@ -746,6 +747,9 @@ class CronsCreate(typing.TypedDict, total=False):
         }
         ```
     """
+
+    assistant_id: UUID
+    """Unique identifier for the assistant."""
 
     payload: dict[str, typing.Any]
     """Payload for the cron job."""
