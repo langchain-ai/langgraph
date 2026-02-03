@@ -2986,7 +2986,7 @@ class CronClient:
         end_time: datetime | None = None,
         enabled: bool | None = None,
         headers: Mapping[str, str] | None = None,
-        params: QueryParamTypes | None = None
+        params: QueryParamTypes | None = None,
     ) -> Run:
         """Create a cron job for a thread.
 
@@ -6461,7 +6461,7 @@ class SyncCronClient:
             "on_run_completed": on_run_completed,
             "multitask_strategy": multitask_strategy,
             "end_time": end_time.isoformat() if end_time else None,
-            "enabled": enabled
+            "enabled": enabled,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(

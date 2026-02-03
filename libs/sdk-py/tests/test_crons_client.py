@@ -277,6 +277,7 @@ def test_sync_create_with_end_time():
 
     assert result == cron
 
+
 def test_sync_create_with_enabled():
     """Test that SyncCronClient.create includes enabled in the payload."""
     cron = _cron_payload()
@@ -288,7 +289,7 @@ def test_sync_create_with_enabled():
         body = json.loads(request.content)
         assert body["schedule"] == "0 12 * * *"
         assert body["assistant_id"] == "asst_456"
-        assert body["enabled"] == True
+        assert body["enabled"]
 
         return httpx.Response(200, json=cron)
 
