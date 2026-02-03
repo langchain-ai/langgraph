@@ -743,7 +743,8 @@ class CronsCreate(typing.TypedDict, total=False):
             "cron_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
             "thread_id": UUID("123e4567-e89b-12d3-a456-426614174001"),
             "user_id": "user123",
-            "end_time": datetime(2024, 3, 16, 10, 0, 0)
+            "end_time": datetime(2024, 3, 16, 10, 0, 0),
+            "enabled": true,
         }
         ```
     """
@@ -768,6 +769,9 @@ class CronsCreate(typing.TypedDict, total=False):
 
     end_time: datetime | None
     """typing.Optional end time for the cron job."""
+
+    enabled: bool | None
+    """typing.Optional enabled status of the cron job."""
 
 
 class CronsDelete(typing.TypedDict):
@@ -811,7 +815,8 @@ class CronsUpdate(typing.TypedDict, total=False):
         update_params = {
             "cron_id": UUID("123e4567-e89b-12d3-a456-426614174000"),
             "payload": {"key": "value"},
-            "schedule": "0 0 * * *"
+            "schedule": "0 0 * * *",
+            "enabled": true
         }
         ```
     """
@@ -824,6 +829,9 @@ class CronsUpdate(typing.TypedDict, total=False):
 
     schedule: str | None
     """typing.Optional schedule to update."""
+
+    enabled: bool | None
+    """typing.Optional enabled status of the cron job."""
 
 
 class CronsSearch(typing.TypedDict, total=False):
