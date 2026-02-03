@@ -2984,7 +2984,7 @@ class CronClient:
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
-        is_enabled: bool | None = None,
+        enabled: bool | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None
     ) -> Run:
@@ -3010,7 +3010,7 @@ class CronClient:
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
-            is_enabled: Whether the cron job is enabled or not.
+            enabled: Whether the cron job is enabled or not.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -3032,7 +3032,7 @@ class CronClient:
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
                 multitask_strategy="interrupt",
-                is_enabled=True,
+                enabled=True,
             )
             ```
         """
@@ -3048,7 +3048,7 @@ class CronClient:
             "interrupt_after": interrupt_after,
             "webhook": webhook,
             "end_time": end_time.isoformat() if end_time else None,
-            "is_enabled": is_enabled if is_enabled is not None else True,
+            "enabled": enabled,
         }
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
@@ -3076,7 +3076,7 @@ class CronClient:
         on_run_completed: OnCompletionBehavior | None = None,
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
-        is_enabled: bool | None = None,
+        enabled: bool | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -3103,7 +3103,7 @@ class CronClient:
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
-            is_enabled: Whether the cron job is enabled or not.
+            enabled: Whether the cron job is enabled or not.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -3124,7 +3124,7 @@ class CronClient:
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
                 multitask_strategy="interrupt",
-                is_enabled=True,
+                enabled=True,
             )
             ```
 
@@ -3142,7 +3142,7 @@ class CronClient:
             "webhook": webhook,
             "on_run_completed": on_run_completed,
             "end_time": end_time.isoformat() if end_time else None,
-            "is_enabled": is_enabled if is_enabled is not None else True,
+            "enabled": enabled,
         }
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
@@ -3185,7 +3185,7 @@ class CronClient:
         *,
         assistant_id: str | None = None,
         thread_id: str | None = None,
-        is_enabled: bool | None = None,
+        enabled: bool | None = None,
         limit: int = 10,
         offset: int = 0,
         sort_by: CronSortBy | None = None,
@@ -3199,7 +3199,7 @@ class CronClient:
         Args:
             assistant_id: The assistant ID or graph name to search for.
             thread_id: the thread ID to search for.
-            is_enabled: The enabled status to search for.
+            enabled: The enabled status to search for.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             headers: Optional custom headers to include with the request.
@@ -3215,7 +3215,7 @@ class CronClient:
             cron_jobs = await client.crons.search(
                 assistant_id="my_assistant_id",
                 thread_id="my_thread_id",
-                is_enabled=True,
+                enabled=True,
                 limit=5,
                 offset=5,
             )
@@ -3250,7 +3250,7 @@ class CronClient:
         payload = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,
-            "is_enabled": is_enabled,
+            "enabled": enabled,
             "limit": limit,
             "offset": offset,
         }
