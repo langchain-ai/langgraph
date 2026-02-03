@@ -3180,7 +3180,7 @@ class CronClient:
         """
         await self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
 
-    async def patch(
+    async def update(
         self,
         cron_id: str,
         *,
@@ -3227,7 +3227,7 @@ class CronClient:
 
             ```python
             client = get_client(url="http://localhost:2024")
-            updated_cron = await client.crons.patch(
+            updated_cron = await client.crons.update(
                 cron_id="1ef3cefa-4c09-6926-96d0-3dc97fd5e39b",
                 schedule="0 10 * * *",
                 enabled=False,
@@ -6573,7 +6573,7 @@ class SyncCronClient:
         """
         self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
 
-    def patch(
+    def update(
         self,
         cron_id: str,
         *,
@@ -6620,7 +6620,7 @@ class SyncCronClient:
 
             ```python
             client = get_sync_client(url="http://localhost:8123")
-            updated_cron = client.crons.patch(
+            updated_cron = client.crons.update(
                 cron_id="1ef3cefa-4c09-6926-96d0-3dc97fd5e39b",
                 schedule="0 10 * * *",
                 enabled=False,

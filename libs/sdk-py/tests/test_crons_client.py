@@ -331,8 +331,8 @@ def _cron_response() -> dict[str, object]:
 
 
 @pytest.mark.asyncio
-async def test_async_patch():
-    """Test that CronClient.patch works with schedule and enabled parameters."""
+async def test_async_update():
+    """Test that CronClient.update works with schedule and enabled parameters."""
     cron = _cron_response()
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -353,7 +353,7 @@ async def test_async_patch():
     ) as client:
         http_client = HttpClient(client)
         cron_client = CronClient(http_client)
-        result = await cron_client.patch(
+        result = await cron_client.update(
             cron_id="cron_123",
             schedule="0 10 * * *",
             enabled=False,
@@ -363,7 +363,7 @@ async def test_async_patch():
 
 
 @pytest.mark.asyncio
-async def test_async_patch_with_end_time():
+async def test_async_update_with_end_time():
     """Test that CronClient.patch includes end_time in the payload."""
     cron = _cron_response()
     end_time = datetime(2025, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
@@ -386,7 +386,7 @@ async def test_async_patch_with_end_time():
     ) as client:
         http_client = HttpClient(client)
         cron_client = CronClient(http_client)
-        result = await cron_client.patch(
+        result = await cron_client.update(
             cron_id="cron_123",
             schedule="0 10 * * *",
             end_time=end_time,
@@ -396,7 +396,7 @@ async def test_async_patch_with_end_time():
     assert result == cron
 
 
-def test_sync_patch():
+def test_sync_update():
     """Test that SyncCronClient.patch works with schedule and enabled parameters."""
     cron = _cron_response()
 
@@ -416,7 +416,7 @@ def test_sync_patch():
     with httpx.Client(transport=transport, base_url="https://example.com") as client:
         http_client = SyncHttpClient(client)
         cron_client = SyncCronClient(http_client)
-        result = cron_client.patch(
+        result = cron_client.update(
             cron_id="cron_123",
             schedule="0 10 * * *",
             enabled=False,
@@ -425,8 +425,8 @@ def test_sync_patch():
     assert result == cron
 
 
-def test_sync_patch_with_end_time():
-    """Test that SyncCronClient.patch includes end_time in the payload."""
+def test_sync_update_with_end_time():
+    """Test that SyncCronClient.update includes end_time in the payload."""
     cron = _cron_response()
     end_time = datetime(2025, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
 
@@ -446,7 +446,7 @@ def test_sync_patch_with_end_time():
     with httpx.Client(transport=transport, base_url="https://example.com") as client:
         http_client = SyncHttpClient(client)
         cron_client = SyncCronClient(http_client)
-        result = cron_client.patch(
+        result = cron_client.update(
             cron_id="cron_123",
             schedule="0 10 * * *",
             end_time=end_time,
@@ -461,8 +461,8 @@ def test_sync_patch_with_end_time():
     [True, False],
     ids=["enabled", "disabled"],
 )
-def test_sync_patch_with_enabled_parameter(enabled_value):
-    """Test that SyncCronClient.patch includes enabled parameter in the payload."""
+def test_sync_update_with_enabled_parameter(enabled_value):
+    """Test that SyncCronClient.update includes enabled parameter in the payload."""
     cron = _cron_response()
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -479,7 +479,7 @@ def test_sync_patch_with_enabled_parameter(enabled_value):
     with httpx.Client(transport=transport, base_url="https://example.com") as client:
         http_client = SyncHttpClient(client)
         cron_client = SyncCronClient(http_client)
-        result = cron_client.patch(
+        result = cron_client.update(
             cron_id="cron_456",
             enabled=enabled_value,
         )

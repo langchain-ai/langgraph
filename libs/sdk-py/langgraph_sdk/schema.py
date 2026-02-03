@@ -376,7 +376,7 @@ class Cron(TypedDict):
     """Whether the cron is enabled."""
 
 
-class CronPatch(TypedDict, total=False):
+class CronUpdate(TypedDict, total=False):
     """Payload for updating a cron job. All fields are optional."""
 
     schedule: str
