@@ -372,6 +372,8 @@ class Cron(TypedDict):
     """The next run date of the cron."""
     metadata: dict
     """The metadata of the cron."""
+    enabled: bool
+    """Whether the cron is enabled."""
 
 
 # Select field aliases for client-side typing of `select` parameters.
@@ -428,6 +430,7 @@ CronSelectField = Literal[
     "metadata",
     "now",
     "on_run_completed",
+    "enabled",
 ]
 
 PrimitiveData = str | int | float | bool | None
