@@ -276,3 +276,36 @@ def test_sync_create_with_end_time():
         )
 
     assert result == cron
+
+
+@pytest.mark.parametrize(
+    "enabled_value",
+    [True, False],
+    ids=["enabled", "disabled"],
+)
+def test_sync_create_with_enabled_parameter(enabled_value):
+    """Test that SyncCronClient.create includes enabled parameter in the payload."""
+    cron = _cron_payload()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/runs/crons"
+
+        body = json.loads(request.content)
+        assert body["schedule"] == "0 12 * * *"
+        assert body["assistant_id"] == "asst_456"
+        assert body["enabled"] == enabled_value
+
+        return httpx.Response(200, json=cron)
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        cron_client = SyncCronClient(http_client)
+        result = cron_client.create(
+            assistant_id="asst_456",
+            schedule="0 12 * * *",
+            enabled=enabled_value,
+        )
+
+    assert result == cron
