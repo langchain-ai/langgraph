@@ -16,7 +16,7 @@ from typing import Annotated, Any, Literal, get_type_hints
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -6985,7 +6985,6 @@ def test_stream_messages_dedupe_pydantic_subgraph_interrupt(
     streaming from subgraphs that use interrupts. Regression test for a bug
     where ``on_chain_start`` only populated the ``seen`` set for dict inputs,
     skipping Pydantic model inputs entirely."""
-    from langchain_core.messages import AIMessage, HumanMessage
 
     class PydanticState(BaseModel):
         messages: Annotated[list[AnyMessage], add_messages] = Field(
