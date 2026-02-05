@@ -120,6 +120,329 @@ def test_graph_validation() -> None:
         graph.invoke({"hello": "there"})
 
 
+def test_detached_nodes_raises_on_single_unreachable_node() -> None:
+    """Raises ValueError when a node has no incoming edges from START."""
+
+    class State(TypedDict):
+        x: int
+
+    graph = StateGraph(State)
+    graph.add_node("connected", lambda x: x)
+    graph.add_node("unreachable", lambda x: x)
+    graph.add_edge(START, "connected")
+    graph.add_edge("connected", END)
+
+    with pytest.raises(ValueError, match="unreachable"):
+        graph.compile(on_detached_nodes="raise")
+
+
+def test_detached_nodes_raises_on_multiple_unreachable_nodes() -> None:
+    """Raises ValueError listing all unreachable nodes when multiple exist."""
+
+    class State(TypedDict):
+        x: int
+
+    graph = StateGraph(State)
+    graph.add_node("connected", lambda x: x)
+    graph.add_node("orphan_a", lambda x: x)
+    graph.add_node("orphan_b", lambda x: x)
+    graph.add_edge(START, "connected")
+    graph.add_edge("connected", END)
+
+    with pytest.raises(ValueError, match="orphan_a|orphan_b"):
+        graph.compile(on_detached_nodes="raise")
+
+
+def test_detached_nodes_raises_on_sink_node_without_path_to_end() -> None:
+    """Raises ValueError when a reachable node has no path to END."""
+
+    class State(TypedDict):
+        x: Annotated[list[str], operator.add]
+
+    graph = StateGraph(State)
+    graph.add_node("normal", lambda x: {"x": ["normal"]})
+    graph.add_node("sink", lambda x: {"x": ["sink"]})
+    graph.add_edge(START, "normal")
+    graph.add_edge(START, "sink")
+    graph.add_edge("normal", END)
+
+    with pytest.raises(ValueError, match="sink"):
+        graph.compile(on_detached_nodes="raise")
+
+
+def test_detached_nodes_warn_logs_warning_and_compiles(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Logs a warning for detached nodes but compiles successfully when mode is 'warn'."""
+
+    class State(TypedDict):
+        x: int
+
+    graph = StateGraph(State)
+    graph.add_node("connected", lambda x: x)
+    graph.add_node("unreachable", lambda x: x)
+    graph.add_edge(START, "connected")
+    graph.add_edge("connected", END)
+
+    with caplog.at_level(logging.WARNING):
+        compiled = graph.compile(on_detached_nodes="warn")
+        assert compiled is not None
+
+    assert any("unreachable" in record.message.lower() for record in caplog.records)
+
+
+def test_detached_nodes_ignore_suppresses_warnings_and_compiles() -> None:
+    """Compiles without warnings or errors when mode is 'ignore'."""
+
+    class State(TypedDict):
+        x: int
+
+    graph = StateGraph(State)
+    graph.add_node("connected", lambda x: x)
+    graph.add_node("unreachable", lambda x: x)
+    graph.add_edge(START, "connected")
+    graph.add_edge("connected", END)
+
+    compiled = graph.compile(on_detached_nodes="ignore")
+    assert compiled is not None
+
+    result = compiled.invoke({"x": 1})
+    assert result == {"x": 1}
+
+
+def test_detached_nodes_conditional_edge_with_explicit_mapping_is_reachable() -> None:
+    """Nodes in conditional edge mapping are considered reachable."""
+
+    class State(TypedDict):
+        x: int
+
+    def router(state: State) -> str:
+        return "branch_target"
+
+    graph = StateGraph(State)
+    graph.add_node("start_node", lambda x: x)
+    graph.add_node("branch_target", lambda x: x)
+    graph.add_edge(START, "start_node")
+    graph.add_conditional_edges(
+        "start_node", router, {"branch_target": "branch_target"}
+    )
+    graph.add_edge("branch_target", END)
+
+    compiled = graph.compile(on_detached_nodes="raise")
+    assert compiled is not None
+
+
+def test_detached_nodes_conditional_edge_without_mapping_targets_are_unreachable() -> (
+    None
+):
+    """Conditional edge targets without explicit mapping are detected as unreachable."""
+
+    class State(TypedDict):
+        x: int
+
+    def dynamic_router(state: State) -> str:
+        return "dynamic_target"
+
+    graph = StateGraph(State)
+    graph.add_node("start_node", lambda x: x)
+    graph.add_node("dynamic_target", lambda x: x)
+    graph.add_edge(START, "start_node")
+    graph.add_conditional_edges("start_node", dynamic_router)
+    graph.add_edge("dynamic_target", END)
+
+    with pytest.raises(ValueError, match="Found unreachable node"):
+        graph.compile(on_detached_nodes="raise")
+
+
+def test_detached_nodes_command_destinations_dict_makes_targets_reachable() -> None:
+    """Nodes declared in destinations dict are considered reachable via Command routing."""
+
+    class State(TypedDict):
+        x: int
+
+    def node_with_command(state: State) -> Command[Literal["target_a", "target_b"]]:
+        return Command(goto="target_a")
+
+    graph = StateGraph(State)
+    graph.add_node(
+        "commander",
+        node_with_command,
+        destinations={"target_a": "Target A", "target_b": "Target B"},
+    )
+    graph.add_node("target_a", lambda x: x)
+    graph.add_node("target_b", lambda x: x)
+    graph.add_edge(START, "commander")
+    graph.add_edge("target_a", END)
+    graph.add_edge("target_b", END)
+
+    compiled = graph.compile(on_detached_nodes="raise")
+    assert compiled is not None
+
+
+def test_detached_nodes_command_destinations_tuple_makes_targets_reachable() -> None:
+    """Nodes declared in destinations tuple are considered reachable via Command routing."""
+
+    class State(TypedDict):
+        x: int
+
+    def node_with_command(state: State) -> Command[Literal["target_a", "target_b"]]:
+        return Command(goto="target_a")
+
+    graph = StateGraph(State)
+    graph.add_node(
+        "commander",
+        node_with_command,
+        destinations=("target_a", "target_b", END),
+    )
+    graph.add_node("target_a", lambda x: x)
+    graph.add_node("target_b", lambda x: x)
+    graph.add_edge(START, "commander")
+    graph.add_edge("target_a", END)
+    graph.add_edge("target_b", END)
+
+    compiled = graph.compile(on_detached_nodes="raise")
+    assert compiled is not None
+
+
+def test_detached_nodes_multi_source_edge_target_is_reachable() -> None:
+    """Nodes targeted by multi-source waiting edges are considered reachable."""
+
+    class State(TypedDict):
+        x: Annotated[list[str], operator.add]
+
+    graph = StateGraph(State)
+    graph.add_node("a", lambda x: {"x": ["a"]})
+    graph.add_node("b", lambda x: {"x": ["b"]})
+    graph.add_node("join", lambda x: {"x": ["join"]})
+    graph.add_edge(START, "a")
+    graph.add_edge(START, "b")
+    graph.add_edge(["a", "b"], "join")
+    graph.add_edge("join", END)
+
+    compiled = graph.compile(on_detached_nodes="raise")
+    assert compiled is not None
+
+
+def test_detached_nodes_diamond_pattern_with_conditional_routing_passes() -> None:
+    """Complex diamond pattern graph with conditional routing has no detached nodes."""
+
+    class State(TypedDict):
+        x: int
+
+    def router(state: State) -> Literal["path_a", "path_b"]:
+        return "path_a" if state["x"] > 0 else "path_b"
+
+    graph = StateGraph(State)
+    graph.add_node("entry", lambda x: x)
+    graph.add_node("path_a", lambda x: x)
+    graph.add_node("path_b", lambda x: x)
+    graph.add_node("merge", lambda x: x)
+    graph.add_edge(START, "entry")
+    graph.add_conditional_edges("entry", router)
+    graph.add_edge("path_a", "merge")
+    graph.add_edge("path_b", "merge")
+    graph.add_edge("merge", END)
+
+    compiled = graph.compile(on_detached_nodes="raise")
+    assert compiled is not None
+
+
+def test_detached_nodes_cyclic_graph_with_conditional_exit_passes() -> None:
+    """Graph with cycle that can exit to END via conditional edge passes validation."""
+
+    class State(TypedDict):
+        x: int
+        count: int
+
+    def should_continue(state: State) -> Literal["loop", "__end__"]:
+        return "loop" if state["count"] < 3 else END
+
+    def increment(state: State) -> dict:
+        return {"count": state["count"] + 1}
+
+    graph = StateGraph(State)
+    graph.add_node("loop", increment)
+    graph.add_edge(START, "loop")
+    graph.add_conditional_edges("loop", should_continue)
+
+    compiled = graph.compile(on_detached_nodes="raise")
+    assert compiled is not None
+
+    result = compiled.invoke({"x": 0, "count": 0})
+    assert result["count"] == 3
+
+
+def test_detached_nodes_minimal_single_node_graph_passes() -> None:
+    """Minimal graph with single node between START and END passes validation."""
+
+    class State(TypedDict):
+        x: int
+
+    graph = StateGraph(State)
+    graph.add_node("only_node", lambda x: x)
+    graph.add_edge(START, "only_node")
+    graph.add_edge("only_node", END)
+
+    compiled = graph.compile(on_detached_nodes="raise")
+    assert compiled is not None
+
+
+def test_detached_nodes_command_goto_end_in_destinations_passes() -> None:
+    """Node with Command(goto=END) and END in destinations passes validation."""
+
+    class State(TypedDict):
+        x: int
+
+    def command_to_end(state: State) -> Command[Literal["__end__"]]:
+        return Command(goto=END)
+
+    graph = StateGraph(State)
+    graph.add_node("commander", command_to_end, destinations=(END,))
+    graph.add_edge(START, "commander")
+
+    compiled = graph.compile(on_detached_nodes="raise")
+    assert compiled is not None
+
+
+def test_detached_nodes_parallel_branches_all_reaching_end_passes() -> None:
+    """Multiple parallel branches from START all reaching END passes validation."""
+
+    class State(TypedDict):
+        x: Annotated[list[str], operator.add]
+
+    graph = StateGraph(State)
+    graph.add_node("branch_a", lambda x: {"x": ["a"]})
+    graph.add_node("branch_b", lambda x: {"x": ["b"]})
+    graph.add_node("branch_c", lambda x: {"x": ["c"]})
+    graph.add_edge(START, "branch_a")
+    graph.add_edge(START, "branch_b")
+    graph.add_edge(START, "branch_c")
+    graph.add_edge("branch_a", END)
+    graph.add_edge("branch_b", END)
+    graph.add_edge("branch_c", END)
+
+    compiled = graph.compile(on_detached_nodes="raise")
+    assert compiled is not None
+
+
+def test_detached_nodes_raises_on_mixed_unreachable_and_sink_nodes() -> None:
+    """Raises ValueError when graph has both unreachable and sink nodes."""
+
+    class State(TypedDict):
+        x: int
+
+    graph = StateGraph(State)
+    graph.add_node("main_path", lambda x: x)
+    graph.add_node("side_path", lambda x: x)
+    graph.add_node("island", lambda x: x)
+    graph.add_edge(START, "main_path")
+    graph.add_edge(START, "side_path")
+    graph.add_edge("main_path", END)
+
+    with pytest.raises(ValueError, match="island|unreachable"):
+        graph.compile(on_detached_nodes="raise")
+
+
 def test_invalid_checkpointer_type() -> None:
     class State(TypedDict):
         foo: str
