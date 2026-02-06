@@ -48,24 +48,41 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     ```
     """
 
-    __slots__ = ("value", "operator")
+    __slots__ = ("value", "operator", "_default")
 
-    def __init__(self, typ: type[Value], operator: Callable[[Value, Value], Value]):
+    def __init__(
+        self,
+        typ: type[Value],
+        operator: Callable[[Value, Value], Value],
+        default: Any = ...,
+    ):
         super().__init__(typ)
         self.operator = operator
-        # special forms from typing or collections.abc are not instantiable
-        # so we need to replace them with their concrete counterparts
-        typ = _strip_extras(typ)
-        if typ in (collections.abc.Sequence, collections.abc.MutableSequence):
-            typ = list
-        if typ in (collections.abc.Set, collections.abc.MutableSet):
-            typ = set
-        if typ in (collections.abc.Mapping, collections.abc.MutableMapping):
-            typ = dict
-        try:
-            self.value = typ()
-        except Exception:
-            self.value = MISSING
+        self._default = default
+
+        # If a default value is provided and it's not the special ... marker
+        if default is not ...:
+            self.value = default
+        else:
+            # special forms from typing or collections.abc are not instantiable
+            # so we need to replace them with their concrete counterparts
+            stripped_typ: Any = _strip_extras(typ)
+            if stripped_typ in (
+                collections.abc.Sequence,
+                collections.abc.MutableSequence,
+            ):
+                stripped_typ = list
+            if stripped_typ in (collections.abc.Set, collections.abc.MutableSet):
+                stripped_typ = set
+            if stripped_typ in (
+                collections.abc.Mapping,
+                collections.abc.MutableMapping,
+            ):
+                stripped_typ = dict
+            try:
+                self.value = stripped_typ()
+            except Exception:
+                self.value = MISSING
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, BinaryOperatorAggregate) and (
@@ -87,13 +104,13 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def copy(self) -> Self:
         """Return a copy of the channel."""
-        empty = self.__class__(self.typ, self.operator)
+        empty = self.__class__(self.typ, self.operator, self._default)
         empty.key = self.key
         empty.value = self.value
         return empty
 
     def from_checkpoint(self, checkpoint: Value) -> Self:
-        empty = self.__class__(self.typ, self.operator)
+        empty = self.__class__(self.typ, self.operator, self._default)
         empty.key = self.key
         if checkpoint is not MISSING:
             empty.value = checkpoint
