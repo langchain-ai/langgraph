@@ -310,7 +310,7 @@ def create_react_agent(
 
     !!! warning
 
-        This function is no longer recommended in favor of
+        This function is deprecated in favor of
         [`create_agent`][langchain.agents.create_agent] from the `langchain`
         package, which provides an equivalent agent factory with a flexible
         middleware system. For migration guidance, see
