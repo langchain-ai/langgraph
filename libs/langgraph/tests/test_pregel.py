@@ -1264,18 +1264,20 @@ def test_imp_task(
     }
 
     thread1 = {"configurable": {"thread_id": "1"}}
-    assert [*graph.stream([0, 1], thread1, durability=durability)] == [
+    result = [*graph.stream([0, 1], thread1, durability=durability)]
+    # mapper tasks run concurrently so output order is non-deterministic
+    assert sorted(result[:-1], key=lambda d: str(d)) == [
         {"mapper": "00"},
         {"mapper": "11"},
-        {
-            "__interrupt__": (
-                Interrupt(
-                    value="question",
-                    id=AnyStr(),
-                ),
-            )
-        },
     ]
+    assert result[-1] == {
+        "__interrupt__": (
+            Interrupt(
+                value="question",
+                id=AnyStr(),
+            ),
+        )
+    }
     assert mapper_calls == 2
 
     assert graph.invoke(Command(resume="answer"), thread1, durability=durability) == [
