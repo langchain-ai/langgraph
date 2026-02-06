@@ -4,9 +4,9 @@ import inspect
 import logging
 import typing
 import warnings
-from collections import defaultdict, deque
+from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
-from functools import cached_property, partial
+from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
 from types import NoneType as NoneType
@@ -253,87 +253,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         return self.edges | {
             (start, end) for starts, end in self.waiting_edges for start in starts
         }
-
-    @cached_property
-    def _adjacency(self) -> dict[str, set[str]]:
-        """An adjacency list mapping each source node to its neighbors.
-
-        This includes:
-        - Direct edges
-        - Conditional branches
-        - Command destinations (from node specs)
-
-        Returns:
-            The adjacency dictionary.
-        """
-        adjacency: dict[str, set[str]] = defaultdict(set)
-
-        # Add direct edges
-        for src, dst in self._all_edges:
-            adjacency[src].add(dst)
-
-        # Add conditional branch targets
-        # If a branch has no explicit ends, then it's considered as having no neighbors.
-        for src, branches in self.branches.items():
-            for branch in branches.values():
-                if branch.ends is not None:
-                    for dst in branch.ends.values():
-                        adjacency[src].add(dst)
-
-        # Add Command destinations from node specs
-        # If a node has no explicit ends, then it's considered as having no neighbors.
-        for src, spec in self.nodes.items():
-            if spec.ends:
-                # When spec.ends is a dict, keys are node names and values are labels
-                # When spec.ends is a tuple, the values are node names directly
-                dsts = spec.ends.keys() if isinstance(spec.ends, dict) else spec.ends
-                for dst in dsts:
-                    adjacency[src].add(dst)
-
-        return adjacency
-
-    @cached_property
-    def _reverse_adjacency(self) -> dict[str, set[str]]:
-        """A reverse adjacency list mapping each target node to its predecessors."""
-        reverse_adjacency: dict[str, set[str]] = defaultdict(set)
-        for src, dsts in self._adjacency.items():
-            for dst in dsts:
-                reverse_adjacency[dst].add(src)
-        return reverse_adjacency
-
-    def _nodes_reachable_from_start(self) -> set[str]:
-        """Find all nodes reachable from START."""
-        reachable: set[str] = set()
-        queue: deque[str] = deque([START])
-
-        # BFS to find all nodes reachable from START
-        while queue:
-            node = queue.popleft()
-            if node in reachable:
-                continue
-            reachable.add(node)
-            for neighbor in self._adjacency.get(node, ()):
-                if neighbor not in reachable:
-                    queue.append(neighbor)
-
-        return reachable
-
-    def _unreachable_nodes(self) -> set[str]:
-        """Find all nodes that are not reachable from START."""
-        all_nodes = set(self.nodes.keys())
-        reachable_from_start = self._nodes_reachable_from_start()
-        unreachable = all_nodes - reachable_from_start
-        return unreachable
-
-    def _sink_nodes(self) -> set[str]:
-        """Nodes with no outgoing edges."""
-        return {node for node in self.nodes.keys() if not self._adjacency.get(node)}
-
-    def _dead_end_nodes(self) -> set[str]:
-        """Nodes that cannot reach the exit point (i.e., END)."""
-        sink_nodes = self._sink_nodes()
-        dead_end_nodes = sink_nodes - {END}
-        return dead_end_nodes
 
     def _add_schema(self, schema: type[Any], /, allow_managed: bool = True) -> None:
         if schema not in self.schemas:
@@ -1064,11 +983,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         """
         return self.add_edge(key, END)
 
-    def validate(
-        self,
-        interrupt: Sequence[str] | None = None,
-        on_detached_nodes: Literal["warn", "raise", "ignore"] = "warn",
-    ) -> Self:
+    def validate(self, interrupt: Sequence[str] | None = None) -> Self:
         # assemble sources
         all_sources = {src for src, _ in self._all_edges}
         for start, branches in self.branches.items():
@@ -1113,25 +1028,6 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             for node in interrupt:
                 if node not in self.nodes:
                     raise ValueError(f"Interrupt node `{node}` not found")
-
-        # Check for detached nodes: unreachable nodes and dead end nodes.
-        if on_detached_nodes != "ignore":
-            if self._unreachable_nodes():
-                errmsg: str = (
-                    f"Found unreachable node(s): {list(self._unreachable_nodes())}."
-                )
-                match on_detached_nodes:
-                    case "warn":
-                        logger.warning(errmsg)
-                    case "raise":
-                        raise ValueError(errmsg)
-            if self._dead_end_nodes():
-                errmsg = f"Found dead end node(s): {list(self._dead_end_nodes())}."
-                match on_detached_nodes:
-                    case "warn":
-                        logger.warning(errmsg)
-                    case "raise":
-                        raise ValueError(errmsg)
 
         self.compiled = True
         return self
@@ -1207,8 +1103,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 (interrupt_before if interrupt_before != "*" else []) + interrupt_after
                 if interrupt_after != "*"
                 else []
-            ),
-            on_detached_nodes=on_detached_nodes,
+            )
         )
 
         # prepare output channels
@@ -1267,6 +1162,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for start, branches in self.branches.items():
             for name, branch in branches.items():
                 compiled.attach_branch(start, name, branch)
+
+        # check for detached nodes after channels are fully set up
+        compiled._check_detached_nodes(on_detached_nodes)
 
         return compiled.validate()
 
@@ -1486,6 +1384,105 @@ class CompiledStateGraph(
 
         # attach branch publisher
         self.nodes[start].writers.append(branch.run(get_writes, reader))
+
+    def _check_detached_nodes(
+        self,
+        on_detached_nodes: Literal["warn", "raise", "ignore"],
+    ) -> None:
+        """Detect unreachable and dead-end nodes by inspecting compiled channels.
+
+        Uses the channel/writer infrastructure that is populated during
+        attach_node/attach_edge/attach_branch to determine connectivity,
+        rather than building a separate graph representation.
+
+        Args:
+            on_detached_nodes: How to handle detached nodes.
+                - ``"warn"``: Log a warning.
+                - ``"raise"``: Raise a ``ValueError``.
+                - ``"ignore"``: Skip detection entirely.
+        """
+        if on_detached_nodes == "ignore":
+            return
+
+        # Collect all channels written to by any node's writers.
+        written_channels: set[str] = set()
+        for node in self.nodes.values():
+            for writer in node.writers:
+                if isinstance(writer, ChannelWrite):
+                    for entry in writer.writes:
+                        if isinstance(entry, ChannelWriteEntry):
+                            written_channels.add(entry.channel)
+                        elif (
+                            isinstance(entry, ChannelWriteTupleEntry)
+                            and entry.static
+                        ):
+                            for ch, _, _ in entry.static:
+                                written_channels.add(ch)
+
+        # Detect unreachable nodes: no writer targets their branch:to: channel.
+        unreachable = [
+            name
+            for name in self.nodes
+            if name != START
+            and _CHANNEL_BRANCH_TO.format(name) not in written_channels
+        ]
+
+        if unreachable:
+            msg = f"Found unreachable node(s): {unreachable}."
+            if on_detached_nodes == "warn":
+                logger.warning(msg)
+            elif on_detached_nodes == "raise":
+                raise ValueError(msg)
+
+        # Detect dead-end nodes: no outgoing connection to another node or END.
+        dead_ends: list[str] = []
+        for name in self.nodes:
+            if name == START:
+                continue
+            has_outgoing = False
+            # Check builder edges for an explicit END connection
+            # (attach_edge skips adding a writer when the target is END).
+            if any(
+                src == name and dst == END
+                for src, dst in self.builder._all_edges
+            ):
+                has_outgoing = True
+            # Check builder branches (conditional edges are outgoing)
+            elif name in self.builder.branches:
+                has_outgoing = True
+            else:
+                # Check compiled writers for branch:to:* or END channels
+                for writer in self.nodes[name].writers:
+                    if isinstance(writer, ChannelWrite):
+                        for entry in writer.writes:
+                            if (
+                                isinstance(entry, ChannelWriteEntry)
+                                and entry.channel.startswith("branch:to:")
+                            ):
+                                has_outgoing = True
+                                break
+                            elif (
+                                isinstance(entry, ChannelWriteTupleEntry)
+                                and entry.static
+                            ):
+                                for ch, _, _ in entry.static:
+                                    if (
+                                        ch.startswith("branch:to:")
+                                        or ch == END
+                                    ):
+                                        has_outgoing = True
+                                        break
+                    if has_outgoing:
+                        break
+            if not has_outgoing:
+                dead_ends.append(name)
+
+        if dead_ends:
+            msg = f"Found dead end node(s): {dead_ends}."
+            if on_detached_nodes == "warn":
+                logger.warning(msg)
+            elif on_detached_nodes == "raise":
+                raise ValueError(msg)
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a checkpoint to new channel layout."""
