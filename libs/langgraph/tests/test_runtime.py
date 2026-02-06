@@ -389,3 +389,45 @@ def test_context_coercion_pydantic_validation_errors() -> None:
         compiled.invoke(
             {"message": "test"}, context={"api_key": "sk_test", "timeout": "not_an_int"}
         )
+
+
+@pytest.mark.anyio
+async def test_context_with_astream_events() -> None:
+    """Test that context is properly passed through astream_events."""
+
+    @dataclass
+    class Context:
+        api_key: str
+
+    class State(TypedDict):
+        message: str
+
+    def node_with_context(state: State, runtime: Runtime[Context]) -> dict[str, Any]:
+        return {"message": f"api_key: {runtime.context.api_key}"}
+
+    graph = StateGraph(state_schema=State, context_schema=Context)
+    graph.add_node("node", node_with_context)
+    graph.add_edge(START, "node")
+    graph.add_edge("node", END)
+    compiled = graph.compile()
+
+    events = []
+    async for event in compiled.astream_events(
+        {"message": "test"},
+        version="v2",
+        context=Context(api_key="sk_events_123"),
+    ):
+        events.append(event)
+
+    # Verify we got events
+    assert len(events) > 0
+
+    # Find the final on_chain_end event (no parent_ids means it's the root)
+    end_events = [
+        e for e in events if e["event"] == "on_chain_end" and not e.get("parent_ids")
+    ]
+    assert len(end_events) == 1
+
+    # Verify the output contains our context value
+    output = end_events[0]["data"]["output"]
+    assert output["message"] == "api_key: sk_events_123"
