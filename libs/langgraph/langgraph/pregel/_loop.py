@@ -56,6 +56,7 @@ from langgraph._internal._constants import (
     NULL_TASK_ID,
     PUSH,
     RESUME,
+    RETRY,
     TASKS,
 )
 from langgraph._internal._scratchpad import PregelScratchpad
@@ -580,7 +581,7 @@ class PregelLoop:
 
     def _match_writes(self, tasks: Mapping[str, PregelExecutableTask]) -> None:
         for tid, k, v in self.checkpoint_pending_writes:
-            if k in (ERROR, INTERRUPT, RESUME):
+            if k in (ERROR, INTERRUPT, RESUME, RETRY):
                 continue
             if task := tasks.get(tid):
                 task.writes.append((k, v))
@@ -916,6 +917,9 @@ class PregelLoop:
             if task.config is not None and TAG_HIDDEN in task.config.get(
                 "tags", EMPTY_SEQ
             ):
+                return
+            if writes[0][0] == RETRY:
+                # retry state writes are internal bookkeeping, no output
                 return
             if writes[0][0] == INTERRUPT:
                 # in loop.py we append a bool to the PUSH task paths to indicate

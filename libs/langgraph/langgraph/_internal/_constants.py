@@ -14,6 +14,8 @@ ERROR = sys.intern("__error__")
 # for errors raised by nodes
 NO_WRITES = sys.intern("__no_writes__")
 # marker to signal node didn't write anything
+RETRY = sys.intern("__retry__")
+# for persisting retry state (attempt count and next retry timestamp)
 TASKS = sys.intern("__pregel_tasks")
 # for Send objects returned by nodes/edges, corresponds to PUSH below
 RETURN = sys.intern("__return__")
@@ -91,6 +93,7 @@ RESERVED = {
     RESUME,
     ERROR,
     NO_WRITES,
+    RETRY,
     # reserved config.configurable keys
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,

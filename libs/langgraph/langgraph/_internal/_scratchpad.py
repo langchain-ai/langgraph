@@ -17,3 +17,6 @@ class PregelScratchpad:
     resume: list[Any]
     # subgraph
     subgraph_counter: Callable[[], int]
+    # retry (restored from checkpoint pending writes)
+    retry_attempt: int = 0
+    retry_ts: float = 0.0

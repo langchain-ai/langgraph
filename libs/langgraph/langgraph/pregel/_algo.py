@@ -56,6 +56,7 @@ from langgraph._internal._constants import (
     PUSH,
     RESERVED,
     RESUME,
+    RETRY,
     RETURN,
     TASKS,
 )
@@ -1086,9 +1087,21 @@ def _scratchpad(
             mapped_resume_write = resume_map[namespace_hash]
             task_resume_write.append(mapped_resume_write)
 
+        # find retry state from pending writes
+        retry_attempt = 0
+        retry_ts = 0.0
+        for w in pending_writes:
+            if w[0] == task_id and w[1] == RETRY:
+                retry_data = w[2]
+                retry_attempt = retry_data[0]
+                retry_ts = retry_data[1]
+                break
+
     else:
         null_resume_write = None
         task_resume_write = []
+        retry_attempt = 0
+        retry_ts = 0.0
 
     def get_null_resume(consume: bool = False) -> Any:
         if null_resume_write is None:
@@ -1115,6 +1128,9 @@ def _scratchpad(
         get_null_resume=get_null_resume,
         # subgraph
         subgraph_counter=LazyAtomicCounter(),
+        # retry
+        retry_attempt=retry_attempt,
+        retry_ts=retry_ts,
     )
 
 

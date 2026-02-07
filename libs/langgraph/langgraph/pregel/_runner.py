@@ -177,6 +177,7 @@ class PregelRunner:
                             submit=self.submit,
                         ),
                     },
+                    put_writes=self.put_writes(),
                 )
                 self.commit(t, None)
             except Exception as exc:
@@ -218,6 +219,7 @@ class PregelRunner:
                         submit=self.submit,
                     ),
                 },
+                put_writes=self.put_writes(),
                 __reraise_on_exit__=reraise,
             )
             futures[fut] = t
@@ -317,6 +319,7 @@ class PregelRunner:
                             loop=loop,
                         ),
                     },
+                    put_writes=self.put_writes(),
                 )
                 self.commit(t, None)
             except Exception as exc:
@@ -363,6 +366,7 @@ class PregelRunner:
                             loop=loop,
                         ),
                     },
+                    put_writes=self.put_writes(),
                     __name__=t.name,
                     __cancel_on_exit__=True,
                     __reraise_on_exit__=reraise,

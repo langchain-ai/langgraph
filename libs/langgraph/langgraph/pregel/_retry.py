@@ -14,8 +14,11 @@ from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_SCRATCHPAD,
     NS_SEP,
+    RETRY,
 )
+from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph.errors import GraphBubbleUp, ParentCommand
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 
@@ -27,10 +30,18 @@ def run_with_retry(
     task: PregelExecutableTask,
     retry_policy: Sequence[RetryPolicy] | None,
     configurable: dict[str, Any] | None = None,
+    put_writes: Callable[[str, Sequence[tuple[str, Any]]], None] | None = None,
 ) -> None:
     """Run a task with retries."""
     retry_policy = task.retry_policy or retry_policy
-    attempts = 0
+    # restore attempt count from checkpoint if available
+    scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
+    attempts = scratchpad.retry_attempt
+    # if resuming with retry state, honor the remaining backoff
+    if attempts > 0 and scratchpad.retry_ts > 0:
+        remaining = scratchpad.retry_ts - time.time()
+        if remaining > 0:
+            time.sleep(remaining)
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
@@ -94,6 +105,12 @@ def run_with_retry(
             sleep_time = (
                 interval + random.uniform(0, 1) if matching_policy.jitter else interval
             )
+
+            # persist retry state for durability before sleeping
+            if put_writes is not None:
+                retry_ts = time.time() + sleep_time
+                put_writes(task.id, [(RETRY, (attempts, retry_ts))])
+
             time.sleep(sleep_time)
 
             # log the retry
@@ -112,10 +129,18 @@ async def arun_with_retry(
     match_cached_writes: Callable[[], Awaitable[Sequence[PregelExecutableTask]]]
     | None = None,
     configurable: dict[str, Any] | None = None,
+    put_writes: Callable[[str, Sequence[tuple[str, Any]]], None] | None = None,
 ) -> None:
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
-    attempts = 0
+    # restore attempt count from checkpoint if available
+    scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
+    attempts = scratchpad.retry_attempt
+    # if resuming with retry state, honor the remaining backoff
+    if attempts > 0 and scratchpad.retry_ts > 0:
+        remaining = scratchpad.retry_ts - time.time()
+        if remaining > 0:
+            await asyncio.sleep(remaining)
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
@@ -190,6 +215,12 @@ async def arun_with_retry(
             sleep_time = (
                 interval + random.uniform(0, 1) if matching_policy.jitter else interval
             )
+
+            # persist retry state for durability before sleeping
+            if put_writes is not None:
+                retry_ts = time.time() + sleep_time
+                put_writes(task.id, [(RETRY, (attempts, retry_ts))])
+
             await asyncio.sleep(sleep_time)
 
             # log the retry

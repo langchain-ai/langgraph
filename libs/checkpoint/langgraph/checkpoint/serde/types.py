@@ -12,6 +12,7 @@ ERROR = "__error__"
 SCHEDULED = "__scheduled__"
 INTERRUPT = "__interrupt__"
 RESUME = "__resume__"
+RETRY = "__retry__"
 TASKS = "__pregel_tasks"
 
 Value = TypeVar("Value", covariant=True)

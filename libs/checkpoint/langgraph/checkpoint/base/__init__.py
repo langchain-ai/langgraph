@@ -19,6 +19,7 @@ from langgraph.checkpoint.serde.types import (
     ERROR,
     INTERRUPT,
     RESUME,
+    RETRY,
     SCHEDULED,
     ChannelProtocol,
 )
@@ -445,7 +446,7 @@ Special writes (e.g. errors) map to negative indices, to avoid those writes from
 conflicting with regular writes.
 Each Checkpointer implementation should use this mapping in put_writes.
 """
-WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3, RESUME: -4}
+WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2, INTERRUPT: -3, RESUME: -4, RETRY: -5}
 
 EXCLUDED_METADATA_KEYS = {
     "thread_id",
