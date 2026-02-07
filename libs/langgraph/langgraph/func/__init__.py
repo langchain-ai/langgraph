@@ -158,7 +158,7 @@ def task(
         @entrypoint()
         def add_one(numbers: list[int]) -> list[int]:
             futures = [add_one_task(n) for n in numbers]
-            results = [f.result() for f in futures]
+            results = [f.result() for f in futures]  # Blocks until each task completes
             return results
 
 
@@ -180,7 +180,8 @@ def task(
         @entrypoint()
         async def add_one(numbers: list[int]) -> list[int]:
             futures = [add_one_task(n) for n in numbers]
-            return asyncio.gather(*futures)
+            results = await asyncio.gather(*futures)
+            return list(results)
 
 
         # Call the entrypoint
