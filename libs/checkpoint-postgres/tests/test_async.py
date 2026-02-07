@@ -371,3 +371,119 @@ async def test_get_checkpoint_no_channel_values(
 
         checkpoint = await saver.aget_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+@pytest.mark.asyncio
+async def test_prepare_threshold_default():
+    """Test that default prepare_threshold=0 works."""
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database
+        ) as checkpointer:
+            await checkpointer.setup()
+            config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+            metadata = {"source": "test", "step": 1}
+            await checkpointer.aput(config, checkpoint, metadata, {})
+            retrieved = await checkpointer.aget_tuple(config)
+            assert retrieved is not None
+            assert retrieved.metadata["source"] == "test"
+    finally:
+        # drop unique db
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.mark.asyncio
+async def test_prepare_threshold_none():
+    """Test that prepare_threshold=None works (for connection poolers)."""
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database, prepare_threshold=None
+        ) as checkpointer:
+            await checkpointer.setup()
+            config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+            metadata = {"source": "test", "step": 1}
+            await checkpointer.aput(config, checkpoint, metadata, {})
+            retrieved = await checkpointer.aget_tuple(config)
+            assert retrieved is not None
+            assert retrieved.metadata["source"] == "test"
+    finally:
+        # drop unique db
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.mark.asyncio
+async def test_prepare_threshold_custom_value():
+    """Test that custom prepare_threshold value works."""
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database, prepare_threshold=5
+        ) as checkpointer:
+            await checkpointer.setup()
+            config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+            metadata = {"source": "test", "step": 1}
+            await checkpointer.aput(config, checkpoint, metadata, {})
+            retrieved = await checkpointer.aget_tuple(config)
+            assert retrieved is not None
+            assert retrieved.metadata["source"] == "test"
+    finally:
+        # drop unique db
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.mark.asyncio
+async def test_shallow_prepare_threshold_none():
+    """Test that AsyncShallowPostgresSaver works with prepare_threshold=None."""
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        async with AsyncShallowPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI + database, prepare_threshold=None
+        ) as checkpointer:
+            await checkpointer.setup()
+            config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+            metadata = {"source": "test", "step": 1}
+            await checkpointer.aput(config, checkpoint, metadata, {})
+            retrieved = await checkpointer.aget_tuple(config)
+            assert retrieved is not None
+            assert retrieved.metadata["source"] == "test"
+    finally:
+        # drop unique db
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
