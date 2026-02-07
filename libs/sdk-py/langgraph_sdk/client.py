@@ -2984,6 +2984,7 @@ class CronClient:
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
+        enabled: bool | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -3009,6 +3010,7 @@ class CronClient:
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
+            enabled: Whether the cron job is enabled or not.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -3029,7 +3031,8 @@ class CronClient:
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
-                multitask_strategy="interrupt"
+                multitask_strategy="interrupt",
+                enabled=True,
             )
             ```
         """
@@ -3045,6 +3048,7 @@ class CronClient:
             "interrupt_after": interrupt_after,
             "webhook": webhook,
             "end_time": end_time.isoformat() if end_time else None,
+            "enabled": enabled,
         }
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
@@ -3072,6 +3076,7 @@ class CronClient:
         on_run_completed: OnCompletionBehavior | None = None,
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
+        enabled: bool | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -3098,6 +3103,7 @@ class CronClient:
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
+            enabled: Whether the cron job is enabled or not.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -3117,7 +3123,8 @@ class CronClient:
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
-                multitask_strategy="interrupt"
+                multitask_strategy="interrupt",
+                enabled=True,
             )
             ```
 
@@ -3135,6 +3142,7 @@ class CronClient:
             "webhook": webhook,
             "on_run_completed": on_run_completed,
             "end_time": end_time.isoformat() if end_time else None,
+            "enabled": enabled,
         }
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
@@ -3172,11 +3180,88 @@ class CronClient:
         """
         await self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
 
+    async def update(
+        self,
+        cron_id: str,
+        *,
+        schedule: str | None = None,
+        end_time: datetime | None = None,
+        input: Input | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        config: Config | None = None,
+        context: Context | None = None,
+        webhook: str | None = None,
+        interrupt_before: All | list[str] | None = None,
+        interrupt_after: All | list[str] | None = None,
+        on_run_completed: OnCompletionBehavior | None = None,
+        enabled: bool | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> Cron:
+        """Update a cron job by ID.
+
+        Args:
+            cron_id: The cron ID to update.
+            schedule: The cron schedule to execute this job on.
+                Schedules are interpreted in UTC.
+            end_time: The end date to stop running the cron.
+            input: The input to the graph.
+            metadata: Metadata to assign to the cron job runs.
+            config: The configuration for the assistant.
+            context: Static context added to the assistant.
+            webhook: Webhook to call after LangGraph API call is done.
+            interrupt_before: Nodes to interrupt immediately before they get executed.
+            interrupt_after: Nodes to interrupt immediately after they get executed.
+            on_run_completed: What to do with the thread after the run completes.
+                Must be one of 'delete' or 'keep'. 'delete' removes the thread
+                after execution. 'keep' creates a new thread for each execution but does not
+                clean them up.
+            enabled: Enable or disable the cron job.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            The updated cron job.
+
+        ???+ example "Example Usage"
+
+            ```python
+            client = get_client(url="http://localhost:2024")
+            updated_cron = await client.crons.update(
+                cron_id="1ef3cefa-4c09-6926-96d0-3dc97fd5e39b",
+                schedule="0 10 * * *",
+                enabled=False,
+            )
+            ```
+
+        """
+        payload = {
+            "schedule": schedule,
+            "end_time": end_time.isoformat() if end_time else None,
+            "input": input,
+            "metadata": metadata,
+            "config": config,
+            "context": context,
+            "webhook": webhook,
+            "interrupt_before": interrupt_before,
+            "interrupt_after": interrupt_after,
+            "on_run_completed": on_run_completed,
+            "enabled": enabled,
+        }
+        payload = {k: v for k, v in payload.items() if v is not None}
+        return await self.http.patch(
+            f"/runs/crons/{cron_id}",
+            json=payload,
+            headers=headers,
+            params=params,
+        )
+
     async def search(
         self,
         *,
         assistant_id: str | None = None,
         thread_id: str | None = None,
+        enabled: bool | None = None,
         limit: int = 10,
         offset: int = 0,
         sort_by: CronSortBy | None = None,
@@ -3190,6 +3275,7 @@ class CronClient:
         Args:
             assistant_id: The assistant ID or graph name to search for.
             thread_id: the thread ID to search for.
+            enabled: The enabled status to search for.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             headers: Optional custom headers to include with the request.
@@ -3205,6 +3291,7 @@ class CronClient:
             cron_jobs = await client.crons.search(
                 assistant_id="my_assistant_id",
                 thread_id="my_thread_id",
+                enabled=True,
                 limit=5,
                 offset=5,
             )
@@ -3239,6 +3326,7 @@ class CronClient:
         payload = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,
+            "enabled": enabled,
             "limit": limit,
             "offset": offset,
         }
@@ -6294,6 +6382,7 @@ class SyncCronClient:
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
+        enabled: bool | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -6317,6 +6406,7 @@ class SyncCronClient:
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
+            enabled: Whether the cron job is enabled. By default, it is considered enabled.
             headers: Optional custom headers to include with the request.
 
         Returns:
@@ -6336,7 +6426,8 @@ class SyncCronClient:
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
-                multitask_strategy="interrupt"
+                multitask_strategy="interrupt",
+                enabled=True
             )
             ```
         """
@@ -6353,6 +6444,7 @@ class SyncCronClient:
             "webhook": webhook,
             "multitask_strategy": multitask_strategy,
             "end_time": end_time.isoformat() if end_time else None,
+            "enabled": enabled,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(
@@ -6378,6 +6470,7 @@ class SyncCronClient:
         on_run_completed: OnCompletionBehavior | None = None,
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
+        enabled: bool | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -6404,6 +6497,7 @@ class SyncCronClient:
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
+            enabled: Whether the cron job is enabled. By default, it is considered enabled.
             headers: Optional custom headers to include with the request.
 
         Returns:
@@ -6423,7 +6517,8 @@ class SyncCronClient:
                 interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
                 interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
                 webhook="https://my.fake.webhook.com",
-                multitask_strategy="interrupt"
+                multitask_strategy="interrupt",
+                enabled=True
             )
             ```
 
@@ -6442,6 +6537,7 @@ class SyncCronClient:
             "on_run_completed": on_run_completed,
             "multitask_strategy": multitask_strategy,
             "end_time": end_time.isoformat() if end_time else None,
+            "enabled": enabled,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(
@@ -6477,11 +6573,88 @@ class SyncCronClient:
         """
         self.http.delete(f"/runs/crons/{cron_id}", headers=headers, params=params)
 
+    def update(
+        self,
+        cron_id: str,
+        *,
+        schedule: str | None = None,
+        end_time: datetime | None = None,
+        input: Input | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        config: Config | None = None,
+        context: Context | None = None,
+        webhook: str | None = None,
+        interrupt_before: All | list[str] | None = None,
+        interrupt_after: All | list[str] | None = None,
+        on_run_completed: OnCompletionBehavior | None = None,
+        enabled: bool | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> Cron:
+        """Update a cron job by ID.
+
+        Args:
+            cron_id: The cron ID to update.
+            schedule: The cron schedule to execute this job on.
+                Schedules are interpreted in UTC.
+            end_time: The end date to stop running the cron.
+            input: The input to the graph.
+            metadata: Metadata to assign to the cron job runs.
+            config: The configuration for the assistant.
+            context: Static context added to the assistant.
+            webhook: Webhook to call after LangGraph API call is done.
+            interrupt_before: Nodes to interrupt immediately before they get executed.
+            interrupt_after: Nodes to interrupt immediately after they get executed.
+            on_run_completed: What to do with the thread after the run completes.
+                Must be one of 'delete' or 'keep'. 'delete' removes the thread
+                after execution. 'keep' creates a new thread for each execution but does not
+                clean them up.
+            enabled: Enable or disable the cron job.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            The updated cron job.
+
+        ???+ example "Example Usage"
+
+            ```python
+            client = get_sync_client(url="http://localhost:8123")
+            updated_cron = client.crons.update(
+                cron_id="1ef3cefa-4c09-6926-96d0-3dc97fd5e39b",
+                schedule="0 10 * * *",
+                enabled=False,
+            )
+            ```
+
+        """
+        payload = {
+            "schedule": schedule,
+            "end_time": end_time.isoformat() if end_time else None,
+            "input": input,
+            "metadata": metadata,
+            "config": config,
+            "context": context,
+            "webhook": webhook,
+            "interrupt_before": interrupt_before,
+            "interrupt_after": interrupt_after,
+            "on_run_completed": on_run_completed,
+            "enabled": enabled,
+        }
+        payload = {k: v for k, v in payload.items() if v is not None}
+        return self.http.patch(
+            f"/runs/crons/{cron_id}",
+            json=payload,
+            headers=headers,
+            params=params,
+        )
+
     def search(
         self,
         *,
         assistant_id: str | None = None,
         thread_id: str | None = None,
+        enabled: bool | None = None,
         limit: int = 10,
         offset: int = 0,
         sort_by: CronSortBy | None = None,
@@ -6495,6 +6668,7 @@ class SyncCronClient:
         Args:
             assistant_id: The assistant ID or graph name to search for.
             thread_id: the thread ID to search for.
+            enabled: Whether the cron job is enabled.
             limit: The maximum number of results to return.
             offset: The number of results to skip.
             headers: Optional custom headers to include with the request.
@@ -6509,6 +6683,7 @@ class SyncCronClient:
             cron_jobs = client.crons.search(
                 assistant_id="my_assistant_id",
                 thread_id="my_thread_id",
+                enabled=True,
                 limit=5,
                 offset=5,
             )
@@ -6542,6 +6717,7 @@ class SyncCronClient:
         payload = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,
+            "enabled": enabled,
             "limit": limit,
             "offset": offset,
         }

@@ -565,7 +565,7 @@ def _call(
         if fut := next(
             (
                 f
-                for f, t in futures().items()  # type: ignore[union-attr]
+                for f, t in list(futures().items())  # type: ignore[union-attr]
                 if t is not None and t == next_task.id
             ),
             None,
@@ -708,7 +708,7 @@ async def _acall_impl(
             if fut := next(
                 (
                     f
-                    for f, t in futures().items()  # type: ignore[union-attr]
+                    for f, t in list(futures().items())  # type: ignore[union-attr]
                     if t is not None and t == next_task.id
                 ),
                 None,
