@@ -685,3 +685,32 @@ async def test_store_ttl(store):
     # Now has been (TTL_SECONDS-2)*2 > TTL_SECONDS + TTL_SECONDS/2
     results = await store.asearch(ns, query="bar", refresh_ttl=False)
     assert len(results) == 0
+
+
+async def test_context_manager_cleanup() -> None:
+    """Test that exiting context manager waits for pending batch tasks."""
+    database = f"test_{uuid.uuid4().hex[:16]}"
+    uri_parts = DEFAULT_URI.split("/")
+    uri_base = "/".join(uri_parts[:-1])
+    conn_string = f"{uri_base}/{database}"
+    admin_conn_string = DEFAULT_URI
+
+    async with await AsyncConnection.connect(
+        admin_conn_string, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+
+    try:
+        async with AsyncPostgresStore.from_conn_string(conn_string) as store:
+            await store.setup()
+            await store.aput(("test",), "key1", {"value": "data1"})
+            await store.aput(("test",), "key2", {"value": "data2"})
+            await store.aput(("test",), "key3", {"value": "data3"})
+
+        # Context manager exit should wait for batch tasks to complete
+        # If not, asyncio will warn about pending tasks
+    finally:
+        async with await AsyncConnection.connect(
+            admin_conn_string, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
