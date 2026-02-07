@@ -631,6 +631,26 @@ class RemoteGraph(PregelProtocol):
         )
         return self._get_config(response["checkpoint"])
 
+    def _prepare_run_input(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None,
+    ) -> tuple[RunnableConfig, dict[str, Any] | Any, CommandSDK | None, str | None]:
+        """Prepare input for run calls.
+
+        Returns:
+            Tuple of (sanitized_config, input, command, thread_id)
+        """
+        merged_config = merge_configs(self.config, config)
+        sanitized_config = self._sanitize_config(merged_config)
+        if isinstance(input, Command):
+            command: CommandSDK | None = cast(CommandSDK, asdict(input))
+            input = None
+        else:
+            command = None
+        thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
+        return sanitized_config, input, command, thread_id
+
     def _get_stream_modes(
         self,
         stream_mode: StreamMode | list[StreamMode] | None,
@@ -715,17 +735,12 @@ class RemoteGraph(PregelProtocol):
             The output of the graph.
         """
         sync_client = self._validate_sync_client()
-        merged_config = merge_configs(self.config, config)
-        sanitized_config = self._sanitize_config(merged_config)
+        sanitized_config, input, command, thread_id = self._prepare_run_input(
+            input, config
+        )
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
-        if isinstance(input, Command):
-            command: CommandSDK | None = cast(CommandSDK, asdict(input))
-            input = None
-        else:
-            command = None
-        thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
         for chunk in sync_client.runs.stream(
             thread_id=thread_id,
@@ -825,17 +840,12 @@ class RemoteGraph(PregelProtocol):
             The output of the graph.
         """
         client = self._validate_client()
-        merged_config = merge_configs(self.config, config)
-        sanitized_config = self._sanitize_config(merged_config)
+        sanitized_config, input, command, thread_id = self._prepare_run_input(
+            input, config
+        )
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
-        if isinstance(input, Command):
-            command: CommandSDK | None = cast(CommandSDK, asdict(input))
-            input = None
-        else:
-            command = None
-        thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
         async for chunk in client.runs.stream(
             thread_id=thread_id,
@@ -937,27 +947,31 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             headers: Additional headers to pass to the request.
-            **kwargs: Additional params to pass to RemoteGraph.stream.
+            **kwargs: Additional params to pass to client.runs.wait.
 
         Returns:
             The output of the graph.
         """
-        for chunk in self.stream(
-            input,
-            config=config,
+        sync_client = self._validate_sync_client()
+        sanitized_config, input, command, thread_id = self._prepare_run_input(
+            input, config
+        )
+
+        return sync_client.runs.wait(  # type: ignore
+            thread_id=thread_id,
+            assistant_id=self.assistant_id,
+            input=input,
+            command=command,
+            config=sanitized_config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            headers=headers,
-            stream_mode="values",
+            if_not_exists="create",
+            headers=(
+                _merge_tracing_headers(headers) if self.distributed_tracing else headers
+            ),
             params=params,
             **kwargs,
-        ):
-            pass
-        try:
-            return chunk
-        except UnboundLocalError:
-            logger.warning("No events received from remote graph")
-            return None
+        )
 
     async def ainvoke(
         self,
@@ -978,27 +992,31 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             headers: Additional headers to pass to the request.
-            **kwargs: Additional params to pass to RemoteGraph.astream.
+            **kwargs: Additional params to pass to client.runs.wait.
 
         Returns:
             The output of the graph.
         """
-        async for chunk in self.astream(
-            input,
-            config=config,
+        client = self._validate_client()
+        sanitized_config, input, command, thread_id = self._prepare_run_input(
+            input, config
+        )
+
+        return await client.runs.wait(
+            thread_id=thread_id,
+            assistant_id=self.assistant_id,
+            input=input,
+            command=command,
+            config=sanitized_config,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
-            headers=headers,
-            stream_mode="values",
+            if_not_exists="create",
+            headers=(
+                _merge_tracing_headers(headers) if self.distributed_tracing else headers
+            ),
             params=params,
             **kwargs,
-        ):
-            pass
-        try:
-            return chunk
-        except UnboundLocalError:
-            logger.warning("No events received from remote graph")
-            return None
+        )
 
 
 def _merge_tracing_headers(headers: dict[str, str] | None) -> dict[str, str] | None:
