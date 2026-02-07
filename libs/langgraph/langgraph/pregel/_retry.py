@@ -37,11 +37,6 @@ def run_with_retry(
     # restore attempt count from checkpoint if available
     scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
     attempts = scratchpad.retry_attempt
-    # if resuming with retry state, honor the remaining backoff
-    if attempts > 0 and scratchpad.retry_ts > 0:
-        remaining = scratchpad.retry_ts - time.time()
-        if remaining > 0:
-            time.sleep(remaining)
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
@@ -136,11 +131,6 @@ async def arun_with_retry(
     # restore attempt count from checkpoint if available
     scratchpad: PregelScratchpad = task.config[CONF][CONFIG_KEY_SCRATCHPAD]
     attempts = scratchpad.retry_attempt
-    # if resuming with retry state, honor the remaining backoff
-    if attempts > 0 and scratchpad.retry_ts > 0:
-        remaining = scratchpad.retry_ts - time.time()
-        if remaining > 0:
-            await asyncio.sleep(remaining)
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)

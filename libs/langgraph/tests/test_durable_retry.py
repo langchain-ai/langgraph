@@ -234,11 +234,15 @@ def test_retry_writes_are_overwritten_on_success():
     assert state.next == ()  # no more tasks to run
 
 
-def test_retry_backoff_timing_honored_on_resume():
-    """Test that the retry timestamp is honored when resuming."""
+def test_retry_ts_stored_for_external_schedulers():
+    """Test that retry_ts is stored in the scratchpad for external schedulers.
+
+    The graph itself does NOT block on retry_ts when resuming — it just
+    restores the attempt count. The timestamp is available for external
+    schedulers (e.g. LangGraph Server) to delay re-scheduling the task.
+    """
     from langgraph._internal._scratchpad import PregelScratchpad
 
-    # Create a scratchpad with retry state indicating we should wait
     future_ts = time.time() + 100  # 100 seconds in the future
 
     scratchpad = PregelScratchpad(
