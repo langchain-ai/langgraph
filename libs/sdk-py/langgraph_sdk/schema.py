@@ -372,6 +372,35 @@ class Cron(TypedDict):
     """The next run date of the cron."""
     metadata: dict
     """The metadata of the cron."""
+    enabled: bool
+    """Whether the cron is enabled."""
+
+
+class CronUpdate(TypedDict, total=False):
+    """Payload for updating a cron job. All fields are optional."""
+
+    schedule: str
+    """The cron schedule to execute this job on."""
+    end_time: datetime
+    """The end date to stop running the cron."""
+    input: Input
+    """The input to the graph."""
+    metadata: dict[str, Any]
+    """Metadata to assign to the cron job runs."""
+    config: Config
+    """The configuration for the assistant."""
+    context: Context
+    """Static context added to the assistant."""
+    webhook: str
+    """Webhook to call after LangGraph API call is done."""
+    interrupt_before: All | list[str]
+    """Nodes to interrupt immediately before they get executed."""
+    interrupt_after: All | list[str]
+    """Nodes to interrupt immediately after they get executed."""
+    on_run_completed: OnCompletionBehavior
+    """What to do with the thread after the run completes."""
+    enabled: bool
+    """Enable or disable the cron job."""
 
 
 # Select field aliases for client-side typing of `select` parameters.
@@ -428,6 +457,7 @@ CronSelectField = Literal[
     "metadata",
     "now",
     "on_run_completed",
+    "enabled",
 ]
 
 PrimitiveData = str | int | float | bool | None

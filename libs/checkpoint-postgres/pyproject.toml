@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-checkpoint-postgres"
-version = "3.0.3"
+version = "3.0.4"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 authors = []
 requires-python = ">=3.10"
