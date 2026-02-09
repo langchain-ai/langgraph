@@ -226,6 +226,7 @@ class PregelLoop:
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        validate_input: Callable[[Any, dict[str, Any]], None] | None = None,
     ) -> None:
         self.stream = stream
         self.config = config
@@ -250,6 +251,7 @@ class PregelLoop:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
+        self.validate_input = validate_input
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -637,6 +639,14 @@ class PregelLoop:
 
         # map command to writes
         if isinstance(self.input, Command):
+            # Validate command update if validator is provided
+            if self.validate_input is not None and self.input.update:
+                current_state = read_channels(self.channels, self.output_keys)
+                try:
+                    self.validate_input(self.input.update, current_state)
+                except Exception as e:
+                    raise ValueError(f"Input validation failed: {str(e)}") from e
+
             if (resume := self.input.resume) is not None:
                 if not self.checkpointer:
                     raise RuntimeError(
@@ -691,6 +701,13 @@ class PregelLoop:
             )
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
+            # Validate input if validator is provided
+            if self.validate_input is not None:
+                current_state = read_channels(self.channels, self.output_keys)
+                try:
+                    self.validate_input(self.input, current_state)
+                except Exception as e:
+                    raise ValueError(f"Input validation failed: {str(e)}") from e
             # discard any unfinished tasks from previous checkpoint
             discard_tasks = prepare_next_tasks(
                 self.checkpoint,
@@ -985,6 +1002,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        validate_input: Callable[[Any, dict[str, Any]], None] | None = None,
     ) -> None:
         super().__init__(
             input,
@@ -1006,6 +1024,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            validate_input=validate_input,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1161,6 +1180,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        validate_input: Callable[[Any, dict[str, Any]], None] | None = None,
     ) -> None:
         super().__init__(
             input,
@@ -1182,6 +1202,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            validate_input=validate_input,
         )
         self.stack = AsyncExitStack()
         if checkpointer:

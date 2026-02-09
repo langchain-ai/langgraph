@@ -31,6 +31,7 @@ __all__ = (
     "MessagesState",
     "MessageGraph",
     "REMOVE_ALL_MESSAGES",
+    "validate_messages_append_only",
 )
 
 Messages = list[MessageLikeRepresentation] | MessageLikeRepresentation
@@ -63,7 +64,6 @@ def add_messages(
     right: Messages,
     *,
     format: Literal["langchain-openai"] | None = None,
-    mode: Literal["allow_everything", "append_only"] = "allow_everything",
 ) -> Messages:
     """Merges two lists of messages, updating existing messages by ID.
 
@@ -193,30 +193,6 @@ def add_messages(
         # }
         ```
 
-    Example: Use append_only mode to prevent message updates
-        ```python
-        from typing import Annotated
-        from typing_extensions import TypedDict
-        from langgraph.graph import StateGraph, add_messages
-
-
-        class State(TypedDict):
-            messages: Annotated[list, add_messages(mode="append_only")]
-
-
-        # This will work - adding new messages
-        msgs1 = [HumanMessage(content="Hello", id="1")]
-        msgs2 = [AIMessage(content="Hi there!", id="2")]
-        add_messages(msgs1, msgs2, mode="append_only")
-        # [HumanMessage(content='Hello', id='1'), AIMessage(content='Hi there!', id='2')]
-
-        # This will raise an error - trying to update an existing message
-        msgs1 = [HumanMessage(content="Hello", id="1")]
-        msgs2 = [HumanMessage(content="Hello again", id="1")]
-        add_messages(msgs1, msgs2, mode="append_only")
-        # ValueError: Cannot update existing message with ID '1' in append_only mode
-        ```
-
     """
     remove_all_idx = None
     # coerce to list
@@ -241,11 +217,6 @@ def add_messages(
         if m.id is None:
             m.id = str(uuid.uuid4())
         if isinstance(m, RemoveMessage) and m.id == REMOVE_ALL_MESSAGES:
-            if mode == "append_only":
-                raise ValueError(
-                    "Cannot remove all messages in append_only mode. "
-                    "Use mode='allow_everything' to allow message removal."
-                )
             remove_all_idx = idx
 
     if remove_all_idx is not None:
@@ -257,18 +228,6 @@ def add_messages(
     ids_to_remove = set()
     for m in right:
         if (existing_idx := merged_by_id.get(m.id)) is not None:
-            # Check for append_only mode violation
-            if mode == "append_only":
-                if isinstance(m, RemoveMessage):
-                    raise ValueError(
-                        f"Cannot remove existing message with ID '{m.id}' in append_only mode. "
-                        f"Use mode='allow_everything' to allow message removal."
-                    )
-                else:
-                    raise ValueError(
-                        f"Cannot update existing message with ID '{m.id}' in append_only mode. "
-                        f"Use mode='allow_everything' to allow message updates."
-                    )
             if isinstance(m, RemoveMessage):
                 ids_to_remove.add(m.id)
             else:
@@ -293,6 +252,92 @@ def add_messages(
         pass
 
     return merged
+
+
+def validate_messages_append_only(
+    input: dict[str, Any], current_state: dict[str, Any]
+) -> None:
+    """Validates that incoming messages are append-only (no updates or removals).
+
+    This validator can be passed to `compile(validate_input=...)` to enforce that
+    external inputs only append new messages and never update or remove existing ones.
+
+    Internal node updates bypass this validation, allowing nodes to perform operations
+    like message compaction or cleanup without restriction.
+
+    Args:
+        input: The raw input dictionary being provided externally
+        current_state: The current state loaded from the checkpoint
+
+    Raises:
+        ValueError: If the input attempts to update or remove existing messages
+
+    Example:
+        ```python
+        from langgraph.graph import StateGraph, MessagesState
+        from langgraph.graph.message import validate_messages_append_only
+
+        builder = StateGraph(MessagesState)
+        builder.add_node("chatbot", my_chatbot_node)
+        builder.set_entry_point("chatbot")
+        builder.set_finish_point("chatbot")
+
+        # Compile with validator to enforce append-only at the boundary
+        graph = builder.compile(validate_input=validate_messages_append_only)
+
+        # This works - adding new messages
+        graph.invoke({"messages": [("user", "Hello")]})
+
+        # This raises ValueError - trying to update existing message
+        graph.invoke({"messages": [HumanMessage(content="Modified", id="existing-id")]})
+        ```
+    """
+    # Only validate if input contains messages
+    if "messages" not in input:
+        return
+
+    # Get current messages from state
+    current_messages = current_state.get("messages", [])
+
+    # Build a set of existing message IDs
+    existing_ids: set[str] = set()
+    for msg in current_messages:
+        if hasattr(msg, "id") and msg.id is not None:
+            existing_ids.add(msg.id)
+
+    # Coerce input messages to list
+    input_messages = input["messages"]
+    if not isinstance(input_messages, list):
+        input_messages = [input_messages]
+
+    # Convert to messages to get proper IDs
+    try:
+        converted_messages = convert_to_messages(input_messages)
+    except Exception:
+        # If conversion fails, let it through - the reducer will handle it
+        return
+
+    # Check each input message
+    for msg in converted_messages:
+        # Check for REMOVE_ALL_MESSAGES
+        if isinstance(msg, RemoveMessage) and msg.id == REMOVE_ALL_MESSAGES:
+            raise ValueError(
+                "Cannot remove all messages in append_only mode. "
+                "External inputs must only append new messages."
+            )
+
+        # Check for updates or removals of existing messages
+        if msg.id and msg.id in existing_ids:
+            if isinstance(msg, RemoveMessage):
+                raise ValueError(
+                    f"Cannot remove existing message with ID '{msg.id}' in append_only mode. "
+                    "External inputs must only append new messages."
+                )
+            else:
+                raise ValueError(
+                    f"Cannot update existing message with ID '{msg.id}' in append_only mode. "
+                    "External inputs must only append new messages."
+                )
 
 
 @deprecated(

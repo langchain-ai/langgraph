@@ -20,7 +20,7 @@ from langgraph.graph.message import REMOVE_ALL_MESSAGES, MessagesState, push_mes
 from langgraph.graph.state import StateGraph
 from tests.messages import _AnyIdHumanMessage
 
-CORE_MAJOR, CORE_MINOR, CORE_PATCH = (
+_, CORE_MINOR, CORE_PATCH = (
     int("".join(c for c in v if c.isdigit()))
     for v in langchain_core.__version__.split(".")
 )
@@ -205,11 +205,7 @@ def test_messages_state(state_schema):
 
 
 @pytest.mark.skipif(
-    condition=not (
-        (CORE_MAJOR == 0 and CORE_MINOR == 3 and CORE_PATCH >= 11)
-        or (CORE_MAJOR == 0 and CORE_MINOR > 3)
-        or CORE_MAJOR > 0
-    ),
+    condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
     reason="Requires langchain_core>=0.3.11.",
 )
 def test_messages_state_format_openai():
@@ -371,3 +367,139 @@ def test_push_messages_in_graph():
             messages.append(message)
 
     assert values["messages"] == messages
+
+
+def test_append_only_mode_allows_new_messages():
+    """Test that append_only mode allows adding new messages."""
+    left = [HumanMessage(content="Hello", id="1")]
+    right = [AIMessage(content="Hi there!", id="2")]
+    result = add_messages(left, right, mode="append_only")
+    expected = [
+        HumanMessage(content="Hello", id="1"),
+        AIMessage(content="Hi there!", id="2"),
+    ]
+    assert result == expected
+
+
+def test_append_only_mode_prevents_updates():
+    """Test that append_only mode raises an error when trying to update an existing message."""
+    left = [HumanMessage(content="Hello", id="1")]
+    right = [HumanMessage(content="Hello again", id="1")]
+    with pytest.raises(
+        ValueError,
+        match="Cannot update existing message with ID '1' in append_only mode",
+    ):
+        add_messages(left, right, mode="append_only")
+
+
+def test_append_only_mode_prevents_remove_messages():
+    """Test that append_only mode prevents RemoveMessage operations."""
+    left = [
+        HumanMessage(content="Hello", id="1"),
+        AIMessage(content="Hi there!", id="2"),
+    ]
+    right = [RemoveMessage(id="2")]
+    with pytest.raises(
+        ValueError,
+        match="Cannot remove existing message with ID '2' in append_only mode",
+    ):
+        add_messages(left, right, mode="append_only")
+
+
+def test_append_only_mode_prevents_remove_all_messages():
+    """Test that append_only mode prevents REMOVE_ALL_MESSAGES operations."""
+    left = [
+        HumanMessage(content="Hello", id="1"),
+        AIMessage(content="Hi there!", id="2"),
+    ]
+    right = [RemoveMessage(id=REMOVE_ALL_MESSAGES)]
+    with pytest.raises(
+        ValueError,
+        match="Cannot remove all messages in append_only mode",
+    ):
+        add_messages(left, right, mode="append_only")
+
+
+def test_append_only_mode_with_multiple_new_messages():
+    """Test that append_only mode allows adding multiple new messages."""
+    left = [HumanMessage(content="Hello", id="1")]
+    right = [
+        AIMessage(content="Hi there!", id="2"),
+        SystemMessage(content="System message", id="3"),
+        HumanMessage(content="Another message", id="4"),
+    ]
+    result = add_messages(left, right, mode="append_only")
+    expected = [
+        HumanMessage(content="Hello", id="1"),
+        AIMessage(content="Hi there!", id="2"),
+        SystemMessage(content="System message", id="3"),
+        HumanMessage(content="Another message", id="4"),
+    ]
+    assert result == expected
+
+
+def test_append_only_mode_with_mixed_operations():
+    """Test that append_only mode fails when mixing new messages with updates."""
+    left = [HumanMessage(content="Hello", id="1")]
+    right = [
+        AIMessage(content="Hi there!", id="2"),  # new message
+        HumanMessage(content="Updated hello", id="1"),  # update attempt
+    ]
+    with pytest.raises(
+        ValueError,
+        match="Cannot update existing message with ID '1' in append_only mode",
+    ):
+        add_messages(left, right, mode="append_only")
+
+
+def test_allow_everything_mode_default_behavior():
+    """Test that allow_everything mode is the default and allows updates."""
+    left = [HumanMessage(content="Hello", id="1")]
+    right = [HumanMessage(content="Hello again", id="1")]
+    # Test without specifying mode (should default to allow_everything)
+    result = add_messages(left, right)
+    expected = [HumanMessage(content="Hello again", id="1")]
+    assert result == expected
+
+    # Test with explicit mode
+    result = add_messages(left, right, mode="allow_everything")
+    assert result == expected
+
+
+def test_append_only_mode_in_state_graph():
+    """Test append_only mode works correctly in a StateGraph."""
+
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages(mode="append_only")]
+
+    def add_message(state: State):
+        return {"messages": [AIMessage(content="Response", id="2")]}
+
+    def try_update_message(state: State):
+        # This should fail because message with id="1" already exists
+        return {"messages": [HumanMessage(content="Updated", id="1")]}
+
+    # Test successful case
+    builder = StateGraph(State)
+    builder.add_node("add_message", add_message)
+    builder.add_edge(START, "add_message")
+    builder.add_edge("add_message", END)
+    graph = builder.compile()
+
+    result = graph.invoke({"messages": [HumanMessage(content="Hello", id="1")]})
+    assert len(result["messages"]) == 2
+    assert result["messages"][0].content == "Hello"
+    assert result["messages"][1].content == "Response"
+
+    # Test failure case
+    builder2 = StateGraph(State)
+    builder2.add_node("try_update", try_update_message)
+    builder2.add_edge(START, "try_update")
+    builder2.add_edge("try_update", END)
+    graph2 = builder2.compile()
+
+    with pytest.raises(
+        ValueError,
+        match="Cannot update existing message with ID '1' in append_only mode",
+    ):
+        graph2.invoke({"messages": [HumanMessage(content="Hello", id="1")]})
