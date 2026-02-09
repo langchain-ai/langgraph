@@ -84,19 +84,10 @@ def add_messages(
 
                 Must have `langchain-core>=0.3.11` installed to use this feature.
 
-        mode: Controls how message updates and removals are handled. Options are:
-            - `allow_everything` (default): Allows adding new messages, updating
-              existing messages by ID, and removing messages. This is the standard behavior.
-            - `append_only`: Only allows adding new messages. If a message in `right`
-              has the same ID as a message in `left` (update or removal), a `ValueError`
-              will be raised. This mode is useful when you want to prevent any modification
-              of message history.
-
     Returns:
         A new list of messages with the messages from `right` merged into `left`.
         If a message in `right` has the same ID as a message in `left`, the
-            message from `right` will replace the message from `left` (in
-            `allow_everything` mode) or raise a `ValueError` (in `append_only` mode).
+            message from `right` will replace the message from `left`.
 
     Example: Basic usage
         ```python
@@ -310,12 +301,8 @@ def validate_messages_append_only(
     if not isinstance(input_messages, list):
         input_messages = [input_messages]
 
-    # Convert to messages to get proper IDs
-    try:
-        converted_messages = convert_to_messages(input_messages)
-    except Exception:
-        # If conversion fails, let it through - the reducer will handle it
-        return
+    # Convert to messages to get proper IDs (let conversion errors propagate)
+    converted_messages = convert_to_messages(input_messages)
 
     # Check each input message
     for msg in converted_messages:
@@ -326,18 +313,19 @@ def validate_messages_append_only(
                 "External inputs must only append new messages."
             )
 
-        # Check for updates or removals of existing messages
-        if msg.id and msg.id in existing_ids:
-            if isinstance(msg, RemoveMessage):
-                raise ValueError(
-                    f"Cannot remove existing message with ID '{msg.id}' in append_only mode. "
-                    "External inputs must only append new messages."
-                )
-            else:
-                raise ValueError(
-                    f"Cannot update existing message with ID '{msg.id}' in append_only mode. "
-                    "External inputs must only append new messages."
-                )
+        # Check for removals of existing messages
+        if isinstance(msg, RemoveMessage) and msg.id in existing_ids:
+            raise ValueError(
+                f"Cannot remove existing message with ID '{msg.id}' in append_only mode. "
+                "External inputs must only append new messages."
+            )
+
+        # Check for updates of existing messages
+        if not isinstance(msg, RemoveMessage) and msg.id and msg.id in existing_ids:
+            raise ValueError(
+                f"Cannot update existing message with ID '{msg.id}' in append_only mode. "
+                "External inputs must only append new messages."
+            )
 
 
 @deprecated(
