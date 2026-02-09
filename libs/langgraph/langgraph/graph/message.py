@@ -63,6 +63,7 @@ def add_messages(
     right: Messages,
     *,
     format: Literal["langchain-openai"] | None = None,
+    mode: Literal["allow_everything", "append_only"] = "allow_everything",
 ) -> Messages:
     """Merges two lists of messages, updating existing messages by ID.
 
@@ -83,10 +84,19 @@ def add_messages(
 
                 Must have `langchain-core>=0.3.11` installed to use this feature.
 
+        mode: Controls how message updates and removals are handled. Options are:
+            - `allow_everything` (default): Allows adding new messages, updating
+              existing messages by ID, and removing messages. This is the standard behavior.
+            - `append_only`: Only allows adding new messages. If a message in `right`
+              has the same ID as a message in `left` (update or removal), a `ValueError`
+              will be raised. This mode is useful when you want to prevent any modification
+              of message history.
+
     Returns:
         A new list of messages with the messages from `right` merged into `left`.
         If a message in `right` has the same ID as a message in `left`, the
-            message from `right` will replace the message from `left`.
+            message from `right` will replace the message from `left` (in
+            `allow_everything` mode) or raise a `ValueError` (in `append_only` mode).
 
     Example: Basic usage
         ```python
@@ -183,6 +193,30 @@ def add_messages(
         # }
         ```
 
+    Example: Use append_only mode to prevent message updates
+        ```python
+        from typing import Annotated
+        from typing_extensions import TypedDict
+        from langgraph.graph import StateGraph, add_messages
+
+
+        class State(TypedDict):
+            messages: Annotated[list, add_messages(mode="append_only")]
+
+
+        # This will work - adding new messages
+        msgs1 = [HumanMessage(content="Hello", id="1")]
+        msgs2 = [AIMessage(content="Hi there!", id="2")]
+        add_messages(msgs1, msgs2, mode="append_only")
+        # [HumanMessage(content='Hello', id='1'), AIMessage(content='Hi there!', id='2')]
+
+        # This will raise an error - trying to update an existing message
+        msgs1 = [HumanMessage(content="Hello", id="1")]
+        msgs2 = [HumanMessage(content="Hello again", id="1")]
+        add_messages(msgs1, msgs2, mode="append_only")
+        # ValueError: Cannot update existing message with ID '1' in append_only mode
+        ```
+
     """
     remove_all_idx = None
     # coerce to list
@@ -207,6 +241,11 @@ def add_messages(
         if m.id is None:
             m.id = str(uuid.uuid4())
         if isinstance(m, RemoveMessage) and m.id == REMOVE_ALL_MESSAGES:
+            if mode == "append_only":
+                raise ValueError(
+                    "Cannot remove all messages in append_only mode. "
+                    "Use mode='allow_everything' to allow message removal."
+                )
             remove_all_idx = idx
 
     if remove_all_idx is not None:
@@ -218,6 +257,18 @@ def add_messages(
     ids_to_remove = set()
     for m in right:
         if (existing_idx := merged_by_id.get(m.id)) is not None:
+            # Check for append_only mode violation
+            if mode == "append_only":
+                if isinstance(m, RemoveMessage):
+                    raise ValueError(
+                        f"Cannot remove existing message with ID '{m.id}' in append_only mode. "
+                        f"Use mode='allow_everything' to allow message removal."
+                    )
+                else:
+                    raise ValueError(
+                        f"Cannot update existing message with ID '{m.id}' in append_only mode. "
+                        f"Use mode='allow_everything' to allow message updates."
+                    )
             if isinstance(m, RemoveMessage):
                 ids_to_remove.add(m.id)
             else:
