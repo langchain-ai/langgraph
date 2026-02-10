@@ -26,13 +26,10 @@ __all__ = [
 
 
 AccessContext = Literal[
-    "runs.create",
-    "threads.update_state",
-    "assistants.get_graph",
-    "assistants.get_subgraphs",
-    "assistants.get_schemas",
-    "threads.get_state",
-    "threads.get_state_history",
+    "threads.create_run",
+    "threads.update",
+    "threads.read",
+    "assistants.read",
 ]
 
 
@@ -59,40 +56,36 @@ class _ServerRuntimeBase(Generic[ContextT]):
 
     Write contexts (graph is used to write state):
 
-    - `runs.create` (`graph.astream`) — full graph execution (nodes +
-      edges). `context` is available (use `.execution_runtime` to narrow).
-    - `threads.update_state` (`graph.aupdate_state`) — does NOT execute
-      node functions or evaluate edges. Only runs the node's channel
-      writers to apply the provided values to state channels as if the
-      specified node had returned them. Reducers are applied and channel
-      triggers are set, so the next `invoke`/`stream` call will evaluate
-      edges from that node to determine the next step. Does not need
-      access to external resources, but a different graph topology will
-      apply writes to the wrong channels.
+    - `threads.create_run` (`graph.astream`) — full graph execution
+      (nodes + edges). `context` is available (use `.execution_runtime`
+      to narrow).
+    - `threads.update` (`graph.aupdate_state`) — does NOT execute node
+      functions or evaluate edges. Only runs the node's channel writers
+      to apply the provided values to state channels as if the specified
+      node had returned them. Reducers are applied and channel triggers
+      are set, so the next `invoke`/`stream` call will evaluate edges
+      from that node to determine the next step. Does not need access to
+      external resources, but a different graph topology will apply
+      writes to the wrong channels.
 
-    Read state contexts (graph used to format the returned `StateSnapshot`).
-    A different topology may cause `get_state` to report incorrect
-    pending tasks. Note that `useStream` uses the state history endpoint
-    to render interrupts and support branching:
+    Read state contexts (graph used to format the returned
+    `StateSnapshot`). A different topology may cause `get_state` to
+    report incorrect pending tasks. Note that `useStream` uses the state
+    history endpoint to render interrupts and support branching:
 
-    - `threads.get_state` (`graph.aget_state`) — the graph structure
-      informs which tasks to include in the prepared view of the latest
-      checkpoint and how to process subgraphs.
-    - `threads.get_state_history` (`graph.aget_state_history`) — same as
-      above, for the list of previous checkpoints.
+    - `threads.read` (`graph.aget_state`, `graph.aget_state_history`) —
+      the graph structure informs which tasks to include in the prepared
+      view of the latest checkpoint and how to process subgraphs.
 
     Introspection contexts (graph structure only, no execution).
     A different topology may cause schemas and visualizations to not
     match actual execution:
 
-    - `assistants.get_graph` (`graph.aget_graph`) — return the graph
-      definition. Used for visualization in the studio UI.
-    - `assistants.get_subgraphs` (`graph.aget_subgraphs`) — return
-      subgraph definitions. Used for visualization in the studio UI.
-    - `assistants.get_schemas` (`graph.aget_schemas`) — return
-      input/output/config schemas. Used to populate the assistant schema
-      for the studio UI as well as for MCP, A2A, and other protocol
-      integrations.
+    - `assistants.read` (`graph.aget_graph`, `graph.aget_subgraphs`,
+      `graph.aget_schemas`) — return the graph definition, subgraph
+      definitions, and input/output/config schemas. Used for
+      visualization in the studio UI and to populate schemas for MCP,
+      A2A, and other protocol integrations.
     """
 
     user: BaseUser | None = field(default=None)
@@ -105,7 +98,7 @@ class _ServerRuntimeBase(Generic[ContextT]):
     def execution_runtime(self) -> _ExecutionRuntime[ContextT] | None:
         """Narrow to the execution runtime, or `None` if not in an execution context.
 
-        When the server calls the graph factory for `runs.create`, the returned
+        When the server calls the graph factory for `threads.create_run`, the returned
         object provides access to `context` (typed by the graph's
         `context_schema`). For all other access contexts (introspection, state
         reads, state updates), this returns `None`.
@@ -154,7 +147,7 @@ class _ServerRuntimeBase(Generic[ContextT]):
 
 @dataclass(kw_only=True, slots=True, frozen=True)
 class _ExecutionRuntime(_ServerRuntimeBase[ContextT], Generic[ContextT]):
-    """Runtime for `runs.create` — the graph will be fully executed.
+    """Runtime for `threads.create_run` — the graph will be fully executed.
 
     Access this via `.execution_runtime` on `ServerRuntime`. Do not
     construct directly.
@@ -166,7 +159,7 @@ class _ExecutionRuntime(_ServerRuntimeBase[ContextT], Generic[ContextT]):
     context: ContextT = field(default=None)  # type: ignore[assignment]
     """The graph run context, typed by the graph's `context_schema`.
 
-    Only available during `runs.create`.
+    Only available during `threads.create_run`.
     """
 
 
@@ -174,9 +167,9 @@ class _ExecutionRuntime(_ServerRuntimeBase[ContextT], Generic[ContextT]):
 class _ReadRuntime(_ServerRuntimeBase[ContextT], Generic[ContextT]):
     """Runtime for non-execution access contexts.
 
-    Used for introspection (`assistants.get_graph`, `assistants.get_schemas`, etc.),
-    state operations (`threads.get_state`, `threads.get_state_history`), and
-    state updates (`threads.update_state`). No `context` is available.
+    Used for introspection (`assistants.read`), state operations
+    (`threads.read`), and state updates (`threads.update`).
+    No `context` is available.
 
     !!! warning "Beta"
         This API is in beta and may change in future releases.
