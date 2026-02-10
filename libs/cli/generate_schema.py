@@ -171,7 +171,12 @@ def generate_schema():
 
     # Add enum constraint for python_version
     if "python_version" in python_schema["properties"]:
-        python_schema["properties"]["python_version"]["enum"] = ["3.11", "3.12", "3.13"]
+        python_schema["properties"]["python_version"]["enum"] = [
+            "3.11",
+            "3.12",
+            "3.13",
+            "3.14",
+        ]
 
     # Create Node.js schema with node_version
     node_schema = {

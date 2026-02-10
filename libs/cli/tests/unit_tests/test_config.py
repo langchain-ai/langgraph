@@ -89,6 +89,9 @@ def test_validate_config():
     expected_config["python_version"] = "3.13"
     actual_config = validate_config(expected_config)
     assert actual_config == expected_config
+    expected_config["python_version"] = "3.14"
+    actual_config = validate_config(expected_config)
+    assert actual_config == expected_config
 
     # check wrong python version raises
     with pytest.raises(click.UsageError):
@@ -1439,6 +1442,7 @@ def test_docker_tag_different_python_versions_with_distro():
         ("3.11", "langchain/langgraph-api:3.11-wolfi"),
         ("3.12", "langchain/langgraph-api:3.12-wolfi"),
         ("3.13", "langchain/langgraph-api:3.13-wolfi"),
+        ("3.14", "langchain/langgraph-api:3.14-wolfi"),
     ]
 
     for python_version, expected_tag in versions_and_expected:
@@ -1546,7 +1550,7 @@ def test_docker_tag_with_api_version(in_config: bool):
     assert tag == f"my-registry/custom-image:{version}-py3.11"
 
     # Test 6: api_version with different Python versions
-    for python_version in ["3.11", "3.12", "3.13"]:
+    for python_version in ["3.11", "3.12", "3.13", "3.14"]:
         config = validate_config(
             {
                 "python_version": python_version,
