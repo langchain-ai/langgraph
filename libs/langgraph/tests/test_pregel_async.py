@@ -2262,18 +2262,20 @@ async def test_imp_task(
 
     tracer = FakeTracer()
     thread1 = {"configurable": {"thread_id": "1"}, "callbacks": [tracer]}
-    assert [c async for c in graph.astream([0, 1], thread1, durability=durability)] == [
+    result = [c async for c in graph.astream([0, 1], thread1, durability=durability)]
+    # mapper tasks run concurrently so output order is non-deterministic
+    assert sorted(result[:-1], key=lambda d: str(d)) == [
         {"mapper": "00"},
         {"mapper": "11"},
-        {
-            "__interrupt__": (
-                Interrupt(
-                    value="question",
-                    id=AnyStr(),
-                ),
-            )
-        },
     ]
+    assert result[-1] == {
+        "__interrupt__": (
+            Interrupt(
+                value="question",
+                id=AnyStr(),
+            ),
+        )
+    }
     assert mapper_calls == 2
     assert len(tracer.runs) == 1
     assert len(tracer.runs[0].child_runs) == 1

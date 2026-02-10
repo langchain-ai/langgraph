@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import threading
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from contextlib import asynccontextmanager
 from typing import Any, TypeVar, cast
@@ -281,8 +282,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         async with self.lock:
             if self.is_setup:
                 return
-            if not self.conn.is_alive():
-                await self.conn
+            await _ensure_connected(self.conn)
             async with self.conn.executescript(
                 """
                 PRAGMA journal_mode=WAL;
@@ -609,3 +609,23 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
         next_v = current_v + 1
         next_h = random.random()
         return f"{next_v:032}.{next_h:016}"
+
+
+async def _ensure_connected(conn: aiosqlite.Connection) -> None:
+    if not _CONN_STARTED_CHECK(conn):
+        await conn
+
+
+def _build_conn_started_check() -> Callable[[aiosqlite.Connection], bool]:
+    is_alive = getattr(aiosqlite.Connection, "is_alive", None)
+    if callable(is_alive):
+        return lambda conn: conn.is_alive()  # type: ignore[attr-defined]
+
+    def _started(conn: aiosqlite.Connection) -> bool:
+        thread: threading.Thread | None = getattr(conn, "_thread", None)
+        return False if thread is None else thread.is_alive()
+
+    return _started
+
+
+_CONN_STARTED_CHECK = _build_conn_started_check()

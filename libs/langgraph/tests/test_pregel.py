@@ -16,7 +16,7 @@ from typing import Annotated, Any, Literal, get_type_hints
 
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -1264,18 +1264,20 @@ def test_imp_task(
     }
 
     thread1 = {"configurable": {"thread_id": "1"}}
-    assert [*graph.stream([0, 1], thread1, durability=durability)] == [
+    result = [*graph.stream([0, 1], thread1, durability=durability)]
+    # mapper tasks run concurrently so output order is non-deterministic
+    assert sorted(result[:-1], key=lambda d: str(d)) == [
         {"mapper": "00"},
         {"mapper": "11"},
-        {
-            "__interrupt__": (
-                Interrupt(
-                    value="question",
-                    id=AnyStr(),
-                ),
-            )
-        },
     ]
+    assert result[-1] == {
+        "__interrupt__": (
+            Interrupt(
+                value="question",
+                id=AnyStr(),
+            ),
+        )
+    }
     assert mapper_calls == 2
 
     assert graph.invoke(Command(resume="answer"), thread1, durability=durability) == [
@@ -6978,6 +6980,93 @@ def test_stream_messages_dedupe_state(sync_checkpointer: BaseCheckpointSaver) ->
     assert chunks[0][1]["langgraph_node"] == "call_model"
 
 
+def test_stream_messages_dedupe_pydantic_subgraph_interrupt(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Pydantic BaseModel state should not cause duplicate messages when
+    streaming from subgraphs that use interrupts. Regression test for a bug
+    where ``on_chain_start`` only populated the ``seen`` set for dict inputs,
+    skipping Pydantic model inputs entirely."""
+
+    class PydanticState(BaseModel):
+        messages: Annotated[list[AnyMessage], add_messages] = Field(
+            default_factory=list
+        )
+
+    def subgraph_proposal(state) -> Command[Literal["subgraph_approval"]]:
+        return Command(
+            goto="subgraph_approval",
+            update={"messages": [AIMessage(content="Proposal", id="proposal_msg")]},
+        )
+
+    def subgraph_approval(state) -> Command[Literal["__end__"]]:
+        resume_value = interrupt({"message": "Waiting for approval"})
+        user_msg = resume_value.get("user_message", "")
+        msgs = [HumanMessage(content=user_msg)] if user_msg else []
+        return Command(goto="__end__", update={"messages": msgs})
+
+    subgraph = (
+        StateGraph(PydanticState)
+        .add_node("proposal", subgraph_proposal)
+        .add_node("subgraph_approval", subgraph_approval)
+        .add_edge(START, "proposal")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    def finalize(state) -> Command[Literal["__end__"]]:
+        return Command(
+            goto="__end__",
+            update={"messages": [AIMessage(content="Finalized", id="finalize_msg")]},
+        )
+
+    graph = (
+        StateGraph(PydanticState)
+        .add_node("subgraph", subgraph)
+        .add_node("finalize", finalize)
+        .add_edge(START, "subgraph")
+        .add_edge("subgraph", "finalize")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    thread1 = {"configurable": {"thread_id": "1"}}
+
+    # First stream: should hit interrupt after proposal
+    chunks_req0 = [
+        (ns, chunk)
+        for ns, chunk in graph.stream(
+            {"messages": [HumanMessage(content="Create a proposal")]},
+            thread1,
+            stream_mode="messages",
+            subgraphs=True,
+        )
+    ]
+
+    msg_ids_req0 = {chunk[0].id for _, chunk in chunks_req0}
+    assert "proposal_msg" in msg_ids_req0
+
+    # Verify interrupted
+    state = graph.get_state(thread1)
+    assert state.next
+
+    # Second stream: resume — should NOT duplicate messages from first stream
+    chunks_req1 = [
+        (ns, chunk)
+        for ns, chunk in graph.stream(
+            Command(resume={"user_message": "Yes"}),
+            thread1,
+            stream_mode="messages",
+            subgraphs=True,
+        )
+    ]
+
+    msg_ids_req1 = {chunk[0].id for _, chunk in chunks_req1}
+    assert "finalize_msg" in msg_ids_req1
+
+    # The key assertion: no message IDs from request 0 should appear in request 1
+    duplicates = msg_ids_req0 & msg_ids_req1
+    assert not duplicates, f"Duplicate message IDs across requests: {duplicates}"
+
+
 def test_interrupt_subgraph_reenter_checkpointer_true(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -7924,6 +8013,83 @@ def test_parent_command_goto(
 
     assert main_graph.invoke(input={"dialog_state": ["init_state"]}, config=config) == {
         "dialog_state": ["init_state", "b_child_state", "node_b_parent"]
+    }
+
+
+@pytest.mark.parametrize("subgraph_persist", [True, False])
+def test_parent_command_goto_deeply_nested(
+    sync_checkpointer: BaseCheckpointSaver,
+    subgraph_persist: bool,
+) -> None:
+    """Test Command.PARENT in a 3-level nested subgraph.
+
+    Command.PARENT should jump to sub_child_3 in the immediate parent (sub_graph).
+
+    Note: With operator.add, subgraph state (including its input) is merged with
+    parent state, causing the input to appear multiple times. This is expected.
+    """
+
+    class State(TypedDict):
+        dialog_state: Annotated[list[str], operator.add]
+
+    # Level 3: Deepest subgraph that issues Command.PARENT
+    def sub_sub_child_node(state):
+        # Jump to immediate parent (sub_graph)
+        return Command(
+            graph=Command.PARENT,
+            goto="sub_child_3",
+            update={"dialog_state": ["sub_sub_child"]},
+        )
+
+    sub_sub_builder = StateGraph(State)
+    sub_sub_builder.add_node("sub_sub_child", sub_sub_child_node)
+    sub_sub_builder.add_edge(START, "sub_sub_child")
+    sub_sub_graph = sub_sub_builder.compile(
+        name="sub_sub_graph", checkpointer=subgraph_persist
+    )
+
+    # Level 2: Middle subgraph containing Level 3
+    def sub_child_1(state):
+        return {"dialog_state": ["sub_child_1"]}
+
+    def sub_child_3(state):
+        return {"dialog_state": ["sub_child_3"]}
+
+    sub_builder = StateGraph(State)
+    sub_builder.add_node("sub_child_1", sub_child_1)
+    sub_builder.add_node("sub_child_2", sub_sub_graph, destinations=("sub_child_3",))
+    sub_builder.add_node("sub_child_3", sub_child_3)
+    sub_builder.add_edge(START, "sub_child_1")
+    sub_builder.add_edge("sub_child_1", "sub_child_2")
+    sub_graph = sub_builder.compile(name="sub_graph", checkpointer=subgraph_persist)
+
+    # Level 1: Main graph containing Level 2
+    def child_1(state):
+        return {"dialog_state": ["child_1"]}
+
+    builder = StateGraph(State)
+    builder.add_node("child_1", child_1)
+    builder.add_node("child_2", sub_graph)
+    builder.add_edge(START, "child_1")
+    builder.add_edge("child_1", "child_2")
+    graph = builder.compile(name="main_graph", checkpointer=sync_checkpointer)
+
+    config = {"configurable": {"thread_id": 1}}
+
+    result = graph.invoke(input={"dialog_state": ["init"]}, config=config)
+
+    # Command.PARENT from sub_sub_child jumps to sub_child_3 in immediate parent
+    # State duplication occurs due to operator.add merging behavior
+    assert result == {
+        "dialog_state": [
+            "init",
+            "child_1",
+            "init",
+            "child_1",
+            "sub_child_1",
+            "sub_sub_child",
+            "sub_child_3",
+        ]
     }
 
 

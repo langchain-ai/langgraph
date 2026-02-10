@@ -106,3 +106,39 @@ def test_field_extraction_from_json_body() -> None:
     assert err.code == "invalid_param"
     assert err.param == "limit"
     assert err.type == "invalid_request_error"
+
+
+def test_error_message_in_str_and_args() -> None:
+    """Test that error message is accessible via str() and args."""
+    r = make_response(422, json_body={"message": "Validation failed"})
+    with pytest.raises(UnprocessableEntityError) as ei:
+        _raise_for_status_typed(r)
+    err = cast("UnprocessableEntityError", ei.value)
+    assert str(err) == "Validation failed"
+    assert err.args == ("Validation failed",)
+    assert err.message == "Validation failed"
+
+
+@pytest.mark.parametrize(
+    "status,exc_type",
+    [
+        (400, BadRequestError),
+        (401, AuthenticationError),
+        (403, PermissionDeniedError),
+        (404, NotFoundError),
+        (409, ConflictError),
+        (422, UnprocessableEntityError),
+        (429, RateLimitError),
+        (500, InternalServerError),
+    ],
+)
+def test_all_error_types_display_message(
+    status: int, exc_type: type[APIStatusError]
+) -> None:
+    """Test that all error subclasses properly display their message."""
+    r = make_response(status, json_body={"message": "test error message"})
+    with pytest.raises(exc_type) as ei:
+        _raise_for_status_typed(r)
+    err = ei.value
+    assert str(err) == "test error message"
+    assert "test error message" in err.args

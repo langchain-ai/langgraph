@@ -121,6 +121,8 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
     """Possible overrides for ToolCallRequest.override() method."""
 
     tool_call: ToolCall
+    tool: BaseTool
+    state: Any
 
 
 @dataclass
@@ -170,8 +172,12 @@ class ToolCallRequest:
         This follows an immutable pattern, leaving the original request unchanged.
 
         Args:
-            **overrides: Keyword arguments for attributes to override. Supported keys:
-                - tool_call: Tool call dict with name, args, and id
+            **overrides: Keyword arguments for attributes to override.
+
+                Supported keys:
+
+                - tool_call: Tool call dict with `name`, `args`, and `id`
+                - state: Agent state (`dict`, `list`, or `BaseModel`)
 
         Returns:
             New ToolCallRequest instance with specified overrides applied.
@@ -1525,16 +1531,23 @@ def tools_condition(
 class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     """Runtime context automatically injected into tools.
 
-    When a tool function has a parameter named `tool_runtime` with type hint
+    !!! note
+
+        This is distinct from `Runtime` (from `langgraph.runtime`), which is injected
+        into graph nodes and middleware. `ToolRuntime` includes additional tool-specific
+        attributes like `config`, `state`, and `tool_call_id` that `Runtime` does not
+        have.
+
+    When a tool function has a parameter named `runtime` with type hint
     `ToolRuntime`, the tool execution system will automatically inject an instance
     containing:
 
     - `state`: The current graph state
     - `tool_call_id`: The ID of the current tool call
     - `config`: `RunnableConfig` for the current execution
-    - `context`: Runtime context (from langgraph `Runtime`)
-    - `store`: `BaseStore` instance for persistent storage (from langgraph `Runtime`)
-    - `stream_writer`: `StreamWriter` for streaming output (from langgraph `Runtime`)
+    - `context`: Runtime context (shared with `Runtime`)
+    - `store`: `BaseStore` instance for persistent storage (shared with `Runtime`)
+    - `stream_writer`: `StreamWriter` for streaming output (shared with `Runtime`)
 
     No `Annotated` wrapper is needed - just use `runtime: ToolRuntime`
     as a parameter.
@@ -1756,6 +1769,12 @@ def _is_injection(
     origin_ = get_origin(type_arg)
     if origin_ is Union or origin_ is Annotated:
         return any(_is_injection(ta, injection_type) for ta in get_args(type_arg))
+
+    if origin_ is not None and (
+        origin_ is injection_type
+        or (isinstance(origin_, type) and issubclass(origin_, injection_type))
+    ):
+        return True
     return False
 
 
