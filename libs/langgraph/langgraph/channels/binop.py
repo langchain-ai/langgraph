@@ -1,8 +1,7 @@
-import collections.abc
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
-from typing_extensions import NotRequired, Required, Self
+from typing_extensions import Self
 
 from langgraph._internal._constants import OVERWRITE
 from langgraph._internal._typing import MISSING
@@ -16,17 +15,6 @@ from langgraph.errors import (
 from langgraph.types import Overwrite
 
 __all__ = ("BinaryOperatorAggregate",)
-
-
-# Adapted from typing_extensions
-def _strip_extras(t):  # type: ignore[no-untyped-def]
-    """Strips Annotated, Required and NotRequired from a given type."""
-    if hasattr(t, "__origin__"):
-        return _strip_extras(t.__origin__)
-    if hasattr(t, "__origin__") and t.__origin__ in (Required, NotRequired):
-        return _strip_extras(t.__args__[0])
-
-    return t
 
 
 def _get_overwrite(value: Any) -> tuple[bool, Any]:
@@ -53,19 +41,9 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     def __init__(self, typ: type[Value], operator: Callable[[Value, Value], Value]):
         super().__init__(typ)
         self.operator = operator
-        # special forms from typing or collections.abc are not instantiable
-        # so we need to replace them with their concrete counterparts
-        typ = _strip_extras(typ)
-        if typ in (collections.abc.Sequence, collections.abc.MutableSequence):
-            typ = list
-        if typ in (collections.abc.Set, collections.abc.MutableSet):
-            typ = set
-        if typ in (collections.abc.Mapping, collections.abc.MutableMapping):
-            typ = dict
-        try:
-            self.value = typ()
-        except Exception:
-            self.value = MISSING
+        # Start with no value - let schema defaults be applied when state is read
+        # This matches behavior of other channels like LastValue
+        self.value = MISSING
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, BinaryOperatorAggregate) and (
