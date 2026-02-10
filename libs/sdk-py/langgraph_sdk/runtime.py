@@ -190,7 +190,7 @@ ServerRuntime = TypeAliasType(
 )
 """Runtime context passed to graph builder factories within the Agent Server.
 
-Requires version 0.7.29 or later of the agent server.
+Requires version 0.7.30 or later of the agent server.
 
 The server calls your graph factory in multiple contexts: executing runs,
 reading state, fetching schemas, and more. `ServerRuntime` provides
