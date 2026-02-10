@@ -52,29 +52,36 @@ class _ServerRuntimeBase(Generic[ContextT]):
     graph structure, or read state history. This field tells you which
     operation triggered the current call.
 
-    Execution contexts (graph is used to write state):
+    Write contexts (graph is used to write state):
 
-    - `runs.create` — full graph execution (nodes + edges).
+    - `runs.create` (graph.astream) — full graph execution (nodes + edges).
       `context` is available (use `.execution_runtime` to narrow).
-    - `threads.update_state` — does NOT execute node functions or evaluate
-      edges. Only runs the node's channel writers (`ChannelWrite` runnables)
-      to apply the provided values to state channels as if the specified node
-      had returned them. Reducers are applied and channel triggers are set,
-      so the next `invoke`/`stream` call will evaluate edges from that node
-      to determine the next step.
-
-    Introspection contexts (graph structure only, no execution):
-
-    - `assistants.get_graph` — return the graph definition.
-    - `assistants.get_subgraphs` — return subgraph definitions.
-    - `assistants.get_schemas` — return input/output/config schemas.
-
-    State contexts (graph used to structure the `StateSnapshot`):
-
-    - `threads.get_state` — the graph structure informs which tasks to
+    - `threads.update_state` (graph.aupdate_state) — does NOT execute node functions or evaluate
+      edges. Only runs the node's channel writers to apply the provided values
+      to state channels as if the specified node had returned them. Reducers
+      are applied and channel triggers are set, so the next `invoke`/`stream`
+      call will evaluate edges from that node to determine the next step.
+      Does not need access to external resources, but it does expect the same
+      graph topology as `runs.create`.
+    
+    Read state contexts (graph used to format the returned `StateSnapshot`):
+        This impacts read endpoints only. Note that `useStream` uses the state history 
+        endpoint to render interrupts and support branching.
+    
+    - `threads.get_state` (graph.aget_state) — the graph structure informs which tasks to
       include in the prepared view of the latest checkpoint and how to
       process subgraphs.
-    - `threads.get_state_history` — same as above, for historical states.
+    - `threads.get_state_history` (graph.aget_state_history) — same as above, for the list of previous checkpoints.
+    
+    Introspection contexts (graph structure only, no execution):
+        This impacts read endpoints only.
+
+    - `assistants.get_graph` (graph.aget_graph) — return the graph definition. Used for visualization in the
+        studio UI.
+    - `assistants.get_subgraphs` (graph.aget_subgraphs) — return subgraph definitions. Used for visualization in the
+        studio UI.
+    - `assistants.get_schemas` (graph.aget_schemas) — return input/output/config schemas. Used to populate the assistant
+        schema for the studio UI as well as for the MCP, A2A, and other protocol integrations.
     """
 
     user: BaseUser | None = field(default=None)
