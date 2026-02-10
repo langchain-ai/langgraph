@@ -39,6 +39,7 @@ lint = [
 dev = [
   { include-group = "test" },
   { include-group = "lint" },
+  "langgraph",
   "pydantic>=2.12.4",
 ]
 
@@ -51,6 +52,9 @@ asyncio_mode = "auto"
 
 [tool.uv]
 default-groups = ['dev']
+
+[tool.uv.sources]
+langgraph = { path = "../langgraph", editable = true }
 
 [tool.ruff]
 exclude = ["venv", ".venv", "build", "dist"]
