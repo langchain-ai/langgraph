@@ -591,6 +591,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "codespell" },
+    { name = "langgraph", editable = "../langgraph" },
     { name = "mypy", specifier = "==1.19.0" },
     { name = "pydantic", specifier = ">=2.12.4" },
     { name = "pytest" },
