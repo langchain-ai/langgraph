@@ -1,5 +1,5 @@
-from langgraph._internal._constants import PULL, PUSH
-from langgraph.pregel._algo import prepare_next_tasks, task_path_str
+from langgraph._internal._constants import PULL, PUSH, RESUME
+from langgraph.pregel._algo import _scratchpad, prepare_next_tasks, task_path_str
 from langgraph.pregel._checkpoint import channels_from_checkpoint, empty_checkpoint
 
 
@@ -65,3 +65,20 @@ def test_tuple_str() -> None:
         f"~{PUSH}, ~{PUSH}, 0000000002, 0000000001",
         f"~{PUSH}, ~{PUSH}, ~{PUSH}, 0000000002, 0000000001, 0000000003",
     ]
+
+
+def test_scratchpad_root_without_global_resume_value() -> None:
+    writes = [("task-1", RESUME, "task-resume")]
+    scratchpad = _scratchpad(
+        parent_scratchpad=None,
+        pending_writes=writes,
+        task_id="task-1",
+        namespace_hash="ns",
+        resume_map=None,
+        step=0,
+        stop=1,
+    )
+
+    assert scratchpad.resume == ["task-resume"]
+    assert scratchpad.get_null_resume() is None
+    assert scratchpad.get_null_resume(consume=True) is None
