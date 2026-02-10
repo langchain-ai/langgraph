@@ -183,11 +183,6 @@ def validate_config(config: Config) -> Config:
 
     if config.get("python_version"):
         pyversion = config["python_version"]
-        if "-bullseye" in pyversion:
-            raise click.UsageError(
-                "Bullseye images were deprecated in version 0.4.13. "
-                "Please use 'bookworm' or 'debian' instead."
-            )
         if not pyversion.count(".") == 1 or not all(
             part.isdigit() for part in pyversion.split("-")[0].split(".")
         ):
