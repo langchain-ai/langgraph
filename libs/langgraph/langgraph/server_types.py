@@ -24,12 +24,17 @@ AccessContext = Literal[
 
 @dataclass(**_DC_KWARGS)
 class ServerRuntime(Runtime):
-    """Server-side runtime context passed to graph builder factories.
+    """Runtime context passed to graph builder factories within the Agent Server.
+
+    Requires version 0.7.29 or later of the agent server.
 
     Extends the base Runtime with server-specific information about
     the authenticated user and the reason the graph factory is being called.
-    """
 
+    !!! warning "Beta"
+        This API is in beta and may change in future releases.
+    """
+    
     user: BaseUser | None = field(default=None)
     """The authenticated user.
 
