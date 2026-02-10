@@ -183,6 +183,11 @@ def validate_config(config: Config) -> Config:
 
     if config.get("python_version"):
         pyversion = config["python_version"]
+        if "-bullseye" in pyversion:
+            raise click.UsageError(
+                "Bullseye images were deprecated in version 0.4.13. "
+                "Please use 'bookworm' or 'debian' instead."
+            )
         if not pyversion.count(".") == 1 or not all(
             part.isdigit() for part in pyversion.split("-")[0].split(".")
         ):
@@ -210,10 +215,15 @@ def validate_config(config: Config) -> Config:
 
     # Validate image_distro config
     if image_distro := config.get("image_distro"):
+        if image_distro == "bullseye":
+            raise click.UsageError(
+                "Bullseye images were deprecated in version 0.4.13. "
+                "Please use 'bookworm' or 'debian' instead."
+            )
         if image_distro not in Distros.__args__:
             raise click.UsageError(
                 f"Invalid image_distro: '{image_distro}'. "
-                "Must be one of 'debian', 'bullseye', or 'bookworm'."
+                "Must be one of 'debian', 'wolfi', or 'bookworm'."
             )
 
     if pip_installer := config.get("pip_installer"):

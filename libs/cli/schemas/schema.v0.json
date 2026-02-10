@@ -147,7 +147,6 @@
                 {
                   "enum": [
                     "bookworm",
-                    "bullseye",
                     "debian",
                     "wolfi"
                   ]
@@ -156,7 +155,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Linux distribution for the base image.\n\nMust be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.\nIf omitted, defaults to 'debian' ('latest').\n"
+              "description": "Optional. Linux distribution for the base image.\n\nMust be one of 'wolfi', 'debian', or 'bookworm'.\nIf omitted, defaults to 'debian' ('latest').\n"
             },
             "keep_pkg_tools": {
               "anyOf": [
@@ -370,7 +369,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Linux distribution for the base image.\n\nMust be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.\nIf omitted, defaults to 'debian' ('latest').\n"
+              "description": "Optional. Linux distribution for the base image.\n\nMust be one of 'wolfi', 'debian', or 'bookworm'.\nIf omitted, defaults to 'debian' ('latest').\n"
             },
             "keep_pkg_tools": {
               "anyOf": [
