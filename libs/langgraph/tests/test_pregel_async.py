@@ -6732,6 +6732,37 @@ async def test_multiple_interrupts_functional(
 
 
 @NEEDS_CONTEXTVARS
+async def test_async_functional_resume_not_double_consumed(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    @task
+    async def dummy(x: int) -> int:
+        interrupt("hello")
+        return x
+
+    @entrypoint(checkpointer=async_checkpointer)
+    async def dummies(x: str) -> str:
+        out = ""
+        for i in range(1, 6):
+            out += str(await dummy(i))
+        return out
+
+    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    state = await dummies.ainvoke("xyz", config)
+
+    resumed_states = []
+    while state is not None and "__interrupt__" in state:
+        state = await dummies.ainvoke(Command(resume="howdy"), config)
+        resumed_states.append(state)
+
+    # Initial invoke interrupts once, then we should still need 5 resume calls:
+    # 4 additional interrupts plus final result.
+    assert len(resumed_states) == 5
+    assert all("__interrupt__" in s for s in resumed_states[:-1])
+    assert resumed_states[-1] == "12345"
+
+
+@NEEDS_CONTEXTVARS
 async def test_multiple_interrupts_functional_cache(
     async_checkpointer: BaseCheckpointSaver, cache: BaseCache
 ):
