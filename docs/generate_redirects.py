@@ -126,6 +126,15 @@ def generate_redirects():
     catchall_404.write_text(CATCHALL_404_TEMPLATE.format(default_url=DEFAULT_REDIRECT))
     print(f"Created: {catchall_404}")
 
+    # Copy static files (like llms.txt) that can't be redirected via HTML
+    static_files = ["llms.txt"]
+    for static_file in static_files:
+        src = script_dir / static_file
+        if src.exists():
+            dst = output_dir / static_file
+            dst.write_text(src.read_text())
+            print(f"Copied: {dst}")
+
     print(f"\nGenerated {len(redirects)} redirect files in {output_dir}")
 
 

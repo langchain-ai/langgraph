@@ -261,7 +261,6 @@
   "/troubleshooting/errors/INVALID_GRAPH_NODE_RETURN_VALUE": "https://docs.langchain.com/oss/python/langgraph/INVALID_GRAPH_NODE_RETURN_VALUE",
   "/troubleshooting/errors/MULTIPLE_SUBGRAPHS": "https://docs.langchain.com/oss/python/langgraph/MULTIPLE_SUBGRAPHS",
   "/tutorials/rag/langgraph_self_rag": "https://docs.langchain.com/oss/python/langgraph/agentic-rag",
-  "/llms.txt": "https://docs.langchain.com/llms.txt",
   "/additional-resources": "https://docs.langchain.com/oss/python/langgraph/overview",
   "/examples": "https://docs.langchain.com/oss/python/langgraph/overview",
   "/guides": "https://docs.langchain.com/oss/python/langgraph/overview",
