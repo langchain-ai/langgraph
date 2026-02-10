@@ -18,7 +18,7 @@ path = "langgraph_sdk/__init__.py"
 
 [project.urls]
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-py"
-Twitter = "https://x.com/LangChainAI"
+Twitter = "https://x.com/LangChain"
 Slack = "https://www.langchain.com/join-community"
 Reddit = "https://www.reddit.com/r/LangChain/"
 
@@ -30,7 +30,7 @@ test = [
     "pytest-watch",
 ]
 lint = [
-    "ruff==0.14.7",
+    "ruff==0.14.11",
     "codespell",
     "mypy==1.19.0",
     "ty==0.0.1a27",

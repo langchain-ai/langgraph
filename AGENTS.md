@@ -10,7 +10,7 @@ When you modify code in any library, run the following commands in that library'
 
 To run a particular test file or to pass additional pytest options you can specify the `TEST` variable:
 
-```
+```txt
 TEST=path/to/test.py make test
 ```
 
@@ -53,3 +53,5 @@ sdk-js (standalone)
 ```
 
 Changes to a library may impact all of its dependents shown above.
+
+- Do NOT use Sphinx-style double backtick formatting (` ``code`` `). Use single backticks (`` `code` ``) for inline code references in docstrings and comments.
