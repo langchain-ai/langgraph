@@ -73,3 +73,7 @@ lint.select = [
 ]
 lint.ignore = ["E501", "B008"]
 target-version = "py310"
+
+[tool.codespell]
+skip = "*.lock"
+
