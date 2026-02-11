@@ -317,3 +317,28 @@ def test_configurable_metadata():
     metadata = merged["metadata"]
     assert metadata.keys() == expected
     assert metadata["nooverride"] == 18
+
+
+def test_ensure_config_rejects_non_mapping() -> None:
+    with pytest.raises(TypeError, match="Expected config to be a mapping, got str"):
+        ensure_config("invalid_config")  # type: ignore[arg-type]
+
+
+def test_graph_rejects_non_mapping_config() -> None:
+    class State(TypedDict):
+        value: int
+
+    def node(state: State) -> State:
+        return state
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.set_entry_point("node")
+    builder.add_edge("node", END)
+    graph = builder.compile()
+
+    with pytest.raises(TypeError, match="Expected config to be a mapping, got str"):
+        graph.invoke({"value": 1}, config="invalid_config")  # type: ignore[arg-type]
+
+    with pytest.raises(TypeError, match="Expected config to be a mapping, got str"):
+        list(graph.stream({"value": 1}, config="invalid_config"))  # type: ignore[arg-type]

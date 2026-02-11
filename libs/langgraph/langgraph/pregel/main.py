@@ -2483,12 +2483,14 @@ class Pregel(
                 )
             durability = "async" if checkpoint_during else "exit"
 
+        config = ensure_config(self.config, config)
+
         if stream_mode is None:
             # if being called as a node in another graph, default to values mode
             # but don't overwrite stream_mode arg if provided
             stream_mode = (
                 "values"
-                if config is not None and CONFIG_KEY_TASK_ID in config.get(CONF, {})
+                if CONFIG_KEY_TASK_ID in config.get(CONF, {})
                 else self.stream_mode
             )
         if debug or self.debug:
@@ -2496,7 +2498,6 @@ class Pregel(
 
         stream = SyncQueue()
 
-        config = ensure_config(self.config, config)
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
             None,
@@ -2757,12 +2758,14 @@ class Pregel(
                 )
             durability = "async" if checkpoint_during else "exit"
 
+        config = ensure_config(self.config, config)
+
         if stream_mode is None:
             # if being called as a node in another graph, default to values mode
             # but don't overwrite stream_mode arg if provided
             stream_mode = (
                 "values"
-                if config is not None and CONFIG_KEY_TASK_ID in config.get(CONF, {})
+                if CONFIG_KEY_TASK_ID in config.get(CONF, {})
                 else self.stream_mode
             )
         if debug or self.debug:
@@ -2775,7 +2778,6 @@ class Pregel(
             partial(aioloop.call_soon_threadsafe, stream.put_nowait),
         )
 
-        config = ensure_config(self.config, config)
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
             None,
