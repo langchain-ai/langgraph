@@ -2,6 +2,7 @@
 
 import os
 import pathlib
+import re
 import shutil
 import sys
 from collections.abc import Callable, Sequence
@@ -17,6 +18,7 @@ from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
+from langgraph_cli.host_backend import HostBackendClient
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
 from langgraph_cli.util import warn_non_wolfi_distro
@@ -304,6 +306,8 @@ def _build(
     passthrough: Sequence[str] = (),
     install_command: str | None = None,
     build_command: str | None = None,
+    docker_command: Sequence[str] | None = None,
+    extra_flags: Sequence[str] = (),
 ):
     # pull latest images
     if pull:
@@ -348,11 +352,12 @@ def _build(
     if additional_contexts:
         for k, v in additional_contexts.items():
             args.extend(["--build-context", f"{k}={v}"])
+    cmd = tuple(docker_command) if docker_command else ("docker", "build")
     runner.run(
         subp_exec(
-            "docker",
-            "build",
+            *cmd,
             *args,
+            *extra_flags,
             *passthrough,
             build_context,
             input=stdin,
@@ -427,6 +432,227 @@ def build(
             install_command,
             build_command,
         )
+
+
+@OPT_CONFIG
+@OPT_PULL
+@OPT_VERBOSE
+@OPT_API_VERSION
+@click.option(
+    "--host-url",
+    envvar="LANGGRAPH_HOST_URL",
+    help="Base URL for the host backend. Defaults to $LANGGRAPH_HOST_URL.",
+)
+@click.option(
+    "--api-key",
+    envvar="LANGGRAPH_HOST_API_KEY",
+    help="Host backend API key. If omitted, you will be prompted securely.",
+)
+@click.option(
+    "--deployment-id",
+    help="Existing deployment ID to update. If omitted, a new deployment is created.",
+)
+@click.option(
+    "--name",
+    help="Deployment name used when creating a new deployment.",
+)
+@click.option(
+    "--image-name",
+    help="Repository suffix appended to the registry returned by the host backend.",
+)
+@click.option(
+    "--image-tag",
+    default="latest",
+    show_default=True,
+    help="Tag applied to the pushed image.",
+)
+@click.option(
+    "--platforms",
+    default="linux/amd64,linux/arm64",
+    show_default=True,
+    help="Comma separated list passed to docker buildx --platform.",
+)
+@click.option(
+    "--base-image",
+    help="Base image to use for building the LangGraph server.",
+)
+@click.option(
+    "--install-command",
+    help="Custom install command to run from the build context root.",
+)
+@click.option(
+    "--build-command",
+    help="Custom build command to run from the langgraph.json directory.",
+)
+@click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
+@cli.command(
+    help="🚢 Build and deploy a LangGraph image to the host backend.",
+    context_settings=dict(ignore_unknown_options=True),
+)
+@log_command
+def deploy(
+    config: pathlib.Path,
+    pull: bool,
+    verbose: bool,
+    api_version: str | None,
+    host_url: str | None,
+    api_key: str | None,
+    deployment_id: str | None,
+    name: str | None,
+    image_name: str | None,
+    image_tag: str,
+    platforms: str,
+    base_image: str | None,
+    install_command: str | None,
+    build_command: str | None,
+    docker_build_args: Sequence[str],
+):
+    host_url = host_url or os.getenv("LANGGRAPH_HOST_URL")
+    if not host_url:
+        raise click.UsageError("Provide --host-url or set LANGGRAPH_HOST_URL")
+    api_key = api_key or os.getenv("LANGGRAPH_HOST_API_KEY")
+    if not api_key:
+        api_key = click.prompt("Host API key", hide_input=True)
+
+    if not deployment_id and not name:
+        raise click.UsageError(
+            "--name is required when --deployment-id is not provided"
+        )
+
+    config_json = langgraph_cli.config.validate_config_file(config)
+    warn_non_wolfi_distro(config_json)
+
+    client = HostBackendClient(host_url, api_key)
+
+    def log_step(message: str) -> None:
+        click.secho(message, fg="cyan")
+
+    step = 1
+    if deployment_id:
+        log_step(f"{step}. Using deployment {deployment_id}")
+        step += 1
+    else:
+        log_step(f"{step}. Creating deployment '{name}'")
+        payload = {
+            "name": name,
+            "source": "internal_docker",
+            "source_config": {"deployment_type": "dev"},
+            "source_revision_config": {},
+            "secrets": [],
+        }
+        created = client.create_deployment(payload)
+        deployment_id = created["id"]
+        click.secho(f"   Deployment ID: {deployment_id}", fg="green")
+        step += 1
+
+    log_step(f"{step}. Requesting push token")
+    push_data = client.request_push_token(deployment_id)
+    deployment_token = push_data.get("token")
+    registry_url = push_data.get("registry_url")
+    if not deployment_token or not registry_url:
+        raise click.ClickException("Push token response missing token or registry_url")
+    step += 1
+
+    normalized_registry = registry_url.rstrip("/")
+    if "://" in normalized_registry:
+        normalized_registry = normalized_registry.split("//", 1)[1]
+    repo_seed = image_name or name or config.parent.name
+    repo_name = _normalize_image_name(repo_seed)
+    tag_value = _normalize_image_tag(image_tag)
+    remote_image = f"{normalized_registry}/{repo_name}:{tag_value}"
+
+    registry_host = normalized_registry.split("/")[0]
+
+    with Runner() as runner:
+        langgraph_cli.docker.check_capabilities(runner)
+
+        log_step(f"{step}. Logging into {registry_host}")
+        token_input = (
+            deployment_token
+            if deployment_token.endswith("\n")
+            else f"{deployment_token}\n"
+        )
+        runner.run(
+            subp_exec(
+                "docker",
+                "login",
+                "-u",
+                "oauth2accesstoken",
+                "--password-stdin",
+                registry_host,
+                input=token_input,
+                verbose=verbose,
+            )
+        )
+        step += 1
+
+        log_step(f"{step}. Building and pushing image {remote_image}")
+        build_platforms = _normalize_platforms(platforms)
+        extra_flags: list[str] = []
+        docker_cmd: Sequence[str] | None
+        if build_platforms:
+            extra_flags.extend(["--platform", build_platforms])
+            docker_cmd = ("docker", "buildx", "build")
+            extra_flags.append("--push")
+        else:
+            docker_cmd = None
+
+        _build(
+            runner,
+            lambda _msg: None,
+            config,
+            config_json,
+            base_image,
+            api_version,
+            pull,
+            remote_image,
+            docker_build_args,
+            install_command,
+            build_command,
+            docker_command=docker_cmd,
+            extra_flags=extra_flags,
+        )
+
+        if not build_platforms:
+            runner.run(
+                subp_exec(
+                    "docker",
+                    "push",
+                    remote_image,
+                    verbose=True,
+                )
+            )
+
+        step += 1
+        log_step(f"{step}. Updating deployment {deployment_id}")
+        client.update_deployment_image(deployment_id, remote_image)
+        click.secho("   Deployment updated", fg="green")
+
+
+def _normalize_image_name(value: str | None) -> str:
+    if not value:
+        return "app"
+    slug = re.sub(r"[^a-z0-9._-]+", "-", value.lower()).strip("-.")
+    return slug or "app"
+
+
+def _normalize_image_tag(value: str) -> str:
+    if not value:
+        value = "latest"
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", value):
+        raise click.UsageError(
+            "Image tag may only contain characters A-Z, a-z, 0-9, '_', '-', '.'"
+        )
+    return value
+
+
+def _normalize_platforms(value: str | None) -> str | None:
+    if not value:
+        return None
+    entries = [item.strip() for item in value.split(",") if item.strip()]
+    if not entries:
+        return None
+    return ",".join(entries)
 
 
 def _get_docker_ignore_content() -> str:
