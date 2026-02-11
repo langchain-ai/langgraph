@@ -196,6 +196,11 @@ def validate_config(config: Config) -> Config:
                 f"Python version {pyversion} is not supported. "
                 f"Minimum required version is {MIN_PYTHON_VERSION}."
             )
+        if "-" in pyversion and pyversion.split("-", 1)[1] == "bullseye":
+            raise click.UsageError(
+                "Bullseye images were deprecated in version 0.4.13. "
+                "Please use 'bookworm' or 'debian' instead."
+            )
 
         if not config["dependencies"]:
             raise click.UsageError(
