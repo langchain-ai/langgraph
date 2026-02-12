@@ -1,0 +1,331 @@
+---
+name: CLI Release
+
+on:
+  push:
+    tags:
+      - 'cli-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., cli-v0.2.10)'
+        required: true
+
+permissions:
+  contents: write
+  id-token: write  # OIDC trusted publishing for PyPI
+
+concurrency:
+  group: cli-release
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Build native binaries for each platform
+  # ──────────────────────────────────────────────
+  build:
+    name: Build - ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        working-directory: libs/cli
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: langgraph
+            npm_pkg: langgraph-cli-linux-x64
+
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            binary: langgraph
+            npm_pkg: langgraph-cli-linux-arm64
+
+          - name: darwin-x64
+            runner: macos-13  # Intel
+            target: x86_64-apple-darwin
+            binary: langgraph
+            npm_pkg: langgraph-cli-darwin-x64
+
+          - name: darwin-arm64
+            runner: macos-latest  # Apple Silicon
+            target: aarch64-apple-darwin
+            binary: langgraph
+            npm_pkg: langgraph-cli-darwin-arm64
+
+          - name: win32-x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: langgraph.exe
+            npm_pkg: langgraph-cli-win32-x64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: libs/cli
+          key: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Run tests
+        if: matrix.name != 'linux-arm64'  # skip on ARM (slow QEMU)
+        run: cargo test --release --target ${{ matrix.target }}
+
+      # Upload raw binary for GitHub release
+      - name: Prepare binary artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} dist/
+          cd dist
+          if [[ "${{ matrix.name }}" == win32-* ]]; then
+            7z a ../langgraph-${{ matrix.name }}.zip ${{ matrix.binary }}
+          else
+            tar czf ../langgraph-${{ matrix.name }}.tar.gz ${{ matrix.binary }}
+          fi
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.name }}
+          path: |
+            libs/cli/langgraph-${{ matrix.name }}.tar.gz
+            libs/cli/langgraph-${{ matrix.name }}.zip
+          if-no-files-found: ignore
+
+      # Prepare npm platform package
+      - name: Prepare npm platform package
+        shell: bash
+        run: |
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} npm/${{ matrix.npm_pkg }}/bin/
+
+      - name: Upload npm platform package
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-${{ matrix.name }}
+          path: libs/cli/npm/${{ matrix.npm_pkg }}/
+
+  # ──────────────────────────────────────────────
+  # Build Linux musl (Alpine-compatible) binary
+  # ──────────────────────────────────────────────
+  build-musl:
+    name: Build - linux-x64-musl
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: libs/cli
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install musl tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: libs/cli
+          key: x86_64-unknown-linux-musl
+
+      - name: Build release binary
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Prepare binary artifact
+        run: |
+          mkdir -p dist
+          cp target/x86_64-unknown-linux-musl/release/langgraph dist/
+          cd dist && tar czf ../langgraph-linux-x64-musl.tar.gz langgraph
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-linux-x64-musl
+          path: libs/cli/langgraph-linux-x64-musl.tar.gz
+
+  # ──────────────────────────────────────────────
+  # Build PyPI wheels via maturin
+  # ──────────────────────────────────────────────
+  pypi-wheels:
+    name: PyPI wheel - ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            manylinux: manylinux_2_17
+
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            manylinux: manylinux_2_17
+
+          - name: linux-x64-musl
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            manylinux: musllinux_1_2
+
+          - name: darwin-x64
+            runner: macos-13
+            target: x86_64-apple-darwin
+            manylinux: auto
+
+          - name: darwin-arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            manylinux: auto
+
+          - name: win32-x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            manylinux: auto
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --manifest-path libs/cli/Cargo.toml --out libs/cli/dist
+          rust-toolchain: stable
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.name }}
+          path: libs/cli/dist/*.whl
+
+  # ──────────────────────────────────────────────
+  # Build sdist
+  # ──────────────────────────────────────────────
+  pypi-sdist:
+    name: PyPI sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --manifest-path libs/cli/Cargo.toml --out libs/cli/dist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: libs/cli/dist/*.tar.gz
+
+  # ──────────────────────────────────────────────
+  # Publish to PyPI
+  # ──────────────────────────────────────────────
+  pypi-publish:
+    name: Publish to PyPI
+    needs: [pypi-wheels, pypi-sdist]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/cli-v')
+    environment:
+      name: pypi
+      url: https://pypi.org/project/langgraph-cli/
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  # ──────────────────────────────────────────────
+  # Publish to npm
+  # ──────────────────────────────────────────────
+  npm-publish:
+    name: Publish to npm
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/cli-v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      # Download all npm platform packages
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: npm-*
+          path: npm-artifacts
+
+      # Publish each platform package
+      - name: Publish platform packages
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for dir in npm-artifacts/npm-*/; do
+            echo "Publishing $(basename $dir)..."
+            cd "$dir"
+            npm publish --access public
+            cd -
+          done
+
+      # Publish the main package
+      - name: Publish main package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd libs/cli/npm/langgraph-cli
+          npm publish --access public
+
+  # ──────────────────────────────────────────────
+  # Create GitHub Release with standalone binaries
+  # ──────────────────────────────────────────────
+  github-release:
+    name: GitHub Release
+    needs: [build, build-musl]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/cli-v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-artifacts/*
+          generate_release_notes: true
+          draft: false

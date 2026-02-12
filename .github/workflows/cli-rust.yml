@@ -1,0 +1,49 @@
+---
+name: CLI Rust
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'libs/cli/src/**'
+      - 'libs/cli/Cargo.toml'
+      - 'libs/cli/Cargo.lock'
+      - 'libs/cli/build.rs'
+  pull_request:
+    paths:
+      - 'libs/cli/src/**'
+      - 'libs/cli/Cargo.toml'
+      - 'libs/cli/Cargo.lock'
+      - 'libs/cli/build.rs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check / Lint / Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: libs/cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: libs/cli
+      - name: Format check
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+      - name: Test
+        run: cargo test
+      - name: Build release
+        run: cargo build --release

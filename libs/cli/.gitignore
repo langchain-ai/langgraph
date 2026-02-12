@@ -1,1 +1,10 @@
 .langgraph_api/
+npm/
+
+# Rust build artifacts
+/target/
+/dist/
+
+# npm platform binaries (added at build time, not checked in)
+npm/*/bin/langgraph
+npm/*/bin/langgraph.exe

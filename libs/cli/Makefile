@@ -1,7 +1,27 @@
-.PHONY: test lint format test-integration update-schema bump-version
+.PHONY: test lint format test-integration update-schema build build-release clean cargo-test cargo-lint
 
 ######################
-# TESTING AND COVERAGE
+# RUST BUILD
+######################
+
+build:
+	cargo build
+
+build-release:
+	cargo build --release
+
+cargo-test:
+	cargo test
+
+cargo-lint:
+	cargo fmt --check
+	cargo clippy -- -D warnings
+
+cargo-fmt:
+	cargo fmt
+
+######################
+# PYTHON TESTING AND COVERAGE
 ######################
 
 TEST?= "tests/unit_tests"
@@ -11,7 +31,7 @@ test-integration:
 	uv run pytest tests/integration_tests
 
 ######################
-# LINTING AND FORMATTING
+# PYTHON LINTING AND FORMATTING
 ######################
 
 # Define a variable for Python and notebook files.
@@ -33,8 +53,35 @@ format format_diff:
 	uv run ruff format $(PYTHON_FILES)
 	uv run ruff check --select I --fix $(PYTHON_FILES)
 
+######################
+# PACKAGING
+######################
+
+# Build maturin wheel for current platform (development)
+wheel-dev:
+	maturin build --release
+
+# Build maturin wheel for specific target
+# Usage: make wheel TARGET=x86_64-unknown-linux-gnu
+TARGET?=
+wheel:
+	maturin build --release $(if $(TARGET),--target $(TARGET),)
+
+# Build sdist
+sdist:
+	maturin sdist
+
+######################
+# SCHEMA
+######################
+
 update-schema:
 	uv run python generate_schema.py
 
-bump-version:
-	uv run hatch version patch
+######################
+# CLEANUP
+######################
+
+clean:
+	cargo clean
+	rm -rf dist/ target/wheels/

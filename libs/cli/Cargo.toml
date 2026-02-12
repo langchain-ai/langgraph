@@ -30,3 +30,9 @@ which = "7"
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
