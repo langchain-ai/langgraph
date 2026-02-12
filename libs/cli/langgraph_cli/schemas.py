@@ -1,6 +1,6 @@
 from typing import Any, Literal, TypedDict
 
-Distros = Literal["debian", "wolfi", "bullseye", "bookworm"]
+Distros = Literal["debian", "wolfi", "bookworm"]
 MiddlewareOrders = Literal["auth_first", "middleware_first"]
 
 
@@ -559,7 +559,7 @@ class Config(TypedDict, total=False):
     image_distro: Distros | None
     """Optional. Linux distribution for the base image.
     
-    Must be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.
+    Must be one of 'wolfi', 'debian', or 'bookworm'.
     If omitted, defaults to 'debian' ('latest').
     """
 
