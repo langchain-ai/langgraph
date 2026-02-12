@@ -1,0 +1,32 @@
+[package]
+name = "langgraph-cli"
+version = "0.2.10"
+edition = "2021"
+description = "Native CLI for LangGraph"
+license = "MIT"
+
+[[bin]]
+name = "langgraph"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["rustls-tls", "blocking"], default-features = false }
+zip = "2"
+indexmap = { version = "2", features = ["serde"] }
+open = "5"
+indicatif = "0.17"
+console = "0.15"
+dotenvy = "0.15"
+tempfile = "3"
+thiserror = "2"
+dialoguer = "0.11"
+regex = "1"
+which = "7"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
