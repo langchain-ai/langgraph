@@ -221,6 +221,22 @@ EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 
 
+def _is_send_like(obj: Any) -> bool:
+    """Return True for Send objects from current and older LangGraph builds."""
+    if isinstance(obj, SendProtocol):
+        return True
+
+    cls = obj.__class__
+    if cls.__name__ != "Send":
+        return False
+
+    module = getattr(cls, "__module__", "")
+    if not module.startswith("langgraph."):
+        return False
+
+    return hasattr(obj, "node") and hasattr(obj, "arg")
+
+
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
         return ormsgpack.Ext(
@@ -393,7 +409,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 (obj.__class__.__module__, obj.__class__.__name__, obj.value),
             ),
         )
-    elif isinstance(obj, SendProtocol):
+    elif _is_send_like(obj):
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_POS_ARGS,
             _msgpack_enc(

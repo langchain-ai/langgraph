@@ -3,6 +3,7 @@ import json
 import pathlib
 import re
 import sys
+import types
 import uuid
 from collections import deque
 from datetime import date, datetime, time, timezone
@@ -317,6 +318,82 @@ def test_serde_jsonplus_bytearray() -> None:
 
     assert dumped == ("bytearray", some_bytearray)
     assert serde.loads_typed(dumped) == some_bytearray
+
+
+def test_serde_jsonplus_send() -> None:
+    serde = JsonPlusSerializer()
+    module_name = "langgraph.protocol_send_module"
+    fake_module = types.ModuleType(module_name)
+    sys.modules[module_name] = fake_module
+
+    class ProtocolSend:
+        __slots__ = ("node", "arg")
+        __module__ = module_name
+
+        def __init__(self, node: str, arg: object) -> None:
+            self.node = node
+            self.arg = arg
+
+        def __hash__(self) -> int:
+            return hash((self.node, json.dumps(self.arg, sort_keys=True)))
+
+        def __repr__(self) -> str:
+            return f"ProtocolSend(node={self.node!r}, arg={self.arg!r})"
+
+        def __eq__(self, value: object) -> bool:
+            return (
+                isinstance(value, ProtocolSend)
+                and self.node == value.node
+                and self.arg == value.arg
+            )
+
+    try:
+        fake_module.ProtocolSend = ProtocolSend  # type: ignore[attr-defined]
+        send = ProtocolSend("worker", {"task": "hello"})
+        dumped = serde.dumps_typed(send)
+
+        assert dumped[0] == "msgpack"
+        loaded = serde.loads_typed(dumped)
+        assert isinstance(loaded, ProtocolSend)
+        assert loaded == send
+    finally:
+        sys.modules.pop(module_name, None)
+
+
+def test_serde_jsonplus_legacy_send_like() -> None:
+    serde = JsonPlusSerializer()
+
+    module_name = "langgraph.fake_send_module"
+    fake_module = types.ModuleType(module_name)
+    sys.modules[module_name] = fake_module
+
+    class Send:
+        __slots__ = ("node", "arg")
+        __module__ = module_name
+
+        def __init__(self, node: str, arg: object) -> None:
+            self.node = node
+            self.arg = arg
+
+        def __eq__(self, value: object) -> bool:
+            return (
+                isinstance(value, Send)
+                and self.node == value.node
+                and self.arg == value.arg
+            )
+
+    try:
+        fake_module.Send = Send  # type: ignore[attr-defined]
+
+        dumped = serde.dumps_typed(Send("worker", {"task": "legacy"}))
+
+        assert dumped[0] == "msgpack"
+        loaded = serde.loads_typed(dumped)
+        assert isinstance(loaded, Send)
+        assert loaded.node == "worker"
+        assert loaded.arg == {"task": "legacy"}
+    finally:
+        sys.modules.pop(module_name, None)
 
 
 @pytest.mark.parametrize(
