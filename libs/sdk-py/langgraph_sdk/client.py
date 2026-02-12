@@ -19,6 +19,7 @@ from langgraph_sdk._async.http import HttpClient, _adecode_json, _aencode_json
 from langgraph_sdk._async.runs import RunsClient
 from langgraph_sdk._async.store import StoreClient
 from langgraph_sdk._async.threads import ThreadsClient
+from langgraph_sdk._shared.utilities import configure_loopback_transports
 from langgraph_sdk._sync.assistants import SyncAssistantsClient
 
 # Re-export sync clients
@@ -48,6 +49,7 @@ __all__ = [
     "_aencode_json",
     "_decode_json",
     "_encode_json",
+    "configure_loopback_transports",
     "get_client",
     "get_sync_client",
 ]

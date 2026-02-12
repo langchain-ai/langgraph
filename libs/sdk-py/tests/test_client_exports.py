@@ -26,6 +26,7 @@ from langgraph_sdk.client import (
     _aencode_json,
     _decode_json,
     _encode_json,
+    configure_loopback_transports,
     get_client,
     get_sync_client,
 )
@@ -66,6 +67,9 @@ def test_client_exports():
     # Sync JSON utilities (might be used internally)
     assert callable(_encode_json)
     assert callable(_decode_json)
+
+    # Loopback transport configuration (used by langgraph-api)
+    assert callable(configure_loopback_transports)
 
 
 def test_public_api_exports():
