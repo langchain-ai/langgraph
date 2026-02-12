@@ -317,3 +317,8 @@ def test_configurable_metadata():
     metadata = merged["metadata"]
     assert metadata.keys() == expected
     assert metadata["nooverride"] == 18
+
+
+def test_ensure_config_rejects_non_mapping() -> None:
+    with pytest.raises(TypeError, match="config must be a mapping"):
+        ensure_config("invalid_config")  # type: ignore[arg-type]

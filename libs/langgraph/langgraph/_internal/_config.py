@@ -299,6 +299,12 @@ def ensure_config(*configs: RunnableConfig | None) -> RunnableConfig:
     for config in configs:
         if config is None:
             continue
+        if not isinstance(config, Mapping):
+            msg = (
+                "config must be a mapping (RunnableConfig), "
+                f"got {type(config).__name__}"
+            )
+            raise TypeError(msg)
         for k, v in config.items():
             if _is_not_empty(v) and k in CONFIG_KEYS:
                 if k == CONF:
