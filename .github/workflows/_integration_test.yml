@@ -96,8 +96,8 @@ jobs:
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h
           echo "Finished starting up langgraph-test-h"
           LANGGRAPH_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langgraph'); print(v);")
-          if [ "$LANGGRAPH_VERSION" != "1.0.2" ]; then
-            echo "LANGGRAPH_VERSION != 1.0.2; $LANGGRAPH_VERSION"
+          if [ "$LANGGRAPH_VERSION" != "1.0.8" ]; then
+            echo "LANGGRAPH_VERSION != 1.0.8; $LANGGRAPH_VERSION"
             exit 1
           fi
           LANGCHAIN_OPENAI_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-openai'); print(v);")
