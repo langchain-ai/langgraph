@@ -190,9 +190,24 @@ def get_client(
     Args:
         url:
             Base URL of the LangGraph API.
-            - If `None`, the client first attempts an in-process connection via ASGI transport.
-              If that fails, it defers registration until after app initialization. This
-              only works if the client is used from within the Agent server.
+
+            - If a URL string is provided (e.g., `"http://localhost:2024"`), the client
+              connects to the LangGraph server at that URL using HTTP transport.
+
+            - If `None`, the client attempts an in-process connection via ASGI transport.
+              This only works when running inside a LangGraph server process. If the
+              in-process connection fails:
+
+              - **With `LANGGRAPH_AUTO_FALLBACK=true`**: Automatically falls back to HTTP
+                connection at the URL specified by `LANGGRAPH_URL` (default:
+                `http://localhost:2024`). A warning will be issued.
+
+              - **Without auto-fallback** (default): Raises a `RuntimeError` with
+                instructions on how to fix the issue.
+
+            **Note**: For production use and reliable streaming, it's recommended to use
+            an explicit URL rather than `None`.
+
         api_key:
             API key for authentication. Can be:
               - A string: use this exact API key
@@ -201,8 +216,10 @@ def get_client(
                 1. `LANGGRAPH_API_KEY`
                 2. `LANGSMITH_API_KEY`
                 3. `LANGCHAIN_API_KEY`
+
         headers:
             Additional HTTP headers to include in requests. Merged with authentication headers.
+
         timeout:
             HTTP timeout configuration. May be:
               - `httpx.Timeout` instance
@@ -215,13 +232,26 @@ def get_client(
             A top-level client exposing sub-clients for assistants, threads,
             runs, and cron operations.
 
-    ???+ example "Connect to a remote server:"
+    Environment Variables:
+        LANGGRAPH_AUTO_FALLBACK:
+            Set to `"true"`, `"1"`, or `"yes"` to enable automatic fallback to HTTP
+            when in-process connection fails. Default: `"false"`.
+
+        LANGGRAPH_URL:
+            Fallback URL to use when `LANGGRAPH_AUTO_FALLBACK` is enabled and
+            in-process connection fails. Default: `"http://localhost:2024"`.
+
+    Raises:
+        RuntimeError:
+            When `url=None` and in-process connection fails without auto-fallback enabled.
+
+    ???+ example "Connect to a remote server (recommended):"
 
         ```python
         from langgraph_sdk import get_client
 
-        # get top-level LangGraphClient
-        client = get_client(url="http://localhost:8123")
+        # Explicit URL - most reliable for production
+        client = get_client(url="http://localhost:2024")
 
         # example usage: client.<model>.<method_name>()
         assistants = await client.assistants.get(assistant_id="some_uuid")
@@ -232,6 +262,7 @@ def get_client(
         ```python
         from langgraph_sdk import get_client
 
+        # Only works when running inside a LangGraph server
         client = get_client(url=None)
 
         async def my_node(...):
@@ -242,6 +273,20 @@ def get_client(
             )
         ```
 
+    ???+ example "Use auto-fallback for url=None:"
+
+        ```python
+        import os
+        from langgraph_sdk import get_client
+
+        # Enable auto-fallback
+        os.environ["LANGGRAPH_AUTO_FALLBACK"] = "true"
+        os.environ["LANGGRAPH_URL"] = "http://localhost:2024"  # optional
+
+        # Will fall back to HTTP if in-process connection fails
+        client = get_client(url=None)
+        ```
+
     ???+ example "Skip auto-loading API key from environment:"
 
         ```python
@@ -249,7 +294,7 @@ def get_client(
 
         # Don't load API key from environment variables
         client = get_client(
-            url="http://localhost:8123",
+            url="http://localhost:2024",
             api_key=None
         )
         ```
@@ -267,12 +312,34 @@ def get_client(
 
                 transport = get_asgi_transport()(app, root_path="/noauth")
             except Exception:
-                logger.debug(
-                    "Failed to connect to in-process LangGraph server. Deferring configuration.",
-                    exc_info=True,
-                )
-                transport = get_asgi_transport()(app=None, root_path="/noauth")
-                _registered_transports.append(transport)
+                auto_fallback = os.getenv("LANGGRAPH_AUTO_FALLBACK", "false")
+                if auto_fallback in ("true", "1", "yes"):
+                    fallback_url = os.getenv("LANGGRAPH_URL", "http://localhost:2024")
+                    warnings.warn(
+                        f"In-process connection (url=None) not available. "
+                        f"Auto-falling back to {fallback_url}. "
+                        f"To disable this, unset LANGGRAPH_AUTO_FALLBACK. "
+                        f"To use a different URL, set LANGGRAPH_URL.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    url = fallback_url
+                    transport = None
+                    logger.info(f"Auto-fallback: Using {fallback_url}")
+
+                else:
+                    logger.debug(
+                        "Failed to connect to in-process LangGraph server.",
+                        exc_info=True,
+                    )
+                    raise RuntimeError(
+                        "Cannot use in-process connection (url=None) when running outside "
+                        "the LangGraph server process.\\n\\n"
+                        "Options:\\n"
+                        "1. Use explicit URL: get_client(url='http://localhost:2024')\\n"
+                        "2. Enable auto-fallback: export LANGGRAPH_AUTO_FALLBACK=true\\n"
+                        "3. Run this code inside a LangGraph server\\n"
+                    )
 
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
