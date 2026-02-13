@@ -7805,6 +7805,53 @@ async def test_interrupt_subgraph_reenter_checkpointer_true(
 
 
 @NEEDS_CONTEXTVARS
+async def test_nested_entrypoint_interrupt_resume_reuses_tasks(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    calls: list[str] = []
+
+    @task
+    async def step_1(input_query: str) -> str:
+        calls.append("step_1")
+        return f"{input_query} bar"
+
+    @task
+    async def human_feedback(input_query: str) -> str:
+        calls.append("human_feedback")
+        feedback = interrupt(f"Please provide feedback: {input_query}")
+        return f"{input_query} {feedback}"
+
+    @task
+    async def step_3(input_query: str) -> str:
+        calls.append("step_3")
+        return f"{input_query} qux"
+
+    @entrypoint()
+    async def child_graph(input_query: str) -> str:
+        result_1 = await step_1(input_query)
+        result_2 = await human_feedback(result_1)
+        return await step_3(result_2)
+
+    @entrypoint(checkpointer=async_checkpointer)
+    async def parent_graph(input_query: str) -> str:
+        return await child_graph.ainvoke(input_query)
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert await parent_graph.ainvoke("foo", config) == {
+        "__interrupt__": [
+            Interrupt(
+                value="Please provide feedback: foo bar",
+                id=AnyStr(),
+            )
+        ]
+    }
+    assert (
+        await parent_graph.ainvoke(Command(resume="baz"), config) == "foo bar baz qux"
+    )
+    assert calls == ["step_1", "human_feedback", "human_feedback", "step_3"]
+
+
+@NEEDS_CONTEXTVARS
 async def test_handles_multiple_interrupts_from_tasks(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:

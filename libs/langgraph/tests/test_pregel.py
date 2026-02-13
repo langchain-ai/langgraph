@@ -7178,6 +7178,50 @@ def test_interrupt_subgraph_reenter_checkpointer_true(
     assert bar_values == [None, "barbaz", "quxbaz"]
 
 
+def test_nested_entrypoint_interrupt_resume_reuses_tasks(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    calls: list[str] = []
+
+    @task
+    def step_1(input_query: str) -> str:
+        calls.append("step_1")
+        return f"{input_query} bar"
+
+    @task
+    def human_feedback(input_query: str) -> str:
+        calls.append("human_feedback")
+        feedback = interrupt(f"Please provide feedback: {input_query}")
+        return f"{input_query} {feedback}"
+
+    @task
+    def step_3(input_query: str) -> str:
+        calls.append("step_3")
+        return f"{input_query} qux"
+
+    @entrypoint()
+    def child_graph(input_query: str) -> str:
+        result_1 = step_1(input_query).result()
+        result_2 = human_feedback(result_1).result()
+        return step_3(result_2).result()
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def parent_graph(input_query: str) -> str:
+        return child_graph.invoke(input_query)
+
+    config = {"configurable": {"thread_id": "1"}}
+    assert parent_graph.invoke("foo", config) == {
+        "__interrupt__": [
+            Interrupt(
+                value="Please provide feedback: foo bar",
+                id=AnyStr(),
+            )
+        ]
+    }
+    assert parent_graph.invoke(Command(resume="baz"), config) == "foo bar baz qux"
+    assert calls == ["step_1", "human_feedback", "human_feedback", "step_3"]
+
+
 def test_empty_invoke() -> None:
     def reducer_merge_dicts(
         dict1: dict[Any, Any], dict2: dict[Any, Any]

@@ -514,6 +514,10 @@ def _panic_or_proceed(
             # raise the exception
             if panic:
                 if isinstance(exc, GraphInterrupt):
+                    # Interrupts from call() futures are surfaced via the parent task.
+                    # Including both duplicates the same interrupt payload.
+                    if fut in SKIP_RERAISE_SET:
+                        continue
                     # collect interrupts
                     interrupts.append(exc)
                 elif fut not in SKIP_RERAISE_SET:
