@@ -1,0 +1,84 @@
+Documentación de GitHub
+Problemas de GitHub /Problemas /Uso de problemas /Vincular PR al problema
+Vincular una solicitud de extracción a un problema
+Puede vincular una solicitud de extracción o una rama a un problema para mostrar que hay una solución en progreso y para cerrar automáticamente el problema cuando se fusione la solicitud de extracción o la rama.
+
+En este artículo
+Acerca de las incidencias vinculadas y las solicitudes de extracción
+Puedes vincular una incidencia a una solicitud de extracción manualmente o usando una palabra clave compatible en la descripción de la solicitud de extracción, es decir, el texto de resumen añadido por el autor cuando creó la solicitud de extracción
+
+Cuando vincula una solicitud de extracción al problema que aborda la solicitud de extracción, los colaboradores pueden ver que alguien está trabajando en el problema.
+
+Al fusionar una solicitud de extracción vinculada con la rama predeterminada de un repositorio, la incidencia vinculada se cierra automáticamente. Para obtener más información sobre la rama predeterminada, consulte Cambiar la rama predeterminada .
+
+Nota
+
+Las palabras clave especiales en la descripción de una solicitud de extracción solo se interpretan cuando la solicitud de extracción se dirige a la rama predeterminada del repositorio . Si la solicitud de extracción se dirige a cualquier otra rama , estas palabras clave se ignoran, no se crean enlaces y la fusión de la solicitud de extracción no tiene ningún efecto en las incidencias
+
+Vincular una solicitud de extracción a una incidencia mediante una palabra clave
+Puedes vincular una solicitud de extracción a una incidencia usando una palabra clave compatible en la descripción de la solicitud o en un mensaje de confirmación. La solicitud de extracción debe estar en la rama predeterminada.
+
+close
+closes
+closed
+fix
+fixes
+fixed
+resolve
+resolves
+resolved
+Si usa una palabra clave para hacer referencia al comentario de una solicitud de extracción en otra solicitud de extracción, ambas se vincularán. Al fusionar la solicitud de extracción que la hace referencia, también se cierra la solicitud de extracción referenciada.
+
+La sintaxis para cerrar palabras clave depende de si el problema está en el mismo repositorio que la solicitud de extracción.
+
+Problema vinculado	Sintaxis	Ejemplo
+Problema en el mismo repositorio	PALABRA CLAVE NÚMERO DE EDICIÓN	Closes #10
+Emisión en un repositorio diferente	PALABRA CLAVE PROPIETARIO/REPOSITORIO NÚMERO DE EDICIÓN	Fixes octo-org/octo-repo#100
+Múltiples problemas	Usar la sintaxis completa para cada problema	Resolves #10, resolves #123, resolves octo-org/octo-repo#100
+Las palabras clave pueden ir seguidas de dos puntos o en mayúsculas. Por ejemplo: Closes: #10, CLOSES #10, CLOSES: #10o
+
+Solo las solicitudes de extracción vinculadas manualmente se pueden desvincular manualmente. Para desvincular una incidencia vinculada con una palabra clave, debe editar la descripción de la solicitud de extracción para eliminar la palabra clave.
+
+También puedes usar palabras clave de cierre en un mensaje de confirmación. La incidencia se cerrará al fusionar la confirmación con la rama predeterminada, pero la solicitud de extracción que la contiene no aparecerá como solicitud de extracción vinculada.
+
+Vincular manualmente una solicitud de extracción a un problema mediante la barra lateral de solicitudes de extracción
+Cualquier persona con permisos de escritura en un repositorio puede vincular manualmente una solicitud de extracción a un problema desde la barra lateral de solicitudes de extracción.
+
+Puedes vincular manualmente hasta diez incidencias a cada solicitud de incorporación de cambios. La incidencia y la solicitud de incorporación de cambios deben estar en el mismo repositorio.
+
+En GitHub, navegue a la página principal del repositorio.
+
+Debajo del nombre de su repositorio, haga clic en Solicitudes de extracción .
+
+Captura de pantalla de la página principal de un repositorio. En la barra de navegación horizontal, una pestaña, etiquetada como "Solicitudes de extracción", está resaltada en naranja oscuro
+En la lista de solicitudes de extracción, haga clic en la solicitud de extracción que desea vincular a un problema.
+
+En la barra lateral derecha, haga clic en Desarrollo .
+
+Captura de pantalla de la barra lateral del problema. La sección "Desarrollo" aparece resaltada en naranja oscuro.
+Haga clic en el problema que desea vincular a la solicitud de extracción.
+
+Vincular manualmente una solicitud de extracción o una rama a un problema mediante la barra lateral del problema
+Cualquier persona con permisos de escritura en un repositorio puede vincular manualmente una solicitud de extracción o una rama a un problema desde la barra lateral del problema.
+
+Puedes vincular manualmente hasta diez incidencias a cada solicitud de extracción. La incidencia puede estar en un repositorio diferente al de la solicitud de extracción o rama vinculada. Se recordará el último repositorio seleccionado.
+
+En GitHub, navegue a la página principal del repositorio.
+
+Debajo del nombre de su repositorio, haga clic en Problemas .
+
+Captura de pantalla de la página principal de un repositorio. En la barra de navegación horizontal, una pestaña, denominada "Problemas", está resaltada en naranja oscuro
+En la lista de problemas, haga clic en el problema al que desea vincular una solicitud de extracción o una rama.
+
+En la barra lateral derecha, haga clic en Desarrollo .
+
+Captura de pantalla de la barra lateral del problema. La sección "Desarrollo" aparece resaltada en naranja oscuro.
+Haga clic en el repositorio que contiene la solicitud de extracción o la rama que desea vincular al problema.
+
+Haga clic en la solicitud de extracción o la rama que desea vincular al problema.
+
+Haga clic en Aplicar .
+
+Lectura adicional
+Referencias y URL enlazadas automáticamente
+Ayuda y soporte técnico
