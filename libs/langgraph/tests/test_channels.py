@@ -56,6 +56,27 @@ def test_topic() -> None:
     assert channel.get() == ["e"]
 
 
+def test_topic_none_checkpoint() -> None:
+    """Regression test: Topic.from_checkpoint(None) should not crash on copy().
+
+    When a checkpoint contains None for a Topic channel value (e.g., after a
+    failed execution), from_checkpoint should treat it as missing and default
+    to an empty list. See https://github.com/langchain-ai/langgraph/issues/6791
+    """
+    channel = Topic(str).from_checkpoint(None)
+    with pytest.raises(EmptyChannelError):
+        channel.get()
+
+    # copy() must not raise AttributeError
+    channel_copy = channel.copy()
+    with pytest.raises(EmptyChannelError):
+        channel_copy.get()
+
+    # channel should still be usable after restore from None checkpoint
+    channel.update(["a", "b"])
+    assert channel.get() == ["a", "b"]
+
+
 def test_topic_accumulate() -> None:
     channel = Topic(str, accumulate=True).from_checkpoint(MISSING)
     assert channel.ValueType == Sequence[str]
