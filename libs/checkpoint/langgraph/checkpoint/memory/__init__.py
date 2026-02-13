@@ -132,6 +132,15 @@ class InMemorySaver(
                     channel_values[k] = self.serde.loads_typed(vv)
         return channel_values
 
+    def _serialize_or_raise(self, value: Any, *, context: str) -> tuple[str, bytes]:
+        try:
+            return self.serde.dumps_typed(value)
+        except Exception as exc:
+            exc_type = type(exc)
+            raise exc_type(
+                f"{context}. value_type={type(value).__name__}. original_error={exc}"
+            ) from exc
+
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.
 
@@ -350,13 +359,36 @@ class InMemorySaver(
         values: dict[str, Any] = c.pop("channel_values")  # type: ignore[misc]
         for k, v in new_versions.items():
             self.blobs[(thread_id, checkpoint_ns, k, v)] = (
-                self.serde.dumps_typed(values[k]) if k in values else ("empty", b"")
+                self._serialize_or_raise(
+                    values[k],
+                    context=(
+                        "Failed to serialize checkpoint channel value "
+                        f"(thread_id={thread_id}, checkpoint_ns={checkpoint_ns}, "
+                        f"channel={k}, version={v})"
+                    ),
+                )
+                if k in values
+                else ("empty", b"")
             )
         self.storage[thread_id][checkpoint_ns].update(
             {
                 checkpoint["id"]: (
-                    self.serde.dumps_typed(c),
-                    self.serde.dumps_typed(get_checkpoint_metadata(config, metadata)),
+                    self._serialize_or_raise(
+                        c,
+                        context=(
+                            "Failed to serialize checkpoint payload "
+                            f"(thread_id={thread_id}, checkpoint_ns={checkpoint_ns}, "
+                            f"checkpoint_id={checkpoint['id']})"
+                        ),
+                    ),
+                    self._serialize_or_raise(
+                        get_checkpoint_metadata(config, metadata),
+                        context=(
+                            "Failed to serialize checkpoint metadata "
+                            f"(thread_id={thread_id}, checkpoint_ns={checkpoint_ns}, "
+                            f"checkpoint_id={checkpoint['id']})"
+                        ),
+                    ),
                     config["configurable"].get("checkpoint_id"),  # parent
                 )
             }
@@ -403,7 +435,14 @@ class InMemorySaver(
             self.writes[outer_key][inner_key] = (
                 task_id,
                 c,
-                self.serde.dumps_typed(v),
+                self._serialize_or_raise(
+                    v,
+                    context=(
+                        "Failed to serialize checkpoint write "
+                        f"(thread_id={thread_id}, checkpoint_ns={checkpoint_ns}, "
+                        f"checkpoint_id={checkpoint_id}, task_id={task_id}, channel={c})"
+                    ),
+                ),
                 task_path,
             )
 
