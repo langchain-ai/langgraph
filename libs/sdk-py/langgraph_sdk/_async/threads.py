@@ -45,6 +45,7 @@ class ThreadsClient:
         self,
         thread_id: str,
         *,
+        include: Sequence[str] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Thread:
@@ -52,6 +53,8 @@ class ThreadsClient:
 
         Args:
             thread_id: The ID of the thread to get.
+            include: Additional fields to include in the response.
+                Supported values: `"ttl"`.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -80,9 +83,15 @@ class ThreadsClient:
             ```
 
         """
-
+        query_params: dict[str, Any] = {}
+        if include:
+            query_params["include"] = ",".join(include)
+        if params:
+            query_params.update(params)
         return await self.http.get(
-            f"/threads/{thread_id}", headers=headers, params=params
+            f"/threads/{thread_id}",
+            headers=headers,
+            params=query_params or None,
         )
 
     async def create(
@@ -370,6 +379,47 @@ class ThreadsClient:
         """
         return await self.http.post(
             f"/threads/{thread_id}/copy", json=None, headers=headers, params=params
+        )
+
+    async def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "delete",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> dict[str, Any]:
+        """Prune threads by ID.
+
+        Args:
+            thread_ids: List of thread IDs to prune.
+            strategy: The prune strategy. `"delete"` removes threads entirely.
+                `"keep_latest"` prunes old checkpoints but keeps threads and their
+                latest state. Defaults to `"delete"`.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            A dict containing `pruned_count` (number of threads pruned).
+
+        ???+ example "Example Usage"
+
+            ```python
+            client = get_client(url="http://localhost:2024")
+            result = await client.threads.prune(
+                thread_ids=["thread_1", "thread_2"],
+            )
+            print(result)  # {'pruned_count': 2}
+            ```
+
+        """
+        payload: dict[str, Any] = {
+            "thread_ids": thread_ids,
+        }
+        if strategy != "delete":
+            payload["strategy"] = strategy
+        return await self.http.post(
+            "/threads/prune", json=payload, headers=headers, params=params
         )
 
     async def get_state(

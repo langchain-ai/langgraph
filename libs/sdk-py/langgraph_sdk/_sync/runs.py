@@ -869,6 +869,65 @@ class SyncRunsClient:
             headers=headers,
         )
 
+    def cancel_many(
+        self,
+        *,
+        thread_id: str | None = None,
+        run_ids: Sequence[str] | None = None,
+        status: str | None = None,
+        action: CancelAction = "interrupt",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> None:
+        """Cancel one or more runs.
+
+        Can cancel runs by thread ID and run IDs, or by status filter.
+
+        Args:
+            thread_id: The ID of the thread containing runs to cancel.
+            run_ids: List of run IDs to cancel.
+            status: Filter runs by status to cancel. Must be one of
+                `"pending"`, `"running"`, or `"all"`.
+            action: Action to take when cancelling the run. Possible values
+                are `"interrupt"` or `"rollback"`. Default is `"interrupt"`.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            `None`
+
+        ???+ example "Example Usage"
+
+            ```python
+            client = get_sync_client(url="http://localhost:2024")
+            # Cancel all pending runs
+            client.runs.cancel_many(status="pending")
+            # Cancel specific runs on a thread
+            client.runs.cancel_many(
+                thread_id="my_thread_id",
+                run_ids=["run_1", "run_2"],
+                action="rollback",
+            )
+            ```
+
+        """
+        payload: dict[str, Any] = {}
+        if thread_id:
+            payload["thread_id"] = thread_id
+        if run_ids:
+            payload["run_ids"] = run_ids
+        if status:
+            payload["status"] = status
+        query_params: dict[str, Any] = {"action": action}
+        if params:
+            query_params.update(params)
+        self.http.post(
+            "/runs/cancel",
+            json=payload,
+            headers=headers,
+            params=query_params,
+        )
+
     def join(
         self,
         thread_id: str,

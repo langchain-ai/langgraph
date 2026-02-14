@@ -137,7 +137,13 @@ The field to sort by.
 """
 
 CronSortBy = Literal[
-    "cron_id", "assistant_id", "thread_id", "created_at", "updated_at", "next_run_date"
+    "cron_id",
+    "assistant_id",
+    "thread_id",
+    "created_at",
+    "updated_at",
+    "next_run_date",
+    "end_time",
 ]
 """
 The field to sort by.
