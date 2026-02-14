@@ -10,7 +10,7 @@ updates:
         patterns:
           - "*"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/checkpoint"
     schedule:
       interval: "weekly"
@@ -19,9 +19,8 @@ updates:
       all-dependencies:
         patterns:
           - "*"
-    package-manager: "uv"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/checkpoint-postgres"
     schedule:
       interval: "weekly"
@@ -30,9 +29,8 @@ updates:
       all-dependencies:
         patterns:
           - "*"
-    package-manager: "uv"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/checkpoint-sqlite"
     schedule:
       interval: "weekly"
@@ -41,9 +39,8 @@ updates:
       all-dependencies:
         patterns:
           - "*"
-    package-manager: "uv"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/cli"
     schedule:
       interval: "weekly"
@@ -52,9 +49,8 @@ updates:
       all-dependencies:
         patterns:
           - "*"
-    package-manager: "uv"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/langgraph"
     schedule:
       interval: "weekly"
@@ -63,9 +59,8 @@ updates:
       all-dependencies:
         patterns:
           - "*"
-    package-manager: "uv"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/prebuilt"
     schedule:
       interval: "weekly"
@@ -74,9 +69,8 @@ updates:
       all-dependencies:
         patterns:
           - "*"
-    package-manager: "uv"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/libs/sdk-py"
     schedule:
       interval: "weekly"
@@ -85,7 +79,6 @@ updates:
       all-dependencies:
         patterns:
           - "*"
-    package-manager: "uv"
 
   - package-ecosystem: "npm"
     directory: "/libs/cli/js-examples"
