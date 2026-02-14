@@ -10,6 +10,7 @@ from langgraph_sdk.schema import (
     Checkpoint,
     Json,
     OnConflictBehavior,
+    PruneStrategy,
     QueryParamTypes,
     SortOrder,
     StreamPart,
@@ -373,7 +374,7 @@ class SyncThreadsClient:
         self,
         thread_ids: Sequence[str],
         *,
-        strategy: str = "delete",
+        strategy: PruneStrategy = "delete",
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> dict[str, Any]:

@@ -12,6 +12,7 @@ from langgraph_sdk._shared.utilities import _get_run_metadata_from_response
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import (
     All,
+    BulkCancelRunsStatus,
     CancelAction,
     Checkpoint,
     Command,
@@ -874,7 +875,7 @@ class SyncRunsClient:
         *,
         thread_id: str | None = None,
         run_ids: Sequence[str] | None = None,
-        status: str | None = None,
+        status: BulkCancelRunsStatus | None = None,
         action: CancelAction = "interrupt",
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
