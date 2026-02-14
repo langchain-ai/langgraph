@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import dataclasses
 import json
@@ -1902,3 +1903,106 @@ async def test_tool_node_tool_runtime_generic() -> None:
     assert tool_message.type == "tool"
     assert tool_message.content == "test_info"
     assert tool_message.tool_call_id == "call_1"
+
+
+async def test_tool_node_handle_cancelled_error() -> None:
+    """Test that CancelledError is converted to ToolMessage when handle_tool_errors=True."""
+
+    @dec_tool
+    async def cancelling_tool():
+        """This tool raises CancelledError."""
+        raise asyncio.CancelledError()
+
+    node = ToolNode([cancelling_tool], handle_tool_errors=True)
+    tool_call = {
+        "name": "cancelling_tool",
+        "args": {},
+        "id": "call_1",
+    }
+    msg = AIMessage("hi", tool_calls=[tool_call])
+    config = _create_config_with_runtime()
+
+    result = await node.ainvoke({"messages": [msg]}, config=config)
+
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.status == "error"
+    assert "cancelled" in tool_message.content.lower()
+
+
+async def test_tool_node_handle_cancelled_error_custom_handler() -> None:
+    """Test that CancelledError uses custom error handler when provided."""
+
+    @dec_tool
+    async def cancelling_tool():
+        """This tool raises CancelledError."""
+        raise asyncio.CancelledError()
+
+    def my_handler(e: Exception) -> str:
+        return f"Caught: {type(e).__name__}"
+
+    node = ToolNode([cancelling_tool], handle_tool_errors=my_handler)
+    tool_call = {
+        "name": "cancelling_tool",
+        "args": {},
+        "id": "call_1",
+    }
+    msg = AIMessage("hi", tool_calls=[tool_call])
+    config = _create_config_with_runtime()
+
+    result = await node.ainvoke({"messages": [msg]}, config=config)
+
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.content == "Caught: Exception"
+
+
+async def test_tool_node_handle_cancelled_error_middleware() -> None:
+    """Test that CancelledError in middleware is handled."""
+
+    @dec_tool
+    async def normal_tool():
+        """Normal tool."""
+        return "ok"
+
+    async def cancelling_middleware(request, execute):
+        raise asyncio.CancelledError()
+
+    node = ToolNode(
+        [normal_tool], handle_tool_errors=True, awrap_tool_call=cancelling_middleware
+    )
+    tool_call = {
+        "name": "normal_tool",
+        "args": {},
+        "id": "call_1",
+    }
+    msg = AIMessage("hi", tool_calls=[tool_call])
+    config = _create_config_with_runtime()
+
+    result = await node.ainvoke({"messages": [msg]}, config=config)
+
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.status == "error"
+    assert "cancelled" in tool_message.content.lower()
+
+
+async def test_tool_node_handle_cancelled_error_false() -> None:
+    """Test that CancelledError is not caught when handle_tool_errors=False."""
+
+    @dec_tool
+    async def cancelling_tool():
+        """This tool raises CancelledError."""
+        raise asyncio.CancelledError()
+
+    node = ToolNode([cancelling_tool], handle_tool_errors=False)
+    tool_call = {
+        "name": "cancelling_tool",
+        "args": {},
+        "id": "call_1",
+    }
+    msg = AIMessage("hi", tool_calls=[tool_call])
+    config = _create_config_with_runtime()
+
+    with pytest.raises(asyncio.CancelledError):
+        await node.ainvoke({"messages": [msg]}, config=config)
