@@ -268,7 +268,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "1.0.7"
+version = "1.0.8"
 source = { editable = "../langgraph" }
 dependencies = [
     { name = "langchain-core" },
@@ -591,6 +591,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "codespell" },
+    { name = "langgraph", editable = "../langgraph" },
     { name = "mypy", specifier = "==1.19.0" },
     { name = "pydantic", specifier = ">=2.12.4" },
     { name = "pytest" },
