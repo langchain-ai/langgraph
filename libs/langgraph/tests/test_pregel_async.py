@@ -9374,13 +9374,13 @@ async def test_state_snapshot_user_metadata_in_config() -> None:
 
     config = {
         "metadata": {"foo": "bar", "user_id": 123},
-        "configurable": {"thread_id": "test-metadata-1"},
+        "configurable": {"thread_id": "1"},
     }
     await app.ainvoke({"value": 0}, config=config)
 
     # Verify user metadata is in snapshot.config["metadata"]
     async for snapshot in app.aget_state_history(
-        {"configurable": {"thread_id": "test-metadata-1"}}
+        {"configurable": {"thread_id": "1"}}
     ):
         assert "metadata" in snapshot.config
         assert snapshot.config["metadata"]["foo"] == "bar"
