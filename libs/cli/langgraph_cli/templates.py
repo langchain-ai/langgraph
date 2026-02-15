@@ -109,7 +109,13 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
         with request.urlopen(repo_url) as response:
             if response.status == 200:
                 with ZipFile(BytesIO(response.read())) as zip_file:
-                    zip_file.extractall(path)
+                    # Securely extract files to prevent Path Traversal (Zip Slip)
+                    for member in zip_file.infolist():
+                        member_path = os.path.normpath(os.path.join(path, member.filename))
+                        if not member_path.startswith(os.path.abspath(path) + os.sep) and member_path != os.path.abspath(path):
+                            continue
+                        zip_file.extract(member, path)
+                    
                     # Move extracted contents to path
                     for item in os.listdir(path):
                         if item.endswith("-main"):
