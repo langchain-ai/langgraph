@@ -384,6 +384,8 @@ def _default_handle_tool_errors(e: Exception) -> str:
     """
     if isinstance(e, ToolInvocationError):
         return e.message
+    if isinstance(e, ToolException):
+        return str(e)
     raise e
 
 
