@@ -778,11 +778,13 @@ class RemoteGraph(PregelProtocol):
 
             # emit chunk
             if subgraphs:
-                if NS_SEP in chunk.event:
-                    mode, ns_ = chunk.event.split(NS_SEP, 1)
-                    ns = tuple(ns_.split(NS_SEP))
-                else:
-                    mode, ns = chunk.event, ()
+                # When streaming subgraphs, we want namespaces to reflect both:
+                # 1) The remote graph's own namespace hierarchy.
+                # 2) Any caller namespace (e.g., when RemoteGraph is used as a subgraph).
+                #
+                # We've already parsed `mode` / `ns` from `chunk.event` and
+                # prefixed `ns` with `caller_ns` above, so we should not
+                # recompute them here based on `chunk.event` again.
                 if req_single:
                     yield ns, chunk.data
                 else:
@@ -888,11 +890,9 @@ class RemoteGraph(PregelProtocol):
 
             # emit chunk
             if subgraphs:
-                if NS_SEP in chunk.event:
-                    mode, ns_ = chunk.event.split(NS_SEP, 1)
-                    ns = tuple(ns_.split(NS_SEP))
-                else:
-                    mode, ns = chunk.event, ()
+                # As in astream_events above, reuse the already-prefixed `ns`
+                # so that namespaces match in-memory Pregel graphs when this
+                # RemoteGraph is used as a subgraph.
                 if req_single:
                     yield ns, chunk.data
                 else:
