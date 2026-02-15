@@ -40,6 +40,7 @@ Typical Usage:
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import inspect
 import json
 from collections.abc import Awaitable, Callable
@@ -82,7 +83,7 @@ from langchain_core.tools.base import (
     get_all_basemodel_annotations,
 )
 from langgraph._internal._runnable import RunnableCallable
-from langgraph.errors import GraphBubbleUp
+from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.store.base import BaseStore  # noqa: TC002
 from langgraph.types import Command, Send, StreamWriter
@@ -808,11 +809,46 @@ class ToolNode(RunnableCallable):
             tool_runtimes.append(tool_runtime)
 
         # Pass original tool calls without injection
-        input_types = [input_type] * len(tool_calls)
+        # Submit all tool calls as separate futures
         with get_executor_for_config(config) as executor:
-            outputs = list(
-                executor.map(self._run_one, tool_calls, input_types, tool_runtimes)
+            futures = [
+                executor.submit(self._run_one, call, input_type, tool_runtime)
+                for call, tool_runtime in zip(
+                    tool_calls, tool_runtimes, strict=False
+                )
+            ]
+
+            # Wait for all futures to complete
+            concurrent.futures.wait(futures, return_when=concurrent.futures.ALL_COMPLETED)
+
+            # Collect outputs and interrupts from completed futures
+            outputs = []
+            interrupts: list[GraphInterrupt] = []
+            first_exception: BaseException | None = None
+            for fut in futures:
+                try:
+                    exc = fut.exception()
+                except concurrent.futures.CancelledError:
+                    continue
+                if exc is not None:
+                    if isinstance(exc, GraphInterrupt):
+                        # Collect all interrupts to combine later
+                        interrupts.append(exc)
+                    elif first_exception is None:
+                        # Keep track of first non-interrupt exception
+                        first_exception = exc
+                else:
+                    outputs.append(fut.result())
+
+        # Raise combined interrupts if any
+        if interrupts:
+            raise GraphInterrupt(
+                tuple(i for exc in interrupts for i in exc.args[0])
             )
+
+        # Raise first non-interrupt exception if any
+        if first_exception is not None:
+            raise first_exception
 
         return self._combine_tool_outputs(outputs, input_type)
 
@@ -840,10 +876,43 @@ class ToolNode(RunnableCallable):
             tool_runtimes.append(tool_runtime)
 
         # Pass original tool calls without injection
-        coros = []
-        for call, tool_runtime in zip(tool_calls, tool_runtimes, strict=False):
-            coros.append(self._arun_one(call, input_type, tool_runtime))  # type: ignore[arg-type]
-        outputs = await asyncio.gather(*coros)
+        # Create tasks to run all tools in parallel
+        tasks = [
+            asyncio.create_task(self._arun_one(call, input_type, tool_runtime))  # type: ignore[arg-type]
+            for call, tool_runtime in zip(tool_calls, tool_runtimes, strict=False)
+        ]
+
+        # Wait for all tasks to complete (don't stop on first exception)
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
+
+        # Collect outputs and interrupts from completed tasks
+        outputs = []
+        interrupts: list[GraphInterrupt] = []
+        first_exception: BaseException | None = None
+        for task in done:
+            try:
+                exc = task.exception()
+            except asyncio.CancelledError:
+                continue
+            if exc is not None:
+                if isinstance(exc, GraphInterrupt):
+                    # Collect all interrupts to combine later
+                    interrupts.append(exc)
+                elif first_exception is None:
+                    # Keep track of first non-interrupt exception
+                    first_exception = exc
+            else:
+                outputs.append(task.result())
+
+        # Raise combined interrupts if any
+        if interrupts:
+            raise GraphInterrupt(
+                tuple(i for exc in interrupts for i in exc.args[0])
+            )
+
+        # Raise first non-interrupt exception if any
+        if first_exception is not None:
+            raise first_exception
 
         return self._combine_tool_outputs(outputs, input_type)
 
