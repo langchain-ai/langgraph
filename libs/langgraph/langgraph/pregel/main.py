@@ -42,6 +42,7 @@ from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
+    CheckpointMetadata,
     CheckpointTuple,
 )
 from langgraph.store.base import BaseStore
@@ -1101,10 +1102,25 @@ class Pregel(
             self.stream_channels_asis,
         )
         # assemble the state snapshot
+        snapshot_config = patch_checkpoint_map(saved.config, saved.metadata)
+        # Restore user metadata into config["metadata"] so it's accessible
+        # at snapshot.config["metadata"]. User metadata was merged into
+        # CheckpointMetadata by get_checkpoint_metadata() during saving.
+        # See: https://github.com/langchain-ai/langgraph/issues/6460
+        if saved.metadata:
+            _system_keys = set(CheckpointMetadata.__annotations__)
+            user_metadata = {
+                k: v
+                for k, v in saved.metadata.items()
+                if k not in _system_keys and not k.startswith("__")
+            }
+            if user_metadata:
+                existing = snapshot_config.get("metadata", {})
+                snapshot_config["metadata"] = {**existing, **user_metadata}
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
             tuple(t.name for t in next_tasks.values() if not t.writes),
-            patch_checkpoint_map(saved.config, saved.metadata),
+            snapshot_config,
             saved.metadata,
             saved.checkpoint["ts"],
             patch_checkpoint_map(saved.parent_config, saved.metadata),
@@ -1221,10 +1237,25 @@ class Pregel(
             self.stream_channels_asis,
         )
         # assemble the state snapshot
+        snapshot_config = patch_checkpoint_map(saved.config, saved.metadata)
+        # Restore user metadata into config["metadata"] so it's accessible
+        # at snapshot.config["metadata"]. User metadata was merged into
+        # CheckpointMetadata by get_checkpoint_metadata() during saving.
+        # See: https://github.com/langchain-ai/langgraph/issues/6460
+        if saved.metadata:
+            _system_keys = set(CheckpointMetadata.__annotations__)
+            user_metadata = {
+                k: v
+                for k, v in saved.metadata.items()
+                if k not in _system_keys and not k.startswith("__")
+            }
+            if user_metadata:
+                existing = snapshot_config.get("metadata", {})
+                snapshot_config["metadata"] = {**existing, **user_metadata}
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
             tuple(t.name for t in next_tasks.values() if not t.writes),
-            patch_checkpoint_map(saved.config, saved.metadata),
+            snapshot_config,
             saved.metadata,
             saved.checkpoint["ts"],
             patch_checkpoint_map(saved.parent_config, saved.metadata),
