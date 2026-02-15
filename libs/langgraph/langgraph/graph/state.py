@@ -1042,6 +1042,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
+        on_detached_nodes: Literal["warn", "raise", "ignore"] = "warn",
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1074,9 +1075,21 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
+            on_detached_nodes: How to handle detached nodes.
+
+                This argument can be used to detect and handle detached nodes as follows:
+                - `"warn"`: Log a warning.
+                - `"raise"`: Raise a `ValueError`.
+                - `"ignore"`: Disables the detection of detached nodes.
+
+                **Important**: For proper detection, you must set the `destinations` argument when adding a node to the graph.
+                This is particularly important for nodes that use conditional edges or Command objects for routing.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
+
+        Raises:
+            ValueError: If the graph has detached nodes and `on_detached_nodes` is set to `"raise"`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
 
@@ -1149,6 +1162,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for start, branches in self.branches.items():
             for name, branch in branches.items():
                 compiled.attach_branch(start, name, branch)
+
+        # check for detached nodes after channels are fully set up
+        compiled._check_detached_nodes(on_detached_nodes)
 
         return compiled.validate()
 
@@ -1368,6 +1384,105 @@ class CompiledStateGraph(
 
         # attach branch publisher
         self.nodes[start].writers.append(branch.run(get_writes, reader))
+
+    def _check_detached_nodes(
+        self,
+        on_detached_nodes: Literal["warn", "raise", "ignore"],
+    ) -> None:
+        """Detect unreachable and dead-end nodes by inspecting compiled channels.
+
+        Uses the channel/writer infrastructure that is populated during
+        attach_node/attach_edge/attach_branch to determine connectivity,
+        rather than building a separate graph representation.
+
+        Args:
+            on_detached_nodes: How to handle detached nodes.
+                - ``"warn"``: Log a warning.
+                - ``"raise"``: Raise a ``ValueError``.
+                - ``"ignore"``: Skip detection entirely.
+        """
+        if on_detached_nodes == "ignore":
+            return
+
+        # Collect all channels written to by any node's writers.
+        written_channels: set[str] = set()
+        for node in self.nodes.values():
+            for writer in node.writers:
+                if isinstance(writer, ChannelWrite):
+                    for entry in writer.writes:
+                        if isinstance(entry, ChannelWriteEntry):
+                            written_channels.add(entry.channel)
+                        elif (
+                            isinstance(entry, ChannelWriteTupleEntry)
+                            and entry.static
+                        ):
+                            for ch, _, _ in entry.static:
+                                written_channels.add(ch)
+
+        # Detect unreachable nodes: no writer targets their branch:to: channel.
+        unreachable = [
+            name
+            for name in self.nodes
+            if name != START
+            and _CHANNEL_BRANCH_TO.format(name) not in written_channels
+        ]
+
+        if unreachable:
+            msg = f"Found unreachable node(s): {unreachable}."
+            if on_detached_nodes == "warn":
+                logger.warning(msg)
+            elif on_detached_nodes == "raise":
+                raise ValueError(msg)
+
+        # Detect dead-end nodes: no outgoing connection to another node or END.
+        dead_ends: list[str] = []
+        for name in self.nodes:
+            if name == START:
+                continue
+            has_outgoing = False
+            # Check builder edges for an explicit END connection
+            # (attach_edge skips adding a writer when the target is END).
+            if any(
+                src == name and dst == END
+                for src, dst in self.builder._all_edges
+            ):
+                has_outgoing = True
+            # Check builder branches (conditional edges are outgoing)
+            elif name in self.builder.branches:
+                has_outgoing = True
+            else:
+                # Check compiled writers for branch:to:* or END channels
+                for writer in self.nodes[name].writers:
+                    if isinstance(writer, ChannelWrite):
+                        for entry in writer.writes:
+                            if (
+                                isinstance(entry, ChannelWriteEntry)
+                                and entry.channel.startswith("branch:to:")
+                            ):
+                                has_outgoing = True
+                                break
+                            elif (
+                                isinstance(entry, ChannelWriteTupleEntry)
+                                and entry.static
+                            ):
+                                for ch, _, _ in entry.static:
+                                    if (
+                                        ch.startswith("branch:to:")
+                                        or ch == END
+                                    ):
+                                        has_outgoing = True
+                                        break
+                    if has_outgoing:
+                        break
+            if not has_outgoing:
+                dead_ends.append(name)
+
+        if dead_ends:
+            msg = f"Found dead end node(s): {dead_ends}."
+            if on_detached_nodes == "warn":
+                logger.warning(msg)
+            elif on_detached_nodes == "raise":
+                raise ValueError(msg)
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a checkpoint to new channel layout."""
