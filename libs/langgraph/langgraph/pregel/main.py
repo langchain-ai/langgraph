@@ -22,6 +22,7 @@ from inspect import isclass
 from typing import (
     Any,
     Generic,
+    Literal,
     cast,
     get_type_hints,
 )
@@ -38,6 +39,7 @@ from langchain_core.runnables.config import (
     get_callback_manager_for_config,
 )
 from langchain_core.runnables.graph import Graph
+from langchain_core.runnables.schema import CustomStreamEvent, StandardStreamEvent
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -3020,6 +3022,61 @@ class Pregel(
         except BaseException as e:
             await asyncio.shield(run_manager.on_chain_error(e))
             raise
+
+    async def astream_events(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        version: Literal["v2"],
+        include_names: Sequence[str] | None = None,
+        include_types: Sequence[str] | None = None,
+        include_tags: Sequence[str] | None = None,
+        exclude_names: Sequence[str] | None = None,
+        exclude_types: Sequence[str] | None = None,
+        exclude_tags: Sequence[str] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[StandardStreamEvent | CustomStreamEvent]:
+        """Stream events from the graph execution.
+
+        This method extends the base Runnable.astream_events with support for
+        the LangGraph `context` parameter.
+
+        Args:
+            input: The input to the graph.
+            config: The configuration to use for the run.
+            context: The static context to use for the run.
+                !!! version-added "Added in version 1.0.6"
+            version: The version of the event stream schema to use ("v2").
+            include_names: Only include events from runnables with matching names.
+            include_types: Only include events from runnables with matching types.
+            include_tags: Only include events from runnables with matching tags.
+            exclude_names: Exclude events from runnables with matching names.
+            exclude_types: Exclude events from runnables with matching types.
+            exclude_tags: Exclude events from runnables with matching tags.
+            **kwargs: Additional arguments passed to the underlying stream.
+
+        Yields:
+            Events from the graph execution.
+        """
+        async with contextlib.aclosing(
+            super().astream_events(
+                input,
+                config,
+                version=version,
+                include_names=include_names,
+                include_types=include_types,
+                include_tags=include_tags,
+                exclude_names=exclude_names,
+                exclude_types=exclude_types,
+                exclude_tags=exclude_tags,
+                context=context,
+                **kwargs,
+            )
+        ) as stream:  # type: ignore[type-var]
+            async for event in stream:
+                yield event
 
     def invoke(
         self,
