@@ -26,6 +26,9 @@ from langgraph.checkpoint.postgres import _internal
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
+import time
+from psycopg.errors import OperationalError
+
 Conn = _internal.Conn  # For backward compatibility
 
 
@@ -473,4 +476,56 @@ class PostgresSaver(BasePostgresSaver):
         )
 
 
-__all__ = ["PostgresSaver", "BasePostgresSaver", "ShallowPostgresSaver", "Conn"]
+
+class ResilientPostgresSaver(PostgresSaver):
+    def __init__(
+        self,
+        conn: Conn,
+        pipe: Optional[Pipeline] = None,
+        serde: Optional[SerializerProtocol] = None,
+        max_retries: int = 3,
+        retry_delay: float = 2.0,  # seconds
+    ) -> None:
+        super().__init__(conn, pipe, serde)
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
+
+    def _execute_with_retries(self, query_func, *args, **kwargs):
+        retries = 0
+        while retries < self.max_retries:
+            try:
+                return query_func(*args, **kwargs)
+            except (OperationalError, ConnectionError) as e:
+                retries += 1
+                if retries >= self.max_retries:
+                    raise
+                time.sleep(self.retry_delay)
+                self._reconnect()
+
+    def _reconnect(self):
+        self.conn.close()
+        if isinstance(self.conn, ConnectionPool):
+            self.conn = ConnectionPool(self.conn.conninfo)  # Reinitialize connection pool
+        else:
+            self.conn = Connection.connect(
+                self.conn.conninfo, autocommit=True, prepare_threshold=0, row_factory=dict_row
+            )
+
+    def setup(self) -> None:
+        self._execute_with_retries(super().setup)
+
+    def list(self, *args, **kwargs):
+        return self._execute_with_retries(super().list, *args, **kwargs)
+
+    def get_tuple(self, *args, **kwargs):
+        return self._execute_with_retries(super().get_tuple, *args, **kwargs)
+
+    def put(self, *args, **kwargs):
+        return self._execute_with_retries(super().put, *args, **kwargs)
+
+    def put_writes(self, *args, **kwargs):
+        return self._execute_with_retries(super().put_writes, *args, **kwargs)
+
+
+
+__all__ = ["PostgresSaver", "BasePostgresSaver", "ShallowPostgresSaver", "Conn", "ResilientPostgresSaver"]
