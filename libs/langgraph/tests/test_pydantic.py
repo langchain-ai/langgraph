@@ -1,6 +1,7 @@
 import datetime
 import decimal
 import ipaddress
+import operator
 import pathlib
 import re
 import sys
@@ -312,3 +313,161 @@ def test_pydantic_state_field_validator():
     g = builder.compile()
     res = g.invoke(input_state)
     assert res["text"] == "Hello, Validated John!"
+
+
+# Tests for Issue #5225: Default value of state variable not working with reducer function
+
+
+def test_pydantic_default_factory_with_reducer():
+    """Test that default_factory works with Annotated reducer functions.
+
+    This is the main reproduction case from issue #5225.
+    """
+
+    def extend_list(original: list, new: list) -> list:
+        original.extend(new)
+        return original
+
+    class State(BaseModel):
+        variable: Annotated[list[str], extend_list] = Field(
+            default_factory=lambda: ["default"]
+        )
+
+    def node(state: State) -> dict:
+        return {"variable": ["new_item"]}
+
+    graph = StateGraph(State)
+    graph.add_node("process", node)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+    compiled = graph.compile()
+
+    # Test with empty input - should start with default value
+    result = compiled.invoke({})
+    # Should have both default and new item
+    assert "default" in result["variable"]
+    assert "new_item" in result["variable"]
+    assert result["variable"] == ["default", "new_item"]
+
+
+def test_pydantic_default_value_with_operator_add():
+    """Test that default values work with operator.add reducer."""
+
+    class State(BaseModel):
+        messages: Annotated[list[str], operator.add] = Field(
+            default_factory=lambda: ["initial"]
+        )
+
+    def node(state: State) -> dict:
+        return {"messages": ["added"]}
+
+    graph = StateGraph(State)
+    graph.add_node("process", node)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+    compiled = graph.compile()
+
+    result = compiled.invoke({})
+    assert result["messages"] == ["initial", "added"]
+
+
+def test_pydantic_static_default_with_reducer():
+    """Test that static default values work with reducer functions."""
+
+    class State(BaseModel):
+        count: Annotated[int, operator.add] = Field(default=10)
+
+    def node(state: State) -> dict:
+        return {"count": 5}
+
+    graph = StateGraph(State)
+    graph.add_node("process", node)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+    compiled = graph.compile()
+
+    result = compiled.invoke({})
+    assert result["count"] == 15  # 10 (default) + 5 (from node)
+
+
+def test_pydantic_mixed_defaults_with_reducers():
+    """Test mix of default values with and without reducers."""
+
+    class State(BaseModel):
+        items: Annotated[list[int], operator.add] = Field(
+            default_factory=lambda: [1, 2]
+        )
+        count: Annotated[int, operator.add] = Field(default=0)
+        name: str = Field(default="test")  # No reducer
+
+    def node(state: State) -> dict:
+        return {"items": [3], "count": 5, "name": state.name + "_modified"}
+
+    graph = StateGraph(State)
+    graph.add_node("process", node)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+    compiled = graph.compile()
+
+    result = compiled.invoke({})
+    assert result["items"] == [1, 2, 3]
+    assert result["count"] == 5  # 0 + 5
+    assert result["name"] == "test_modified"
+
+
+def test_pydantic_reducer_without_default_still_works():
+    """Test backward compatibility: reducers without defaults still work."""
+
+    class State(BaseModel):
+        items: Annotated[list[str], operator.add]
+        count: Annotated[int, operator.add]
+
+    def node1(state: State) -> dict:
+        return {"items": ["first"], "count": 1}
+
+    def node2(state: State) -> dict:
+        return {"items": ["second"], "count": 2}
+
+    graph = StateGraph(State)
+    graph.add_node("node1", node1)
+    graph.add_node("node2", node2)
+    graph.add_edge(START, "node1")
+    graph.add_edge("node1", "node2")
+    graph.add_edge("node2", END)
+    compiled = graph.compile()
+
+    # Provide initial values as before
+    result = compiled.invoke({"items": [], "count": 0})
+    assert result["items"] == ["first", "second"]
+    assert result["count"] == 3
+
+
+def test_pydantic_custom_reducer_with_default():
+    """Test custom reducer functions with default values."""
+
+    def merge_dicts(current: dict, update: dict) -> dict:
+        """Custom reducer that merges dictionaries."""
+        result = current.copy()
+        result.update(update)
+        return result
+
+    class State(BaseModel):
+        metadata: Annotated[dict, merge_dicts] = Field(
+            default_factory=lambda: {"source": "default"}
+        )
+
+    def node(state: State) -> dict:
+        return {"metadata": {"author": "user", "timestamp": "2024"}}
+
+    graph = StateGraph(State)
+    graph.add_node("process", node)
+    graph.add_edge(START, "process")
+    graph.add_edge("process", END)
+    compiled = graph.compile()
+
+    result = compiled.invoke({})
+    assert result["metadata"] == {
+        "source": "default",
+        "author": "user",
+        "timestamp": "2024",
+    }
