@@ -18,6 +18,7 @@ from typing import (
 )
 from uuid import UUID
 
+import anyio
 import pytest
 from langchain_core.language_models import GenericFakeChatModel
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
@@ -1231,6 +1232,69 @@ async def test_cancel_graph_astream(async_checkpointer: BaseCheckpointSaver) -> 
         "source": "loop",
         "step": 0,
     }
+
+
+async def test_cancel_graph_astream_subgraph_cleanup_under_anyio_cancel_scope() -> None:
+    class State(TypedDict):
+        i: int
+
+    class Worker:
+        def __init__(self) -> None:
+            self.started = False
+            self.cancelled = False
+
+        async def __call__(self, _: State) -> None:
+            self.started = True
+            try:
+                while True:
+                    await asyncio.sleep(0.01)
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+
+    worker = Worker()
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node("work", worker)
+    subgraph_builder.add_edge(START, "work")
+    subgraph_builder.add_edge("work", END)
+    subgraph = subgraph_builder.compile()
+
+    graph_builder = StateGraph(State)
+    graph_builder.add_node("child", subgraph)
+    graph_builder.add_edge(START, "child")
+    graph_builder.add_edge("child", END)
+    graph = graph_builder.compile(checkpointer=InMemorySaver())
+
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+    async def consume() -> None:
+        try:
+            async for _ in graph.astream(
+                {"i": 0},
+                config=config,
+                subgraphs=True,
+                print_mode=["tasks"],
+                durability="exit",
+            ):
+                await asyncio.sleep(0.01)
+        except asyncio.CancelledError:
+            # Mimic request streaming generators that swallow cancellation.
+            return
+
+    async with anyio.create_task_group() as task_group:
+        task_group.start_soon(consume)
+        with anyio.fail_after(1):
+            while not worker.started:
+                await anyio.sleep(0.01)
+        task_group.cancel_scope.cancel()
+
+    for _ in range(100):
+        if worker.cancelled:
+            break
+        await asyncio.sleep(0.01)
+
+    assert worker.cancelled is True
 
 
 async def test_cancel_graph_astream_events_v2(

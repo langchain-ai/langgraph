@@ -10,6 +10,7 @@ from contextlib import (
     AbstractContextManager,
     AsyncExitStack,
     ExitStack,
+    nullcontext,
 )
 from datetime import datetime, timezone
 from inspect import signature
@@ -1315,13 +1316,24 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> bool | None:
+        def shield_cancel_scope() -> AbstractContextManager[None]:
+            try:
+                import anyio
+            except ImportError:
+                return nullcontext()
+            return cast(AbstractContextManager[None], anyio.CancelScope(shield=True))
+
         # unwind stack
-        exit_task = asyncio.create_task(
-            self.stack.__aexit__(exc_type, exc_value, traceback)
-        )
+        with shield_cancel_scope():
+            exit_task = asyncio.create_task(
+                self.stack.__aexit__(exc_type, exc_value, traceback)
+            )
         try:
-            return await exit_task
+            with shield_cancel_scope():
+                return await asyncio.shield(exit_task)
         except asyncio.CancelledError as e:
+            with shield_cancel_scope():
+                await asyncio.shield(exit_task)
             # Bubble up the exit task upon cancellation to permit the API
             # consumer to await it before e.g., reusing the DB connection.
             e.args = (*e.args, exit_task)
