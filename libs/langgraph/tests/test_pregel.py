@@ -1102,6 +1102,56 @@ def test_pending_writes_resume(
     )
 
 
+def test_checkpoint_resume_matches_uninterrupted_outcome(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        value: Annotated[int, operator.add]
+
+    class FailOnce:
+        def __init__(self) -> None:
+            self.failed = False
+
+        def __call__(self, state: State) -> State:
+            if not self.failed:
+                self.failed = True
+                raise RuntimeError("simulated crash before commit")
+            return {"value": 2}
+
+    def add_three(state: State) -> State:
+        return {"value": 3}
+
+    crashing_builder = StateGraph(State)
+    crashing_builder.add_node("first", FailOnce())
+    crashing_builder.add_node("second", add_three)
+    crashing_builder.add_edge(START, "first")
+    crashing_builder.add_edge("first", "second")
+    crashing_graph = crashing_builder.compile(checkpointer=sync_checkpointer)
+
+    baseline_builder = StateGraph(State)
+    baseline_builder.add_node("first", lambda state: {"value": 2})
+    baseline_builder.add_node("second", add_three)
+    baseline_builder.add_edge(START, "first")
+    baseline_builder.add_edge("first", "second")
+    baseline_graph = baseline_builder.compile(checkpointer=sync_checkpointer)
+
+    crash_config: RunnableConfig = {"configurable": {"thread_id": "resume-run"}}
+    baseline_config: RunnableConfig = {"configurable": {"thread_id": "direct-run"}}
+
+    with pytest.raises(RuntimeError, match="simulated crash before commit"):
+        crashing_graph.invoke({"value": 1}, crash_config)
+
+    resumed_result = crashing_graph.invoke(None, crash_config)
+    uninterrupted_result = baseline_graph.invoke({"value": 1}, baseline_config)
+
+    assert resumed_result == uninterrupted_result
+    assert resumed_result == {"value": 6}
+    assert (
+        crashing_graph.get_state(crash_config).values
+        == baseline_graph.get_state(baseline_config).values
+    )
+
+
 def test_cond_edge_after_send() -> None:
     class Node:
         def __init__(self, name: str):
