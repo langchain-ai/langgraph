@@ -187,6 +187,23 @@ class TestMemorySaver:
         ]
         assert len(search_results_4) == 0
 
+    def test_put_writes_raises_serialization_error_with_context(self) -> None:
+        class FaultySerializer:
+            def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+                raise TypeError("cannot pickle '_thread.lock' object")
+
+            def loads_typed(self, data: tuple[str, bytes]) -> Any:
+                return data
+
+        memory_saver = InMemorySaver(serde=FaultySerializer())  # type: ignore[arg-type]
+
+        with pytest.raises(TypeError, match="Failed to serialize checkpoint write"):
+            memory_saver.put_writes(
+                self.config_1,
+                writes=[("foo", object())],
+                task_id="task-1",
+            )
+
 
 async def test_memory_saver() -> None:
     from langgraph.checkpoint.memory import InMemorySaver
