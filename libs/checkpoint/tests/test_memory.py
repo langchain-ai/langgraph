@@ -187,6 +187,35 @@ class TestMemorySaver:
         ]
         assert len(search_results_4) == 0
 
+    def test_get_tuple_without_checkpoint_id_uses_last_written_checkpoint(self) -> None:
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-lexical",
+                "checkpoint_ns": "",
+            }
+        }
+        checkpoint_2 = empty_checkpoint()
+        checkpoint_2["id"] = "2"
+        checkpoint_10 = create_checkpoint(checkpoint_2, {}, 1)
+        checkpoint_10["id"] = "10"
+
+        self.memory_saver.put(
+            config,
+            checkpoint_2,
+            self.metadata_1,
+            checkpoint_2["channel_versions"],
+        )
+        self.memory_saver.put(
+            config,
+            checkpoint_10,
+            self.metadata_2,
+            checkpoint_10["channel_versions"],
+        )
+
+        latest = self.memory_saver.get_tuple(config)
+        assert latest is not None
+        assert latest.config["configurable"]["checkpoint_id"] == "10"
+
 
 async def test_memory_saver() -> None:
     from langgraph.checkpoint.memory import InMemorySaver

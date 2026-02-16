@@ -179,7 +179,9 @@ class InMemorySaver(
                 )
         else:
             if checkpoints := self.storage[thread_id][checkpoint_ns]:
-                checkpoint_id = max(checkpoints.keys())
+                # Dict insertion order preserves write order in Python 3.7+.
+                # Use last-written checkpoint instead of lexicographic max ID.
+                checkpoint_id = next(reversed(checkpoints))
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 checkpoint_ = self.serde.loads_typed(checkpoint)
