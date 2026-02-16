@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langgraph-checkpoint-validation"
+version = "0.1.0"
+description = "Conformance test suite for LangGraph checkpointer implementations."
+authors = []
+requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
+dependencies = [
+    "langgraph-checkpoint>=2.0.0",
+]
+
+[project.urls]
+Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint-validation"
+
+[dependency-groups]
+test = [
+  "pytest",
+  "pytest-asyncio",
+]
+lint = [
+  "ruff",
+]
+dev = [
+  {include-group = "test"},
+  {include-group = "lint"},
+]
+
+[tool.hatch.build.targets.wheel]
+include = ["langgraph"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --durations=5 -vv"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+lint.select = [
+  "E",  # pycodestyle
+  "F",  # Pyflakes
+  "UP", # pyupgrade
+  "B",  # flake8-bugbear
+  "I",  # isort
+]
+lint.ignore = ["E501", "B008"]
+target-version = "py310"
