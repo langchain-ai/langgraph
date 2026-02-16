@@ -255,11 +255,7 @@ class InMemorySaver(
                     checkpoint,
                     metadata_b,
                     parent_checkpoint_id,
-                ) in sorted(
-                    self.storage[thread_id][checkpoint_ns].items(),
-                    key=lambda x: x[0],
-                    reverse=True,
-                ):
+                ) in reversed(self.storage[thread_id][checkpoint_ns].items()):
                     # filter by checkpoint ID from config
                     if config_checkpoint_id and checkpoint_id != config_checkpoint_id:
                         continue
