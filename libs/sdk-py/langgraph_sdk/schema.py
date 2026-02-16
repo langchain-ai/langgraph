@@ -117,11 +117,26 @@ Specifies behavior if the thread doesn't exist:
 - "reject": Reject the operation if the thread doesn't exist.
 """
 
+PruneStrategy = Literal["delete", "keep_latest"]
+"""
+Strategy for pruning threads:
+- "delete": Remove threads entirely.
+- "keep_latest": Prune old checkpoints but keep threads and their latest state.
+"""
+
 CancelAction = Literal["interrupt", "rollback"]
 """
 Action to take when cancelling the run.
 - "interrupt": Simply cancel the run.
 - "rollback": Cancel the run. Then delete the run and associated checkpoints.
+"""
+
+BulkCancelRunsStatus = Literal["pending", "running", "all"]
+"""
+Filter runs by status when bulk-cancelling:
+- "pending": Cancel only pending runs.
+- "running": Cancel only running runs.
+- "all": Cancel all runs regardless of status.
 """
 
 AssistantSortBy = Literal[
@@ -137,7 +152,13 @@ The field to sort by.
 """
 
 CronSortBy = Literal[
-    "cron_id", "assistant_id", "thread_id", "created_at", "updated_at", "next_run_date"
+    "cron_id",
+    "assistant_id",
+    "thread_id",
+    "created_at",
+    "updated_at",
+    "next_run_date",
+    "end_time",
 ]
 """
 The field to sort by.
@@ -374,6 +395,33 @@ class Cron(TypedDict):
     """The metadata of the cron."""
     enabled: bool
     """Whether the cron is enabled."""
+
+
+class CronUpdate(TypedDict, total=False):
+    """Payload for updating a cron job. All fields are optional."""
+
+    schedule: str
+    """The cron schedule to execute this job on."""
+    end_time: datetime
+    """The end date to stop running the cron."""
+    input: Input
+    """The input to the graph."""
+    metadata: dict[str, Any]
+    """Metadata to assign to the cron job runs."""
+    config: Config
+    """The configuration for the assistant."""
+    context: Context
+    """Static context added to the assistant."""
+    webhook: str
+    """Webhook to call after LangGraph API call is done."""
+    interrupt_before: All | list[str]
+    """Nodes to interrupt immediately before they get executed."""
+    interrupt_after: All | list[str]
+    """Nodes to interrupt immediately after they get executed."""
+    on_run_completed: OnCompletionBehavior
+    """What to do with the thread after the run completes."""
+    enabled: bool
+    """Enable or disable the cron job."""
 
 
 # Select field aliases for client-side typing of `select` parameters.
