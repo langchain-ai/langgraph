@@ -446,6 +446,7 @@ class AssistantsClient:
         self,
         assistant_id: str,
         *,
+        delete_threads: bool = False,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
@@ -453,6 +454,9 @@ class AssistantsClient:
 
         Args:
             assistant_id: The assistant ID to delete.
+            delete_threads: If true, delete all threads with `metadata.assistant_id`
+                matching this assistant, along with runs and checkpoints belonging to
+                those threads.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -469,8 +473,15 @@ class AssistantsClient:
             ```
 
         """
+        query_params: dict[str, Any] = {}
+        if delete_threads:
+            query_params["delete_threads"] = True
+        if params:
+            query_params.update(params)
         await self.http.delete(
-            f"/assistants/{assistant_id}", headers=headers, params=params
+            f"/assistants/{assistant_id}",
+            headers=headers,
+            params=query_params or None,
         )
 
     @overload
