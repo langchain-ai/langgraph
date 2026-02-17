@@ -57,3 +57,8 @@ lint.select = [
 ]
 lint.ignore = ["E501", "B008"]
 target-version = "py310"
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
