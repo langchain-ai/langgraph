@@ -10,6 +10,7 @@ updates:
       - "libs/checkpoint"
       - "libs/checkpoint-postgres"
       - "libs/checkpoint-sqlite"
+      - "libs/checkpoint-validation"
       - "libs/cli"
       - "libs/langgraph"
       - "libs/prebuilt"

@@ -39,6 +39,7 @@ jobs:
               - 'libs/checkpoint/**'
               - 'libs/checkpoint-sqlite/**'
               - 'libs/checkpoint-postgres/**'
+              - 'libs/checkpoint-validation/**'
               - 'libs/prebuilt/**'
             deps:
               - '**/pyproject.toml'
@@ -57,7 +58,7 @@ jobs:
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
-
+            "libs/checkpoint-validation",
             "libs/prebuilt",
           ]
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
@@ -77,6 +78,7 @@ jobs:
             "libs/checkpoint",
             "libs/checkpoint-sqlite",
             "libs/checkpoint-postgres",
+            "libs/checkpoint-validation",
             "libs/prebuilt",
             "libs/sdk-py",
           ]
