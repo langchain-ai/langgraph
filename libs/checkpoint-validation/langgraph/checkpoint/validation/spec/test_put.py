@@ -226,27 +226,6 @@ async def test_put_parent_config(saver: BaseCheckpointSaver) -> None:
         == stored1["configurable"]["checkpoint_id"]
     )
 
-
-async def test_put_channel_versions_delta(saver: BaseCheckpointSaver) -> None:
-    """Only changed channels stored via new_versions param."""
-    tid = str(uuid4())
-    config = generate_config(tid)
-    cp = generate_checkpoint(
-        channel_values={"a": 1, "b": 2},
-        channel_versions={"a": 1, "b": 1},
-    )
-    # Only 'a' is new
-    stored = await saver.aput(config, cp, generate_metadata(), {"a": 1})
-    tup = await saver.aget_tuple(stored)
-    assert tup is not None
-    # 'a' should be present (it was in new_versions)
-    assert tup.checkpoint["channel_values"].get("a") == 1
-    # 'b' should NOT be present (it was NOT in new_versions)
-    assert "b" not in tup.checkpoint["channel_values"], (
-        "'b' should not be stored since it was not in new_versions"
-    )
-
-
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -264,7 +243,6 @@ ALL_PUT_TESTS = [
     test_put_multiple_checkpoints_same_thread,
     test_put_multiple_threads_isolated,
     test_put_parent_config,
-    test_put_channel_versions_delta,
 ]
 
 

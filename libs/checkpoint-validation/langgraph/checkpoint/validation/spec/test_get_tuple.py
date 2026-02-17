@@ -201,13 +201,14 @@ async def test_get_tuple_nonexistent_checkpoint_id(
 ) -> None:
     """Specific but missing checkpoint_id returns None."""
     tid = str(uuid4())
+    nonexistent_id = str(uuid4())
     # Put one checkpoint so the thread exists
     config = generate_config(tid)
     cp = generate_checkpoint()
     await saver.aput(config, cp, generate_metadata(), {})
 
     # Ask for a non-existent checkpoint_id
-    bad_cfg = generate_config(tid, checkpoint_id="nonexistent-id-000")
+    bad_cfg = generate_config(tid, checkpoint_id=nonexistent_id)
     tup = await saver.aget_tuple(bad_cfg)
     assert tup is None
 
