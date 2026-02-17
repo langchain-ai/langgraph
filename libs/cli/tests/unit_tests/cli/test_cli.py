@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 import re
 import shutil
@@ -6,6 +7,7 @@ import tempfile
 import textwrap
 from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 from click.testing import CliRunner
 
@@ -47,6 +49,7 @@ def temporary_config_folder(config_content: dict, levels: int = 0):
         shutil.rmtree(temp_dir)
 
 
+@patch.dict(os.environ, {"LANGGRAPH_CACHE_OPTIMIZE": "lock"})
 def test_prepare_args_and_stdin() -> None:
     # this basically serves as an end-to-end test for using config and docker helpers
     config_path = pathlib.Path(__file__).parent / "langgraph.json"
@@ -143,15 +146,29 @@ services:
             dockerfile_inline: |
                 # syntax=docker/dockerfile:1.4
                 FROM langchain/langgraph-api:3.11
+                # -- Generate requirements.txt for packages without one --
+                # Copy packaging metadata files
+                ADD pyproject.toml /tmp/dep_metadata/cli/pyproject.toml
+                COPY --from=cli_1 pyproject.toml /tmp/dep_metadata/cli_1/pyproject.toml
+                COPY --from=cli_1 uv.lock /tmp/dep_metadata/cli_1/uv.lock
+                # Generate requirements.txt from packaging metadata
+                RUN cd '/tmp/dep_metadata/cli' && uv pip compile pyproject.toml -o 'requirements.txt' --constraint /api/constraints.txt
+                RUN cd '/tmp/dep_metadata/cli_1' && uv export --no-hashes --no-dev --no-emit-local -o 'requirements.txt'
+                # -- End of requirements.txt generation --
+                # -- Installing from requirements.txt files --
+                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/tmp/dep_metadata/cli/requirements.txt'
+                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/tmp/dep_metadata/cli_1/requirements.txt'
+                # -- End of requirements.txt install --
                 # -- Adding local package . --
                 ADD . /deps/cli
                 # -- End of local package . --
-                # -- Adding local package ../../.. --
-                COPY --from=cli_1 . /deps/cli_1
-                # -- End of local package ../../.. --
                 # -- Installing all local dependencies --
                 RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
+                # -- Adding full source for local package ../../.. --
+                COPY --from=cli_1 . /deps/cli_1
+                RUN cd /deps/cli_1 && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt --no-deps -e .
+                # -- End of full source for local package ../../.. --
                 ENV LANGSERVE_GRAPHS='{{"agent": "agent.py:graph"}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
                 WORKDIR /deps/cli

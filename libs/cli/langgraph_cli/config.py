@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import pathlib
 import re
@@ -10,8 +11,18 @@ import click
 
 from langgraph_cli.schemas import Config, Distros
 
+logger = logging.getLogger(__name__)
+
 MIN_NODE_VERSION = "20"
 DEFAULT_NODE_VERSION = "20"
+
+CONSTRAINTS_PATH = "/api/constraints.txt"
+
+CACHE_OPTIMIZE_LEVELS = {"off", "lock", "pyproject", "all"}
+CACHE_OPTIMIZE_ENV_VAR = "LANGGRAPH_CACHE_OPTIMIZE"
+DEFAULT_CACHE_OPTIMIZE = "lock"
+
+METADATA_STAGING_DIR = "/tmp/dep_metadata"
 
 MIN_PYTHON_VERSION = "3.11"
 DEFAULT_PYTHON_VERSION = "3.11"
@@ -318,6 +329,30 @@ def validate_config_file(config_path: pathlib.Path) -> Config:
     return validated
 
 
+class ReqGenSpec(NamedTuple):
+    """Specification for a local package that needs requirements.txt generation.
+
+    Created for every real package missing a requirements.txt, regardless of
+    cache optimization eligibility.  The eligibility decision happens later
+    in ``python_config_to_docker()`` via ``_is_optimizable()``.
+
+    Attributes:
+        host_pkg_path: Absolute host path of the package directory.
+        container_pkg_path: Target path for the package source in the container.
+        container_req_path: Full path to requirements.txt inside the container.
+        package_type: ``"pyproject"`` or ``"setup"``.
+        has_uv_lock: True if the package includes uv.lock.
+        stage_name: BuildKit context name if outside the build context, else None.
+    """
+
+    host_pkg_path: pathlib.Path
+    container_pkg_path: str
+    container_req_path: str
+    package_type: Literal["pyproject", "setup"]
+    has_uv_lock: bool
+    stage_name: str | None
+
+
 class LocalDeps(NamedTuple):
     """A container for referencing and managing local Python dependencies.
 
@@ -365,6 +400,11 @@ class LocalDeps(NamedTuple):
         additional_contexts: A list of paths to directories that contain local
             dependencies in parent directories. These directories are added to the
             Docker build context to ensure that the Dockerfile can access them.
+
+        pkgs_missing_reqs: A list of ``ReqGenSpec`` entries for real packages that
+            do not have a ``requirements.txt`` file.  Populated by
+            ``_assemble_local_deps()`` and consumed by ``python_config_to_docker()``
+            for cache-optimized Dockerfile generation.
     """
 
     pip_reqs: list[tuple[pathlib.Path, str]]
@@ -374,6 +414,124 @@ class LocalDeps(NamedTuple):
     working_dir: str | None = None
     # if there are local dependencies in parent directories, use additional_contexts
     additional_contexts: list[pathlib.Path] = None
+    # real packages that need requirements.txt generation for cache optimization
+    pkgs_missing_reqs: list[ReqGenSpec] | None = None
+
+
+def _get_cache_optimize_level() -> str:
+    """Read the cache optimization level from environment.
+
+    Returns one of: "off", "lock", "pyproject", "all".
+    Falls back to DEFAULT_CACHE_OPTIMIZE on invalid values (with warning).
+    """
+    raw = os.getenv(CACHE_OPTIMIZE_ENV_VAR, DEFAULT_CACHE_OPTIMIZE).strip().lower()
+    if raw in CACHE_OPTIMIZE_LEVELS:
+        return raw
+    logger.warning(
+        "Invalid %s=%r. Falling back to %r.",
+        CACHE_OPTIMIZE_ENV_VAR,
+        raw,
+        DEFAULT_CACHE_OPTIMIZE,
+    )
+    return DEFAULT_CACHE_OPTIMIZE
+
+
+def _is_optimizable(spec: ReqGenSpec, level: str) -> bool:
+    """Determine if a package is eligible for deferred source copy.
+
+    Eligibility tiers (cumulative):
+    - "off":       no packages optimized
+    - "lock":      pyproject.toml + uv.lock only (safest, default)
+    - "pyproject": all pyproject.toml packages (with or without lock)
+    - "all":       all real packages including setup.py
+    """
+    if level == "off":
+        return False
+    if level == "lock":
+        return spec.package_type == "pyproject" and spec.has_uv_lock
+    if level == "pyproject":
+        return spec.package_type == "pyproject"
+    if level == "all":
+        return spec.package_type in {"pyproject", "setup"}
+    return False  # unknown level — fail safe
+
+
+def _metadata_files(spec: ReqGenSpec) -> list[str]:
+    """Return the list of packaging metadata files to copy for requirements generation."""
+    files = ["pyproject.toml"] if spec.package_type == "pyproject" else ["setup.py"]
+    if spec.package_type == "pyproject" and spec.has_uv_lock:
+        files.append("uv.lock")
+    if spec.package_type == "setup" and (spec.host_pkg_path / "setup.cfg").exists():
+        files.append("setup.cfg")
+    return files
+
+
+def _get_reqs_gen_cmd(spec: ReqGenSpec) -> str:
+    """Return the shell command to generate requirements.txt from packaging metadata."""
+    if spec.package_type == "pyproject" and spec.has_uv_lock:
+        return "uv export --no-hashes --no-dev --no-emit-local -o 'requirements.txt'"
+    if spec.package_type == "pyproject":
+        return (
+            f"uv pip compile pyproject.toml -o 'requirements.txt'"
+            f" --constraint {CONSTRAINTS_PATH}"
+        )
+    return (
+        f"uv pip compile setup.py -o 'requirements.txt' --constraint {CONSTRAINTS_PATH}"
+    )
+
+
+def _staging_path(spec: ReqGenSpec) -> str:
+    """Return the staging directory path for a spec's metadata files.
+
+    Metadata is staged in a temporary directory separate from ``/deps/``
+    so the install loop does not encounter incomplete package directories.
+    """
+    # Use the last component of container_pkg_path as the staging subdir
+    name = spec.container_pkg_path.rstrip("/").rsplit("/", 1)[-1]
+    return f"{METADATA_STAGING_DIR}/{name}"
+
+
+def _generate_requirements_from_metadata(
+    config_path: pathlib.Path,
+    specs: list[ReqGenSpec],
+) -> str:
+    """Generate Dockerfile lines to create requirements.txt from packaging metadata.
+
+    Metadata files are staged under ``METADATA_STAGING_DIR`` (not ``/deps/``)
+    so the install loop does not find incomplete package directories.
+
+    Only processes the given ``specs``.  Returns an empty string when the
+    list is empty.
+    """
+    if not specs:
+        return ""
+
+    resolved_config_parent = config_path.resolve().parent
+
+    docker_lines = ["# -- Generate requirements.txt for packages without one --"]
+    docker_lines.append("# Copy packaging metadata files")
+
+    for spec in sorted(specs, key=lambda s: s.container_pkg_path):
+        staging = _staging_path(spec)
+        for file_name in _metadata_files(spec):
+            if spec.stage_name:
+                docker_lines.append(
+                    f"COPY --from={spec.stage_name} {file_name} {staging}/{file_name}"
+                )
+            else:
+                file_relpath = (spec.host_pkg_path / file_name).relative_to(
+                    resolved_config_parent
+                )
+                docker_lines.append(f"ADD {file_relpath} {staging}/{file_name}")
+
+    docker_lines.append("")
+    docker_lines.append("# Generate requirements.txt from packaging metadata")
+    for spec in sorted(specs, key=lambda s: s.container_pkg_path):
+        staging = _staging_path(spec)
+        docker_lines.append(f"RUN cd '{staging}' && {_get_reqs_gen_cmd(spec)}")
+
+    docker_lines.append("# -- End of requirements.txt generation --")
+    return os.linesep.join(docker_lines)
 
 
 def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps:
@@ -409,6 +567,7 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
     faux_pkgs = {}
     working_dir: str | None = None
     additional_contexts: list[pathlib.Path] = []
+    pkgs_missing_reqs: list[ReqGenSpec] = []
 
     for local_dep in config["dependencies"]:
         if not local_dep.startswith("."):
@@ -435,6 +594,8 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
         # If found, treat as a real package, if not treat as a faux package.
         # For faux packages, we'll also check for presence of requirements.txt.
         files = os.listdir(resolved)
+        # requirement_path is set in both branches and used after them
+        requirement_path: str = ""
         if "pyproject.toml" in files or "setup.py" in files:
             # real package
 
@@ -448,6 +609,31 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
             # set working_dir
             if local_dep == ".":
                 working_dir = f"/deps/{container_name}"
+
+            requirement_path = f"/deps/{container_name}/requirements.txt"
+
+            # Track real packages that need requirements.txt generation
+            if "requirements.txt" not in files:
+                has_pyproject = "pyproject.toml" in files
+                has_uv_lock = "uv.lock" in files
+                pkg_type: Literal["pyproject", "setup"] = (
+                    "pyproject" if has_pyproject else "setup"
+                )
+
+                stage_name = None
+                if resolved in additional_contexts:
+                    stage_name = container_name
+
+                pkgs_missing_reqs.append(
+                    ReqGenSpec(
+                        host_pkg_path=resolved,
+                        container_pkg_path=f"/deps/{container_name}",
+                        container_req_path=f"{METADATA_STAGING_DIR}/{container_name}/requirements.txt",
+                        package_type=pkg_type,
+                        has_uv_lock=has_uv_lock if has_pyproject else False,
+                        stage_name=stage_name,
+                    )
+                )
         else:
             # We could not find a pyproject.toml or setup.py, so treat as a faux package
             if any(file == "__init__.py" for file in files):
@@ -480,18 +666,27 @@ def _assemble_local_deps(config_path: pathlib.Path, config: Config) -> LocalDeps
             if local_dep == ".":
                 working_dir = container_path
 
-            # If the faux package has a requirements.txt, we'll add
-            # the path to the list of requirements to install.
-            if "requirements.txt" in files:
-                rfile = resolved / "requirements.txt"
-                pip_reqs.append(
-                    (
-                        rfile,
-                        f"{container_path}/requirements.txt",
-                    )
-                )
+            requirement_path = f"{container_path}/requirements.txt"
 
-    return LocalDeps(pip_reqs, real_pkgs, faux_pkgs, working_dir, additional_contexts)
+        # If the package has a requirements.txt, register it for pre-installation.
+        # This applies to BOTH real and faux packages.
+        if "requirements.txt" in files:
+            rfile = resolved / "requirements.txt"
+            pip_reqs.append(
+                (
+                    rfile,
+                    requirement_path,
+                )
+            )
+
+    return LocalDeps(
+        pip_reqs,
+        real_pkgs,
+        faux_pkgs,
+        working_dir,
+        additional_contexts,
+        pkgs_missing_reqs,
+    )
 
 
 def _update_graph_paths(
@@ -883,22 +1078,106 @@ def python_config_to_docker(
     pip_pkgs_str = (
         f"RUN {local_reqs_pip_install} {' '.join(pypi_deps)}" if pypi_deps else ""
     )
-    if local_deps.pip_reqs:
-        pip_reqs_str = os.linesep.join(
-            (
-                f"COPY --from=outer-{reqpath.name} requirements.txt {destpath}"
-                if reqpath.parent in local_deps.additional_contexts
-                else f"ADD {reqpath.relative_to(config_path.parent)} {destpath}"
-            )
-            for reqpath, destpath in local_deps.pip_reqs
-        )
-        pip_reqs_str += f"{os.linesep}RUN {local_reqs_pip_install} {' '.join('-r ' + r for _, r in local_deps.pip_reqs)}"
-        pip_reqs_str = f"""# -- Installing local requirements --
-{pip_reqs_str}
-# -- End of local requirements install --"""
+    # --- Compute optimized package set ---
+    optimized_pkg_paths: set[pathlib.Path] = set()
+    if pip_installer == "uv":
+        level = _get_cache_optimize_level()
+        logger.info("Docker cache optimization level: %s", level)
 
-    else:
-        pip_reqs_str = ""
+        # Source 1: packages with generated requirements
+        for spec in local_deps.pkgs_missing_reqs or []:
+            if _is_optimizable(spec, level):
+                optimized_pkg_paths.add(spec.host_pkg_path)
+
+        # Source 2: real packages with existing requirements.txt
+        # Their deps are already pre-installed via pip_reqs, so deferred copy is safe —
+        # but still subject to the same tier eligibility as generated-requirements packages.
+        if level != "off":
+            for reqpath, _ in local_deps.pip_reqs or []:
+                for fullpath in local_deps.real_pkgs:
+                    if reqpath.parent != fullpath:
+                        continue
+                    # Build a synthetic spec to reuse the same eligibility check
+                    pkg_files = os.listdir(fullpath)
+                    has_pyproject = "pyproject.toml" in pkg_files
+                    has_setup = "setup.py" in pkg_files
+                    if not has_pyproject and not has_setup:
+                        continue
+                    synthetic = ReqGenSpec(
+                        host_pkg_path=fullpath,
+                        container_pkg_path="",  # unused by _is_optimizable
+                        container_req_path="",  # unused by _is_optimizable
+                        package_type="pyproject" if has_pyproject else "setup",
+                        has_uv_lock="uv.lock" in pkg_files,
+                        stage_name=None,  # unused by _is_optimizable
+                    )
+                    if _is_optimizable(synthetic, level):
+                        optimized_pkg_paths.add(fullpath)
+
+    # --- Generate requirements.txt from packaging metadata ---
+    # Always generate for ALL real packages missing requirements.txt (when using uv).
+    # This benefits caching even for non-deferred packages because the generated
+    # requirements.txt install layer is cached and deps are pre-installed before
+    # the install loop.
+    all_specs = list(local_deps.pkgs_missing_reqs or [])
+    generated_reqs_str = (
+        _generate_requirements_from_metadata(config_path, all_specs)
+        if pip_installer == "uv"
+        else ""
+    )
+
+    # --- Build combined requirements install block ---
+    # Gather all requirement paths: existing pip_reqs + generated specs
+    copy_lines: list[str] = []
+    all_req_paths: list[str] = []
+
+    # Existing pip_reqs (from packages that already have requirements.txt)
+    if local_deps.pip_reqs:
+        for reqpath, destpath in local_deps.pip_reqs:
+            # For optimized (deferred) packages, redirect the requirements.txt
+            # copy to the staging directory so we don't create a partial /deps/
+            # directory that the install loop would trip over.
+            resolved_pkg = reqpath.parent.resolve()
+            if resolved_pkg in optimized_pkg_paths:
+                name = destpath.rstrip("/").rsplit("/", 2)[-2]
+                effective_dest = f"{METADATA_STAGING_DIR}/{name}/requirements.txt"
+            else:
+                effective_dest = destpath
+            if reqpath.parent in local_deps.additional_contexts:
+                if reqpath.parent in local_deps.real_pkgs:
+                    stage_name = local_deps.real_pkgs[reqpath.parent][1]
+                else:
+                    stage_name = f"outer-{reqpath.parent.name}"
+                copy_lines.append(
+                    f"COPY --from={stage_name} requirements.txt {effective_dest}"
+                )
+            else:
+                copy_lines.append(
+                    f"ADD {reqpath.relative_to(config_path.parent)} {effective_dest}"
+                )
+            all_req_paths.append(effective_dest)
+
+    # Generated requirements from specs (all real packages with generation, uv only)
+    if pip_installer == "uv":
+        for spec in sorted(
+            local_deps.pkgs_missing_reqs or [], key=lambda s: s.container_req_path
+        ):
+            all_req_paths.append(spec.container_req_path)
+
+    pip_reqs_str = ""
+    if all_req_paths:
+        all_req_paths = sorted(set(all_req_paths))
+        install_lines = [
+            f"RUN {local_reqs_pip_install} -r '{p}'" for p in all_req_paths
+        ]
+        pip_reqs_str = f"""# -- Installing from requirements.txt files --
+{os.linesep.join(copy_lines)}
+{os.linesep.join(install_lines)}
+# -- End of requirements.txt install --"""
+        # Clean up leading/trailing blank lines in case copy_lines is empty
+        pip_reqs_str = pip_reqs_str.replace(
+            os.linesep + os.linesep + "RUN", os.linesep + "RUN"
+        )
 
     # https://setuptools.pypa.io/en/latest/userguide/datafiles.html#package-data
     # https://til.simonwillison.net/python/pyproject
@@ -926,18 +1205,34 @@ RUN set -ex && \\
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
     )
 
-    local_pkgs_str = os.linesep.join(
-        (
-            f"""# -- Adding local package {relpath} --
-COPY --from={name} . /deps/{name}
-# -- End of local package {relpath} --"""
-            if fullpath in local_deps.additional_contexts
-            else f"""# -- Adding local package {relpath} --
-ADD {relpath} /deps/{name}
-# -- End of local package {relpath} --"""
-        )
-        for fullpath, (relpath, name) in local_deps.real_pkgs.items()
-    )
+    # --- Split real package source copy into pre-loop and post-loop ---
+    local_pkgs_pre_parts: list[str] = []
+    local_pkgs_post_parts: list[str] = []
+
+    for fullpath, (relpath, name) in local_deps.real_pkgs.items():
+        if fullpath in local_deps.additional_contexts:
+            add_line = f"COPY --from={name} . /deps/{name}"
+        else:
+            add_line = f"ADD {relpath} /deps/{name}"
+
+        if fullpath in optimized_pkg_paths:
+            # Deferred: full source copy + no-deps editable install after the loop
+            local_pkgs_post_parts.append(
+                f"# -- Adding full source for local package {relpath} --\n"
+                f"{add_line}\n"
+                f"RUN cd /deps/{name} && {global_reqs_pip_install} --no-deps -e .\n"
+                f"# -- End of full source for local package {relpath} --"
+            )
+        else:
+            # Non-optimized: keep in pre-loop position (unchanged behavior)
+            local_pkgs_pre_parts.append(
+                f"# -- Adding local package {relpath} --\n"
+                f"{add_line}\n"
+                f"# -- End of local package {relpath} --"
+            )
+
+    local_pkgs_pre_str = os.linesep.join(local_pkgs_pre_parts)
+    local_pkgs_post_str = os.linesep.join(local_pkgs_post_parts)
 
     install_node_str: str = (
         "RUN /storage/install-node.sh"
@@ -952,8 +1247,9 @@ ADD {relpath} /deps/{name}
                 install_node_str,
                 pip_config_file_str,
                 pip_pkgs_str,
+                generated_reqs_str,
                 pip_reqs_str,
-                local_pkgs_str,
+                local_pkgs_pre_str,
                 faux_pkgs_str,
             ],
         )
@@ -1033,6 +1329,7 @@ ADD {relpath} /deps/{name}
             fi; \
         done""",
             "# -- End of local dependencies install --",
+            local_pkgs_post_str,
             os.linesep.join(env_vars),
             "",
             js_inst_str,
