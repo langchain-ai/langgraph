@@ -593,6 +593,32 @@ class Send(TypedDict):
     If None, the node will be called with no input."""
 
 
+class _ResumeAuthorizationRequired(TypedDict):
+    """Required metadata for authorizing a resume command."""
+
+    actor_id: str
+    """Identifier for the actor authorized to perform the resume."""
+    token: str
+    """Opaque authorization token for this resume request."""
+    signature: str
+    """Signature over the token payload."""
+
+
+class ResumeAuthorization(_ResumeAuthorizationRequired, total=False):
+    """Optional metadata fields for resume authorization context."""
+
+    key_id: str
+    """Identifier for the signing key used to generate `signature`."""
+    issuer: str
+    """Issuer of the resume authorization token."""
+    issued_at: str
+    """Timestamp when the token was issued (ISO-8601 string)."""
+    expires_at: str
+    """Timestamp when the token expires (ISO-8601 string)."""
+    scheme: str
+    """Authorization scheme name used to interpret the token."""
+
+
 class Command(TypedDict, total=False):
     """Represents one or more commands to control graph execution flow and state.
 
@@ -617,6 +643,12 @@ class Command(TypedDict, total=False):
     resume: Any
     """Value to resume execution with after an interruption.
        Used in conjunction with interrupt() to implement control flow.
+    """
+    resume_authorization: ResumeAuthorization
+    """Authorization token metadata for `resume`.
+
+    When provided, SDK request builders validate this payload before sending the
+    request.
     """
 
 
