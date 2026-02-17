@@ -67,57 +67,58 @@ async def validate(
     else:
         caps_to_test = set(Capability)
 
-    for cap in Capability:
-        if cap in caps_to_test and cap.value not in registered.skip_capabilities:
-            # Create a fresh checkpointer for each capability suite.
-            async with registered.create() as saver:
-                detected = DetectedCapabilities.from_instance(saver)
-                is_detected = cap in detected.detected
+    async with registered.enter_lifespan():
+        for cap in Capability:
+            if cap in caps_to_test and cap.value not in registered.skip_capabilities:
+                # Create a fresh checkpointer for each capability suite.
+                async with registered.create() as saver:
+                    detected = DetectedCapabilities.from_instance(saver)
+                    is_detected = cap in detected.detected
 
-                if not is_detected:
+                    if not is_detected:
+                        if progress and progress.on_capability_start:
+                            progress.on_capability_start(cap.value, False)
+                        report.results[cap.value] = CapabilityResult(
+                            detected=False,
+                            passed=None,
+                            tests_skipped=1,
+                        )
+                        continue
+
+                    runner = _RUNNERS.get(cap)
+                    if runner is None:
+                        report.results[cap.value] = CapabilityResult(
+                            detected=True,
+                            passed=None,
+                            tests_skipped=1,
+                        )
+                        continue
+
                     if progress and progress.on_capability_start:
-                        progress.on_capability_start(cap.value, False)
-                    report.results[cap.value] = CapabilityResult(
-                        detected=False,
-                        passed=None,
-                        tests_skipped=1,
-                    )
-                    continue
+                        progress.on_capability_start(cap.value, True)
 
-                runner = _RUNNERS.get(cap)
-                if runner is None:
+                    passed, failed, failures = await runner(
+                        saver,
+                        on_test_result=progress.on_test_result if progress else None,
+                    )
+
+                    if progress and progress.on_capability_end:
+                        progress.on_capability_end(cap.value)
+
                     report.results[cap.value] = CapabilityResult(
                         detected=True,
-                        passed=None,
-                        tests_skipped=1,
+                        passed=failed == 0,
+                        tests_passed=passed,
+                        tests_failed=failed,
+                        failures=failures,
                     )
-                    continue
-
+            else:
                 if progress and progress.on_capability_start:
-                    progress.on_capability_start(cap.value, True)
-
-                passed, failed, failures = await runner(
-                    saver,
-                    on_test_result=progress.on_test_result if progress else None,
-                )
-
-                if progress and progress.on_capability_end:
-                    progress.on_capability_end(cap.value)
-
+                    progress.on_capability_start(cap.value, False)
                 report.results[cap.value] = CapabilityResult(
-                    detected=True,
-                    passed=failed == 0,
-                    tests_passed=passed,
-                    tests_failed=failed,
-                    failures=failures,
+                    detected=False,
+                    passed=None,
+                    tests_skipped=1,
                 )
-        else:
-            if progress and progress.on_capability_start:
-                progress.on_capability_start(cap.value, False)
-            report.results[cap.value] = CapabilityResult(
-                detected=False,
-                passed=None,
-                tests_skipped=1,
-            )
 
     return report

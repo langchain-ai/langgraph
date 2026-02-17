@@ -63,6 +63,20 @@ def conformance_tests(
     else:
         caps_to_test = set(Capability)
 
+    # Inject a module-scoped fixture that enters the lifespan once.
+    import pytest
+
+    fixture_name = f"_lifespan_{registered.name}"
+
+    @pytest.fixture(scope="module")
+    async def _lifespan_fixture():  # type: ignore[misc]
+        async with registered.enter_lifespan():
+            yield
+
+    _lifespan_fixture.__name__ = fixture_name
+    _lifespan_fixture.__qualname__ = fixture_name
+    caller_module[fixture_name] = _lifespan_fixture
+
     for cap in Capability:
         if cap not in caps_to_test:
             continue
@@ -72,14 +86,19 @@ def conformance_tests(
         tests = _TEST_LISTS.get(cap, [])
         for test_fn in tests:
 
-            async def _make_test(_fn: Any = test_fn, _cap: Capability = cap) -> None:
+            async def _make_test(
+                _fn: Any = test_fn,
+                _cap: Capability = cap,
+                **kwargs: Any,
+            ) -> None:
                 async with registered.create() as saver:
                     detected = DetectedCapabilities.from_instance(saver)
                     if _cap not in detected.detected:
-                        import pytest
-
                         pytest.skip(f"{_cap.value} not detected on {registered.name}")
                     await _fn(saver)
+
+            # Mark the test as depending on the lifespan fixture.
+            _make_test = pytest.mark.usefixtures(fixture_name)(_make_test)
 
             name = f"test_{cap.value}__{test_fn.__name__}"
             _make_test.__name__ = name
