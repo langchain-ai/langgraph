@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import traceback
 from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
@@ -226,6 +227,7 @@ async def test_put_parent_config(saver: BaseCheckpointSaver) -> None:
         == stored1["configurable"]["checkpoint_id"]
     )
 
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -265,5 +267,5 @@ async def run_put_tests(
             msg = f"{test_fn.__name__}: {e}"
             failures.append(msg)
             if on_test_result:
-                on_test_result("put", test_fn.__name__, False, str(e))
+                on_test_result("put", test_fn.__name__, False, traceback.format_exc())
     return passed, failed, failures

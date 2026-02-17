@@ -75,7 +75,8 @@ class ProgressCallbacks:
             icon = "✓" if passed else "✗"
             print(f"    {icon} {test_name}")
             if error:
-                print(f"      {error}")
+                for line in error.rstrip().splitlines():
+                    print(f"      {line}")
 
         return cls(
             on_capability_start=_cap_start,

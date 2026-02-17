@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import traceback
 from collections.abc import Callable
 from uuid import uuid4
 
@@ -247,5 +248,7 @@ async def run_copy_thread_tests(
             msg = f"{test_fn.__name__}: {e}"
             failures.append(msg)
             if on_test_result:
-                on_test_result("copy_thread", test_fn.__name__, False, str(e))
+                on_test_result(
+                    "copy_thread", test_fn.__name__, False, traceback.format_exc()
+                )
     return passed, failed, failures
