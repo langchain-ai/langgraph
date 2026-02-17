@@ -19,6 +19,16 @@ updates:
       all-dependencies:
         patterns:
           - "*"
+  - package-ecosystem: "uv"
+    directory: "/libs/checkpoint-conformance"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
+
 
   - package-ecosystem: "uv"
     directory: "/libs/checkpoint-postgres"
