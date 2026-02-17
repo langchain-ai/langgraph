@@ -24,6 +24,7 @@ test = [
 ]
 lint = [
   "ruff",
+  "ty",
 ]
 dev = [
   {include-group = "test"},
@@ -37,6 +38,14 @@ include = ["langgraph"]
 addopts = "--strict-markers --strict-config --durations=5 -vv"
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.ty.rules]
+# The extended methods (acopy_thread, adelete_for_runs, aprune) are checked
+# at runtime via capability detection and may not exist on the installed
+# base class. Dict literal inference is also overly strict for RunnableConfig.
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+invalid-return-type = "ignore"
 
 [tool.ruff]
 lint.select = [

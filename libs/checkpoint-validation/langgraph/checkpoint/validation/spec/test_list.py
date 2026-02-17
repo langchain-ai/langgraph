@@ -270,6 +270,106 @@ async def test_list_multiple_namespaces(saver: BaseCheckpointSaver) -> None:
     assert len(results) == 1, f"Expected 1 root checkpoint, got {len(results)}"
 
 
+async def test_list_metadata_filter_multiple_keys(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """filter with multiple keys — all must match."""
+    tid = str(uuid4())
+
+    # Create checkpoints with different metadata combos
+    for source, step in [("input", 1), ("loop", 1), ("input", 2)]:
+        cfg = generate_config(tid)
+        cp = generate_checkpoint()
+        await saver.aput(cfg, cp, generate_metadata(source=source, step=step), {})
+
+    results = []
+    async for tup in saver.alist(
+        generate_config(tid),
+        filter={"source": "input", "step": 2},
+    ):
+        results.append(tup)
+
+    assert len(results) == 1, (
+        f"Expected 1 match for source=input+step=2, got {len(results)}"
+    )
+    assert results[0].metadata["source"] == "input"
+    assert results[0].metadata["step"] == 2
+
+
+async def test_list_metadata_filter_no_match(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """Multi-key filter that matches nothing returns empty."""
+    data = await _setup_list_data(saver)
+
+    results = []
+    async for tup in saver.alist(
+        generate_config(data["thread_id"]),
+        filter={"source": "update", "step": 99},
+    ):
+        results.append(tup)
+
+    assert len(results) == 0
+
+
+async def test_list_metadata_custom_keys(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """Custom (non-standard) metadata keys are filterable."""
+    tid = str(uuid4())
+
+    cfg = generate_config(tid)
+    cp = generate_checkpoint()
+    await saver.aput(cfg, cp, generate_metadata(score=42, run_id="run-abc"), {})
+
+    cfg2 = generate_config(tid)
+    cp2 = generate_checkpoint()
+    await saver.aput(cfg2, cp2, generate_metadata(score=99, run_id="run-xyz"), {})
+
+    # Filter by custom key
+    results = []
+    async for tup in saver.alist(
+        generate_config(tid),
+        filter={"score": 42},
+    ):
+        results.append(tup)
+
+    assert len(results) == 1
+    assert results[0].metadata["score"] == 42
+    assert results[0].metadata["run_id"] == "run-abc"
+
+
+async def test_list_global_search(
+    saver: BaseCheckpointSaver,
+) -> None:
+    """alist(None, filter=...) searches across all threads."""
+    tid1, tid2 = str(uuid4()), str(uuid4())
+
+    # Use a unique marker so we don't collide with other tests' data
+    marker = str(uuid4())
+
+    cfg1 = generate_config(tid1)
+    cp1 = generate_checkpoint()
+    await saver.aput(cfg1, cp1, generate_metadata(source="input", marker=marker), {})
+
+    cfg2 = generate_config(tid2)
+    cp2 = generate_checkpoint()
+    await saver.aput(cfg2, cp2, generate_metadata(source="loop", marker=marker), {})
+
+    # Search across all threads with filter
+    results = []
+    async for tup in saver.alist(None, filter={"source": "input", "marker": marker}):
+        results.append(tup)
+    assert len(results) == 1
+    assert results[0].config["configurable"]["thread_id"] == tid1
+
+    # Search with marker only — should find both
+    results = []
+    async for tup in saver.alist(None, filter={"marker": marker}):
+        results.append(tup)
+    assert len(results) == 2
+
+
 ALL_LIST_TESTS = [
     test_list_all,
     test_list_by_thread,
@@ -277,6 +377,10 @@ ALL_LIST_TESTS = [
     test_list_ordering,
     test_list_metadata_filter_single_key,
     test_list_metadata_filter_step,
+    test_list_metadata_filter_multiple_keys,
+    test_list_metadata_filter_no_match,
+    test_list_metadata_custom_keys,
+    test_list_global_search,
     test_list_before,
     test_list_limit,
     test_list_limit_plus_before,

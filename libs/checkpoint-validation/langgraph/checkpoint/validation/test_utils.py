@@ -31,7 +31,7 @@ def generate_checkpoint(
         channel_values=channel_values if channel_values is not None else {},
         channel_versions=channel_versions if channel_versions is not None else {},
         versions_seen=versions_seen if versions_seen is not None else {},
-        pending_sends=[],
+        pending_sends=[],  # ty: ignore[invalid-key]
         updated_channels=None,
     )
 
@@ -60,7 +60,7 @@ def generate_metadata(
     """Create CheckpointMetadata with defaults."""
     md: dict[str, Any] = {"source": source, "step": step, "parents": {}}
     md.update(extra)
-    return md  # type: ignore[return-value]
+    return md
 
 
 async def put_test_checkpoint(

@@ -100,6 +100,8 @@ async def test_prune_keep_latest_across_namespaces(
         parent = await saver.aput(cfg, cp, generate_metadata(step=i), {})
     child_latest = parent
 
+    assert root_latest is not None
+    assert child_latest is not None
     await saver.aprune([tid], strategy="keep_latest")
     for ns, expected in [("", root_latest), ("child:1", child_latest)]:
         results = []
