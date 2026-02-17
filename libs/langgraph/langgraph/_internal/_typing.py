@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import Field
 from typing import Any, ClassVar, Protocol, TypeAlias
 
@@ -35,11 +36,17 @@ class DataclassLike(Protocol):
     __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
 
 
-StateLike: TypeAlias = TypedDictLikeV1 | TypedDictLikeV2 | DataclassLike | BaseModel
+StateLike: TypeAlias = (
+    TypedDictLikeV1 | TypedDictLikeV2 | Mapping[str, Any] | DataclassLike | BaseModel
+)
 """Type alias for state-like types.
 
 It can either be a `TypedDict`, `dataclass`, or Pydantic `BaseModel`.
-Note: we cannot use either `TypedDict` or `dataclass` directly due to limitations in type checking.
+Note: we cannot use either `TypedDict` or `dataclass` directly due to limitations in
+type checking.
+
+`Mapping[str, Any]` keeps `TypedDict` support compatible with stricter type checkers
+like `ty` while preserving existing `Protocol`-based checks.
 """
 
 MISSING = object()
