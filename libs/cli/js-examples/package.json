@@ -24,6 +24,9 @@
     "@langchain/core": "^1.1.24",
     "@langchain/langgraph": "^1.1.4"
   },
+  "resolutions": {
+    "js-yaml": "^4.1.1"
+  },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.3",
     "@eslint/js": "^10.0.1",
