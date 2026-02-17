@@ -125,8 +125,6 @@ def test_sync_runs_create_batch_validates_resume_authorization():
                     ],
                 )
             )
-
-
 def test_sync_runs_create_batch_rejects_non_string_unknown_auth_keys():
     def handler(_: httpx.Request) -> httpx.Response:
         raise AssertionError("HTTP request should not be sent for invalid command")
