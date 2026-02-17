@@ -484,7 +484,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.25.2" },
-    { name = "orjson", specifier = ">=3.10.1" },
+    { name = "orjson", specifier = ">=3.11.5" },
 ]
 
 [package.metadata.requires-dev]

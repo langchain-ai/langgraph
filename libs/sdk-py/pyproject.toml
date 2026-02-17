@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
-dependencies = ["httpx>=0.25.2", "orjson>=3.10.1"]
+dependencies = ["httpx>=0.25.2", "orjson>=3.11.5"]
 
 [tool.hatch.version]
 path = "langgraph_sdk/__init__.py"
