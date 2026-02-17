@@ -47,9 +47,9 @@ enum Commands {
         #[arg(long)]
         recreate: bool,
 
-        /// Pull latest images before running
-        #[arg(long, default_value_t = true)]
-        pull: bool,
+        /// Skip pulling latest images before running
+        #[arg(long)]
+        no_pull: bool,
 
         /// Wait for services to be healthy before returning
         #[arg(long)]
@@ -90,9 +90,9 @@ enum Commands {
         #[arg(short, long)]
         tag: String,
 
-        /// Pull latest images before building
-        #[arg(long, default_value_t = true)]
-        pull: bool,
+        /// Skip pulling latest images before building
+        #[arg(long)]
+        no_pull: bool,
 
         /// Base image for the LangGraph API server
         #[arg(long)]
@@ -152,7 +152,7 @@ enum Commands {
         no_reload: bool,
 
         /// Path to configuration file
-        #[arg(long, default_value = "langgraph.json")]
+        #[arg(short, long, default_value = "langgraph.json")]
         config: String,
 
         /// Max concurrent jobs per worker
@@ -210,7 +210,7 @@ fn main() {
             verbose,
             watch,
             recreate,
-            pull,
+            no_pull,
             wait,
             debugger_port,
             debugger_base_url,
@@ -225,7 +225,7 @@ fn main() {
             verbose,
             watch,
             recreate,
-            pull,
+            !no_pull,
             wait,
             debugger_port,
             debugger_base_url.as_deref(),
@@ -237,7 +237,7 @@ fn main() {
         Commands::Build {
             config,
             tag,
-            pull,
+            no_pull,
             base_image,
             api_version,
             install_command,
@@ -246,7 +246,7 @@ fn main() {
         } => commands::build_cmd::run(
             &config,
             &tag,
-            pull,
+            !no_pull,
             base_image.as_deref(),
             api_version.as_deref(),
             install_command.as_deref(),

@@ -9,7 +9,7 @@ use crate::config::validate_config_file;
 use crate::docker::capabilities::{check_capabilities, ComposeType};
 use crate::docker::compose::compose;
 use crate::docker::dockerfile::config_to_compose;
-use crate::exec::{run_command, run_command_streaming};
+use crate::exec::{run_command, run_command_streaming_with_callback};
 use crate::progress::Progress;
 use crate::util::warn_non_wolfi_distro;
 
@@ -153,10 +153,46 @@ pub fn run(
         cmd_args.push(a.as_str());
     }
 
-    progress.finish();
+    // Run docker compose with streaming output, intercepting stdout
+    // to detect startup and show Ready! URLs
+    let mut ready_printed = false;
+    let debugger_base_url_query = debugger_base_url
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("http://127.0.0.1:{port}"));
 
-    // Run docker compose with streaming output
-    run_command_streaming(compose_cmd[0], &cmd_args, Some(&compose_stdin), verbose)?;
+    run_command_streaming_with_callback(
+        compose_cmd[0],
+        &cmd_args,
+        Some(&compose_stdin),
+        verbose,
+        |line| {
+            if !ready_printed {
+                if line.contains("unpacking to docker.io") {
+                    progress.set_message("Starting...");
+                } else if line.contains("Application startup complete") {
+                    progress.finish();
+                    ready_printed = true;
+
+                    let debugger_origin = if let Some(dp) = debugger_port {
+                        format!("http://localhost:{dp}")
+                    } else {
+                        "https://smith.langchain.com".to_string()
+                    };
+
+                    println!(
+                        "Ready!\n\
+                         - API: http://localhost:{port}\n\
+                         - Docs: http://localhost:{port}/docs\n\
+                         - LangGraph Studio: {debugger_origin}/studio/?baseUrl={debugger_base_url_query}"
+                    );
+                }
+            }
+        },
+    )?;
+
+    if !ready_printed {
+        progress.finish();
+    }
 
     Ok(())
 }

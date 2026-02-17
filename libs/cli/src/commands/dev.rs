@@ -7,11 +7,25 @@ use console::style;
 use crate::analytics;
 use crate::config::validate_config_file;
 
+/// Find the Python interpreter, preferring python3 over python.
+fn find_python() -> Result<String, String> {
+    for candidate in &["python3", "python"] {
+        if which::which(candidate).is_ok() {
+            return Ok(candidate.to_string());
+        }
+    }
+    Err(
+        "Python not found. The `langgraph dev` command requires Python >= 3.11 with \
+         langgraph-cli[inmem] installed.\n\
+         Install with: pip install -U \"langgraph-cli[inmem]\""
+            .to_string(),
+    )
+}
+
 /// Run the LangGraph API server in development mode (in-memory, via Python subprocess).
 ///
-/// This spawns `python -c "from langgraph_api.cli import run_server; ..."` as a subprocess,
-/// passing the parsed config as arguments. For JS graphs, an error is returned since the
-/// in-memory server doesn't support them in this CLI.
+/// This passes the config as a JSON object via stdin to a Python bootstrap script,
+/// avoiding any string interpolation into Python source code.
 #[allow(clippy::too_many_arguments)]
 pub fn run(
     host: &str,
@@ -48,162 +62,126 @@ pub fn run(
         );
     }
 
-    // Build the graphs JSON
-    let graphs_json = serde_json::to_string(&config_json.graphs)
-        .map_err(|e| format!("Failed to serialize graphs: {e}"))?;
+    let python = find_python()?;
 
-    // Build env JSON (optional)
-    let env_json = config_json
-        .env
-        .as_ref()
-        .map(|e| serde_json::to_string(e).unwrap_or_else(|_| "null".to_string()))
-        .unwrap_or_else(|| "None".to_string());
+    // Pre-check that langgraph_api is importable
+    let check = Command::new(&python)
+        .args(["-c", "from langgraph_api.cli import run_server"])
+        .output();
 
-    // Build store JSON (optional)
-    let store_json = config_json
-        .store
-        .as_ref()
-        .map(|s| serde_json::to_string(s).unwrap_or_else(|_| "null".to_string()))
-        .unwrap_or_else(|| "None".to_string());
+    match check {
+        Ok(output) if !output.status.success() => {
+            return Err(
+                "Required package 'langgraph-api' is not installed.\n\
+                 Please install it with:\n\n\
+                     pip install -U \"langgraph-cli[inmem]\"\n\n\
+                 Note: The in-mem server requires Python 3.11 or higher."
+                    .to_string(),
+            );
+        }
+        Err(_) => {
+            return Err(format!(
+                "Failed to run {python}. The `langgraph dev` command requires Python >= 3.11 with \
+                 langgraph-cli[inmem] installed.\n\
+                 Install with: pip install -U \"langgraph-cli[inmem]\""
+            ));
+        }
+        _ => {}
+    }
 
-    // Build auth JSON (optional)
-    let auth_json = config_json
-        .auth
-        .as_ref()
-        .map(|a| serde_json::to_string(a).unwrap_or_else(|_| "null".to_string()))
-        .unwrap_or_else(|| "None".to_string());
+    // Build a JSON config object to pass via stdin.
+    // This avoids interpolating user data into Python source code.
+    let dev_config = serde_json::json!({
+        "host": host,
+        "port": port,
+        "reload": !no_reload,
+        "open_browser": !no_browser,
+        "wait_for_client": wait_for_client,
+        "allow_blocking": allow_blocking,
+        "tunnel": tunnel,
+        "server_log_level": server_log_level,
+        "dependencies": config_json.dependencies,
+        "graphs": config_json.graphs,
+        "n_jobs_per_worker": n_jobs_per_worker,
+        "debug_port": debug_port,
+        "studio_url": studio_url,
+        "env": config_json.env,
+        "store": config_json.store,
+        "auth": config_json.auth,
+        "http": config_json.http,
+        "ui": config_json.ui,
+        "ui_config": config_json.ui_config,
+        "webhooks": config_json.webhooks,
+    });
 
-    // Build http JSON (optional)
-    let http_json = config_json
-        .http
-        .as_ref()
-        .map(|h| serde_json::to_string(h).unwrap_or_else(|_| "null".to_string()))
-        .unwrap_or_else(|| "None".to_string());
-
-    // Build ui JSON (optional)
-    let ui_json = config_json
-        .ui
-        .as_ref()
-        .map(|u| serde_json::to_string(u).unwrap_or_else(|_| "null".to_string()))
-        .unwrap_or_else(|| "None".to_string());
-
-    // Build ui_config JSON (optional)
-    let ui_config_json = config_json
-        .ui_config
-        .as_ref()
-        .map(|u| serde_json::to_string(u).unwrap_or_else(|_| "null".to_string()))
-        .unwrap_or_else(|| "None".to_string());
-
-    // Build webhooks JSON (optional)
-    let webhooks_json = config_json
-        .webhooks
-        .as_ref()
-        .map(|w| serde_json::to_string(w).unwrap_or_else(|_| "null".to_string()))
-        .unwrap_or_else(|| "None".to_string());
-
-    // Build n_jobs_per_worker
-    let n_jobs_str = n_jobs_per_worker
-        .map(|n| n.to_string())
-        .unwrap_or_else(|| "None".to_string());
-
-    // Build debug_port
-    let debug_port_str = debug_port
-        .map(|p| p.to_string())
-        .unwrap_or_else(|| "None".to_string());
-
-    // Build studio_url
-    let studio_url_str = studio_url
-        .map(|s| format!("\"{}\"", s.replace('"', "\\\"")))
-        .unwrap_or_else(|| "None".to_string());
-
-    // Construct the Python code to execute
-    let python_code = format!(
-        r#"
-import sys, os, json
+    // Python bootstrap: reads JSON from stdin, calls run_server
+    let python_code = r#"
+import sys, os, json, pathlib
+config = json.loads(sys.stdin.read())
 cwd = os.getcwd()
 sys.path.append(cwd)
-deps = json.loads('{deps_json}')
-for dep in deps:
-    import pathlib
+for dep in config.get('dependencies', []):
     dep_path = pathlib.Path(cwd) / dep
     if dep_path.is_dir() and dep_path.exists():
         sys.path.append(str(dep_path))
 from langgraph_api.cli import run_server
-graphs = json.loads('{graphs}')
 run_server(
-    "{host}",
-    {port},
-    {reload},
-    graphs,
-    n_jobs_per_worker={n_jobs},
-    open_browser={open_browser},
-    debug_port={debug_port},
-    env={env},
-    store={store},
-    wait_for_client={wait_for_client},
-    auth={auth},
-    http={http},
-    ui={ui},
-    ui_config={ui_config},
-    webhooks={webhooks},
-    studio_url={studio_url},
-    allow_blocking={allow_blocking},
-    tunnel={tunnel},
-    server_level="{server_log_level}",
+    config['host'],
+    config['port'],
+    config['reload'],
+    config['graphs'],
+    n_jobs_per_worker=config.get('n_jobs_per_worker'),
+    open_browser=config['open_browser'],
+    debug_port=config.get('debug_port'),
+    env=config.get('env'),
+    store=config.get('store'),
+    wait_for_client=config['wait_for_client'],
+    auth=config.get('auth'),
+    http=config.get('http'),
+    ui=config.get('ui'),
+    ui_config=config.get('ui_config'),
+    webhooks=config.get('webhooks'),
+    studio_url=config.get('studio_url'),
+    allow_blocking=config['allow_blocking'],
+    tunnel=config['tunnel'],
+    server_level=config['server_log_level'],
 )
-"#,
-        deps_json = serde_json::to_string(&config_json.dependencies)
-            .unwrap_or_else(|_| "[]".to_string())
-            .replace('\'', "\\'"),
-        graphs = graphs_json.replace('\'', "\\'"),
-        host = host,
-        port = port,
-        reload = if no_reload { "False" } else { "True" },
-        n_jobs = n_jobs_str,
-        open_browser = if no_browser { "False" } else { "True" },
-        debug_port = debug_port_str,
-        env = env_json,
-        store = store_json,
-        wait_for_client = if wait_for_client { "True" } else { "False" },
-        auth = auth_json,
-        http = http_json,
-        ui = ui_json,
-        ui_config = ui_config_json,
-        webhooks = webhooks_json,
-        studio_url = studio_url_str,
-        allow_blocking = if allow_blocking { "True" } else { "False" },
-        tunnel = if tunnel { "True" } else { "False" },
-        server_log_level = server_log_level,
-    );
+"#;
 
     eprintln!(
         "{}",
         style("Starting LangGraph API server in development mode...").green()
     );
 
-    // Spawn Python subprocess
-    let status = Command::new("python")
+    // Spawn Python subprocess with config on stdin
+    let mut child = Command::new(&python)
         .arg("-c")
-        .arg(&python_code)
+        .arg(python_code)
         .current_dir(
             config_path
                 .parent()
                 .unwrap_or_else(|| Path::new(".")),
         )
-        .stdin(std::process::Stdio::inherit())
+        .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
-        .status()
-        .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                "Python not found. The `langgraph dev` command requires Python >= 3.11 with \
-                 langgraph-cli[inmem] installed.\n\
-                 Install with: pip install -U \"langgraph-cli[inmem]\""
-                    .to_string()
-            } else {
-                format!("Failed to start Python: {e}")
-            }
-        })?;
+        .spawn()
+        .map_err(|e| format!("Failed to start Python: {e}"))?;
+
+    // Write JSON config to stdin
+    if let Some(ref mut stdin) = child.stdin {
+        use std::io::Write;
+        let json_bytes = dev_config.to_string();
+        stdin
+            .write_all(json_bytes.as_bytes())
+            .map_err(|e| format!("Failed to write config to Python stdin: {e}"))?;
+    }
+    // Drop stdin to signal EOF
+    drop(child.stdin.take());
+
+    let status = child
+        .wait()
+        .map_err(|e| format!("Failed to wait for Python: {e}"))?;
 
     if !status.success() {
         let code = status.code().unwrap_or(1);

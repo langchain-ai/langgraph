@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use indexmap::IndexMap;
 
@@ -13,13 +14,15 @@ use crate::constants::{BUILD_TOOLS, DEFAULT_NODE_VERSION};
 
 use regex::Regex;
 
+static IMAGE_VERSION_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r":(\d+(?:\.\d+)?(?:\.\d+)?)(?:-|$)").unwrap());
+
 /// Check if a base image supports uv.
 fn image_supports_uv(base_image: &str) -> bool {
     if base_image == "langchain/langgraph-trial" {
         return false;
     }
-    let re = Regex::new(r":(\d+(?:\.\d+)?(?:\.\d+)?)(?:-|$)").unwrap();
-    match re.find(base_image) {
+    match IMAGE_VERSION_RE.find(base_image) {
         None => true, // Default image supports it
         Some(m) => {
             let raw = &base_image[m.start() + 1..m.end()];
@@ -107,6 +110,66 @@ fn get_pip_cleanup_lines(
     }
 
     commands.join("\n")
+}
+
+/// Build ENV lines for all config-driven environment variables (shared between Python and Node).
+fn build_config_env_vars(config: &Config) -> Vec<String> {
+    let mut env_vars = Vec::new();
+
+    if let Some(ref store) = config.store {
+        env_vars.push(format!(
+            "ENV LANGGRAPH_STORE='{}'",
+            serde_json::to_string(store).unwrap()
+        ));
+    }
+    if let Some(ref auth) = config.auth {
+        env_vars.push(format!(
+            "ENV LANGGRAPH_AUTH='{}'",
+            serde_json::to_string(auth).unwrap()
+        ));
+    }
+    if let Some(ref encryption) = config.encryption {
+        env_vars.push(format!(
+            "ENV LANGGRAPH_ENCRYPTION='{}'",
+            serde_json::to_string(encryption).unwrap()
+        ));
+    }
+    if let Some(ref http) = config.http {
+        env_vars.push(format!(
+            "ENV LANGGRAPH_HTTP='{}'",
+            serde_json::to_string(http).unwrap()
+        ));
+    }
+    if let Some(ref webhooks) = config.webhooks {
+        env_vars.push(format!(
+            "ENV LANGGRAPH_WEBHOOKS='{}'",
+            serde_json::to_string(webhooks).unwrap()
+        ));
+    }
+    if let Some(ref checkpointer) = config.checkpointer {
+        env_vars.push(format!(
+            "ENV LANGGRAPH_CHECKPOINTER='{}'",
+            serde_json::to_string(checkpointer).unwrap()
+        ));
+    }
+    if let Some(ref ui) = config.ui {
+        env_vars.push(format!(
+            "ENV LANGGRAPH_UI='{}'",
+            serde_json::to_string(ui).unwrap()
+        ));
+    }
+    if let Some(ref ui_config) = config.ui_config {
+        env_vars.push(format!(
+            "ENV LANGGRAPH_UI_CONFIG='{}'",
+            serde_json::to_string(ui_config).unwrap()
+        ));
+    }
+    env_vars.push(format!(
+        "ENV LANGSERVE_GRAPHS='{}'",
+        serde_json::to_string(&config.graphs).unwrap()
+    ));
+
+    env_vars
 }
 
 /// Detect the Node.js package manager install command.
@@ -275,60 +338,7 @@ pub fn python_config_to_docker(
     let installs = installs.join("\n\n");
 
     // Environment variables
-    let mut env_vars = Vec::new();
-
-    if let Some(ref store) = config.store {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_STORE='{}'",
-            serde_json::to_string(store).unwrap()
-        ));
-    }
-    if let Some(ref auth) = config.auth {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_AUTH='{}'",
-            serde_json::to_string(auth).unwrap()
-        ));
-    }
-    if let Some(ref encryption) = config.encryption {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_ENCRYPTION='{}'",
-            serde_json::to_string(encryption).unwrap()
-        ));
-    }
-    if let Some(ref http) = config.http {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_HTTP='{}'",
-            serde_json::to_string(http).unwrap()
-        ));
-    }
-    if let Some(ref webhooks) = config.webhooks {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_WEBHOOKS='{}'",
-            serde_json::to_string(webhooks).unwrap()
-        ));
-    }
-    if let Some(ref checkpointer) = config.checkpointer {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_CHECKPOINTER='{}'",
-            serde_json::to_string(checkpointer).unwrap()
-        ));
-    }
-    if let Some(ref ui) = config.ui {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_UI='{}'",
-            serde_json::to_string(ui).unwrap()
-        ));
-    }
-    if let Some(ref ui_config) = config.ui_config {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_UI_CONFIG='{}'",
-            serde_json::to_string(ui_config).unwrap()
-        ));
-    }
-    env_vars.push(format!(
-        "ENV LANGSERVE_GRAPHS='{}'",
-        serde_json::to_string(&config.graphs).unwrap()
-    ));
+    let env_vars = build_config_env_vars(config);
 
     // JS install
     let js_inst_str =
@@ -451,59 +461,7 @@ pub fn node_config_to_docker(
     let image_str = docker_tag(config, Some(base_image), api_version);
 
     // Environment variables
-    let mut env_vars = Vec::new();
-    if let Some(ref store) = config.store {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_STORE='{}'",
-            serde_json::to_string(store).unwrap()
-        ));
-    }
-    if let Some(ref auth) = config.auth {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_AUTH='{}'",
-            serde_json::to_string(auth).unwrap()
-        ));
-    }
-    if let Some(ref encryption) = config.encryption {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_ENCRYPTION='{}'",
-            serde_json::to_string(encryption).unwrap()
-        ));
-    }
-    if let Some(ref http) = config.http {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_HTTP='{}'",
-            serde_json::to_string(http).unwrap()
-        ));
-    }
-    if let Some(ref webhooks) = config.webhooks {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_WEBHOOKS='{}'",
-            serde_json::to_string(webhooks).unwrap()
-        ));
-    }
-    if let Some(ref checkpointer) = config.checkpointer {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_CHECKPOINTER='{}'",
-            serde_json::to_string(checkpointer).unwrap()
-        ));
-    }
-    if let Some(ref ui) = config.ui {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_UI='{}'",
-            serde_json::to_string(ui).unwrap()
-        ));
-    }
-    if let Some(ref ui_config) = config.ui_config {
-        env_vars.push(format!(
-            "ENV LANGGRAPH_UI_CONFIG='{}'",
-            serde_json::to_string(ui_config).unwrap()
-        ));
-    }
-    env_vars.push(format!(
-        "ENV LANGSERVE_GRAPHS='{}'",
-        serde_json::to_string(&config.graphs).unwrap()
-    ));
+    let env_vars = build_config_env_vars(config);
 
     let (install_step, build_step) = if let Some(_bc) = build_context {
         let cr = container_root.as_ref().unwrap();

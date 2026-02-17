@@ -28,7 +28,9 @@ pub enum ComposeType {
 /// Docker capabilities detected on the system.
 #[derive(Debug, Clone)]
 pub struct DockerCapabilities {
+    #[allow(dead_code)]
     pub version_docker: Version,
+    #[allow(dead_code)]
     pub version_compose: Version,
     pub healthcheck_start_interval: bool,
     pub compose_type: ComposeType,

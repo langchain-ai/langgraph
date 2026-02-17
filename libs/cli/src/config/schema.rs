@@ -78,13 +78,6 @@ pub enum GraphSpec {
 }
 
 impl GraphSpec {
-    pub fn get_path(&self) -> Option<&str> {
-        match self {
-            GraphSpec::Path(s) => Some(s),
-            GraphSpec::Dict(m) => m.get("path").and_then(|v| v.as_str()),
-        }
-    }
-
     pub fn set_path(&mut self, new_path: String) {
         match self {
             GraphSpec::Path(s) => *s = new_path,

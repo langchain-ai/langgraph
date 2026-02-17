@@ -13,7 +13,6 @@ path = "src/main.rs"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
-tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", features = ["rustls-tls", "blocking"], default-features = false }
 zip = "2"
 indexmap = { version = "2", features = ["serde"] }

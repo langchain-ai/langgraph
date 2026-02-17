@@ -1,6 +1,3 @@
-pub const DEFAULT_CONFIG: &str = "langgraph.json";
-pub const DEFAULT_PORT: u16 = 8123;
-
 pub const MIN_NODE_VERSION: u32 = 20;
 pub const DEFAULT_NODE_VERSION: u32 = 20;
 
