@@ -1,11 +1,11 @@
-"""Self-tests: run the validation suite against InMemorySaver."""
+"""Self-tests: run the conformance suite against InMemorySaver."""
 
 from __future__ import annotations
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
-from langgraph.checkpoint.validation import checkpointer_test, validate
+from langgraph.checkpoint.conformance import checkpointer_test, validate
 
 
 @checkpointer_test(name="InMemorySaver")

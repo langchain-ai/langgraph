@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from langgraph.checkpoint.validation.capabilities import (
+from langgraph.checkpoint.conformance.capabilities import (
     BASE_CAPABILITIES,
     EXTENDED_CAPABILITIES,
     Capability,

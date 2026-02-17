@@ -1,29 +1,29 @@
-"""Core validation runner — detects capabilities, runs test suites, builds report."""
+"""Core conformance runner — detects capabilities, runs test suites, builds report."""
 
 from __future__ import annotations
 
-from langgraph.checkpoint.validation.capabilities import (
+from langgraph.checkpoint.conformance.capabilities import (
     Capability,
     DetectedCapabilities,
 )
-from langgraph.checkpoint.validation.initializer import RegisteredCheckpointer
-from langgraph.checkpoint.validation.report import (
+from langgraph.checkpoint.conformance.initializer import RegisteredCheckpointer
+from langgraph.checkpoint.conformance.report import (
     CapabilityReport,
     CapabilityResult,
     ProgressCallbacks,
 )
-from langgraph.checkpoint.validation.spec.test_copy_thread import run_copy_thread_tests
-from langgraph.checkpoint.validation.spec.test_delete_for_runs import (
+from langgraph.checkpoint.conformance.spec.test_copy_thread import run_copy_thread_tests
+from langgraph.checkpoint.conformance.spec.test_delete_for_runs import (
     run_delete_for_runs_tests,
 )
-from langgraph.checkpoint.validation.spec.test_delete_thread import (
+from langgraph.checkpoint.conformance.spec.test_delete_thread import (
     run_delete_thread_tests,
 )
-from langgraph.checkpoint.validation.spec.test_get_tuple import run_get_tuple_tests
-from langgraph.checkpoint.validation.spec.test_list import run_list_tests
-from langgraph.checkpoint.validation.spec.test_prune import run_prune_tests
-from langgraph.checkpoint.validation.spec.test_put import run_put_tests
-from langgraph.checkpoint.validation.spec.test_put_writes import run_put_writes_tests
+from langgraph.checkpoint.conformance.spec.test_get_tuple import run_get_tuple_tests
+from langgraph.checkpoint.conformance.spec.test_list import run_list_tests
+from langgraph.checkpoint.conformance.spec.test_prune import run_prune_tests
+from langgraph.checkpoint.conformance.spec.test_put import run_put_tests
+from langgraph.checkpoint.conformance.spec.test_put_writes import run_put_writes_tests
 
 # Maps capability to its runner function.
 _RUNNERS = {

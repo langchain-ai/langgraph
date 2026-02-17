@@ -12,7 +12,7 @@ from langgraph.checkpoint.base import (
     ChannelVersions,
 )
 
-from langgraph.checkpoint.validation.test_utils import (
+from langgraph.checkpoint.conformance.test_utils import (
     generate_checkpoint,
     generate_config,
     generate_metadata,

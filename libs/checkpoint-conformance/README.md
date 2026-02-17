@@ -1,4 +1,4 @@
-# langgraph-checkpoint-validation
+# langgraph-checkpoint-conformance
 
 Conformance test suite for [LangGraph](https://github.com/langchain-ai/langgraph) checkpointer implementations.
 
@@ -7,7 +7,7 @@ Validates that a `BaseCheckpointSaver` subclass correctly implements the checkpo
 ## Installation
 
 ```bash
-pip install langgraph-checkpoint-validation
+pip install langgraph-checkpoint-conformance
 ```
 
 ## Quick start
@@ -16,7 +16,7 @@ Register your checkpointer with `@checkpointer_test` and run `validate()`:
 
 ```python
 import asyncio
-from langgraph.checkpoint.validation import checkpointer_test, validate
+from langgraph.checkpoint.conformance import checkpointer_test, validate
 
 @checkpointer_test(name="MyCheckpointer")
 async def my_checkpointer():
@@ -36,7 +36,7 @@ Or in a pytest test:
 
 ```python
 import pytest
-from langgraph.checkpoint.validation import checkpointer_test, validate
+from langgraph.checkpoint.conformance import checkpointer_test, validate
 
 @checkpointer_test(name="MyCheckpointer")
 async def my_checkpointer():
@@ -71,7 +71,7 @@ Extended capabilities are detected by checking whether the method is overridden 
 ### Progress output
 
 ```python
-from langgraph.checkpoint.validation.report import ProgressCallbacks
+from langgraph.checkpoint.conformance.report import ProgressCallbacks
 
 # Dot-style progress (. per pass, F per fail)
 report = await validate(my_checkpointer, progress=ProgressCallbacks.default())

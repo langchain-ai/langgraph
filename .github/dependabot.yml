@@ -20,7 +20,7 @@ updates:
         patterns:
           - "*"
   - package-ecosystem: "uv"
-    directory: "/libs/checkpoint-validation"
+    directory: "/libs/checkpoint-conformance"
     schedule:
       interval: "weekly"
       day: "monday"

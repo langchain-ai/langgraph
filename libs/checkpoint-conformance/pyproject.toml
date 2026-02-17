@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "langgraph-checkpoint-validation"
+name = "langgraph-checkpoint-conformance"
 version = "0.0.1"
 description = "Conformance test suite for LangGraph checkpointer implementations."
 authors = [{name = "William FH", email = "13333726+hinthornw@users.noreply.github.com"}]
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.urls]
-Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint-validation"
+Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint-conformance"
 
 [dependency-groups]
 test = [

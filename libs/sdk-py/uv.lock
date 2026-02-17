@@ -314,7 +314,7 @@ dev = [
     { name = "ruff" },
     { name = "syrupy" },
     { name = "types-requests" },
-    { name = "uvloop", specifier = "==0.21.0b1" },
+    { name = "uvloop", specifier = "==0.22.1" },
 ]
 lint = [
     { name = "mypy" },
@@ -344,7 +344,7 @@ test = [
     { name = "pytest-xdist", extras = ["psutil"] },
     { name = "redis" },
     { name = "syrupy" },
-    { name = "uvloop", specifier = "==0.21.0b1" },
+    { name = "uvloop", specifier = "==0.22.1" },
 ]
 
 [[package]]
