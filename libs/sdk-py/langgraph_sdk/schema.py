@@ -117,11 +117,26 @@ Specifies behavior if the thread doesn't exist:
 - "reject": Reject the operation if the thread doesn't exist.
 """
 
+PruneStrategy = Literal["delete", "keep_latest"]
+"""
+Strategy for pruning threads:
+- "delete": Remove threads entirely.
+- "keep_latest": Prune old checkpoints but keep threads and their latest state.
+"""
+
 CancelAction = Literal["interrupt", "rollback"]
 """
 Action to take when cancelling the run.
 - "interrupt": Simply cancel the run.
 - "rollback": Cancel the run. Then delete the run and associated checkpoints.
+"""
+
+BulkCancelRunsStatus = Literal["pending", "running", "all"]
+"""
+Filter runs by status when bulk-cancelling:
+- "pending": Cancel only pending runs.
+- "running": Cancel only running runs.
+- "all": Cancel all runs regardless of status.
 """
 
 AssistantSortBy = Literal[
@@ -137,7 +152,13 @@ The field to sort by.
 """
 
 CronSortBy = Literal[
-    "cron_id", "assistant_id", "thread_id", "created_at", "updated_at", "next_run_date"
+    "cron_id",
+    "assistant_id",
+    "thread_id",
+    "created_at",
+    "updated_at",
+    "next_run_date",
+    "end_time",
 ]
 """
 The field to sort by.
