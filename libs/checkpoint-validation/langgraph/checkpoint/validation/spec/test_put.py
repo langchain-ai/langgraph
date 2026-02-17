@@ -228,6 +228,145 @@ async def test_put_parent_config(saver: BaseCheckpointSaver) -> None:
     )
 
 
+async def test_put_incremental_channel_update(saver: BaseCheckpointSaver) -> None:
+    """Only updated channels need new blobs; unchanged channels loaded from prior versions."""
+    tid = str(uuid4())
+
+    # Checkpoint 1: both channels are new
+    config1 = generate_config(tid)
+    cp1 = generate_checkpoint(
+        channel_values={"a": "v1", "b": "v2"},
+        channel_versions={"a": 1, "b": 1},
+    )
+    stored1 = await saver.aput(
+        config1, cp1, generate_metadata(step=0), {"a": 1, "b": 1}
+    )
+
+    # Checkpoint 2: only 'a' is updated
+    config2 = generate_config(tid)
+    config2["configurable"]["checkpoint_id"] = stored1["configurable"]["checkpoint_id"]
+    cp2 = generate_checkpoint(
+        channel_values={"a": "v1_updated", "b": "v2"},
+        channel_versions={"a": 2, "b": 1},
+    )
+    stored2 = await saver.aput(config2, cp2, generate_metadata(step=1), {"a": 2})
+
+    # cp2 should reconstruct full channel_values from blobs at mixed versions
+    tup2 = await saver.aget_tuple(stored2)
+    assert tup2 is not None
+    assert tup2.checkpoint["channel_values"].get("a") == "v1_updated", (
+        f"a: expected 'v1_updated', got {tup2.checkpoint['channel_values'].get('a')!r}"
+    )
+    assert tup2.checkpoint["channel_values"].get("b") == "v2", (
+        f"b: expected 'v2', got {tup2.checkpoint['channel_values'].get('b')!r}"
+    )
+
+    # cp1 should still return original values
+    tup1 = await saver.aget_tuple(stored1)
+    assert tup1 is not None
+    assert tup1.checkpoint["channel_values"].get("a") == "v1"
+    assert tup1.checkpoint["channel_values"].get("b") == "v2"
+
+
+async def test_put_new_channel_added(saver: BaseCheckpointSaver) -> None:
+    """A channel that appears for the first time in a later checkpoint."""
+    tid = str(uuid4())
+
+    config1 = generate_config(tid)
+    cp1 = generate_checkpoint(
+        channel_values={"a": "v1"},
+        channel_versions={"a": 1},
+    )
+    stored1 = await saver.aput(config1, cp1, generate_metadata(step=0), {"a": 1})
+
+    # Checkpoint 2: 'b' is brand new, 'a' is unchanged
+    config2 = generate_config(tid)
+    config2["configurable"]["checkpoint_id"] = stored1["configurable"]["checkpoint_id"]
+    cp2 = generate_checkpoint(
+        channel_values={"a": "v1", "b": "new_channel"},
+        channel_versions={"a": 1, "b": 1},
+    )
+    stored2 = await saver.aput(config2, cp2, generate_metadata(step=1), {"b": 1})
+
+    tup2 = await saver.aget_tuple(stored2)
+    assert tup2 is not None
+    assert tup2.checkpoint["channel_values"].get("a") == "v1", (
+        f"a: expected 'v1', got {tup2.checkpoint['channel_values'].get('a')!r}"
+    )
+    assert tup2.checkpoint["channel_values"].get("b") == "new_channel", (
+        f"b: expected 'new_channel', got {tup2.checkpoint['channel_values'].get('b')!r}"
+    )
+
+
+async def test_put_channel_removed(saver: BaseCheckpointSaver) -> None:
+    """Channel no longer in channel_versions should not appear in loaded values."""
+    tid = str(uuid4())
+
+    config1 = generate_config(tid)
+    cp1 = generate_checkpoint(
+        channel_values={"a": "v1", "b": "v2"},
+        channel_versions={"a": 1, "b": 1},
+    )
+    stored1 = await saver.aput(
+        config1, cp1, generate_metadata(step=0), {"a": 1, "b": 1}
+    )
+
+    # Checkpoint 2: 'b' dropped from channel_versions
+    config2 = generate_config(tid)
+    config2["configurable"]["checkpoint_id"] = stored1["configurable"]["checkpoint_id"]
+    cp2 = generate_checkpoint(
+        channel_values={"a": "v1_updated"},
+        channel_versions={"a": 2},
+    )
+    stored2 = await saver.aput(config2, cp2, generate_metadata(step=1), {"a": 2})
+
+    tup2 = await saver.aget_tuple(stored2)
+    assert tup2 is not None
+    assert tup2.checkpoint["channel_values"].get("a") == "v1_updated"
+    assert "b" not in tup2.checkpoint["channel_values"], (
+        f"'b' should not be present, got {tup2.checkpoint['channel_values']}"
+    )
+
+
+async def test_put_preserves_run_id(saver: BaseCheckpointSaver) -> None:
+    """run_id in metadata round-trips correctly."""
+    run_id = str(uuid4())
+    config = generate_config()
+    cp = generate_checkpoint()
+    md = generate_metadata(source="loop", step=0, run_id=run_id)
+
+    stored = await saver.aput(config, cp, md, {})
+    tup = await saver.aget_tuple(stored)
+    assert tup is not None
+    assert tup.metadata.get("run_id") == run_id, (
+        f"run_id: expected {run_id!r}, got {tup.metadata.get('run_id')!r}"
+    )
+
+
+async def test_put_preserves_versions_seen_values(saver: BaseCheckpointSaver) -> None:
+    """versions_seen values (not just keys) round-trip correctly."""
+    vs: dict[str, ChannelVersions] = {
+        "node1": {"ch_a": 1, "ch_b": 2},
+        "node2": {"ch_a": 3},
+    }
+    config = generate_config()
+    cp = generate_checkpoint(versions_seen=vs)
+    md = generate_metadata()
+
+    stored = await saver.aput(config, cp, md, {})
+    tup = await saver.aget_tuple(stored)
+    assert tup is not None
+    for node, expected_versions in vs.items():
+        assert node in tup.checkpoint["versions_seen"], f"versions_seen[{node}] missing"
+        actual_versions = tup.checkpoint["versions_seen"][node]
+        for ch, expected_v in expected_versions.items():
+            actual_v = actual_versions.get(ch)
+            assert actual_v is not None, f"versions_seen[{node}][{ch}] missing"
+            assert str(actual_v).split(".")[0] == str(expected_v).split(".")[0], (
+                f"versions_seen[{node}][{ch}]: expected {expected_v!r}, got {actual_v!r}"
+            )
+
+
 ALL_PUT_TESTS = [
     test_put_returns_config,
     test_put_roundtrip,
@@ -241,6 +380,11 @@ ALL_PUT_TESTS = [
     test_put_multiple_checkpoints_same_thread,
     test_put_multiple_threads_isolated,
     test_put_parent_config,
+    test_put_incremental_channel_update,
+    test_put_new_channel_added,
+    test_put_channel_removed,
+    test_put_preserves_run_id,
+    test_put_preserves_versions_seen_values,
 ]
 
 

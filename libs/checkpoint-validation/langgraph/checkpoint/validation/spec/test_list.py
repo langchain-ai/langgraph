@@ -370,7 +370,6 @@ async def test_list_global_search(
     assert len(results) == 2
 
 
-
 ALL_LIST_TESTS = [
     test_list_all,
     test_list_by_thread,

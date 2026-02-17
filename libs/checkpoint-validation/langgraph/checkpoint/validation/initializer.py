@@ -98,8 +98,3 @@ def checkpointer_test(
         return registered
 
     return decorator
-
-
-def get_registry() -> dict[str, RegisteredCheckpointer]:
-    """Return the module-level registry of registered checkpointers."""
-    return _REGISTRY

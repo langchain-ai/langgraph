@@ -263,7 +263,7 @@ wheels = [
 
 [[package]]
 name = "langgraph-checkpoint-validation"
-version = "0.1.0"
+version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "langgraph-checkpoint" },

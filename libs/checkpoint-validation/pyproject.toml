@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "langgraph-checkpoint-validation"
 version = "0.0.1"
 description = "Conformance test suite for LangGraph checkpointer implementations."
-authors = []
+authors = [{name = "William FH", email = "13333726+hinthornw@users.noreply.github.com"}]
 requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
