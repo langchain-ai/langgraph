@@ -214,10 +214,6 @@ async def test_get_tuple_nonexistent_checkpoint_id(
     assert tup is None
 
 
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
-
 ALL_GET_TUPLE_TESTS = [
     test_get_tuple_nonexistent_returns_none,
     test_get_tuple_latest_when_no_checkpoint_id,

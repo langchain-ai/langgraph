@@ -182,10 +182,6 @@ async def test_delete_for_runs_across_namespaces(
         assert run1 not in run_ids
 
 
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
-
 ALL_DELETE_FOR_RUNS_TESTS = [
     test_delete_for_runs_single,
     test_delete_for_runs_multiple,

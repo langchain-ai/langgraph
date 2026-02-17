@@ -263,10 +263,6 @@ async def test_put_writes_cleared_on_next_checkpoint(
     assert len(writes) == 0
 
 
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
-
 ALL_PUT_WRITES_TESTS = [
     test_put_writes_basic,
     test_put_writes_multiple_writes_same_task,

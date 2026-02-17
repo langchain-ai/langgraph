@@ -228,10 +228,6 @@ async def test_put_parent_config(saver: BaseCheckpointSaver) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
-
 ALL_PUT_TESTS = [
     test_put_returns_config,
     test_put_roundtrip,

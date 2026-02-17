@@ -213,10 +213,6 @@ async def test_copy_thread_nonexistent_source(
     assert len(results) == 0
 
 
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
-
 ALL_COPY_THREAD_TESTS = [
     test_copy_thread_basic,
     test_copy_thread_all_checkpoints,

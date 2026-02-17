@@ -180,10 +180,6 @@ async def test_prune_nonexistent_noop(saver: BaseCheckpointSaver) -> None:
     await saver.aprune([str(uuid4())], strategy="keep_latest")
 
 
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
-
 ALL_PRUNE_TESTS = [
     test_prune_keep_latest_single_thread,
     test_prune_keep_latest_multiple_threads,

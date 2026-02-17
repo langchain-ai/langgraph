@@ -270,10 +270,6 @@ async def test_list_multiple_namespaces(saver: BaseCheckpointSaver) -> None:
     assert len(results) == 1, f"Expected 1 root checkpoint, got {len(results)}"
 
 
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
-
 ALL_LIST_TESTS = [
     test_list_all,
     test_list_by_thread,

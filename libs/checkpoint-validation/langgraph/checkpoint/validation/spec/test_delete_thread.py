@@ -115,10 +115,6 @@ async def test_delete_thread_nonexistent_noop(
     await saver.adelete_thread(str(uuid4()))
 
 
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
-
 ALL_DELETE_THREAD_TESTS = [
     test_delete_thread_removes_checkpoints,
     test_delete_thread_removes_writes,
