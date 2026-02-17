@@ -2,6 +2,9 @@ name: CLI integration test
 
 on:
   workflow_call:
+    secrets:
+      LANGSMITH_API_KEY:
+        required: false
 
 permissions:
   contents: read
