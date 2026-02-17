@@ -35,6 +35,23 @@ def test_typed_dict_state() -> None:
     graph.invoke({"invalid": "lalala"})  # type: ignore[arg-type]
 
 
+def test_partial_typed_dict_state() -> None:
+    class PartialTypedDictState(TypedDict, total=False):
+        info: Annotated[list[str], add]
+        user_id: str
+
+    graph_builder = StateGraph(PartialTypedDictState)
+
+    def valid(state: PartialTypedDictState) -> Any: ...
+
+    graph_builder.add_node("valid", valid)
+    graph_builder.set_entry_point("valid")
+    graph = graph_builder.compile()
+
+    graph.invoke({"info": ["hello"]})
+    graph.invoke({"user_id": "u-1"})
+
+
 def test_dataclass_state() -> None:
     @dataclass
     class DataclassState:
