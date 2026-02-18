@@ -922,7 +922,7 @@ class ToolNode(RunnableCallable):
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime)
+        injected_call = self._inject_tool_args(call, request.runtime, tool)
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
@@ -1075,7 +1075,7 @@ class ToolNode(RunnableCallable):
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime)
+        injected_call = self._inject_tool_args(call, request.runtime, tool)
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
@@ -1281,6 +1281,7 @@ class ToolNode(RunnableCallable):
         self,
         tool_call: ToolCall,
         tool_runtime: ToolRuntime,
+        tool: BaseTool | None = None,
     ) -> ToolCall:
         """Inject graph state, store, and runtime into tool call arguments.
 
@@ -1299,6 +1300,9 @@ class ToolNode(RunnableCallable):
                 Must contain 'name', 'args', 'id', and 'type' fields.
             tool_runtime: The ToolRuntime instance containing all runtime context
                 (state, config, store, context, stream_writer) to inject into tools.
+            tool: Optional tool instance. When provided, allows injection for
+                dynamically registered tools that are not in self.tools_by_name
+                (e.g., tools added via middleware's wrap_tool_call).
 
         Returns:
             A new ToolCall dictionary with the same structure as the input but with
@@ -1312,10 +1316,12 @@ class ToolNode(RunnableCallable):
             This method is called automatically during tool execution. It should not
             be called from outside the `ToolNode`.
         """
-        if tool_call["name"] not in self.tools_by_name:
-            return tool_call
-
         injected = self._injected_args.get(tool_call["name"])
+        if not injected and tool is not None:
+            # For dynamically registered tools (e.g., added via middleware's
+            # wrap_tool_call), compute injected args on-the-fly since they
+            # were not present during ToolNode initialization.
+            injected = _get_all_injected_args(tool)
         if not injected:
             return tool_call
 
