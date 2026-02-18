@@ -1,6 +1,6 @@
 # LangGraph
 
-LangGraph documentation has moved to docs.langchain.com.
+LangGraph documentation has moved to https://docs.langchain.com/oss/python/langgraph/overview.
 
 # Docs by LangChain
 

@@ -147,7 +147,6 @@
                 {
                   "enum": [
                     "bookworm",
-                    "bullseye",
                     "debian",
                     "wolfi"
                   ]
@@ -156,7 +155,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Linux distribution for the base image.\n\nMust be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.\nIf omitted, defaults to 'debian' ('latest').\n"
+              "description": "Optional. Linux distribution for the base image.\n\nMust be one of 'wolfi', 'debian', or 'bookworm'.\nIf omitted, defaults to 'debian' ('latest').\n"
             },
             "keep_pkg_tools": {
               "anyOf": [
@@ -370,7 +369,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional. Linux distribution for the base image.\n\nMust be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.\nIf omitted, defaults to 'debian' ('latest').\n"
+              "description": "Optional. Linux distribution for the base image.\n\nMust be one of 'wolfi', 'debian', or 'bookworm'.\nIf omitted, defaults to 'debian' ('latest').\n"
             },
             "keep_pkg_tools": {
               "anyOf": [
@@ -554,17 +553,6 @@
           ],
           "description": "Optional. Defines the serde configuration.\n\nIf provided, the checkpointer will apply serde settings according to the configuration.\nIf omitted, no serde behavior is configured.\n\nThis configuration requires server version 0.5 or later to take effect.\n"
         },
-        "sweep_limit": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Maximum number of threads to process per sweep iteration. Defaults to 1000."
-        },
         "ttl": {
           "anyOf": [
             {
@@ -629,9 +617,10 @@
         },
         "strategy": {
           "enum": [
-            "delete"
+            "delete",
+            "keep_latest"
           ],
-          "description": "Strategy to use for deleting checkpointed data.\n"
+          "description": "Action taken when a thread exceeds its TTL.\n\n"
         },
         "sweep_interval_minutes": {
           "anyOf": [
@@ -643,6 +632,17 @@
             }
           ],
           "description": "Interval in minutes between sweep iterations.\nIf omitted, a default interval will be used (typically ~ 5 minutes)."
+        },
+        "sweep_limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Maximum number of threads to process per sweep iteration. Defaults to 1000."
         }
       },
       "required": []
