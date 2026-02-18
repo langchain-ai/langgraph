@@ -58,7 +58,9 @@ def _validate_resume_authorization(resume_authorization: Any) -> None:
             + ", ".join(missing)
         )
 
-    unknown = sorted(set(resume_authorization) - _RESUME_AUTH_ALLOWED_KEYS)
+    unknown = sorted(
+        str(key) for key in resume_authorization if key not in _RESUME_AUTH_ALLOWED_KEYS
+    )
     if unknown:
         raise ValueError(
             "`command.resume_authorization` contains unknown key(s): "

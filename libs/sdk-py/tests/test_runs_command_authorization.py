@@ -125,3 +125,36 @@ def test_sync_runs_create_batch_validates_resume_authorization():
                     ],
                 )
             )
+
+
+def test_sync_runs_create_batch_rejects_non_string_unknown_auth_keys():
+    def handler(_: httpx.Request) -> httpx.Response:
+        raise AssertionError("HTTP request should not be sent for invalid command")
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        runs_client = SyncRunsClient(SyncHttpClient(client))
+        with pytest.raises(
+            ValueError,
+            match=r"contains unknown key\(s\): 1",
+        ):
+            runs_client.create_batch(
+                cast(
+                    Any,
+                    [
+                        {
+                            "thread_id": None,
+                            "assistant_id": "assistant-1",
+                            "command": {
+                                "resume": {"approved": True},
+                                "resume_authorization": {
+                                    "actor_id": "approver-1",
+                                    "token": "opaque-token",
+                                    "signature": "signed-token",
+                                    1: "oops",
+                                },
+                            },
+                        }
+                    ],
+                )
+            )
