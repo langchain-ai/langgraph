@@ -146,7 +146,9 @@ AssistantSortBy = Literal[
 The field to sort by.
 """
 
-ThreadSortBy = Literal["thread_id", "status", "created_at", "updated_at"]
+ThreadSortBy = Literal[
+    "thread_id", "status", "created_at", "updated_at", "state_updated_at"
+]
 """
 The field to sort by.
 """
