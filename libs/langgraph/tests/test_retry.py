@@ -84,7 +84,10 @@ def test_checkpoint_ns_for_parent_command() -> None:
     assert _checkpoint_ns_for_parent_command("node:1|child:2") == "node:1"
     assert _checkpoint_ns_for_parent_command("node:1|1|child:2") == "node:1"
     assert _checkpoint_ns_for_parent_command("node:1|1|child:2|1") == "node:1"
-    assert _checkpoint_ns_for_parent_command("parent:1|1|child:1|1|node:1|1") == "parent:1|1|child:1"
+    assert (
+        _checkpoint_ns_for_parent_command("parent:1|1|child:1|1|node:1|1")
+        == "parent:1|1|child:1"
+    )
 
 
 def test_should_retry_default_retry_on():

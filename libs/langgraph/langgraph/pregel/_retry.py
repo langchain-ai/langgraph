@@ -36,12 +36,19 @@ def _checkpoint_ns_for_parent_command(ns: str) -> str:
     """
 
     parts = ns.split(NS_SEP)
+
+    # Drop any trailing numeric selectors for the current frame (e.g. `...|node:<id>|1`).
     while parts and parts[-1].isdigit():
         parts.pop()
+
+    # Drop the current frame segment itself (e.g. the `node:<id>`).
     if parts:
         parts.pop()
+
+    # Drop any trailing numeric selectors for the parent frame (e.g. `...|1|node:<id>`).
     while parts and parts[-1].isdigit():
         parts.pop()
+
     return NS_SEP.join(parts)
 
 
