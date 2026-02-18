@@ -23,6 +23,28 @@ logger = logging.getLogger(__name__)
 SUPPORTS_EXC_NOTES = sys.version_info >= (3, 11)
 
 
+def _checkpoint_ns_for_parent_command(ns: str) -> str:
+    """Return the checkpoint namespace for the parent graph.
+
+    The checkpoint namespace is a `|`-separated path. Each segment is usually
+    of the form `name:task_id` (e.g. `parent_first:<uuid>|node:<uuid>`), but the
+    runtime may also insert a purely-numeric segment (e.g. `|1`) to disambiguate
+    concurrent tasks (e.g. `parent_first:<uuid>|1|node:<uuid>`).
+
+    Numeric segments are not real path levels, so we drop them before computing
+    the parent namespace.
+    """
+
+    parts = ns.split(NS_SEP)
+    while parts and parts[-1].isdigit():
+        parts.pop()
+    if parts:
+        parts.pop()
+    while parts and parts[-1].isdigit():
+        parts.pop()
+    return NS_SEP.join(parts)
+
+
 def run_with_retry(
     task: PregelExecutableTask,
     retry_policy: Sequence[RetryPolicy] | None,
@@ -58,9 +80,7 @@ def run_with_retry(
                 # disambiguate concurrent tasks (e.g. `parent_first:<uuid>|1|node:<uuid>`).
                 # Numeric segments are not real path levels, so we drop them before
                 # computing the parent namespace.
-                parts = [p for p in ns.split(NS_SEP) if not p.isdigit()]
-                parent_ns = NS_SEP.join(parts[:-1])
-                exc.args = (replace(cmd, graph=parent_ns),)
+                exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
             # bubble up
             raise
         except GraphBubbleUp:
@@ -159,9 +179,7 @@ async def arun_with_retry(
                 # disambiguate concurrent tasks (e.g. `parent_first:<uuid>|1|node:<uuid>`).
                 # Numeric segments are not real path levels, so we drop them before
                 # computing the parent namespace.
-                parts = [p for p in ns.split(NS_SEP) if not p.isdigit()]
-                parent_ns = NS_SEP.join(parts[:-1])
-                exc.args = (replace(cmd, graph=parent_ns),)
+                exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
             # bubble up
             raise
         except GraphBubbleUp:
