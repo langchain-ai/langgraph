@@ -80,13 +80,6 @@ def run_with_retry(
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent.
-                #
-                # The checkpoint namespace is a `|`-separated path. Each segment is usually
-                # of the form `name:task_id` (e.g. `parent_first:<uuid>|node:<uuid>`), but
-                # the runtime may also insert a purely-numeric segment (e.g. `|1`) to
-                # disambiguate concurrent tasks (e.g. `parent_first:<uuid>|1|node:<uuid>`).
-                # Numeric segments are not real path levels, so we drop them before
-                # computing the parent namespace.
                 exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
             # bubble up
             raise
@@ -179,13 +172,6 @@ async def arun_with_retry(
                 break
             elif cmd.graph == Command.PARENT:
                 # this command is for the parent graph, assign it to the parent.
-                #
-                # The checkpoint namespace is a `|`-separated path. Each segment is usually
-                # of the form `name:task_id` (e.g. `parent_first:<uuid>|node:<uuid>`), but
-                # the runtime may also insert a purely-numeric segment (e.g. `|1`) to
-                # disambiguate concurrent tasks (e.g. `parent_first:<uuid>|1|node:<uuid>`).
-                # Numeric segments are not real path levels, so we drop them before
-                # computing the parent namespace.
                 exc.args = (replace(cmd, graph=_checkpoint_ns_for_parent_command(ns)),)
             # bubble up
             raise
