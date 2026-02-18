@@ -290,7 +290,7 @@ class AssistantsClient:
         """
         get_params = {"recurse": recurse}
         if params:
-            get_params = {**get_params, **params}
+            get_params = {**get_params, **dict(params)}
         if namespace is not None:
             return await self.http.get(
                 f"/assistants/{assistant_id}/subgraphs/{namespace}",

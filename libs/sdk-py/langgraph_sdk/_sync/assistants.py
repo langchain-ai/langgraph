@@ -294,7 +294,7 @@ class SyncAssistantsClient:
         """
         get_params = {"recurse": recurse}
         if params:
-            get_params = {**get_params, **params}
+            get_params = {**get_params, **dict(params)}
         if namespace is not None:
             return self.http.get(
                 f"/assistants/{assistant_id}/subgraphs/{namespace}",

@@ -530,7 +530,7 @@ class SyncThreadsClient:
         elif checkpoint_id:
             get_params = {"subgraphs": subgraphs}
             if params:
-                get_params = {**get_params, **params}
+                get_params = {**get_params, **dict(params)}
             return self.http.get(
                 f"/threads/{thread_id}/state/{checkpoint_id}",
                 params=get_params,
@@ -539,7 +539,7 @@ class SyncThreadsClient:
         else:
             get_params = {"subgraphs": subgraphs}
             if params:
-                get_params = {**get_params, **params}
+                get_params = {**get_params, **dict(params)}
             return self.http.get(
                 f"/threads/{thread_id}/state",
                 params=get_params,
