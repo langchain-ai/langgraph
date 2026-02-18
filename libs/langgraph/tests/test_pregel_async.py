@@ -7920,6 +7920,91 @@ async def test_interrupts_in_tasks_surfaced_once(
     assert result[1] == "Added Will!"
 
 
+@NEEDS_CONTEXTVARS
+async def test_task_before_interrupt_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that Command(resume=value) works correctly when a @task runs
+    before interrupt-producing tasks in an @entrypoint."""
+
+    @task
+    async def ask(question: str) -> str:
+        return interrupt(question)
+
+    @entrypoint(checkpointer=async_checkpointer)
+    async def workflow(number_of_topics: int) -> dict:
+        @task
+        async def setup() -> int:
+            return number_of_topics
+
+        n = await setup()
+
+        answers = []
+        for i in range(n):
+            q = f"Whats the answer for topic {i + 1}?"
+            answers.append(await ask(q))
+
+        return {"answers": answers}
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # First invocation - should get first interrupt
+    result = await workflow.ainvoke(2, config=config)
+    assert "__interrupt__" in result
+    assert len(result["__interrupt__"]) == 1
+    assert result["__interrupt__"][0].value == "Whats the answer for topic 1?"
+
+    # Resume with answer for topic 1 - should get second interrupt
+    result = await workflow.ainvoke(Command(resume="answer1"), config=config)
+    assert "__interrupt__" in result, f"Expected interrupt for topic 2, got: {result}"
+    assert len(result["__interrupt__"]) == 1
+    assert result["__interrupt__"][0].value == "Whats the answer for topic 2?"
+
+    # Resume with answer for topic 2 - should get final result
+    result = await workflow.ainvoke(Command(resume="answer2"), config=config)
+    assert result == {"answers": ["answer1", "answer2"]}
+
+
+@NEEDS_CONTEXTVARS
+async def test_multiple_tasks_before_interrupt_resume(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that Command(resume=value) works correctly when multiple @tasks
+    run before an interrupt-producing task in an @entrypoint."""
+
+    @task
+    async def ask(question: str) -> str:
+        return interrupt(question)
+
+    @entrypoint(checkpointer=async_checkpointer)
+    async def workflow(inputs: dict) -> dict:
+        @task
+        async def step_a(x: int) -> int:
+            return x + 1
+
+        @task
+        async def step_b(x: int) -> int:
+            return x * 2
+
+        a = await step_a(inputs["x"])
+        b = await step_b(a)
+
+        answer = await ask(f"Result so far is {b}. What next?")
+
+        return {"computed": b, "answer": answer}
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # First invocation - should get interrupt
+    result = await workflow.ainvoke({"x": 5}, config=config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Result so far is 12. What next?"
+
+    # Resume
+    result = await workflow.ainvoke(Command(resume="continue"), config=config)
+    assert result == {"computed": 12, "answer": "continue"}
+
+
 async def test_pregel_loop_refcount():
     gc.collect()
     try:

@@ -5800,6 +5800,89 @@ def test_multiple_interrupts_functional_cache(
     assert counter == 6
 
 
+def test_task_before_interrupt_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that Command(resume=value) works correctly when a @task runs
+    before interrupt-producing tasks in an @entrypoint."""
+
+    @task
+    def ask(question: str) -> str:
+        return interrupt(question)
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def workflow(number_of_topics: int) -> dict:
+        @task
+        def setup() -> int:
+            return number_of_topics
+
+        n = setup().result()
+
+        answers = []
+        for i in range(n):
+            q = f"Whats the answer for topic {i + 1}?"
+            answers.append(ask(q).result())
+
+        return {"answers": answers}
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # First invocation - should get first interrupt
+    result = workflow.invoke(2, config=config)
+    assert "__interrupt__" in result
+    assert len(result["__interrupt__"]) == 1
+    assert result["__interrupt__"][0].value == "Whats the answer for topic 1?"
+
+    # Resume with answer for topic 1 - should get second interrupt
+    result = workflow.invoke(Command(resume="answer1"), config=config)
+    assert "__interrupt__" in result, f"Expected interrupt for topic 2, got: {result}"
+    assert len(result["__interrupt__"]) == 1
+    assert result["__interrupt__"][0].value == "Whats the answer for topic 2?"
+
+    # Resume with answer for topic 2 - should get final result
+    result = workflow.invoke(Command(resume="answer2"), config=config)
+    assert result == {"answers": ["answer1", "answer2"]}
+
+
+def test_multiple_tasks_before_interrupt_resume(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that Command(resume=value) works correctly when multiple @tasks
+    run before an interrupt-producing task in an @entrypoint."""
+
+    @task
+    def ask(question: str) -> str:
+        return interrupt(question)
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def workflow(inputs: dict) -> dict:
+        @task
+        def step_a(x: int) -> int:
+            return x + 1
+
+        @task
+        def step_b(x: int) -> int:
+            return x * 2
+
+        a = step_a(inputs["x"]).result()
+        b = step_b(a).result()
+
+        answer = ask(f"Result so far is {b}. What next?").result()
+
+        return {"computed": b, "answer": answer}
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # First invocation - should get interrupt
+    result = workflow.invoke({"x": 5}, config=config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Result so far is 12. What next?"
+
+    # Resume
+    result = workflow.invoke(Command(resume="continue"), config=config)
+    assert result == {"computed": 12, "answer": "continue"}
+
+
 def test_double_interrupt_subgraph(sync_checkpointer: BaseCheckpointSaver) -> None:
     class AgentState(TypedDict):
         input: str
