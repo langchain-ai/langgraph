@@ -543,7 +543,7 @@ class ThreadsClient:
         elif checkpoint_id:
             get_params = {"subgraphs": subgraphs}
             if params:
-                get_params = {**get_params, **params}
+                get_params = {**get_params, **dict(params)}
             return await self.http.get(
                 f"/threads/{thread_id}/state/{checkpoint_id}",
                 params=get_params,
@@ -552,7 +552,7 @@ class ThreadsClient:
         else:
             get_params = {"subgraphs": subgraphs}
             if params:
-                get_params = {**get_params, **params}
+                get_params = {**get_params, **dict(params)}
             return await self.http.get(
                 f"/threads/{thread_id}/state",
                 params=get_params,
