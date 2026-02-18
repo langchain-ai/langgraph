@@ -50,10 +50,15 @@ def run_with_retry(
                     w.invoke(cmd, config)
                 break
             elif cmd.graph == Command.PARENT:
-                # this command is for the parent graph, assign it to the parent
-                parts = ns.split(NS_SEP)
-                if parts[-1].isdigit():
-                    parts.pop()
+                # this command is for the parent graph, assign it to the parent.
+                #
+                # The checkpoint namespace is a `|`-separated path. Each segment is usually
+                # of the form `name:task_id` (e.g. `parent_first:<uuid>|node:<uuid>`), but
+                # the runtime may also insert a purely-numeric segment (e.g. `|1`) to
+                # disambiguate concurrent tasks (e.g. `parent_first:<uuid>|1|node:<uuid>`).
+                # Numeric segments are not real path levels, so we drop them before
+                # computing the parent namespace.
+                parts = [p for p in ns.split(NS_SEP) if not p.isdigit()]
                 parent_ns = NS_SEP.join(parts[:-1])
                 exc.args = (replace(cmd, graph=parent_ns),)
             # bubble up
@@ -146,10 +151,15 @@ async def arun_with_retry(
                     w.invoke(cmd, config)
                 break
             elif cmd.graph == Command.PARENT:
-                # this command is for the parent graph, assign it to the parent
-                parts = ns.split(NS_SEP)
-                if parts[-1].isdigit():
-                    parts.pop()
+                # this command is for the parent graph, assign it to the parent.
+                #
+                # The checkpoint namespace is a `|`-separated path. Each segment is usually
+                # of the form `name:task_id` (e.g. `parent_first:<uuid>|node:<uuid>`), but
+                # the runtime may also insert a purely-numeric segment (e.g. `|1`) to
+                # disambiguate concurrent tasks (e.g. `parent_first:<uuid>|1|node:<uuid>`).
+                # Numeric segments are not real path levels, so we drop them before
+                # computing the parent namespace.
+                parts = [p for p in ns.split(NS_SEP) if not p.isdigit()]
                 parent_ns = NS_SEP.join(parts[:-1])
                 exc.args = (replace(cmd, graph=parent_ns),)
             # bubble up
