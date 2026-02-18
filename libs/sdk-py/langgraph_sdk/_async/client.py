@@ -110,7 +110,7 @@ def get_client(
     if url is None:
         url = "http://api"
         if os.environ.get("__LANGGRAPH_DEFER_LOOPBACK_TRANSPORT") == "true":
-            transport = get_asgi_transport()(app=None, root_path="/noauth")
+            transport = get_asgi_transport()(app=None, root_path="/noauth")  # type: ignore[invalid-argument-type]
             _registered_transports.append(transport)
         else:
             try:
@@ -122,7 +122,7 @@ def get_client(
                     "Failed to connect to in-process LangGraph server. Deferring configuration.",
                     exc_info=True,
                 )
-                transport = get_asgi_transport()(app=None, root_path="/noauth")
+                transport = get_asgi_transport()(app=None, root_path="/noauth")  # type: ignore[invalid-argument-type]
                 _registered_transports.append(transport)
 
     if transport is None:

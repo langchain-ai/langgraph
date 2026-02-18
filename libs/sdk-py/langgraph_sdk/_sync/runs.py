@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import warnings
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Any, overload
@@ -503,11 +504,11 @@ class SyncRunsClient:
 
     def create_batch(
         self,
-        payloads: list[RunCreate],
+        payloads: builtins.list[RunCreate],
         *,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Run]:
+    ) -> builtins.list[Run]:
         """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
@@ -543,7 +544,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> list[dict] | dict[str, Any]: ...
+    ) -> builtins.list[dict] | dict[str, Any]: ...
 
     @overload
     def wait(
@@ -568,7 +569,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> list[dict] | dict[str, Any]: ...
+    ) -> builtins.list[dict] | dict[str, Any]: ...
 
     def wait(
         self,
@@ -596,7 +597,7 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-    ) -> list[dict] | dict[str, Any]:
+    ) -> builtins.list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -740,10 +741,10 @@ class SyncRunsClient:
         limit: int = 10,
         offset: int = 0,
         status: RunStatus | None = None,
-        select: list[RunSelectField] | None = None,
+        select: builtins.list[RunSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Run]:
+    ) -> builtins.list[Run]:
         """List runs.
 
         Args:
