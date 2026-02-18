@@ -425,9 +425,9 @@ class AssistantsClient:
         payload: dict[str, Any] = {}
         if graph_id:
             payload["graph_id"] = graph_id
-        if config:
+        if config is not None:
             payload["config"] = config
-        if context:
+        if context is not None:
             payload["context"] = context
         if metadata:
             payload["metadata"] = metadata
