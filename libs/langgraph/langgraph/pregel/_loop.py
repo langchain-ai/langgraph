@@ -310,10 +310,7 @@ class PregelLoop:
             writes = list({w[0]: w for w in writes}.values())
         if task_id == NULL_TASK_ID:
             # writes for the null task are accumulated
-            # NOTE: use in-place mutation to preserve list identity, as
-            # _scratchpad closures capture the list reference for
-            # get_null_resume consumption tracking
-            self.checkpoint_pending_writes[:] = [
+            self.checkpoint_pending_writes = [
                 w
                 for w in self.checkpoint_pending_writes
                 if w[0] != task_id or w[1] not in WRITES_IDX_MAP
@@ -323,10 +320,7 @@ class PregelLoop:
             ] + list(writes)
         else:
             # remove existing writes for this task
-            # NOTE: use in-place mutation to preserve list identity, as
-            # _scratchpad closures capture the list reference for
-            # get_null_resume consumption tracking
-            self.checkpoint_pending_writes[:] = [
+            self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[0] != task_id
             ]
             writes_to_save = writes
