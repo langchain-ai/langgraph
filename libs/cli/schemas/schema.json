@@ -542,6 +542,10 @@
       "description": "Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).",
       "type": "object",
       "properties": {
+        "path": {
+          "type": "string",
+          "description": "Import path to an async context manager that yields a `BaseCheckpointSaver` instance.\n\nThe referenced object should be an `@asynccontextmanager`-decorated function so that the server can properly manage the checkpointer's lifecycle (e.g. opening and closing connections).\n\nExamples:\n- \"./my_checkpointer.py:create_checkpointer\"\n- \"my_package.checkpointer:create_checkpointer\"\n\nWhen provided, this replaces the default checkpointer.\n\nYou can use the `langgraph-checkpoint-conformance` package (https://pypi.org/project/langgraph-checkpoint-conformance/) to run simple conformance tests against your custom checkpointer and catch incompatibilities early."
+        },
         "serde": {
           "anyOf": [
             {
