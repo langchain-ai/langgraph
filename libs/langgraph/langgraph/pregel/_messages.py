@@ -56,6 +56,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         subgraphs: bool,
         *,
         parent_ns: tuple[str, ...] | None = None,
+        messages_key: str | None = None,
     ) -> None:
         """Configure the handler to stream messages from LLMs and nodes.
 
@@ -66,6 +67,10 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                 We keep track of this namespace to allow calls to subgraphs that
                 were explicitly requested as a stream with `messages` mode
                 configured.
+            messages_key: Optional key to restrict streaming to a specific state field.
+                If provided, only messages from this state key will be streamed.
+                This is useful when you have multiple message fields but only want
+                to expose one to the frontend.
 
         Example:
             parent_ns is used to handle scenarios where the subgraph is explicitly
@@ -83,6 +88,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         """
         self.stream = stream
         self.subgraphs = subgraphs
+        self.messages_key = messages_key
         self.metadata: dict[UUID, Meta] = {}
         self.seen: set[int | str] = set()
         self.parent_ns = parent_ns
@@ -97,6 +103,42 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             self.stream((meta[0], "messages", (message, meta[1])))
 
     def _find_and_emit_messages(self, meta: Meta, response: Any) -> None:
+        # If messages_key is specified, only emit from that key
+        if self.messages_key:
+            self._find_and_emit_from_key(meta, response, self.messages_key)
+        else:
+            # Current behavior: emit all messages (backward compatible)
+            self._find_and_emit_all(meta, response)
+
+    def _find_and_emit_from_key(self, meta: Meta, response: Any, key: str) -> None:
+        """Extract and emit messages only from the specified state key."""
+        # Handle direct message (rare case)
+        if isinstance(response, BaseMessage):
+            # Only emit if this IS the right key context
+            # (This case is rare - usually response is a dict/state)
+            self._emit(meta, response, dedupe=True)
+            return
+
+        # Extract value from the specified key
+        value = None
+        if isinstance(response, dict):
+            value = response.get(key)
+        elif hasattr(response, "__dict__"):
+            # Handle BaseModel and similar objects
+            if hasattr(response, key):
+                value = getattr(response, key)
+
+        # Emit if we found messages at the key
+        if value is not None:
+            if isinstance(value, BaseMessage):
+                self._emit(meta, value, dedupe=True)
+            elif isinstance(value, Sequence):
+                for item in value:
+                    if isinstance(item, BaseMessage):
+                        self._emit(meta, item, dedupe=True)
+
+    def _find_and_emit_all(self, meta: Meta, response: Any) -> None:
+        """Extract and emit messages from all state keys (current behavior)."""
         if isinstance(response, BaseMessage):
             self._emit(meta, response, dedupe=True)
         elif isinstance(response, Sequence):
