@@ -8011,6 +8011,7 @@ async def test_multiple_tasks_before_interrupt_resume(
     assert result == {"computed": 12, "answer": "continue"}
 
 
+@NEEDS_CONTEXTVARS
 async def test_node_before_interrupt_resume_graph_api(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -8066,6 +8067,7 @@ async def test_node_before_interrupt_resume_graph_api(
     }
 
 
+@NEEDS_CONTEXTVARS
 async def test_multiple_nodes_before_interrupt_resume_graph_api(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -8111,6 +8113,7 @@ async def test_multiple_nodes_before_interrupt_resume_graph_api(
     assert result == {"value": 12, "answer": "continue"}
 
 
+@NEEDS_CONTEXTVARS
 async def test_node_before_multiple_interrupt_cycles_graph_api(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
