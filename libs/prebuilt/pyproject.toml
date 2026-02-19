@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph-prebuilt"
-version = "1.0.7"
+version = "1.0.8"
 description = "Library with high-level APIs for creating and executing LangGraph agents and tools."
 authors = []
 requires-python = ">=3.10"
