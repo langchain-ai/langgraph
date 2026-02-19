@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import warnings
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
@@ -14,11 +15,13 @@ from langgraph_sdk.schema import (
     Cron,
     CronSelectField,
     CronSortBy,
+    Durability,
     Input,
     OnCompletionBehavior,
     QueryParamTypes,
     Run,
     SortOrder,
+    StreamMode,
 )
 
 
@@ -61,6 +64,10 @@ class SyncCronClient:
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
         enabled: bool | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_subgraphs: bool | None = None,
+        stream_resumable: bool | None = None,
+        durability: Durability | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -85,6 +92,10 @@ class SyncCronClient:
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             enabled: Whether the cron job is enabled. By default, it is considered enabled.
+            stream_mode: The stream mode(s) to use.
+            stream_subgraphs: Whether to stream output from subgraphs.
+            stream_resumable: Whether to persist the stream chunks in order to resume the stream later.
+            durability: Durability level for the run. Must be one of 'sync', 'async', or 'exit'.
             headers: Optional custom headers to include with the request.
 
         Returns:
@@ -109,6 +120,13 @@ class SyncCronClient:
             )
             ```
         """
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         payload = {
             "schedule": schedule,
             "input": input,
@@ -123,6 +141,10 @@ class SyncCronClient:
             "multitask_strategy": multitask_strategy,
             "end_time": end_time.isoformat() if end_time else None,
             "enabled": enabled,
+            "stream_mode": stream_mode,
+            "stream_subgraphs": stream_subgraphs,
+            "stream_resumable": stream_resumable,
+            "durability": durability,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(
@@ -149,6 +171,10 @@ class SyncCronClient:
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
         enabled: bool | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_subgraphs: bool | None = None,
+        stream_resumable: bool | None = None,
+        durability: Durability | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -176,6 +202,10 @@ class SyncCronClient:
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             enabled: Whether the cron job is enabled. By default, it is considered enabled.
+            stream_mode: The stream mode(s) to use.
+            stream_subgraphs: Whether to stream output from subgraphs.
+            stream_resumable: Whether to persist the stream chunks in order to resume the stream later.
+            durability: Durability level for the run. Must be one of 'sync', 'async', or 'exit'.
             headers: Optional custom headers to include with the request.
 
         Returns:
@@ -201,6 +231,13 @@ class SyncCronClient:
             ```
 
         """
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         payload = {
             "schedule": schedule,
             "input": input,
@@ -216,6 +253,10 @@ class SyncCronClient:
             "multitask_strategy": multitask_strategy,
             "end_time": end_time.isoformat() if end_time else None,
             "enabled": enabled,
+            "stream_mode": stream_mode,
+            "stream_subgraphs": stream_subgraphs,
+            "stream_resumable": stream_resumable,
+            "durability": durability,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.post(
@@ -266,6 +307,10 @@ class SyncCronClient:
         interrupt_after: All | list[str] | None = None,
         on_run_completed: OnCompletionBehavior | None = None,
         enabled: bool | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_subgraphs: bool | None = None,
+        stream_resumable: bool | None = None,
+        durability: Durability | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Cron:
@@ -288,6 +333,10 @@ class SyncCronClient:
                 after execution. 'keep' creates a new thread for each execution but does not
                 clean them up.
             enabled: Enable or disable the cron job.
+            stream_mode: The stream mode(s) to use.
+            stream_subgraphs: Whether to stream output from subgraphs.
+            stream_resumable: Whether to persist the stream chunks in order to resume the stream later.
+            durability: Durability level for the run. Must be one of 'sync', 'async', or 'exit'.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -318,6 +367,10 @@ class SyncCronClient:
             "interrupt_after": interrupt_after,
             "on_run_completed": on_run_completed,
             "enabled": enabled,
+            "stream_mode": stream_mode,
+            "stream_subgraphs": stream_subgraphs,
+            "stream_resumable": stream_resumable,
+            "durability": durability,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return self.http.patch(
