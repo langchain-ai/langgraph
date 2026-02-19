@@ -250,22 +250,22 @@ class InMemorySaver(
                     and checkpoint_ns != config_checkpoint_ns
                 ):
                     continue
+                before_checkpoint_id = get_checkpoint_id(before) if before else None
+                reached_before_boundary = before_checkpoint_id is None
 
                 for checkpoint_id, (
                     checkpoint,
                     metadata_b,
                     parent_checkpoint_id,
                 ) in reversed(self.storage[thread_id][checkpoint_ns].items()):
-                    # filter by checkpoint ID from config
-                    if config_checkpoint_id and checkpoint_id != config_checkpoint_id:
+                    # filter by checkpoint position from `before` config
+                    if not reached_before_boundary:
+                        if checkpoint_id == before_checkpoint_id:
+                            reached_before_boundary = True
                         continue
 
-                    # filter by checkpoint ID from `before` config
-                    if (
-                        before
-                        and (before_checkpoint_id := get_checkpoint_id(before))
-                        and checkpoint_id >= before_checkpoint_id
-                    ):
+                    # filter by checkpoint ID from config
+                    if config_checkpoint_id and checkpoint_id != config_checkpoint_id:
                         continue
 
                     # filter by metadata

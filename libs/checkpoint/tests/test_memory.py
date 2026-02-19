@@ -245,6 +245,41 @@ class TestMemorySaver:
         assert len(latest_from_list) == 1
         assert latest_from_list[0].config["configurable"]["checkpoint_id"] == "10"
 
+    def test_list_before_uses_insertion_order_cursor(self) -> None:
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-lexical-before",
+                "checkpoint_ns": "",
+            }
+        }
+        checkpoint_2 = empty_checkpoint()
+        checkpoint_2["id"] = "2"
+        checkpoint_10 = create_checkpoint(checkpoint_2, {}, 1)
+        checkpoint_10["id"] = "10"
+
+        self.memory_saver.put(
+            config,
+            checkpoint_2,
+            self.metadata_1,
+            checkpoint_2["channel_versions"],
+        )
+        self.memory_saver.put(
+            config,
+            checkpoint_10,
+            self.metadata_2,
+            checkpoint_10["channel_versions"],
+        )
+
+        first_page = list(self.memory_saver.list(config, limit=1))
+        assert len(first_page) == 1
+        assert first_page[0].config["configurable"]["checkpoint_id"] == "10"
+
+        second_page = list(
+            self.memory_saver.list(config, before=first_page[0].config, limit=1)
+        )
+        assert len(second_page) == 1
+        assert second_page[0].config["configurable"]["checkpoint_id"] == "2"
+
 
 async def test_memory_saver() -> None:
     from langgraph.checkpoint.memory import InMemorySaver
