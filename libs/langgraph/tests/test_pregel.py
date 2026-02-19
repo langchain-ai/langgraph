@@ -5929,9 +5929,7 @@ def test_no_redundant_put_writes_for_cached_task(
     # Count unique non-null task IDs that got put_writes.
     # Should be exactly 2: the ask task and the entrypoint task.
     # If 3, the cached setup task is being redundantly re-committed.
-    non_null = set(
-        tid for tid in put_writes_task_ids if not tid.startswith("00000000")
-    )
+    non_null = set(tid for tid in put_writes_task_ids if not tid.startswith("00000000"))
     assert len(non_null) == 2, (
         f"Expected 2 task IDs in put_writes (ask + entrypoint), got {len(non_null)}"
     )
