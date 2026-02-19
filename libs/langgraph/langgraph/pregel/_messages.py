@@ -39,6 +39,17 @@ def _state_values(obj: Any) -> Sequence[Any]:
     return ()
 
 
+def _state_items(obj: Any) -> Sequence[tuple[str, Any]]:
+    """Extract top-level field items from a state object (dict, BaseModel, or dataclass)."""
+    if isinstance(obj, dict):
+        return list(obj.items())
+    elif isinstance(obj, BaseModel):
+        return [(k, getattr(obj, k)) for k in type(obj).model_fields]
+    elif is_dataclass(obj) and not isinstance(obj, type):
+        return [(f.name, getattr(obj, f.name)) for f in fields(obj)]
+    return ()
+
+
 class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     """A callback handler that implements stream_mode=messages.
 
@@ -56,6 +67,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         subgraphs: bool,
         *,
         parent_ns: tuple[str, ...] | None = None,
+        messages_keys: set[str] | None = None,
     ) -> None:
         """Configure the handler to stream messages from LLMs and nodes.
 
@@ -66,6 +78,8 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                 We keep track of this namespace to allow calls to subgraphs that
                 were explicitly requested as a stream with `messages` mode
                 configured.
+            messages_keys: Optional set of state keys to include for node output
+                message streaming. If `None`, all state keys are considered.
 
         Example:
             parent_ns is used to handle scenarios where the subgraph is explicitly
@@ -86,6 +100,10 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         self.metadata: dict[UUID, Meta] = {}
         self.seen: set[int | str] = set()
         self.parent_ns = parent_ns
+        self.messages_keys = messages_keys
+
+    def _include_state_key(self, key: str) -> bool:
+        return self.messages_keys is None or key in self.messages_keys
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         if dedupe and message.id in self.seen:
@@ -104,7 +122,9 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                 if isinstance(value, BaseMessage):
                     self._emit(meta, value, dedupe=True)
         else:
-            for value in _state_values(response):
+            for key, value in _state_items(response):
+                if not self._include_state_key(key):
+                    continue
                 if isinstance(value, BaseMessage):
                     self._emit(meta, value, dedupe=True)
                 elif isinstance(value, Sequence):
@@ -204,7 +224,9 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             if not self.subgraphs and len(ns) > 0:
                 return
             self.metadata[run_id] = (ns, metadata)
-            for value in _state_values(inputs):
+            for key, value in _state_items(inputs):
+                if not self._include_state_key(key):
+                    continue
                 if isinstance(value, BaseMessage):
                     if value.id is not None:
                         self.seen.add(value.id)

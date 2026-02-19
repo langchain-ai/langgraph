@@ -1038,6 +1038,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         *,
         cache: BaseCache | None = None,
         store: BaseStore | None = None,
+        messages_key: str | Sequence[str] | None = None,
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
@@ -1072,6 +1073,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
             interrupt_before: An optional list of node names to interrupt before.
             interrupt_after: An optional list of node names to interrupt after.
+            messages_key: Optional state key or keys to include when `stream_mode` includes `"messages"`.
+                If omitted, all message-like keys are included.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
 
@@ -1124,6 +1127,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             },
             input_channels=START,
             stream_mode="updates",
+            messages_key=messages_key,
             output_channels=output_channels,
             stream_channels=stream_channels,
             checkpointer=checkpointer,
