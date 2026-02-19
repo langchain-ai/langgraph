@@ -5889,6 +5889,54 @@ def test_multiple_tasks_before_interrupt_resume(
     assert result == {"computed": 12, "answer": "continue"}
 
 
+def test_no_redundant_put_writes_for_cached_task(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Cached @tasks on resume must not trigger redundant put_writes."""
+    from unittest.mock import patch
+
+    from langgraph.pregel._loop import PregelLoop
+
+    @task
+    def setup(x: int) -> int:
+        return x
+
+    @task
+    def ask(question: str) -> str:
+        return interrupt(question)
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def workflow(x: int) -> dict:
+        n = setup(x).result()
+        answer = ask(f"q{n}").result()
+        return {"answer": answer}
+
+    config = {"configurable": {"thread_id": "1"}}
+    result = workflow.invoke(1, config=config)
+    assert "__interrupt__" in result
+
+    put_writes_task_ids: list[str] = []
+    orig = PregelLoop.put_writes
+
+    def spy(self, task_id, writes):
+        put_writes_task_ids.append(task_id)
+        return orig(self, task_id, writes)
+
+    with patch.object(PregelLoop, "put_writes", spy):
+        result = workflow.invoke(Command(resume="ans"), config=config)
+
+    assert result == {"answer": "ans"}
+    # Count unique non-null task IDs that got put_writes.
+    # Should be exactly 2: the ask task and the entrypoint task.
+    # If 3, the cached setup task is being redundantly re-committed.
+    non_null = set(
+        tid for tid in put_writes_task_ids if not tid.startswith("00000000")
+    )
+    assert len(non_null) == 2, (
+        f"Expected 2 task IDs in put_writes (ask + entrypoint), got {len(non_null)}"
+    )
+
+
 def test_node_before_interrupt_resume_graph_api(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
