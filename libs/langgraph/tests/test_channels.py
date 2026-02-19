@@ -122,6 +122,45 @@ def test_binop_with_default() -> None:
     assert channel.get() == {"a": 1, "b": 2}
 
 
+def test_binop_with_default_mutable_safety() -> None:
+    """Mutable defaults should not be shared across channel instances."""
+    default = {"a": 1}
+    ch1 = BinaryOperatorAggregate(dict, operator.or_, default=default).from_checkpoint(
+        MISSING
+    )
+    ch2 = BinaryOperatorAggregate(dict, operator.or_, default=default).from_checkpoint(
+        MISSING
+    )
+
+    # Mutate ch1's value via a reducer that mutates in-place
+    def mutating_reducer(a: dict, b: dict) -> dict:
+        a.update(b)
+        return a
+
+    ch1.operator = mutating_reducer
+    ch1.update([{"b": 2}])
+    assert ch1.get() == {"a": 1, "b": 2}
+
+    # ch2 should be unaffected
+    assert ch2.get() == {"a": 1}
+
+    # Original default should be unaffected
+    assert default == {"a": 1}
+
+
+def test_binop_with_default_multi_invoke() -> None:
+    """Defaults should be fresh across multiple from_checkpoint calls."""
+    template = BinaryOperatorAggregate(dict, operator.or_, default={"a": 1})
+
+    # Simulate two separate runs
+    run1 = template.from_checkpoint(MISSING)
+    run1.update([{"b": 2}])
+    assert run1.get() == {"a": 1, "b": 2}
+
+    run2 = template.from_checkpoint(MISSING)
+    assert run2.get() == {"a": 1}  # Should NOT see {"b": 2}
+
+
 def test_untracked_value() -> None:
     channel = UntrackedValue(dict).from_checkpoint(MISSING)
     assert channel.ValueType is dict

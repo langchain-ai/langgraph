@@ -1,4 +1,5 @@
 import collections.abc
+import copy
 from collections.abc import Callable, Sequence
 from typing import Any, Generic
 
@@ -69,7 +70,7 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         if typ in (collections.abc.Mapping, collections.abc.MutableMapping):
             typ = dict
         if default is not MISSING:
-            self.value = default
+            self.value = copy.deepcopy(default)
         else:
             try:
                 self.value = typ()
@@ -78,10 +79,13 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, BinaryOperatorAggregate) and (
-            value.operator is self.operator
-            if value.operator.__name__ != "<lambda>"
-            and self.operator.__name__ != "<lambda>"
-            else True
+            (
+                value.operator is self.operator
+                if value.operator.__name__ != "<lambda>"
+                and self.operator.__name__ != "<lambda>"
+                else True
+            )
+            and value.default == self.default
         )
 
     @property
