@@ -948,6 +948,20 @@ class ToolNode(RunnableCallable):
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         except GraphBubbleUp:
             raise
+        except asyncio.CancelledError:
+            if not self._handle_tool_errors:
+                raise
+
+            content = _handle_tool_error(
+                Exception("Tool execution was cancelled."),
+                flag=self._handle_tool_errors,
+            )
+            return ToolMessage(
+                content=content,
+                name=call["name"],
+                tool_call_id=call["id"],
+                status="error",
+            )
         except Exception as e:
             # Determine which exception types are handled
             handled_types: tuple[type[Exception], ...]
@@ -1031,6 +1045,19 @@ class ToolNode(RunnableCallable):
         # Call wrapper with request and execute callable
         try:
             return self._wrap_tool_call(tool_request, execute)
+        except asyncio.CancelledError:
+            if not self._handle_tool_errors:
+                raise
+            content = _handle_tool_error(
+                Exception("Tool execution was cancelled."),
+                flag=self._handle_tool_errors,
+            )
+            return ToolMessage(
+                content=content,
+                name=tool_request.tool_call["name"],
+                tool_call_id=tool_request.tool_call["id"],
+                status="error",
+            )
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
@@ -1101,6 +1128,20 @@ class ToolNode(RunnableCallable):
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         except GraphBubbleUp:
             raise
+        except asyncio.CancelledError:
+            if not self._handle_tool_errors:
+                raise
+
+            content = _handle_tool_error(
+                Exception("Tool execution was cancelled."),
+                flag=self._handle_tool_errors,
+            )
+            return ToolMessage(
+                content=content,
+                name=call["name"],
+                tool_call_id=call["id"],
+                status="error",
+            )
         except Exception as e:
             # Determine which exception types are handled
             handled_types: tuple[type[Exception], ...]
@@ -1192,6 +1233,19 @@ class ToolNode(RunnableCallable):
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
             return self._wrap_tool_call(tool_request, _sync_execute)
+        except asyncio.CancelledError:
+            if not self._handle_tool_errors:
+                raise
+            content = _handle_tool_error(
+                Exception("Tool execution was cancelled."),
+                flag=self._handle_tool_errors,
+            )
+            return ToolMessage(
+                content=content,
+                name=tool_request.tool_call["name"],
+                tool_call_id=tool_request.tool_call["id"],
+                status="error",
+            )
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
