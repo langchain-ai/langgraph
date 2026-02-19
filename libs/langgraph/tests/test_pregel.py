@@ -2043,6 +2043,33 @@ def test_in_one_fan_out_state_graph_waiting_edge(
     ]
 
 
+def test_conditional_edges_path_map_allows_implicit_end() -> None:
+    class State(TypedDict, total=False):
+        counter: int
+
+    def router(state: State) -> str:
+        if state.get("counter", 0) >= 2:
+            return END
+        return "worker"
+
+    def worker(state: State) -> State:
+        return {"counter": state.get("counter", 0) + 1}
+
+    workflow = StateGraph(State)
+    workflow.add_node("router", lambda state: {})
+    workflow.add_node("worker", worker)
+    workflow.set_entry_point("router")
+    workflow.add_conditional_edges("router", router, {"worker": "worker"})
+    workflow.add_edge("worker", "router")
+
+    app = workflow.compile()
+
+    # Empty state should loop until router returns END.
+    assert app.invoke({}) == {"counter": 2}
+    # Returning END directly should work without explicit END mapping in path_map.
+    assert app.invoke({"counter": 2}) == {"counter": 2}
+
+
 @pytest.mark.parametrize("use_waiting_edge", (True, False))
 def test_in_one_fan_out_state_graph_defer_node(
     snapshot: SnapshotAssertion,
