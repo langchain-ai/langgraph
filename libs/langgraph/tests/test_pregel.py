@@ -9059,3 +9059,144 @@ def test_fork_does_not_apply_pending_writes(
 
     # Should be: 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+def test_reducer_field_with_pydantic_default() -> None:
+    """Test that Annotated reducer fields respect Pydantic Field defaults."""
+
+    class State(BaseModel):
+        query: str
+        files: Annotated[dict[str, str], operator.or_] = Field(
+            default_factory=lambda: {"default.txt": "content"}
+        )
+
+    observed_files: list[dict] = []
+
+    def node(state: State) -> dict:
+        observed_files.append(state.files)
+        return {"files": {"new.txt": "new"}}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.set_entry_point("node")
+    graph.set_finish_point("node")
+    app = graph.compile()
+
+    # Invoke without providing files — should use default
+    result = app.invoke({"query": "test"})
+    assert observed_files[0] == {"default.txt": "content"}
+    assert result == {
+        "query": "test",
+        "files": {"default.txt": "content", "new.txt": "new"},
+    }
+
+
+def test_reducer_field_with_pydantic_default_explicit_value() -> None:
+    """Test that an explicit value overrides the default for reducer fields."""
+
+    class State(BaseModel):
+        files: Annotated[dict[str, str], operator.or_] = Field(
+            default_factory=lambda: {"default.txt": "content"}
+        )
+
+    observed_files: list[dict] = []
+
+    def node(state: State) -> dict:
+        observed_files.append(state.files)
+        return {}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.set_entry_point("node")
+    graph.set_finish_point("node")
+    app = graph.compile()
+
+    # Invoke WITH explicit files — should use provided value, not default
+    app.invoke({"files": {"custom.txt": "custom"}})
+    assert observed_files[0] == {"default.txt": "content", "custom.txt": "custom"}
+
+
+def test_reducer_field_with_dataclass_default() -> None:
+    """Test that Annotated reducer fields respect dataclass defaults."""
+
+    @dataclass
+    class State:
+        query: str
+        files: Annotated[dict[str, str], operator.or_] = field(
+            default_factory=lambda: {"default.txt": "content"}
+        )
+
+    observed_files: list[dict] = []
+
+    def node(state: State) -> dict:
+        observed_files.append(state.files)
+        return {"files": {"new.txt": "new"}}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.set_entry_point("node")
+    graph.set_finish_point("node")
+    app = graph.compile()
+
+    result = app.invoke({"query": "test"})
+    assert observed_files[0] == {"default.txt": "content"}
+    assert result == {
+        "query": "test",
+        "files": {"default.txt": "content", "new.txt": "new"},
+    }
+
+
+def test_reducer_field_with_pydantic_none_default() -> None:
+    """Test that None default is respected (not confused with 'no default')."""
+
+    def _reducer(a: str | None, b: str | None) -> str | None:
+        if b is not None:
+            return b
+        return a
+
+    class State(BaseModel):
+        query: str
+        data: Annotated[str | None, _reducer] = None
+
+    observed: list[Any] = []
+
+    def node(state: State) -> dict:
+        observed.append(state.data)
+        return {"data": "updated"}
+
+    graph = StateGraph(State)
+    graph.add_node("node", node)
+    graph.set_entry_point("node")
+    graph.set_finish_point("node")
+    app = graph.compile()
+
+    result = app.invoke({"query": "test"})
+    assert observed[0] is None  # default None was respected
+    assert result == {"query": "test", "data": "updated"}
+
+
+def test_reducer_field_with_default_multi_step() -> None:
+    """Test that defaults work correctly across multiple graph steps."""
+
+    class State(BaseModel):
+        items: Annotated[list[str], operator.add] = Field(
+            default_factory=lambda: ["initial"]
+        )
+
+    def step1(state: State) -> dict:
+        return {"items": ["step1"]}
+
+    def step2(state: State) -> dict:
+        return {"items": ["step2"]}
+
+    graph = StateGraph(State)
+    graph.add_node("step1", step1)
+    graph.add_node("step2", step2)
+    graph.set_entry_point("step1")
+    graph.add_edge("step1", "step2")
+    graph.set_finish_point("step2")
+    app = graph.compile()
+
+    result = app.invoke({})
+    # Default ["initial"] + ["step1"] + ["step2"]
+    assert result == {"items": ["initial", "step1", "step2"]}

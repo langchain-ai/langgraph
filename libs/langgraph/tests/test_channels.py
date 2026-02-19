@@ -90,6 +90,38 @@ def test_binop() -> None:
     assert channel.get() == 10
 
 
+def test_binop_with_default() -> None:
+    # Test that a default value is used instead of typ()
+    channel = BinaryOperatorAggregate(int, operator.add, default=10).from_checkpoint(
+        MISSING
+    )
+    assert channel.get() == 10
+
+    channel.update([5])
+    assert channel.get() == 15
+
+    # Test checkpoint round-trip preserves default for new channels
+    checkpoint = channel.checkpoint()
+    restored = BinaryOperatorAggregate(int, operator.add, default=10).from_checkpoint(
+        checkpoint
+    )
+    assert restored.get() == 15
+
+    # Test from_checkpoint with MISSING uses default
+    fresh = BinaryOperatorAggregate(int, operator.add, default=10).from_checkpoint(
+        MISSING
+    )
+    assert fresh.get() == 10
+
+    # Test dict default with or_ reducer
+    channel = BinaryOperatorAggregate(
+        dict, operator.or_, default={"a": 1}
+    ).from_checkpoint(MISSING)
+    assert channel.get() == {"a": 1}
+    channel.update([{"b": 2}])
+    assert channel.get() == {"a": 1, "b": 2}
+
+
 def test_untracked_value() -> None:
     channel = UntrackedValue(dict).from_checkpoint(MISSING)
     assert channel.ValueType is dict
