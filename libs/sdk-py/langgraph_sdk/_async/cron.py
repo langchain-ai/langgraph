@@ -63,7 +63,7 @@ class CronClient:
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
@@ -90,7 +90,7 @@ class CronClient:
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
                 !!! version-added "Added in version 0.6.0"
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
 
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
@@ -104,6 +104,9 @@ class CronClient:
             stream_subgraphs: Whether to stream output from subgraphs.
             stream_resumable: Whether to persist the stream chunks in order to resume the stream later.
             durability: Durability level for the run. Must be one of 'sync', 'async', or 'exit'.
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -173,7 +176,7 @@ class CronClient:
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
@@ -200,7 +203,7 @@ class CronClient:
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
                 !!! version-added "Added in version 0.6.0"
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -216,6 +219,9 @@ class CronClient:
             stream_subgraphs: Whether to stream output from subgraphs.
             stream_resumable: Whether to persist the stream chunks in order to resume the stream later.
             durability: Durability level for the run. Must be one of 'sync', 'async', or 'exit'.
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
