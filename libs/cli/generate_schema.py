@@ -214,12 +214,12 @@ def main():
     schema = generate_schema()
 
     # Add versioning to the schema
-    import importlib.metadata
-
+    # Use hardcoded version to avoid importlib.metadata overhead
     try:
-        version = importlib.metadata.version("langgraph_cli").split(".")
+        from langgraph_cli.version import __version__
+        version = __version__.split(".")
         schema_version = f"v{version[0]}"
-    except importlib.metadata.PackageNotFoundError:
+    except ImportError:
         schema_version = "v1"
 
     # Add version to schema
