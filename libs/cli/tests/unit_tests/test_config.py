@@ -120,14 +120,14 @@ def test_validate_config():
         validate_config({"python_version": "3.10"})
     assert "Minimum required version" in str(exc_info.value)
 
-    config = validate_config(
-        {
-            "python_version": "3.11-bullseye",
-            "dependencies": ["."],
-            "graphs": {"agent": "./agent.py:graph"},
-        }
-    )
-    assert config["python_version"] == "3.11-bullseye"
+    with pytest.raises(click.UsageError, match="Bullseye images were deprecated"):
+        validate_config(
+            {
+                "python_version": "3.11-bullseye",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        )
 
     config = validate_config(
         {
@@ -180,6 +180,17 @@ def test_validate_config_image_distro():
         }
     )
     assert config["image_distro"] == "debian"
+
+    # Bullseye should raise deprecation error
+    with pytest.raises(click.UsageError, match="Bullseye images were deprecated"):
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "image_distro": "bullseye",
+            }
+        )
 
     # Invalid image_distro values should raise error
     with pytest.raises(click.UsageError) as exc_info:
