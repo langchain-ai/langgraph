@@ -31,7 +31,7 @@ from langchain_core.runnables import (
 from langchain_core.tools import BaseTool
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import MISSING
-from langgraph.errors import ErrorCode, create_error_message
+from langgraph.errors import ErrorCode, GraphRecursionError, create_error_message
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
@@ -835,6 +835,41 @@ def create_react_agent(
                 return END
         # Otherwise if there is, we continue
         else:
+            # Check for infinite loops of tool calls
+            # If the last 3 AIMessages have the same tool calls, we consider it a loop
+            ai_messages = [
+                m
+                for m in reversed(messages)
+                if isinstance(m, AIMessage) and m.tool_calls
+            ]
+            if len(ai_messages) > 2:
+                last_call = ai_messages[0].tool_calls
+                prev_call = ai_messages[1].tool_calls
+                prev_prev_call = ai_messages[2].tool_calls
+
+                # Normalize (ignore None or empty vs empty)
+                def normalize(calls: list) -> list:
+                    return sorted(
+                        (c["name"], c.get("args", {}))
+                        for c in calls
+                        if c.get("type") == "tool_call"
+                    )
+
+                if (
+                    normalize(last_call)
+                    == normalize(prev_call)
+                    == normalize(prev_prev_call)
+                ):
+                    msg = create_error_message(
+                        message=(
+                            "Recursion limit hit for tool call: the agent has "
+                            "requested the same tool call with the same arguments "
+                            "3 times in a row."
+                        ),
+                        error_code=ErrorCode.GRAPH_RECURSION_LIMIT,
+                    )
+                    raise GraphRecursionError(msg)
+
             if version == "v1":
                 return "tools"
             elif version == "v2":
