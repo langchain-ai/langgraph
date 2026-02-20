@@ -542,6 +542,10 @@
       "description": "Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).",
       "type": "object",
       "properties": {
+        "path": {
+          "type": "string",
+          "description": "Import path to an async context manager that yields a `BaseCheckpointSaver`\ninstance.\n\nThe referenced object should be an `@asynccontextmanager`-decorated function\nso that the server can properly manage the checkpointer's lifecycle (e.g.\nopening and closing connections).\n"
+        },
         "serde": {
           "anyOf": [
             {
