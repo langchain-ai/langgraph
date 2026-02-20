@@ -16,6 +16,12 @@ dependencies = [
     "ormsgpack>=1.12.0",
 ]
 
+[project.optional-dependencies]
+pandas = [
+    "pandas>=2.0.0",
+    "pyarrow>=14.0.0",
+]
+
 [project.urls]
 Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint"
 Twitter = "https://x.com/LangChain"
@@ -32,6 +38,7 @@ test = [
   "numpy",
   "pandas",
   "pandas-stubs>=2.2.2.240807",
+  "pyarrow>=14.0.0",
   "redis",
 ]
 lint = [
