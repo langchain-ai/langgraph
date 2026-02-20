@@ -22,6 +22,27 @@ from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
 from langgraph_cli.util import warn_non_wolfi_distro
 from langgraph_cli.version import __version__
 
+
+def _inmem_python_version_note(
+    version: tuple[int, int] | None = None,
+) -> str:
+    """Return a user-facing note when the current Python cannot run `inmem`."""
+    major, minor = version or (sys.version_info.major, sys.version_info.minor)
+    if (major, minor) < (3, 11):
+        return (
+            "\n\nNote: The in-mem server requires Python 3.11 or higher to be installed."
+            f" You are currently using Python {major}.{minor}."
+            ' Please upgrade your Python version before installing "langgraph-cli[inmem]".'
+        )
+    if (major, minor) >= (3, 14):
+        return (
+            "\n\nNote: The in-mem server currently supports Python 3.11-3.13."
+            f" You are currently using Python {major}.{minor}."
+            ' Please use Python 3.13 (or 3.12/3.11) before installing "langgraph-cli[inmem]".'
+        )
+    return ""
+
+
 OPT_DOCKER_COMPOSE = click.option(
     "--docker-compose",
     "-d",
@@ -700,13 +721,7 @@ def dev(
     try:
         from langgraph_api.cli import run_server  # type: ignore
     except ImportError:
-        py_version_msg = ""
-        if sys.version_info < (3, 11):
-            py_version_msg = (
-                "\n\nNote: The in-mem server requires Python 3.11 or higher to be installed."
-                f" You are currently using Python {sys.version_info.major}.{sys.version_info.minor}."
-                ' Please upgrade your Python version before installing "langgraph-cli[inmem]".'
-            )
+        py_version_msg = _inmem_python_version_note()
         try:
             from importlib import util
 
