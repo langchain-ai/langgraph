@@ -487,6 +487,14 @@ def get_checkpoint_id(config: RunnableConfig) -> str | None:
     return config["configurable"].get("checkpoint_id")
 
 
+def get_thread_id(config: RunnableConfig) -> str:
+    """Get thread ID and enforce string-typed identity semantics."""
+    thread_id = config["configurable"].get("thread_id")
+    if not isinstance(thread_id, str):
+        raise TypeError("`thread_id` must be a string.")
+    return thread_id
+
+
 def get_checkpoint_metadata(
     config: RunnableConfig, metadata: CheckpointMetadata
 ) -> CheckpointMetadata:

@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from langchain_core.runnables import RunnableConfig
@@ -72,6 +72,15 @@ class TestAsyncSqliteSaver:
                 **self.metadata_2,
                 "run_id": "my_run_id",
             }
+
+    async def test_rejects_non_string_thread_id(self) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            bad_config = cast(
+                RunnableConfig,
+                {"configurable": {"thread_id": 123, "checkpoint_ns": ""}},
+            )
+            with pytest.raises(TypeError, match="`thread_id` must be a string."):
+                await saver.aput(bad_config, self.chkpnt_1, self.metadata_1, {})
 
     async def test_asearch(self) -> None:
         async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:

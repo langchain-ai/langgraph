@@ -15,6 +15,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
+    get_thread_id,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline, Capabilities
@@ -184,7 +185,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         Returns:
             The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
-        thread_id = config["configurable"]["thread_id"]
+        thread_id = get_thread_id(config)
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         if checkpoint_id:
@@ -243,7 +244,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
             RunnableConfig: Updated configuration after storing the checkpoint.
         """
         configurable = config["configurable"].copy()
-        thread_id = configurable.pop("thread_id")
+        thread_id = get_thread_id(config)
+        configurable.pop("thread_id")
         checkpoint_ns = configurable.pop("checkpoint_ns")
         checkpoint_id = configurable.pop("checkpoint_id", None)
 
@@ -316,7 +318,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         )
         params = await asyncio.to_thread(
             self._dump_writes,
-            config["configurable"]["thread_id"],
+            get_thread_id(config),
             config["configurable"]["checkpoint_ns"],
             config["configurable"]["checkpoint_id"],
             task_id,

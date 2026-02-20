@@ -75,6 +75,15 @@ class TestSqliteSaver:
                 "run_id": "my_run_id",
             }
 
+    def test_rejects_non_string_thread_id(self) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            bad_config = cast(
+                RunnableConfig,
+                {"configurable": {"thread_id": 123, "checkpoint_ns": ""}},
+            )
+            with pytest.raises(TypeError, match="`thread_id` must be a string."):
+                saver.put(bad_config, self.chkpnt_1, self.metadata_1, {})
+
     def test_search(self) -> None:
         with SqliteSaver.from_conn_string(":memory:") as saver:
             # set up test

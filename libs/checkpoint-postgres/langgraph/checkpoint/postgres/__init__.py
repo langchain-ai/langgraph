@@ -15,6 +15,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
+    get_thread_id,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from psycopg import Capabilities, Connection, Cursor, Pipeline
@@ -216,7 +217,7 @@ class PostgresSaver(BasePostgresSaver):
             >>> print(checkpoint_tuple)
             CheckpointTuple(...)
         """  # noqa
-        thread_id = config["configurable"]["thread_id"]
+        thread_id = get_thread_id(config)
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         if checkpoint_id:
@@ -285,7 +286,8 @@ class PostgresSaver(BasePostgresSaver):
             {'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef4f797-8335-6428-8001-8a1503f9b875'}}
         """
         configurable = config["configurable"].copy()
-        thread_id = configurable.pop("thread_id")
+        thread_id = get_thread_id(config)
+        configurable.pop("thread_id")
         checkpoint_ns = configurable.pop("checkpoint_ns")
         checkpoint_id = configurable.pop("checkpoint_id", None)
         copy = checkpoint.copy()
@@ -358,7 +360,7 @@ class PostgresSaver(BasePostgresSaver):
             cur.executemany(
                 query,
                 self._dump_writes(
-                    config["configurable"]["thread_id"],
+                    get_thread_id(config),
                     config["configurable"]["checkpoint_ns"],
                     config["configurable"]["checkpoint_id"],
                     task_id,
