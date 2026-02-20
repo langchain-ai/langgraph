@@ -1,6 +1,6 @@
 from typing import Any, Literal, TypedDict
 
-Distros = Literal["debian", "wolfi", "bullseye", "bookworm"]
+Distros = Literal["debian", "wolfi", "bookworm"]
 MiddlewareOrders = Literal["auth_first", "middleware_first"]
 
 
@@ -107,17 +107,19 @@ class StoreConfig(TypedDict, total=False):
 class ThreadTTLConfig(TypedDict, total=False):
     """Configure a default TTL for checkpointed data within threads."""
 
-    strategy: Literal["delete"]
-    """Strategy to use for deleting checkpointed data.
-    
-    Choices:
-      - "delete": Delete all checkpoints for a thread after TTL expires.
+    strategy: Literal["delete", "keep_latest"]
+    """Action taken when a thread exceeds its TTL.
+
+    - "delete": Remove the thread and all its data entirely.
+    - "keep_latest": Prune old checkpoints but keep the thread and its latest state.
     """
     default_ttl: float | None
     """Default TTL (time-to-live) in minutes for checkpointed data."""
     sweep_interval_minutes: int | None
     """Interval in minutes between sweep iterations.
     If omitted, a default interval will be used (typically ~ 5 minutes)."""
+    sweep_limit: int | None
+    """Maximum number of threads to process per sweep iteration. Defaults to 1000."""
 
 
 class SerdeConfig(TypedDict, total=False):
@@ -165,6 +167,26 @@ class CheckpointerConfig(TypedDict, total=False):
     If omitted, no checkpointer is set up (the object store will still be present, however).
     """
 
+    path: str
+    """Import path to an async context manager that yields a `BaseCheckpointSaver`
+    instance.
+
+    The referenced object should be an `@asynccontextmanager`-decorated function
+    so that the server can properly manage the checkpointer's lifecycle (e.g.
+    opening and closing connections).
+
+    Examples:
+    - "./my_checkpointer.py:create_checkpointer"
+    - "my_package.checkpointer:create_checkpointer"
+
+    When provided, this replaces the default checkpointer.
+
+    You can use the `langgraph-checkpoint-conformance` package
+    (https://pypi.org/project/langgraph-checkpoint-conformance/) to run simple
+    conformance tests against your custom checkpointer and catch
+    incompatibilities early.
+    """
+
     ttl: ThreadTTLConfig | None
     """Optional. Defines the TTL (time-to-live) behavior configuration.
     
@@ -173,14 +195,12 @@ class CheckpointerConfig(TypedDict, total=False):
     """
     serde: SerdeConfig | None
     """Optional. Defines the serde configuration.
-    
+
     If provided, the checkpointer will apply serde settings according to the configuration.
     If omitted, no serde behavior is configured.
 
     This configuration requires server version 0.5 or later to take effect.
     """
-    sweep_limit: int | None
-    """Maximum number of threads to process per sweep iteration. Defaults to 1000."""
 
 
 class SecurityConfig(TypedDict, total=False):
@@ -559,7 +579,7 @@ class Config(TypedDict, total=False):
     image_distro: Distros | None
     """Optional. Linux distribution for the base image.
     
-    Must be one of 'wolfi', 'debian', 'bullseye', or 'bookworm'.
+    Must be one of 'wolfi', 'debian', or 'bookworm'.
     If omitted, defaults to 'debian' ('latest').
     """
 

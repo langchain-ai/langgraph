@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "1.0.8"
+version = "1.0.9"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.10"
@@ -27,7 +27,7 @@ dependencies = [
     "langchain-core>=0.1",
     "langgraph-checkpoint>=2.1.0,<5.0.0",
     "langgraph-sdk>=0.3.0,<0.4.0",
-    "langgraph-prebuilt>=1.0.7,<1.1.0",
+    "langgraph-prebuilt>=1.0.8,<1.1.0",
     "xxhash>=3.5.0",
     "pydantic>=2.7.4",
 ]
@@ -60,7 +60,7 @@ test = [
     "langgraph-checkpoint-postgres",
     "langgraph-sdk",
     "psycopg[binary]",
-    "uvloop==0.21.0beta1",
+    "uvloop==0.22.1",
     "pyperf",
     "py-spy",
     "pycryptodome",

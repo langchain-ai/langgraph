@@ -19,7 +19,7 @@ class AsyncListByteStream(httpx.AsyncByteStream):
         self._chunks = list(chunks)
         self._exc = exc
 
-    async def __aiter__(self):  # type: ignore[override]
+    async def __aiter__(self):
         for chunk in self._chunks:
             yield chunk
         if self._exc is not None:
@@ -34,7 +34,7 @@ class ListByteStream(httpx.ByteStream):
         self._chunks = list(chunks)
         self._exc = exc
 
-    def __iter__(self):  # type: ignore[override]
+    def __iter__(self):
         yield from self._chunks
         if self._exc is not None:
             raise self._exc
