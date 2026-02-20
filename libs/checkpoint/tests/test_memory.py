@@ -209,6 +209,31 @@ class TestMemorySaver:
         assert latest is not None
         assert latest.checkpoint["id"] == "aaa-second-id"
 
+    def test_before_cursor_uses_insertion_order(self) -> None:
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-before",
+                "checkpoint_ns": "",
+            }
+        }
+        first = empty_checkpoint()
+        first["id"] = "2"
+        second = empty_checkpoint()
+        second["id"] = "10"
+
+        self.memory_saver.put(config, first, {"source": "input", "step": 1}, {})
+        self.memory_saver.put(config, second, {"source": "loop", "step": 2}, {})
+
+        first_page = list(self.memory_saver.list(config, limit=1))
+        assert len(first_page) == 1
+        assert first_page[0].checkpoint["id"] == "10"
+
+        second_page = list(
+            self.memory_saver.list(config, before=first_page[0].config, limit=1)
+        )
+        assert len(second_page) == 1
+        assert second_page[0].checkpoint["id"] == "2"
+
 
 async def test_memory_saver() -> None:
     from langgraph.checkpoint.memory import InMemorySaver

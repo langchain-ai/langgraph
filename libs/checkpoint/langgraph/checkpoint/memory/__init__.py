@@ -250,25 +250,24 @@ class InMemorySaver(
                 ):
                     continue
 
+                before_checkpoint_id = get_checkpoint_id(before) if before else None
+                before_seen = before_checkpoint_id is None
                 for checkpoint_id, (
                     checkpoint,
                     metadata_b,
                     parent_checkpoint_id,
-                ) in sorted(
-                    self.storage[thread_id][checkpoint_ns].items(),
-                    key=lambda x: x[0],
-                    reverse=True,
-                ):
+                ) in reversed(self.storage[thread_id][checkpoint_ns].items()):
                     # filter by checkpoint ID from config
                     if config_checkpoint_id and checkpoint_id != config_checkpoint_id:
                         continue
 
-                    # filter by checkpoint ID from `before` config
-                    if (
-                        before
-                        and (before_checkpoint_id := get_checkpoint_id(before))
-                        and checkpoint_id >= before_checkpoint_id
-                    ):
+                    # filter by checkpoint ID from `before` config using the same
+                    # insertion order as iteration.
+                    if before_checkpoint_id and not before_seen:
+                        if checkpoint_id == before_checkpoint_id:
+                            before_seen = True
+                        continue
+                    if before_checkpoint_id and checkpoint_id == before_checkpoint_id:
                         continue
 
                     # filter by metadata
