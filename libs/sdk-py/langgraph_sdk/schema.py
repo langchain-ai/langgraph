@@ -15,7 +15,7 @@ from typing import (
     Union,
 )
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 Json = dict[str, Any] | None
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
@@ -304,6 +304,8 @@ class Thread(TypedDict):
     """The current state of the thread."""
     interrupts: dict[str, list[Interrupt]]
     """Mapping of task ids to interrupts that were raised in that task."""
+    extracted: NotRequired[dict[str, Any]]
+    """Extracted values from thread data. Only present when `extract` is used in search."""
 
 
 class ThreadTask(TypedDict):
