@@ -203,6 +203,8 @@ class BranchSpec(NamedTuple):
             destinations = [self._resolve_destination(r) for r in result]
         else:
             destinations = cast(Sequence[Send | str], result)
+        # Routing to END is terminal and does not emit branch writes.
+        destinations = [dest for dest in destinations if dest != END]
         if any(dest is None or dest == START for dest in destinations):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Send)):
