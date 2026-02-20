@@ -421,6 +421,7 @@ dev = [
     { name = "anyio" },
     { name = "codespell" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "mypy" },
     { name = "psycopg", extras = ["binary"] },
     { name = "pytest" },
@@ -437,6 +438,7 @@ lint = [
 test = [
     { name = "anyio" },
     { name = "langgraph-checkpoint", editable = "../checkpoint" },
+    { name = "langgraph-checkpoint-conformance", editable = "../checkpoint-conformance" },
     { name = "psycopg", extras = ["binary"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
