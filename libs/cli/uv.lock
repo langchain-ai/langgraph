@@ -974,8 +974,8 @@ dependencies = [
 
 [package.optional-dependencies]
 inmem = [
-    { name = "langgraph-api", marker = "python_full_version >= '3.11'" },
-    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11'" },
+    { name = "langgraph-api", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
+    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and python_full_version < '3.14'" },
     { name = "python-dotenv" },
 ]
 
@@ -1007,8 +1007,8 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1.7" },
-    { name = "langgraph-api", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.5.35,<0.8.0" },
-    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.7" },
+    { name = "langgraph-api", marker = "python_full_version >= '3.11' and python_full_version < '3.14' and extra == 'inmem'", specifier = ">=0.5.35,<0.8.0" },
+    { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and python_full_version < '3.14' and extra == 'inmem'", specifier = ">=0.7" },
     { name = "langgraph-sdk", marker = "python_full_version >= '3.11'", specifier = ">=0.1.0" },
     { name = "python-dotenv", marker = "extra == 'inmem'", specifier = ">=0.8.0" },
 ]

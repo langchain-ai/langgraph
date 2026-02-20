@@ -13,6 +13,7 @@ For development mode with hot reloading:
 ```bash
 pip install "langgraph-cli[inmem]"
 ```
+Note: `inmem` currently supports Python `3.11` to `3.13`.
 
 ## Commands
 

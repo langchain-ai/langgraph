@@ -19,8 +19,8 @@ dependencies = [
 path = "langgraph_cli/__init__.py"
 [project.optional-dependencies]
 inmem = [
-    "langgraph-api>=0.5.35,<0.8.0 ; python_version >= '3.11'",
-    "langgraph-runtime-inmem>=0.7 ; python_version >= '3.11'",
+    "langgraph-api>=0.5.35,<0.8.0 ; python_version >= '3.11' and python_version < '3.14'",
+    "langgraph-runtime-inmem>=0.7 ; python_version >= '3.11' and python_version < '3.14'",
     "python-dotenv>=0.8.0",
 ]
 
