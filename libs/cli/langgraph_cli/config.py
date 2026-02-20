@@ -678,6 +678,51 @@ def _update_encryption_path(
     )
 
 
+def _update_checkpointer_path(
+    config_path: pathlib.Path, config: Config, local_deps: LocalDeps
+) -> None:
+    """Update checkpointer.path to use Docker container paths."""
+    checkpointer_conf = config.get("checkpointer")
+    if not checkpointer_conf or not isinstance(checkpointer_conf, dict):
+        return
+    if not (path_str := checkpointer_conf.get("path")):
+        return
+
+    module_str, sep, attr_str = path_str.partition(":")
+    if not sep or not module_str.startswith("."):
+        return  # Already validated or absolute path
+
+    resolved = config_path.parent / module_str
+    if not resolved.exists():
+        raise FileNotFoundError(
+            f"Checkpointer file not found: {resolved} (from {path_str})"
+        )
+    if not resolved.is_file():
+        raise IsADirectoryError(f"Checkpointer path must be a file: {resolved}")
+
+    # Check faux packages first (higher priority)
+    for faux_path, (_, destpath) in local_deps.faux_pkgs.items():
+        if resolved.is_relative_to(faux_path):
+            new_path = f"{destpath}/{resolved.relative_to(faux_path)}:{attr_str}"
+            checkpointer_conf["path"] = new_path
+            return
+
+    # Check real packages
+    for real_path in local_deps.real_pkgs:
+        if resolved.is_relative_to(real_path):
+            new_path = (
+                f"/deps/{real_path.name}/{resolved.relative_to(real_path)}:{attr_str}"
+            )
+            checkpointer_conf["path"] = new_path
+            return
+
+    raise ValueError(
+        f"Checkpointer file '{resolved}' not covered by dependencies.\n"
+        "Add its parent directory to the 'dependencies' array in your config.\n"
+        f"Current dependencies: {config['dependencies']}"
+    )
+
+
 def _update_http_app_path(
     config_path: pathlib.Path, config: Config, local_deps: LocalDeps
 ) -> None:
@@ -877,6 +922,8 @@ def python_config_to_docker(
     _update_auth_path(config_path, config, local_deps)
     # Rewrite encryption path, so it points to the correct location in the Docker container
     _update_encryption_path(config_path, config, local_deps)
+    # Rewrite checkpointer path, so it points to the correct location in the Docker container
+    _update_checkpointer_path(config_path, config, local_deps)
     # Rewrite HTTP app path, so it points to the correct location in the Docker container
     _update_http_app_path(config_path, config, local_deps)
 
