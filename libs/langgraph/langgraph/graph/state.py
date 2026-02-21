@@ -1042,6 +1042,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
+        validate_input: Callable[[Any, dict[str, Any]], None] | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1074,6 +1075,34 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
+            validate_input: Optional validation function for external inputs.
+                The function receives `(input, current_state)` and should raise an
+                exception if the input is invalid, or return normally if valid.
+
+                This validation only applies to external updates (from `invoke()`, `stream()`,
+                `update_state()`, or `Command.update`) - internal node updates bypass this
+                validation, allowing trusted nodes to perform privileged operations.
+
+                Example:
+                    ```python
+                    from langgraph.graph import StateGraph
+                    from langgraph.graph.message import validate_messages_append_only
+
+                    builder = StateGraph(MessagesState)
+                    # ... add nodes ...
+
+                    # Use built-in validator
+                    graph = builder.compile(
+                        validate_input=validate_messages_append_only
+                    )
+
+                    # Or custom validator
+                    def my_validator(input: dict, current_state: dict) -> None:
+                        if "forbidden_key" in input:
+                            raise ValueError("Forbidden key detected")
+
+                    graph = builder.compile(validate_input=my_validator)
+                    ```
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
@@ -1134,6 +1163,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             store=store,
             cache=cache,
             name=name or "LangGraph",
+            validate_input=validate_input,
         )
 
         compiled.attach_node(START, None)

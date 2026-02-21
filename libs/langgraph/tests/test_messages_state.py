@@ -20,7 +20,7 @@ from langgraph.graph.message import REMOVE_ALL_MESSAGES, MessagesState, push_mes
 from langgraph.graph.state import StateGraph
 from tests.messages import _AnyIdHumanMessage
 
-_, CORE_MINOR, CORE_PATCH = (
+CORE_MAJOR, CORE_MINOR, CORE_PATCH = (
     int("".join(c for c in v if c.isdigit()))
     for v in langchain_core.__version__.split(".")
 )
@@ -205,7 +205,11 @@ def test_messages_state(state_schema):
 
 
 @pytest.mark.skipif(
-    condition=not ((CORE_MINOR == 3 and CORE_PATCH >= 11) or CORE_MINOR > 3),
+    condition=not (
+        (CORE_MAJOR == 0 and CORE_MINOR == 3 and CORE_PATCH >= 11)
+        or (CORE_MAJOR == 0 and CORE_MINOR > 3)
+        or CORE_MAJOR > 0
+    ),
     reason="Requires langchain_core>=0.3.11.",
 )
 def test_messages_state_format_openai():
