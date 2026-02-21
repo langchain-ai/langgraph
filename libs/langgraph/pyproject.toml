@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langgraph"
-version = "1.0.9"
+dynamic = ["version"]
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 requires-python = ">=3.10"
@@ -116,6 +116,9 @@ omit = ["tests/*"]
 now = true
 delay = 0.1
 patterns = ["*.py"]
+
+[tool.hatch.version]
+path = "langgraph/version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["langgraph"]
