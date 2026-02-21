@@ -424,6 +424,14 @@ class CronUpdate(TypedDict, total=False):
     """What to do with the thread after the run completes."""
     enabled: bool
     """Enable or disable the cron job."""
+    stream_mode: StreamMode | list[StreamMode]
+    """The stream mode(s) to use."""
+    stream_subgraphs: bool
+    """Whether to stream output from subgraphs."""
+    stream_resumable: bool
+    """Whether to persist the stream chunks in order to resume the stream later."""
+    durability: Durability
+    """Durability level for the run. Must be one of 'sync', 'async', or 'exit'."""
 
 
 # Select field aliases for client-side typing of `select` parameters.

@@ -167,6 +167,26 @@ class CheckpointerConfig(TypedDict, total=False):
     If omitted, no checkpointer is set up (the object store will still be present, however).
     """
 
+    path: str
+    """Import path to an async context manager that yields a `BaseCheckpointSaver`
+    instance.
+
+    The referenced object should be an `@asynccontextmanager`-decorated function
+    so that the server can properly manage the checkpointer's lifecycle (e.g.
+    opening and closing connections).
+
+    Examples:
+    - "./my_checkpointer.py:create_checkpointer"
+    - "my_package.checkpointer:create_checkpointer"
+
+    When provided, this replaces the default checkpointer.
+
+    You can use the `langgraph-checkpoint-conformance` package
+    (https://pypi.org/project/langgraph-checkpoint-conformance/) to run simple
+    conformance tests against your custom checkpointer and catch
+    incompatibilities early.
+    """
+
     ttl: ThreadTTLConfig | None
     """Optional. Defines the TTL (time-to-live) behavior configuration.
     

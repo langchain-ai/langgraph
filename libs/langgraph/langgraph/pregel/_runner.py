@@ -728,7 +728,6 @@ async def _acall_impl(
                     )
                 else:
                     fut.set_result(None)
-                futures()[fut] = next_task  # type: ignore[index]
             else:
                 # schedule the next task
                 fut = cast(
