@@ -9,6 +9,7 @@ from typing import Any, overload
 
 import httpx
 
+from langgraph_sdk._shared.command_validation import normalize_and_validate_command
 from langgraph_sdk._shared.utilities import _get_run_metadata_from_response
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import (
@@ -218,11 +219,10 @@ class SyncRunsClient:
                 DeprecationWarning,
                 stacklevel=2,
             )
+        command_payload = normalize_and_validate_command(command)
         payload = {
             "input": input,
-            "command": (
-                {k: v for k, v in command.items() if v is not None} if command else None
-            ),
+            "command": command_payload,
             "config": config,
             "context": context,
             "metadata": metadata,
@@ -463,11 +463,10 @@ class SyncRunsClient:
                 DeprecationWarning,
                 stacklevel=2,
             )
+        command_payload = normalize_and_validate_command(command)
         payload = {
             "input": input,
-            "command": (
-                {k: v for k, v in command.items() if v is not None} if command else None
-            ),
+            "command": command_payload,
             "stream_mode": stream_mode,
             "stream_subgraphs": stream_subgraphs,
             "stream_resumable": stream_resumable,
@@ -512,7 +511,13 @@ class SyncRunsClient:
         """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
-            return {k: v for k, v in payload.items() if v is not None}
+            filtered: dict[str, Any] = {
+                k: v for k, v in payload.items() if v is not None
+            }
+            command_payload = filtered.get("command")
+            if isinstance(command_payload, Mapping):
+                filtered["command"] = normalize_and_validate_command(command_payload)
+            return filtered
 
         filtered = [filter_payload(payload) for payload in payloads]
         return self.http.post(
@@ -693,11 +698,10 @@ class SyncRunsClient:
                 DeprecationWarning,
                 stacklevel=2,
             )
+        command_payload = normalize_and_validate_command(command)
         payload = {
             "input": input,
-            "command": (
-                {k: v for k, v in command.items() if v is not None} if command else None
-            ),
+            "command": command_payload,
             "config": config,
             "context": context,
             "metadata": metadata,
