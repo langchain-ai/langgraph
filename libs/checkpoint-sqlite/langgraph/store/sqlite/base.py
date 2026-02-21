@@ -1146,9 +1146,22 @@ class SqliteStore(BaseSqliteStore, BaseStore):
         return success
 
     def __del__(self) -> None:
-        """Ensure the TTL sweeper thread is stopped when the object is garbage collected."""
-        if hasattr(self, "_ttl_stop_event") and hasattr(self, "_ttl_sweeper_thread"):
-            self.stop_ttl_sweeper(timeout=0.1)
+        """Ensure the TTL sweeper thread is stopped when the object is garbage collected.
+
+        Note: This is a best-effort cleanup. For reliable cleanup, use the context
+        manager protocol or explicitly call stop_ttl_sweeper().
+        """
+        try:
+            if hasattr(self, "_ttl_stop_event") and hasattr(
+                self, "_ttl_sweeper_thread"
+            ):
+                # Use a short timeout to avoid blocking during shutdown
+                # Don't log here as logging may not be available during shutdown
+                self.stop_ttl_sweeper(timeout=0.1)
+        except Exception:
+            # Silently ignore all exceptions during cleanup
+            # Logging or raising here can cause issues during interpreter shutdown
+            pass
 
     def batch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute a batch of operations.
