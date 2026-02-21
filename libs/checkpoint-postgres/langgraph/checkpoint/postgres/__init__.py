@@ -390,6 +390,142 @@ class PostgresSaver(BasePostgresSaver):
                 (str(thread_id),),
             )
 
+    def delete_for_runs(self, run_ids: Sequence[str]) -> None:
+        """Delete all checkpoints and writes for the given run IDs.
+
+        Args:
+            run_ids: The run IDs whose checkpoints should be deleted.
+        """
+        if not run_ids:
+            return
+        with self._cursor(pipeline=True) as cur:
+            cur.execute(
+                """DELETE FROM checkpoint_writes
+                WHERE (thread_id, checkpoint_ns, checkpoint_id) IN (
+                    SELECT thread_id, checkpoint_ns, checkpoint_id
+                    FROM checkpoints
+                    WHERE metadata->>'run_id' = ANY(%s)
+                )""",
+                (list(run_ids),),
+            )
+            cur.execute(
+                """DELETE FROM checkpoint_blobs
+                WHERE (thread_id, checkpoint_ns) IN (
+                    SELECT DISTINCT thread_id, checkpoint_ns
+                    FROM checkpoints
+                    WHERE metadata->>'run_id' = ANY(%s)
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM checkpoints c2
+                    WHERE c2.thread_id = checkpoint_blobs.thread_id
+                    AND c2.checkpoint_ns = checkpoint_blobs.checkpoint_ns
+                    AND (c2.metadata->>'run_id' IS NULL OR c2.metadata->>'run_id' != ALL(%s))
+                    AND c2.checkpoint->'channel_versions' ? checkpoint_blobs.channel
+                )""",
+                (list(run_ids), list(run_ids)),
+            )
+            cur.execute(
+                "DELETE FROM checkpoints WHERE metadata->>'run_id' = ANY(%s)",
+                (list(run_ids),),
+            )
+
+    def copy_thread(self, source_thread_id: str, target_thread_id: str) -> None:
+        """Copy all checkpoints and writes from source thread to target thread.
+
+        Args:
+            source_thread_id: The thread ID to copy from.
+            target_thread_id: The thread ID to copy to.
+        """
+        with self._cursor(pipeline=True) as cur:
+            cur.execute(
+                """INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint, metadata)
+                SELECT %s, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint, metadata
+                FROM checkpoints
+                WHERE thread_id = %s
+                ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id) DO NOTHING""",
+                (target_thread_id, source_thread_id),
+            )
+            cur.execute(
+                """INSERT INTO checkpoint_blobs (thread_id, checkpoint_ns, channel, version, type, blob)
+                SELECT %s, checkpoint_ns, channel, version, type, blob
+                FROM checkpoint_blobs
+                WHERE thread_id = %s
+                ON CONFLICT (thread_id, checkpoint_ns, channel, version) DO NOTHING""",
+                (target_thread_id, source_thread_id),
+            )
+            cur.execute(
+                """INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, blob)
+                SELECT %s, checkpoint_ns, checkpoint_id, task_id, task_path, idx, channel, type, blob
+                FROM checkpoint_writes
+                WHERE thread_id = %s
+                ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING""",
+                (target_thread_id, source_thread_id),
+            )
+
+    def prune(
+        self,
+        thread_ids: Sequence[str],
+        *,
+        strategy: str = "keep_latest",
+    ) -> None:
+        """Prune checkpoints for given threads.
+
+        Args:
+            thread_ids: The thread IDs to prune.
+            strategy: `"keep_latest"` keeps only the latest checkpoint per
+                thread+namespace. `"delete"` removes everything.
+        """
+        if not thread_ids:
+            return
+        if strategy == "delete":
+            with self._cursor(pipeline=True) as cur:
+                cur.execute(
+                    "DELETE FROM checkpoints WHERE thread_id = ANY(%s)",
+                    (list(thread_ids),),
+                )
+                cur.execute(
+                    "DELETE FROM checkpoint_blobs WHERE thread_id = ANY(%s)",
+                    (list(thread_ids),),
+                )
+                cur.execute(
+                    "DELETE FROM checkpoint_writes WHERE thread_id = ANY(%s)",
+                    (list(thread_ids),),
+                )
+        elif strategy == "keep_latest":
+            with self._cursor(pipeline=True) as cur:
+                cur.execute(
+                    """DELETE FROM checkpoints
+                    WHERE thread_id = ANY(%s)
+                    AND (thread_id, checkpoint_ns, checkpoint_id) NOT IN (
+                        SELECT DISTINCT ON (thread_id, checkpoint_ns)
+                            thread_id, checkpoint_ns, checkpoint_id
+                        FROM checkpoints
+                        WHERE thread_id = ANY(%s)
+                        ORDER BY thread_id, checkpoint_ns, checkpoint_id DESC
+                    )""",
+                    (list(thread_ids), list(thread_ids)),
+                )
+                cur.execute(
+                    """DELETE FROM checkpoint_writes
+                    WHERE thread_id = ANY(%s)
+                    AND (thread_id, checkpoint_ns, checkpoint_id) NOT IN (
+                        SELECT thread_id, checkpoint_ns, checkpoint_id
+                        FROM checkpoints
+                        WHERE thread_id = ANY(%s)
+                    )""",
+                    (list(thread_ids), list(thread_ids)),
+                )
+                cur.execute(
+                    """DELETE FROM checkpoint_blobs
+                    WHERE thread_id = ANY(%s)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM checkpoints c
+                        WHERE c.thread_id = checkpoint_blobs.thread_id
+                        AND c.checkpoint_ns = checkpoint_blobs.checkpoint_ns
+                    )""",
+                    (list(thread_ids),),
+                )
+
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor[DictRow]]:
         """Create a database cursor as a context manager.
