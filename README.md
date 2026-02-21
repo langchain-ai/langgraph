@@ -66,6 +66,17 @@ LangGraph provides low-level supporting infrastructure for *any* long-running, s
 - [Debugging with LangSmith](http://www.langchain.com/langsmith): Gain deep visibility into complex agent behavior with visualization tools that trace execution paths, capture state transitions, and provide detailed runtime metrics.
 - [Production-ready deployment](https://docs.langchain.com/langsmith/app-development): Deploy sophisticated agent systems confidently with scalable infrastructure designed to handle the unique challenges of stateful, long-running workflows.
 
+When using human-in-the-loop interrupts, you can defer expensive context building until
+an interrupt is actually raised:
+
+```python
+from langgraph.types import interrupt, ainterrupt
+
+answer = interrupt(deferred=lambda: build_expensive_context())
+# or in async nodes:
+answer = await ainterrupt(deferred=fetch_latest_context)
+```
+
 ## LangGraph’s ecosystem
 
 While LangGraph can be used standalone, it also integrates seamlessly with any LangChain product, giving developers a full suite of tools for building agents. To improve your LLM application development, pair LangGraph with:
