@@ -1043,18 +1043,24 @@ class SqliteStore(BaseSqliteStore, BaseStore):
 
             self.is_setup = True
 
-    def sweep_ttl(self) -> int:
+    def sweep_ttl(self, *, now: datetime.datetime | None = None) -> int:
         """Delete expired store items based on TTL.
+
+        Args:
+            now: Optional UTC timestamp used as the deterministic sweep cutoff.
+                If omitted, uses the current UTC time.
 
         Returns:
             int: The number of deleted items.
         """
+        cutoff = now or datetime.datetime.now(datetime.timezone.utc)
         with self._cursor() as cur:
             cur.execute(
                 """
                 DELETE FROM store
-                WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP
-                """
+                WHERE expires_at IS NOT NULL AND expires_at < ?
+                """,
+                (cutoff,),
             )
             deleted_count = cur.rowcount
             return deleted_count
