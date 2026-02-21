@@ -179,7 +179,9 @@ class InMemorySaver(
                 )
         else:
             if checkpoints := self.storage[thread_id][checkpoint_ns]:
-                checkpoint_id = max(checkpoints.keys())
+                # Dict insertion order preserves write order in Python 3.7+.
+                # Use last-written checkpoint instead of lexicographic max ID.
+                checkpoint_id = next(reversed(checkpoints))
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 checkpoint_ = self.serde.loads_typed(checkpoint)
@@ -248,26 +250,22 @@ class InMemorySaver(
                     and checkpoint_ns != config_checkpoint_ns
                 ):
                     continue
+                before_checkpoint_id = get_checkpoint_id(before) if before else None
+                reached_before_boundary = before_checkpoint_id is None
 
                 for checkpoint_id, (
                     checkpoint,
                     metadata_b,
                     parent_checkpoint_id,
-                ) in sorted(
-                    self.storage[thread_id][checkpoint_ns].items(),
-                    key=lambda x: x[0],
-                    reverse=True,
-                ):
-                    # filter by checkpoint ID from config
-                    if config_checkpoint_id and checkpoint_id != config_checkpoint_id:
+                ) in reversed(self.storage[thread_id][checkpoint_ns].items()):
+                    # filter by checkpoint position from `before` config
+                    if not reached_before_boundary:
+                        if checkpoint_id == before_checkpoint_id:
+                            reached_before_boundary = True
                         continue
 
-                    # filter by checkpoint ID from `before` config
-                    if (
-                        before
-                        and (before_checkpoint_id := get_checkpoint_id(before))
-                        and checkpoint_id >= before_checkpoint_id
-                    ):
+                    # filter by checkpoint ID from config
+                    if config_checkpoint_id and checkpoint_id != config_checkpoint_id:
                         continue
 
                     # filter by metadata
