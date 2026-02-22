@@ -3,10 +3,11 @@ from __future__ import annotations
 import dataclasses
 import types
 import weakref
-from collections.abc import Generator, Sequence
-from typing import Annotated, Any, Optional, Union, get_origin, get_type_hints
+from collections.abc import Callable, Generator, Sequence
+from typing import Annotated, Any, Optional, Union, cast, get_origin, get_type_hints
 
 from pydantic import BaseModel
+from pydantic_core import PydanticUndefined
 from typing_extensions import NotRequired, ReadOnly, Required
 
 from langgraph._internal._typing import MISSING
@@ -101,6 +102,14 @@ def get_field_default(name: str, type_: Any, schema: type[Any]) -> Any:
             return ...
         # Handle NotRequired[<type>] for earlier versions of python
         return None
+    if isinstance(schema, type) and issubclass(schema, BaseModel):
+        if name in schema.model_fields:
+            field = schema.model_fields[name]
+            if field.default_factory is not None:
+                factory = cast(Callable[[], Any], field.default_factory)
+                return factory()
+            if field.default is not PydanticUndefined:
+                return field.default
     if dataclasses.is_dataclass(schema):
         field_info = next(
             (f for f in dataclasses.fields(schema) if f.name == name), None
