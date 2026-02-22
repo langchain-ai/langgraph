@@ -6,7 +6,13 @@ import http
 from collections.abc import Mapping
 
 
-class HTTPException(Exception):
+try:
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+except ImportError:
+    StarletteHTTPException = Exception  # type: ignore
+
+
+class HTTPException(StarletteHTTPException):
     """HTTP exception that you can raise to return a specific HTTP error response.
 
     Since this is defined in the auth module, we default to a 401 status code.
@@ -47,6 +53,12 @@ class HTTPException(Exception):
         self.status_code = status_code
         self.detail = detail
         self.headers = headers
+
+        # Ensure we initialize the parent correctly if it's the Starlette exception
+        if StarletteHTTPException is not Exception:
+            super().__init__(status_code=status_code, detail=detail)  # type: ignore
+        else:
+            super().__init__(detail)
 
     def __str__(self) -> str:
         return f"{self.status_code}: {self.detail}"
