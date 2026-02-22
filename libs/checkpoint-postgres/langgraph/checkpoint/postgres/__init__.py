@@ -5,6 +5,7 @@ from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import Any
+import time
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
@@ -18,6 +19,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from psycopg import Capabilities, Connection, Cursor, Pipeline
+from psycopg.errors import OperationalError
 from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
@@ -30,7 +32,15 @@ Conn = _internal.Conn  # For backward compatibility
 
 
 class PostgresSaver(BasePostgresSaver):
-    """Checkpointer that stores checkpoints in a Postgres database."""
+    """Checkpointer that stores checkpoints in a Postgres database.
+
+    Args:
+        conn: A `psycopg.Connection` or `psycopg_pool.ConnectionPool` to use.
+        pipe: Optional `Pipeline` object when using a single `Connection` in pipeline mode.
+        serde: Optional serializer implementation.
+        max_retries: Maximum number of retries for transient connection errors (default: 3).
+        retry_delay_seconds: Delay between retries in seconds (default: 2.0).
+    """
 
     lock: threading.Lock
 
@@ -39,6 +49,9 @@ class PostgresSaver(BasePostgresSaver):
         conn: _internal.Conn,
         pipe: Pipeline | None = None,
         serde: SerializerProtocol | None = None,
+        *,
+        max_retries: int = 3,
+        retry_delay_seconds: float = 2.0,
     ) -> None:
         super().__init__(serde=serde)
         if isinstance(conn, ConnectionPool) and pipe is not None:
@@ -50,6 +63,19 @@ class PostgresSaver(BasePostgresSaver):
         self.pipe = pipe
         self.lock = threading.Lock()
         self.supports_pipeline = Capabilities().has_pipeline()
+        # Retry configuration
+        self.max_retries = max_retries
+        self.retry_delay_seconds = retry_delay_seconds
+        # Preserve connection info for reconnection attempts
+        try:
+            if isinstance(conn, ConnectionPool):
+                self._conninfo: str | None = getattr(conn, "conninfo", None)
+            else:
+                # psycopg3 Connection exposes dsn via .info.dsn
+                self._conninfo = getattr(conn, "info", None).dsn if getattr(conn, "info", None) else None
+        except Exception:
+            # Best-effort: if we cannot determine conninfo, leave as None.
+            self._conninfo = None
 
     @classmethod
     @contextmanager
@@ -74,6 +100,84 @@ class PostgresSaver(BasePostgresSaver):
             else:
                 yield cls(conn)
 
+    # ---- Minimal retry helpers for transient connection errors ----
+    def _execute_with_retries(self, fn, *args, **kwargs):
+        """Execute a callable with minimal retry logic for transient DB errors.
+
+        Retries on psycopg `OperationalError` and built-in `ConnectionError`.
+        On each failure: sleep, try to reconnect, then retry up to `self.max_retries`
+        total attempts. The helper preserves the original return value and re-raises
+        the last exception if all retries fail.
+        """
+        for attempt in range(self.max_retries):
+            try:
+                return fn(*args, **kwargs)
+            except (OperationalError, ConnectionError):
+                if attempt == self.max_retries - 1:
+                    # Re-raise the original exception on final failure
+                    raise
+                # Backoff then reconnect and retry
+                try:
+                    time.sleep(self.retry_delay_seconds)
+                except Exception:
+                    # Sleep errors shouldn't prevent a retry attempt
+                    pass
+                try:
+                    self._reconnect()
+                except Exception:
+                    # If reconnect fails, continue to retry and eventually re-raise
+                    pass
+        # Should not reach here
+        return fn(*args, **kwargs)
+
+    def _reconnect(self) -> None:
+        """Attempt to reopen the underlying connection/pool using stored conninfo.
+
+        - Safely closes existing connection if applicable.
+        - Reinitializes a `ConnectionPool` from the same conninfo when needed.
+        - Otherwise, creates a new `Connection` with the same parameters.
+        """
+        # Safely close existing connection object if it supports close
+        try:
+            if isinstance(self.conn, Connection):
+                try:
+                    # psycopg3 `close()` is idempotent; guard for safety
+                    self.conn.close()
+                except Exception:
+                    pass
+            elif isinstance(self.conn, ConnectionPool):
+                try:
+                    self.conn.close()
+                except Exception:
+                    pass
+        except Exception:
+            # Never let close errors prevent a reconnect attempt
+            pass
+
+        if not getattr(self, "_conninfo", None):
+            # If we don't know how to recreate the connection, nothing more to do
+            return
+
+        if isinstance(self.conn, ConnectionPool):
+            # Recreate pool from conninfo
+            try:
+                self.conn = ConnectionPool(self._conninfo)  # type: ignore[assignment]
+            except Exception:
+                # Leave as-is; caller will handle retries and failures
+                pass
+        else:
+            # Recreate single connection
+            try:
+                self.conn = Connection.connect(  # type: ignore[assignment]
+                    self._conninfo,
+                    autocommit=True,
+                    prepare_threshold=0,
+                    row_factory=dict_row,
+                )
+            except Exception:
+                # Leave as-is; caller will handle retries and failures
+                pass
+
     def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
 
@@ -81,25 +185,28 @@ class PostgresSaver(BasePostgresSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        with self._cursor() as cur:
-            cur.execute(self.MIGRATIONS[0])
-            results = cur.execute(
-                "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-            )
-            row = results.fetchone()
-            if row is None:
-                version = -1
-            else:
-                version = row["v"]
-            for v, migration in zip(
-                range(version + 1, len(self.MIGRATIONS)),
-                self.MIGRATIONS[version + 1 :],
-                strict=False,
-            ):
-                cur.execute(migration)
-                cur.execute("INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,))
-        if self.pipe:
-            self.pipe.sync()
+        def _op() -> None:
+            with self._cursor() as cur:
+                cur.execute(self.MIGRATIONS[0])
+                results = cur.execute(
+                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                )
+                row = results.fetchone()
+                if row is None:
+                    version = -1
+                else:
+                    version = row["v"]
+                for v, migration in zip(
+                    range(version + 1, len(self.MIGRATIONS)),
+                    self.MIGRATIONS[version + 1 :],
+                    strict=False,
+                ):
+                    cur.execute(migration)
+                    cur.execute("INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,))
+            if self.pipe:
+                self.pipe.sync()
+
+        self._execute_with_retries(_op)
 
     def list(
         self,
@@ -148,38 +255,43 @@ class PostgresSaver(BasePostgresSaver):
             query += " LIMIT %s"
             params.append(int(limit))
         # if we change this to use .stream() we need to make sure to close the cursor
-        with self._cursor() as cur:
-            cur.execute(query, params)
-            values = cur.fetchall()
-            if not values:
-                return
-            # migrate pending sends if necessary
-            if to_migrate := [
-                v
-                for v in values
-                if v["checkpoint"]["v"] < 4 and v["parent_checkpoint_id"]
-            ]:
-                cur.execute(
-                    self.SELECT_PENDING_SENDS_SQL,
-                    (
-                        values[0]["thread_id"],
-                        [v["parent_checkpoint_id"] for v in to_migrate],
-                    ),
-                )
-                grouped_by_parent = defaultdict(list)
-                for value in to_migrate:
-                    grouped_by_parent[value["parent_checkpoint_id"]].append(value)
-                for sends in cur:
-                    for value in grouped_by_parent[sends["checkpoint_id"]]:
-                        if value["channel_values"] is None:
-                            value["channel_values"] = []
-                        self._migrate_pending_sends(
-                            sends["sends"],
-                            value["checkpoint"],
-                            value["channel_values"],
-                        )
-            for value in values:
-                yield self._load_checkpoint_tuple(value)
+        def _op() -> list[CheckpointTuple]:
+            # if we change this to use .stream() we need to make sure to close the cursor
+            with self._cursor() as cur:
+                cur.execute(query, params)
+                values = cur.fetchall()
+                if not values:
+                    return []
+                # migrate pending sends if necessary
+                if to_migrate := [
+                    v
+                    for v in values
+                    if v["checkpoint"]["v"] < 4 and v["parent_checkpoint_id"]
+                ]:
+                    cur.execute(
+                        self.SELECT_PENDING_SENDS_SQL,
+                        (
+                            values[0]["thread_id"],
+                            [v["parent_checkpoint_id"] for v in to_migrate],
+                        ),
+                    )
+                    grouped_by_parent = defaultdict(list)
+                    for value in to_migrate:
+                        grouped_by_parent[value["parent_checkpoint_id"]].append(value)
+                    for sends in cur:
+                        for value in grouped_by_parent[sends["checkpoint_id"]]:
+                            if value["channel_values"] is None:
+                                value["channel_values"] = []
+                            self._migrate_pending_sends(
+                                sends["sends"],
+                                value["checkpoint"],
+                                value["channel_values"],
+                            )
+                return [self._load_checkpoint_tuple(v) for v in values]
+
+        results = self._execute_with_retries(_op)
+        for item in results:
+            yield item
 
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database.
@@ -226,31 +338,34 @@ class PostgresSaver(BasePostgresSaver):
             args = (thread_id, checkpoint_ns)
             where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
 
-        with self._cursor() as cur:
-            cur.execute(
-                self.SELECT_SQL + where,
-                args,
-            )
-            value = cur.fetchone()
-            if value is None:
-                return None
-
-            # migrate pending sends if necessary
-            if value["checkpoint"]["v"] < 4 and value["parent_checkpoint_id"]:
+        def _op() -> CheckpointTuple | None:
+            with self._cursor() as cur:
                 cur.execute(
-                    self.SELECT_PENDING_SENDS_SQL,
-                    (thread_id, [value["parent_checkpoint_id"]]),
+                    self.SELECT_SQL + where,
+                    args,
                 )
-                if sends := cur.fetchone():
-                    if value["channel_values"] is None:
-                        value["channel_values"] = []
-                    self._migrate_pending_sends(
-                        sends["sends"],
-                        value["checkpoint"],
-                        value["channel_values"],
-                    )
+                value = cur.fetchone()
+                if value is None:
+                    return None
 
-            return self._load_checkpoint_tuple(value)
+                # migrate pending sends if necessary
+                if value["checkpoint"]["v"] < 4 and value["parent_checkpoint_id"]:
+                    cur.execute(
+                        self.SELECT_PENDING_SENDS_SQL,
+                        (thread_id, [value["parent_checkpoint_id"]]),
+                    )
+                    if sends := cur.fetchone():
+                        if value["channel_values"] is None:
+                            value["channel_values"] = []
+                        self._migrate_pending_sends(
+                            sends["sends"],
+                            value["checkpoint"],
+                            value["channel_values"],
+                        )
+
+                return self._load_checkpoint_tuple(value)
+
+        return self._execute_with_retries(_op)
 
     def put(
         self,
@@ -307,31 +422,34 @@ class PostgresSaver(BasePostgresSaver):
             else:
                 blob_values[k] = copy["channel_values"].pop(k)
 
-        with self._cursor(pipeline=True) as cur:
-            if blob_versions := {
-                k: v for k, v in new_versions.items() if k in blob_values
-            }:
-                cur.executemany(
-                    self.UPSERT_CHECKPOINT_BLOBS_SQL,
-                    self._dump_blobs(
+        def _op() -> RunnableConfig:
+            with self._cursor(pipeline=True) as cur:
+                if blob_versions := {
+                    k: v for k, v in new_versions.items() if k in blob_values
+                }:
+                    cur.executemany(
+                        self.UPSERT_CHECKPOINT_BLOBS_SQL,
+                        self._dump_blobs(
+                            thread_id,
+                            checkpoint_ns,
+                            blob_values,
+                            blob_versions,
+                        ),
+                    )
+                cur.execute(
+                    self.UPSERT_CHECKPOINTS_SQL,
+                    (
                         thread_id,
                         checkpoint_ns,
-                        blob_values,
-                        blob_versions,
+                        checkpoint["id"],
+                        checkpoint_id,
+                        Jsonb(copy),
+                        Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
                     ),
                 )
-            cur.execute(
-                self.UPSERT_CHECKPOINTS_SQL,
-                (
-                    thread_id,
-                    checkpoint_ns,
-                    checkpoint["id"],
-                    checkpoint_id,
-                    Jsonb(copy),
-                    Jsonb(get_serializable_checkpoint_metadata(config, metadata)),
-                ),
-            )
-        return next_config
+            return next_config
+
+        return self._execute_with_retries(_op)
 
     def put_writes(
         self,
@@ -354,18 +472,21 @@ class PostgresSaver(BasePostgresSaver):
             if all(w[0] in WRITES_IDX_MAP for w in writes)
             else self.INSERT_CHECKPOINT_WRITES_SQL
         )
-        with self._cursor(pipeline=True) as cur:
-            cur.executemany(
-                query,
-                self._dump_writes(
-                    config["configurable"]["thread_id"],
-                    config["configurable"]["checkpoint_ns"],
-                    config["configurable"]["checkpoint_id"],
-                    task_id,
-                    task_path,
-                    writes,
-                ),
-            )
+        def _op() -> None:
+            with self._cursor(pipeline=True) as cur:
+                cur.executemany(
+                    query,
+                    self._dump_writes(
+                        config["configurable"]["thread_id"],
+                        config["configurable"]["checkpoint_ns"],
+                        config["configurable"]["checkpoint_id"],
+                        task_id,
+                        task_path,
+                        writes,
+                    ),
+                )
+
+        self._execute_with_retries(_op)
 
     def delete_thread(self, thread_id: str) -> None:
         """Delete all checkpoints and writes associated with a thread ID.
