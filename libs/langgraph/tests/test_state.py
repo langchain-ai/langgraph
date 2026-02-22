@@ -371,3 +371,90 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+def test_add_edge_with_objects() -> None:
+    """Test add_edge() accepts both strings and node objects."""
+
+    class SimpleState(TypedDict):
+        value: int
+
+    class ParallelState(TypedDict):
+        # Use operator.add to handle parallel writes
+        value: Annotated[int, operator.add]
+
+    def node_a(state: SimpleState) -> SimpleState:
+        return {"value": state["value"] + 1}
+
+    def node_b(state: SimpleState) -> SimpleState:
+        return {"value": state["value"] * 2}
+
+    def node_c(state: SimpleState) -> SimpleState:
+        return {"value": state["value"] + 10}
+
+    # Test 1: Using strings (backward compatibility)
+    builder = StateGraph(SimpleState)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge("__start__", "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.set_finish_point("node_b")
+    graph = builder.compile()
+    result = graph.invoke({"value": 5})
+    assert result == {"value": 12}  # (5 + 1) * 2
+
+    # Test 2: Using node objects (new feature)
+    builder = StateGraph(SimpleState)
+    builder.add_node(node_a)  # Uses function name as node key
+    builder.add_node(node_b)
+    builder.add_edge("__start__", node_a)  # Pass function object
+    builder.add_edge(node_a, node_b)  # Both as objects
+    builder.set_finish_point(node_b)  # End node as object
+    graph = builder.compile()
+    result = graph.invoke({"value": 5})
+    assert result == {"value": 12}  # Same result
+
+    # Test 3: Mixed usage (strings and objects)
+    builder = StateGraph(SimpleState)
+    builder.add_node("node_a", node_a)
+    builder.add_node(node_b)  # Add using object
+    builder.add_node("node_c", node_c)
+    builder.add_edge("__start__", "node_a")
+    builder.add_edge("node_a", node_b)  # Mix: string -> object
+    builder.add_edge(node_b, "node_c")  # Mix: object -> string
+    builder.set_finish_point("node_c")
+    graph = builder.compile()
+    result = graph.invoke({"value": 5})
+    assert result == {"value": 22}  # ((5 + 1) * 2) + 10
+
+    # Test 4: Using list of objects for waiting edges
+    # This test verifies that list of node objects work correctly
+    builder = StateGraph(SimpleState)
+    builder.add_node(node_a)
+    builder.add_node(node_b)
+    builder.add_node(node_c)
+    builder.add_edge("__start__", node_a)
+    builder.add_edge(node_a, node_b)
+    # Wait for node_b to complete before starting node_c
+    builder.add_edge([node_b], node_c)  # List with single object
+    builder.set_finish_point(node_c)
+    graph = builder.compile()
+    result = graph.invoke({"value": 5})
+    # Sequential: (5+1)=6, (6*2)=12, (12+10)=22
+    assert result == {"value": 22}
+
+    # Test 5: Mixed list of strings and objects
+    # This test verifies that mixed lists work correctly
+    builder = StateGraph(SimpleState)
+    builder.add_node("node_a", node_a)
+    builder.add_node(node_b)
+    builder.add_node(node_c)
+    builder.add_edge("__start__", "node_a")
+    builder.add_edge("node_a", node_b)
+    # Mix strings and objects in list - both must complete before node_c
+    builder.add_edge(["node_a", node_b], "node_c")
+    builder.set_finish_point("node_c")
+    graph = builder.compile()
+    result = graph.invoke({"value": 5})
+    # Sequential: node_a completes (6), then node_b (12), then node_c (22)
+    assert result == {"value": 22}
