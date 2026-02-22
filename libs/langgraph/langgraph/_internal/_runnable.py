@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import enum
 import inspect
+import logging
 import sys
 import warnings
 from collections.abc import (
@@ -25,6 +26,7 @@ from typing import (
     cast,
 )
 
+from langchain_core.callbacks import AsyncCallbackManager, CallbackManager
 from langchain_core.runnables.base import (
     Runnable,
     RunnableConfig,
@@ -60,6 +62,86 @@ try:
     from langchain_core.tracers._streaming import _StreamingCallbackHandler
 except ImportError:
     _StreamingCallbackHandler = None  # type: ignore
+
+logger = logging.getLogger(__name__)
+
+
+def _process_inputs(processor: Callable[[Any], Any] | None, inputs: Any) -> Any:
+    """Safely process trace inputs, returning error placeholder on failure."""
+    if processor is None:
+        return inputs
+    try:
+        return processor(inputs)
+    except Exception:
+        logger.exception("trace_inputs filter failed")
+        return {"error": "<trace_inputs processing failed>"}
+
+
+def _process_outputs(processor: Callable[[Any], Any] | None, outputs: Any) -> Any:
+    """Safely process trace outputs, returning error placeholder on failure."""
+    if processor is None:
+        return outputs
+    try:
+        return processor(outputs)
+    except Exception:
+        logger.exception("trace_outputs filter failed")
+        return {"error": "<trace_outputs processing failed>"}
+
+
+def _filter_langsmith_handlers(
+    callback_manager: CallbackManager,
+) -> CallbackManager:
+    """Filter out LangChainTracer handlers from a callback manager.
+
+    Used when traceable config has enabled=False - we want to fire callbacks
+    to custom handlers but skip LangSmith tracing.
+    """
+    filtered_handlers = [
+        h for h in callback_manager.handlers if not isinstance(h, LangChainTracer)
+    ]
+    filtered_inheritable = [
+        h
+        for h in callback_manager.inheritable_handlers
+        if not isinstance(h, LangChainTracer)
+    ]
+    # Create a new callback manager with filtered handlers
+    return CallbackManager(
+        handlers=filtered_handlers,
+        inheritable_handlers=filtered_inheritable,
+        parent_run_id=callback_manager.parent_run_id,
+        tags=callback_manager.tags,
+        inheritable_tags=callback_manager.inheritable_tags,
+        metadata=callback_manager.metadata,
+        inheritable_metadata=callback_manager.inheritable_metadata,
+    )
+
+
+def _filter_langsmith_handlers_async(
+    callback_manager: AsyncCallbackManager,
+) -> AsyncCallbackManager:
+    """Filter out LangChainTracer handlers from an async callback manager.
+
+    Used when traceable config has enabled=False - we want to fire callbacks
+    to custom handlers but skip LangSmith tracing.
+    """
+    filtered_handlers = [
+        h for h in callback_manager.handlers if not isinstance(h, LangChainTracer)
+    ]
+    filtered_inheritable = [
+        h
+        for h in callback_manager.inheritable_handlers
+        if not isinstance(h, LangChainTracer)
+    ]
+    # Create a new callback manager with filtered handlers
+    return AsyncCallbackManager(
+        handlers=filtered_handlers,
+        inheritable_handlers=filtered_inheritable,
+        parent_run_id=callback_manager.parent_run_id,
+        tags=callback_manager.tags,
+        inheritable_tags=callback_manager.inheritable_tags,
+        metadata=callback_manager.metadata,
+        inheritable_metadata=callback_manager.inheritable_metadata,
+    )
 
 
 def _set_config_context(
@@ -397,7 +479,9 @@ class RunnableCallable(Runnable):
             else:
                 run_manager.on_chain_end(ret)
         else:
-            ret = self.func(*args, **kwargs)
+            # Still need to set config context for get_config() to work
+            with set_config_context(config, None) as context:
+                ret = context.run(self.func, *args, **kwargs)
         if self.recurse and isinstance(ret, Runnable):
             return ret.invoke(input, config)
         return ret
@@ -470,7 +554,13 @@ class RunnableCallable(Runnable):
             else:
                 await run_manager.on_chain_end(ret)
         else:
-            ret = await self.afunc(*args, **kwargs)
+            # Still need to set config context for get_config() to work
+            coro = cast(Coroutine[None, None, Any], self.afunc(*args, **kwargs))
+            if ASYNCIO_ACCEPTS_CONTEXT:
+                with set_config_context(config, None) as context:
+                    ret = await asyncio.create_task(coro, context=context)
+            else:
+                ret = await coro
         if self.recurse and isinstance(ret, Runnable):
             return await ret.ainvoke(input, config)
         return ret
@@ -544,12 +634,20 @@ class RunnableSeq(Runnable):
         *steps: RunnableLike,
         name: str | None = None,
         trace_inputs: Callable[[Any], Any] | None = None,
+        trace_outputs: Callable[[Any], Any] | None = None,
+        trace: bool = True,
+        skip_langsmith: bool = False,
     ) -> None:
         """Create a new RunnableSeq.
 
         Args:
             steps: The steps to include in the sequence.
             name: The name of the `Runnable`.
+            trace_inputs: Optional function to transform inputs before tracing.
+            trace_outputs: Optional function to transform outputs before tracing.
+            trace: Whether to trace this sequence. Defaults to True.
+            skip_langsmith: If True, filter out LangChainTracer handlers but keep
+                other callbacks. Used when traceable config has enabled=False.
 
         Raises:
             ValueError: If the sequence has less than 2 steps.
@@ -569,6 +667,9 @@ class RunnableSeq(Runnable):
         self.steps = steps_flat
         self.name = name
         self.trace_inputs = trace_inputs
+        self.trace_outputs = trace_outputs
+        self.trace = trace
+        self.skip_langsmith = skip_langsmith
 
     def __or__(
         self,
@@ -625,43 +726,58 @@ class RunnableSeq(Runnable):
     ) -> Any:
         if config is None:
             config = ensure_config()
-        # setup callbacks and context
-        callback_manager = get_callback_manager_for_config(config)
-        # start the root run
-        run_manager = callback_manager.on_chain_start(
-            None,
-            self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
-        )
-        # invoke all steps in sequence
-        try:
-            for i, step in enumerate(self.steps):
-                # mark each step as a child run
-                config = patch_config(
-                    config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
-                )
-                # 1st step is the actual node,
-                # others are writers which don't need to be run in context
-                if i == 0:
-                    # get the run object
-                    for h in run_manager.handlers:
-                        if isinstance(h, LangChainTracer):
-                            run = h.run_map.get(str(run_manager.run_id))
-                            break
+
+        if self.trace:
+            # setup callbacks and context
+            callback_manager = get_callback_manager_for_config(config)
+            # Filter out LangChainTracer if skip_langsmith is set
+            if self.skip_langsmith:
+                callback_manager = _filter_langsmith_handlers(callback_manager)
+            # start the root run
+            run_manager = callback_manager.on_chain_start(
+                None,
+                _process_inputs(self.trace_inputs, input),
+                name=config.get("run_name") or self.get_name(),
+                run_id=config.pop("run_id", None),
+            )
+            # invoke all steps in sequence
+            try:
+                for i, step in enumerate(self.steps):
+                    # mark each step as a child run
+                    config = patch_config(
+                        config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
+                    )
+                    # 1st step is the actual node,
+                    # others are writers which don't need to be run in context
+                    if i == 0:
+                        # get the run object
+                        for h in run_manager.handlers:
+                            if isinstance(h, LangChainTracer):
+                                run = h.run_map.get(str(run_manager.run_id))
+                                break
+                        else:
+                            run = None
+                        # run in context
+                        with set_config_context(config, run) as context:
+                            input = context.run(step.invoke, input, config, **kwargs)
                     else:
-                        run = None
-                    # run in context
-                    with set_config_context(config, run) as context:
-                        input = context.run(step.invoke, input, config, **kwargs)
-                else:
-                    input = step.invoke(input, config)
-        # finish the root run
-        except BaseException as e:
-            run_manager.on_chain_error(e)
-            raise
+                        input = step.invoke(input, config)
+            # finish the root run
+            except BaseException as e:
+                run_manager.on_chain_error(e)
+                raise
+            else:
+                run_manager.on_chain_end(_process_outputs(self.trace_outputs, input))
+                return input
         else:
-            run_manager.on_chain_end(input)
+            # Still need to set config context for get_config() to work
+            with set_config_context(config, None) as context:
+                for i, step in enumerate(self.steps):
+                    input = (
+                        context.run(step.invoke, input, config, **kwargs)
+                        if i == 0
+                        else step.invoke(input, config)
+                    )
             return input
 
     async def ainvoke(
@@ -672,49 +788,75 @@ class RunnableSeq(Runnable):
     ) -> Any:
         if config is None:
             config = ensure_config()
-        # setup callbacks
-        callback_manager = get_async_callback_manager_for_config(config)
-        # start the root run
-        run_manager = await callback_manager.on_chain_start(
-            None,
-            self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
-        )
 
-        # invoke all steps in sequence
-        try:
-            for i, step in enumerate(self.steps):
-                # mark each step as a child run
-                config = patch_config(
-                    config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
-                )
-                # 1st step is the actual node,
-                # others are writers which don't need to be run in context
-                if i == 0:
-                    if ASYNCIO_ACCEPTS_CONTEXT:
-                        # get the run object
-                        for h in run_manager.handlers:
-                            if isinstance(h, LangChainTracer):
-                                run = h.run_map.get(str(run_manager.run_id))
-                                break
+        if self.trace:
+            # setup callbacks
+            callback_manager = get_async_callback_manager_for_config(config)
+            # Filter out LangChainTracer if skip_langsmith is set
+            if self.skip_langsmith:
+                callback_manager = _filter_langsmith_handlers_async(callback_manager)
+            # start the root run
+            run_manager = await callback_manager.on_chain_start(
+                None,
+                _process_inputs(self.trace_inputs, input),
+                name=config.get("run_name") or self.get_name(),
+                run_id=config.pop("run_id", None),
+            )
+
+            # invoke all steps in sequence
+            try:
+                for i, step in enumerate(self.steps):
+                    # mark each step as a child run
+                    config = patch_config(
+                        config, callbacks=run_manager.get_child(f"seq:step:{i + 1}")
+                    )
+                    # 1st step is the actual node,
+                    # others are writers which don't need to be run in context
+                    if i == 0:
+                        if ASYNCIO_ACCEPTS_CONTEXT:
+                            # get the run object
+                            for h in run_manager.handlers:
+                                if isinstance(h, LangChainTracer):
+                                    run = h.run_map.get(str(run_manager.run_id))
+                                    break
+                            else:
+                                run = None
+                            # run in context
+                            with set_config_context(config, run) as context:
+                                input = await asyncio.create_task(
+                                    step.ainvoke(input, config, **kwargs),
+                                    context=context,
+                                )
                         else:
-                            run = None
-                        # run in context
-                        with set_config_context(config, run) as context:
+                            input = await step.ainvoke(input, config, **kwargs)
+                    else:
+                        input = await step.ainvoke(input, config)
+            # finish the root run
+            except BaseException as e:
+                await run_manager.on_chain_error(e)
+                raise
+            else:
+                await run_manager.on_chain_end(
+                    _process_outputs(self.trace_outputs, input)
+                )
+                return input
+        else:
+            # Still need to set config context for get_config() to work
+            if ASYNCIO_ACCEPTS_CONTEXT:
+                with set_config_context(config, None) as context:
+                    for i, step in enumerate(self.steps):
+                        if i == 0:
                             input = await asyncio.create_task(
                                 step.ainvoke(input, config, **kwargs), context=context
                             )
-                    else:
+                        else:
+                            input = await step.ainvoke(input, config)
+            else:
+                for i, step in enumerate(self.steps):
+                    if i == 0:
                         input = await step.ainvoke(input, config, **kwargs)
-                else:
-                    input = await step.ainvoke(input, config)
-        # finish the root run
-        except BaseException as e:
-            await run_manager.on_chain_error(e)
-            raise
-        else:
-            await run_manager.on_chain_end(input)
+                    else:
+                        input = await step.ainvoke(input, config)
             return input
 
     def stream(
@@ -725,80 +867,20 @@ class RunnableSeq(Runnable):
     ) -> Iterator[Any]:
         if config is None:
             config = ensure_config()
-        # setup callbacks
-        callback_manager = get_callback_manager_for_config(config)
-        # start the root run
-        run_manager = callback_manager.on_chain_start(
-            None,
-            self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
-        )
-        # get the run object
-        for h in run_manager.handlers:
-            if isinstance(h, LangChainTracer):
-                run = h.run_map.get(str(run_manager.run_id))
-                break
-        else:
-            run = None
-        # create first step config
-        config = patch_config(
-            config,
-            callbacks=run_manager.get_child(f"seq:step:{1}"),
-        )
-        # run all in context
-        with set_config_context(config, run) as context:
-            try:
-                # stream the last steps
-                # transform the input stream of each step with the next
-                # steps that don't natively support transforming an input stream will
-                # buffer input in memory until all available, and then start emitting output
-                for idx, step in enumerate(self.steps):
-                    if idx == 0:
-                        iterator = step.stream(input, config, **kwargs)
-                    else:
-                        config = patch_config(
-                            config,
-                            callbacks=run_manager.get_child(f"seq:step:{idx + 1}"),
-                        )
-                        iterator = step.transform(iterator, config)
-                # populates streamed_output in astream_log() output if needed
-                if _StreamingCallbackHandler is not None:
-                    for h in run_manager.handlers:
-                        if isinstance(h, _StreamingCallbackHandler):
-                            iterator = h.tap_output_iter(run_manager.run_id, iterator)
-                # consume into final output
-                output = context.run(_consume_iter, iterator)
-                # sequence doesn't emit output, yield to mark as generator
-                yield
-            except BaseException as e:
-                run_manager.on_chain_error(e)
-                raise
-            else:
-                run_manager.on_chain_end(output)
 
-    async def astream(
-        self,
-        input: Input,
-        config: RunnableConfig | None = None,
-        **kwargs: Any | None,
-    ) -> AsyncIterator[Any]:
-        if config is None:
-            config = ensure_config()
-        # setup callbacks
-        callback_manager = get_async_callback_manager_for_config(config)
-        # start the root run
-        run_manager = await callback_manager.on_chain_start(
-            None,
-            self.trace_inputs(input) if self.trace_inputs is not None else input,
-            name=config.get("run_name") or self.get_name(),
-            run_id=config.pop("run_id", None),
-        )
-        # stream the last steps
-        # transform the input stream of each step with the next
-        # steps that don't natively support transforming an input stream will
-        # buffer input in memory until all available, and then start emitting output
-        if ASYNCIO_ACCEPTS_CONTEXT:
+        if self.trace:
+            # setup callbacks
+            callback_manager = get_callback_manager_for_config(config)
+            # Filter out LangChainTracer if skip_langsmith is set
+            if self.skip_langsmith:
+                callback_manager = _filter_langsmith_handlers(callback_manager)
+            # start the root run
+            run_manager = callback_manager.on_chain_start(
+                None,
+                _process_inputs(self.trace_inputs, input),
+                name=config.get("run_name") or self.get_name(),
+                run_id=config.pop("run_id", None),
+            )
             # get the run object
             for h in run_manager.handlers:
                 if isinstance(h, LangChainTracer):
@@ -814,17 +896,135 @@ class RunnableSeq(Runnable):
             # run all in context
             with set_config_context(config, run) as context:
                 try:
+                    # stream the last steps
+                    # transform the input stream of each step with the next
+                    # steps that don't natively support transforming an input stream will
+                    # buffer input in memory until all available, and then start emitting output
+                    for idx, step in enumerate(self.steps):
+                        if idx == 0:
+                            iterator = step.stream(input, config, **kwargs)
+                        else:
+                            config = patch_config(
+                                config,
+                                callbacks=run_manager.get_child(f"seq:step:{idx + 1}"),
+                            )
+                            iterator = step.transform(iterator, config)
+                    # populates streamed_output in astream_log() output if needed
+                    if _StreamingCallbackHandler is not None:
+                        for h in run_manager.handlers:
+                            if isinstance(h, _StreamingCallbackHandler):
+                                iterator = h.tap_output_iter(
+                                    run_manager.run_id, iterator
+                                )
+                    # consume into final output
+                    output = context.run(_consume_iter, iterator)
+                    # sequence doesn't emit output, yield to mark as generator
+                    yield
+                except BaseException as e:
+                    run_manager.on_chain_error(e)
+                    raise
+                else:
+                    run_manager.on_chain_end(
+                        _process_outputs(self.trace_outputs, output)
+                    )
+        else:
+            # No tracing - still need to set config context for get_config() to work
+            with set_config_context(config, None) as context:
+                for idx, step in enumerate(self.steps):
+                    if idx == 0:
+                        iterator = step.stream(input, config, **kwargs)
+                    else:
+                        iterator = step.transform(iterator, config)
+                context.run(_consume_iter, iterator)
+            yield
+
+    async def astream(
+        self,
+        input: Input,
+        config: RunnableConfig | None = None,
+        **kwargs: Any | None,
+    ) -> AsyncIterator[Any]:
+        if config is None:
+            config = ensure_config()
+
+        if self.trace:
+            # setup callbacks
+            callback_manager = get_async_callback_manager_for_config(config)
+            # Filter out LangChainTracer if skip_langsmith is set
+            if self.skip_langsmith:
+                callback_manager = _filter_langsmith_handlers_async(callback_manager)
+            # start the root run
+            run_manager = await callback_manager.on_chain_start(
+                None,
+                _process_inputs(self.trace_inputs, input),
+                name=config.get("run_name") or self.get_name(),
+                run_id=config.pop("run_id", None),
+            )
+            # stream the last steps
+            # transform the input stream of each step with the next
+            # steps that don't natively support transforming an input stream will
+            # buffer input in memory until all available, and then start emitting output
+            if ASYNCIO_ACCEPTS_CONTEXT:
+                # get the run object
+                for h in run_manager.handlers:
+                    if isinstance(h, LangChainTracer):
+                        run = h.run_map.get(str(run_manager.run_id))
+                        break
+                else:
+                    run = None
+                # create first step config
+                config = patch_config(
+                    config,
+                    callbacks=run_manager.get_child(f"seq:step:{1}"),
+                )
+                # run all in context
+                with set_config_context(config, run) as context:
+                    try:
+                        async with AsyncExitStack() as stack:
+                            for idx, step in enumerate(self.steps):
+                                if idx == 0:
+                                    aiterator = step.astream(input, config, **kwargs)
+                                else:
+                                    config = patch_config(
+                                        config,
+                                        callbacks=run_manager.get_child(
+                                            f"seq:step:{idx + 1}"
+                                        ),
+                                    )
+                                    aiterator = step.atransform(aiterator, config)
+                                if hasattr(aiterator, "aclose"):
+                                    stack.push_async_callback(aiterator.aclose)
+                            # populates streamed_output in astream_log() output if needed
+                            if _StreamingCallbackHandler is not None:
+                                for h in run_manager.handlers:
+                                    if isinstance(h, _StreamingCallbackHandler):
+                                        aiterator = h.tap_output_aiter(
+                                            run_manager.run_id, aiterator
+                                        )
+                            # consume into final output
+                            output = await asyncio.create_task(
+                                _consume_aiter(aiterator), context=context
+                            )
+                            # sequence doesn't emit output, yield to mark as generator
+                            yield
+                    except BaseException as e:
+                        await run_manager.on_chain_error(e)
+                        raise
+                    else:
+                        await run_manager.on_chain_end(
+                            _process_outputs(self.trace_outputs, output)
+                        )
+            else:
+                try:
                     async with AsyncExitStack() as stack:
                         for idx, step in enumerate(self.steps):
+                            config = patch_config(
+                                config,
+                                callbacks=run_manager.get_child(f"seq:step:{idx + 1}"),
+                            )
                             if idx == 0:
                                 aiterator = step.astream(input, config, **kwargs)
                             else:
-                                config = patch_config(
-                                    config,
-                                    callbacks=run_manager.get_child(
-                                        f"seq:step:{idx + 1}"
-                                    ),
-                                )
                                 aiterator = step.atransform(aiterator, config)
                             if hasattr(aiterator, "aclose"):
                                 stack.push_async_callback(aiterator.aclose)
@@ -836,46 +1036,29 @@ class RunnableSeq(Runnable):
                                         run_manager.run_id, aiterator
                                     )
                         # consume into final output
-                        output = await asyncio.create_task(
-                            _consume_aiter(aiterator), context=context
-                        )
+                        output = await _consume_aiter(aiterator)
                         # sequence doesn't emit output, yield to mark as generator
                         yield
                 except BaseException as e:
                     await run_manager.on_chain_error(e)
                     raise
                 else:
-                    await run_manager.on_chain_end(output)
+                    await run_manager.on_chain_end(
+                        _process_outputs(self.trace_outputs, output)
+                    )
         else:
-            try:
-                async with AsyncExitStack() as stack:
-                    for idx, step in enumerate(self.steps):
-                        config = patch_config(
-                            config,
-                            callbacks=run_manager.get_child(f"seq:step:{idx + 1}"),
-                        )
-                        if idx == 0:
-                            aiterator = step.astream(input, config, **kwargs)
-                        else:
-                            aiterator = step.atransform(aiterator, config)
-                        if hasattr(aiterator, "aclose"):
-                            stack.push_async_callback(aiterator.aclose)
-                    # populates streamed_output in astream_log() output if needed
-                    if _StreamingCallbackHandler is not None:
-                        for h in run_manager.handlers:
-                            if isinstance(h, _StreamingCallbackHandler):
-                                aiterator = h.tap_output_aiter(
-                                    run_manager.run_id, aiterator
-                                )
-                    # consume into final output
-                    output = await _consume_aiter(aiterator)
-                    # sequence doesn't emit output, yield to mark as generator
-                    yield
-            except BaseException as e:
-                await run_manager.on_chain_error(e)
-                raise
-            else:
-                await run_manager.on_chain_end(output)
+            # No tracing - just execute the steps directly
+            async with AsyncExitStack() as stack:
+                for idx, step in enumerate(self.steps):
+                    if idx == 0:
+                        aiterator = step.astream(input, config, **kwargs)
+                    else:
+                        aiterator = step.atransform(aiterator, config)
+                    if hasattr(aiterator, "aclose"):
+                        stack.push_async_callback(aiterator.aclose)
+                # consume into final output
+                await _consume_aiter(aiterator)
+                yield
 
 
 def _consume_iter(it: Iterator[Any]) -> Any:

@@ -21,6 +21,7 @@ from langgraph._internal._runnable import (
     run_in_executor,
 )
 from langgraph.config import get_config
+from langgraph.pregel._read import _validate_traceable_config
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.types import CachePolicy, RetryPolicy
 
@@ -192,6 +193,19 @@ def get_runnable_for_entrypoint(func: Callable[..., Any]) -> Runnable:
         return CACHE.setdefault(key, run)
 
 
+def _compose_trace_inputs(
+    base_fn: Callable[[Any], Any],
+    process_fn: Callable[[Any], Any],
+) -> Callable[[Any], Any]:
+    """Compose trace_inputs with process_inputs from traceable config."""
+
+    def composed(inputs: Any) -> Any:
+        exploded = base_fn(inputs)
+        return process_fn(exploded)
+
+    return composed
+
+
 def get_runnable_for_task(func: Callable[..., Any]) -> Runnable:
     key = (func, True)
     if key in CACHE:
@@ -206,10 +220,22 @@ def get_runnable_for_task(func: Callable[..., Any]) -> Runnable:
         else:
             name = str(func)
 
-        if is_async_callable(func):
+        # Check for traceable config early to handle __unwrapped__
+        raw_config = getattr(func, "__traceable_config__", None)
+        traceable_config = _validate_traceable_config(raw_config)
+
+        # Use unwrapped function if available to avoid double-tracing
+        # when @traceable and @task are used together
+        func_to_run: Callable[..., Any] = func
+        if traceable_config:
+            unwrapped = traceable_config.get("__unwrapped__")
+            if unwrapped is not None:
+                func_to_run = unwrapped
+
+        if is_async_callable(func_to_run):
             run = RunnableCallable(
                 None,
-                func,
+                func_to_run,
                 explode_args=True,
                 name=name,
                 trace=False,
@@ -217,20 +243,45 @@ def get_runnable_for_task(func: Callable[..., Any]) -> Runnable:
             )
         else:
             run = RunnableCallable(
-                func,
-                functools.wraps(func)(functools.partial(run_in_executor, None, func)),
+                func_to_run,
+                functools.wraps(func_to_run)(
+                    functools.partial(run_in_executor, None, func_to_run)
+                ),
                 explode_args=True,
                 name=name,
                 trace=False,
                 recurse=False,
             )
+
+        # Build trace_inputs - compose with process_inputs if provided
+        # Use original func for signature to match expected args
+        base_trace_inputs = functools.partial(
+            _explode_args_trace_inputs, inspect.signature(func)
+        )
+        process_inputs = (
+            traceable_config.get("process_inputs") if traceable_config else None
+        )
+        if process_inputs is not None:
+            trace_inputs = _compose_trace_inputs(base_trace_inputs, process_inputs)
+        else:
+            trace_inputs = base_trace_inputs
+
+        # Build seq_kwargs
+        seq_kwargs: dict[str, Any] = {
+            "name": name,
+            "trace_inputs": trace_inputs,
+        }
+        if traceable_config:
+            # Filter out LangChainTracer (skip LangSmith) but keep other callbacks
+            if traceable_config.get("enabled") is False:
+                seq_kwargs["skip_langsmith"] = True
+            if traceable_config.get("process_outputs"):
+                seq_kwargs["trace_outputs"] = traceable_config["process_outputs"]
+
         seq = RunnableSeq(
             run,
             ChannelWrite([ChannelWriteEntry(RETURN)]),
-            name=name,
-            trace_inputs=functools.partial(
-                _explode_args_trace_inputs, inspect.signature(func)
-            ),
+            **seq_kwargs,
         )
         if not _lookup_module_and_qualname(func):
             return seq
