@@ -1496,6 +1496,19 @@ class Pregel(
             )
             if saved:
                 checkpoint_config = patch_configurable(config, saved.config[CONF])
+                # Inherit custom metadata fields from parent checkpoint
+                # (e.g., assistant_id, user_id) so update_state checkpoints
+                # remain discoverable via get_state_history metadata filters.
+                parent_meta = {
+                    k: v
+                    for k, v in saved.metadata.items()
+                    if k not in {"source", "step", "writes", "parents", "run_id"}
+                    and isinstance(v, (str, int, float, bool))
+                }
+                if parent_meta:
+                    checkpoint_config = patch_configurable(
+                        checkpoint_config, parent_meta
+                    )
             channels, managed = channels_from_checkpoint(
                 self.channels,
                 checkpoint,
@@ -1940,6 +1953,19 @@ class Pregel(
             )
             if saved:
                 checkpoint_config = patch_configurable(config, saved.config[CONF])
+                # Inherit custom metadata fields from parent checkpoint
+                # (e.g., assistant_id, user_id) so update_state checkpoints
+                # remain discoverable via get_state_history metadata filters.
+                parent_meta = {
+                    k: v
+                    for k, v in saved.metadata.items()
+                    if k not in {"source", "step", "writes", "parents", "run_id"}
+                    and isinstance(v, (str, int, float, bool))
+                }
+                if parent_meta:
+                    checkpoint_config = patch_configurable(
+                        checkpoint_config, parent_meta
+                    )
             channels, managed = channels_from_checkpoint(
                 self.channels,
                 checkpoint,
