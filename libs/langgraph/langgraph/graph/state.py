@@ -1571,8 +1571,18 @@ def _get_channels(
         for name, typ in type_hints.items()
         if name != "__slots__"
     }
+    # Set schema default values for BinaryOperatorAggregate channels.
+    # This ensures that dataclass/pydantic default values are used as the
+    # initial value for reducer channels, rather than type zero-values.
+    channels = {k: v for k, v in all_keys.items() if isinstance(v, BaseChannel)}
+    for name, channel in channels.items():
+        if isinstance(channel, BinaryOperatorAggregate):
+            default = get_field_default(name, type_hints[name], schema)
+            if default is not ... and default is not None:
+                channel.default = default
+                channel.value = default
     return (
-        {k: v for k, v in all_keys.items() if isinstance(v, BaseChannel)},
+        channels,
         {k: v for k, v in all_keys.items() if is_managed_value(v)},
         type_hints,
     )
