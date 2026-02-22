@@ -143,6 +143,21 @@ services:
             dockerfile_inline: |
                 # syntax=docker/dockerfile:1.4
                 FROM langchain/langgraph-api:3.11
+                # -- Generate requirements.txt for packages without one --
+                # Copy packaging metadata files
+                ADD pyproject.toml /deps/cli/pyproject.toml
+                COPY --from=cli_1 pyproject.toml /deps/cli_1/pyproject.toml
+                COPY --from=cli_1 uv.lock /deps/cli_1/uv.lock
+                # Generate requirements.txt from packaging metadata
+                # Compile from pyproject.toml for cli
+                RUN cd '/deps/cli' && uv pip compile pyproject.toml -o 'requirements.txt' --constraint /api/constraints.txt
+                # Generate from uv.lock for cli
+                RUN cd '/deps/cli_1' && uv export --no-hashes --no-dev -o 'requirements.txt'
+                # -- End of requirements.txt generation --
+                # -- Installing from requirements.txt files --
+                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/cli/requirements.txt'
+                RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/cli_1/requirements.txt'
+                # -- End of requirements.txt install --
                 # -- Adding local package . --
                 ADD . /deps/cli
                 # -- End of local package . --

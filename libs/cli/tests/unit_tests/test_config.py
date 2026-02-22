@@ -436,10 +436,18 @@ def test_config_to_docker_simple():
     expected_docker_stdin = f"""\
 # syntax=docker/dockerfile:1.4
 FROM langchain/langgraph-api:3.11
-# -- Installing local requirements --
-COPY --from=outer-requirements.txt requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
-RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
-# -- End of local requirements install --
+# -- Generate requirements.txt for packages without one --
+# Copy packaging metadata files
+COPY --from=examples pyproject.toml /deps/examples/pyproject.toml
+# Generate requirements.txt from packaging metadata
+# Compile from pyproject.toml for examples
+RUN cd '/deps/examples' && uv pip compile pyproject.toml -o 'requirements.txt' --constraint /api/constraints.txt
+# -- End of requirements.txt generation --
+# -- Installing from requirements.txt files --
+COPY --from=outer-graphs_reqs_a requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
+RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/examples/requirements.txt'
+RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt'
+# -- End of requirements.txt install --
 # -- Adding local package ../../examples --
 COPY --from=examples . /deps/examples
 # -- End of local package ../../examples --
@@ -670,6 +678,16 @@ dependencies = ["langchain"]"""
     os.remove(pyproject_path)
     expected_docker_stdin = (
         """FROM langchain/langgraph-api:3.11
+# -- Generate requirements.txt for packages without one --
+# Copy packaging metadata files
+ADD pyproject.toml /deps/unit_tests/pyproject.toml
+# Generate requirements.txt from packaging metadata
+# Compile from pyproject.toml for unit_tests
+RUN cd '/deps/unit_tests' && uv pip compile pyproject.toml -o 'requirements.txt' --constraint /api/constraints.txt
+# -- End of requirements.txt generation --
+# -- Installing from requirements.txt files --
+RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/unit_tests/requirements.txt'
+# -- End of requirements.txt install --
 # -- Adding local package . --
 ADD . /deps/unit_tests
 # -- End of local package . --
@@ -968,7 +986,7 @@ ENV LANGGRAPH_UI_CONFIG='{{"shared": ["nuqs"]}}'
 ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 # -- Installing JS dependencies --
 ENV NODE_VERSION=20
-RUN cd /deps/outer-unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
+RUN cd '/deps/outer-unit_tests/unit_tests' && npm i && tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
 {FORMATTED_CLEANUP_LINES}
 WORKDIR /deps/outer-unit_tests/unit_tests"""
@@ -1012,7 +1030,7 @@ RUN for dep in /deps/*; do             echo "Installing $dep";             if [ 
 ENV LANGSERVE_GRAPHS='{{"python": "/deps/outer-unit_tests/unit_tests/multiplatform/python.py:graph", "js": "/deps/outer-unit_tests/unit_tests/multiplatform/js.mts:graph"}}'
 # -- Installing JS dependencies --
 ENV NODE_VERSION=22
-RUN cd /deps/outer-unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
+RUN cd '/deps/outer-unit_tests/unit_tests' && npm i && tsx /api/langgraph_api/js/build.mts
 # -- End of JS dependencies install --
 {FORMATTED_CLEANUP_LINES}
 WORKDIR /deps/outer-unit_tests/unit_tests"""
