@@ -7,7 +7,7 @@ from typing import Annotated as Annotated2
 
 import pytest
 from langchain_core.runnables import RunnableConfig
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from typing_extensions import NotRequired, Required, TypedDict
 
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -371,3 +371,19 @@ def test_is_field_channel() -> None:
     # No channel cases
     assert _is_field_channel(int) is None
     assert _is_field_channel(Annotated[int, "just_metadata"]) is None
+
+
+def test_validation_error():
+    class State(BaseModel):
+        items: list[str]
+
+    def bad_node(state: State):
+        return {"items": [None]}
+
+    builder = StateGraph(State)
+    builder.add_node("bad", bad_node)
+    builder.set_entry_point("bad")
+    graph = builder.compile()
+
+    with pytest.raises(ValidationError):
+        graph.invoke({"items": []})
