@@ -39,6 +39,38 @@ def _state_values(obj: Any) -> Sequence[Any]:
     return ()
 
 
+def _find_messages_recursive(obj: Any, *, _depth: int = 0) -> list[BaseMessage]:
+    """Recursively find all BaseMessage instances in a nested structure.
+
+    Traverses dicts, sequences, Pydantic BaseModel fields, and dataclass fields
+    up to a depth limit to avoid infinite recursion on cyclic structures.
+    """
+    if _depth > 10:
+        return []
+    if isinstance(obj, BaseMessage):
+        return [obj]
+    if isinstance(obj, str):
+        return []
+    messages: list[BaseMessage] = []
+    if isinstance(obj, Sequence):
+        for item in obj:
+            messages.extend(_find_messages_recursive(item, _depth=_depth + 1))
+    elif isinstance(obj, dict):
+        for value in obj.values():
+            messages.extend(_find_messages_recursive(value, _depth=_depth + 1))
+    elif isinstance(obj, BaseModel):
+        for key in type(obj).model_fields:
+            messages.extend(
+                _find_messages_recursive(getattr(obj, key), _depth=_depth + 1)
+            )
+    elif is_dataclass(obj) and not isinstance(obj, type):
+        for f in fields(obj):
+            messages.extend(
+                _find_messages_recursive(getattr(obj, f.name), _depth=_depth + 1)
+            )
+    return messages
+
+
 class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
     """A callback handler that implements stream_mode=messages.
 
@@ -97,20 +129,8 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             self.stream((meta[0], "messages", (message, meta[1])))
 
     def _find_and_emit_messages(self, meta: Meta, response: Any) -> None:
-        if isinstance(response, BaseMessage):
-            self._emit(meta, response, dedupe=True)
-        elif isinstance(response, Sequence):
-            for value in response:
-                if isinstance(value, BaseMessage):
-                    self._emit(meta, value, dedupe=True)
-        else:
-            for value in _state_values(response):
-                if isinstance(value, BaseMessage):
-                    self._emit(meta, value, dedupe=True)
-                elif isinstance(value, Sequence):
-                    for item in value:
-                        if isinstance(item, BaseMessage):
-                            self._emit(meta, item, dedupe=True)
+        for msg in _find_messages_recursive(response):
+            self._emit(meta, msg, dedupe=True)
 
     def tap_output_aiter(
         self, run_id: UUID, output: AsyncIterator[T]
@@ -204,15 +224,9 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
             if not self.subgraphs and len(ns) > 0:
                 return
             self.metadata[run_id] = (ns, metadata)
-            for value in _state_values(inputs):
-                if isinstance(value, BaseMessage):
-                    if value.id is not None:
-                        self.seen.add(value.id)
-                elif isinstance(value, Sequence) and not isinstance(value, str):
-                    for item in value:
-                        if isinstance(item, BaseMessage):
-                            if item.id is not None:
-                                self.seen.add(item.id)
+            for msg in _find_messages_recursive(inputs):
+                if msg.id is not None:
+                    self.seen.add(msg.id)
 
     def on_chain_end(
         self,
