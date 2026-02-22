@@ -1284,6 +1284,8 @@ class CompiledStateGraph(
                 channels=("__root__" if is_single_input else input_channels),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=mapper,
+                # validate output state before checkpoint (same as input mapper)
+                mapper_output=mapper,
                 # publish to state keys
                 writers=[ChannelWrite(write_entries)],
                 metadata=node.metadata,
