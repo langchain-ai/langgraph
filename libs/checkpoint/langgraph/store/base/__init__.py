@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import (
     Any,
     Literal,
@@ -531,6 +531,9 @@ class PutOp(NamedTuple):
     refreshes on both read operations (get/search) and write operations (put/update).
     When the TTL expires, the item will be scheduled for deletion on a best-effort basis.
     Defaults to `None` (no expiration).
+    
+    You can accept `timedelta` or `datetime` objects in `put/aput`, which will be
+    converted to minutes automatically.
     """
 
 
@@ -852,7 +855,7 @@ class BaseStore(ABC):
         value: dict[str, Any],
         index: Literal[False] | list[str] | None = None,
         *,
-        ttl: float | None | NotProvided = NOT_PROVIDED,
+        ttl: float | timedelta | datetime | None | NotProvided = NOT_PROVIDED,
     ) -> None:
         """Store or update an item in the store.
 
@@ -1105,7 +1108,7 @@ class BaseStore(ABC):
         value: dict[str, Any],
         index: Literal[False] | list[str] | None = None,
         *,
-        ttl: float | None | NotProvided = NOT_PROVIDED,
+        ttl: float | timedelta | datetime | None | NotProvided = NOT_PROVIDED,
     ) -> None:
         """Asynchronously store or update an item in the store.
 
@@ -1287,12 +1290,29 @@ def _ensure_refresh(
 
 def _ensure_ttl(
     ttl_config: TTLConfig | None,
-    ttl: float | None | NotProvided = NOT_PROVIDED,
+    ttl: float | timedelta | datetime | None | NotProvided = NOT_PROVIDED,
 ) -> float | None:
     if ttl is NOT_PROVIDED:
         if ttl_config:
             return ttl_config.get("default_ttl")
         return None
+    
+    if isinstance(ttl, timedelta):
+        return ttl.total_seconds() / 60
+    
+    if isinstance(ttl, datetime):
+        if ttl.tzinfo is None:
+            # Assume UTC if naive, to match store behavior which usually uses UTC
+            # However, safer to default to system time approach or just assume naive is incompatible?
+            # Standard practice in many libs is to assume system local or UTC. 
+            # Given we are calculating duration, we need to compare against "now".
+            # If provided dt is naive, we compare vs naive now.
+            current_time = datetime.now()
+        else:
+            current_time = datetime.now(timezone.utc)
+            
+        return (ttl - current_time).total_seconds() / 60
+        
     return ttl
 
 
