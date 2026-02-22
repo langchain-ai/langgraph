@@ -553,6 +553,10 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 def test_run_from_checkpoint_id_retains_previous_writes(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
+    """
+    This test ensures state and checkpoint data is correctly preserved when running from a previous checkpoint.
+    """
+
     class MyState(TypedDict):
         myval: Annotated[int, operator.add]
         otherval: bool
@@ -625,6 +629,63 @@ def test_run_from_checkpoint_id_retains_previous_writes(
         return [h.tasks for h in hist[start:]]
 
     assert _get_tasks(new_history, 1) == _get_tasks(history, 0)
+
+
+def test_time_travel_creates_new_checkpoint_ids(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """
+    This test verifies that when 'time traveling' to a previous checkpoint,
+    the graph correctly forks the history by creating new checkpoint IDs,
+    rather than overwriting the existing state.
+    """
+
+    class State(TypedDict):
+        foo: str
+        bar: Annotated[list[str], operator.add]
+
+    def node_a(state: State) -> dict[str, list[str]]:
+        return {"bar": ["a"]}
+
+    def node_b(state: State) -> dict[str, list[str]]:
+        return {"bar": ["b"]}
+
+    workflow = StateGraph(State)
+    workflow.add_node("a", node_a)
+    workflow.add_node("b", node_b)
+    workflow.add_edge(START, "a")
+    workflow.add_edge("a", "b")
+    graph = workflow.compile(checkpointer=sync_checkpointer)
+
+    # Initial run to create history
+    thread = {"configurable": {"thread_id": "test-thread-1"}}
+    graph.invoke({"foo": "v1"}, thread)
+    history = list(graph.get_state_history(thread))
+    assert len(history) == 3  # Start, A, B
+
+    # Select a checkpoint to time travel to (after node A)
+    checkpoint_to_replay_from = history[1]
+    replay_config = {
+        "configurable": {
+            "thread_id": "test-thread-1",
+            "checkpoint_id": checkpoint_to_replay_from.config["configurable"][
+                "checkpoint_id"
+            ],
+        }
+    }
+
+    # Re-invoke from the old checkpoint
+    graph.invoke(None, replay_config)
+
+    # Assert that a new branch was created
+    final_history = list(graph.get_state_history(thread))
+    # The new history should be longer than the original
+    assert len(final_history) > len(history)
+    # The ID of the latest checkpoint MUST be different from the one we replayed from
+    assert (
+        final_history[0].config["configurable"]["checkpoint_id"]
+        != replay_config["configurable"]["checkpoint_id"]
+    )
 
 
 def test_batch_two_processes_in_out() -> None:
