@@ -9,6 +9,7 @@ from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum
 from ipaddress import IPv4Address
+from typing import Generic, TypeVar
 from zoneinfo import ZoneInfo
 
 import dataclasses_json
@@ -25,6 +26,15 @@ from langgraph.checkpoint.serde.jsonplus import (
     _msgpack_ext_hook_to_json,
 )
 from langgraph.store.base import Item
+
+
+TInner = TypeVar("TInner", bound=BaseModel)
+
+
+class GenericPydantic(BaseModel, Generic[TInner]):
+    name: str
+    value: int
+    inner: TInner
 
 
 class InnerPydantic(BaseModel):
@@ -514,3 +524,49 @@ def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
     result = serde.loads_typed(dumped)
 
     assert result.equals(series)
+
+
+def test_serde_jsonplus_pydantic_generic() -> None:
+    """Roundtrip generic pydantic v2 models through msgpack."""
+    instance = GenericPydantic[InnerPydantic](
+        name="outer", value=1, inner=InnerPydantic(hello="world")
+    )
+
+    serde = JsonPlusSerializer()
+    dumped = serde.dumps_typed(instance)
+    assert dumped[0] == "msgpack"
+
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, GenericPydantic)
+    assert result == instance
+    assert type(result) is type(instance)  # exact parameterized type
+
+
+def test_serde_jsonplus_pydantic_generic_nested() -> None:
+    """Roundtrip nested generic pydantic v2 models."""
+    instance = GenericPydantic[GenericPydantic[InnerPydantic]](
+        name="outer",
+        value=1,
+        inner=GenericPydantic[InnerPydantic](
+            name="mid", value=2, inner=InnerPydantic(hello="deep")
+        ),
+    )
+
+    serde = JsonPlusSerializer()
+    dumped = serde.dumps_typed(instance)
+    result = serde.loads_typed(dumped)
+    assert result == instance
+    assert type(result) is type(instance)
+
+
+def test_serde_jsonplus_pydantic_generic_json_mode() -> None:
+    """JSON deserialization of generic models returns plain dicts."""
+    instance = GenericPydantic[InnerPydantic](
+        name="test", value=42, inner=InnerPydantic(hello="hi")
+    )
+    serde = JsonPlusSerializer()
+    dumped = serde.dumps_typed(instance)
+
+    json_serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    result = json_serde.loads_typed(dumped)
+    assert result == instance.model_dump()
