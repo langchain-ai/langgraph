@@ -1218,16 +1218,32 @@ def sanitize_untracked_values_in_send(
     """Pop any values belonging to UntrackedValue channels in Send.arg for safe checkpointing.
 
     Send is often called with state to be passed to the dest node, which may contain
-    UntrackedValues at the top level. Send is not typed and arg may be a nested dict."""
+    UntrackedValues at any nesting level. This function recursively removes entries
+    whose keys correspond to UntrackedValue channels.
+
+    Args:
+        packet: The Send object to sanitize.
+        channels: Mapping of channel names to channel instances.
+
+    Returns:
+        A new Send object with UntrackedValue channel entries removed at all nesting levels.
+    """
 
     if not isinstance(packet.arg, dict):
         # Command
         return packet
 
-    # top level keys should be the channel names
-    sanitized_arg = {
-        k: v
-        for k, v in packet.arg.items()
-        if not isinstance(channels.get(k), UntrackedValue)
-    }
+    def _sanitize(obj: Any) -> Any:
+        """Recursively sanitize an object, removing UntrackedValue channel entries from dicts."""
+        if isinstance(obj, dict):
+            return {
+                k: _sanitize(v)
+                for k, v in obj.items()
+                if not isinstance(channels.get(k), UntrackedValue)
+            }
+        elif isinstance(obj, list):
+            return [_sanitize(item) for item in obj]
+        return obj
+
+    sanitized_arg = _sanitize(packet.arg)
     return Send(node=packet.node, arg=sanitized_arg)
