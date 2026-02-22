@@ -248,6 +248,39 @@ def test_state_schema_default_values(kw_only_: bool):
     )
 
 
+def test_dataclass_default_with_reducer():
+    """Test that dataclass default values are respected when using Annotated with reducer.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6569
+    """
+
+    def my_reducer(_: int | None, right: int | None) -> int | None:
+        return right
+
+    @dataclass
+    class MyState:
+        # Both fields have a default of 5
+        my_value_1: Annotated[int, my_reducer] = 5
+        my_value_2: Annotated[int | None, my_reducer] = 5
+
+    def sample_node(state: MyState):
+        return {"my_value_1": state.my_value_1, "my_value_2": state.my_value_2}
+
+    builder = StateGraph(MyState)
+    builder.add_node("sample", sample_node)
+    builder.add_edge("__start__", "sample")
+    builder.add_edge("sample", "__end__")
+
+    graph = builder.compile()
+
+    # Invoke with empty input - should use dataclass defaults
+    result = graph.invoke({})
+
+    # Both values should be 5 (the dataclass default), not 0 (the type default)
+    assert result["my_value_1"] == 5, f"Expected 5, got {result['my_value_1']}"
+    assert result["my_value_2"] == 5, f"Expected 5, got {result['my_value_2']}"
+
+
 def test__get_node_name() -> None:
     # lambda
     assert _get_node_name(lambda x: x) == "<lambda>"
