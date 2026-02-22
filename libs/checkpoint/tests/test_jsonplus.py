@@ -7,8 +7,9 @@ import uuid
 from collections import deque
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, StrEnum
 from ipaddress import IPv4Address
+from typing import Generic, TypeVar
 from zoneinfo import ZoneInfo
 
 import dataclasses_json
@@ -514,3 +515,192 @@ def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
     result = serde.loads_typed(dumped)
 
     assert result.equals(series)
+
+
+# --- Regression tests for #6102 (Pydantic v2 generics) and #6718 (nested enums) ---
+
+T = TypeVar("T", bound=BaseModel)
+
+
+class GenericModel(BaseModel, Generic[T]):
+    inner: T
+
+
+class Outer:
+    """Container for nested classes used in deserialization tests."""
+
+    class Status(Enum):
+        ACTIVE = "active"
+        INACTIVE = "inactive"
+
+    class Priority(StrEnum):
+        HIGH = "high"
+        LOW = "low"
+
+    @dataclasses.dataclass
+    class Config:
+        name: str
+        value: int
+
+
+class DatasetArtifact(BaseModel):
+    class PhaseEnum(StrEnum):
+        QUERY = "query_ready"
+        READY = "ready"
+
+    phase: PhaseEnum
+    item_id: str | None = None
+
+
+def test_serde_jsonplus_pydantic_v2_generic() -> None:
+    """Regression test for #6102: generic Pydantic v2 models degrade to dicts."""
+    instance = GenericModel[InnerPydantic](inner=InnerPydantic(hello="world"))
+    serde = JsonPlusSerializer()
+
+    dumped = serde.dumps_typed(instance)
+    assert dumped[0] == "msgpack"
+
+    result = serde.loads_typed(dumped)
+    assert type(result) is type(instance)
+    assert isinstance(result, GenericModel)
+    assert result.inner.hello == "world"
+
+
+def test_serde_jsonplus_pydantic_v2_nested_generic() -> None:
+    """Nested generics: GenericModel[GenericModel[Inner]] round-trips correctly."""
+    inner_instance = GenericModel[InnerPydantic](inner=InnerPydantic(hello="deep"))
+    instance = GenericModel[GenericModel[InnerPydantic]](inner=inner_instance)
+    serde = JsonPlusSerializer()
+
+    result = serde.loads_typed(serde.dumps_typed(instance))
+    assert isinstance(result, GenericModel)
+    assert isinstance(result.inner, GenericModel)
+    assert result.inner.inner.hello == "deep"
+
+
+def test_serde_jsonplus_nested_enum() -> None:
+    """Regression test for #6718: nested enum fields become None."""
+    serde = JsonPlusSerializer()
+
+    result = serde.loads_typed(serde.dumps_typed(Outer.Status.ACTIVE))
+    assert result == Outer.Status.ACTIVE
+    assert type(result) is Outer.Status
+
+    result2 = serde.loads_typed(serde.dumps_typed(Outer.Status.INACTIVE))
+    assert result2 == Outer.Status.INACTIVE
+
+
+def test_serde_jsonplus_nested_strenum() -> None:
+    """Nested StrEnum preserves type through round-trip."""
+    serde = JsonPlusSerializer()
+
+    result = serde.loads_typed(serde.dumps_typed(Outer.Priority.HIGH))
+    assert result == Outer.Priority.HIGH
+    assert type(result) is Outer.Priority
+
+
+def test_serde_jsonplus_nested_enum_in_pydantic() -> None:
+    """Nested enum inside Pydantic model survives checkpoint round-trip (#6718)."""
+    obj = DatasetArtifact(phase=DatasetArtifact.PhaseEnum.QUERY, item_id="123")
+    serde = JsonPlusSerializer()
+
+    result = serde.loads_typed(serde.dumps_typed(obj))
+    assert isinstance(result, DatasetArtifact)
+    assert result.phase == DatasetArtifact.PhaseEnum.QUERY
+    assert type(result.phase) is DatasetArtifact.PhaseEnum
+    assert result.item_id == "123"
+
+
+def test_serde_jsonplus_nested_dataclass() -> None:
+    """Nested dataclass (class defined inside another class) round-trips."""
+    serde = JsonPlusSerializer()
+    obj = Outer.Config(name="test", value=42)
+
+    result = serde.loads_typed(serde.dumps_typed(obj))
+    assert isinstance(result, Outer.Config)
+    assert result.name == "test"
+    assert result.value == 42
+
+
+def test_serde_jsonplus_mixed_nested_types() -> None:
+    """Multiple nested class types in the same serialized payload all survive."""
+    payload = {
+        "status": Outer.Status.ACTIVE,
+        "priority": Outer.Priority.LOW,
+        "config": Outer.Config(name="mix", value=7),
+        "artifact": DatasetArtifact(phase=DatasetArtifact.PhaseEnum.READY),
+        "generic": GenericModel[InnerPydantic](inner=InnerPydantic(hello="mixed")),
+    }
+    serde = JsonPlusSerializer()
+
+    result = serde.loads_typed(serde.dumps_typed(payload))
+    assert result["status"] == Outer.Status.ACTIVE
+    assert type(result["status"]) is Outer.Status
+    assert result["priority"] == Outer.Priority.LOW
+    assert isinstance(result["config"], Outer.Config)
+    assert isinstance(result["artifact"], DatasetArtifact)
+    assert result["artifact"].phase == DatasetArtifact.PhaseEnum.READY
+    assert isinstance(result["generic"], GenericModel)
+    assert result["generic"].inner.hello == "mixed"
+
+
+def test_serde_jsonplus_pydantic_v2_backward_compat() -> None:
+    """Old serialized data (with __name__ and method string) still deserializes.
+
+    Simulates data written by the old serializer that stored __name__ (not
+    __qualname__) and ``"model_validate_json"`` as the 4th tuple element.
+    """
+    from langgraph.checkpoint.serde.jsonplus import (
+        EXT_CONSTRUCTOR_SINGLE_ARG,
+        EXT_PYDANTIC_V2,
+        _msgpack_enc,
+        _msgpack_ext_hook,
+    )
+
+    # Build old-format payload: (module, __name__, kwargs, method_string)
+    old_payload = _msgpack_enc(
+        (
+            InnerPydantic.__module__,
+            InnerPydantic.__name__,  # simple name, not qualname
+            {"hello": "compat"},
+            "model_validate_json",  # old method string
+        )
+    )
+    result = _msgpack_ext_hook(EXT_PYDANTIC_V2, old_payload)
+    assert isinstance(result, InnerPydantic)
+    assert result.hello == "compat"
+
+    # Also test with EXT_CONSTRUCTOR_SINGLE_ARG for enums (old __name__)
+    old_enum_payload = _msgpack_enc(
+        (
+            MyEnum.__module__,
+            MyEnum.__name__,  # not qualname, but MyEnum isn't nested so same
+            "foo",
+        )
+    )
+    result_enum = _msgpack_ext_hook(
+        EXT_CONSTRUCTOR_SINGLE_ARG,
+        old_enum_payload,
+    )
+    assert result_enum == MyEnum.FOO
+
+
+def test_serde_jsonplus_nested_types_json_mode() -> None:
+    """JSON mode returns simplified representations for nested types."""
+    payload = {
+        "status": Outer.Status.ACTIVE,
+        "config": Outer.Config(name="json", value=1),
+        "artifact": DatasetArtifact(phase=DatasetArtifact.PhaseEnum.QUERY),
+    }
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+
+    dumped = serde.dumps_typed(payload)
+    result = serde.loads_typed(dumped)
+
+    # JSON mode returns simplified values, not reconstructed objects
+    assert result["status"] == "active"  # enum value
+    assert result["config"] == {"name": "json", "value": 1}  # dict
+    assert result["artifact"] == {
+        "phase": "query_ready",
+        "item_id": None,
+    }  # dict

@@ -13,6 +13,7 @@ from collections import deque
 from collections.abc import Callable, Sequence
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
+from functools import reduce
 from inspect import isclass
 from ipaddress import (
     IPv4Address,
@@ -36,6 +37,84 @@ from langgraph.store.base import Item
 LC_REVIVER = Reviver()
 EMPTY_BYTES = b""
 logger = logging.getLogger(__name__)
+
+# Registry of classes seen during serialization, keyed by (module, qualname).
+# Used as a fallback when importlib resolution fails (e.g. for classes defined
+# in local scopes such as test functions or notebooks).
+_CLASS_REGISTRY: dict[tuple[str, str], type] = {}
+
+
+def _resolve_class(module: str, qualname: str) -> type:
+    """Resolve a class by module and qualified name, with registry fallback.
+
+    Handles nested classes (e.g. ``"Outer.Inner"``) by traversing the
+    dot-separated qualified name via `getattr`.  Falls back to the class
+    registry for classes that are not importable (e.g. defined in ``__main__``
+    or inside a function).
+    """
+    try:
+        mod = importlib.import_module(module)
+        return reduce(getattr, qualname.split("."), mod)
+    except (ImportError, AttributeError):
+        cls = _CLASS_REGISTRY.get((module, qualname))
+        if cls is not None:
+            return cls
+        # Backward compat: qualname may be a simple name serialized by older
+        # code where __name__ was used instead of __qualname__.
+        if "." in qualname:
+            simple_name = qualname.rsplit(".", 1)[-1]
+            try:
+                return getattr(importlib.import_module(module), simple_name)
+            except (ImportError, AttributeError):
+                pass
+        raise
+
+
+def _get_pydantic_generic_info(cls: type) -> dict[str, Any] | None:
+    """Extract generic metadata from a parameterized Pydantic v2 model.
+
+    Returns ``None`` for non-generic models.  For generics like
+    ``MyModel[Inner]``, returns a dict with ``origin`` (module, qualname) and
+    ``args`` (list of serialized type arguments).  Each arg is either a simple
+    ``[module, qualname]`` pair or a nested generic info dict (recursive).
+    """
+    meta = getattr(cls, "__pydantic_generic_metadata__", None)
+    if not meta or not meta.get("origin"):
+        return None
+    origin = meta["origin"]
+    args = meta.get("args", ())
+    serialized_args: list[Any] = []
+    for a in args:
+        # Check if the type arg is itself a parameterized generic
+        nested = _get_pydantic_generic_info(a)
+        if nested is not None:
+            serialized_args.append(nested)
+        elif hasattr(a, "__module__") and hasattr(a, "__qualname__"):
+            serialized_args.append([a.__module__, a.__qualname__])
+    return {
+        "origin": [origin.__module__, origin.__qualname__],
+        "args": serialized_args,
+    }
+
+
+def _resolve_pydantic_generic(info: dict[str, Any]) -> type:
+    """Reconstruct a parameterized Pydantic type from stored generic info."""
+    origin_module, origin_name = info["origin"]
+    origin_cls = _resolve_class(origin_module, origin_name)
+    args = info.get("args")
+    if not args:
+        return origin_cls
+    type_args: list[type] = []
+    for arg in args:
+        if isinstance(arg, dict) and "origin" in arg:
+            # Nested generic — recurse
+            type_args.append(_resolve_pydantic_generic(arg))
+        else:
+            # Simple [module, qualname] pair
+            type_args.append(_resolve_class(arg[0], arg[1]))
+    if len(type_args) == 1:
+        return origin_cls[type_args[0]]  # type: ignore[index]
+    return origin_cls[tuple(type_args)]  # type: ignore[index]
 
 
 class JsonPlusSerializer(SerializerProtocol):
@@ -223,16 +302,20 @@ EXT_NUMPY_ARRAY = 6
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
+        cls = obj.__class__
+        generic_info = _get_pydantic_generic_info(cls)
+        if generic_info:
+            origin = generic_info["origin"]
+            _CLASS_REGISTRY[(origin[0], origin[1])] = getattr(
+                cls, "__pydantic_generic_metadata__", {}
+            ).get("origin", cls)
+            mod, name = origin[0], origin[1]
+        else:
+            _CLASS_REGISTRY[(cls.__module__, cls.__qualname__)] = cls
+            mod, name = cls.__module__, cls.__qualname__
         return ormsgpack.Ext(
             EXT_PYDANTIC_V2,
-            _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    obj.model_dump(),
-                    "model_validate_json",
-                ),
-            ),
+            _msgpack_enc((mod, name, obj.model_dump(), generic_info)),
         )
     elif hasattr(obj, "get_secret_value") and callable(obj.get_secret_value):
         return ormsgpack.Ext(
@@ -387,10 +470,17 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
             ),
         )
     elif isinstance(obj, Enum):
+        _CLASS_REGISTRY[(obj.__class__.__module__, obj.__class__.__qualname__)] = (
+            obj.__class__
+        )
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, obj.value),
+                (
+                    obj.__class__.__module__,
+                    obj.__class__.__qualname__,
+                    obj.value,
+                ),
             ),
         )
     elif isinstance(obj, SendProtocol):
@@ -402,12 +492,14 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         )
     elif dataclasses.is_dataclass(obj):
         # doesn't use dataclasses.asdict to avoid deepcopy and recursion
+        _cls: type = type(obj)
+        _CLASS_REGISTRY[(_cls.__module__, _cls.__qualname__)] = _cls
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_KW_ARGS,
             _msgpack_enc(
                 (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
+                    _cls.__module__,
+                    _cls.__qualname__,
                     {
                         field.name: getattr(obj, field.name)
                         for field in dataclasses.fields(obj)
@@ -454,8 +546,8 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             tup = ormsgpack.unpackb(
                 data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
-            # module, name, arg
-            return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+            # module, qualname, arg
+            return _resolve_class(tup[0], tup[1])(tup[2])
         except Exception:
             return
     elif code == EXT_CONSTRUCTOR_POS_ARGS:
@@ -463,8 +555,8 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             tup = ormsgpack.unpackb(
                 data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
-            # module, name, args
-            return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
+            # module, qualname, args
+            return _resolve_class(tup[0], tup[1])(*tup[2])
         except Exception:
             return
     elif code == EXT_CONSTRUCTOR_KW_ARGS:
@@ -472,8 +564,8 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             tup = ormsgpack.unpackb(
                 data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
-            # module, name, args
-            return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+            # module, qualname, kwargs
+            return _resolve_class(tup[0], tup[1])(**tup[2])
         except Exception:
             return
     elif code == EXT_METHOD_SINGLE_ARG:
@@ -481,10 +573,9 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             tup = ormsgpack.unpackb(
                 data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
-            # module, name, arg, method
-            return getattr(getattr(importlib.import_module(tup[0]), tup[1]), tup[3])(
-                tup[2]
-            )
+            # module, qualname, arg, method
+            cls = _resolve_class(tup[0], tup[1])
+            return getattr(cls, tup[3])(tup[2])
         except Exception:
             return
     elif code == EXT_PYDANTIC_V1:
@@ -492,12 +583,12 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             tup = ormsgpack.unpackb(
                 data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
-            # module, name, kwargs
-            cls = getattr(importlib.import_module(tup[0]), tup[1])
+            # module, qualname, kwargs
+            cls = _resolve_class(tup[0], tup[1])
             try:
                 return cls(**tup[2])
             except Exception:
-                return cls.construct(**tup[2])
+                return cls.construct(**tup[2])  # type: ignore[attr-defined]
         except Exception:
             # for pydantic objects we can't find/reconstruct
             # let's return the kwargs dict instead
@@ -510,12 +601,20 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             tup = ormsgpack.unpackb(
                 data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
-            # module, name, kwargs, method
-            cls = getattr(importlib.import_module(tup[0]), tup[1])
+            # module, qualname, kwargs, generic_info_or_method
+            generic_info = tup[3] if len(tup) > 3 else None
+            if isinstance(generic_info, dict) and "origin" in generic_info:
+                cls = _resolve_pydantic_generic(generic_info)
+            else:
+                # Non-generic, or backward compat (old data has method string)
+                cls = _resolve_class(tup[0], tup[1])
             try:
-                return cls(**tup[2])
+                return cls.model_validate(tup[2])  # type: ignore[attr-defined]
             except Exception:
-                return cls.model_construct(**tup[2])
+                try:
+                    return cls(**tup[2])
+                except Exception:
+                    return cls.model_construct(**tup[2])  # type: ignore[attr-defined]
         except Exception:
             # for pydantic objects we can't find/reconstruct
             # let's return the kwargs dict instead
