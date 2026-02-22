@@ -54,6 +54,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_RUNTIME,
 )
 from langgraph._internal._typing import MISSING
+from langgraph.runtime import DEFAULT_RUNTIME
 from langgraph.types import StreamWriter
 
 try:
@@ -354,14 +355,14 @@ class RunnableCallable(Runnable):
             kw_value: Any = MISSING
             if kw == "config":
                 kw_value = config
+            elif kw == "runtime":
+                # Use config runtime if available, otherwise use default runtime
+                kw_value = runtime if runtime else DEFAULT_RUNTIME
             elif runtime:
-                if kw == "runtime":
-                    kw_value = runtime
-                else:
-                    try:
-                        kw_value = getattr(runtime, runtime_key)
-                    except AttributeError:
-                        pass
+                try:
+                    kw_value = getattr(runtime, runtime_key)
+                except AttributeError:
+                    pass
 
             if kw_value is MISSING:
                 if default is inspect.Parameter.empty:
@@ -426,14 +427,14 @@ class RunnableCallable(Runnable):
             kw_value: Any = MISSING
             if kw == "config":
                 kw_value = config
+            elif kw == "runtime":
+                # Use config runtime if available, otherwise use default runtime
+                kw_value = runtime if runtime else DEFAULT_RUNTIME
             elif runtime:
-                if kw == "runtime":
-                    kw_value = runtime
-                else:
-                    try:
-                        kw_value = getattr(runtime, runtime_key)
-                    except AttributeError:
-                        pass
+                try:
+                    kw_value = getattr(runtime, runtime_key)
+                except AttributeError:
+                    pass
             if kw_value is MISSING:
                 if default is inspect.Parameter.empty:
                     raise ValueError(
