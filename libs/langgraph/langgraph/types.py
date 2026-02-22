@@ -52,6 +52,7 @@ __all__ = (
     "PregelExecutableTask",
     "StateSnapshot",
     "Send",
+    "Goto",
     "Command",
     "Durability",
     "interrupt",
@@ -365,6 +366,77 @@ N = TypeVar("N", bound=Hashable)
 
 
 @dataclass(**_DC_KWARGS)
+class Goto(Generic[N]):
+    """A navigation command with state updates for the target graph.
+
+    The `Goto` class enables atomic cross-graph handoffs by allowing a node to:
+    1. Navigate to a different graph
+    2. Apply state updates to the target graph using its reducers
+    3. Execute the target node
+
+    This eliminates the need for shim nodes and maintains message history integrity.
+
+    Attributes:
+        graph: The target graph to navigate to. Can be:
+            - `None`: current graph
+            - `Command.PARENT`: parent graph
+            - String: specific graph namespace
+        node: The node to execute in the target graph. Can be:
+            - String: node name
+            - `Send` object: node with custom input
+            - Sequence of node names or `Send` objects
+        update: State updates to apply to the TARGET graph before executing the node.
+            Applied using the target graph's reducers.
+
+    !!! example
+
+        ```python
+        from langgraph.types import Command, Goto
+        from langchain_core.messages import ToolMessage, AIMessage
+
+        def my_tool_node(state):
+            # Update current graph, then handoff to parent with parent update
+            return Command(
+                update={"messages": [ToolMessage(content="result", tool_call_id="1")]},
+                goto=Goto(
+                    graph=Command.PARENT,
+                    node="agent",
+                    update={"messages": [AIMessage(content="Routing back to agent")]}
+                )
+            )
+        ```
+
+    !!! version-added "Added in version 0.6.0"
+    """
+
+    graph: str | None = None
+    node: Send | Sequence[Send | N] | N = ()
+    update: Any | None = None
+
+    def __repr__(self) -> str:
+        contents = ", ".join(
+            f"{key}={value!r}" for key, value in asdict(self).items() if value
+        )
+        return f"Goto({contents})"
+
+    def _update_as_tuples(self) -> Sequence[tuple[str, Any]]:
+        """Convert update to a sequence of (channel, value) tuples."""
+        if isinstance(self.update, dict):
+            return list(self.update.items())
+        elif isinstance(self.update, (list, tuple)) and all(
+            isinstance(t, tuple) and len(t) == 2 and isinstance(t[0], str)
+            for t in self.update
+        ):
+            return self.update
+        elif keys := get_cached_annotated_keys(type(self.update)):
+            return get_update_as_tuples(self.update, keys)
+        elif self.update is not None:
+            return [("__root__", self.update)]
+        else:
+            return []
+
+
+@dataclass(**_DC_KWARGS)
 class Command(Generic[N], ToolOutputMixin):
     """One or more commands to update the graph's state and send messages to nodes.
 
@@ -373,7 +445,8 @@ class Command(Generic[N], ToolOutputMixin):
 
             - `None`: the current graph
             - `Command.PARENT`: closest parent graph
-        update: Update to apply to the graph's state.
+        update: Update to apply to the CURRENT graph's state before any navigation.
+            Applied using the current graph's reducers.
         resume: Value to resume execution with. To be used together with [`interrupt()`][langgraph.types.interrupt].
             Can be one of the following:
 
@@ -385,12 +458,35 @@ class Command(Generic[N], ToolOutputMixin):
             - Sequence of node names to navigate to next
             - `Send` object (to execute a node with the input provided)
             - Sequence of `Send` objects
+            - `Goto` object (to navigate to a different graph with atomic state updates)
+            - Sequence of `Goto` objects
+
+    !!! example "Atomic Cross-Graph Handoff"
+
+        ```python
+        from langgraph.types import Command, Goto
+        from langchain_core.messages import ToolMessage, AIMessage
+
+        def tool_node(state):
+            # Atomically: update current graph + navigate to parent + update parent
+            return Command(
+                update={"messages": [ToolMessage(content="result", tool_call_id="1")]},
+                goto=Goto(
+                    graph=Command.PARENT,
+                    node="agent",
+                    update={"messages": [AIMessage(content="Routing back")]}
+                )
+            )
+        ```
+
+    !!! version-changed "Changed in version 0.6.0"
+        Added support for `Goto` objects in the `goto` field for atomic cross-graph handoffs.
     """
 
     graph: str | None = None
     update: Any | None = None
     resume: dict[str, Any] | Any | None = None
-    goto: Send | Sequence[Send | N] | N = ()
+    goto: Send | Sequence[Send | N] | N | Goto[N] | Sequence[Goto[N]] = ()
 
     def __repr__(self) -> str:
         # get all non-None values
