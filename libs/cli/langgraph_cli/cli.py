@@ -48,7 +48,7 @@ OPT_CONFIG = click.option(
     - "graphs": mapping from graph ID to path where the compiled graph is defined, i.e. ./your_package/your_file.py:variable, where
         "variable" is an instance of langgraph.graph.graph.CompiledGraph
     - "env": (optional) path to .env file or a mapping from environment variable to its value
-    - "python_version": (optional) 3.11, 3.12, or 3.13. Defaults to 3.11
+    - "python_version": (optional) 3.11, 3.12, 3.13, or 3.14. Defaults to 3.11
     - "pip_config_file": (optional) path to pip config file
     - "dockerfile_lines": (optional) array of additional lines to add to Dockerfile following the import from parent image
 

@@ -16,7 +16,8 @@
               "enum": [
                 "3.11",
                 "3.12",
-                "3.13"
+                "3.13",
+                "3.14"
               ]
             },
             "pip_config_file": {
@@ -1003,5 +1004,5 @@
   },
   "title": "LangGraph CLI Configuration",
   "description": "Configuration schema for langgraph-cli",
-  "version": "v0"
+  "version": "v1"
 }
