@@ -514,3 +514,52 @@ def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
     result = serde.loads_typed(dumped)
 
     assert result.equals(series)
+
+
+def test_serde_jsonplus_nested_enum() -> None:
+    """Test that nested enums (enums defined inside classes) serialize/deserialize correctly."""
+    from enum import StrEnum
+
+    # Pydantic model with nested enum (enum defined inside class)
+    class DatasetArtifact(BaseModel):
+        class PhaseEnum(StrEnum):
+            QUERY = "query_ready"
+            READY = "ready"
+
+        phase: PhaseEnum
+        item_id: str | None = None
+
+    serde = JsonPlusSerializer()
+
+    # Test serialization and deserialization of nested enum
+    artifact = DatasetArtifact(phase=DatasetArtifact.PhaseEnum.QUERY, item_id="123")
+    dumped = serde.dumps_typed(artifact)
+    assert dumped[0] == "msgpack"
+
+    result = serde.loads_typed(dumped)
+
+    # When pydantic models can't be imported, they fall back to dict
+    # But the important fix is that enum values are preserved (not None)
+    assert isinstance(result, dict)
+    assert result["phase"] == "query_ready"  # Not None!
+    assert result["item_id"] == "123"
+
+    # Verify we can reconstruct the model from the dict
+    reconstructed = DatasetArtifact(**result)
+    assert reconstructed.phase == DatasetArtifact.PhaseEnum.QUERY
+    assert isinstance(reconstructed.phase, DatasetArtifact.PhaseEnum)
+    assert reconstructed.item_id == "123"
+
+    # Test with READY enum value
+    artifact2 = DatasetArtifact(phase=DatasetArtifact.PhaseEnum.READY, item_id="456")
+    dumped2 = serde.dumps_typed(artifact2)
+    result2 = serde.loads_typed(dumped2)
+
+    assert isinstance(result2, dict)
+    assert result2["phase"] == "ready"  # Not None!
+    assert result2["item_id"] == "456"
+
+    reconstructed2 = DatasetArtifact(**result2)
+    assert reconstructed2.phase == DatasetArtifact.PhaseEnum.READY
+    assert isinstance(reconstructed2.phase, DatasetArtifact.PhaseEnum)
+    assert reconstructed2.item_id == "456"
