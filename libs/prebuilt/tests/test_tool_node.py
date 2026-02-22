@@ -2008,3 +2008,65 @@ async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() 
     tool_message = result["messages"][-1]
     assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_2"
     assert tool_message.tool_call_id == "call_dynamic_2"
+async def test_tool_node_handles_cancelled_error() -> None:
+    """Test that ToolNode handles asyncio.CancelledError raised within tools when handle_tool_errors=True.
+
+    This replicates the scenario from issue #6726 where a tool raises CancelledError
+    (e.g., from a cancelled underlying operation) and we want the ToolNode to convert
+    it to an error ToolMessage rather than letting it propagate.
+    """
+    import asyncio
+
+    @dec_tool
+    async def tool_that_cancels(query: str) -> str:
+        """A tool that simulates cancellation during execution."""
+        # Simulate a scenario where the tool's work is cancelled
+        # For example, an internal HTTP request that times out and gets cancelled
+        raise asyncio.CancelledError("Simulated cancellation")
+
+    # Test with handle_tool_errors=True
+    tool_node = ToolNode([tool_that_cancels], handle_tool_errors=True)
+
+    ai_message = AIMessage(
+        "",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_that_cancels", "args": {"query": "test"}}
+        ],
+    )
+    state = {"messages": [ai_message]}
+    config = _create_config_with_runtime()
+
+    # Should not raise, should return ToolMessage with error
+    result = await tool_node.ainvoke(state, config)
+    tool_message = result["messages"][-1]
+
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.tool_call_id == "call_1"
+    assert tool_message.status == "error"
+    assert "cancel" in tool_message.content.lower()
+
+
+async def test_tool_node_raises_cancelled_error_when_not_handled() -> None:
+    """Test that ToolNode raises CancelledError when handle_tool_errors=False."""
+    import asyncio
+
+    @dec_tool
+    async def tool_that_cancels(query: str) -> str:
+        """A tool that simulates cancellation during execution."""
+        raise asyncio.CancelledError("Simulated cancellation")
+
+    # Test with handle_tool_errors=False
+    tool_node = ToolNode([tool_that_cancels], handle_tool_errors=False)
+
+    ai_message = AIMessage(
+        "",
+        tool_calls=[
+            {"id": "call_1", "name": "tool_that_cancels", "args": {"query": "test"}}
+        ],
+    )
+    state = {"messages": [ai_message]}
+    config = _create_config_with_runtime()
+
+    # Should raise CancelledError
+    with pytest.raises(asyncio.CancelledError):
+        await tool_node.ainvoke(state, config)
