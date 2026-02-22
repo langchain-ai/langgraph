@@ -39,6 +39,7 @@ declared in that library's `pyproject.toml` (or `package.json`).
 checkpoint
 ├── checkpoint-postgres
 ├── checkpoint-sqlite
+├── checkpoint-cosmosdb
 ├── prebuilt
 └── langgraph
 

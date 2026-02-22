@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langgraph-checkpoint-cosmosdb"
+version = "1.0.0"
+description = "Library with an Azure CosmosDB implementation of LangGraph checkpoint saver."
+authors = [{name = "Kamal", email = "skamalj@github.com"}]
+requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
+license-files = ['LICENSE']
+dependencies = [
+  "langgraph-checkpoint>=2.1.2,<5.0.0",
+  "azure-cosmos>=4.0.0",
+  "azure-identity>=1.12.0",
+  "aiohttp>=3.8.0",
+]
+
+[project.urls]
+Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint-cosmosdb"
+Twitter = "https://x.com/LangChain"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
+
+[dependency-groups]
+test = [
+  "pytest",
+  "pytest-asyncio",
+  "pytest-mock",
+  "pytest-watcher",
+  "langgraph-checkpoint",
+]
+lint = [
+  "ruff",
+  "codespell",
+  "mypy",
+]
+dev = [
+  {include-group = "test"},
+  {include-group = "lint"},
+]
+
+[tool.uv]
+default-groups = ['dev']
+
+[tool.uv.sources]
+langgraph-checkpoint = { path = "../checkpoint", editable = true }
+
+[tool.hatch.build.targets.wheel]
+include = ["langgraph"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --durations=5 -vv"
+asyncio_mode = "auto"
+
+[tool.ruff]
+lint.select = ["E", "F", "UP", "B", "I", "UP"]
+lint.ignore = ["E501", "B008"]
+target-version = "py310"
+
+[tool.mypy]
+disallow_untyped_defs = "True"
+explicit_package_bases = "True"
+warn_no_return = "False"
+warn_unused_ignores = "True"
+warn_redundant_casts = "True"
+allow_redefinition = "True"
+disable_error_code = "typeddict-item, return-value, valid-type, index, attr-defined, var-annotated"
+
+[tool.pytest-watcher]
+now = true
+delay = 0.1
+runner_args = ["--ff", "-x", "-v", "--tb", "short"]
+patterns = ["*.py"]
