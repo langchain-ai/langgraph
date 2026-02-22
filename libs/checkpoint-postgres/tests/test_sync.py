@@ -281,6 +281,34 @@ def test_nonnull_migrations() -> None:
         assert statement.strip()
 
 
+def test_shallow_setup_fails_on_incomplete_schema() -> None:
+    database = f"test_{uuid4().hex[:16]}"
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+
+    try:
+        with Connection.connect(
+            DEFAULT_POSTGRES_URI + database,
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row,
+        ) as conn:
+            conn.execute("CREATE TABLE checkpoint_migrations (v INTEGER PRIMARY KEY)")
+            conn.execute(
+                "INSERT INTO checkpoint_migrations (v) VALUES (%s)",
+                (len(ShallowPostgresSaver.MIGRATIONS) - 1,),
+            )
+
+            saver = ShallowPostgresSaver(conn)
+            with pytest.raises(
+                RuntimeError, match="incomplete shallow checkpoint schema"
+            ):
+                saver.setup()
+    finally:
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
 def test_pending_sends_migration(saver_name: str) -> None:
     with _saver(saver_name) as saver:
