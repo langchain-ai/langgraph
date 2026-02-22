@@ -358,3 +358,55 @@ def test_get_checkpoint_no_channel_values(
 
         checkpoint = saver.get_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+def test_cleanup_old_threads(saver_name: str, test_data) -> None:
+    """Test that cleanup_old_threads deletes expired threads."""
+    from datetime import datetime, timedelta, timezone
+
+    with _saver(saver_name) as saver:
+        # Create checkpoints for two threads
+        configs = test_data["configs"]
+        checkpoints = test_data["checkpoints"]
+        metadata = test_data["metadata"]
+
+        # Save checkpoints normally (they will have current timestamps)
+        saver.put(configs[0], checkpoints[0], metadata[0], {})
+        saver.put(configs[1], checkpoints[1], metadata[1], {})
+
+        # Verify both threads exist
+        results_before = list(saver.list(None))
+        assert len(results_before) == 2
+
+        # Cleanup with 30 day retention - nothing should be deleted since checkpoints are new
+        deleted_count = saver.cleanup_old_threads(retention_days=30)
+        assert deleted_count == 0
+
+        # Verify both threads still exist
+        results_after = list(saver.list(None))
+        assert len(results_after) == 2
+
+        # Now manually update the checkpoint timestamps to be old
+        # This simulates threads that are older than the retention period
+        old_timestamp = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+
+        with saver._cursor() as cur:
+            # Update thread-1's checkpoint to have an old timestamp
+            cur.execute(
+                """
+                UPDATE checkpoints 
+                SET checkpoint = jsonb_set(checkpoint, '{ts}', to_jsonb(%s::text))
+                WHERE thread_id = %s
+                """,
+                (old_timestamp, "thread-1"),
+            )
+
+        # Cleanup with 30 day retention - thread-1 should be deleted
+        deleted_count = saver.cleanup_old_threads(retention_days=30)
+        assert deleted_count == 1
+
+        # Verify only thread-2 remains
+        results_final = list(saver.list(None))
+        assert len(results_final) == 1
+        assert results_final[0].config["configurable"]["thread_id"] == "thread-2"

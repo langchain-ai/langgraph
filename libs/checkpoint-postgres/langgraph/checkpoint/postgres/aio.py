@@ -349,6 +349,69 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 (str(thread_id),),
             )
 
+    async def acleanup_old_threads(self, retention_days: int) -> int:
+        """Delete all threads whose latest checkpoint is older than the retention period.
+
+        This removes data from:
+          - checkpoints
+          - checkpoint_blobs
+          - checkpoint_writes
+
+        Args:
+            retention_days: Number of days to retain threads. Threads with all
+                checkpoints older than this will be deleted.
+
+        Returns:
+            Number of threads deleted.
+
+        Examples:
+
+            >>> from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+            >>> DB_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+            >>> async with AsyncPostgresSaver.from_conn_string(DB_URI) as memory:
+            ...     # Delete threads older than 30 days
+            ...     deleted_count = await memory.acleanup_old_threads(retention_days=30)
+            ...     print(f"Deleted {deleted_count} expired threads")
+        """
+        from datetime import datetime, timedelta, timezone
+
+        cutoff_date = (
+            datetime.now(timezone.utc) - timedelta(days=retention_days)
+        ).isoformat()
+
+        # Find thread_ids whose latest checkpoint timestamp is older than cutoff
+        find_expired_query = """
+            SELECT thread_id
+            FROM checkpoints
+            GROUP BY thread_id
+            HAVING MAX(checkpoint ->> 'ts') < %s
+        """
+
+        async with self._cursor() as cur:
+            await cur.execute(find_expired_query, (cutoff_date,))
+            rows = await cur.fetchall()
+            thread_ids = [row["thread_id"] for row in rows]
+
+            if not thread_ids:
+                return 0
+
+            # Bulk delete all related data
+            async with self._cursor(pipeline=True) as del_cur:
+                await del_cur.execute(
+                    "DELETE FROM checkpoints WHERE thread_id = ANY(%s)",
+                    (thread_ids,),
+                )
+                await del_cur.execute(
+                    "DELETE FROM checkpoint_blobs WHERE thread_id = ANY(%s)",
+                    (thread_ids,),
+                )
+                await del_cur.execute(
+                    "DELETE FROM checkpoint_writes WHERE thread_id = ANY(%s)",
+                    (thread_ids,),
+                )
+
+            return len(thread_ids)
+
     @asynccontextmanager
     async def _cursor(
         self, *, pipeline: bool = False
@@ -576,6 +639,32 @@ class AsyncPostgresSaver(BasePostgresSaver):
             pass
         return asyncio.run_coroutine_threadsafe(
             self.adelete_thread(thread_id), self.loop
+        ).result()
+
+    def cleanup_old_threads(self, retention_days: int) -> int:
+        """Delete all threads whose latest checkpoint is older than the retention period.
+
+        Args:
+            retention_days: Number of days to retain threads. Threads with all
+                checkpoints older than this will be deleted.
+
+        Returns:
+            Number of threads deleted.
+        """
+        try:
+            # check if we are in the main thread, only bg threads can block
+            # we don't check in other methods to avoid the overhead
+            if asyncio.get_running_loop() is self.loop:
+                raise asyncio.InvalidStateError(
+                    "Synchronous calls to AsyncPostgresSaver are only allowed from a "
+                    "different thread. From the main thread, use the async interface. "
+                    "For example, use `await checkpointer.acleanup_old_threads(...)` or `await "
+                    "graph.ainvoke(...)`."
+                )
+        except RuntimeError:
+            pass
+        return asyncio.run_coroutine_threadsafe(
+            self.acleanup_old_threads(retention_days), self.loop
         ).result()
 
 
