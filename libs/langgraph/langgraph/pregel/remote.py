@@ -7,6 +7,7 @@ from typing import (
     Any,
     Literal,
     cast,
+    Optional,
 )
 from uuid import UUID
 
@@ -61,6 +62,7 @@ from langgraph.types import (
     PregelTask,
     StateSnapshot,
     StreamMode,
+    Durability,
 )
 
 logger = logging.getLogger(__name__)
@@ -690,6 +692,7 @@ class RemoteGraph(PregelProtocol):
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
@@ -707,9 +710,16 @@ class RemoteGraph(PregelProtocol):
             stream_mode: Stream mode(s) to use.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
+            durability: Specifies persistence mode for interrupt handling and
+                when the graph state is persisted. Accepted values are
+                `'sync'`, `'async'`, or `'exit'` (see :class:`langgraph.types.Durability`).
+                - `'sync'`: Persist changes synchronously before the next step starts.
+                - `'async'`: Persist changes asynchronously while the next step executes.
+                - `'exit'`: Persist changes only when the graph exits.
+
+                When ``None``, the client's default behavior is used.
             subgraphs: Stream from subgraphs.
-            headers: Additional headers to pass to the request.
-            **kwargs: Additional params to pass to client.runs.stream.
+            headers: Additional headers to pass to the request.            **kwargs: Additional params to pass to client.runs.stream.
 
         Yields:
             The output of the graph.
@@ -736,6 +746,7 @@ class RemoteGraph(PregelProtocol):
             stream_mode=stream_modes,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            durability=durability,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
             headers=(
@@ -800,6 +811,7 @@ class RemoteGraph(PregelProtocol):
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
@@ -817,6 +829,15 @@ class RemoteGraph(PregelProtocol):
             stream_mode: Stream mode(s) to use.
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
+            durability: Specifies persistence mode for interrupt handling and
+                when the graph state is persisted. Accepted values are
+                `'sync'`, `'async'`, or `'exit'` (see :class:`langgraph.types.Durability`).
+                - `'sync'`: Persist changes synchronously before the next step starts.
+                - `'async'`: Persist changes asynchronously while the next step executes.
+                - `'exit'`: Persist changes only when the graph exits.
+
+                When ``None``, the client's default behavior is used.
+
             subgraphs: Stream from subgraphs.
             headers: Additional headers to pass to the request.
             **kwargs: Additional params to pass to client.runs.stream.
@@ -846,6 +867,7 @@ class RemoteGraph(PregelProtocol):
             stream_mode=stream_modes,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
+            durability=durability,
             stream_subgraphs=subgraphs or stream is not None,
             if_not_exists="create",
             headers=(
