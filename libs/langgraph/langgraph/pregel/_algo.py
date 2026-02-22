@@ -1060,14 +1060,17 @@ def _scratchpad(
     stop: int,
 ) -> PregelScratchpad:
     if len(pending_writes) > 0:
-        # find global resume value
-        for w in pending_writes:
-            if w[0] == NULL_TASK_ID and w[1] == RESUME:
-                null_resume_write = w
-                break
+        # only the root scratchpad should consume the global resume value
+        if parent_scratchpad is None:
+            for w in pending_writes:
+                if w[0] == NULL_TASK_ID and w[1] == RESUME:
+                    null_resume_write = w
+                    break
+            else:
+                # None cannot be used as a resume value, because it would be difficult to
+                # distinguish from missing when used over http
+                null_resume_write = None
         else:
-            # None cannot be used as a resume value, because it would be difficult to
-            # distinguish from missing when used over http
             null_resume_write = None
 
         # find task-specific resume value
