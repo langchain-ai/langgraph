@@ -9631,3 +9631,44 @@ async def test_fork_does_not_apply_pending_writes(
 
     # 1 (input) + 20 (forked node_a) + 100 (node_b) = 121
     assert result == {"value": 121}
+
+
+async def test_state_snapshot_user_metadata_in_config() -> None:
+    """Test that user-provided metadata is available in snapshot.config['metadata'].
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6460
+    User metadata passed in config should be accessible at snapshot.config['metadata'],
+    not only in snapshot.metadata.
+    """
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    class State(TypedDict):
+        value: int
+
+    def node1(state: State) -> State:
+        return {"value": state["value"] + 1}
+
+    graph = StateGraph(State)
+    graph.add_node("node1", node1)
+    graph.add_edge(START, "node1")
+    graph.add_edge("node1", END)
+
+    checkpointer = InMemorySaver()
+    app = graph.compile(checkpointer=checkpointer)
+
+    config = {
+        "metadata": {"foo": "bar", "user_id": 123},
+        "configurable": {"thread_id": "1"},
+    }
+    await app.ainvoke({"value": 0}, config=config)
+
+    # Verify user metadata is in snapshot.config["metadata"]
+    async for snapshot in app.aget_state_history(
+        {"configurable": {"thread_id": "1"}}
+    ):
+        assert "metadata" in snapshot.config
+        assert snapshot.config["metadata"]["foo"] == "bar"
+        assert snapshot.config["metadata"]["user_id"] == 123
+        # Also verify it's still in snapshot.metadata (backwards compatibility)
+        assert snapshot.metadata["foo"] == "bar"
+        assert snapshot.metadata["user_id"] == 123
