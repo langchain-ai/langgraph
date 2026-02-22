@@ -4,6 +4,7 @@ import os
 import pathlib
 import tempfile
 import textwrap
+from unittest.mock import patch
 
 import click
 import pytest
@@ -420,6 +421,7 @@ def test_validate_config_multiplatform():
 
 
 # config_to_docker
+@patch.dict(os.environ, {"LANGGRAPH_CACHE_OPTIMIZE": "lock"})
 def test_config_to_docker_simple():
     graphs = {"agent": "./agent.py:graph"}
     actual_docker_stdin, additional_contexts = config_to_docker(
@@ -436,10 +438,17 @@ def test_config_to_docker_simple():
     expected_docker_stdin = f"""\
 # syntax=docker/dockerfile:1.4
 FROM langchain/langgraph-api:3.11
-# -- Installing local requirements --
-COPY --from=outer-requirements.txt requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
-RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
-# -- End of local requirements install --
+# -- Generate requirements.txt for packages without one --
+# Copy packaging metadata files
+COPY --from=examples pyproject.toml /tmp/dep_metadata/examples/pyproject.toml
+# Generate requirements.txt from packaging metadata
+RUN cd '/tmp/dep_metadata/examples' && uv pip compile pyproject.toml -o 'requirements.txt' --constraint /api/constraints.txt
+# -- End of requirements.txt generation --
+# -- Installing from requirements.txt files --
+COPY --from=outer-graphs_reqs_a requirements.txt /deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt
+RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/deps/outer-graphs_reqs_a/graphs_reqs_a/requirements.txt'
+RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/tmp/dep_metadata/examples/requirements.txt'
+# -- End of requirements.txt install --
 # -- Adding local package ../../examples --
 COPY --from=examples . /deps/examples
 # -- End of local package ../../examples --
@@ -647,6 +656,7 @@ ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-graphs/src/agent.py:graph"}}'
     assert additional_contexts == {}
 
 
+@patch.dict(os.environ, {"LANGGRAPH_CACHE_OPTIMIZE": "lock"})
 def test_config_to_docker_pyproject():
     pyproject_str = """[project]
 name = "custom"
@@ -670,6 +680,15 @@ dependencies = ["langchain"]"""
     os.remove(pyproject_path)
     expected_docker_stdin = (
         """FROM langchain/langgraph-api:3.11
+# -- Generate requirements.txt for packages without one --
+# Copy packaging metadata files
+ADD pyproject.toml /tmp/dep_metadata/unit_tests/pyproject.toml
+# Generate requirements.txt from packaging metadata
+RUN cd '/tmp/dep_metadata/unit_tests' && uv pip compile pyproject.toml -o 'requirements.txt' --constraint /api/constraints.txt
+# -- End of requirements.txt generation --
+# -- Installing from requirements.txt files --
+RUN PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -r '/tmp/dep_metadata/unit_tests/requirements.txt'
+# -- End of requirements.txt install --
 # -- Adding local package . --
 ADD . /deps/unit_tests
 # -- End of local package . --
