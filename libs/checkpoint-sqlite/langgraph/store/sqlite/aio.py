@@ -252,7 +252,8 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             await cur.execute(
                 """
                 DELETE FROM store
-                WHERE expires_at IS NOT NULL AND expires_at < ?
+                WHERE expires_at IS NOT NULL
+                  AND julianday(expires_at) < julianday(?)
                 """,
                 (cutoff,),
             )
