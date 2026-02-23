@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterator, Sequence
-from typing import Any, Generic, cast
+from typing import TYPE_CHECKING, Any, Generic, Literal, cast, overload
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.graph import Graph as DrawableGraph
 from typing_extensions import Self
 
 from langgraph.types import All, Command, StateSnapshot, StateUpdate, StreamMode
+
+if TYPE_CHECKING:
+    from langchain_core.messages import AnyMessage
 from langgraph.typing import ContextT, InputT, OutputT, StateT
 
 __all__ = ("PregelProtocol", "StreamProtocol")
@@ -96,6 +99,146 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         as_node: str | None = None,
     ) -> RunnableConfig: ...
 
+    @overload
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["values"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[False] = False,
+    ) -> Iterator[OutputT]: ...
+
+    @overload
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["updates"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[False] = False,
+    ) -> Iterator[dict[str, Any]]: ...
+
+    @overload
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["messages"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[False] = False,
+    ) -> Iterator[tuple[AnyMessage, dict[str, Any]]]: ...
+
+    @overload
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["custom"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[False] = False,
+    ) -> Iterator[Any]: ...
+
+    @overload
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["values"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[True],
+    ) -> Iterator[tuple[tuple[str, ...], OutputT]]: ...
+
+    @overload
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["updates"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[True],
+    ) -> Iterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
+
+    @overload
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["messages"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[True],
+    ) -> Iterator[tuple[tuple[str, ...], tuple[AnyMessage, dict[str, Any]]]]: ...
+
+    @overload
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["custom"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[True],
+    ) -> Iterator[tuple[tuple[str, ...], Any]]: ...
+
+    @overload
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: list[StreamMode],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[False] = False,
+    ) -> Iterator[tuple[str, Any]]: ...
+
+    @overload
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: list[StreamMode],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[True],
+    ) -> Iterator[tuple[tuple[str, ...], str, Any]]: ...
+
     @abstractmethod
     def stream(
         self,
@@ -108,6 +251,146 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
     ) -> Iterator[dict[str, Any] | Any]: ...
+
+    @overload
+    @abstractmethod
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["values"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[False] = False,
+    ) -> AsyncIterator[OutputT]: ...
+
+    @overload
+    @abstractmethod
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["updates"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[False] = False,
+    ) -> AsyncIterator[dict[str, Any]]: ...
+
+    @overload
+    @abstractmethod
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["messages"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[False] = False,
+    ) -> AsyncIterator[tuple[AnyMessage, dict[str, Any]]]: ...
+
+    @overload
+    @abstractmethod
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["custom"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[False] = False,
+    ) -> AsyncIterator[Any]: ...
+
+    @overload
+    @abstractmethod
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["values"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[True],
+    ) -> AsyncIterator[tuple[tuple[str, ...], OutputT]]: ...
+
+    @overload
+    @abstractmethod
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["updates"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[True],
+    ) -> AsyncIterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
+
+    @overload
+    @abstractmethod
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["messages"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[True],
+    ) -> AsyncIterator[tuple[tuple[str, ...], tuple[AnyMessage, dict[str, Any]]]]: ...
+
+    @overload
+    @abstractmethod
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["custom"],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[True],
+    ) -> AsyncIterator[tuple[tuple[str, ...], Any]]: ...
+
+    @overload
+    @abstractmethod
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: list[StreamMode],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[False] = False,
+    ) -> AsyncIterator[tuple[str, Any]]: ...
+
+    @overload
+    @abstractmethod
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: list[StreamMode],
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: Literal[True],
+    ) -> AsyncIterator[tuple[tuple[str, ...], str, Any]]: ...
 
     @abstractmethod
     def astream(
