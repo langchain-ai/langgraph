@@ -71,8 +71,8 @@ def test_sync_api_matches_async(async_cls, sync_cls):
         sync_fn = sync_methods[name]
 
         # Use inspect.signature for parameter names (robust across versions)
-        async_sig = _strip_self(inspect.signature(async_fn))
-        sync_sig = _strip_self(inspect.signature(sync_fn))
+        async_sig = _strip_self(inspect.signature(async_fn))  # type: ignore
+        sync_sig = _strip_self(inspect.signature(sync_fn))  # type: ignore
 
         a_names = list(async_sig.parameters.keys())
         s_names = list(sync_sig.parameters.keys())

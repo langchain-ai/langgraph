@@ -102,7 +102,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 strict=False,
             ):
                 await cur.execute(migration)
-                await cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+                await cur.execute(
+                    "INSERT INTO checkpoint_migrations (v) VALUES (%s)", (v,)
+                )
         if self.pipe:
             await self.pipe.sync()
 
@@ -130,11 +132,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
         """
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
-        if limit:
-            query += f" LIMIT {limit}"
+        params = list(args)
+        if limit is not None:
+            query += " LIMIT %s"
+            params.append(int(limit))
         # if we change this to use .stream() we need to make sure to close the cursor
         async with self._cursor() as cur:
-            await cur.execute(query, args, binary=True)
+            await cur.execute(query, params, binary=True)
             values = await cur.fetchall()
             if not values:
                 return

@@ -42,6 +42,7 @@ from langgraph.prebuilt import (
 from langgraph.prebuilt.tool_node import (
     TOOL_CALL_ERROR_TEMPLATE,
     ToolInvocationError,
+    ToolRuntime,
     tools_condition,
 )
 
@@ -1610,3 +1611,400 @@ def test_tool_node_stream_writer() -> None:
             },
         ),
     ]
+
+
+def test_tool_call_request_setattr_deprecation_warning():
+    """Test that ToolCallRequest raises a deprecation warning on direct attribute modification."""
+    import warnings
+
+    from langgraph.prebuilt.tool_node import ToolCallRequest
+
+    # Create a mock ToolCall
+    tool_call = {"name": "test", "args": {"a": 1}, "id": "call_1", "type": "tool_call"}
+
+    # Create a ToolCallRequest
+    request = ToolCallRequest(
+        tool_call=tool_call,
+        tool=None,
+        state={"messages": []},
+        runtime=None,
+    )
+
+    # Test 1: Direct attribute assignment should raise deprecation warning but still work
+    with pytest.warns(DeprecationWarning, match="deprecated.*override"):
+        request.tool_call = {"name": "other", "args": {}, "id": "call_2"}
+
+    # Verify the attribute was actually modified
+    assert request.tool_call == {"name": "other", "args": {}, "id": "call_2"}
+
+    # Reset for further tests
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        request.tool_call = tool_call
+
+    # Test 2: override method should work without warnings
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        new_tool_call = {
+            "name": "new_tool",
+            "args": {"b": 2},
+            "id": "call_3",
+            "type": "tool_call",
+        }
+        new_request = request.override(tool_call=new_tool_call)
+
+        # Verify no warning was raised
+        assert len(w) == 0
+
+    # Verify original is unchanged
+    assert request.tool_call == tool_call
+
+    # Verify new request has updated values
+    assert new_request.tool_call == new_tool_call
+
+    # Test 3: Initialization should not trigger warning
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        ToolCallRequest(
+            tool_call=tool_call,
+            tool=None,
+            state={"messages": []},
+            runtime=None,
+        )
+        # Verify no warning was raised during initialization
+        assert len(w) == 0
+
+
+async def test_tool_node_inject_async_all_types_signature_only() -> None:
+    """Test all injection types without @tool decorator."""
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"store_data": "from_store"})
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    async def comprehensive_async_tool(
+        x: int,
+        whole_state: Annotated[TestState, InjectedState],
+        foo_field: Annotated[str, InjectedState("foo")],
+        store: Annotated[BaseStore, InjectedStore()],
+        runtime: ToolRuntime,
+    ) -> str:
+        """Async tool that uses all injection types."""
+        bar_from_whole = whole_state["bar"]
+        foo_value = foo_field
+        store_val = store.get(namespace, "test_key").value["store_data"]
+        foo_from_runtime = runtime.state["foo"]
+        tool_call_id = runtime.tool_call_id
+
+        return (
+            f"x={x}, "
+            f"bar_from_whole={bar_from_whole}, "
+            f"foo_field={foo_value}, "
+            f"store={store_val}, "
+            f"foo_from_runtime={foo_from_runtime}, "
+            f"tool_call_id={tool_call_id}"
+        )
+
+    node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
+    tool_call = {
+        "name": "comprehensive_async_tool",
+        "args": {"x": 42},
+        "id": "test_call_123",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime(store=store)
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "foo_value", "bar": 99}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == (
+        "x=42, "
+        "bar_from_whole=99, "
+        "foo_field=foo_value, "
+        "store=from_store, "
+        "foo_from_runtime=foo_value, "
+        "tool_call_id=test_call_123"
+    )
+
+
+async def test_tool_node_inject_async_all_types_with_decorator() -> None:
+    """Test all injection types with @tool decorator."""
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"store_data": "from_store"})
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    @dec_tool
+    async def comprehensive_async_tool(
+        x: int,
+        whole_state: Annotated[TestState, InjectedState],
+        foo_field: Annotated[str, InjectedState("foo")],
+        store: Annotated[BaseStore, InjectedStore()],
+        runtime: ToolRuntime,
+    ) -> str:
+        """Async tool that uses all injection types."""
+        bar_from_whole = whole_state["bar"]
+        foo_value = foo_field
+        store_val = store.get(namespace, "test_key").value["store_data"]
+        foo_from_runtime = runtime.state["foo"]
+        tool_call_id = runtime.tool_call_id
+
+        return (
+            f"x={x}, "
+            f"bar_from_whole={bar_from_whole}, "
+            f"foo_field={foo_value}, "
+            f"store={store_val}, "
+            f"foo_from_runtime={foo_from_runtime}, "
+            f"tool_call_id={tool_call_id}"
+        )
+
+    node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
+    tool_call = {
+        "name": "comprehensive_async_tool",
+        "args": {"x": 42},
+        "id": "test_call_456",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime(store=store)
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "foo_value", "bar": 99}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == (
+        "x=42, "
+        "bar_from_whole=99, "
+        "foo_field=foo_value, "
+        "store=from_store, "
+        "foo_from_runtime=foo_value, "
+        "tool_call_id=test_call_456"
+    )
+
+
+async def test_tool_node_inject_async_all_types_with_schema() -> None:
+    """Test all injection types with explicit schema."""
+    store = InMemoryStore()
+    namespace = ("test",)
+    store.put(namespace, "test_key", {"store_data": "from_store"})
+
+    class TestState(TypedDict):
+        messages: list
+        foo: str
+        bar: int
+
+    class ComprehensiveToolSchema(BaseModel):
+        model_config = {"arbitrary_types_allowed": True}
+        x: int
+        whole_state: Annotated[TestState, InjectedState]
+        foo_field: Annotated[str, InjectedState("foo")]
+        store: Annotated[BaseStore, InjectedStore()]
+        runtime: ToolRuntime
+
+    @dec_tool(args_schema=ComprehensiveToolSchema)
+    async def comprehensive_async_tool(
+        x: int,
+        whole_state: Annotated[TestState, InjectedState],
+        foo_field: Annotated[str, InjectedState("foo")],
+        store: Annotated[BaseStore, InjectedStore()],
+        runtime: ToolRuntime,
+    ) -> str:
+        """Async tool that uses all injection types."""
+        bar_from_whole = whole_state["bar"]
+        foo_value = foo_field
+        store_val = store.get(namespace, "test_key").value["store_data"]
+        foo_from_runtime = runtime.state["foo"]
+        tool_call_id = runtime.tool_call_id
+
+        return (
+            f"x={x}, "
+            f"bar_from_whole={bar_from_whole}, "
+            f"foo_field={foo_value}, "
+            f"store={store_val}, "
+            f"foo_from_runtime={foo_from_runtime}, "
+            f"tool_call_id={tool_call_id}"
+        )
+
+    node = ToolNode([comprehensive_async_tool], handle_tool_errors=True)
+    tool_call = {
+        "name": "comprehensive_async_tool",
+        "args": {"x": 42},
+        "id": "test_call_789",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+
+    config = _create_config_with_runtime(store=store)
+    result = await node.ainvoke(
+        {"messages": [msg], "foo": "foo_value", "bar": 99}, config=config
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == (
+        "x=42, "
+        "bar_from_whole=99, "
+        "foo_field=foo_value, "
+        "store=from_store, "
+        "foo_from_runtime=foo_value, "
+        "tool_call_id=test_call_789"
+    )
+
+
+async def test_tool_node_tool_runtime_generic() -> None:
+    """Test that ToolRuntime with generic type arguments is correctly injected."""
+
+    @dataclasses.dataclass
+    class MyContext:
+        some_info: str
+
+    @dec_tool
+    def get_info(rt: ToolRuntime[MyContext]):
+        """This tool returns info from context."""
+        return rt.context.some_info
+
+    # Create a mock runtime with context
+    mock_runtime = _create_mock_runtime()
+    mock_runtime.context = MyContext(some_info="test_info")
+
+    config = {"configurable": {"__pregel_runtime": mock_runtime}}
+
+    result = await ToolNode([get_info]).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "call tool",
+                    tool_calls=[
+                        {
+                            "name": "get_info",
+                            "args": {},
+                            "id": "call_1",
+                        }
+                    ],
+                )
+            ]
+        },
+        config=config,
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.content == "test_info"
+    assert tool_message.tool_call_id == "call_1"
+
+
+def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call() -> None:
+    """Test that ToolRuntime is injected for dynamically registered tools.
+
+    Regression test for https://github.com/langchain-ai/langchain/issues/35305.
+    When a tool is dynamically provided via wrap_tool_call (not registered at
+    ToolNode init time), ToolRuntime should still be injected into the tool.
+    """
+
+    @dec_tool
+    def static_tool(x: int) -> str:
+        """A static tool registered at init."""
+        return f"static: {x}"
+
+    @dec_tool
+    def dynamic_tool_with_runtime(x: int, runtime: ToolRuntime) -> str:
+        """A dynamic tool that needs ToolRuntime injection."""
+        return f"dynamic: x={x}, tool_call_id={runtime.tool_call_id}"
+
+    def wrap_tool_call(request, execute):
+        """Middleware that swaps in a dynamic tool."""
+        if request.tool_call["name"] == "dynamic_tool_with_runtime":
+            # Override tool to the dynamic one (not registered at init)
+            new_request = request.override(tool=dynamic_tool_with_runtime)
+            return execute(new_request)
+        return execute(request)
+
+    # ToolNode only knows about static_tool at init time
+    tool_node = ToolNode(
+        [static_tool],
+        wrap_tool_call=wrap_tool_call,
+    )
+
+    # Verify the dynamic tool is NOT in the tool node's registered tools
+    assert "dynamic_tool_with_runtime" not in tool_node.tools_by_name
+
+    # Call the dynamic tool
+    tool_call = {
+        "name": "dynamic_tool_with_runtime",
+        "args": {"x": 42},
+        "id": "call_dynamic_1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = tool_node.invoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    # ToolRuntime should be injected and the tool should execute successfully
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_1"
+    assert tool_message.tool_call_id == "call_dynamic_1"
+
+
+async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() -> None:
+    """Test that ToolRuntime is injected for dynamically registered tools (async).
+
+    Async version of the regression test for
+    https://github.com/langchain-ai/langchain/issues/35305.
+    """
+
+    @dec_tool
+    def static_tool(x: int) -> str:
+        """A static tool registered at init."""
+        return f"static: {x}"
+
+    @dec_tool
+    async def dynamic_tool_with_runtime(x: int, runtime: ToolRuntime) -> str:
+        """A dynamic async tool that needs ToolRuntime injection."""
+        return f"dynamic: x={x}, tool_call_id={runtime.tool_call_id}"
+
+    async def awrap_tool_call(request, execute):
+        """Async middleware that swaps in a dynamic tool."""
+        if request.tool_call["name"] == "dynamic_tool_with_runtime":
+            new_request = request.override(tool=dynamic_tool_with_runtime)
+            return await execute(new_request)
+        return await execute(request)
+
+    # ToolNode only knows about static_tool at init time
+    tool_node = ToolNode(
+        [static_tool],
+        awrap_tool_call=awrap_tool_call,
+    )
+
+    # Verify the dynamic tool is NOT in the tool node's registered tools
+    assert "dynamic_tool_with_runtime" not in tool_node.tools_by_name
+
+    # Call the dynamic tool
+    tool_call = {
+        "name": "dynamic_tool_with_runtime",
+        "args": {"x": 42},
+        "id": "call_dynamic_2",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    result = await tool_node.ainvoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    # ToolRuntime should be injected and the tool should execute successfully
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_2"
+    assert tool_message.tool_call_id == "call_dynamic_2"

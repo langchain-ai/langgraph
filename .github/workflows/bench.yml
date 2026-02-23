@@ -15,7 +15,7 @@ jobs:
       run:
         working-directory: libs/langgraph
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - id: files
         name: Get changed files
         uses: Ana06/get-changed-files@v2.3.0
@@ -30,7 +30,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --group test
       - name: Download baseline
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           key: ${{ runner.os }}-benchmark-baseline
           restore-keys: |

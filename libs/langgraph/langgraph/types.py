@@ -56,22 +56,41 @@ __all__ = (
     "Durability",
     "interrupt",
     "Overwrite",
+    "ensure_valid_checkpointer",
 )
 
 Durability = Literal["sync", "async", "exit"]
 """Durability mode for the graph execution.
-- `"sync"`: Changes are persisted synchronously before the next step starts.
-- `"async"`: Changes are persisted asynchronously while the next step executes.
-- `"exit"`: Changes are persisted only when the graph exits."""
+
+- `'sync'`: Changes are persisted synchronously before the next step starts.
+- `'async'`: Changes are persisted asynchronously while the next step executes.
+- `'exit'`: Changes are persisted only when the graph exits.
+"""
 
 All = Literal["*"]
 """Special value to indicate that graph should interrupt on all nodes."""
 
 Checkpointer = None | bool | BaseCheckpointSaver
 """Type of the checkpointer to use for a subgraph.
-- True enables persistent checkpointing for this subgraph.
-- False disables checkpointing, even if the parent graph has a checkpointer.
-- None inherits checkpointer from the parent graph."""
+
+- `True` enables persistent checkpointing for this subgraph.
+- `False` disables checkpointing, even if the parent graph has a checkpointer.
+- `None` inherits checkpointer from the parent graph.
+"""
+
+
+def ensure_valid_checkpointer(checkpointer: Checkpointer) -> Checkpointer:
+    if checkpointer not in (None, True, False) and not isinstance(
+        checkpointer, BaseCheckpointSaver
+    ):
+        raise TypeError(
+            "Invalid checkpointer provided. Expected an instance of "
+            "`BaseCheckpointSaver`, `True`, `False`, or `None`. "
+            f"Received {type(checkpointer).__name__!s}. "
+            "Pass a proper saver (e.g., InMemorySaver, AsyncPostgresSaver)."
+        )
+    return checkpointer
+
 
 StreamMode = Literal[
     "values", "updates", "checkpoints", "tasks", "debug", "messages", "custom"

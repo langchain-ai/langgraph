@@ -7,7 +7,7 @@ requires-python = ">=3.10"
 dependencies = [
   "langchain-openai==1.0.0a2",
   "langchain-anthropic==1.0.0a5",
-  "langgraph==1.0.2"
+  "langgraph==1.0.8"
 ]
 
 [tool.uv]

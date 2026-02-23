@@ -15,12 +15,12 @@ The module implements design patterns for:
 
 Key Components:
 
-- `ToolNode`: Main class for executing tools in LangGraph workflows
-- `InjectedState`: Annotation for injecting graph state into tools
-- `InjectedStore`: Annotation for injecting persistent store into tools
-- `ToolRuntime`: Runtime information for tools, bundling together `state`, `context`,
+- [`ToolNode`][langgraph.prebuilt.ToolNode]: Main class for executing tools in LangGraph workflows
+- [`InjectedState`][langgraph.prebuilt.InjectedState]: Annotation for injecting graph state into tools
+- [`InjectedStore`][langgraph.prebuilt.InjectedStore]: Annotation for injecting persistent store into tools
+- [`ToolRuntime`][langgraph.prebuilt.ToolRuntime]: Runtime information for tools, bundling together `state`, `context`,
     `config`, `stream_writer`, `tool_call_id`, and `store`
-- `tools_condition`: Utility function for conditional routing based on tool calls
+- [`tools_condition`][langgraph.prebuilt.tools_condition]: Utility function for conditional routing based on tool calls
 
 Typical Usage:
     ```python
@@ -121,6 +121,8 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
     """Possible overrides for ToolCallRequest.override() method."""
 
     tool_call: ToolCall
+    tool: BaseTool
+    state: Any
 
 
 @dataclass
@@ -142,6 +144,25 @@ class ToolCallRequest:
     state: Any
     runtime: ToolRuntime
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Raise deprecation warning when setting attributes directly.
+
+        Direct attribute assignment is deprecated. Use the `override()` method instead.
+        """
+        import warnings
+
+        # Allow setting attributes during initialization
+        if not hasattr(self, "__dataclass_fields__") or not hasattr(self, name):
+            object.__setattr__(self, name, value)
+        else:
+            warnings.warn(
+                f"Setting attribute '{name}' on ToolCallRequest is deprecated. "
+                "Use the override() method instead to create a new instance with modified values.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            object.__setattr__(self, name, value)
+
     def override(
         self, **overrides: Unpack[_ToolCallRequestOverrides]
     ) -> ToolCallRequest:
@@ -151,8 +172,12 @@ class ToolCallRequest:
         This follows an immutable pattern, leaving the original request unchanged.
 
         Args:
-            **overrides: Keyword arguments for attributes to override. Supported keys:
-                - tool_call: Tool call dict with name, args, and id
+            **overrides: Keyword arguments for attributes to override.
+
+                Supported keys:
+
+                - tool_call: Tool call dict with `name`, `args`, and `id`
+                - state: Agent state (`dict`, `list`, or `BaseModel`)
 
         Returns:
             New ToolCallRequest instance with specified overrides applied.
@@ -202,8 +227,9 @@ Examples:
 
     ```python
     def handler(request, execute):
-        request.tool_call["args"]["value"] *= 2
-        return execute(request)
+        modified_call = {**request.tool_call, "args": {**request.tool_call["args"], "value": request.tool_call["args"]["value"] * 2}}
+        modified_request = request.override(tool_call=modified_call)
+        return execute(modified_request)
     ```
 
     Retry on error (execute multiple times):
@@ -479,9 +505,7 @@ def _infer_handled_types(handler: Callable[..., str]) -> tuple[type[Exception], 
 
 def _filter_validation_errors(
     validation_error: ValidationError,
-    tool_to_state_args: dict[str, str | None],
-    tool_to_store_arg: str | None,
-    tool_to_runtime_arg: str | None,
+    injected_args: _InjectedArgs | None,
 ) -> list[ErrorDetails]:
     """Filter validation errors to only include LLM-controlled arguments.
 
@@ -496,25 +520,28 @@ def _filter_validation_errors(
 
     Args:
         validation_error: The Pydantic ValidationError raised during tool invocation.
-        tool_to_state_args: Mapping of state argument names to state field names.
-        tool_to_store_arg: Name of the store argument, if any.
-        tool_to_runtime_arg: Name of the runtime argument, if any.
+        injected_args: The _InjectedArgs structure containing all injected arguments,
+            or None if there are no injected arguments.
 
     Returns:
         List of ErrorDetails containing only errors for LLM-controlled arguments,
         with system-injected argument values removed from the input field.
     """
-    injected_args = set(tool_to_state_args.keys())
-    if tool_to_store_arg:
-        injected_args.add(tool_to_store_arg)
-    if tool_to_runtime_arg:
-        injected_args.add(tool_to_runtime_arg)
+    # Collect all injected argument names
+    injected_arg_names: set[str] = set()
+    if injected_args:
+        if injected_args.state:
+            injected_arg_names.update(injected_args.state.keys())
+        if injected_args.store:
+            injected_arg_names.add(injected_args.store)
+        if injected_args.runtime:
+            injected_arg_names.add(injected_args.runtime)
 
     filtered_errors: list[ErrorDetails] = []
     for error in validation_error.errors():
         # Check if error location contains any injected argument
         # error['loc'] is a tuple like ('field_name',) or ('field_name', 'nested_field')
-        if error["loc"] and error["loc"][0] not in injected_args:
+        if error["loc"] and error["loc"][0] not in injected_arg_names:
             # Create a copy of the error dict to avoid mutating the original
             error_copy: dict[str, Any] = {**error}
 
@@ -522,7 +549,7 @@ def _filter_validation_errors(
             if isinstance(error_copy.get("input"), dict):
                 input_dict = error_copy["input"]
                 input_copy = {
-                    k: v for k, v in input_dict.items() if k not in injected_args
+                    k: v for k, v in input_dict.items() if k not in injected_arg_names
                 }
                 error_copy["input"] = input_copy
 
@@ -532,6 +559,60 @@ def _filter_validation_errors(
     return filtered_errors
 
 
+@dataclass
+class _InjectedArgs:
+    """Internal structure for tracking injected arguments for a tool.
+
+    This data structure is built once during ToolNode initialization by analyzing
+    the tool's signature and args schema, then reused during execution for efficient
+    injection without repeated reflection.
+
+    The structure maps from tool parameter names to their injection sources, enabling
+    the ToolNode to know exactly which arguments need to be injected and where to
+    get their values from.
+
+    Attributes:
+        state: Mapping from tool parameter names to state field names for injection.
+            Keys are tool parameter names, values are either:
+            - str: Name of the state field to extract and inject
+            - None: Inject the entire state object
+            Empty dict if no state injection is needed.
+        store: Name of the tool parameter where the store should be injected,
+            or None if no store injection is needed.
+        runtime: Name of the tool parameter where the runtime should be injected,
+            or None if no runtime injection is needed.
+
+    Example:
+        For a tool with signature:
+        ```python
+        def my_tool(
+            x: int,
+            messages: Annotated[list, InjectedState("messages")],
+            full_state: Annotated[dict, InjectedState()],
+            store: Annotated[BaseStore, InjectedStore()],
+            runtime: ToolRuntime,
+        ) -> str:
+            ...
+        ```
+
+        The resulting `_InjectedArgs` would be:
+        ```python
+        _InjectedArgs(
+            state={
+                "messages": "messages",  # Extract state["messages"]
+                "full_state": None,      # Inject entire state
+            },
+            store="store",               # Inject into "store" parameter
+            runtime="runtime",           # Inject into "runtime" parameter
+        )
+        ```
+    """
+
+    state: dict[str, str | None]
+    store: str | None
+    runtime: str | None
+
+
 class ToolNode(RunnableCallable):
     """A node for executing tools in LangGraph workflows.
 
@@ -539,8 +620,16 @@ class ToolNode(RunnableCallable):
     persistent storage, and control flow. Manages parallel execution,
     error handling.
 
+    Use `ToolNode` when building custom workflows that require fine-grained control over
+    tool execution—for example, custom routing logic, specialized error handling, or
+    non-standard agent architectures.
+
+    For standard ReAct-style agents, use [`create_agent`][langchain.agents.create_agent]
+    instead. It uses `ToolNode` internally with sensible defaults for the agent loop,
+    conditional routing, and error handling.
+
     Input Formats:
-        1. Graph state with `messages` key that has a list of messages:
+        1. **Graph state** with `messages` key that has a list of messages:
             - Common representation for agentic workflows
             - Supports custom messages key via `messages_key` parameter
 
@@ -676,9 +765,7 @@ class ToolNode(RunnableCallable):
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self._tools_by_name: dict[str, BaseTool] = {}
-        self._tool_to_state_args: dict[str, dict[str, str | None]] = {}
-        self._tool_to_store_arg: dict[str, str | None] = {}
-        self._tool_to_runtime_arg: dict[str, str | None] = {}
+        self._injected_args: dict[str, _InjectedArgs] = {}
         self._handle_tool_errors = handle_tool_errors
         self._messages_key = messages_key
         self._wrap_tool_call = wrap_tool_call
@@ -689,9 +776,8 @@ class ToolNode(RunnableCallable):
             else:
                 tool_ = tool
             self._tools_by_name[tool_.name] = tool_
-            self._tool_to_state_args[tool_.name] = _get_state_args(tool_)
-            self._tool_to_store_arg[tool_.name] = _get_store_arg(tool_)
-            self._tool_to_runtime_arg[tool_.name] = _get_runtime_arg(tool_)
+            # Build injected args mapping once during initialization in a single pass
+            self._injected_args[tool_.name] = _get_all_injected_args(tool_)
 
     @property
     def tools_by_name(self) -> dict[str, BaseTool]:
@@ -836,7 +922,7 @@ class ToolNode(RunnableCallable):
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime)
+        injected_call = self._inject_tool_args(call, request.runtime, tool)
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
@@ -844,12 +930,8 @@ class ToolNode(RunnableCallable):
                 response = tool.invoke(call_args, config)
             except ValidationError as exc:
                 # Filter out errors for injected arguments
-                filtered_errors = _filter_validation_errors(
-                    exc,
-                    self._tool_to_state_args.get(call["name"], {}),
-                    self._tool_to_store_arg.get(call["name"]),
-                    self._tool_to_runtime_arg.get(call["name"]),
-                )
+                injected = self._injected_args.get(call["name"])
+                filtered_errors = _filter_validation_errors(exc, injected)
                 # Use original call["args"] without injected values for error reporting
                 raise ToolInvocationError(
                     call["name"], exc, call["args"], filtered_errors
@@ -993,7 +1075,7 @@ class ToolNode(RunnableCallable):
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime)
+        injected_call = self._inject_tool_args(call, request.runtime, tool)
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
@@ -1001,12 +1083,8 @@ class ToolNode(RunnableCallable):
                 response = await tool.ainvoke(call_args, config)
             except ValidationError as exc:
                 # Filter out errors for injected arguments
-                filtered_errors = _filter_validation_errors(
-                    exc,
-                    self._tool_to_state_args.get(call["name"], {}),
-                    self._tool_to_store_arg.get(call["name"]),
-                    self._tool_to_runtime_arg.get(call["name"]),
-                )
+                injected = self._injected_args.get(call["name"])
+                filtered_errors = _filter_validation_errors(exc, injected)
                 # Use original call["args"] without injected values for error reporting
                 raise ToolInvocationError(
                     call["name"], exc, call["args"], filtered_errors
@@ -1199,90 +1277,11 @@ class ToolNode(RunnableCallable):
             return input["state"]
         return input
 
-    def _inject_state(
-        self,
-        tool_call: ToolCall,
-        state: list[AnyMessage] | dict[str, Any] | BaseModel,
-    ) -> ToolCall:
-        state_args = self._tool_to_state_args[tool_call["name"]]
-
-        if state_args and isinstance(state, list):
-            required_fields = list(state_args.values())
-            if (
-                len(required_fields) == 1 and required_fields[0] == self._messages_key
-            ) or required_fields[0] is None:
-                state = {self._messages_key: state}
-            else:
-                err_msg = (
-                    f"Invalid input to ToolNode. Tool {tool_call['name']} requires "
-                    f"graph state dict as input."
-                )
-                if any(state_field for state_field in state_args.values()):
-                    required_fields_str = ", ".join(f for f in required_fields if f)
-                    err_msg += f" State should contain fields {required_fields_str}."
-                raise ValueError(err_msg)
-
-        if isinstance(state, dict):
-            tool_state_args = {
-                tool_arg: state[state_field] if state_field else state
-                for tool_arg, state_field in state_args.items()
-            }
-        else:
-            tool_state_args = {
-                tool_arg: getattr(state, state_field) if state_field else state
-                for tool_arg, state_field in state_args.items()
-            }
-
-        tool_call["args"] = {
-            **tool_call["args"],
-            **tool_state_args,
-        }
-        return tool_call
-
-    def _inject_store(self, tool_call: ToolCall, store: BaseStore | None) -> ToolCall:
-        store_arg = self._tool_to_store_arg[tool_call["name"]]
-        if not store_arg:
-            return tool_call
-
-        if store is None:
-            msg = (
-                "Cannot inject store into tools with InjectedStore annotations - "
-                "please compile your graph with a store."
-            )
-            raise ValueError(msg)
-
-        tool_call["args"] = {
-            **tool_call["args"],
-            store_arg: store,
-        }
-        return tool_call
-
-    def _inject_runtime(
-        self, tool_call: ToolCall, tool_runtime: ToolRuntime
-    ) -> ToolCall:
-        """Inject ToolRuntime into tool call arguments.
-
-        Args:
-            tool_call: The tool call to inject runtime into.
-            tool_runtime: The ToolRuntime instance to inject.
-
-        Returns:
-            The tool call with runtime injected if needed.
-        """
-        runtime_arg = self._tool_to_runtime_arg.get(tool_call["name"])
-        if not runtime_arg:
-            return tool_call
-
-        tool_call["args"] = {
-            **tool_call["args"],
-            runtime_arg: tool_runtime,
-        }
-        return tool_call
-
     def _inject_tool_args(
         self,
         tool_call: ToolCall,
         tool_runtime: ToolRuntime,
+        tool: BaseTool | None = None,
     ) -> ToolCall:
         """Inject graph state, store, and runtime into tool call arguments.
 
@@ -1301,6 +1300,9 @@ class ToolNode(RunnableCallable):
                 Must contain 'name', 'args', 'id', and 'type' fields.
             tool_runtime: The ToolRuntime instance containing all runtime context
                 (state, config, store, context, stream_writer) to inject into tools.
+            tool: Optional tool instance. When provided, allows injection for
+                dynamically registered tools that are not in self.tools_by_name
+                (e.g., tools added via middleware's wrap_tool_call).
 
         Returns:
             A new ToolCall dictionary with the same structure as the input but with
@@ -1314,15 +1316,69 @@ class ToolNode(RunnableCallable):
             This method is called automatically during tool execution. It should not
             be called from outside the `ToolNode`.
         """
-        if tool_call["name"] not in self.tools_by_name:
+        injected = self._injected_args.get(tool_call["name"])
+        if not injected and tool is not None:
+            # For dynamically registered tools (e.g., added via middleware's
+            # wrap_tool_call), compute injected args on-the-fly since they
+            # were not present during ToolNode initialization.
+            injected = _get_all_injected_args(tool)
+        if not injected:
             return tool_call
 
         tool_call_copy: ToolCall = copy(tool_call)
-        tool_call_with_state = self._inject_state(tool_call_copy, tool_runtime.state)
-        tool_call_with_store = self._inject_store(
-            tool_call_with_state, tool_runtime.store
-        )
-        return self._inject_runtime(tool_call_with_store, tool_runtime)
+        injected_args = {}
+
+        # Inject state
+        if injected.state:
+            state = tool_runtime.state
+            # Handle list state by converting to dict
+            if isinstance(state, list):
+                required_fields = list(injected.state.values())
+                if (
+                    len(required_fields) == 1
+                    and required_fields[0] == self._messages_key
+                ) or required_fields[0] is None:
+                    state = {self._messages_key: state}
+                else:
+                    err_msg = (
+                        f"Invalid input to ToolNode. Tool {tool_call['name']} requires "
+                        f"graph state dict as input."
+                    )
+                    if any(state_field for state_field in injected.state.values()):
+                        required_fields_str = ", ".join(f for f in required_fields if f)
+                        err_msg += (
+                            f" State should contain fields {required_fields_str}."
+                        )
+                    raise ValueError(err_msg)
+
+            # Extract state values
+            if isinstance(state, dict):
+                for tool_arg, state_field in injected.state.items():
+                    injected_args[tool_arg] = (
+                        state[state_field] if state_field else state
+                    )
+            else:
+                for tool_arg, state_field in injected.state.items():
+                    injected_args[tool_arg] = (
+                        getattr(state, state_field) if state_field else state
+                    )
+
+        # Inject store
+        if injected.store:
+            if tool_runtime.store is None:
+                msg = (
+                    "Cannot inject store into tools with InjectedStore annotations - "
+                    "please compile your graph with a store."
+                )
+                raise ValueError(msg)
+            injected_args[injected.store] = tool_runtime.store
+
+        # Inject runtime
+        if injected.runtime:
+            injected_args[injected.runtime] = tool_runtime
+
+        tool_call_copy["args"] = {**tool_call_copy["args"], **injected_args}
+        return tool_call_copy
 
     def _validate_tool_command(
         self,
@@ -1481,16 +1537,23 @@ def tools_condition(
 class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     """Runtime context automatically injected into tools.
 
-    When a tool function has a parameter named `tool_runtime` with type hint
+    !!! note
+
+        This is distinct from `Runtime` (from `langgraph.runtime`), which is injected
+        into graph nodes and middleware. `ToolRuntime` includes additional tool-specific
+        attributes like `config`, `state`, and `tool_call_id` that `Runtime` does not
+        have.
+
+    When a tool function has a parameter named `runtime` with type hint
     `ToolRuntime`, the tool execution system will automatically inject an instance
     containing:
 
     - `state`: The current graph state
     - `tool_call_id`: The ID of the current tool call
     - `config`: `RunnableConfig` for the current execution
-    - `context`: Runtime context (from langgraph `Runtime`)
-    - `store`: `BaseStore` instance for persistent storage (from langgraph `Runtime`)
-    - `stream_writer`: `StreamWriter` for streaming output (from langgraph `Runtime`)
+    - `context`: Runtime context (shared with `Runtime`)
+    - `store`: `BaseStore` instance for persistent storage (shared with `Runtime`)
+    - `stream_writer`: `StreamWriter` for streaming output (shared with `Runtime`)
 
     No `Annotated` wrapper is needed - just use `runtime: ToolRuntime`
     as a parameter.
@@ -1712,123 +1775,95 @@ def _is_injection(
     origin_ = get_origin(type_arg)
     if origin_ is Union or origin_ is Annotated:
         return any(_is_injection(ta, injection_type) for ta in get_args(type_arg))
+
+    if origin_ is not None and (
+        origin_ is injection_type
+        or (isinstance(origin_, type) and issubclass(origin_, injection_type))
+    ):
+        return True
     return False
 
 
-def _get_state_args(tool: BaseTool) -> dict[str, str | None]:
-    """Extract state injection mappings from tool annotations.
-
-    This function analyzes a tool's input schema to identify arguments that should
-    be injected with graph state. It processes InjectedState annotations to build
-    a mapping of tool argument names to state field names.
+def _get_injection_from_type(
+    type_: Any, injection_type: type[InjectedState | InjectedStore | ToolRuntime]
+) -> Any | None:
+    """Extract injection instance from a type annotation.
 
     Args:
-        tool: The tool to analyze for state injection requirements.
+        type_: The type annotation to check.
+        injection_type: The injection type to look for.
 
     Returns:
-        A dictionary mapping tool argument names to state field names. If a field
-        name is None, the entire state should be injected for that argument.
+        The injection instance if found, True if injection marker found without instance, None otherwise.
     """
-    full_schema = tool.get_input_schema()
-    tool_args_to_state_fields: dict = {}
+    type_args = get_args(type_)
+    matches = [arg for arg in type_args if _is_injection(arg, injection_type)]
 
-    for name, type_ in get_all_basemodel_annotations(full_schema).items():
-        injections = [
-            type_arg
-            for type_arg in get_args(type_)
-            if _is_injection(type_arg, InjectedState)
-        ]
-        if len(injections) > 1:
-            msg = (
-                "A tool argument should not be annotated with InjectedState more than "
-                f"once. Received arg {name} with annotations {injections}."
-            )
-            raise ValueError(msg)
-        if len(injections) == 1:
-            injection = injections[0]
-            if isinstance(injection, InjectedState) and injection.field:
-                tool_args_to_state_fields[name] = injection.field
-            else:
-                tool_args_to_state_fields[name] = None
-        else:
-            pass
-    return tool_args_to_state_fields
+    if len(matches) > 1:
+        msg = (
+            f"A tool argument should not be annotated with {injection_type.__name__} "
+            f"more than once. Found: {matches}"
+        )
+        raise ValueError(msg)
 
-
-def _get_store_arg(tool: BaseTool) -> str | None:
-    """Extract store injection argument from tool annotations.
-
-    This function analyzes a tool's input schema to identify the argument that
-    should be injected with the graph store. Only one store argument is supported
-    per tool.
-
-    Args:
-        tool: The tool to analyze for store injection requirements.
-
-    Returns:
-        The name of the argument that should receive the store injection, or None
-        if no store injection is required.
-
-    Raises:
-        ValueError: If a tool argument has multiple InjectedStore annotations.
-    """
-    full_schema = tool.get_input_schema()
-    for name, type_ in get_all_basemodel_annotations(full_schema).items():
-        injections = [
-            type_arg
-            for type_arg in get_args(type_)
-            if _is_injection(type_arg, InjectedStore)
-        ]
-        if len(injections) > 1:
-            msg = (
-                "A tool argument should not be annotated with InjectedStore more than "
-                f"once. Received arg {name} with annotations {injections}."
-            )
-            raise ValueError(msg)
-        if len(injections) == 1:
-            return name
+    if len(matches) == 1:
+        return matches[0]
+    elif _is_injection(type_, injection_type):
+        return True
 
     return None
 
 
-def _get_runtime_arg(tool: BaseTool) -> str | None:
-    """Extract runtime injection argument from tool annotations.
+def _get_all_injected_args(tool: BaseTool) -> _InjectedArgs:
+    """Extract all injected arguments from tool in a single pass.
 
-    This function analyzes a tool's input schema to identify the argument that
-    should be injected with the ToolRuntime instance. Only one runtime argument
-    is supported per tool.
+    This function analyzes both the tool's input schema and function signature
+    to identify all arguments that should be injected (state, store, runtime).
 
     Args:
-        tool: The tool to analyze for runtime injection requirements.
+        tool: The tool to analyze for injection requirements.
 
     Returns:
-        The name of the argument that should receive the runtime injection, or None
-        if no runtime injection is required.
-
-    Raises:
-        ValueError: If a tool argument has multiple ToolRuntime annotations.
+        _InjectedArgs structure containing all detected injections.
     """
+    # Get annotations from both schema and function signature
     full_schema = tool.get_input_schema()
-    for name, type_ in get_all_basemodel_annotations(full_schema).items():
-        # Check if the parameter name is "runtime" (regardless of type)
+    schema_annotations = get_all_basemodel_annotations(full_schema)
+
+    func = getattr(tool, "func", None) or getattr(tool, "coroutine", None)
+    func_annotations = get_type_hints(func, include_extras=True) if func else {}
+
+    # Combine both annotation sources, preferring schema annotations
+    # In the future, we might want to add more restrictions here...
+    all_annotations = {**func_annotations, **schema_annotations}
+
+    # Track injected args
+    state_args: dict[str, str | None] = {}
+    store_arg: str | None = None
+    runtime_arg: str | None = None
+
+    for name, type_ in all_annotations.items():
+        # Check for runtime (special case: parameter named "runtime")
         if name == "runtime":
-            return name
-        # Check if the type itself is ToolRuntime (direct usage)
-        if _is_injection(type_, ToolRuntime):
-            return name
-        # Check if ToolRuntime is in Annotated args
-        injections = [
-            type_arg
-            for type_arg in get_args(type_)
-            if _is_injection(type_arg, ToolRuntime)
-        ]
-        if len(injections) > 1:
-            msg = (
-                "A tool argument should not be annotated with ToolRuntime more than "
-                f"once. Received arg {name} with annotations {injections}."
-            )
-            raise ValueError(msg)
-        if len(injections) == 1:
-            return name
+            runtime_arg = name
 
-    return None
+        # Check for InjectedState
+        if state_inj := _get_injection_from_type(type_, InjectedState):
+            if isinstance(state_inj, InjectedState) and state_inj.field:
+                state_args[name] = state_inj.field
+            else:
+                state_args[name] = None
+
+        # Check for InjectedStore
+        if _get_injection_from_type(type_, InjectedStore):
+            store_arg = name
+
+        # Check for ToolRuntime
+        if _get_injection_from_type(type_, ToolRuntime):
+            runtime_arg = name
+
+    return _InjectedArgs(
+        state=state_args,
+        store=store_arg,
+        runtime=runtime_arg,
+    )

@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import Field
 from datetime import datetime
 from typing import (
     Any,
+    ClassVar,
     Literal,
     NamedTuple,
+    Protocol,
     TypeAlias,
-    TypedDict,
+    Union,
 )
+
+from typing_extensions import TypedDict
 
 Json = dict[str, Any] | None
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
@@ -112,11 +117,26 @@ Specifies behavior if the thread doesn't exist:
 - "reject": Reject the operation if the thread doesn't exist.
 """
 
+PruneStrategy = Literal["delete", "keep_latest"]
+"""
+Strategy for pruning threads:
+- "delete": Remove threads entirely.
+- "keep_latest": Prune old checkpoints but keep threads and their latest state.
+"""
+
 CancelAction = Literal["interrupt", "rollback"]
 """
 Action to take when cancelling the run.
 - "interrupt": Simply cancel the run.
 - "rollback": Cancel the run. Then delete the run and associated checkpoints.
+"""
+
+BulkCancelRunsStatus = Literal["pending", "running", "all"]
+"""
+Filter runs by status when bulk-cancelling:
+- "pending": Cancel only pending runs.
+- "running": Cancel only running runs.
+- "all": Cancel all runs regardless of status.
 """
 
 AssistantSortBy = Literal[
@@ -126,13 +146,21 @@ AssistantSortBy = Literal[
 The field to sort by.
 """
 
-ThreadSortBy = Literal["thread_id", "status", "created_at", "updated_at"]
+ThreadSortBy = Literal[
+    "thread_id", "status", "created_at", "updated_at", "state_updated_at"
+]
 """
 The field to sort by.
 """
 
 CronSortBy = Literal[
-    "cron_id", "assistant_id", "thread_id", "created_at", "updated_at", "next_run_date"
+    "cron_id",
+    "assistant_id",
+    "thread_id",
+    "created_at",
+    "updated_at",
+    "next_run_date",
+    "end_time",
 ]
 """
 The field to sort by.
@@ -142,8 +170,6 @@ SortOrder = Literal["asc", "desc"]
 """
 The order to sort by.
 """
-
-Context: TypeAlias = dict[str, Any]
 
 
 class Config(TypedDict, total=False):
@@ -164,7 +190,7 @@ class Config(TypedDict, total=False):
     """
     Runtime values for attributes previously made configurable on this Runnable,
     or sub-Runnables, through .configurable_fields() or .configurable_alternatives().
-    Check .output_schema() for a description of the attributes that have been made 
+    Check .output_schema() for a description of the attributes that have been made
     configurable.
     """
 
@@ -243,6 +269,15 @@ class Assistant(AssistantBase):
     """The last time the assistant was updated."""
 
 
+class AssistantsSearchResponse(TypedDict):
+    """Paginated response for assistant search results."""
+
+    assistants: list[Assistant]
+    """The assistants returned for the current search page."""
+    next: str | None
+    """Pagination cursor from the ``X-Pagination-Next`` response header."""
+
+
 class Interrupt(TypedDict):
     """Represents an interruption in the execution flow."""
 
@@ -289,7 +324,7 @@ class ThreadState(TypedDict):
     values: list[dict] | dict[str, Any]
     """The state values."""
     next: Sequence[str]
-    """The next nodes to execute. If empty, the thread is done until new input is 
+    """The next nodes to execute. If empty, the thread is done until new input is
     received."""
     checkpoint: Checkpoint
     """The ID of the checkpoint."""
@@ -342,6 +377,8 @@ class Cron(TypedDict):
     """The ID of the assistant."""
     thread_id: str | None
     """The ID of the thread."""
+    on_run_completed: OnCompletionBehavior | None
+    """What to do with the thread after the run completes. Only applicable for stateless crons."""
     end_time: datetime | None
     """The end date to stop running the cron."""
     schedule: str
@@ -358,6 +395,43 @@ class Cron(TypedDict):
     """The next run date of the cron."""
     metadata: dict
     """The metadata of the cron."""
+    enabled: bool
+    """Whether the cron is enabled."""
+
+
+class CronUpdate(TypedDict, total=False):
+    """Payload for updating a cron job. All fields are optional."""
+
+    schedule: str
+    """The cron schedule to execute this job on."""
+    end_time: datetime
+    """The end date to stop running the cron."""
+    input: Input
+    """The input to the graph."""
+    metadata: dict[str, Any]
+    """Metadata to assign to the cron job runs."""
+    config: Config
+    """The configuration for the assistant."""
+    context: Context
+    """Static context added to the assistant."""
+    webhook: str
+    """Webhook to call after LangGraph API call is done."""
+    interrupt_before: All | list[str]
+    """Nodes to interrupt immediately before they get executed."""
+    interrupt_after: All | list[str]
+    """Nodes to interrupt immediately after they get executed."""
+    on_run_completed: OnCompletionBehavior
+    """What to do with the thread after the run completes."""
+    enabled: bool
+    """Enable or disable the cron job."""
+    stream_mode: StreamMode | list[StreamMode]
+    """The stream mode(s) to use."""
+    stream_subgraphs: bool
+    """Whether to stream output from subgraphs."""
+    stream_resumable: bool
+    """Whether to persist the stream chunks in order to resume the stream later."""
+    durability: Durability
+    """Durability level for the run. Must be one of 'sync', 'async', or 'exit'."""
 
 
 # Select field aliases for client-side typing of `select` parameters.
@@ -413,6 +487,8 @@ CronSelectField = Literal[
     "next_run_date",
     "metadata",
     "now",
+    "on_run_completed",
+    "enabled",
 ]
 
 PrimitiveData = str | int | float | bool | None
@@ -463,7 +539,7 @@ class Item(TypedDict):
     """The namespace of the item. A namespace is analogous to a document's directory."""
     key: str
     """The unique identifier of the item within its namespace.
-    
+
     In general, keys needn't be globally unique.
     """
     value: dict[str, Any]
@@ -506,6 +582,8 @@ class StreamPart(NamedTuple):
     """The type of event for this stream part."""
     data: dict
     """The data payload associated with the event."""
+    id: str | None = None
+    """The ID of the event."""
 
 
 class Send(TypedDict):
@@ -558,3 +636,54 @@ class RunCreateMetadata(TypedDict):
 
     thread_id: str | None
     """The ID of the thread."""
+
+
+class _TypedDictLikeV1(Protocol):
+    """Protocol to represent types that behave like TypedDicts
+
+    Version 1: using `ClassVar` for keys."""
+
+    __required_keys__: ClassVar[frozenset[str]]
+    __optional_keys__: ClassVar[frozenset[str]]
+
+
+class _TypedDictLikeV2(Protocol):
+    """Protocol to represent types that behave like TypedDicts
+
+    Version 2: not using `ClassVar` for keys."""
+
+    __required_keys__: frozenset[str]
+    __optional_keys__: frozenset[str]
+
+
+class _DataclassLike(Protocol):
+    """Protocol to represent types that behave like dataclasses.
+
+    Inspired by the private _DataclassT from dataclasses that uses a similar protocol as a bound.
+    """
+
+    __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
+
+
+class _BaseModelLike(Protocol):
+    """Protocol to represent types that behave like Pydantic `BaseModel`."""
+
+    model_config: ClassVar[dict[str, Any]]
+    __pydantic_core_schema__: ClassVar[Any]
+
+    def model_dump(
+        self,
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
+
+_JSONLike: TypeAlias = None | str | int | float | bool
+_JSONMap: TypeAlias = Mapping[
+    str, Union[_JSONLike, list[_JSONLike], "_JSONMap", list["_JSONMap"]]
+]
+
+Input: TypeAlias = (
+    _TypedDictLikeV1 | _TypedDictLikeV2 | _DataclassLike | _BaseModelLike | _JSONMap
+)
+
+Context: TypeAlias = Input

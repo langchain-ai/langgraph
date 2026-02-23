@@ -182,3 +182,128 @@ class TestSqliteSaver:
             with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
                 async for _ in saver.alist(self.config_1):
                     pass
+
+    def test_metadata_predicate_sql_injection_prevention(self) -> None:
+        """Test that _metadata_predicate rejects malicious filter keys."""
+        # Test various SQL injection payloads
+        malicious_keys = [
+            "x') OR '1'='1",  # Boolean-based injection
+            "x') OR 1=1 --",  # Comment-based injection
+            "x') UNION SELECT 1,2,3,4,5,6,7 --",  # UNION-based injection
+            "access') = 'public' OR '1'='1' OR json_extract(value, '$.",  # Complex injection
+            "'; DROP TABLE checkpoints; --",  # Destructive injection
+        ]
+
+        for malicious_key in malicious_keys:
+            with pytest.raises(ValueError, match="Invalid filter key"):
+                _metadata_predicate({malicious_key: "dummy"})
+
+    def test_checkpoint_search_sql_injection_prevention(self) -> None:
+        """Test that SQL injection via malicious filter keys is prevented in checkpoint search."""
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            # Setup: Create checkpoints with different metadata
+            config_public: RunnableConfig = {
+                "configurable": {
+                    "thread_id": "thread-public",
+                    "checkpoint_ns": "",
+                }
+            }
+            config_private: RunnableConfig = {
+                "configurable": {
+                    "thread_id": "thread-private",
+                    "checkpoint_ns": "",
+                }
+            }
+
+            checkpoint_public = empty_checkpoint()
+            checkpoint_private = empty_checkpoint()
+
+            metadata_public: CheckpointMetadata = {
+                "access": "public",
+                "data": "public information",
+            }
+            metadata_private: CheckpointMetadata = {
+                "access": "private",
+                "data": "secret information",
+                "password": "secret123",
+            }
+
+            saver.put(config_public, checkpoint_public, metadata_public, {})
+            saver.put(config_private, checkpoint_private, metadata_private, {})
+
+            # Normal query - should return only public checkpoint
+            normal_results = list(saver.list(None, filter={"access": "public"}))
+            assert len(normal_results) == 1
+            assert normal_results[0].metadata["access"] == "public"
+
+            # SQL injection attempt should raise ValueError
+            malicious_key = (
+                "access') = 'public' OR '1'='1' OR json_extract(metadata, '$."
+            )
+
+            with pytest.raises(ValueError, match="Invalid filter key"):
+                list(saver.list(None, filter={malicious_key: "dummy"}))
+
+    def test_limit_parameter_sql_injection_prevention(self) -> None:
+        """Test that the limit parameter properly uses parameterized queries to prevent SQL injection."""
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            # Setup: Create multiple checkpoints
+            for i in range(5):
+                config: RunnableConfig = {
+                    "configurable": {
+                        "thread_id": f"thread-{i}",
+                        "checkpoint_ns": "",
+                    }
+                }
+                checkpoint = empty_checkpoint()
+                metadata: CheckpointMetadata = {"index": i}
+                saver.put(config, checkpoint, metadata, {})
+
+            # Test that limit works correctly with valid integer
+            results = list(saver.list(None, limit=2))
+            assert len(results) == 2
+
+            # Test that limit=0 returns no results
+            results = list(saver.list(None, limit=0))
+            assert len(results) == 0
+
+            # Test that limit=None returns all results
+            results = list(saver.list(None, limit=None))
+            assert len(results) == 5
+
+    def test_metadata_filter_keys_with_hyphens_and_digits(self) -> None:
+        """Metadata keys with hyphens and digit-start should be filterable.
+
+        This exposes incorrect JSON path handling (unquoted segments) by asserting
+        that such filters successfully match saved checkpoints.
+        """
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            config: RunnableConfig = {
+                "configurable": {
+                    "thread_id": "thread-hyphen-digit",
+                    "checkpoint_ns": "",
+                }
+            }
+            checkpoint = empty_checkpoint()
+            metadata: CheckpointMetadata = {
+                "access-level": "public",
+                "user": {"access-level": "nested", "123abc": "ok2"},
+                "123abc": "ok",
+            }
+            saver.put(config, checkpoint, metadata, {})
+
+            # Top-level hyphenated key
+            results = list(saver.list(None, filter={"access-level": "public"}))
+            assert len(results) == 1
+
+            # Nested hyphenated key via dotted path
+            results = list(saver.list(None, filter={"user.access-level": "nested"}))
+            assert len(results) == 1
+
+            # Top-level digit-starting key
+            results = list(saver.list(None, filter={"123abc": "ok"}))
+            assert len(results) == 1
+
+            # Nested digit-starting key via dotted path
+            results = list(saver.list(None, filter={"user.123abc": "ok2"}))
+            assert len(results) == 1

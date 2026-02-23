@@ -151,13 +151,13 @@ def task(
 
 
         @task
-        def add_one(a: int) -> int:
+        def add_one_task(a: int) -> int:
             return a + 1
 
 
         @entrypoint()
         def add_one(numbers: list[int]) -> list[int]:
-            futures = [add_one(n) for n in numbers]
+            futures = [add_one_task(n) for n in numbers]
             results = [f.result() for f in futures]
             return results
 
@@ -173,13 +173,13 @@ def task(
 
 
         @task
-        async def add_one(a: int) -> int:
+        async def add_one_task(a: int) -> int:
             return a + 1
 
 
         @entrypoint()
         async def add_one(numbers: list[int]) -> list[int]:
-            futures = [add_one(n) for n in numbers]
+            futures = [add_one_task(n) for n in numbers]
             return asyncio.gather(*futures)
 
 
@@ -357,7 +357,7 @@ class entrypoint(Generic[ContextT]):
         my_workflow.invoke("hello", config)
         ```
 
-    Example: Using entrypoint.final to save a value
+    Example: Using `entrypoint.final` to save a value
         The `entrypoint.final` object allows you to return a value while saving
         a different value to the checkpoint. This value will be accessible
         in the next invocation of the entrypoint via the `previous` parameter, as
