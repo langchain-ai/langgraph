@@ -309,6 +309,49 @@ def test_shallow_setup_fails_on_incomplete_schema() -> None:
             conn.execute(f"DROP DATABASE {database}")
 
 
+def test_shallow_setup_uses_resolved_schema_for_task_path_check() -> None:
+    database = f"test_{uuid4().hex[:16]}"
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+
+    try:
+        with Connection.connect(
+            DEFAULT_POSTGRES_URI + database,
+            autocommit=True,
+            prepare_threshold=0,
+            row_factory=dict_row,
+        ) as conn:
+            conn.execute("CREATE SCHEMA custom")
+            conn.execute("SET search_path TO custom, public")
+            conn.execute("CREATE TABLE checkpoint_migrations (v INTEGER PRIMARY KEY)")
+            conn.execute(
+                "INSERT INTO checkpoint_migrations (v) VALUES (%s)",
+                (len(ShallowPostgresSaver.MIGRATIONS) - 1,),
+            )
+            conn.execute(
+                "CREATE TABLE checkpoints (thread_id TEXT, checkpoint_ns TEXT, checkpoint JSONB, metadata JSONB)"
+            )
+            conn.execute(
+                "CREATE TABLE checkpoint_blobs (thread_id TEXT, checkpoint_ns TEXT, channel TEXT, type TEXT, blob BYTEA)"
+            )
+            conn.execute(
+                "CREATE TABLE checkpoint_writes (thread_id TEXT, checkpoint_ns TEXT, checkpoint_id TEXT, task_id TEXT, idx INTEGER, channel TEXT, type TEXT, blob BYTEA)"
+            )
+            conn.execute(
+                "CREATE TABLE public.checkpoint_writes (thread_id TEXT, checkpoint_ns TEXT, checkpoint_id TEXT, task_id TEXT, task_path TEXT NOT NULL DEFAULT '', idx INTEGER, channel TEXT, type TEXT, blob BYTEA)"
+            )
+
+            saver = ShallowPostgresSaver(conn)
+            with pytest.raises(
+                RuntimeError,
+                match="missing 'checkpoint_writes.task_path' column",
+            ):
+                saver.setup()
+    finally:
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
 @pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
 def test_pending_sends_migration(saver_name: str) -> None:
     with _saver(saver_name) as saver:

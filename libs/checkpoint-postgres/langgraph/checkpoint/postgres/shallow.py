@@ -168,9 +168,12 @@ def _ensure_shallow_schema_ready_sync(cur: Cursor[DictRow]) -> None:
     col_row = cur.execute(
         """
         SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = 'checkpoint_writes' AND column_name = 'task_path'
-        """
+        FROM pg_catalog.pg_attribute
+        WHERE attrelid = to_regclass(%s)
+          AND attname = 'task_path'
+          AND NOT attisdropped
+        """,
+        ("checkpoint_writes",),
     ).fetchone()
     if col_row is None:
         raise RuntimeError(
@@ -204,9 +207,12 @@ async def _ensure_shallow_schema_ready_async(cur: AsyncCursor[DictRow]) -> None:
     res = await cur.execute(
         """
         SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = 'checkpoint_writes' AND column_name = 'task_path'
-        """
+        FROM pg_catalog.pg_attribute
+        WHERE attrelid = to_regclass(%s)
+          AND attname = 'task_path'
+          AND NOT attisdropped
+        """,
+        ("checkpoint_writes",),
     )
     col_row = await res.fetchone()
     if col_row is None:
