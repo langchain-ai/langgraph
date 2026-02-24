@@ -696,7 +696,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v2"],
+        stream_version: Literal["v2"],
         **kwargs: Any,
     ) -> Iterator[StreamPart]: ...
 
@@ -712,7 +712,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v1"] = ...,
+        stream_version: Literal["v1"] = ...,
         **kwargs: Any,
     ) -> Iterator[dict[str, Any] | Any]: ...
 
@@ -727,7 +727,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> Iterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -809,10 +809,10 @@ class RemoteGraph(PregelProtocol):
                 continue
 
             if chunk.event.startswith("messages"):
-                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+                chunk = chunk._replace(data=tuple(chunk.data))
 
             # emit chunk
-            if version == "v2":
+            if stream_version == "v2":
                 yield {"type": mode, "ns": ns, "data": chunk.data}
             elif subgraphs:
                 if NS_SEP in chunk.event:
@@ -841,7 +841,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v2"],
+        stream_version: Literal["v2"],
         **kwargs: Any,
     ) -> AsyncIterator[StreamPart]: ...
 
@@ -857,7 +857,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v1"] = ...,
+        stream_version: Literal["v1"] = ...,
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
@@ -872,7 +872,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -954,10 +954,10 @@ class RemoteGraph(PregelProtocol):
                 continue
 
             if chunk.event.startswith("messages"):
-                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+                chunk = chunk._replace(data=tuple(chunk.data))
 
             # emit chunk
-            if version == "v2":
+            if stream_version == "v2":
                 yield {"type": mode, "ns": ns, "data": chunk.data}
             elif subgraphs:
                 if NS_SEP in chunk.event:
@@ -1000,7 +1000,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v2"],
+        stream_version: Literal["v2"],
         **kwargs: Any,
     ) -> dict[str, Any]: ...
 
@@ -1014,7 +1014,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v1"] = ...,
+        stream_version: Literal["v1"] = ...,
         **kwargs: Any,
     ) -> dict[str, Any] | Any: ...
 
@@ -1027,7 +1027,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -1038,7 +1038,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             headers: Additional headers to pass to the request.
-            version: The streaming format version. `"v1"` (default) returns the
+            stream_version: The streaming format version. `"v1"` (default) returns the
                 traditional format, `"v2"` returns `StreamPart` typed dicts.
             **kwargs: Additional params to pass to RemoteGraph.stream.
 
@@ -1053,12 +1053,12 @@ class RemoteGraph(PregelProtocol):
             headers=headers,
             stream_mode="values",
             params=params,
-            version=version,
+            stream_version=stream_version,
             **kwargs,
         ):
             pass
         try:
-            if version == "v2":
+            if stream_version == "v2":
                 return chunk["data"]
             return chunk
         except UnboundLocalError:
@@ -1075,7 +1075,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v2"],
+        stream_version: Literal["v2"],
         **kwargs: Any,
     ) -> dict[str, Any]: ...
 
@@ -1089,7 +1089,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v1"] = ...,
+        stream_version: Literal["v1"] = ...,
         **kwargs: Any,
     ) -> dict[str, Any] | Any: ...
 
@@ -1102,7 +1102,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -1113,7 +1113,7 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             headers: Additional headers to pass to the request.
-            version: The streaming format version. `"v1"` (default) returns the
+            stream_version: The streaming format version. `"v1"` (default) returns the
                 traditional format, `"v2"` returns `StreamPart` typed dicts.
             **kwargs: Additional params to pass to RemoteGraph.astream.
 
@@ -1128,12 +1128,12 @@ class RemoteGraph(PregelProtocol):
             headers=headers,
             stream_mode="values",
             params=params,
-            version=version,
+            stream_version=stream_version,
             **kwargs,
         ):
             pass
         try:
-            if version == "v2":
+            if stream_version == "v2":
                 return chunk["data"]
             return chunk
         except UnboundLocalError:

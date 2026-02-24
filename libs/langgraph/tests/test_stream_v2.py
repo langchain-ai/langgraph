@@ -136,7 +136,7 @@ class TestV2Stream:
             graph.stream(
                 {"value": "x", "items": []},
                 stream_mode="values",
-                version="v2",
+                stream_version="v2",
             )
         )
         assert len(chunks) >= 1
@@ -153,7 +153,7 @@ class TestV2Stream:
             graph.stream(
                 {"value": "x", "items": []},
                 stream_mode="updates",
-                version="v2",
+                stream_version="v2",
             )
         )
         assert len(chunks) == 2
@@ -170,7 +170,7 @@ class TestV2Stream:
             graph.stream(
                 {"messages": "hi"},
                 stream_mode="messages",
-                version="v2",
+                stream_version="v2",
             )
         )
         msg_chunks = [c for c in chunks if c["type"] == "messages"]
@@ -198,7 +198,7 @@ class TestV2Stream:
             graph.stream(
                 {"key": "val"},
                 stream_mode="custom",
-                version="v2",
+                stream_version="v2",
             )
         )
         custom_chunks = [c for c in chunks if c["type"] == "custom"]
@@ -213,7 +213,7 @@ class TestV2Stream:
             graph.stream(
                 {"value": "x", "items": []},
                 stream_mode=["values", "updates"],
-                version="v2",
+                stream_version="v2",
             )
         )
         assert len(chunks) > 0
@@ -246,7 +246,7 @@ class TestV2Stream:
                 {"value": "x", "items": []},
                 stream_mode="updates",
                 subgraphs=True,
-                version="v2",
+                stream_version="v2",
             )
         )
         # Should have events from both root and subgraph
@@ -267,7 +267,7 @@ class TestV2Stream:
                 {"value": "x", "items": []},
                 config,
                 stream_mode="checkpoints",
-                version="v2",
+                stream_version="v2",
             )
         )
         ckpt_chunks = [c for c in chunks if c["type"] == "checkpoints"]
@@ -294,7 +294,7 @@ class TestV2Stream:
                 {"value": "x", "items": []},
                 config,
                 stream_mode="tasks",
-                version="v2",
+                stream_version="v2",
             )
         )
         task_chunks = [c for c in chunks if c["type"] == "tasks"]
@@ -337,7 +337,7 @@ class TestV2Stream:
                 {"value": "x", "items": []},
                 config,
                 stream_mode="debug",
-                version="v2",
+                stream_version="v2",
             )
         )
         debug_chunks = [c for c in chunks if c["type"] == "debug"]
@@ -372,7 +372,7 @@ class TestV2Stream:
                 {"value": "x", "items": []},
                 stream_mode="updates",
                 subgraphs=False,
-                version="v2",
+                stream_version="v2",
             )
         )
         chunks_with_sub: list[StreamPart] = list(
@@ -380,7 +380,7 @@ class TestV2Stream:
                 {"value": "x", "items": []},
                 stream_mode="updates",
                 subgraphs=True,
-                version="v2",
+                stream_version="v2",
             )
         )
         # Both should yield same structure: dict with type/ns/data
@@ -399,7 +399,7 @@ class TestV2Invoke:
     def test_invoke_v2_values_default(self) -> None:
         """v2 invoke with default stream_mode='values' returns the final state dict."""
         graph = _make_simple_graph().compile()
-        result = graph.invoke({"value": "x", "items": []}, version="v2")
+        result = graph.invoke({"value": "x", "items": []}, stream_version="v2")
         assert isinstance(result, dict)
         assert result["value"] == "x_a_b"
         assert result["items"] == ["a", "b"]
@@ -410,7 +410,7 @@ class TestV2Invoke:
         result = graph.invoke(
             {"value": "x", "items": []},
             stream_mode="updates",
-            version="v2",
+            stream_version="v2",
         )
         assert isinstance(result, list)
         assert len(result) == 2
@@ -429,7 +429,7 @@ class TestV2Invoke:
         result = graph.invoke(
             {"value": "x", "items": []},
             stream_mode=["values", "updates"],
-            version="v2",
+            stream_version="v2",
         )
         assert isinstance(result, list)
         types_seen = set()
@@ -474,7 +474,7 @@ class TestV2StreamAsync:
         async for chunk in graph.astream(
             {"value": "x", "items": []},
             stream_mode="values",
-            version="v2",
+            stream_version="v2",
         ):
             chunks.append(chunk)
         assert len(chunks) >= 1
@@ -491,7 +491,7 @@ class TestV2StreamAsync:
         async for chunk in graph.astream(
             {"value": "x", "items": []},
             stream_mode="updates",
-            version="v2",
+            stream_version="v2",
         ):
             chunks.append(chunk)
         assert len(chunks) == 2
@@ -507,7 +507,7 @@ class TestV2StreamAsync:
         async for chunk in graph.astream(
             {"messages": "hi"},
             stream_mode="messages",
-            version="v2",
+            stream_version="v2",
         ):
             chunks.append(chunk)
         msg_chunks = [c for c in chunks if c["type"] == "messages"]
@@ -534,7 +534,7 @@ class TestV2StreamAsync:
         async for chunk in graph.astream(
             {"key": "val"},
             stream_mode="custom",
-            version="v2",
+            stream_version="v2",
         ):
             chunks.append(chunk)
         custom_chunks = [c for c in chunks if c["type"] == "custom"]
@@ -549,7 +549,7 @@ class TestV2StreamAsync:
         async for chunk in graph.astream(
             {"value": "x", "items": []},
             stream_mode=["values", "updates"],
-            version="v2",
+            stream_version="v2",
         ):
             chunks.append(chunk)
         types_seen = {c["type"] for c in chunks}
@@ -573,7 +573,7 @@ class TestV2StreamAsync:
             {"value": "x", "items": []},
             stream_mode="updates",
             subgraphs=True,
-            version="v2",
+            stream_version="v2",
         ):
             chunks.append(chunk)
         root_chunks = [c for c in chunks if c["ns"] == ()]
@@ -594,7 +594,7 @@ class TestV2StreamAsync:
             {"value": "x", "items": []},
             config,
             stream_mode="checkpoints",
-            version="v2",
+            stream_version="v2",
         ):
             chunks.append(chunk)
         ckpt_chunks = [c for c in chunks if c["type"] == "checkpoints"]
@@ -618,7 +618,7 @@ class TestV2StreamAsync:
             {"value": "x", "items": []},
             config,
             stream_mode="tasks",
-            version="v2",
+            stream_version="v2",
         ):
             chunks.append(chunk)
         task_chunks = [c for c in chunks if c["type"] == "tasks"]
@@ -646,7 +646,7 @@ class TestV2StreamAsync:
             {"value": "x", "items": []},
             config,
             stream_mode="debug",
-            version="v2",
+            stream_version="v2",
         ):
             chunks.append(chunk)
         debug_chunks = [c for c in chunks if c["type"] == "debug"]
@@ -675,7 +675,7 @@ class TestV2InvokeAsync:
     async def test_ainvoke_v2_values_default(self) -> None:
         """v2 ainvoke with default stream_mode='values' returns the final state dict."""
         graph = _make_simple_graph().compile()
-        result = await graph.ainvoke({"value": "x", "items": []}, version="v2")
+        result = await graph.ainvoke({"value": "x", "items": []}, stream_version="v2")
         assert isinstance(result, dict)
         assert result["value"] == "x_a_b"
         assert result["items"] == ["a", "b"]
@@ -687,7 +687,7 @@ class TestV2InvokeAsync:
         result = await graph.ainvoke(
             {"value": "x", "items": []},
             stream_mode="updates",
-            version="v2",
+            stream_version="v2",
         )
         assert isinstance(result, list)
         assert len(result) == 2
@@ -707,7 +707,7 @@ class TestV2InvokeAsync:
         result = await graph.ainvoke(
             {"value": "x", "items": []},
             stream_mode=["values", "updates"],
-            version="v2",
+            stream_version="v2",
         )
         assert isinstance(result, list)
         types_seen = set()

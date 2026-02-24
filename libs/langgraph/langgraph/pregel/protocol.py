@@ -115,7 +115,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-        version: Literal["v2"],
+        stream_version: Literal["v2"],
     ) -> Iterator[StreamPart]: ...
 
     @overload
@@ -130,7 +130,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-        version: Literal["v1"] = ...,
+        stream_version: Literal["v1"] = ...,
     ) -> Iterator[dict[str, Any] | Any]: ...
 
     @abstractmethod
@@ -144,7 +144,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-        version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v1",
     ) -> Iterator[dict[str, Any] | Any]: ...
 
     @overload
@@ -159,7 +159,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-        version: Literal["v2"],
+        stream_version: Literal["v2"],
     ) -> AsyncIterator[StreamPart]: ...
 
     @overload
@@ -174,7 +174,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-        version: Literal["v1"] = ...,
+        stream_version: Literal["v1"] = ...,
     ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
     @abstractmethod
@@ -188,7 +188,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-        version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v1",
     ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
     @overload
@@ -201,7 +201,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        version: Literal["v2"],
+        stream_version: Literal["v2"],
     ) -> dict[str, Any]: ...
 
     @overload
@@ -214,7 +214,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        version: Literal["v1"] = ...,
+        stream_version: Literal["v1"] = ...,
     ) -> dict[str, Any] | Any: ...
 
     @abstractmethod
@@ -226,7 +226,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v1",
     ) -> dict[str, Any] | Any: ...
 
     @overload
@@ -239,7 +239,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        version: Literal["v2"],
+        stream_version: Literal["v2"],
     ) -> dict[str, Any]: ...
 
     @overload
@@ -252,7 +252,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        version: Literal["v1"] = ...,
+        stream_version: Literal["v1"] = ...,
     ) -> dict[str, Any] | Any: ...
 
     @abstractmethod
@@ -264,7 +264,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v1",
     ) -> dict[str, Any] | Any: ...
 
 

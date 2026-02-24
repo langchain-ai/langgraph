@@ -189,7 +189,7 @@ class TestInvokeOverloadTypes:
         """v2 invoke with default stream_mode='values' returns dict[str, Any]."""
         result = _run_mypy_invoke(
             textwrap.dedent("""\
-            r = graph.invoke(inp, version="v2")
+            r = graph.invoke(inp, stream_version="v2")
             assert_type(r, dict[str, Any])
         """)
         )
@@ -199,7 +199,7 @@ class TestInvokeOverloadTypes:
         """v2 invoke with non-values stream_mode returns list[StreamPart]."""
         result = _run_mypy_invoke(
             textwrap.dedent("""\
-            r = graph.invoke(inp, stream_mode="updates", version="v2")
+            r = graph.invoke(inp, stream_mode="updates", stream_version="v2")
             assert_type(r, list[StreamPart])
         """)
         )
@@ -209,7 +209,7 @@ class TestInvokeOverloadTypes:
         """v2 invoke with default values mode can be assigned to dict."""
         result = _run_mypy_invoke(
             textwrap.dedent("""\
-            r: dict[str, Any] = graph.invoke(inp, version="v2")
+            r: dict[str, Any] = graph.invoke(inp, stream_version="v2")
         """)
         )
         assert result.returncode == 0, result.stdout
