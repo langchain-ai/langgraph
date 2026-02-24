@@ -13,7 +13,7 @@ license = "MIT"
 license-files = ['LICENSE']
 dependencies = [
   "langgraph-checkpoint>=2.1.2,<5.0.0",
-  "orjson>=3.10.1",
+  "orjson>=3.11.5",
   "psycopg>=3.2.0",
   "psycopg-pool>=3.2.0",
 ]

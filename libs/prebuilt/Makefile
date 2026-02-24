@@ -1,4 +1,4 @@
-.PHONY: all format lint test test-fast test_watch integration_tests spell_check spell_fix benchmark profile
+.PHONY: all format lint type test test-fast test_watch integration_tests spell_check spell_fix benchmark profile
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -50,6 +50,9 @@ lint lint_diff lint_package lint_tests:
 	[ "$(PYTHON_FILES)" = "" ] || mkdir -p $(MYPY_CACHE)
 	[ "$(PYTHON_FILES)" = "" ] || uv run mypy langgraph --cache-dir $(MYPY_CACHE)
 
+type:
+	mkdir -p $(MYPY_CACHE) && uv run mypy langgraph --cache-dir $(MYPY_CACHE)
+
 format format_diff:
 	uv run ruff format $(PYTHON_FILES)
 	uv run ruff check --fix $(PYTHON_FILES)
@@ -72,6 +75,7 @@ help:
 	@echo '-- LINTING --'
 	@echo 'format                       - run code formatters'
 	@echo 'lint                         - run linters'
+	@echo 'type                         - run type checking'
 	@echo 'spell_check               	- run codespell on the project'
 	@echo 'spell_fix               		- run codespell on the project and fix the errors'
 	@echo '-- TESTS --'
