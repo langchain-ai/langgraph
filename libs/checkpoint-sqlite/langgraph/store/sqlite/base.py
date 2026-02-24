@@ -1054,6 +1054,11 @@ class SqliteStore(BaseSqliteStore, BaseStore):
             int: The number of deleted items.
         """
         cutoff = now or datetime.datetime.now(datetime.timezone.utc)
+        cutoff_text = (
+            cutoff.astimezone(datetime.timezone.utc)
+            .replace(tzinfo=None)
+            .isoformat(sep=" ", timespec="microseconds")
+        )
         with self._cursor() as cur:
             cur.execute(
                 """
@@ -1061,7 +1066,7 @@ class SqliteStore(BaseSqliteStore, BaseStore):
                 WHERE expires_at IS NOT NULL
                   AND julianday(expires_at) < julianday(?)
                 """,
-                (cutoff,),
+                (cutoff_text,),
             )
             deleted_count = cur.rowcount
             return deleted_count

@@ -248,6 +248,11 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             int: The number of deleted items.
         """
         cutoff = now or datetime.datetime.now(datetime.timezone.utc)
+        cutoff_text = (
+            cutoff.astimezone(datetime.timezone.utc)
+            .replace(tzinfo=None)
+            .isoformat(sep=" ", timespec="microseconds")
+        )
         async with self._cursor() as cur:
             await cur.execute(
                 """
@@ -255,7 +260,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                 WHERE expires_at IS NOT NULL
                   AND julianday(expires_at) < julianday(?)
                 """,
-                (cutoff,),
+                (cutoff_text,),
             )
             deleted_count = cur.rowcount
             return deleted_count
