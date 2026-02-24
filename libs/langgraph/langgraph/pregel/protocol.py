@@ -15,7 +15,6 @@ from langgraph.types import (
     StateUpdate,
     StreamMode,
     StreamPart,
-    StreamVersion,
 )
 
 if TYPE_CHECKING:
@@ -273,7 +272,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-        version: StreamVersion = "v1",
+        version: Literal["v1", "v2"] = "v1",
     ) -> Iterator[dict[str, Any] | Any]: ...
 
     @overload
@@ -442,7 +441,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-        version: StreamVersion = "v1",
+        version: Literal["v1", "v2"] = "v1",
     ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
     @abstractmethod

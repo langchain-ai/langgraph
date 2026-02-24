@@ -149,7 +149,6 @@ from langgraph.types import (
     StateUpdate,
     StreamMode,
     StreamPart,
-    StreamVersion,
     ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
@@ -2625,7 +2624,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        version: StreamVersion = "v1",
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[dict[str, Any] | Any]:
         """Stream graph steps for a single input.
@@ -3104,7 +3103,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        version: StreamVersion = "v1",
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Asynchronously stream graph steps for a single input.
@@ -3670,7 +3669,7 @@ def _output(
     stream_subgraphs: bool,
     getter: Callable[[], tuple[tuple[str, ...], str, Any]],
     empty_exc: type[Exception],
-    version: StreamVersion = "v1",
+    version: Literal["v1", "v2"] = "v1",
 ) -> Iterator:
     while True:
         try:

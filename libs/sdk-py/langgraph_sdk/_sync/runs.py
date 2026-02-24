@@ -5,7 +5,7 @@ from __future__ import annotations
 import builtins
 import warnings
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from typing import Any, overload
+from typing import Any, Literal, overload
 
 import httpx
 
@@ -33,7 +33,6 @@ from langgraph_sdk.schema import (
     RunStatus,
     StreamMode,
     StreamPart,
-    StreamVersion,
     TypedStreamPart,
 )
 
@@ -155,7 +154,7 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-        version: StreamVersion = "v1",
+        version: Literal["v1", "v2"] = "v1",
     ) -> Iterator[StreamPart] | Iterator[TypedStreamPart]:
         """Create a run and stream the results.
 

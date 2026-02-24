@@ -67,7 +67,6 @@ from langgraph.types import (
     StateSnapshot,
     StreamMode,
     StreamPart,
-    StreamVersion,
 )
 
 logger = logging.getLogger(__name__)
@@ -866,7 +865,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: StreamVersion = "v1",
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> Iterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -1145,7 +1144,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: StreamVersion = "v1",
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Create a run and stream the results.

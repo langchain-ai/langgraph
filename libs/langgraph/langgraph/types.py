@@ -43,7 +43,6 @@ __all__ = (
     "All",
     "Checkpointer",
     "StreamMode",
-    "StreamVersion",
     "StreamWriter",
     "StreamPart",
     "ValuesStreamPart",
@@ -121,15 +120,6 @@ StreamWriter = Callable[[Any], None]
 """`Callable` that accepts a single argument and writes it to the output stream.
 Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using `stream_mode="custom"`."""
-
-StreamVersion = Literal["v1", "v2"]
-"""Version of the stream output format.
-
-- `"v1"`: The default format. Output shape depends on `stream_mode`, `subgraphs`, and whether
-  `stream_mode` is a list. This is the existing behavior.
-- `"v2"`: Every chunk is a self-describing `StreamPart` TypedDict with a `type` discriminator
-  and an `ns` field. Enables type narrowing via `part["type"]`.
-"""
 
 
 class ValuesStreamPart(TypedDict):

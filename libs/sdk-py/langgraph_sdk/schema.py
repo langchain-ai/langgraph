@@ -588,16 +588,6 @@ class StreamPart(NamedTuple):
     """The ID of the event."""
 
 
-StreamVersion = Literal["v1", "v2"]
-"""Version of the stream output format.
-
-- `"v1"`: The default format. Each chunk is a `StreamPart` NamedTuple with
-  `event`, `data`, and `id` fields.
-- `"v2"`: Every chunk is a self-describing `TypedStreamPart` TypedDict with a
-  `type` discriminator and an `ns` field. Enables type narrowing via `part["type"]`.
-"""
-
-
 class ValuesStreamPart(TypedDict):
     """Stream part emitted for `stream_mode="values"`."""
 
