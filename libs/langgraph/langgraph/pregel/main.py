@@ -20,7 +20,6 @@ from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass
 from typing import (
-    TYPE_CHECKING,
     Any,
     Generic,
     Literal,
@@ -50,9 +49,6 @@ from langgraph.checkpoint.base import (
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import Self, Unpack, deprecated, is_typeddict
-
-if TYPE_CHECKING:
-    from langchain_core.messages import AnyMessage
 
 from langgraph._internal._config import (
     ensure_config,
@@ -2418,187 +2414,7 @@ class Pregel(
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
-        stream_mode: Literal["values"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[False] = False,
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[OutputT]: ...
-
-    @overload
-    def stream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["updates"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[False] = False,
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[dict[str, Any]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["messages"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[False] = False,
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[tuple[AnyMessage, dict[str, Any]]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["custom"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[False] = False,
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[Any]: ...
-
-    @overload
-    def stream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["values"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[True],
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[tuple[tuple[str, ...], OutputT]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["updates"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[True],
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["messages"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[True],
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[tuple[tuple[str, ...], tuple[AnyMessage, dict[str, Any]]]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["custom"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[True],
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[tuple[tuple[str, ...], Any]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: list[StreamMode],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[False] = False,
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[tuple[str, Any]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: list[StreamMode],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[True],
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[tuple[tuple[str, ...], str, Any]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: StreamMode | list[StreamMode] | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -2609,6 +2425,25 @@ class Pregel(
         version: Literal["v2"],
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[StreamPart]: ...
+
+    @overload
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        subgraphs: bool = False,
+        debug: bool | None = None,
+        version: Literal["v1"] = ...,
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> Iterator[dict[str, Any] | Any]: ...
 
     def stream(
         self,
@@ -2897,187 +2732,7 @@ class Pregel(
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
-        stream_mode: Literal["values"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[False] = False,
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[OutputT]: ...
-
-    @overload
-    def astream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["updates"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[False] = False,
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[dict[str, Any]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["messages"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[False] = False,
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[tuple[AnyMessage, dict[str, Any]]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["custom"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[False] = False,
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[Any]: ...
-
-    @overload
-    def astream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["values"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[True],
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[tuple[tuple[str, ...], OutputT]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["updates"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[True],
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["messages"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[True],
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[tuple[tuple[str, ...], tuple[AnyMessage, dict[str, Any]]]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: Literal["custom"],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[True],
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[tuple[tuple[str, ...], Any]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: list[StreamMode],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[False] = False,
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[tuple[str, Any]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: list[StreamMode],
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        subgraphs: Literal[True],
-        debug: bool | None = None,
-        **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[tuple[tuple[str, ...], str, Any]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: StreamMode | list[StreamMode] | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
@@ -3088,6 +2743,25 @@ class Pregel(
         version: Literal["v2"],
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[StreamPart]: ...
+
+    @overload
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        subgraphs: bool = False,
+        debug: bool | None = None,
+        version: Literal["v1"] = ...,
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
     async def astream(
         self,

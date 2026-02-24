@@ -4,7 +4,6 @@ import logging
 from collections.abc import AsyncIterator, Iterator, Sequence
 from dataclasses import asdict
 from typing import (
-    TYPE_CHECKING,
     Any,
     Literal,
     cast,
@@ -42,9 +41,6 @@ from langgraph_sdk.schema import (
     StreamMode as StreamModeSDK,
 )
 from typing_extensions import Self
-
-if TYPE_CHECKING:
-    from langchain_core.messages import AnyMessage
 
 from langgraph._internal._config import merge_configs
 from langgraph._internal._constants import (
@@ -694,149 +690,15 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
-        stream_mode: Literal["values"],
+        stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
+        subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        version: Literal["v2"],
         **kwargs: Any,
-    ) -> Iterator[dict[str, Any]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["updates"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[dict[str, Any]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["messages"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[AnyMessage, dict[str, Any]]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["custom"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[Any]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["values"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["updates"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["messages"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[tuple[str, ...], tuple[AnyMessage, dict[str, Any]]]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["custom"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[tuple[str, ...], Any]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: list[StreamMode],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[str, Any]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: list[StreamMode],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[tuple[str, ...], str, Any]]: ...
+    ) -> Iterator[StreamPart]: ...
 
     @overload
     def stream(
@@ -850,9 +712,9 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v2"],
+        version: Literal["v1"] = ...,
         **kwargs: Any,
-    ) -> Iterator[StreamPart]: ...
+    ) -> Iterator[dict[str, Any] | Any]: ...
 
     def stream(
         self,
@@ -973,149 +835,15 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
-        stream_mode: Literal["values"],
+        stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
+        subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        version: Literal["v2"],
         **kwargs: Any,
-    ) -> AsyncIterator[dict[str, Any]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["updates"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[dict[str, Any]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["messages"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[AnyMessage, dict[str, Any]]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["custom"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[Any]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["values"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["updates"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["messages"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[tuple[str, ...], tuple[AnyMessage, dict[str, Any]]]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["custom"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[tuple[str, ...], Any]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: list[StreamMode],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[str, Any]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: list[StreamMode],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[tuple[str, ...], str, Any]]: ...
+    ) -> AsyncIterator[StreamPart]: ...
 
     @overload
     def astream(
@@ -1129,9 +857,9 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        version: Literal["v2"],
+        version: Literal["v1"] = ...,
         **kwargs: Any,
-    ) -> AsyncIterator[StreamPart]: ...
+    ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
     async def astream(
         self,
