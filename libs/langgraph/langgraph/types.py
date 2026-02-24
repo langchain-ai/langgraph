@@ -168,17 +168,29 @@ class CheckpointPayload(TypedDict):
     tasks: list[CheckpointTask]
 
 
-class DebugPayload(TypedDict):
-    """Wrapper payload for debug events.
-
-    Wraps an underlying checkpoint or task payload with step and timestamp
-    metadata.
-    """
-
+class _DebugCheckpointPayload(TypedDict):
     step: int
     timestamp: str
-    type: Literal["checkpoint", "task", "task_result"]
-    payload: CheckpointPayload | TaskPayload | TaskResultPayload
+    type: Literal["checkpoint"]
+    payload: CheckpointPayload
+
+
+class _DebugTaskPayload(TypedDict):
+    step: int
+    timestamp: str
+    type: Literal["task"]
+    payload: TaskPayload
+
+
+class _DebugTaskResultPayload(TypedDict):
+    step: int
+    timestamp: str
+    type: Literal["task_result"]
+    payload: TaskResultPayload
+
+
+DebugPayload = _DebugCheckpointPayload | _DebugTaskPayload | _DebugTaskResultPayload
+"""Wrapper payload for debug events. Discriminate on `type`."""
 
 
 class ValuesStreamPart(TypedDict):
