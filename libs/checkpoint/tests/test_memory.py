@@ -187,6 +187,53 @@ class TestMemorySaver:
         ]
         assert len(search_results_4) == 0
 
+    def test_equal_timestamp_uses_insertion_order_for_latest(self) -> None:
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-tie",
+                "checkpoint_ns": "",
+            }
+        }
+        first = empty_checkpoint()
+        first["id"] = "zzz-first-id"
+        first["ts"] = "2026-02-19T10:00:00.000000+00:00"
+
+        second = empty_checkpoint()
+        second["id"] = "aaa-second-id"
+        second["ts"] = "2026-02-19T10:00:00.000000+00:00"
+
+        self.memory_saver.put(config, first, {"source": "input", "step": 1}, {})
+        self.memory_saver.put(config, second, {"source": "loop", "step": 2}, {})
+
+        latest = self.memory_saver.get_tuple(config)
+        assert latest is not None
+        assert latest.checkpoint["id"] == "aaa-second-id"
+
+    def test_before_cursor_uses_insertion_order(self) -> None:
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-before",
+                "checkpoint_ns": "",
+            }
+        }
+        first = empty_checkpoint()
+        first["id"] = "2"
+        second = empty_checkpoint()
+        second["id"] = "10"
+
+        self.memory_saver.put(config, first, {"source": "input", "step": 1}, {})
+        self.memory_saver.put(config, second, {"source": "loop", "step": 2}, {})
+
+        first_page = list(self.memory_saver.list(config, limit=1))
+        assert len(first_page) == 1
+        assert first_page[0].checkpoint["id"] == "10"
+
+        second_page = list(
+            self.memory_saver.list(config, before=first_page[0].config, limit=1)
+        )
+        assert len(second_page) == 1
+        assert second_page[0].checkpoint["id"] == "2"
+
 
 async def test_memory_saver() -> None:
     from langgraph.checkpoint.memory import InMemorySaver
