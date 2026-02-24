@@ -3109,6 +3109,41 @@ class Pregel(
             await asyncio.shield(run_manager.on_chain_error(e))
             raise
 
+    @overload
+    def invoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["values"] = ...,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def invoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> list[StreamPart]: ...
+
+    @overload
     def invoke(
         self,
         input: InputT | Command | None,
@@ -3121,6 +3156,23 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        version: Literal["v1"] = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any: ...
+
+    def invoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode = "values",
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Run the graph with a single input and config.
@@ -3144,6 +3196,9 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
+            version: The streaming format version. `"v1"` (default) returns the
+                traditional format, `"v2"` returns `StreamPart` typed dicts when
+                `stream_mode` is not `"values"`.
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
@@ -3156,7 +3211,7 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
-        for chunk in self.stream(
+        for chunk in self.stream(  # type: ignore[misc]
             input,
             config,
             context=context,
@@ -3168,21 +3223,27 @@ class Pregel(
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             durability=durability,
+            version=version,  # type: ignore[arg-type]
             **kwargs,
         ):
             if stream_mode == "values":
-                if len(chunk) == 2:
-                    mode, payload = cast(tuple[StreamMode, Any], chunk)
+                if version == "v2":
+                    chunk = cast(dict[str, Any], chunk)  # type: ignore[assignment]
+                    mode = chunk["type"]
+                    payload = chunk["data"]
                 else:
-                    _, mode, payload = cast(
-                        tuple[tuple[str, ...], StreamMode, Any], chunk
-                    )
+                    if len(chunk) == 2:
+                        mode, payload = cast(tuple[StreamMode, Any], chunk)
+                    else:
+                        _, mode, payload = cast(
+                            tuple[tuple[str, ...], StreamMode, Any], chunk
+                        )
                 if (
                     mode == "updates"
                     and isinstance(payload, dict)
                     and (ints := payload.get(INTERRUPT)) is not None
                 ):
-                    interrupts.extend(ints)
+                    interrupts.extend(ints)  # type: ignore[arg-type]
                 elif mode == "values":
                     latest = payload
             else:
@@ -3199,6 +3260,41 @@ class Pregel(
         else:
             return chunks
 
+    @overload
+    async def ainvoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: Literal["values"] = ...,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    async def ainvoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> list[StreamPart]: ...
+
+    @overload
     async def ainvoke(
         self,
         input: InputT | Command | None,
@@ -3211,6 +3307,23 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
+        version: Literal["v1"] = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any: ...
+
+    async def ainvoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode = "values",
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Asynchronously run the graph with a single input and config.
@@ -3234,6 +3347,9 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
+            version: The streaming format version. `"v1"` (default) returns the
+                traditional format, `"v2"` returns `StreamPart` typed dicts when
+                `stream_mode` is not `"values"`.
             **kwargs: Additional keyword arguments to pass to the graph run.
 
         Returns:
@@ -3246,7 +3362,7 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
-        async for chunk in self.astream(
+        async for chunk in self.astream(  # type: ignore[misc]
             input,
             config,
             context=context,
@@ -3258,21 +3374,27 @@ class Pregel(
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             durability=durability,
+            version=version,  # type: ignore[arg-type]
             **kwargs,
         ):
             if stream_mode == "values":
-                if len(chunk) == 2:
-                    mode, payload = cast(tuple[StreamMode, Any], chunk)
+                if version == "v2":
+                    chunk = cast(dict[str, Any], chunk)  # type: ignore[assignment]
+                    mode = chunk["type"]
+                    payload = chunk["data"]
                 else:
-                    _, mode, payload = cast(
-                        tuple[tuple[str, ...], StreamMode, Any], chunk
-                    )
+                    if len(chunk) == 2:
+                        mode, payload = cast(tuple[StreamMode, Any], chunk)
+                    else:
+                        _, mode, payload = cast(
+                            tuple[tuple[str, ...], StreamMode, Any], chunk
+                        )
                 if (
                     mode == "updates"
                     and isinstance(payload, dict)
                     and (ints := payload.get(INTERRUPT)) is not None
                 ):
-                    interrupts.extend(ints)
+                    interrupts.extend(ints)  # type: ignore[arg-type]
                 elif mode == "values":
                     latest = payload
             else:

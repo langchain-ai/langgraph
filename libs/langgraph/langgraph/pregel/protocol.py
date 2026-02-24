@@ -191,6 +191,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         version: Literal["v1", "v2"] = "v1",
     ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
+    @overload
     @abstractmethod
     def invoke(
         self,
@@ -200,6 +201,58 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        version: Literal["v2"],
+    ) -> dict[str, Any]: ...
+
+    @overload
+    @abstractmethod
+    def invoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        version: Literal["v1"] = ...,
+    ) -> dict[str, Any] | Any: ...
+
+    @abstractmethod
+    def invoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        version: Literal["v1", "v2"] = "v1",
+    ) -> dict[str, Any] | Any: ...
+
+    @overload
+    @abstractmethod
+    async def ainvoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        version: Literal["v2"],
+    ) -> dict[str, Any]: ...
+
+    @overload
+    @abstractmethod
+    async def ainvoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        version: Literal["v1"] = ...,
     ) -> dict[str, Any] | Any: ...
 
     @abstractmethod
@@ -211,6 +264,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
+        version: Literal["v1", "v2"] = "v1",
     ) -> dict[str, Any] | Any: ...
 
 

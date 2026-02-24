@@ -990,6 +990,7 @@ class RemoteGraph(PregelProtocol):
     ) -> AsyncIterator[dict[str, Any]]:
         raise NotImplementedError
 
+    @overload
     def invoke(
         self,
         input: dict[str, Any] | Any,
@@ -999,6 +1000,34 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def invoke(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        version: Literal["v1"] = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any: ...
+
+    def invoke(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -1009,12 +1038,14 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             headers: Additional headers to pass to the request.
+            version: The streaming format version. `"v1"` (default) returns the
+                traditional format, `"v2"` returns `StreamPart` typed dicts.
             **kwargs: Additional params to pass to RemoteGraph.stream.
 
         Returns:
             The output of the graph.
         """
-        for chunk in self.stream(
+        for chunk in self.stream(  # type: ignore[misc, call-overload]
             input,
             config=config,
             interrupt_before=interrupt_before,
@@ -1022,14 +1053,45 @@ class RemoteGraph(PregelProtocol):
             headers=headers,
             stream_mode="values",
             params=params,
+            version=version,
             **kwargs,
         ):
             pass
         try:
+            if version == "v2":
+                return chunk["data"]
             return chunk
         except UnboundLocalError:
             logger.warning("No events received from remote graph")
             return None
+
+    @overload
+    async def ainvoke(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    async def ainvoke(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        version: Literal["v1"] = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any: ...
 
     async def ainvoke(
         self,
@@ -1040,6 +1102,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -1050,12 +1113,14 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             headers: Additional headers to pass to the request.
+            version: The streaming format version. `"v1"` (default) returns the
+                traditional format, `"v2"` returns `StreamPart` typed dicts.
             **kwargs: Additional params to pass to RemoteGraph.astream.
 
         Returns:
             The output of the graph.
         """
-        async for chunk in self.astream(
+        async for chunk in self.astream(  # type: ignore[misc, call-overload]
             input,
             config=config,
             interrupt_before=interrupt_before,
@@ -1063,10 +1128,13 @@ class RemoteGraph(PregelProtocol):
             headers=headers,
             stream_mode="values",
             params=params,
+            version=version,
             **kwargs,
         ):
             pass
         try:
+            if version == "v2":
+                return chunk["data"]
             return chunk
         except UnboundLocalError:
             logger.warning("No events received from remote graph")
