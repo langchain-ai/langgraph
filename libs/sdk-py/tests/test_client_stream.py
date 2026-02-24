@@ -6,6 +6,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from langgraph_sdk._shared.utilities import _sse_to_v2_dict
 from langgraph_sdk.client import HttpClient, SyncHttpClient
 from langgraph_sdk.schema import StreamPart
 from langgraph_sdk.sse import BytesLike, BytesLineDecoder, SSEDecoder
@@ -246,3 +247,133 @@ def test_sync_http_client_stream_flushes_trailing_event():
         parts = list(http_client.stream("/stream", "GET"))
 
     assert parts == [StreamPart(event="foo", data={"bar": 1})]
+
+
+# --- v2 streaming tests ---
+
+
+def test_sse_to_v2_dict_basic():
+    """Test basic conversion of SSE event to v2 dict."""
+    result = _sse_to_v2_dict("values", {"messages": [{"role": "user"}]})
+    assert result == {
+        "type": "values",
+        "ns": [],
+        "data": {"messages": [{"role": "user"}]},
+    }
+
+
+def test_sse_to_v2_dict_with_namespace():
+    """Test namespace parsing from pipe-separated event name."""
+    result = _sse_to_v2_dict("updates|sub:abc", {"key": "val"})
+    assert result == {
+        "type": "updates",
+        "ns": ["sub:abc"],
+        "data": {"key": "val"},
+    }
+
+
+def test_sse_to_v2_dict_with_multiple_ns():
+    """Test multiple namespace parts."""
+    result = _sse_to_v2_dict("custom|parent|child:123", "hello")
+    assert result == {
+        "type": "custom",
+        "ns": ["parent", "child:123"],
+        "data": "hello",
+    }
+
+
+def test_sse_to_v2_dict_end_event():
+    """Test that end events return None (stop iteration)."""
+    assert _sse_to_v2_dict("end", None) is None
+
+
+def test_sse_to_v2_dict_metadata_event():
+    """Test metadata control event."""
+    result = _sse_to_v2_dict("metadata", {"run_id": "abc-123"})
+    assert result == {
+        "type": "metadata",
+        "ns": [],
+        "data": {"run_id": "abc-123"},
+    }
+
+
+def test_sse_to_v2_dict_messages_partial():
+    """Test messages/partial event type."""
+    result = _sse_to_v2_dict("messages/partial", [{"type": "ai", "content": "hi"}])
+    assert result == {
+        "type": "messages/partial",
+        "ns": [],
+        "data": [{"type": "ai", "content": "hi"}],
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_stream_v2_client_side_conversion():
+    """Test v2 wrapping with client-side conversion of v1-format SSE events."""
+    from langgraph_sdk._async.runs import _wrap_stream_v2
+
+    async def mock_stream():
+        yield StreamPart(event="metadata", data={"run_id": "r1"})
+        yield StreamPart(
+            event="values", data={"messages": [{"role": "user", "content": "hi"}]}
+        )
+        yield StreamPart(event="updates|sub:abc", data={"node": {"out": 1}})
+        yield StreamPart(event="end", data=None)  # type: ignore[arg-type]
+
+    parts = [part async for part in _wrap_stream_v2(mock_stream())]
+    assert len(parts) == 3
+    assert parts[0] == {"type": "metadata", "ns": [], "data": {"run_id": "r1"}}
+    assert parts[1] == {
+        "type": "values",
+        "ns": [],
+        "data": {"messages": [{"role": "user", "content": "hi"}]},
+    }
+    assert parts[2] == {
+        "type": "updates",
+        "ns": ["sub:abc"],
+        "data": {"node": {"out": 1}},
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_stream_v2_server_side_passthrough():
+    """Test v2 wrapping when server already sends v2-format data."""
+    from langgraph_sdk._async.runs import _wrap_stream_v2
+
+    v2_data = {"type": "values", "ns": [], "data": {"key": "val"}}
+
+    async def mock_stream():
+        yield StreamPart(event="values", data=v2_data)
+
+    parts = [part async for part in _wrap_stream_v2(mock_stream())]
+    assert len(parts) == 1
+    assert parts[0] == v2_data
+
+
+def test_sync_stream_v2_client_side_conversion():
+    """Test v2 wrapping with sync generator."""
+    from langgraph_sdk._sync.runs import _wrap_stream_v2_sync
+
+    def mock_stream():
+        yield StreamPart(event="metadata", data={"run_id": "r1"})
+        yield StreamPart(event="values", data={"state": "full"})
+        yield StreamPart(event="end", data=None)  # type: ignore[arg-type]
+
+    parts = list(_wrap_stream_v2_sync(mock_stream()))
+    assert len(parts) == 2
+    assert parts[0] == {"type": "metadata", "ns": [], "data": {"run_id": "r1"}}
+    assert parts[1] == {"type": "values", "ns": [], "data": {"state": "full"}}
+
+
+def test_sync_stream_v2_server_side_passthrough():
+    """Test v2 wrapping passthrough when server sends v2-format."""
+    from langgraph_sdk._sync.runs import _wrap_stream_v2_sync
+
+    v2_data = {"type": "custom", "ns": ["sub"], "data": {"x": 1}}
+
+    def mock_stream():
+        yield StreamPart(event="custom", data=v2_data)
+
+    parts = list(_wrap_stream_v2_sync(mock_stream()))
+    assert len(parts) == 1
+    assert parts[0] == v2_data
