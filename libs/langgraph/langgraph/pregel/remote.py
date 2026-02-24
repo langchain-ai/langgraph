@@ -66,6 +66,8 @@ from langgraph.types import (
     PregelTask,
     StateSnapshot,
     StreamMode,
+    StreamPart,
+    StreamVersion,
 )
 
 logger = logging.getLogger(__name__)
@@ -837,6 +839,7 @@ class RemoteGraph(PregelProtocol):
         **kwargs: Any,
     ) -> Iterator[tuple[tuple[str, ...], str, Any]]: ...
 
+    @overload
     def stream(
         self,
         input: dict[str, Any] | Any,
@@ -848,6 +851,22 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> Iterator[StreamPart]: ...
+
+    def stream(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        *,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: bool = False,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        version: StreamVersion = "v1",
         **kwargs: Any,
     ) -> Iterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -932,7 +951,9 @@ class RemoteGraph(PregelProtocol):
                 chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
 
             # emit chunk
-            if subgraphs:
+            if version == "v2":
+                yield {"type": mode, "ns": ns, "data": chunk.data}
+            elif subgraphs:
                 if NS_SEP in chunk.event:
                     mode, ns_ = chunk.event.split(NS_SEP, 1)
                     ns = tuple(ns_.split(NS_SEP))
@@ -1097,6 +1118,22 @@ class RemoteGraph(PregelProtocol):
         **kwargs: Any,
     ) -> AsyncIterator[tuple[tuple[str, ...], str, Any]]: ...
 
+    @overload
+    def astream(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        *,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: bool = False,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        version: Literal["v2"],
+        **kwargs: Any,
+    ) -> AsyncIterator[StreamPart]: ...
+
     async def astream(
         self,
         input: dict[str, Any] | Any,
@@ -1108,6 +1145,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        version: StreamVersion = "v1",
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -1192,7 +1230,9 @@ class RemoteGraph(PregelProtocol):
                 chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
 
             # emit chunk
-            if subgraphs:
+            if version == "v2":
+                yield {"type": mode, "ns": ns, "data": chunk.data}
+            elif subgraphs:
                 if NS_SEP in chunk.event:
                     mode, ns_ = chunk.event.split(NS_SEP, 1)
                     ns = tuple(ns_.split(NS_SEP))

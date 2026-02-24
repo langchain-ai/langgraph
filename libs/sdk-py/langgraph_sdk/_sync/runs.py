@@ -33,7 +33,23 @@ from langgraph_sdk.schema import (
     RunStatus,
     StreamMode,
     StreamPart,
+    StreamVersion,
+    TypedStreamPart,
 )
+
+_NS_SEP = "|"
+
+
+def _stream_parts_v2(raw: Iterator[StreamPart]) -> Iterator[TypedStreamPart]:
+    """Convert v1 StreamPart NamedTuples to v2 TypedStreamPart TypedDicts."""
+    for part in raw:
+        event = part.event
+        if _NS_SEP in event:
+            mode, ns_ = event.split(_NS_SEP, 1)
+            ns = tuple(ns_.split(_NS_SEP))
+        else:
+            mode, ns = event, ()
+        yield {"type": mode, "ns": ns, "data": part.data}
 
 
 class SyncRunsClient:
@@ -139,7 +155,8 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-    ) -> Iterator[StreamPart]:
+        version: StreamVersion = "v1",
+    ) -> Iterator[StreamPart] | Iterator[TypedStreamPart]:
         """Create a run and stream the results.
 
         Args:
@@ -255,7 +272,7 @@ class SyncRunsClient:
             if on_run_created and (metadata := _get_run_metadata_from_response(res)):
                 on_run_created(metadata)
 
-        return self.http.stream(
+        raw_stream = self.http.stream(
             endpoint,
             "POST",
             json={k: v for k, v in payload.items() if v is not None},
@@ -263,6 +280,9 @@ class SyncRunsClient:
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
+        if version == "v2":
+            return _stream_parts_v2(raw_stream)
+        return raw_stream
 
     @overload
     def create(

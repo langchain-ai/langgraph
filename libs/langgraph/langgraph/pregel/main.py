@@ -148,6 +148,8 @@ from langgraph.types import (
     StateSnapshot,
     StateUpdate,
     StreamMode,
+    StreamPart,
+    StreamVersion,
     ensure_valid_checkpointer,
 )
 from langgraph.typing import ContextT, InputT, OutputT, StateT
@@ -2590,6 +2592,25 @@ class Pregel(
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[tuple[tuple[str, ...], str, Any]]: ...
 
+    @overload
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        subgraphs: bool = False,
+        debug: bool | None = None,
+        version: Literal["v2"],
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> Iterator[StreamPart]: ...
+
     def stream(
         self,
         input: InputT | Command | None,
@@ -2604,6 +2625,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
+        version: StreamVersion = "v1",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[dict[str, Any] | Any]:
         """Stream graph steps for a single input.
@@ -2837,7 +2859,12 @@ class Pregel(
                     ):
                         # emit output
                         yield from _output(
-                            stream_mode, print_mode, subgraphs, stream.get, queue.Empty
+                            stream_mode,
+                            print_mode,
+                            subgraphs,
+                            stream.get,
+                            queue.Empty,
+                            version,
                         )
                     loop.after_tick()
                     # wait for checkpoint
@@ -2845,7 +2872,7 @@ class Pregel(
                         loop._put_checkpoint_fut.result()
             # emit output
             yield from _output(
-                stream_mode, print_mode, subgraphs, stream.get, queue.Empty
+                stream_mode, print_mode, subgraphs, stream.get, queue.Empty, version
             )
             # handle exit
             if loop.status == "out_of_steps":
@@ -3044,6 +3071,25 @@ class Pregel(
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[tuple[tuple[str, ...], str, Any]]: ...
 
+    @overload
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        subgraphs: bool = False,
+        debug: bool | None = None,
+        version: Literal["v2"],
+        **kwargs: Unpack[DeprecatedKwargs],
+    ) -> AsyncIterator[StreamPart]: ...
+
     async def astream(
         self,
         input: InputT | Command | None,
@@ -3058,6 +3104,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
+        version: StreamVersion = "v1",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Asynchronously stream graph steps for a single input.
@@ -3350,6 +3397,7 @@ class Pregel(
                                 subgraphs,
                                 stream.get_nowait,
                                 asyncio.QueueEmpty,
+                                version,
                             ):
                                 yield o
                         loop.after_tick()
@@ -3368,6 +3416,7 @@ class Pregel(
                 subgraphs,
                 stream.get_nowait,
                 asyncio.QueueEmpty,
+                version,
             ):
                 yield o
             # handle exit
@@ -3434,14 +3483,12 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
-        for chunk in self.stream(  # type: ignore[misc]
+        for chunk in self.stream(
             input,
             config,
             context=context,
             stream_mode=(
-                ["updates", "values"]  # type: ignore[arg-type]
-                if stream_mode == "values"
-                else stream_mode
+                ["updates", "values"] if stream_mode == "values" else stream_mode
             ),
             print_mode=print_mode,
             output_keys=output_keys,
@@ -3526,14 +3573,12 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
-        async for chunk in self.astream(  # type: ignore[misc]
+        async for chunk in self.astream(
             input,
             config,
             context=context,
             stream_mode=(
-                ["updates", "values"]  # type: ignore[arg-type]
-                if stream_mode == "values"
-                else stream_mode
+                ["updates", "values"] if stream_mode == "values" else stream_mode
             ),
             print_mode=print_mode,
             output_keys=output_keys,
@@ -3625,6 +3670,7 @@ def _output(
     stream_subgraphs: bool,
     getter: Callable[[], tuple[tuple[str, ...], str, Any]],
     empty_exc: type[Exception],
+    version: StreamVersion = "v1",
 ) -> Iterator:
     while True:
         try:
@@ -3652,7 +3698,9 @@ def _output(
                     )
                 )
         if mode in stream_mode:
-            if stream_subgraphs and isinstance(stream_mode, list):
+            if version == "v2":
+                yield {"type": mode, "ns": ns, "data": payload}
+            elif stream_subgraphs and isinstance(stream_mode, list):
                 yield (ns, mode, payload)
             elif isinstance(stream_mode, list):
                 yield (mode, payload)

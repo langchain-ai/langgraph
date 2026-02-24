@@ -33,7 +33,25 @@ from langgraph_sdk.schema import (
     RunStatus,
     StreamMode,
     StreamPart,
+    StreamVersion,
+    TypedStreamPart,
 )
+
+_NS_SEP = "|"
+
+
+async def _astream_parts_v2(
+    raw: AsyncIterator[StreamPart],
+) -> AsyncIterator[TypedStreamPart]:
+    """Convert v1 StreamPart NamedTuples to v2 TypedStreamPart TypedDicts."""
+    async for part in raw:
+        event = part.event
+        if _NS_SEP in event:
+            mode, ns_ = event.split(_NS_SEP, 1)
+            ns = tuple(ns_.split(_NS_SEP))
+        else:
+            mode, ns = event, ()
+        yield {"type": mode, "ns": ns, "data": part.data}
 
 
 class RunsClient:
@@ -139,7 +157,8 @@ class RunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-    ) -> AsyncIterator[StreamPart]:
+        version: StreamVersion = "v1",
+    ) -> AsyncIterator[StreamPart] | AsyncIterator[TypedStreamPart]:
         """Create a run and stream the results.
 
         Args:
@@ -259,7 +278,7 @@ class RunsClient:
             if on_run_created and (metadata := _get_run_metadata_from_response(res)):
                 on_run_created(metadata)
 
-        return self.http.stream(
+        raw_stream = self.http.stream(
             endpoint,
             "POST",
             json={k: v for k, v in payload.items() if v is not None},
@@ -267,6 +286,9 @@ class RunsClient:
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
+        if version == "v2":
+            return _astream_parts_v2(raw_stream)
+        return raw_stream
 
     @overload
     async def create(

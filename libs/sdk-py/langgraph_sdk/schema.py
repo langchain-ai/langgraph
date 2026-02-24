@@ -588,6 +588,84 @@ class StreamPart(NamedTuple):
     """The ID of the event."""
 
 
+StreamVersion = Literal["v1", "v2"]
+"""Version of the stream output format.
+
+- `"v1"`: The default format. Each chunk is a `StreamPart` NamedTuple with
+  `event`, `data`, and `id` fields.
+- `"v2"`: Every chunk is a self-describing `TypedStreamPart` TypedDict with a
+  `type` discriminator and an `ns` field. Enables type narrowing via `part["type"]`.
+"""
+
+
+class ValuesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="values"`."""
+
+    type: Literal["values"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+class UpdatesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="updates"`."""
+
+    type: Literal["updates"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+class MessagesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="messages"`."""
+
+    type: Literal["messages"]
+    ns: tuple[str, ...]
+    data: tuple[Any, dict[str, Any]]
+
+
+class CustomStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="custom"`."""
+
+    type: Literal["custom"]
+    ns: tuple[str, ...]
+    data: Any
+
+
+class CheckpointStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="checkpoints"`."""
+
+    type: Literal["checkpoints"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+class TasksStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="tasks"`."""
+
+    type: Literal["tasks"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+class DebugStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="debug"`."""
+
+    type: Literal["debug"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+TypedStreamPart = (
+    ValuesStreamPart
+    | UpdatesStreamPart
+    | MessagesStreamPart
+    | CustomStreamPart
+    | CheckpointStreamPart
+    | TasksStreamPart
+    | DebugStreamPart
+)
+"""A discriminated union of all v2 stream part types. Narrow via `part["type"]`."""
+
+
 class Send(TypedDict):
     """Represents a message to be sent to a specific node in the graph.
 

@@ -18,7 +18,7 @@ from warnings import warn
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from typing_extensions import Unpack, deprecated
+from typing_extensions import TypedDict, Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
@@ -43,7 +43,16 @@ __all__ = (
     "All",
     "Checkpointer",
     "StreamMode",
+    "StreamVersion",
     "StreamWriter",
+    "StreamPart",
+    "ValuesStreamPart",
+    "UpdatesStreamPart",
+    "MessagesStreamPart",
+    "CustomStreamPart",
+    "CheckpointStreamPart",
+    "TasksStreamPart",
+    "DebugStreamPart",
     "RetryPolicy",
     "CachePolicy",
     "Interrupt",
@@ -112,6 +121,127 @@ StreamWriter = Callable[[Any], None]
 """`Callable` that accepts a single argument and writes it to the output stream.
 Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using `stream_mode="custom"`."""
+
+StreamVersion = Literal["v1", "v2"]
+"""Version of the stream output format.
+
+- `"v1"`: The default format. Output shape depends on `stream_mode`, `subgraphs`, and whether
+  `stream_mode` is a list. This is the existing behavior.
+- `"v2"`: Every chunk is a self-describing `StreamPart` TypedDict with a `type` discriminator
+  and an `ns` field. Enables type narrowing via `part["type"]`.
+"""
+
+
+class ValuesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="values"`.
+
+    `data` contains the full state after each step, as returned by `read_channels()`.
+    """
+
+    type: Literal["values"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+class UpdatesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="updates"`.
+
+    `data` maps node names to their outputs. May also contain
+    `__interrupt__` (tuple of `Interrupt` dicts) and `__metadata__` keys.
+    """
+
+    type: Literal["updates"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+class MessagesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="messages"`.
+
+    `data` is a 2-tuple of `(message, metadata)` where `message` is a
+    `BaseMessage` (e.g. `AIMessageChunk`) and `metadata` is a dict containing
+    keys like `langgraph_step`, `langgraph_node`, `langgraph_triggers`, etc.
+    """
+
+    type: Literal["messages"]
+    ns: tuple[str, ...]
+    data: tuple[Any, dict[str, Any]]
+
+
+class CustomStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="custom"`.
+
+    `data` is whatever value was passed to `StreamWriter` inside a node.
+    """
+
+    type: Literal["custom"]
+    ns: tuple[str, ...]
+    data: Any
+
+
+class CheckpointStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="checkpoints"`.
+
+    `data` is a `CheckpointPayload` dict containing `config`, `metadata`,
+    `values`, `next`, `parent_config`, and `tasks` keys.
+    """
+
+    type: Literal["checkpoints"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+class TasksStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="tasks"`.
+
+    For task start events, `data` is a `TaskPayload` dict with `id`, `name`,
+    `input`, and `triggers` keys.
+
+    For task result events, `data` is a `TaskResultPayload` dict with `id`,
+    `name`, `error`, `interrupts`, and `result` keys.
+    """
+
+    type: Literal["tasks"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+class DebugStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="debug"`.
+
+    `data` is a wrapper dict with `step` (int), `timestamp` (ISO 8601 str),
+    `type` (`"checkpoint"` | `"task"` | `"task_result"`), and `payload`
+    (the underlying checkpoint or task payload dict).
+    """
+
+    type: Literal["debug"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+StreamPart = (
+    ValuesStreamPart
+    | UpdatesStreamPart
+    | MessagesStreamPart
+    | CustomStreamPart
+    | CheckpointStreamPart
+    | TasksStreamPart
+    | DebugStreamPart
+)
+"""A discriminated union of all v2 stream part types.
+
+Use `part["type"]` to narrow the type:
+
+```python
+async for part in graph.astream(input, version="v2"):
+    if part["type"] == "values":
+        part["data"]  # dict[str, Any] — full state
+    elif part["type"] == "messages":
+        part["data"]  # tuple[BaseMessage, dict] — (message, metadata)
+    elif part["type"] == "custom":
+        part["data"]  # Any — user-defined
+```
+"""
 
 _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 
