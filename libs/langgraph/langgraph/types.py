@@ -16,6 +16,7 @@ from typing import (
 )
 from warnings import warn
 
+from langchain_core.messages import AnyMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
 from typing_extensions import TypedDict, Unpack, deprecated
@@ -52,6 +53,11 @@ __all__ = (
     "CheckpointStreamPart",
     "TasksStreamPart",
     "DebugStreamPart",
+    "TaskPayload",
+    "TaskResultPayload",
+    "CheckpointTask",
+    "CheckpointPayload",
+    "DebugPayload",
     "RetryPolicy",
     "CachePolicy",
     "Interrupt",
@@ -122,6 +128,59 @@ Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using `stream_mode="custom"`."""
 
 
+class TaskPayload(TypedDict):
+    """Payload for a task start event."""
+
+    id: str
+    name: str
+    input: Any
+    triggers: list[str]
+
+
+class TaskResultPayload(TypedDict):
+    """Payload for a task result event."""
+
+    id: str
+    name: str
+    error: str | None
+    interrupts: list[dict]
+    result: dict[str, Any]
+
+
+class CheckpointTask(TypedDict):
+    """A task entry within a `CheckpointPayload`."""
+
+    id: str
+    name: str
+    error: str | None
+    interrupts: list[dict]
+    state: StateSnapshot | RunnableConfig | None
+
+
+class CheckpointPayload(TypedDict):
+    """Payload for a checkpoint event."""
+
+    config: RunnableConfig | None
+    metadata: CheckpointMetadata
+    values: dict[str, Any]
+    next: list[str]
+    parent_config: RunnableConfig | None
+    tasks: list[CheckpointTask]
+
+
+class DebugPayload(TypedDict):
+    """Wrapper payload for debug events.
+
+    Wraps an underlying checkpoint or task payload with step and timestamp
+    metadata.
+    """
+
+    step: int
+    timestamp: str
+    type: Literal["checkpoint", "task", "task_result"]
+    payload: CheckpointPayload | TaskPayload | TaskResultPayload
+
+
 class ValuesStreamPart(TypedDict):
     """Stream part emitted for `stream_mode="values"`.
 
@@ -155,7 +214,7 @@ class MessagesStreamPart(TypedDict):
 
     type: Literal["messages"]
     ns: tuple[str, ...]
-    data: tuple[Any, dict[str, Any]]
+    data: tuple[AnyMessage, dict[str, Any]]
 
 
 class CustomStreamPart(TypedDict):
@@ -170,43 +229,34 @@ class CustomStreamPart(TypedDict):
 
 
 class CheckpointStreamPart(TypedDict):
-    """Stream part emitted for `stream_mode="checkpoints"`.
-
-    `data` is a `CheckpointPayload` dict containing `config`, `metadata`,
-    `values`, `next`, `parent_config`, and `tasks` keys.
-    """
+    """Stream part emitted for `stream_mode="checkpoints"`."""
 
     type: Literal["checkpoints"]
     ns: tuple[str, ...]
-    data: dict[str, Any]
+    data: CheckpointPayload
 
 
 class TasksStreamPart(TypedDict):
     """Stream part emitted for `stream_mode="tasks"`.
 
-    For task start events, `data` is a `TaskPayload` dict with `id`, `name`,
+    For task start events, `data` is a `TaskPayload` with `id`, `name`,
     `input`, and `triggers` keys.
 
-    For task result events, `data` is a `TaskResultPayload` dict with `id`,
+    For task result events, `data` is a `TaskResultPayload` with `id`,
     `name`, `error`, `interrupts`, and `result` keys.
     """
 
     type: Literal["tasks"]
     ns: tuple[str, ...]
-    data: dict[str, Any]
+    data: TaskPayload | TaskResultPayload
 
 
 class DebugStreamPart(TypedDict):
-    """Stream part emitted for `stream_mode="debug"`.
-
-    `data` is a wrapper dict with `step` (int), `timestamp` (ISO 8601 str),
-    `type` (`"checkpoint"` | `"task"` | `"task_result"`), and `payload`
-    (the underlying checkpoint or task payload dict).
-    """
+    """Stream part emitted for `stream_mode="debug"`."""
 
     type: Literal["debug"]
     ns: tuple[str, ...]
-    data: dict[str, Any]
+    data: DebugPayload
 
 
 StreamPart = (
