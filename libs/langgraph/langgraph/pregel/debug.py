@@ -24,14 +24,12 @@ from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel._io import read_channels
 from langgraph.types import (
     CheckpointPayload,
-    CheckpointTask,
     PregelExecutableTask,
     PregelTask,
     StateSnapshot,
     TaskPayload,
     TaskResultPayload,
 )
-
 
 TASK_NAMESPACE = UUID("6ba7b831-9dad-11d1-80b4-00c04fd430c8")
 
