@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import warnings
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from typing import Any, overload
@@ -12,6 +13,7 @@ from langgraph_sdk._async.http import HttpClient
 from langgraph_sdk._shared.utilities import _get_run_metadata_from_response
 from langgraph_sdk.schema import (
     All,
+    BulkCancelRunsStatus,
     CancelAction,
     Checkpoint,
     Command,
@@ -506,11 +508,11 @@ class RunsClient:
 
     async def create_batch(
         self,
-        payloads: list[RunCreate],
+        payloads: builtins.list[RunCreate],
         *,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Run]:
+    ) -> builtins.list[Run]:
         """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
@@ -546,7 +548,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> list[dict] | dict[str, Any]: ...
+    ) -> builtins.list[dict] | dict[str, Any]: ...
 
     @overload
     async def wait(
@@ -571,7 +573,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> list[dict] | dict[str, Any]: ...
+    ) -> builtins.list[dict] | dict[str, Any]: ...
 
     async def wait(
         self,
@@ -599,7 +601,7 @@ class RunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-    ) -> list[dict] | dict[str, Any]:
+    ) -> builtins.list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -750,10 +752,10 @@ class RunsClient:
         limit: int = 10,
         offset: int = 0,
         status: RunStatus | None = None,
-        select: list[RunSelectField] | None = None,
+        select: builtins.list[RunSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Run]:
+    ) -> builtins.list[Run]:
         """List runs.
 
         Args:
@@ -885,6 +887,65 @@ class RunsClient:
                 params=query_params,
                 headers=headers,
             )
+
+    async def cancel_many(
+        self,
+        *,
+        thread_id: str | None = None,
+        run_ids: Sequence[str] | None = None,
+        status: BulkCancelRunsStatus | None = None,
+        action: CancelAction = "interrupt",
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+    ) -> None:
+        """Cancel one or more runs.
+
+        Can cancel runs by thread ID and run IDs, or by status filter.
+
+        Args:
+            thread_id: The ID of the thread containing runs to cancel.
+            run_ids: List of run IDs to cancel.
+            status: Filter runs by status to cancel. Must be one of
+                `"pending"`, `"running"`, or `"all"`.
+            action: Action to take when cancelling the run. Possible values
+                are `"interrupt"` or `"rollback"`. Default is `"interrupt"`.
+            headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
+
+        Returns:
+            `None`
+
+        ???+ example "Example Usage"
+
+            ```python
+            client = get_client(url="http://localhost:2024")
+            # Cancel all pending runs
+            await client.runs.cancel_many(status="pending")
+            # Cancel specific runs on a thread
+            await client.runs.cancel_many(
+                thread_id="my_thread_id",
+                run_ids=["run_1", "run_2"],
+                action="rollback",
+            )
+            ```
+
+        """
+        payload: dict[str, Any] = {}
+        if thread_id:
+            payload["thread_id"] = thread_id
+        if run_ids:
+            payload["run_ids"] = run_ids
+        if status:
+            payload["status"] = status
+        query_params: dict[str, Any] = {"action": action}
+        if params:
+            query_params.update(params)
+        await self.http.post(
+            "/runs/cancel",
+            json=payload,
+            headers=headers,
+            params=query_params,
+        )
 
     async def join(
         self,

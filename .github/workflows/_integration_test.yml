@@ -2,6 +2,9 @@ name: CLI integration test
 
 on:
   workflow_call:
+    secrets:
+      LANGSMITH_API_KEY:
+        required: false
 
 permissions:
   contents: read
@@ -28,6 +31,8 @@ jobs:
             workdir: libs/cli/examples/graphs_reqs_b
             tag: langgraph-test-d
     name: "CLI integration test"
+    env:
+      HAS_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY != '' }}
     defaults:
       run:
         working-directory: libs/cli
@@ -49,19 +54,22 @@ jobs:
       - name: Install cli globally
         if: steps.changed-files.outputs.all
         run: pip install -e .
-      - name: Build and test service ${{ matrix.example.name }}
+      - name: Build service ${{ matrix.example.name }}
         if: steps.changed-files.outputs.all
+        working-directory: ${{ matrix.example.workdir }}
+        run: |
+          langgraph build -t ${{ matrix.example.tag }}
+      - name: Test service ${{ matrix.example.name }}
+        if: ${{ steps.changed-files.outputs.all && env.HAS_LANGSMITH_API_KEY == 'true' }}
         working-directory: ${{ matrix.example.workdir }}
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
-          # Build the image for this example
-          langgraph build -t ${{ matrix.example.tag }}
           # Prepare environment file from local or parent example directory
           if [ -f .env.example ]; then cp .env.example .env; elif [ -f ../.env.example ]; then cp ../.env.example .env && cp ../.env.example ../.env; fi
-          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; if [ -f ../.env ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> ../.env; fi; fi
+          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
+          if [ -f ../.env ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> ../.env; fi
           # Run the integration test using the built tag
-          # Compute repo root to reference the shared script robustly
           REPO_ROOT=$(git rev-parse --show-toplevel)
           timeout 60 python "$REPO_ROOT/.github/scripts/run_langgraph_cli_test.py" -t ${{ matrix.example.tag }}
 
@@ -82,17 +90,29 @@ jobs:
         working-directory: libs/cli/python-monorepo-example
         run: |
           langgraph build -t langgraph-test-g -c apps/agent/langgraph.json
+      - name: Test Python monorepo service
+        if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        working-directory: libs/cli/python-monorepo-example
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
           cp apps/agent/.env.example apps/agent/.env
-          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> apps/agent/.env; fi
+          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> apps/agent/.env
           timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-g -c apps/agent/langgraph.json
 
-      - name: Build and test prerelease reqs service
+      - name: Build prerelease reqs service
         if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' }}
         working-directory: libs/cli/examples/graph_prerelease_reqs
         run: |
           langgraph build -t langgraph-test-h
+      - name: Test prerelease reqs service
+        if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        working-directory: libs/cli/examples/graph_prerelease_reqs
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
           cp ../.env.example .env
-          if [ -n "${{ secrets.LANGSMITH_API_KEY }}" ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env; fi
+          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
           timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h
           echo "Finished starting up langgraph-test-h"
           LANGGRAPH_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langgraph'); print(v);")

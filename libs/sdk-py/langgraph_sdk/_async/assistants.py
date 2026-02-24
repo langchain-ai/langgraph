@@ -290,7 +290,7 @@ class AssistantsClient:
         """
         get_params = {"recurse": recurse}
         if params:
-            get_params = {**get_params, **params}
+            get_params = {**get_params, **dict(params)}
         if namespace is not None:
             return await self.http.get(
                 f"/assistants/{assistant_id}/subgraphs/{namespace}",
@@ -425,9 +425,9 @@ class AssistantsClient:
         payload: dict[str, Any] = {}
         if graph_id:
             payload["graph_id"] = graph_id
-        if config:
+        if config is not None:
             payload["config"] = config
-        if context:
+        if context is not None:
             payload["context"] = context
         if metadata:
             payload["metadata"] = metadata
@@ -446,6 +446,7 @@ class AssistantsClient:
         self,
         assistant_id: str,
         *,
+        delete_threads: bool = False,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> None:
@@ -453,6 +454,9 @@ class AssistantsClient:
 
         Args:
             assistant_id: The assistant ID to delete.
+            delete_threads: If true, delete all threads with `metadata.assistant_id`
+                matching this assistant, along with runs and checkpoints belonging to
+                those threads.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -469,8 +473,15 @@ class AssistantsClient:
             ```
 
         """
+        query_params: dict[str, Any] = {}
+        if delete_threads:
+            query_params["delete_threads"] = True
+        if params:
+            query_params.update(params)
         await self.http.delete(
-            f"/assistants/{assistant_id}", headers=headers, params=params
+            f"/assistants/{assistant_id}",
+            headers=headers,
+            params=query_params or None,
         )
 
     @overload

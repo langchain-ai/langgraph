@@ -72,8 +72,13 @@ class Auth:
             assert params.get("metadata", {}).get("owner") == "allowed_user"
 
         @auth.on.store
-        async def authorize_store(ctx: Auth.types.AuthContext, value: Auth.types.on):
-            assert ctx.user.identity in value["namespace"], "Not authorized"
+        async def authorize_store(ctx: Auth.types.AuthContext, value: Auth.types.on.store.value):
+            # Automatically scope all store operations to the user's namespace.
+            namespace = tuple(value["namespace"]) if value.get("namespace") else ()
+            assert isinstance(namespace, tuple)
+            if not namespace or namespace[0] != ctx.user.identity:
+                namespace = (ctx.user.identity, *namespace)
+            value["namespace"] = namespace
         ```
 
     ???+ note "Request Processing Flow"
@@ -170,13 +175,32 @@ class Auth:
             ```
 
             Auth for the `store` resource is a bit different since its structure is developer defined.
-            You typically want to enforce user creds in the namespace.
+            You typically want to scope store operations by rewriting the namespace to include the user's identity.
+            The `value` dict is mutable — changes to `value["namespace"]` are used by the server for the actual operation.
 
             ```python
             @auth.on.store
-            async def check_store_access(ctx: AuthContext, value: Auth.types.on) -> bool:
-                # Assuming you structure your store like (store.aput((user_id, application_context), key, value))
-                assert value["namespace"][0] == ctx.user.identity
+            async def authorize_store(ctx: AuthContext, value: Auth.types.on.store.value):
+                # Automatically scope all store operations to the user's namespace.
+                namespace = tuple(value["namespace"]) if value.get("namespace") else ()
+                assert isinstance(namespace, tuple)
+                if not namespace or namespace[0] != ctx.user.identity:
+                    namespace = (ctx.user.identity, *namespace)
+                value["namespace"] = namespace
+            ```
+
+            You can also register handlers for specific store actions:
+
+            ```python
+            @auth.on.store.put
+            async def on_put(ctx: AuthContext, value: Auth.types.on.store.put.value):
+                # value has typed fields: namespace, key, value, index
+                ...
+
+            @auth.on.store.get
+            async def on_get(ctx: AuthContext, value: Auth.types.on.store.get.value):
+                # value has typed fields: namespace, key
+                ...
             ```
         """
         # These are accessed by the API. Changes to their names or types is
@@ -483,9 +507,85 @@ class _CronsOn(
     Search = types.CronsSearch
 
 
+class _StoreActionOn(typing.Generic[T]):
+    """Decorator for registering a handler for a specific store action."""
+
+    def __init__(
+        self,
+        auth: Auth,
+        action: typing.Literal["put", "get", "search", "delete", "list_namespaces"],
+        value: type[T],
+    ) -> None:
+        self.auth = auth
+        self.action = action
+        self.value = value
+
+    def __call__(self, fn: _ActionHandler[T]) -> _ActionHandler[T]:
+        _validate_handler(fn)
+        _register_handler(self.auth, "store", self.action, fn)
+        return fn
+
+
 class _StoreOn:
     def __init__(self, auth: Auth) -> None:
         self._auth = auth
+        self.put = _StoreActionOn(auth, "put", types.StorePut)
+        """Register a handler for store put operations.
+
+        ???+ example "Example"
+            ```python
+            @auth.on.store.put
+            async def on_store_put(ctx: Auth.types.AuthContext, value: Auth.types.on.store.put.value):
+                # Scope puts to user's namespace
+                ...
+            ```
+        """
+        self.get = _StoreActionOn(auth, "get", types.StoreGet)
+        """Register a handler for store get operations.
+
+        ???+ example "Example"
+            ```python
+            @auth.on.store.get
+            async def on_store_get(ctx: Auth.types.AuthContext, value: Auth.types.on.store.get.value):
+                # Scope gets to user's namespace
+                ...
+            ```
+        """
+        self.search = _StoreActionOn(auth, "search", types.StoreSearch)
+        """Register a handler for store search operations.
+
+        ???+ example "Example"
+            ```python
+            @auth.on.store.search
+            async def on_store_search(ctx: Auth.types.AuthContext, value: Auth.types.on.store.search.value):
+                # Scope searches to user's namespace
+                ...
+            ```
+        """
+        self.delete = _StoreActionOn(auth, "delete", types.StoreDelete)
+        """Register a handler for store delete operations.
+
+        ???+ example "Example"
+            ```python
+            @auth.on.store.delete
+            async def on_store_delete(ctx: Auth.types.AuthContext, value: Auth.types.on.store.delete.value):
+                # Scope deletes to user's namespace
+                ...
+            ```
+        """
+        self.list_namespaces = _StoreActionOn(
+            auth, "list_namespaces", types.StoreListNamespaces
+        )
+        """Register a handler for store list_namespaces operations.
+
+        ???+ example "Example"
+            ```python
+            @auth.on.store.list_namespaces
+            async def on_list_ns(ctx: Auth.types.AuthContext, value: Auth.types.on.store.list_namespaces.value):
+                # Scope namespace listing to user's prefix
+                ...
+            ```
+        """
 
     @typing.overload
     def __call__(
