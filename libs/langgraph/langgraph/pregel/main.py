@@ -652,6 +652,7 @@ class Pregel(
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         name: str = "LangGraph",
+        validate_input: Callable[[Any, dict[str, Any]], None] | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         if (
@@ -698,6 +699,7 @@ class Pregel(
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.name = name
+        self.validate_input = validate_input
         if auto_validate:
             self.validate()
 
@@ -2599,6 +2601,7 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                validate_input=self.validate_input,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -2908,6 +2911,7 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                validate_input=self.validate_input,
             ) as loop:
                 # create runner
                 runner = PregelRunner(

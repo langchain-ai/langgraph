@@ -31,6 +31,7 @@ __all__ = (
     "MessagesState",
     "MessageGraph",
     "REMOVE_ALL_MESSAGES",
+    "validate_messages_append_only",
 )
 
 Messages = list[MessageLikeRepresentation] | MessageLikeRepresentation
@@ -242,6 +243,89 @@ def add_messages(
         pass
 
     return merged
+
+
+def validate_messages_append_only(
+    input: dict[str, Any], current_state: dict[str, Any]
+) -> None:
+    """Validates that incoming messages are append-only (no updates or removals).
+
+    This validator can be passed to `compile(validate_input=...)` to enforce that
+    external inputs only append new messages and never update or remove existing ones.
+
+    Internal node updates bypass this validation, allowing nodes to perform operations
+    like message compaction or cleanup without restriction.
+
+    Args:
+        input: The raw input dictionary being provided externally
+        current_state: The current state loaded from the checkpoint
+
+    Raises:
+        ValueError: If the input attempts to update or remove existing messages
+
+    Example:
+        ```python
+        from langgraph.graph import StateGraph, MessagesState
+        from langgraph.graph.message import validate_messages_append_only
+
+        builder = StateGraph(MessagesState)
+        builder.add_node("chatbot", my_chatbot_node)
+        builder.set_entry_point("chatbot")
+        builder.set_finish_point("chatbot")
+
+        # Compile with validator to enforce append-only at the boundary
+        graph = builder.compile(validate_input=validate_messages_append_only)
+
+        # This works - adding new messages
+        graph.invoke({"messages": [("user", "Hello")]})
+
+        # This raises ValueError - trying to update existing message
+        graph.invoke({"messages": [HumanMessage(content="Modified", id="existing-id")]})
+        ```
+    """
+    # Only validate if input contains messages
+    if "messages" not in input:
+        return
+
+    # Get current messages from state
+    current_messages = current_state.get("messages", [])
+
+    # Build a set of existing message IDs
+    existing_ids: set[str] = set()
+    for msg in current_messages:
+        if hasattr(msg, "id") and msg.id is not None:
+            existing_ids.add(msg.id)
+
+    # Coerce input messages to list
+    input_messages = input["messages"]
+    if not isinstance(input_messages, list):
+        input_messages = [input_messages]
+
+    # Convert to messages to get proper IDs (let conversion errors propagate)
+    converted_messages = convert_to_messages(input_messages)
+
+    # Check each input message
+    for msg in converted_messages:
+        # Check for REMOVE_ALL_MESSAGES
+        if isinstance(msg, RemoveMessage) and msg.id == REMOVE_ALL_MESSAGES:
+            raise ValueError(
+                "Cannot remove all messages in append_only mode. "
+                "External inputs must only append new messages."
+            )
+
+        # Check for removals of existing messages
+        if isinstance(msg, RemoveMessage) and msg.id in existing_ids:
+            raise ValueError(
+                f"Cannot remove existing message with ID '{msg.id}' in append_only mode. "
+                "External inputs must only append new messages."
+            )
+
+        # Check for updates of existing messages
+        if not isinstance(msg, RemoveMessage) and msg.id and msg.id in existing_ids:
+            raise ValueError(
+                f"Cannot update existing message with ID '{msg.id}' in append_only mode. "
+                "External inputs must only append new messages."
+            )
 
 
 @deprecated(
