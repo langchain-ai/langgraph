@@ -46,17 +46,9 @@ def _wrap_stream_v2_sync(
 ) -> Iterator[StreamPartV2]:
     """Wrap a raw SSE stream, converting each event to a v2 dict."""
     for part in raw:
-        if (
-            isinstance(part.data, dict)
-            and "type" in part.data
-            and "ns" in part.data
-            and "data" in part.data
-        ):
-            yield part.data
-        else:
-            v2 = _sse_to_v2_dict(part.event, part.data)
-            if v2 is not None:
-                yield v2
+        v2 = _sse_to_v2_dict(part.event, part.data)
+        if v2 is not None:
+            yield v2
 
 
 class SyncRunsClient:
@@ -330,8 +322,6 @@ class SyncRunsClient:
             "after_seconds": after_seconds,
             "durability": durability,
         }
-        if stream_version == "v2":
-            payload["stream_version"] = stream_version
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
             if thread_id is not None

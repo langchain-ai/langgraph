@@ -335,21 +335,6 @@ async def test_async_stream_v2_client_side_conversion():
     }
 
 
-@pytest.mark.asyncio
-async def test_async_stream_v2_server_side_passthrough():
-    """Test v2 wrapping when server already sends v2-format data."""
-    from langgraph_sdk._async.runs import _wrap_stream_v2
-
-    v2_data = {"type": "values", "ns": [], "data": {"key": "val"}}
-
-    async def mock_stream():
-        yield StreamPart(event="values", data=v2_data)
-
-    parts = [part async for part in _wrap_stream_v2(mock_stream())]
-    assert len(parts) == 1
-    assert parts[0] == v2_data
-
-
 def test_sync_stream_v2_client_side_conversion():
     """Test v2 wrapping with sync generator."""
     from langgraph_sdk._sync.runs import _wrap_stream_v2_sync
@@ -363,17 +348,3 @@ def test_sync_stream_v2_client_side_conversion():
     assert len(parts) == 2
     assert parts[0] == {"type": "metadata", "ns": [], "data": {"run_id": "r1"}}
     assert parts[1] == {"type": "values", "ns": [], "data": {"state": "full"}}
-
-
-def test_sync_stream_v2_server_side_passthrough():
-    """Test v2 wrapping passthrough when server sends v2-format."""
-    from langgraph_sdk._sync.runs import _wrap_stream_v2_sync
-
-    v2_data = {"type": "custom", "ns": ["sub"], "data": {"x": 1}}
-
-    def mock_stream():
-        yield StreamPart(event="custom", data=v2_data)
-
-    parts = list(_wrap_stream_v2_sync(mock_stream()))
-    assert len(parts) == 1
-    assert parts[0] == v2_data
