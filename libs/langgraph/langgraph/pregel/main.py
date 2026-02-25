@@ -652,6 +652,7 @@ class Pregel(
         config: RunnableConfig | None = None,
         trigger_to_nodes: Mapping[str, Sequence[str]] | None = None,
         name: str = "LangGraph",
+        messages_key: str | None = None,
         **deprecated_kwargs: Unpack[DeprecatedKwargs],
     ) -> None:
         if (
@@ -698,6 +699,7 @@ class Pregel(
         self.config = config
         self.trigger_to_nodes = trigger_to_nodes or {}
         self.name = name
+        self.messages_key = messages_key
         if auto_validate:
             self.validate()
 
@@ -2418,6 +2420,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
+        messages_key: str | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[dict[str, Any] | Any]:
         """Stream graph steps for a single input.
@@ -2535,11 +2538,16 @@ class Pregel(
             # set up messages stream mode
             if "messages" in stream_modes:
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                # Determine effective messages_key: stream param > compile param
+                effective_messages_key = (
+                    messages_key if messages_key is not None else self.messages_key
+                )
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(
                         stream.put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
+                        messages_key=effective_messages_key,
                     )
                 )
 
@@ -2692,6 +2700,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
+        messages_key: str | None = None,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Asynchronously stream graph steps for a single input.
@@ -2829,11 +2838,16 @@ class Pregel(
             if "messages" in stream_modes:
                 # namespace can be None in a root level graph?
                 ns_ = cast(str | None, config[CONF].get(CONFIG_KEY_CHECKPOINT_NS))
+                # Determine effective messages_key: stream param > compile param
+                effective_messages_key = (
+                    messages_key if messages_key is not None else self.messages_key
+                )
                 run_manager.inheritable_handlers.append(
                     StreamMessagesHandler(
                         stream_put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
+                        messages_key=effective_messages_key,
                     )
                 )
 

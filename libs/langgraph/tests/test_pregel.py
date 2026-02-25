@@ -6958,6 +6958,155 @@ def test_stream_mode_messages_command() -> None:
     ]
 
 
+def test_stream_mode_messages_with_messages_key() -> None:
+    """Test that messages_key restricts streaming to specific state field."""
+    from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+
+    class MultiMessageState(TypedDict):
+        messages: Annotated[list[BaseMessage], add_messages]
+        agent_messages: Annotated[list[BaseMessage], add_messages]
+
+    def public_node(state):
+        return {
+            "messages": [AIMessage(content="Public response")],
+            "agent_messages": [AIMessage(content="SECRET internal reasoning")],
+        }
+
+    def private_node(state):
+        return {
+            "agent_messages": [AIMessage(content="More secret stuff")],
+        }
+
+    graph = (
+        StateGraph(MultiMessageState)
+        .add_node("public", public_node)
+        .add_node("private", private_node)
+        .add_edge(START, "public")
+        .add_edge("public", "private")
+        .compile()
+    )
+
+    # Test 1: Default behavior (no messages_key) - streams all node outputs
+    chunks_all = list(
+        graph.stream(
+            {"messages": [HumanMessage(content="hi")], "agent_messages": []},
+            stream_mode="messages",
+        )
+    )
+    # Input messages are NOT streamed, only node outputs: 3 AIMessages
+    assert len(chunks_all) == 3  # 3 AIMessages from node outputs
+    contents_all = [msg.content for msg, _ in chunks_all]
+    assert "Public response" in contents_all
+    assert "SECRET internal reasoning" in contents_all
+    assert "More secret stuff" in contents_all
+
+    # Test 2: With messages_key at stream time - only streams from 'messages' key
+    chunks_filtered = list(
+        graph.stream(
+            {"messages": [HumanMessage(content="hi")], "agent_messages": []},
+            stream_mode="messages",
+            messages_key="messages",
+        )
+    )
+    assert len(chunks_filtered) == 1  # Only public AIMessage (node output only)
+    contents_filtered = [msg.content for msg, _ in chunks_filtered]
+    assert "Public response" in contents_filtered
+    assert "SECRET internal reasoning" not in contents_filtered
+    assert "More secret stuff" not in contents_filtered
+
+    # Test 3: With messages_key at compile time
+    # Create a new graph with messages_key at compile time
+    graph_with_key = (
+        StateGraph(MultiMessageState)
+        .add_node("public", public_node)
+        .add_node("private", private_node)
+        .add_edge(START, "public")
+        .add_edge("public", "private")
+        .compile(messages_key="messages")
+    )
+    chunks_compile = list(
+        graph_with_key.stream(
+            {"messages": [HumanMessage(content="hi")], "agent_messages": []},
+            stream_mode="messages",
+        )
+    )
+    # Same as Test 2: only messages from 'messages' key (node outputs only)
+    assert len(chunks_compile) == 1
+    contents_compile = [msg.content for msg, _ in chunks_compile]
+    assert "Public response" in contents_compile
+    assert "SECRET internal reasoning" not in contents_compile
+
+
+def test_stream_mode_messages_with_custom_messages_key() -> None:
+    """Test messages_key with non-default key name."""
+    from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+
+    class CustomState(TypedDict):
+        chat: Annotated[list[BaseMessage], add_messages]
+        internal: Annotated[list[BaseMessage], add_messages]
+
+    def my_node(state):
+        return {
+            "chat": [AIMessage(content="Hello")],
+            "internal": [AIMessage(content="Internal thought")],
+        }
+
+    graph = (
+        StateGraph(CustomState)
+        .add_node("my_node", my_node)
+        .add_edge(START, "my_node")
+        .compile(messages_key="chat")
+    )
+
+    chunks = list(
+        graph.stream(
+            {"chat": [HumanMessage(content="hi")], "internal": []},
+            stream_mode="messages",
+        )
+    )
+
+    assert len(chunks) == 1  # Only AIMessage from 'chat' (node output only)
+    contents = [msg.content for msg, _ in chunks]
+    assert "Hello" in contents
+    assert "Internal thought" not in contents
+
+
+def test_stream_mode_messages_key_override() -> None:
+    """Test that stream-time messages_key overrides compile-time setting."""
+    from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+
+    class MultiMessageState(TypedDict):
+        messages: Annotated[list[BaseMessage], add_messages]
+        agent_messages: Annotated[list[BaseMessage], add_messages]
+
+    def my_node(state):
+        return {
+            "messages": [AIMessage(content="Public")],
+            "agent_messages": [AIMessage(content="Private")],
+        }
+
+    # Compile with messages_key="agent_messages"
+    graph = (
+        StateGraph(MultiMessageState)
+        .add_node("my_node", my_node)
+        .add_edge(START, "my_node")
+        .compile(messages_key="agent_messages")
+    )
+
+    # Override at stream time to "messages"
+    chunks = list(
+        graph.stream(
+            {"messages": [HumanMessage(content="hi")], "agent_messages": []},
+            stream_mode="messages",
+            messages_key="messages",  # Override compile-time setting
+        )
+    )
+
+    contents = [msg.content for msg, _ in chunks]
+    assert "Public" in contents
+    assert "Private" not in contents
+
+
 def test_node_destinations() -> None:
     class State(TypedDict):
         foo: Annotated[str, operator.add]

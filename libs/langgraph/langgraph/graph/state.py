@@ -1042,6 +1042,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         interrupt_after: All | list[str] | None = None,
         debug: bool = False,
         name: str | None = None,
+        messages_key: str | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
         """Compiles the `StateGraph` into a `CompiledStateGraph` object.
 
@@ -1074,6 +1075,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             interrupt_after: An optional list of node names to interrupt after.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
+            messages_key: Optional key to restrict `stream_mode="messages"` to a specific state field.
+                If provided, when streaming with `stream_mode="messages"`, only messages from this
+                state key will be streamed. This is useful when you have multiple message fields
+                but only want to expose one (e.g., `messages`) to the frontend while keeping others
+                (e.g., `agent_messages`) private. Can be overridden at stream time.
 
         Returns:
             CompiledStateGraph: The compiled `StateGraph`.
@@ -1134,6 +1140,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             store=store,
             cache=cache,
             name=name or "LangGraph",
+            messages_key=messages_key,
         )
 
         compiled.attach_node(START, None)
