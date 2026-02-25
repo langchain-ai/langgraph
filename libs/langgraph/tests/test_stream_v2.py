@@ -41,7 +41,7 @@ class SimpleState(TypedDict):
     items: Annotated[list[str], operator.add]
 
 
-def _make_simple_graph() -> StateGraph:
+def _make_simple_graph() -> StateGraph[SimpleState, None, SimpleState, SimpleState]:
     """Build a simple 2-node graph for testing."""
 
     def node_a(state: SimpleState) -> dict[str, Any]:
@@ -50,7 +50,7 @@ def _make_simple_graph() -> StateGraph:
     def node_b(state: SimpleState) -> dict[str, Any]:
         return {"value": state["value"] + "_b", "items": ["b"]}
 
-    builder: StateGraph[SimpleState] = StateGraph(SimpleState)
+    builder = StateGraph(SimpleState, input_schema=SimpleState)
     builder.add_node("node_a", node_a)
     builder.add_node("node_b", node_b)
     builder.add_edge(START, "node_a")
@@ -59,14 +59,16 @@ def _make_simple_graph() -> StateGraph:
     return builder
 
 
-def _make_messages_graph() -> StateGraph:
+def _make_messages_graph() -> StateGraph[
+    MessagesState, None, MessagesState, MessagesState
+]:
     """Build a graph that invokes a fake LLM for messages mode testing."""
     model = FakeChatModel(messages=[AIMessage(content="hello world")])
 
     def call_model(state: MessagesState) -> dict[str, Any]:
         return {"messages": model.invoke(state["messages"])}
 
-    builder = StateGraph(MessagesState)
+    builder = StateGraph(MessagesState, input_schema=MessagesState)
     builder.add_node("call_model", call_model)
     builder.add_edge(START, "call_model")
     builder.add_edge("call_model", END)
@@ -155,9 +157,8 @@ def _assert_debug_envelope(envelope: Any) -> None:
         _assert_task_result_payload(envelope["payload"])
 
 
-# Use Any-typed inputs to avoid mypy's StateT binding issues with dict literals.
-_SIMPLE_INPUT: Any = {"value": "x", "items": []}
-_MSG_INPUT: Any = {"messages": "hi"}
+_SIMPLE_INPUT: SimpleState = {"value": "x", "items": []}
+_MSG_INPUT: MessagesState = {"messages": "hi"}
 
 
 # --- v1 backwards compatibility ---
@@ -329,7 +330,7 @@ class TestV2Stream:
         """With subgraphs, ns should reflect the namespace for subgraph events."""
         inner = _make_simple_graph().compile()
 
-        outer_builder = StateGraph(SimpleState)
+        outer_builder = StateGraph(SimpleState, input_schema=SimpleState)
         outer_builder.add_node("inner", inner)
         outer_builder.add_edge(START, "inner")
         outer_builder.add_edge("inner", END)
@@ -630,7 +631,7 @@ class TestV2StreamAsync:
     async def test_astream_v2_subgraphs_ns(self) -> None:
         inner = _make_simple_graph().compile()
 
-        outer_builder = StateGraph(SimpleState)
+        outer_builder = StateGraph(SimpleState, input_schema=SimpleState)
         outer_builder.add_node("inner", inner)
         outer_builder.add_edge(START, "inner")
         outer_builder.add_edge("inner", END)
