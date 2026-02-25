@@ -188,3 +188,40 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_invalid_checkpoint_schema_fails_closed(self) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            await saver.setup()
+            serializer_type, serialized_checkpoint = saver.serde.dumps_typed(
+                {
+                    "v": 1,
+                    "id": "bad-checkpoint",
+                    "ts": "2026-01-01T00:00:00+00:00",
+                    "channel_versions": {},
+                    "versions_seen": {},
+                }
+            )
+            serialized_metadata = b"{}"
+            await saver.conn.execute(
+                "INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "thread-invalid",
+                    "",
+                    "bad-checkpoint",
+                    None,
+                    serializer_type,
+                    serialized_checkpoint,
+                    serialized_metadata,
+                ),
+            )
+
+            with pytest.raises(ValueError, match="Invalid sqlite checkpoint schema"):
+                await saver.aget_tuple(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-invalid",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": "bad-checkpoint",
+                        }
+                    }
+                )
