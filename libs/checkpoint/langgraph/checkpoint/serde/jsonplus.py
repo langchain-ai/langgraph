@@ -221,18 +221,62 @@ EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
 
 
+def _get_pydantic_generic_info(cls: Any) -> list | None:
+    """Extract serializable generic type arg info from a pydantic v2 class.
+
+    For a generic type like ``MyModel[Inner]``, returns a nested list
+    ``[origin_module, origin_name, [[arg_module, arg_name], ...]]``.
+    Returns ``None`` for non-generic types.
+    """
+    meta = getattr(cls, "__pydantic_generic_metadata__", None)
+    if not meta:
+        return None
+    origin = meta.get("origin")
+    args = meta.get("args", ())
+    if not origin or not args:
+        return None
+    serialized_args: list = []
+    for arg in args:
+        nested = _get_pydantic_generic_info(arg)
+        if nested is not None:
+            serialized_args.append(nested)
+        else:
+            serialized_args.append([arg.__module__, arg.__name__])
+    return [origin.__module__, origin.__name__, serialized_args]
+
+
+def _resolve_pydantic_generic(generic_info: list) -> Any:
+    """Reconstruct a parameterized pydantic generic type from serialized info."""
+    module_name, cls_name, arg_infos = generic_info
+    origin_cls = getattr(importlib.import_module(module_name), cls_name)
+    type_args: list = []
+    for info in arg_infos:
+        if len(info) == 3 and isinstance(info[2], list):
+            # nested generic
+            type_args.append(_resolve_pydantic_generic(info))
+        else:
+            type_args.append(
+                getattr(importlib.import_module(info[0]), info[1])
+            )
+    if len(type_args) == 1:
+        return origin_cls[type_args[0]]
+    return origin_cls[tuple(type_args)]
+
+
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
     if hasattr(obj, "model_dump") and callable(obj.model_dump):  # pydantic v2
+        generic_info = _get_pydantic_generic_info(obj.__class__)
+        data: tuple = (
+            obj.__class__.__module__,
+            obj.__class__.__name__,
+            obj.model_dump(),
+            "model_validate_json",
+        )
+        if generic_info is not None:
+            data = data + (generic_info,)
         return ormsgpack.Ext(
             EXT_PYDANTIC_V2,
-            _msgpack_enc(
-                (
-                    obj.__class__.__module__,
-                    obj.__class__.__name__,
-                    obj.model_dump(),
-                    "model_validate_json",
-                ),
-            ),
+            _msgpack_enc(data),
         )
     elif hasattr(obj, "get_secret_value") and callable(obj.get_secret_value):
         return ormsgpack.Ext(
@@ -510,8 +554,11 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             tup = ormsgpack.unpackb(
                 data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
             )
-            # module, name, kwargs, method
-            cls = getattr(importlib.import_module(tup[0]), tup[1])
+            # module, name, kwargs, method[, generic_info]
+            if len(tup) > 4 and tup[4] is not None:
+                cls = _resolve_pydantic_generic(tup[4])
+            else:
+                cls = getattr(importlib.import_module(tup[0]), tup[1])
             try:
                 return cls(**tup[2])
             except Exception:
