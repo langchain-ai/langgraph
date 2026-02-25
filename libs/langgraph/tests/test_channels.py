@@ -90,6 +90,43 @@ def test_binop() -> None:
     assert channel.get() == 10
 
 
+def test_binop_with_default() -> None:
+    # Test with a static default value
+    channel = BinaryOperatorAggregate(int, operator.add, default=100).from_checkpoint(
+        MISSING
+    )
+    assert channel.get() == 100
+
+    channel.update([5])
+    assert channel.get() == 105
+    checkpoint = channel.checkpoint()
+    channel = BinaryOperatorAggregate(int, operator.add, default=100).from_checkpoint(
+        checkpoint
+    )
+    assert channel.get() == 105
+
+    # Test with a mutable default (list)
+    channel = BinaryOperatorAggregate(list, operator.add, default=["a"]).from_checkpoint(
+        MISSING
+    )
+    assert channel.get() == ["a"]
+
+    channel.update([["b"]])
+    assert channel.get() == ["a", "b"]
+
+    # Verify the default is not mutated (deepcopy safety)
+    assert channel._default == ["a"]
+
+    # Test that from_checkpoint with MISSING restores the default
+    channel2 = channel.from_checkpoint(MISSING)
+    assert channel2.get() == ["a"]
+
+    # Test that copy preserves the default
+    channel3 = channel.copy()
+    assert channel3._default == ["a"]
+    assert channel3.get() == ["a", "b"]  # copy preserves current value
+
+
 def test_untracked_value() -> None:
     channel = UntrackedValue(dict).from_checkpoint(MISSING)
     assert channel.ValueType is dict
