@@ -15,8 +15,9 @@ import dataclasses_json
 import numpy as np
 import pandas as pd
 import pytest
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, HttpUrl, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
+from pydantic.v1 import HttpUrl as HttpUrlV1
 from pydantic.v1 import SecretStr as SecretStrV1
 
 from langgraph.checkpoint.serde.jsonplus import (
@@ -130,6 +131,8 @@ def test_serde_jsonplus() -> None:
             created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
             updated_at=datetime(2024, 9, 24, 17, 29, 11, 128397),
         ),
+        "http_url": HttpUrl(url="https://example.com/"),
+        "http_url_v1": HttpUrlV1(url="https://example.com/", scheme="https"),
     }
 
     if sys.version_info < (3, 14):
@@ -213,6 +216,8 @@ def test_serde_jsonplus_json_mode() -> None:
             created_at=datetime(2024, 9, 24, 17, 29, 10, 128397),
             updated_at=datetime(2024, 9, 24, 17, 29, 11, 128397),
         ),
+        "http_url": HttpUrl(url="https://example.com/"),
+        "http_url_v1": HttpUrlV1(url="https://example.com/", scheme="https"),
     }
 
     if sys.version_info < (3, 14):
@@ -272,6 +277,8 @@ def test_serde_jsonplus_json_mode() -> None:
             "created_at": "2024-09-24T17:29:10.128397",
             "updated_at": "2024-09-24T17:29:11.128397",
         },
+        "http_url": "https://example.com/",
+        "http_url_v1": "https://example.com/",
     }
 
     if sys.version_info < (3, 14):
