@@ -17,12 +17,12 @@
     "lint": "eslint 'apps/**/*.ts' 'libs/**/*.ts'"
   },
   "devDependencies": {
-    "turbo": "^2.8.9",
+    "turbo": "^2.8.10",
     "typescript": "^5.9.3",
     "@tsconfig/recommended": "^1.0.13",
     "@eslint/eslintrc": "^3.3.3",
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.0.0",
+    "eslint": "^10.0.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.27.5",
     "eslint-plugin-no-instanceof": "^1.0.1",
