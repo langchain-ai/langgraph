@@ -1025,6 +1025,12 @@ ADD {relpath} /deps/{name}
     )
 
     env_vars = [_build_server_config_env(config)]
+    # JS build/runtime scripts read these env vars directly
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    if (ui := config.get("ui")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
+    if (ui_config := config.get("ui_config")) is not None:
+        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
 
     js_inst_str: str = ""
     if (config.get("ui") or config.get("node_version")) and local_deps.working_dir:
@@ -1127,6 +1133,12 @@ def node_config_to_docker(
     image_str = docker_tag(config, base_image, api_version)
 
     env_vars: list[str] = [_build_server_config_env(config)]
+    # JS build/runtime scripts read these env vars directly
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    if ui := config.get("ui"):
+        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
+    if ui_config := config.get("ui_config"):
+        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
 
     # For monorepo support, we need to handle install and build commands differently
     if build_context:
