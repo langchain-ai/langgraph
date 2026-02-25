@@ -3233,7 +3233,6 @@ class Pregel(
         ):
             if stream_mode == "values":
                 if stream_version == "v2":
-                    chunk = cast(dict[str, Any], chunk)  # type: ignore[assignment]
                     mode = chunk["type"]
                     payload = chunk["data"]
                 else:
@@ -3384,7 +3383,6 @@ class Pregel(
         ):
             if stream_mode == "values":
                 if stream_version == "v2":
-                    chunk = cast(dict[str, Any], chunk)  # type: ignore[assignment]
                     mode = chunk["type"]
                     payload = chunk["data"]
                 else:
