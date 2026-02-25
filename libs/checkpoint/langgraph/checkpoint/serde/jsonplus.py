@@ -219,6 +219,53 @@ EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
+EXT_PANDAS_DATAFRAME = 7
+EXT_PANDAS_SERIES = 8
+
+
+def _pandas_to_bytes(obj: Any) -> tuple[bytes, bytes]:
+    """Serialize a pandas DataFrame or Series to bytes using Arrow IPC format.
+
+    Falls back to pickle for types that Arrow cannot handle (e.g., object dtype
+    with mixed Python types, period dtype, interval dtype, bytes columns).
+    """
+    try:
+        import pyarrow as pa
+        import pyarrow.ipc as ipc
+
+        pd_mod = sys.modules["pandas"]
+        if isinstance(obj, pd_mod.Series):
+            frame = obj.to_frame(name=obj.name if obj.name is not None else 0)
+            table = pa.Table.from_pandas(frame, preserve_index=True)
+        else:
+            table = pa.Table.from_pandas(obj, preserve_index=True)
+
+        sink = pa.BufferOutputStream()
+        writer = ipc.new_stream(sink, table.schema)
+        writer.write_table(table)
+        writer.close()
+        return (b"arrow", sink.getvalue().to_pybytes())
+    except Exception:
+        return (b"pickle", pickle.dumps(obj))
+
+
+def _pandas_from_bytes(payload: tuple[bytes, bytes], is_series: bool = False) -> Any:
+    """Deserialize a pandas DataFrame or Series from bytes."""
+    fmt, data = payload
+    if fmt == b"arrow":
+        import pyarrow.ipc as ipc
+
+        reader = ipc.open_stream(data)
+        table = reader.read_all()
+        df = table.to_pandas()
+        if is_series:
+            col = [c for c in df.columns if not str(c).startswith("__index_level_")]
+            series = df[col[0]]
+            series.name = col[0] if col[0] != 0 else None
+            return series
+        return df
+    else:
+        return pickle.loads(data)
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -426,6 +473,16 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 ),
             ),
         )
+    elif (pd_mod := sys.modules.get("pandas")) is not None and isinstance(
+        obj, pd_mod.DataFrame
+    ):
+        payload = _pandas_to_bytes(obj)
+        return ormsgpack.Ext(EXT_PANDAS_DATAFRAME, _msgpack_enc(payload))
+    elif (pd_mod := sys.modules.get("pandas")) is not None and isinstance(
+        obj, pd_mod.Series
+    ):
+        payload = _pandas_to_bytes(obj)
+        return ormsgpack.Ext(EXT_PANDAS_SERIES, _msgpack_enc(payload))
     elif (np_mod := sys.modules.get("numpy")) is not None and isinstance(
         obj, np_mod.ndarray
     ):
@@ -534,6 +591,22 @@ def _msgpack_ext_hook(code: int, data: bytes) -> Any:
             return arr.reshape(shape, order=order)
         except Exception:
             return
+    elif code == EXT_PANDAS_DATAFRAME:
+        try:
+            payload = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+            return _pandas_from_bytes(payload, is_series=False)
+        except Exception:
+            return
+    elif code == EXT_PANDAS_SERIES:
+        try:
+            payload = ormsgpack.unpackb(
+                data, ext_hook=_msgpack_ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+            )
+            return _pandas_from_bytes(payload, is_series=True)
+        except Exception:
+            return
 
 
 def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
@@ -625,6 +698,28 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
             return arr.reshape(shape, order=order).tolist()
+        except Exception:
+            return
+    elif code == EXT_PANDAS_DATAFRAME:
+        try:
+            payload = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            df = _pandas_from_bytes(payload, is_series=False)
+            return df.to_dict(orient="list")
+        except Exception:
+            return
+    elif code == EXT_PANDAS_SERIES:
+        try:
+            payload = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            series = _pandas_from_bytes(payload, is_series=True)
+            return series.tolist()
         except Exception:
             return
 

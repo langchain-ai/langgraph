@@ -453,11 +453,12 @@ def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
     ],
 )
 def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
-    serde = JsonPlusSerializer(pickle_fallback=True)
+    serde = JsonPlusSerializer()
 
     dumped = serde.dumps_typed(df)
-    assert dumped[0] == "pickle"
+    assert dumped[0] == "msgpack"
     result = serde.loads_typed(dumped)
+    assert isinstance(result, pd.DataFrame)
     assert result.equals(df)
 
 
@@ -507,10 +508,49 @@ def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
     ],
 )
 def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
-    serde = JsonPlusSerializer(pickle_fallback=True)
+    serde = JsonPlusSerializer()
     dumped = serde.dumps_typed(series)
 
-    assert dumped[0] == "pickle"
+    assert dumped[0] == "msgpack"
     result = serde.loads_typed(dumped)
 
+    assert isinstance(result, pd.Series)
     assert result.equals(series)
+
+
+def test_serde_jsonplus_pandas_dataframe_json_hook() -> None:
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
+    dumped = serde.dumps_typed(df)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, dict)
+    assert result == df.to_dict(orient="list")
+
+
+def test_serde_jsonplus_pandas_series_json_hook() -> None:
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    series = pd.Series([1, 2, 3], name="test")
+    dumped = serde.dumps_typed(series)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, list)
+    assert result == series.tolist()
+
+
+def test_serde_jsonplus_pandas_in_dict() -> None:
+    """Test that pandas objects can be serialized as part of a larger structure."""
+    serde = JsonPlusSerializer()
+    data = {
+        "df": pd.DataFrame({"a": [1, 2], "b": ["x", "y"]}),
+        "series": pd.Series([10, 20, 30], name="values"),
+        "other": "hello",
+    }
+    dumped = serde.dumps_typed(data)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result["df"], pd.DataFrame)
+    assert result["df"].equals(data["df"])
+    assert isinstance(result["series"], pd.Series)
+    assert result["series"].equals(data["series"])
+    assert result["other"] == "hello"
