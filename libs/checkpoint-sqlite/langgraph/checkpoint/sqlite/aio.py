@@ -20,6 +20,7 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
     get_checkpoint_id,
     get_checkpoint_metadata,
+    validate_checkpoint_schema,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
@@ -373,9 +374,13 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     ),
                 )
                 # deserialize the checkpoint and metadata
+                loaded_checkpoint = validate_checkpoint_schema(
+                    self.serde.loads_typed((type, checkpoint)),
+                    source="sqlite checkpoint",
+                )
                 return CheckpointTuple(
                     config,
-                    self.serde.loads_typed((type, checkpoint)),
+                    loaded_checkpoint,
                     cast(
                         CheckpointMetadata,
                         (json.loads(metadata) if metadata is not None else {}),
@@ -446,6 +451,10 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                     "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
                     (thread_id, checkpoint_ns, checkpoint_id),
                 )
+                loaded_checkpoint = validate_checkpoint_schema(
+                    self.serde.loads_typed((type, checkpoint)),
+                    source="sqlite checkpoint",
+                )
                 yield CheckpointTuple(
                     {
                         "configurable": {
@@ -454,7 +463,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver[str]):
                             "checkpoint_id": checkpoint_id,
                         }
                     },
-                    self.serde.loads_typed((type, checkpoint)),
+                    loaded_checkpoint,
                     cast(
                         CheckpointMetadata,
                         (json.loads(metadata) if metadata is not None else {}),

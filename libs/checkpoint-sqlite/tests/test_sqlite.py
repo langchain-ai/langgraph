@@ -307,3 +307,40 @@ class TestSqliteSaver:
             # Nested digit-starting key via dotted path
             results = list(saver.list(None, filter={"user.123abc": "ok2"}))
             assert len(results) == 1
+
+    def test_invalid_checkpoint_schema_fails_closed(self) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            saver.setup()
+            serializer_type, serialized_checkpoint = saver.serde.dumps_typed(
+                {
+                    "v": 1,
+                    "id": "bad-checkpoint",
+                    "ts": "2026-01-01T00:00:00+00:00",
+                    "channel_versions": {},
+                    "versions_seen": {},
+                }
+            )
+            serialized_metadata = b"{}"
+            saver.conn.execute(
+                "INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "thread-invalid",
+                    "",
+                    "bad-checkpoint",
+                    None,
+                    serializer_type,
+                    serialized_checkpoint,
+                    serialized_metadata,
+                ),
+            )
+
+            with pytest.raises(ValueError, match="Invalid sqlite checkpoint schema"):
+                saver.get_tuple(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-invalid",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": "bad-checkpoint",
+                        }
+                    }
+                )

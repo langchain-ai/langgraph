@@ -92,6 +92,54 @@ class Checkpoint(TypedDict):
     """
 
 
+def validate_checkpoint_schema(
+    checkpoint: Any, *, source: str = "checkpoint"
+) -> Checkpoint:
+    """Validate loaded checkpoint payloads before they are returned to callers."""
+    if not isinstance(checkpoint, dict):
+        raise ValueError(
+            f"Invalid {source} schema: expected dict, got {type(checkpoint).__name__}"
+        )
+
+    required_fields = (
+        "v",
+        "id",
+        "ts",
+        "channel_values",
+        "channel_versions",
+        "versions_seen",
+    )
+    missing_fields = [field for field in required_fields if field not in checkpoint]
+    if missing_fields:
+        raise ValueError(
+            f"Invalid {source} schema: missing required fields {missing_fields}"
+        )
+
+    if not isinstance(checkpoint["v"], int):
+        raise ValueError("Invalid checkpoint schema: `v` must be an int")
+    if not isinstance(checkpoint["id"], str):
+        raise ValueError("Invalid checkpoint schema: `id` must be a string")
+    if not isinstance(checkpoint["ts"], str):
+        raise ValueError("Invalid checkpoint schema: `ts` must be a string")
+    if not isinstance(checkpoint["channel_values"], dict):
+        raise ValueError("Invalid checkpoint schema: `channel_values` must be a dict")
+    if not isinstance(checkpoint["channel_versions"], dict):
+        raise ValueError("Invalid checkpoint schema: `channel_versions` must be a dict")
+    if not isinstance(checkpoint["versions_seen"], dict):
+        raise ValueError("Invalid checkpoint schema: `versions_seen` must be a dict")
+
+    updated_channels = checkpoint.get("updated_channels")
+    if updated_channels is not None and (
+        not isinstance(updated_channels, list)
+        or any(not isinstance(channel, str) for channel in updated_channels)
+    ):
+        raise ValueError(
+            "Invalid checkpoint schema: `updated_channels` must be a list[str] or null"
+        )
+
+    return checkpoint
+
+
 def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
     return Checkpoint(
         v=checkpoint["v"],

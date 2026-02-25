@@ -187,6 +187,31 @@ class TestMemorySaver:
         ]
         assert len(search_results_4) == 0
 
+    def test_invalid_checkpoint_schema_fails_closed(self) -> None:
+        self.memory_saver.storage["thread-invalid"][""]["bad-checkpoint"] = (
+            self.memory_saver.serde.dumps_typed(
+                {
+                    "v": 1,
+                    "id": "bad-checkpoint",
+                    "ts": "2026-01-01T00:00:00+00:00",
+                    "channel_versions": {},
+                }
+            ),
+            self.memory_saver.serde.dumps_typed({}),
+            None,
+        )
+
+        with pytest.raises(ValueError, match="Invalid in-memory checkpoint schema"):
+            self.memory_saver.get_tuple(
+                {
+                    "configurable": {
+                        "thread_id": "thread-invalid",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": "bad-checkpoint",
+                    }
+                }
+            )
+
 
 async def test_memory_saver() -> None:
     from langgraph.checkpoint.memory import InMemorySaver
