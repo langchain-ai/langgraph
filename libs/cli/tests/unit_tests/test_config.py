@@ -474,8 +474,7 @@ RUN set -ex && \\
 # -- Installing all local dependencies --
 RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
-ENV LANGGRAPH_HTTP='{{"app": "/deps/examples/my_app.py:app"}}'
-ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
+ENV AGENT_SERVER_CONFIG='{{"graphs": {{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}, "http": {{"app": "/deps/examples/my_app.py:app"}}}}'
 {FORMATTED_CLEANUP_LINES}
 WORKDIR /deps/outer-unit_tests/unit_tests\
 """
@@ -531,7 +530,7 @@ RUN set -ex && \\
 # -- Installing all local dependencies --
 RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}'
+ENV AGENT_SERVER_CONFIG='{"graphs": {"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 """
         + FORMATTED_CLEANUP_LINES
         + """
@@ -578,7 +577,7 @@ RUN set -ex && \\
 # -- Installing all local dependencies --
 RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}'
+ENV AGENT_SERVER_CONFIG='{"graphs": {"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
 """
         + FORMATTED_CLEANUP_LINES
         + """
@@ -640,7 +639,7 @@ RUN set -ex && \\
 # -- Installing all local dependencies --
 RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-graphs/src/agent.py:graph"}}'
+ENV AGENT_SERVER_CONFIG='{{"graphs": {{"agent": "/deps/outer-graphs/src/agent.py:graph"}}}}'
 {FORMATTED_CLEANUP_LINES}\
 """
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
@@ -676,7 +675,7 @@ ADD . /deps/unit_tests
 # -- Installing all local dependencies --
 RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{"agent": "/deps/unit_tests/graphs/agent.py:graph"}'
+ENV AGENT_SERVER_CONFIG='{"graphs": {"agent": "/deps/unit_tests/graphs/agent.py:graph"}}'
 """
         + FORMATTED_CLEANUP_LINES
         + "\n"
@@ -724,7 +723,7 @@ RUN set -ex && \\
 # -- Installing all local dependencies --
 RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-graphs/src/agent.py:graph"}}'
+ENV AGENT_SERVER_CONFIG='{{"graphs": {{"agent": "/deps/outer-graphs/src/agent.py:graph"}}}}'
 {FORMATTED_CLEANUP_LINES}"""
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
     assert additional_contexts == {}
@@ -752,10 +751,7 @@ ARG meow
 ARG foo
 ADD . /deps/unit_tests
 RUN cd /deps/unit_tests && npm i
-ENV LANGGRAPH_AUTH='{"path": "./graphs/auth.mts:auth"}'
-ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
-ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'
-ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
+ENV AGENT_SERVER_CONFIG='{"graphs": {"agent": "./graphs/agent.js:graph"}, "auth": {"path": "./graphs/auth.mts:auth"}, "ui": {"agent": "./graphs/agent.ui.jsx"}, "ui_config": {"shared": ["nuqs"]}}'
 WORKDIR /deps/unit_tests
 RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts"""
 
@@ -809,8 +805,8 @@ def test_config_to_docker_python_encryption_formatted():
         ),
         base_image="langchain/langgraph-api",
     )
-    # Verify that LANGGRAPH_ENCRYPTION is in the docker output with the correct path
-    assert "LANGGRAPH_ENCRYPTION=" in actual_docker_stdin
+    # Verify that AGENT_SERVER_CONFIG contains encryption with the correct path
+    assert "AGENT_SERVER_CONFIG=" in actual_docker_stdin
     assert (
         "/deps/outer-unit_tests/unit_tests/agent.py:my_encryption"
         in actual_docker_stdin
@@ -839,10 +835,7 @@ ARG meow
 ARG foo
 ADD . /deps/unit_tests
 RUN cd /deps/unit_tests && npm i
-ENV LANGGRAPH_AUTH='{"path": "./graphs/auth.mts:auth"}'
-ENV LANGGRAPH_UI='{"agent": "./graphs/agent.ui.jsx"}'
-ENV LANGGRAPH_UI_CONFIG='{"shared": ["nuqs"]}'
-ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
+ENV AGENT_SERVER_CONFIG='{"graphs": {"agent": "./graphs/agent.js:graph"}, "auth": {"path": "./graphs/auth.mts:auth"}, "ui": {"agent": "./graphs/agent.ui.jsx"}, "ui_config": {"shared": ["nuqs"]}}'
 WORKDIR /deps/unit_tests
 RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not found, skipping") || tsx /api/langgraph_api/js/build.mts"""
 
@@ -850,14 +843,14 @@ RUN (test ! -f /api/langgraph_api/js/build.mts && echo "Prebuild script not foun
     assert additional_contexts == {}
 
 
-def _extract_env_json(dockerfile: str, var_name: str) -> dict:
-    """Helper to extract and parse a JSON value from an ENV line in a Dockerfile."""
-    line_prefix = f"ENV {var_name}='"
+def _extract_server_config(dockerfile: str) -> dict:
+    """Helper to extract and parse the AGENT_SERVER_CONFIG JSON from a Dockerfile."""
+    line_prefix = "ENV AGENT_SERVER_CONFIG='"
     for line in dockerfile.splitlines():
         if line.startswith(line_prefix) and line.endswith("'"):
             json_str = line[len(line_prefix) : -1]
             return json.loads(json_str)
-    raise AssertionError(f"{var_name} not found in Dockerfile env lines")
+    raise AssertionError("AGENT_SERVER_CONFIG not found in Dockerfile env lines")
 
 
 def test_config_to_docker_webhooks_python():
@@ -890,8 +883,8 @@ def test_config_to_docker_webhooks_python():
     )
 
     # Ensure the ENV line is present and the payload round-trips via JSON
-    parsed = _extract_env_json(dockerfile, "LANGGRAPH_WEBHOOKS")
-    assert parsed == webhooks
+    server_config = _extract_server_config(dockerfile)
+    assert server_config["webhooks"] == webhooks
 
 
 def test_config_to_docker_webhooks_node():
@@ -914,8 +907,8 @@ def test_config_to_docker_webhooks_node():
         base_image="langchain/langgraphjs-api",
     )
 
-    parsed = _extract_env_json(dockerfile, "LANGGRAPH_WEBHOOKS")
-    assert parsed == webhooks
+    server_config = _extract_server_config(dockerfile)
+    assert server_config["webhooks"] == webhooks
 
 
 def test_config_to_docker_no_webhooks():
@@ -926,7 +919,8 @@ def test_config_to_docker_no_webhooks():
         base_image="langchain/langgraph-api",
     )
 
-    assert "ENV LANGGRAPH_WEBHOOKS=" not in dockerfile
+    server_config = _extract_server_config(dockerfile)
+    assert "webhooks" not in server_config
 
 
 def test_config_to_docker_gen_ui_python():
@@ -963,9 +957,7 @@ RUN set -ex && \\
 # -- Installing all local dependencies --
 RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
-ENV LANGGRAPH_UI='{{"agent": "./graphs/agent.ui.jsx"}}'
-ENV LANGGRAPH_UI_CONFIG='{{"shared": ["nuqs"]}}'
-ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
+ENV AGENT_SERVER_CONFIG='{{"graphs": {{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}, "ui": {{"agent": "./graphs/agent.ui.jsx"}}, "ui_config": {{"shared": ["nuqs"]}}}}'
 # -- Installing JS dependencies --
 ENV NODE_VERSION=20
 RUN cd /deps/outer-unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
@@ -1009,7 +1001,7 @@ RUN set -ex && \\
 # -- Installing all local dependencies --
 RUN for dep in /deps/*; do             echo "Installing $dep";             if [ -d "$dep" ]; then                 echo "Installing $dep";                 (cd "$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
 # -- End of local dependencies install --
-ENV LANGSERVE_GRAPHS='{{"python": "/deps/outer-unit_tests/unit_tests/multiplatform/python.py:graph", "js": "/deps/outer-unit_tests/unit_tests/multiplatform/js.mts:graph"}}'
+ENV AGENT_SERVER_CONFIG='{{"graphs": {{"python": "/deps/outer-unit_tests/unit_tests/multiplatform/python.py:graph", "js": "/deps/outer-unit_tests/unit_tests/multiplatform/js.mts:graph"}}}}'
 # -- Installing JS dependencies --
 ENV NODE_VERSION=22
 RUN cd /deps/outer-unit_tests/unit_tests && npm i && tsx /api/langgraph_api/js/build.mts
@@ -1150,7 +1142,7 @@ def test_config_to_compose_simple_config():
                 # -- Installing all local dependencies --
                 RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
-                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
+                ENV AGENT_SERVER_CONFIG='{{"graphs": {{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
                 WORKDIR /deps/outer-unit_tests/unit_tests
         """
@@ -1191,7 +1183,7 @@ def test_config_to_compose_env_vars():
                 # -- Installing all local dependencies --
                 RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
-                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
+                ENV AGENT_SERVER_CONFIG='{{"graphs": {{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
                 WORKDIR /deps/outer-unit_tests/unit_tests
         """
@@ -1236,7 +1228,7 @@ def test_config_to_compose_env_file():
                 # -- Installing all local dependencies --
                 RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
-                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
+                ENV AGENT_SERVER_CONFIG='{{"graphs": {{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
                 WORKDIR /deps/outer-unit_tests/unit_tests
         """
@@ -1274,7 +1266,7 @@ def test_config_to_compose_watch():
                 # -- Installing all local dependencies --
                 RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
-                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
+                ENV AGENT_SERVER_CONFIG='{{"graphs": {{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
                 WORKDIR /deps/outer-unit_tests/unit_tests
         
@@ -1321,7 +1313,7 @@ def test_config_to_compose_end_to_end():
                 # -- Installing all local dependencies --
                 RUN for dep in /deps/*; do             echo "Installing $$dep";             if [ -d "$$dep" ]; then                 echo "Installing $$dep";                 (cd "$$dep" && PYTHONDONTWRITEBYTECODE=1 uv pip install --system --no-cache-dir -c /api/constraints.txt -e .);             fi;         done
                 # -- End of local dependencies install --
-                ENV LANGSERVE_GRAPHS='{{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}'
+                ENV AGENT_SERVER_CONFIG='{{"graphs": {{"agent": "/deps/outer-unit_tests/unit_tests/agent.py:graph"}}}}'
 {textwrap.indent(textwrap.dedent(FORMATTED_CLEANUP_LINES), "                ")}
                 WORKDIR /deps/outer-unit_tests/unit_tests
         

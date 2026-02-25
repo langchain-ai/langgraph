@@ -713,9 +713,28 @@ class Config(TypedDict, total=False):
     """
 
 
+class ServerConfig(TypedDict, total=False):
+    """Unified server configuration emitted as ``AGENT_SERVER_CONFIG``.
+
+    Mirrors the server-side ``ServerConfig`` but only contains fields
+    relevant to the CLI's Dockerfile / docker-compose emission.
+    """
+
+    graphs: dict[str, str]
+    store: StoreConfig | None
+    auth: AuthConfig | None
+    encryption: EncryptionConfig | None
+    http: HttpConfig | None
+    webhooks: WebhooksConfig | None
+    checkpointer: CheckpointerConfig | None
+    ui: dict[str, str] | None
+    ui_config: dict | None
+
+
 __all__ = [
     "Config",
     "GraphDef",
+    "ServerConfig",
     "StoreConfig",
     "CheckpointerConfig",
     "AuthConfig",
