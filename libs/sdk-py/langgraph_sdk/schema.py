@@ -596,6 +596,83 @@ StreamVersion = Literal["v1", "v2"]
 """
 
 
+# --- Typed payload dicts (JSON-deserialized from the server) ---
+
+
+class TaskPayload(TypedDict):
+    """Payload for a task start event."""
+
+    id: str
+    name: str
+    input: Any
+    triggers: list[str]
+
+
+class TaskResultPayload(TypedDict):
+    """Payload for a task result event."""
+
+    id: str
+    name: str
+    error: str | None
+    interrupts: list[dict[str, Any]]
+    result: dict[str, Any]
+
+
+class CheckpointTaskPayload(TypedDict):
+    """A task entry within a ``CheckpointPayload``."""
+
+    id: str
+    name: str
+    error: str | None
+    interrupts: list[dict[str, Any]]
+    state: dict[str, Any] | None
+
+
+class CheckpointPayload(TypedDict):
+    """Payload for a checkpoint event."""
+
+    config: dict[str, Any] | None
+    metadata: dict[str, Any]
+    values: dict[str, Any]
+    next: list[str]
+    parent_config: dict[str, Any] | None
+    tasks: list[CheckpointTaskPayload]
+
+
+class _DebugCheckpointPayload(TypedDict):
+    step: int
+    timestamp: str
+    type: Literal["checkpoint"]
+    payload: CheckpointPayload
+
+
+class _DebugTaskPayload(TypedDict):
+    step: int
+    timestamp: str
+    type: Literal["task"]
+    payload: TaskPayload
+
+
+class _DebugTaskResultPayload(TypedDict):
+    step: int
+    timestamp: str
+    type: Literal["task_result"]
+    payload: TaskResultPayload
+
+
+DebugPayload = _DebugCheckpointPayload | _DebugTaskPayload | _DebugTaskResultPayload
+"""Wrapper payload for debug events. Discriminate on ``type``."""
+
+
+class RunMetadataPayload(TypedDict):
+    """Payload for the ``metadata`` control event."""
+
+    run_id: str
+
+
+# --- v2 stream part TypedDicts ---
+
+
 class ValuesStreamPart(TypedDict):
     """Stream part emitted for ``stream_mode="values"``."""
 
@@ -617,7 +694,7 @@ class MessagesPartialStreamPart(TypedDict):
 
     type: Literal["messages/partial"]
     ns: list[str]
-    data: list
+    data: list[dict[str, Any]]
 
 
 class MessagesCompleteStreamPart(TypedDict):
@@ -625,7 +702,7 @@ class MessagesCompleteStreamPart(TypedDict):
 
     type: Literal["messages/complete"]
     ns: list[str]
-    data: list
+    data: list[dict[str, Any]]
 
 
 class MessagesMetadataStreamPart(TypedDict):
@@ -641,7 +718,7 @@ class MessagesTupleStreamPart(TypedDict):
 
     type: Literal["messages"]
     ns: list[str]
-    data: list
+    data: list[dict[str, Any]]
 
 
 class CustomStreamPart(TypedDict):
@@ -657,7 +734,7 @@ class CheckpointsStreamPart(TypedDict):
 
     type: Literal["checkpoints"]
     ns: list[str]
-    data: dict[str, Any]
+    data: CheckpointPayload
 
 
 class TasksStreamPart(TypedDict):
@@ -665,7 +742,7 @@ class TasksStreamPart(TypedDict):
 
     type: Literal["tasks"]
     ns: list[str]
-    data: dict[str, Any]
+    data: TaskPayload | TaskResultPayload
 
 
 class DebugStreamPart(TypedDict):
@@ -673,7 +750,7 @@ class DebugStreamPart(TypedDict):
 
     type: Literal["debug"]
     ns: list[str]
-    data: dict[str, Any]
+    data: DebugPayload
 
 
 class MetadataStreamPart(TypedDict):
@@ -681,7 +758,7 @@ class MetadataStreamPart(TypedDict):
 
     type: Literal["metadata"]
     ns: list[str]
-    data: dict[str, Any]
+    data: RunMetadataPayload
 
 
 StreamPartV2 = (
