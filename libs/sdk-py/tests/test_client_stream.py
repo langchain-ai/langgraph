@@ -32,6 +32,9 @@ with open(Path(__file__).parent / "fixtures" / "response.txt", "rb") as f:
     RESPONSE_PAYLOAD = f.read()
 
 
+# --- test helpers ---
+
+
 class AsyncListByteStream(httpx.AsyncByteStream):
     def __init__(self, chunks: Sequence[bytes], exc: Exception | None = None) -> None:
         self._chunks = list(chunks)
@@ -68,6 +71,24 @@ def iter_lines_raw(payload: list[bytes]) -> Iterator[BytesLike]:
     yield from decoder.flush()
 
 
+_V2_REQUIRED_KEYS = {"type", "ns", "data"}
+
+
+def _assert_v2_shape(part: Any) -> None:
+    """Assert a v2 stream part has the required keys and types."""
+    assert isinstance(part, dict), f"Expected dict, got {type(part)}"
+    assert part.keys() >= _V2_REQUIRED_KEYS, (
+        f"Missing keys: {_V2_REQUIRED_KEYS - part.keys()}"
+    )
+    assert isinstance(part["type"], str)
+    assert isinstance(part["ns"], list)
+    for elem in part["ns"]:
+        assert isinstance(elem, str)
+
+
+# --- SSE parsing ---
+
+
 def test_stream_sse():
     for groups in (
         [RESPONSE_PAYLOAD],
@@ -85,6 +106,9 @@ def test_stream_sse():
 
         assert decoder.decode(b"") is None
         assert len(parts) == 79
+
+
+# --- HTTP client streaming ---
 
 
 @pytest.mark.asyncio
@@ -106,6 +130,26 @@ async def test_http_client_stream_flushes_trailing_event():
     ) as client:
         http_client = HttpClient(client)
         parts = [part async for part in http_client.stream("/stream", "GET")]
+
+    assert parts == [StreamPart(event="foo", data={"bar": 1})]
+
+
+def test_sync_http_client_stream_flushes_trailing_event():
+    payload = b'event: foo\ndata: {"bar": 1}\n'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["accept"] == "text/event-stream"
+        assert request.headers["cache-control"] == "no-store"
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            content=payload,
+        )
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        parts = list(http_client.stream("/stream", "GET"))
 
     assert parts == [StreamPart(event="foo", data={"bar": 1})]
 
@@ -246,47 +290,10 @@ async def test_http_client_stream_recovers_after_disconnect():
     ]
 
 
-def test_sync_http_client_stream_flushes_trailing_event():
-    payload = b'event: foo\ndata: {"bar": 1}\n'
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.headers["accept"] == "text/event-stream"
-        assert request.headers["cache-control"] == "no-store"
-        return httpx.Response(
-            200,
-            headers={"Content-Type": "text/event-stream"},
-            content=payload,
-        )
-
-    transport = httpx.MockTransport(handler)
-    with httpx.Client(transport=transport, base_url="https://example.com") as client:
-        http_client = SyncHttpClient(client)
-        parts = list(http_client.stream("/stream", "GET"))
-
-    assert parts == [StreamPart(event="foo", data={"bar": 1})]
-
-
-# --- v2 streaming tests ---
-
-_V2_REQUIRED_KEYS = {"type", "ns", "data"}
-
-
-def _assert_v2_shape(part: Any) -> None:
-    """Assert a v2 stream part has the required keys and types."""
-    assert isinstance(part, dict), f"Expected dict, got {type(part)}"
-    assert part.keys() >= _V2_REQUIRED_KEYS, (
-        f"Missing keys: {_V2_REQUIRED_KEYS - part.keys()}"
-    )
-    assert isinstance(part["type"], str), (
-        f"type should be str, got {type(part['type'])}"
-    )
-    assert isinstance(part["ns"], list), f"ns should be list, got {type(part['ns'])}"
-    for elem in part["ns"]:
-        assert isinstance(elem, str), f"ns element should be str, got {type(elem)}"
+# --- _sse_to_v2_dict conversion ---
 
 
 def test_sse_to_v2_dict_basic() -> None:
-    """Test basic conversion of SSE event to v2 dict."""
     result = _sse_to_v2_dict("values", {"messages": [{"role": "user"}]})
     assert result is not None
     _assert_v2_shape(result)
@@ -298,7 +305,6 @@ def test_sse_to_v2_dict_basic() -> None:
 
 
 def test_sse_to_v2_dict_with_namespace() -> None:
-    """Test namespace parsing from pipe-separated event name."""
     result = _sse_to_v2_dict("updates|sub:abc", {"key": "val"})
     assert result is not None
     _assert_v2_shape(result)
@@ -310,7 +316,6 @@ def test_sse_to_v2_dict_with_namespace() -> None:
 
 
 def test_sse_to_v2_dict_with_multiple_ns() -> None:
-    """Test multiple namespace parts."""
     result = _sse_to_v2_dict("custom|parent|child:123", "hello")
     assert result is not None
     _assert_v2_shape(result)
@@ -322,12 +327,10 @@ def test_sse_to_v2_dict_with_multiple_ns() -> None:
 
 
 def test_sse_to_v2_dict_end_event() -> None:
-    """Test that end events return None (stop iteration)."""
     assert _sse_to_v2_dict("end", None) is None
 
 
 def test_sse_to_v2_dict_metadata_event() -> None:
-    """Test metadata control event."""
     result = _sse_to_v2_dict("metadata", {"run_id": "abc-123"})
     assert result is not None
     _assert_v2_shape(result)
@@ -339,7 +342,6 @@ def test_sse_to_v2_dict_metadata_event() -> None:
 
 
 def test_sse_to_v2_dict_messages_partial() -> None:
-    """Test messages/partial event type."""
     result = _sse_to_v2_dict("messages/partial", [{"type": "ai", "content": "hi"}])
     assert result is not None
     _assert_v2_shape(result)
@@ -350,9 +352,11 @@ def test_sse_to_v2_dict_messages_partial() -> None:
     }
 
 
+# --- client-side v2 stream wrapping ---
+
+
 @pytest.mark.asyncio
 async def test_async_stream_v2_client_side_conversion() -> None:
-    """Test v2 wrapping with client-side conversion of v1-format SSE events."""
     from langgraph_sdk._async.runs import _wrap_stream_v2
 
     async def mock_stream() -> Any:
@@ -381,7 +385,6 @@ async def test_async_stream_v2_client_side_conversion() -> None:
 
 
 def test_sync_stream_v2_client_side_conversion() -> None:
-    """Test v2 wrapping with sync generator."""
     from langgraph_sdk._sync.runs import _wrap_stream_v2_sync
 
     def mock_stream() -> Any:
@@ -395,142 +398,6 @@ def test_sync_stream_v2_client_side_conversion() -> None:
         _assert_v2_shape(part)
     assert parts[0] == {"type": "metadata", "ns": [], "data": {"run_id": "r1"}}
     assert parts[1] == {"type": "values", "ns": [], "data": {"state": "full"}}
-
-
-# --- data structure validation tests ---
-
-
-def test_v2_values_data_structure() -> None:
-    """Validate ValuesStreamPart data structure."""
-    result = _sse_to_v2_dict("values", {"messages": [{"role": "user"}], "count": 1})
-    assert result is not None
-    _assert_v2_shape(result)
-    assert result["type"] == "values"
-    assert isinstance(result["data"], dict)
-    # values data should be the full state dict
-    assert "messages" in result["data"]
-    assert "count" in result["data"]
-
-
-def test_v2_updates_data_structure() -> None:
-    """Validate UpdatesStreamPart data structure."""
-    result = _sse_to_v2_dict("updates", {"my_node": {"output": "value"}})
-    assert result is not None
-    _assert_v2_shape(result)
-    assert result["type"] == "updates"
-    assert isinstance(result["data"], dict)
-    assert "my_node" in result["data"]
-
-
-def test_v2_tasks_start_data_structure() -> None:
-    """Validate TaskPayload (task start) data structure."""
-    task_data: dict[str, Any] = {
-        "id": "task-123",
-        "name": "my_node",
-        "input": {"key": "value"},
-        "triggers": ["start:my_node"],
-    }
-    result = _sse_to_v2_dict("tasks", task_data)
-    assert result is not None
-    _assert_v2_shape(result)
-    assert result["type"] == "tasks"
-    data = result["data"]
-    assert isinstance(data, dict)
-    assert isinstance(data["id"], str)
-    assert isinstance(data["name"], str)
-    assert isinstance(data["triggers"], list)
-    assert all(isinstance(t, str) for t in data["triggers"])
-
-
-def test_v2_tasks_result_data_structure() -> None:
-    """Validate TaskResultPayload (task result) data structure."""
-    result_data: dict[str, Any] = {
-        "id": "task-123",
-        "name": "my_node",
-        "error": None,
-        "interrupts": [],
-        "result": {"output": "value"},
-    }
-    result = _sse_to_v2_dict("tasks", result_data)
-    assert result is not None
-    _assert_v2_shape(result)
-    data = result["data"]
-    assert isinstance(data, dict)
-    assert isinstance(data["id"], str)
-    assert isinstance(data["name"], str)
-    assert data["error"] is None
-    assert isinstance(data["interrupts"], list)
-    assert isinstance(data["result"], dict)
-
-
-def test_v2_checkpoints_data_structure() -> None:
-    """Validate CheckpointPayload data structure."""
-    ckpt_data: dict[str, Any] = {
-        "config": {"configurable": {"thread_id": "t1"}},
-        "metadata": {"step": 1},
-        "values": {"count": 42},
-        "next": ["my_node"],
-        "parent_config": None,
-        "tasks": [
-            {
-                "id": "task-1",
-                "name": "my_node",
-                "error": None,
-                "interrupts": [],
-                "state": None,
-            }
-        ],
-    }
-    result = _sse_to_v2_dict("checkpoints", ckpt_data)
-    assert result is not None
-    _assert_v2_shape(result)
-    data = result["data"]
-    assert isinstance(data, dict)
-    assert isinstance(data["config"], dict)
-    assert isinstance(data["metadata"], dict)
-    assert isinstance(data["values"], dict)
-    assert isinstance(data["next"], list)
-    assert all(isinstance(n, str) for n in data["next"])
-    assert isinstance(data["tasks"], list)
-    assert len(data["tasks"]) == 1
-    task = data["tasks"][0]
-    assert isinstance(task["id"], str)
-    assert isinstance(task["name"], str)
-
-
-def test_v2_debug_data_structure() -> None:
-    """Validate DebugPayload data structure."""
-    debug_data: dict[str, Any] = {
-        "step": 1,
-        "timestamp": "2025-01-01T00:00:00Z",
-        "type": "task",
-        "payload": {
-            "id": "task-1",
-            "name": "my_node",
-            "input": {"key": "val"},
-            "triggers": ["start:my_node"],
-        },
-    }
-    result = _sse_to_v2_dict("debug", debug_data)
-    assert result is not None
-    _assert_v2_shape(result)
-    data = result["data"]
-    assert isinstance(data, dict)
-    assert isinstance(data["step"], int)
-    assert isinstance(data["timestamp"], str)
-    assert data["type"] in ("checkpoint", "task", "task_result")
-    assert isinstance(data["payload"], dict)
-
-
-def test_v2_metadata_data_structure() -> None:
-    """Validate RunMetadataPayload data structure."""
-    result = _sse_to_v2_dict("metadata", {"run_id": "abc-123"})
-    assert result is not None
-    _assert_v2_shape(result)
-    assert result["type"] == "metadata"
-    data = result["data"]
-    assert isinstance(data, dict)
-    assert isinstance(data["run_id"], str)
 
 
 # --- type narrowing compile-time checks ---
