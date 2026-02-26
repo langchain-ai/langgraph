@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from langchain_core.runnables import RunnableConfig
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -31,12 +32,12 @@ async def test_parent_command_from_nested_subgraph() -> None:
 
     parent_builder: StateGraph[ParentState] = StateGraph(ParentState)
 
-    async def parent_first(state: ParentState) -> ParentState:
-        await child_0.ainvoke({"jump": state["jump_from_idx"] == 1})
+    async def parent_first(state: ParentState, config: RunnableConfig) -> ParentState:
+        await child_0.ainvoke({"jump": state["jump_from_idx"] == 1}, config)
         if state["jump_from_idx"] == 1:
             raise AssertionError("Shouldn't be here")
 
-        await child_1.ainvoke({"jump": state["jump_from_idx"] == 2})
+        await child_1.ainvoke({"jump": state["jump_from_idx"] == 2}, config)
         if state["jump_from_idx"] == 2:
             raise AssertionError("Shouldn't be here")
 
