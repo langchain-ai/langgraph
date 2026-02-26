@@ -619,12 +619,20 @@ class TaskResultPayload(TypedDict):
 
 
 class CheckpointTaskPayload(TypedDict):
-    """A task entry within a ``CheckpointPayload``."""
+    """A task entry within a ``CheckpointPayload``.
+
+    The keys present depend on the task's state:
+
+    - **Error:** ``id``, ``name``, ``error``, ``state``
+    - **Has result:** ``id``, ``name``, ``result``, ``interrupts``, ``state``
+    - **Pending:** ``id``, ``name``, ``interrupts``, ``state``
+    """
 
     id: str
     name: str
-    error: str | None
-    interrupts: list[dict[str, Any]]
+    error: NotRequired[str]
+    result: NotRequired[Any]
+    interrupts: NotRequired[list[dict[str, Any]]]
     state: dict[str, Any] | None
 
 

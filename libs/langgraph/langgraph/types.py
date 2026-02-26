@@ -19,7 +19,7 @@ from warnings import warn
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from typing_extensions import TypedDict, Unpack, deprecated
+from typing_extensions import NotRequired, TypedDict, Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
@@ -148,12 +148,20 @@ class TaskResultPayload(TypedDict):
 
 
 class CheckpointTask(TypedDict):
-    """A task entry within a `CheckpointPayload`."""
+    """A task entry within a `CheckpointPayload`.
+
+    The keys present depend on the task's state:
+
+    - **Error:** `id`, `name`, `error`, `state`
+    - **Has result:** `id`, `name`, `result`, `interrupts`, `state`
+    - **Pending:** `id`, `name`, `interrupts`, `state`
+    """
 
     id: str
     name: str
-    error: str | None
-    interrupts: list[dict]
+    error: NotRequired[str]
+    result: NotRequired[Any]
+    interrupts: NotRequired[list[dict]]
     state: StateSnapshot | RunnableConfig | None
 
 
