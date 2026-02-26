@@ -17,6 +17,8 @@ import numpy as np
 import ormsgpack
 import pandas as pd
 import pytest
+from langchain_core.documents.base import Document
+from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
@@ -682,6 +684,36 @@ def test_msgpack_strict_allows_safe_types(
 
     assert "blocked" not in caplog.text.lower()
     assert result == safe
+
+
+def test_msgpack_strict_allows_core_langchain_messages(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    msg = HumanMessage(content="hello")
+
+    caplog.clear()
+    result = serde.loads_typed(serde.dumps_typed(msg))
+
+    assert "blocked" not in caplog.text.lower()
+    assert "unregistered" not in caplog.text.lower()
+    assert isinstance(result, HumanMessage)
+    assert result == msg
+
+
+def test_msgpack_strict_allows_langchain_document(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    doc = Document(page_content="hello", metadata={"k": "v"})
+
+    caplog.clear()
+    result = serde.loads_typed(serde.dumps_typed(doc))
+
+    assert "blocked" not in caplog.text.lower()
+    assert "unregistered" not in caplog.text.lower()
+    assert isinstance(result, Document)
+    assert result == doc
 
 
 def test_msgpack_regex_safe_type(caplog: pytest.LogCaptureFixture) -> None:

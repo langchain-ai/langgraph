@@ -45,6 +45,13 @@ jobs:
         shell: bash
         run: make test_parallel
 
+      - name: Run strict msgpack pregel tests
+        if: ${{ matrix.python-version == '3.13' }}
+        shell: bash
+        env:
+          LANGGRAPH_STRICT_MSGPACK: "true"
+        run: make test TEST="tests/test_pregel.py tests/test_pregel_async.py"
+
       - name: Ensure the tests did not create any additional files
         shell: bash
         run: |

@@ -535,11 +535,12 @@ def _create_msgpack_ext_hook(
         # strict mode blocks unregistered types
         logger.warning(
             "Blocked deserialization of %s.%s - not in allowed_msgpack_modules. "
-            "Add to allowed_msgpack_modules to allow: [(%r, %r)]",
+            "Add to allowed_msgpack_modules to allow: [(%r, %r)]\n\nAllowed types: %s",
             module,
             name,
             module,
             name,
+            _lg_msgpack.SAFE_MSGPACK_TYPES,
         )
         return False
 
