@@ -5,7 +5,7 @@ Covers three checkpointer settings for subgraph state:
 - checkpointer=None (default): "stateless" — inherits parent checkpointer for
   interrupt support, but state resets each invocation. This is the common case
   when an agent is invoked from inside a tool used by another agent.
-- checkpointer=True: "stateful" — state accumulates across invocations
+- checkpointer=True: "stateful" — state accumulates across invocations on the same thread id
 """
 
 import sys
