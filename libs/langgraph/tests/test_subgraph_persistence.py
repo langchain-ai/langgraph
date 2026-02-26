@@ -5,10 +5,6 @@ Covers three checkpointer settings for subgraph state:
 - checkpointer=None (default): "tool scope" — inherits parent checkpointer for
   interrupt support, but state resets each invocation
 - checkpointer=True: "session scope" — state accumulates across invocations
-
-These tests use deterministic node functions (no LLM calls) and validate
-interrupt/resume, state reset vs accumulation, namespace isolation via
-StateGraph wrapper, and checkpoint collision with parallel calls.
 """
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -20,65 +16,76 @@ from langgraph.graph.message import MessagesState
 from langgraph.types import Command, Interrupt, interrupt
 from tests.any_str import AnyStr
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+# -- Shared helpers --
 
 
-def _make_inner_graph() -> StateGraph:
-    """Build a simple inner subgraph that uses interrupt and echoes a response.
+class ParentState(TypedDict):
+    result: str
 
-    Flow: process_input -> respond
-    - process_input: appends a tool-result message after interrupt
-    - respond: appends an AI response summarising the interaction
-    """
 
-    def process_input(state: MessagesState):
+def _contents(messages: list) -> list[str]:
+    """Extract message content strings for readable assertions."""
+    return [m.content for m in messages]
+
+
+def _echo_graph(prefix: str = "Echo", *, checkpointer=None):
+    """Single-node subgraph: echoes '<prefix>: <last message content>'."""
+
+    def echo(state: MessagesState):
+        content = state["messages"][-1].content
+        return {"messages": [AIMessage(content=f"{prefix}: {content}")]}
+
+    return (
+        StateGraph(MessagesState)
+        .add_node("echo", echo)
+        .add_edge(START, "echo")
+        .compile(checkpointer=checkpointer)
+    )
+
+
+def _interrupt_echo_graph():
+    """Two-node subgraph with interrupt: echoes 'Processing: <input>' then 'Done'."""
+
+    def process(state: MessagesState):
         interrupt("continue?")
-        last_content = state["messages"][-1].content
-        return {
-            "messages": [
-                AIMessage(content=f"Processing: {last_content}"),
-            ]
-        }
+        content = state["messages"][-1].content
+        return {"messages": [AIMessage(content=f"Processing: {content}")]}
 
     def respond(state: MessagesState):
-        return {
-            "messages": [
-                AIMessage(content="Done"),
-            ]
-        }
+        return {"messages": [AIMessage(content="Done")]}
 
-    builder = StateGraph(MessagesState)
-    builder.add_node("process_input", process_input)
-    builder.add_node("respond", respond)
-    builder.add_edge(START, "process_input")
-    builder.add_edge("process_input", "respond")
-    return builder
+    return (
+        StateGraph(MessagesState)
+        .add_node("process", process)
+        .add_node("respond", respond)
+        .add_edge(START, "process")
+        .add_edge("process", "respond")
+        .compile()
+    )
 
 
-# ---------------------------------------------------------------------------
-# checkpointer=None (tool scope) — interrupt and resume
-# ---------------------------------------------------------------------------
+def _wrap_session_scope(inner, name: str):
+    """Wrap a compiled subgraph for session scope (checkpointer=True)."""
+    return (
+        StateGraph(MessagesState)
+        .add_node(name, inner)
+        .add_edge(START, name)
+        .compile(checkpointer=True)
+    )
 
 
-def test_tool_invocation_scope_interrupt_resume(
+# -- checkpointer=None (tool scope) --
+
+
+def test_tool_scope_interrupt_resume(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Subgraph with checkpointer=None (tool scope) supports interrupt/resume.
-
-    Maps to tool_invocation_scope.py Case 1.
-    """
-    inner = _make_inner_graph().compile()  # checkpointer=None (default)
-
-    class ParentState(TypedDict):
-        result: str
+    """checkpointer=None supports interrupt/resume."""
+    inner = _interrupt_echo_graph()
 
     def call_inner(state: ParentState):
-        response = inner.invoke(
-            {"messages": [HumanMessage(content="tell me about apples")]}
-        )
-        return {"result": response["messages"][-1].content}
+        resp = inner.invoke({"messages": [HumanMessage(content="apples")]})
+        return {"result": resp["messages"][-1].content}
 
     parent = (
         StateGraph(ParentState)
@@ -86,64 +93,35 @@ def test_tool_invocation_scope_interrupt_resume(
         .add_edge(START, "call_inner")
         .compile(checkpointer=sync_checkpointer)
     )
-
     config = {"configurable": {"thread_id": "1"}}
 
-    # First invoke hits interrupt
     result = parent.invoke({"result": ""}, config)
     assert result == {
         "result": "",
-        "__interrupt__": [
-            Interrupt(value="continue?", id=AnyStr()),
-        ],
+        "__interrupt__": [Interrupt(value="continue?", id=AnyStr())],
     }
 
-    # Resume completes the graph
     result = parent.invoke(Command(resume=True), config)
     assert result == {"result": "Done"}
 
 
-# ---------------------------------------------------------------------------
-# checkpointer=False — explicitly disables persistence
-# ---------------------------------------------------------------------------
-
-
-def test_checkpointer_false_no_persistence(
+def test_tool_scope_state_resets(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Subgraph with checkpointer=False never persists state, even when parent has one.
-
-    Unlike omitting the checkpointer (which inherits from parent),
-    checkpointer=False explicitly opts out of checkpointing.
-    State should reset on every invocation.
-    """
-
-    def process(state: MessagesState):
-        last_content = state["messages"][-1].content
-        return {"messages": [AIMessage(content=f"Processed: {last_content}")]}
-
-    inner = (
-        StateGraph(MessagesState)
-        .add_node("process", process)
-        .add_edge(START, "process")
-        .compile(checkpointer=False)  # explicitly disabled
-    )
-
-    message_counts: list[int] = []
+    """checkpointer=None resets subgraph state on each invocation."""
+    inner = _interrupt_echo_graph()
+    subgraph_messages: list[list[str]] = []
     call_count = 0
-
-    class ParentState(TypedDict):
-        result: str
 
     def call_inner(state: ParentState):
         nonlocal call_count
         call_count += 1
         topic = "apples" if call_count == 1 else "bananas"
-        response = inner.invoke(
+        resp = inner.invoke(
             {"messages": [HumanMessage(content=f"tell me about {topic}")]}
         )
-        message_counts.append(len(response["messages"]))
-        return {"result": response["messages"][-1].content}
+        subgraph_messages.append(_contents(resp["messages"]))
+        return {"result": resp["messages"][-1].content}
 
     parent = (
         StateGraph(ParentState)
@@ -151,53 +129,46 @@ def test_checkpointer_false_no_persistence(
         .add_edge(START, "call_inner")
         .compile(checkpointer=sync_checkpointer)
     )
-
     config = {"configurable": {"thread_id": "1"}}
 
-    # Two invocations on the same thread
     parent.invoke({"result": ""}, config)
+    parent.invoke(Command(resume=True), config)
     parent.invoke({"result": ""}, config)
+    parent.invoke(Command(resume=True), config)
 
-    # Both should have the same count — no accumulation despite parent having
-    # a checkpointer, because checkpointer=False explicitly disables it
-    assert len(message_counts) == 2
-    assert message_counts[0] == message_counts[1], (
-        f"checkpointer=False should prevent state accumulation, "
-        f"got counts {message_counts}"
-    )
+    # Both invocations produce fresh history — no memory of prior call
+    assert subgraph_messages[0] == [
+        "tell me about apples",
+        "Processing: tell me about apples",
+        "Done",
+    ]
+    assert subgraph_messages[1] == [
+        "tell me about bananas",
+        "Processing: tell me about bananas",
+        "Done",
+    ]
 
 
-# ---------------------------------------------------------------------------
-# checkpointer=None (tool scope) — state resets between calls
-# ---------------------------------------------------------------------------
+# -- checkpointer=False --
 
 
-def test_tool_invocation_scope_state_resets(
+def test_checkpointer_false_no_persistence(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Subgraph with checkpointer=None (tool scope) resets state on each invocation.
-
-    Maps to tool_invocation_scope.py Case 2. The inner subgraph is called
-    twice on the same thread. Both calls should produce the same message
-    count because the subgraph has no memory.
-    """
-    inner = _make_inner_graph().compile()  # checkpointer=None (default)
-
+    """checkpointer=False prevents persistence even when parent has a checkpointer."""
+    inner = _echo_graph("Processed", checkpointer=False)
+    subgraph_messages: list[list[str]] = []
     call_count = 0
-    message_counts: list[int] = []
-
-    class ParentState(TypedDict):
-        result: str
 
     def call_inner(state: ParentState):
         nonlocal call_count
         call_count += 1
-        question = "apples" if call_count == 1 else "bananas"
-        response = inner.invoke(
-            {"messages": [HumanMessage(content=f"tell me about {question}")]}
+        topic = "apples" if call_count == 1 else "bananas"
+        resp = inner.invoke(
+            {"messages": [HumanMessage(content=f"tell me about {topic}")]}
         )
-        message_counts.append(len(response["messages"]))
-        return {"result": response["messages"][-1].content}
+        subgraph_messages.append(_contents(resp["messages"]))
+        return {"result": resp["messages"][-1].content}
 
     parent = (
         StateGraph(ParentState)
@@ -205,85 +176,40 @@ def test_tool_invocation_scope_state_resets(
         .add_edge(START, "call_inner")
         .compile(checkpointer=sync_checkpointer)
     )
-
     config = {"configurable": {"thread_id": "1"}}
 
-    # First call — hits interrupt
     parent.invoke({"result": ""}, config)
-    parent.invoke(Command(resume=True), config)
-
-    # Second call on same thread — hits interrupt again
     parent.invoke({"result": ""}, config)
-    parent.invoke(Command(resume=True), config)
 
-    # Both invocations should have produced the same message count
-    # because the inner subgraph uses checkpointer=None (tool scope — state resets)
-    assert len(message_counts) == 2
-    assert message_counts[0] == message_counts[1], (
-        f"Expected equal message counts (state reset), got {message_counts}"
-    )
+    # Both start fresh — no history from first call
+    assert subgraph_messages[0] == [
+        "tell me about apples",
+        "Processed: tell me about apples",
+    ]
+    assert subgraph_messages[1] == [
+        "tell me about bananas",
+        "Processed: tell me about bananas",
+    ]
 
 
-# ---------------------------------------------------------------------------
-# checkpointer=True (session scope) — state accumulates across calls
-# ---------------------------------------------------------------------------
+# -- checkpointer=True (session scope) --
 
 
 def test_session_scope_state_accumulates(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Subgraph with checkpointer=True (session scope) accumulates state across invocations.
-
-    Maps to session_scope.py Case 2. The inner subgraph is wrapped in a
-    StateGraph (for namespace isolation) and compiled with checkpointer=True.
-    On the second call the subgraph should have more messages than the first.
-    """
-
-    def process_input(state: MessagesState):
-        last_content = state["messages"][-1].content
-        return {
-            "messages": [
-                AIMessage(content=f"Processing: {last_content}"),
-            ]
-        }
-
-    def respond(state: MessagesState):
-        return {
-            "messages": [
-                AIMessage(content="Done"),
-            ]
-        }
-
-    inner_builder = StateGraph(MessagesState)
-    inner_builder.add_node("process_input", process_input)
-    inner_builder.add_node("respond", respond)
-    inner_builder.add_edge(START, "process_input")
-    inner_builder.add_edge("process_input", "respond")
-    inner_graph = inner_builder.compile()
-
-    # Wrap in StateGraph for namespace isolation (matches session_scope.py pattern)
-    wrapper = (
-        StateGraph(MessagesState)
-        .add_node("inner_agent", inner_graph)
-        .add_edge(START, "inner_agent")
-        .compile(checkpointer=True)
-    )
-
-    message_counts: list[int] = []
-    call_count = 0
-
-    class ParentState(TypedDict):
-        result: str
+    """checkpointer=True retains subgraph state across invocations."""
+    wrapper = _wrap_session_scope(_echo_graph("Processing"), "agent")
+    subgraph_messages: list[list[str]] = []
+    topics = ["apples", "bananas"]
 
     def call_inner(state: ParentState):
-        nonlocal call_count
-        call_count += 1
-        question = "apples" if call_count == 1 else "bananas"
-        response = wrapper.invoke(
-            {"messages": [HumanMessage(content=f"tell me about {question}")]}
+        topic = topics[len(subgraph_messages)]
+        resp = wrapper.invoke(
+            {"messages": [HumanMessage(content=f"tell me about {topic}")]}
         )
-        message_counts.append(len(response["messages"]))
-        return {"result": response["messages"][-1].content}
+        subgraph_messages.append(_contents(resp["messages"]))
+        return {"result": resp["messages"][-1].content}
 
     parent = (
         StateGraph(ParentState)
@@ -291,108 +217,45 @@ def test_session_scope_state_accumulates(
         .add_edge(START, "call_inner")
         .compile(checkpointer=sync_checkpointer)
     )
-
     config = {"configurable": {"thread_id": "1"}}
 
-    # First call
     parent.invoke({"result": ""}, config)
-    first_count = message_counts[0]
-
-    # Second call on same thread — state should accumulate
     parent.invoke({"result": ""}, config)
-    second_count = message_counts[1]
 
-    assert second_count > first_count, (
-        f"Expected state to accumulate (second_count > first_count), "
-        f"got first={first_count}, second={second_count}"
-    )
+    # First call: fresh history
+    assert subgraph_messages[0] == [
+        "tell me about apples",
+        "Processing: tell me about apples",
+    ]
+    # Second call: retains messages from first call
+    assert subgraph_messages[1] == [
+        "tell me about apples",
+        "Processing: tell me about apples",
+        "tell me about bananas",
+        "Processing: tell me about bananas",
+    ]
 
 
-# ---------------------------------------------------------------------------
-# checkpointer=True (session scope) — parallel different agents, namespace isolation
-# ---------------------------------------------------------------------------
-
-
-def test_session_scope_parallel_different_agents_namespace_isolation(
+def test_session_scope_namespace_isolation(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Two different checkpointer=True (session scope) subgraphs maintain independent state.
-
-    Maps to session_scope.py Case 3 + sydney_test.py. Each subgraph is
-    wrapped in its own StateGraph with a unique node name, giving each
-    its own checkpoint namespace. State accumulates independently.
-    """
-
-    def fruit_node(state: MessagesState):
-        last_content = state["messages"][-1].content
-        return {
-            "messages": [
-                AIMessage(content=f"Fruit info: {last_content}"),
-            ]
-        }
-
-    def veggie_node(state: MessagesState):
-        last_content = state["messages"][-1].content
-        return {
-            "messages": [
-                AIMessage(content=f"Veggie info: {last_content}"),
-            ]
-        }
-
-    # Build two subgraphs with unique wrapper names for namespace isolation
-    fruit_inner = (
-        StateGraph(MessagesState)
-        .add_node("fruit_node", fruit_node)
-        .add_edge(START, "fruit_node")
-        .compile()
-    )
-    fruit_wrapper = (
-        StateGraph(MessagesState)
-        .add_node("fruit_agent", fruit_inner)  # unique name
-        .add_edge(START, "fruit_agent")
-        .compile(checkpointer=True)
-    )
-
-    veggie_inner = (
-        StateGraph(MessagesState)
-        .add_node("veggie_node", veggie_node)
-        .add_edge(START, "veggie_node")
-        .compile()
-    )
-    veggie_wrapper = (
-        StateGraph(MessagesState)
-        .add_node("veggie_agent", veggie_inner)  # unique name
-        .add_edge(START, "veggie_agent")
-        .compile(checkpointer=True)
-    )
-
-    fruit_counts: list[int] = []
-    veggie_counts: list[int] = []
+    """Different checkpointer=True subgraphs maintain independent state
+    via unique wrapper node names."""
+    fruit = _wrap_session_scope(_echo_graph("Fruit"), "fruit_agent")
+    veggie = _wrap_session_scope(_echo_graph("Veggie"), "veggie_agent")
+    fruit_msgs: list[list[str]] = []
+    veggie_msgs: list[list[str]] = []
     call_count = 0
-
-    class ParentState(TypedDict):
-        fruit_result: str
-        veggie_result: str
 
     def call_both(state: ParentState):
         nonlocal call_count
         call_count += 1
         suffix = "round 1" if call_count == 1 else "round 2"
-
-        fruit_resp = fruit_wrapper.invoke(
-            {"messages": [HumanMessage(content=f"cherries {suffix}")]}
-        )
-        veggie_resp = veggie_wrapper.invoke(
-            {"messages": [HumanMessage(content=f"broccoli {suffix}")]}
-        )
-
-        fruit_counts.append(len(fruit_resp["messages"]))
-        veggie_counts.append(len(veggie_resp["messages"]))
-
-        return {
-            "fruit_result": fruit_resp["messages"][-1].content,
-            "veggie_result": veggie_resp["messages"][-1].content,
-        }
+        f = fruit.invoke({"messages": [HumanMessage(content=f"cherries {suffix}")]})
+        v = veggie.invoke({"messages": [HumanMessage(content=f"broccoli {suffix}")]})
+        fruit_msgs.append(_contents(f["messages"]))
+        veggie_msgs.append(_contents(v["messages"]))
+        return {"result": f["messages"][-1].content}
 
     parent = (
         StateGraph(ParentState)
@@ -400,115 +263,67 @@ def test_session_scope_parallel_different_agents_namespace_isolation(
         .add_edge(START, "call_both")
         .compile(checkpointer=sync_checkpointer)
     )
-
     config = {"configurable": {"thread_id": "1"}}
 
-    # First call
-    parent.invoke({"fruit_result": "", "veggie_result": ""}, config)
-    fruit_first = fruit_counts[0]
-    veggie_first = veggie_counts[0]
+    parent.invoke({"result": ""}, config)
+    parent.invoke({"result": ""}, config)
 
-    # Second call — both should accumulate independently
-    parent.invoke({"fruit_result": "", "veggie_result": ""}, config)
-    fruit_second = fruit_counts[1]
-    veggie_second = veggie_counts[1]
+    # First call: each agent sees only its own history
+    assert fruit_msgs[0] == ["cherries round 1", "Fruit: cherries round 1"]
+    assert veggie_msgs[0] == ["broccoli round 1", "Veggie: broccoli round 1"]
 
-    # Both agents should accumulate state
-    assert fruit_second > fruit_first, (
-        f"Fruit agent should accumulate state: first={fruit_first}, second={fruit_second}"
-    )
-    assert veggie_second > veggie_first, (
-        f"Veggie agent should accumulate state: first={veggie_first}, second={veggie_second}"
-    )
-
-    # Namespace isolation: fruit and veggie counts should match each other
-    # (both start fresh and accumulate symmetrically)
-    assert fruit_first == veggie_first
-    assert fruit_second == veggie_second
+    # Second call: each accumulated independently — no cross-contamination
+    assert fruit_msgs[1] == [
+        "cherries round 1",
+        "Fruit: cherries round 1",
+        "cherries round 2",
+        "Fruit: cherries round 2",
+    ]
+    assert veggie_msgs[1] == [
+        "broccoli round 1",
+        "Veggie: broccoli round 1",
+        "broccoli round 2",
+        "Veggie: broccoli round 2",
+    ]
 
 
-# ---------------------------------------------------------------------------
-# checkpointer=True (session scope) — same agent, shared checkpoint
-# ---------------------------------------------------------------------------
-
-
-def test_session_scope_parallel_same_agent_checkpoint_collision(
+def test_session_scope_shared_checkpoint(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Same checkpointer=True (session scope) subgraph shares one checkpoint across all calls.
+    """Same checkpointer=True subgraph shares one checkpoint across all calls.
 
-    Maps to session_scope.py Case 4. When the same checkpointer=True subgraph
-    is called multiple times (whether sequentially or in parallel), all calls
-    read/write the same checkpoint namespace. This means:
-    - Sequential calls across invocations: state accumulates (expected)
-    - Parallel calls within one invocation: both read the same initial state
-      and write back, causing a merge that produces unexpected message counts
-
-    This test verifies the shared-checkpoint behavior by calling the same
-    session-scope subgraph once per parent invocation. The first call to
-    the subgraph within each parent invocation records its message count.
-    On the second parent invocation, the subgraph sees accumulated state
-    from the first invocation — confirming a single shared checkpoint.
+    Documents a known limitation: parallel tool calls to the same session-scope
+    subgraph read/write the same checkpoint, causing unexpected state merges.
     """
-
-    def echo_node(state: MessagesState):
-        last_content = state["messages"][-1].content
-        return {
-            "messages": [
-                AIMessage(content=f"Echo: {last_content}"),
-            ]
-        }
-
-    inner = (
-        StateGraph(MessagesState)
-        .add_node("echo", echo_node)
-        .add_edge(START, "echo")
-        .compile()
-    )
-    # Same wrapper used for all calls — single shared checkpoint namespace
-    shared_wrapper = (
-        StateGraph(MessagesState)
-        .add_node("shared_agent", inner)
-        .add_edge(START, "shared_agent")
-        .compile(checkpointer=True)
-    )
-
-    message_counts: list[int] = []
+    wrapper = _wrap_session_scope(_echo_graph(), "shared_agent")
+    subgraph_messages: list[list[str]] = []
     call_count = 0
 
-    class ParentState(TypedDict):
-        result: str
-
-    def call_shared_agent(state: ParentState):
+    def call_agent(state: ParentState):
         nonlocal call_count
         call_count += 1
         topic = "apples" if call_count == 1 else "bananas"
-        resp = shared_wrapper.invoke({"messages": [HumanMessage(content=topic)]})
-        message_counts.append(len(resp["messages"]))
+        resp = wrapper.invoke({"messages": [HumanMessage(content=topic)]})
+        subgraph_messages.append(_contents(resp["messages"]))
         return {"result": resp["messages"][-1].content}
 
     parent = (
         StateGraph(ParentState)
-        .add_node("call_shared_agent", call_shared_agent)
-        .add_edge(START, "call_shared_agent")
+        .add_node("call_agent", call_agent)
+        .add_edge(START, "call_agent")
         .compile(checkpointer=sync_checkpointer)
     )
-
     config = {"configurable": {"thread_id": "1"}}
 
-    # First invocation — subgraph starts fresh
     parent.invoke({"result": ""}, config)
-    first_count = message_counts[0]
-
-    # Second invocation — subgraph sees accumulated state (shared checkpoint)
     parent.invoke({"result": ""}, config)
-    second_count = message_counts[1]
 
-    # The same checkpointer=True subgraph accumulates state across invocations
-    # because all calls share a single checkpoint namespace. This is the
-    # mechanism that causes unexpected state merging when parallel tool calls
-    # target the same subgraph within one invocation.
-    assert second_count > first_count, (
-        f"Same checkpointer=True subgraph should accumulate state across invocations "
-        f"(shared checkpoint): first={first_count}, second={second_count}"
-    )
+    # First call: fresh history
+    assert subgraph_messages[0] == ["apples", "Echo: apples"]
+    # Second call: shared checkpoint retained state from first call
+    assert subgraph_messages[1] == [
+        "apples",
+        "Echo: apples",
+        "bananas",
+        "Echo: bananas",
+    ]
