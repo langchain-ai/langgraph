@@ -4,7 +4,7 @@ import pytest
 from typing_extensions import TypedDict
 
 from langgraph.graph import START, StateGraph
-from langgraph.pregel._retry import _should_retry_on
+from langgraph.pregel._retry import _checkpoint_ns_for_parent_command, _should_retry_on
 from langgraph.types import RetryPolicy
 
 
@@ -76,6 +76,22 @@ def test_should_retry_on_empty_sequence():
 
     # Should not retry when sequence is empty
     assert _should_retry_on(policy, ValueError("test error")) is False
+
+
+def test_checkpoint_ns_for_parent_command() -> None:
+    assert _checkpoint_ns_for_parent_command("") == ""
+    assert _checkpoint_ns_for_parent_command("node:1") == ""
+    assert _checkpoint_ns_for_parent_command("node:1|child:2") == "node:1"
+    assert _checkpoint_ns_for_parent_command("node:1|1|child:2") == "node:1"
+    assert _checkpoint_ns_for_parent_command("node:1|1|child:2|1") == "node:1"
+    assert (
+        _checkpoint_ns_for_parent_command("parent:1|1|child:1|1|node:1|1")
+        == "parent:1|1|child:1"
+    )
+    assert (
+        _checkpoint_ns_for_parent_command("parent:1|1|child:1|1|node:1")
+        == "parent:1|1|child:1"
+    )
 
 
 def test_should_retry_default_retry_on():
