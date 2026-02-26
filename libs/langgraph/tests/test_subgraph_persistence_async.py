@@ -1,4 +1,4 @@
-"""Tests for subgraph persistence behavior (sync).
+"""Tests for subgraph persistence behavior (async).
 
 Covers three checkpointer settings for subgraph state:
 - checkpointer=False: no persistence, even when parent has a checkpointer
@@ -7,6 +7,7 @@ Covers three checkpointer settings for subgraph state:
 - checkpointer=True: "session scope" — state accumulates across invocations
 """
 
+import pytest
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
@@ -22,50 +23,52 @@ from tests.subgraph_persistence_helpers import (
     _wrap_session_scope_interrupt,
 )
 
+pytestmark = pytest.mark.anyio
+
 # -- checkpointer=None (tool scope) --
 
 
-def test_tool_scope_interrupt_resume(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_tool_scope_interrupt_resume_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """checkpointer=None supports interrupt/resume."""
+    """checkpointer=None supports interrupt/resume (async)."""
     inner = _interrupt_echo_graph()
 
-    def call_inner(state: ParentState):
-        resp = inner.invoke({"messages": [HumanMessage(content="apples")]})
+    async def call_inner(state: ParentState):
+        resp = await inner.ainvoke({"messages": [HumanMessage(content="apples")]})
         return {"result": resp["messages"][-1].content}
 
     parent = (
         StateGraph(ParentState)
         .add_node("call_inner", call_inner)
         .add_edge(START, "call_inner")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    result = parent.invoke({"result": ""}, config)
+    result = await parent.ainvoke({"result": ""}, config)
     assert result == {
         "result": "",
         "__interrupt__": [Interrupt(value="continue?", id=AnyStr())],
     }
 
-    result = parent.invoke(Command(resume=True), config)
+    result = await parent.ainvoke(Command(resume=True), config)
     assert result == {"result": "Done"}
 
 
-def test_tool_scope_state_resets(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_tool_scope_state_resets_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """checkpointer=None resets subgraph state on each invocation."""
+    """checkpointer=None resets subgraph state on each invocation (async)."""
     inner = _echo_graph("Processing")
     subgraph_messages: list[list[str]] = []
     call_count = 0
 
-    def call_inner(state: ParentState):
+    async def call_inner(state: ParentState):
         nonlocal call_count
         call_count += 1
         topic = "apples" if call_count == 1 else "bananas"
-        resp = inner.invoke(
+        resp = await inner.ainvoke(
             {"messages": [HumanMessage(content=f"tell me about {topic}")]}
         )
         subgraph_messages.append(_contents(resp["messages"]))
@@ -75,12 +78,12 @@ def test_tool_scope_state_resets(
         StateGraph(ParentState)
         .add_node("call_inner", call_inner)
         .add_edge(START, "call_inner")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    parent.invoke({"result": ""}, config)
-    parent.invoke({"result": ""}, config)
+    await parent.ainvoke({"result": ""}, config)
+    await parent.ainvoke({"result": ""}, config)
 
     # Both invocations produce fresh history — no memory of prior call
     assert subgraph_messages[0] == [
@@ -93,19 +96,19 @@ def test_tool_scope_state_resets(
     ]
 
 
-def test_tool_scope_state_resets_with_interrupt(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_tool_scope_state_resets_with_interrupt_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """checkpointer=None resets subgraph state on each invocation (with interrupt)."""
+    """checkpointer=None resets subgraph state on each invocation (async, with interrupt)."""
     inner = _interrupt_echo_graph()
     subgraph_messages: list[list[str]] = []
     call_count = 0
 
-    def call_inner(state: ParentState):
+    async def call_inner(state: ParentState):
         nonlocal call_count
         call_count += 1
         topic = "apples" if call_count == 1 else "bananas"
-        resp = inner.invoke(
+        resp = await inner.ainvoke(
             {"messages": [HumanMessage(content=f"tell me about {topic}")]}
         )
         subgraph_messages.append(_contents(resp["messages"]))
@@ -115,14 +118,14 @@ def test_tool_scope_state_resets_with_interrupt(
         StateGraph(ParentState)
         .add_node("call_inner", call_inner)
         .add_edge(START, "call_inner")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    parent.invoke({"result": ""}, config)
-    parent.invoke(Command(resume=True), config)
-    parent.invoke({"result": ""}, config)
-    parent.invoke(Command(resume=True), config)
+    await parent.ainvoke({"result": ""}, config)
+    await parent.ainvoke(Command(resume=True), config)
+    await parent.ainvoke({"result": ""}, config)
+    await parent.ainvoke(Command(resume=True), config)
 
     # Both invocations produce fresh history — no memory of prior call
     assert subgraph_messages[0] == [
@@ -140,19 +143,19 @@ def test_tool_scope_state_resets_with_interrupt(
 # -- checkpointer=False --
 
 
-def test_checkpointer_false_no_persistence(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_checkpointer_false_no_persistence_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """checkpointer=False prevents persistence even when parent has a checkpointer."""
+    """checkpointer=False prevents persistence even when parent has a checkpointer (async)."""
     inner = _echo_graph("Processed", checkpointer=False)
     subgraph_messages: list[list[str]] = []
     call_count = 0
 
-    def call_inner(state: ParentState):
+    async def call_inner(state: ParentState):
         nonlocal call_count
         call_count += 1
         topic = "apples" if call_count == 1 else "bananas"
-        resp = inner.invoke(
+        resp = await inner.ainvoke(
             {"messages": [HumanMessage(content=f"tell me about {topic}")]}
         )
         subgraph_messages.append(_contents(resp["messages"]))
@@ -162,12 +165,12 @@ def test_checkpointer_false_no_persistence(
         StateGraph(ParentState)
         .add_node("call_inner", call_inner)
         .add_edge(START, "call_inner")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    parent.invoke({"result": ""}, config)
-    parent.invoke({"result": ""}, config)
+    await parent.ainvoke({"result": ""}, config)
+    await parent.ainvoke({"result": ""}, config)
 
     # Both start fresh — no history from first call
     assert subgraph_messages[0] == [
@@ -183,17 +186,17 @@ def test_checkpointer_false_no_persistence(
 # -- checkpointer=True (session scope) --
 
 
-def test_session_scope_state_accumulates(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_session_scope_state_accumulates_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """checkpointer=True retains subgraph state across invocations."""
+    """checkpointer=True retains subgraph state across invocations (async)."""
     wrapper = _wrap_session_scope(_echo_graph("Processing"), "agent")
     subgraph_messages: list[list[str]] = []
     topics = ["apples", "bananas"]
 
-    def call_inner(state: ParentState):
+    async def call_inner(state: ParentState):
         topic = topics[len(subgraph_messages)]
-        resp = wrapper.invoke(
+        resp = await wrapper.ainvoke(
             {"messages": [HumanMessage(content=f"tell me about {topic}")]}
         )
         subgraph_messages.append(_contents(resp["messages"]))
@@ -203,12 +206,12 @@ def test_session_scope_state_accumulates(
         StateGraph(ParentState)
         .add_node("call_inner", call_inner)
         .add_edge(START, "call_inner")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    parent.invoke({"result": ""}, config)
-    parent.invoke({"result": ""}, config)
+    await parent.ainvoke({"result": ""}, config)
+    await parent.ainvoke({"result": ""}, config)
 
     # First call: fresh history
     assert subgraph_messages[0] == [
@@ -224,17 +227,17 @@ def test_session_scope_state_accumulates(
     ]
 
 
-def test_session_scope_state_accumulates_with_interrupt(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_session_scope_state_accumulates_with_interrupt_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """checkpointer=True retains subgraph state across invocations (with interrupt)."""
+    """checkpointer=True retains subgraph state across invocations (async, with interrupt)."""
     wrapper = _wrap_session_scope_interrupt("agent")
     subgraph_messages: list[list[str]] = []
     topics = ["apples", "bananas"]
 
-    def call_inner(state: ParentState):
+    async def call_inner(state: ParentState):
         topic = topics[len(subgraph_messages)]
-        resp = wrapper.invoke(
+        resp = await wrapper.ainvoke(
             {"messages": [HumanMessage(content=f"tell me about {topic}")]}
         )
         subgraph_messages.append(_contents(resp["messages"]))
@@ -244,14 +247,14 @@ def test_session_scope_state_accumulates_with_interrupt(
         StateGraph(ParentState)
         .add_node("call_inner", call_inner)
         .add_edge(START, "call_inner")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    parent.invoke({"result": ""}, config)
-    parent.invoke(Command(resume=True), config)
-    parent.invoke({"result": ""}, config)
-    parent.invoke(Command(resume=True), config)
+    await parent.ainvoke({"result": ""}, config)
+    await parent.ainvoke(Command(resume=True), config)
+    await parent.ainvoke({"result": ""}, config)
+    await parent.ainvoke(Command(resume=True), config)
 
     # First call: fresh history
     assert subgraph_messages[0] == [
@@ -270,17 +273,17 @@ def test_session_scope_state_accumulates_with_interrupt(
     ]
 
 
-def test_session_scope_interrupt_resume(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_session_scope_interrupt_resume_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """checkpointer=True supports interrupt/resume and accumulates state."""
+    """checkpointer=True supports interrupt/resume and accumulates state (async)."""
     wrapper = _wrap_session_scope_interrupt("agent")
     subgraph_messages: list[list[str]] = []
     topics = ["apples", "bananas"]
 
-    def call_inner(state: ParentState):
+    async def call_inner(state: ParentState):
         topic = topics[len(subgraph_messages)]
-        resp = wrapper.invoke(
+        resp = await wrapper.ainvoke(
             {"messages": [HumanMessage(content=f"tell me about {topic}")]}
         )
         subgraph_messages.append(_contents(resp["messages"]))
@@ -290,19 +293,19 @@ def test_session_scope_interrupt_resume(
         StateGraph(ParentState)
         .add_node("call_inner", call_inner)
         .add_edge(START, "call_inner")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
     config = {"configurable": {"thread_id": "1"}}
 
     # First invocation: hits interrupt
-    result = parent.invoke({"result": ""}, config)
+    result = await parent.ainvoke({"result": ""}, config)
     assert result == {
         "result": "",
         "__interrupt__": [Interrupt(value="continue?", id=AnyStr())],
     }
 
     # Resume: completes first call
-    result = parent.invoke(Command(resume=True), config)
+    result = await parent.ainvoke(Command(resume=True), config)
     assert result == {"result": "Done"}
     assert subgraph_messages[0] == [
         "tell me about apples",
@@ -311,14 +314,14 @@ def test_session_scope_interrupt_resume(
     ]
 
     # Second invocation: hits interrupt, state accumulated from first call
-    result = parent.invoke({"result": ""}, config)
+    result = await parent.ainvoke({"result": ""}, config)
     assert result == {
         "result": "",
         "__interrupt__": [Interrupt(value="continue?", id=AnyStr())],
     }
 
     # Resume: completes second call with accumulated state
-    result = parent.invoke(Command(resume=True), config)
+    result = await parent.ainvoke(Command(resume=True), config)
     assert result == {"result": "Done"}
     assert subgraph_messages[1] == [
         "tell me about apples",
@@ -330,23 +333,27 @@ def test_session_scope_interrupt_resume(
     ]
 
 
-def test_session_scope_namespace_isolation(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_session_scope_namespace_isolation_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Different checkpointer=True subgraphs maintain independent state
-    via unique wrapper node names."""
+    via unique wrapper node names (async)."""
     fruit = _wrap_session_scope(_echo_graph("Fruit"), "fruit_agent")
     veggie = _wrap_session_scope(_echo_graph("Veggie"), "veggie_agent")
     fruit_msgs: list[list[str]] = []
     veggie_msgs: list[list[str]] = []
     call_count = 0
 
-    def call_both(state: ParentState):
+    async def call_both(state: ParentState):
         nonlocal call_count
         call_count += 1
         suffix = "round 1" if call_count == 1 else "round 2"
-        f = fruit.invoke({"messages": [HumanMessage(content=f"cherries {suffix}")]})
-        v = veggie.invoke({"messages": [HumanMessage(content=f"broccoli {suffix}")]})
+        f = await fruit.ainvoke(
+            {"messages": [HumanMessage(content=f"cherries {suffix}")]}
+        )
+        v = await veggie.ainvoke(
+            {"messages": [HumanMessage(content=f"broccoli {suffix}")]}
+        )
         fruit_msgs.append(_contents(f["messages"]))
         veggie_msgs.append(_contents(v["messages"]))
         return {"result": f["messages"][-1].content}
@@ -355,12 +362,12 @@ def test_session_scope_namespace_isolation(
         StateGraph(ParentState)
         .add_node("call_both", call_both)
         .add_edge(START, "call_both")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    parent.invoke({"result": ""}, config)
-    parent.invoke({"result": ""}, config)
+    await parent.ainvoke({"result": ""}, config)
+    await parent.ainvoke({"result": ""}, config)
 
     # First call: each agent sees only its own history
     assert fruit_msgs[0] == ["cherries round 1", "Fruit: cherries round 1"]
@@ -381,23 +388,19 @@ def test_session_scope_namespace_isolation(
     ]
 
 
-def test_session_scope_shared_checkpoint(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_session_scope_shared_checkpoint_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Same checkpointer=True subgraph shares one checkpoint across all calls.
-
-    Documents a known limitation: parallel tool calls to the same session-scope
-    subgraph read/write the same checkpoint, causing unexpected state merges.
-    """
+    """Same checkpointer=True subgraph shares one checkpoint across all calls (async)."""
     wrapper = _wrap_session_scope(_echo_graph(), "shared_agent")
     subgraph_messages: list[list[str]] = []
     call_count = 0
 
-    def call_agent(state: ParentState):
+    async def call_agent(state: ParentState):
         nonlocal call_count
         call_count += 1
         topic = "apples" if call_count == 1 else "bananas"
-        resp = wrapper.invoke({"messages": [HumanMessage(content=topic)]})
+        resp = await wrapper.ainvoke({"messages": [HumanMessage(content=topic)]})
         subgraph_messages.append(_contents(resp["messages"]))
         return {"result": resp["messages"][-1].content}
 
@@ -405,12 +408,12 @@ def test_session_scope_shared_checkpoint(
         StateGraph(ParentState)
         .add_node("call_agent", call_agent)
         .add_edge(START, "call_agent")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    parent.invoke({"result": ""}, config)
-    parent.invoke({"result": ""}, config)
+    await parent.ainvoke({"result": ""}, config)
+    await parent.ainvoke({"result": ""}, config)
 
     # First call: fresh history
     assert subgraph_messages[0] == [
@@ -426,20 +429,20 @@ def test_session_scope_shared_checkpoint(
     ]
 
 
-def test_session_scope_shared_checkpoint_with_interrupt(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_session_scope_shared_checkpoint_with_interrupt_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Same checkpointer=True subgraph shares one checkpoint across all calls
-    (with interrupt)."""
+    (async, with interrupt)."""
     wrapper = _wrap_session_scope_interrupt("shared_agent", "Echo")
     subgraph_messages: list[list[str]] = []
     call_count = 0
 
-    def call_agent(state: ParentState):
+    async def call_agent(state: ParentState):
         nonlocal call_count
         call_count += 1
         topic = "apples" if call_count == 1 else "bananas"
-        resp = wrapper.invoke({"messages": [HumanMessage(content=topic)]})
+        resp = await wrapper.ainvoke({"messages": [HumanMessage(content=topic)]})
         subgraph_messages.append(_contents(resp["messages"]))
         return {"result": resp["messages"][-1].content}
 
@@ -447,14 +450,14 @@ def test_session_scope_shared_checkpoint_with_interrupt(
         StateGraph(ParentState)
         .add_node("call_agent", call_agent)
         .add_edge(START, "call_agent")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    parent.invoke({"result": ""}, config)
-    parent.invoke(Command(resume=True), config)
-    parent.invoke({"result": ""}, config)
-    parent.invoke(Command(resume=True), config)
+    await parent.ainvoke({"result": ""}, config)
+    await parent.ainvoke(Command(resume=True), config)
+    await parent.ainvoke({"result": ""}, config)
+    await parent.ainvoke(Command(resume=True), config)
 
     # First call: fresh history
     assert subgraph_messages[0] == [
