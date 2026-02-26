@@ -6,7 +6,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
 
 
-def test_parent_command_from_nested_subgraph() -> None:
+async def test_parent_command_from_nested_subgraph() -> None:
     class ParentState(TypedDict):
         jump_from_idx: int
 
@@ -15,7 +15,7 @@ def test_parent_command_from_nested_subgraph() -> None:
 
     child_builder: StateGraph[ChildState] = StateGraph(ChildState)
 
-    def child_node(state: ChildState) -> Command | ChildState:
+    async def child_node(state: ChildState) -> Command | ChildState:
         if state["jump"]:
             return Command(graph=Command.PARENT, goto="parent_second")
         return state
@@ -28,18 +28,18 @@ def test_parent_command_from_nested_subgraph() -> None:
 
     parent_builder: StateGraph[ParentState] = StateGraph(ParentState)
 
-    def parent_first(state: ParentState) -> ParentState:
-        child_0.invoke({"jump": state["jump_from_idx"] == 1})
+    async def parent_first(state: ParentState) -> ParentState:
+        await child_0.ainvoke({"jump": state["jump_from_idx"] == 1})
         if state["jump_from_idx"] == 1:
             raise AssertionError("Shouldn't be here")
 
-        child_1.invoke({"jump": state["jump_from_idx"] == 2})
+        await child_1.ainvoke({"jump": state["jump_from_idx"] == 2})
         if state["jump_from_idx"] == 2:
             raise AssertionError("Shouldn't be here")
 
         return state
 
-    def parent_second(state: ParentState) -> ParentState:
+    async def parent_second(state: ParentState) -> ParentState:
         return state
 
     parent_builder.add_node("parent_first", parent_first)
@@ -49,5 +49,5 @@ def test_parent_command_from_nested_subgraph() -> None:
 
     graph = parent_builder.compile().with_config(recursion_limit=10)
 
-    assert graph.invoke({"jump_from_idx": 1}) == {"jump_from_idx": 1}
-    assert graph.invoke({"jump_from_idx": 2}) == {"jump_from_idx": 2}
+    assert await graph.ainvoke({"jump_from_idx": 1}) == {"jump_from_idx": 1}
+    assert await graph.ainvoke({"jump_from_idx": 2}) == {"jump_from_idx": 2}
