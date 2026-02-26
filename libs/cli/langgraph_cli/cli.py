@@ -608,6 +608,13 @@ def build(
     ),
 )
 @click.option(
+    "--deployment-type",
+    type=click.Choice(["dev", "prod"]),
+    default="dev",
+    show_default=True,
+    help="Deployment type (used when creating a new deployment).",
+)
+@click.option(
     "--platforms",
     default="linux/amd64,linux/arm64",
     show_default=True,
@@ -664,6 +671,7 @@ def deploy(
     host_url: str | None,
     api_key: str | None,
     deployment_id: str | None,
+    deployment_type: str,
     name: str | None,
     image_name: str | None,
     image_tag: str,
@@ -718,37 +726,39 @@ def deploy(
             build_flags: list[str] = ["--platform", build_platforms]
             if not verbose:
                 build_flags.append("--progress=quiet")
-            _build(
-                runner,
-                lambda _msg: None,
-                config,
-                config_json,
-                base_image,
-                api_version,
-                pull,
-                local_tag,
-                docker_build_args,
-                install_command,
-                build_command,
-                docker_command=("docker", "buildx", "build"),
-                extra_flags=build_flags,
-                verbose=verbose,
-            )
+            with Progress(message="Building...", elapsed=not verbose):
+                _build(
+                    runner,
+                    lambda _msg: None,
+                    config,
+                    config_json,
+                    base_image,
+                    api_version,
+                    pull,
+                    local_tag,
+                    docker_build_args,
+                    install_command,
+                    build_command,
+                    docker_command=("docker", "buildx", "build"),
+                    extra_flags=build_flags,
+                    verbose=verbose,
+                )
         else:
-            _build(
-                runner,
-                lambda _msg: None,
-                config,
-                config_json,
-                base_image,
-                api_version,
-                pull,
-                local_tag,
-                docker_build_args,
-                install_command,
-                build_command,
-                verbose=verbose,
-            )
+            with Progress(message="Building...", elapsed=not verbose):
+                _build(
+                    runner,
+                    lambda _msg: None,
+                    config,
+                    config_json,
+                    base_image,
+                    api_version,
+                    pull,
+                    local_tag,
+                    docker_build_args,
+                    install_command,
+                    build_command,
+                    verbose=verbose,
+                )
         step += 1
 
         # -- Step: Find or create deployment --
@@ -777,7 +787,7 @@ def deploy(
                 payload = {
                     "name": name,
                     "source": "internal_docker",
-                    "source_config": {"deployment_type": "dev"},
+                    "source_config": {"deployment_type": deployment_type},
                     "source_revision_config": {},
                     "secrets": secrets,
                 }
