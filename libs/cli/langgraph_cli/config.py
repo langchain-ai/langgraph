@@ -4,7 +4,7 @@ import pathlib
 import re
 import textwrap
 from collections import Counter
-from typing import Literal, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 import click
 
@@ -874,6 +874,55 @@ def get_build_tools_to_uninstall(config: Config) -> tuple[str]:
         )
 
 
+def _build_langgraph_env(
+    config: Config, *, runtime: Literal["python", "node"]
+) -> dict[str, str]:
+    """Build runtime environment variables that are serialized from config."""
+    env_map: dict[str, str] = {}
+
+    if (store_config := config.get("store")) is not None:
+        env_map["LANGGRAPH_STORE"] = json.dumps(store_config)
+
+    if (auth_config := config.get("auth")) is not None:
+        env_map["LANGGRAPH_AUTH"] = json.dumps(auth_config)
+
+    if (encryption_config := config.get("encryption")) is not None:
+        env_map["LANGGRAPH_ENCRYPTION"] = json.dumps(encryption_config)
+
+    if (http_config := config.get("http")) is not None:
+        env_map["LANGGRAPH_HTTP"] = json.dumps(http_config)
+
+    if (webhooks_config := config.get("webhooks")) is not None:
+        env_map["LANGGRAPH_WEBHOOKS"] = json.dumps(webhooks_config)
+
+    if (checkpointer_config := config.get("checkpointer")) is not None:
+        env_map["LANGGRAPH_CHECKPOINTER"] = json.dumps(checkpointer_config)
+
+    # Keep Python/Node behavior consistent with current Dockerfile generation:
+    # Python emits UI vars when explicitly set (including empty dict), while
+    # Node currently emits them only when truthy.
+    if runtime == "python":
+        if (ui := config.get("ui")) is not None:
+            env_map["LANGGRAPH_UI"] = json.dumps(ui)
+        if (ui_config := config.get("ui_config")) is not None:
+            env_map["LANGGRAPH_UI_CONFIG"] = json.dumps(ui_config)
+    else:
+        if ui := config.get("ui"):
+            env_map["LANGGRAPH_UI"] = json.dumps(ui)
+        if ui_config := config.get("ui_config"):
+            env_map["LANGGRAPH_UI_CONFIG"] = json.dumps(ui_config)
+
+    env_map["LANGSERVE_GRAPHS"] = json.dumps(config["graphs"])
+    return env_map
+
+
+def _extract_workdir(dockerfile: str) -> str | None:
+    for line in dockerfile.splitlines():
+        if line.startswith("WORKDIR "):
+            return line.removeprefix("WORKDIR ").strip() or None
+    return None
+
+
 def python_config_to_docker(
     config_path: pathlib.Path,
     config: Config,
@@ -1006,36 +1055,8 @@ ADD {relpath} /deps/{name}
         )
     )
 
-    env_vars = []
-
-    if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
-
-    if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
-
-    if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
-
-    if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
-
-    # Inject webhooks configuration if provided
-    if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
-
-    if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
-        )
-
-    if (ui := config.get("ui")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
-
-    if (ui_config := config.get("ui_config")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
-
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    env_map = _build_langgraph_env(config, runtime="python")
+    env_vars = [f"ENV {key}='{value}'" for key, value in env_map.items()]
 
     js_inst_str: str = ""
     if (config.get("ui") or config.get("node_version")) and local_deps.working_dir:
@@ -1137,36 +1158,8 @@ def node_config_to_docker(
 
     image_str = docker_tag(config, base_image, api_version)
 
-    env_vars: list[str] = []
-
-    if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
-
-    if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
-
-    if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
-
-    if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
-
-    # Inject webhooks configuration if provided
-    if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
-
-    if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
-        )
-
-    if ui := config.get("ui"):
-        env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
-
-    if ui_config := config.get("ui_config"):
-        env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
-
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
+    env_map = _build_langgraph_env(config, runtime="node")
+    env_vars = [f"ENV {key}='{value}'" for key, value in env_map.items()]
 
     # For monorepo support, we need to handle install and build commands differently
     if build_context:
@@ -1290,6 +1283,50 @@ def config_to_docker(
         api_version=api_version,
         escape_variables=escape_variables,
     )
+
+
+def config_to_build_spec(
+    config_path: pathlib.Path,
+    config: Config,
+    *,
+    base_image: str | None = None,
+    api_version: str | None = None,
+    install_command: str | None = None,
+    build_command: str | None = None,
+    build_context: str | None = None,
+) -> dict[str, Any]:
+    """Generate a machine-readable, versioned build specification."""
+    # Normalize via JSON round-trip to avoid mutating the caller's dictionary.
+    normalized: Config = json.loads(json.dumps(config))
+    is_node_runtime = bool(
+        normalized.get("node_version") and not normalized.get("python_version")
+    )
+    runtime: Literal["python", "node"] = "node" if is_node_runtime else "python"
+    resolved_base_image = docker_tag(normalized, base_image, api_version)
+
+    dockerfile, additional_contexts = config_to_docker(
+        config_path=config_path,
+        config=normalized,
+        base_image=base_image,
+        api_version=api_version,
+        install_command=install_command,
+        build_command=build_command,
+        build_context=build_context,
+    )
+    env_map = _build_langgraph_env(normalized, runtime=runtime)
+
+    return {
+        "schema_version": 1,
+        "kind": "langgraph.build_spec",
+        "runtime": runtime,
+        "resolved_base_image": resolved_base_image,
+        "build_context": build_context,
+        "additional_contexts": additional_contexts,
+        "env": env_map,
+        "graphs": normalized["graphs"],
+        "working_dir": _extract_workdir(dockerfile),
+        "dockerfile": dockerfile,
+    }
 
 
 def config_to_compose(

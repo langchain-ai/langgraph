@@ -287,6 +287,148 @@ def test_version_option() -> None:
     )
 
 
+def test_build_spec_export_command_python_to_stdout() -> None:
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "image_distro": "wolfi",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+    }
+    with temporary_config_folder(config_content) as temp_dir:
+        (temp_dir / "agent.py").touch()
+        result = runner.invoke(
+            cli,
+            ["build-spec", "export", "--config", str(temp_dir / "config.json")],
+        )
+        assert result.exit_code == 0, result.output
+        spec = json.loads(result.output)
+        assert spec["schema_version"] == 1
+        assert spec["kind"] == "langgraph.build_spec"
+        assert spec["runtime"] == "python"
+        assert spec["resolved_base_image"] == "langchain/langgraph-api:3.11-wolfi"
+        assert spec["env"]["LANGSERVE_GRAPHS"] == '{"agent": "agent.py:graph"}'
+        assert spec["working_dir"] is not None
+        assert spec["working_dir"].startswith("/deps/")
+
+
+def test_build_spec_export_command_node_to_file() -> None:
+    runner = CliRunner()
+    config_content = {
+        "node_version": "20",
+        "image_distro": "wolfi",
+        "graphs": {"agent": "src/agent.ts:graph"},
+        "dependencies": ["."],
+    }
+    with temporary_config_folder(config_content) as temp_dir:
+        spec_path = temp_dir / "buildspec.json"
+        (temp_dir / "src").mkdir(parents=True, exist_ok=True)
+        (temp_dir / "src" / "agent.ts").touch()
+        (temp_dir / "package.json").write_text("{}", encoding="utf-8")
+
+        result = runner.invoke(
+            cli,
+            [
+                "build-spec",
+                "export",
+                "--config",
+                str(temp_dir / "config.json"),
+                "--output",
+                str(spec_path),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert spec_path.exists()
+        with open(spec_path, encoding="utf-8") as f:
+            spec = json.load(f)
+        assert spec["runtime"] == "node"
+        assert spec["resolved_base_image"] == "langchain/langgraphjs-api:20-wolfi"
+        assert spec["working_dir"] is not None
+        assert spec["working_dir"].startswith("/deps/")
+
+
+def test_build_spec_verify_command_in_sync() -> None:
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "image_distro": "wolfi",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+    }
+    with temporary_config_folder(config_content) as temp_dir:
+        spec_path = temp_dir / "buildspec.json"
+        (temp_dir / "agent.py").touch()
+        export_result = runner.invoke(
+            cli,
+            [
+                "build-spec",
+                "export",
+                "--config",
+                str(temp_dir / "config.json"),
+                "--output",
+                str(spec_path),
+            ],
+        )
+        assert export_result.exit_code == 0, export_result.output
+
+        verify_result = runner.invoke(
+            cli,
+            [
+                "build-spec",
+                "verify",
+                str(spec_path),
+                "--config",
+                str(temp_dir / "config.json"),
+            ],
+        )
+        assert verify_result.exit_code == 0, verify_result.output
+        assert "Build spec is in sync" in verify_result.output
+
+
+def test_build_spec_verify_command_out_of_sync() -> None:
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "image_distro": "wolfi",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+    }
+    with temporary_config_folder(config_content) as temp_dir:
+        spec_path = temp_dir / "buildspec.json"
+        (temp_dir / "agent.py").touch()
+        export_result = runner.invoke(
+            cli,
+            [
+                "build-spec",
+                "export",
+                "--config",
+                str(temp_dir / "config.json"),
+                "--output",
+                str(spec_path),
+            ],
+        )
+        assert export_result.exit_code == 0, export_result.output
+
+        with open(spec_path, encoding="utf-8") as f:
+            spec = json.load(f)
+        spec["runtime"] = "node"
+        with open(spec_path, "w", encoding="utf-8") as f:
+            json.dump(spec, f, indent=2, sort_keys=True)
+
+        verify_result = runner.invoke(
+            cli,
+            [
+                "build-spec",
+                "verify",
+                str(spec_path),
+                "--config",
+                str(temp_dir / "config.json"),
+            ],
+        )
+        assert verify_result.exit_code != 0
+        assert "Build spec is out of sync" in verify_result.output
+
+
 def test_dockerfile_command_basic() -> None:
     """Test the 'dockerfile' command with basic configuration."""
     runner = CliRunner()

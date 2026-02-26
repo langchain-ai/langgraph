@@ -1,5 +1,7 @@
 """CLI entrypoint for LangGraph API server."""
 
+import difflib
+import json
 import os
 import pathlib
 import shutil
@@ -163,6 +165,10 @@ OPT_API_VERSION = click.option(
 @click.version_option(version=__version__, prog_name="LangGraph CLI")
 def cli():
     pass
+
+
+def _format_json(value: object) -> str:
+    return json.dumps(value, indent=2, sort_keys=True) + os.linesep
 
 
 @OPT_RECREATE
@@ -604,6 +610,160 @@ def dockerfile(
         fg="cyan",
         bold=True,
     )
+
+
+@cli.group(
+    "build-spec",
+    help="🧾 Export or verify a machine-readable build specification for hermetic builds.",
+)
+def build_spec() -> None:
+    pass
+
+
+@OPT_CONFIG
+@click.option(
+    "--base-image",
+    help="Base image to use for the LangGraph API server. Defaults to langchain/langgraph-api or langchain/langgraphjs-api.",
+)
+@OPT_API_VERSION
+@click.option(
+    "--install-command",
+    help="Custom install command (Node projects only). If omitted, auto-detects based on package manager files.",
+)
+@click.option(
+    "--build-command",
+    help="Custom build command to run from the langgraph.json directory (Node projects only).",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(
+        exists=False,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        path_type=pathlib.Path,
+    ),
+    help="Path to write the build spec JSON. If omitted, prints to stdout.",
+)
+@build_spec.command("export")
+@log_command
+def build_spec_export(
+    config: pathlib.Path,
+    base_image: str | None,
+    api_version: str | None,
+    install_command: str | None,
+    build_command: str | None,
+    output: pathlib.Path | None,
+) -> None:
+    config_json = langgraph_cli.config.validate_config_file(config)
+    warn_non_wolfi_distro(config_json)
+
+    is_js_project = config_json.get("node_version") and not config_json.get(
+        "python_version"
+    )
+    if is_js_project and (build_command or install_command):
+        build_context = str(pathlib.Path.cwd())
+    else:
+        build_context = str(config.parent)
+
+    spec = langgraph_cli.config.config_to_build_spec(
+        config_path=config,
+        config=config_json,
+        base_image=base_image,
+        api_version=api_version,
+        install_command=install_command,
+        build_command=build_command,
+        build_context=build_context,
+    )
+    rendered = _format_json(spec)
+
+    if output is None:
+        click.echo(rendered, nl=False)
+        return
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with open(output, "w", encoding="utf-8") as f:
+        f.write(rendered)
+    secho(f"✅ Created build spec: {output}", fg="green")
+
+
+@OPT_CONFIG
+@click.argument(
+    "spec_path",
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        path_type=pathlib.Path,
+    ),
+)
+@click.option(
+    "--base-image",
+    help="Base image to use for the LangGraph API server. Defaults to langchain/langgraph-api or langchain/langgraphjs-api.",
+)
+@OPT_API_VERSION
+@click.option(
+    "--install-command",
+    help="Custom install command (Node projects only). If omitted, auto-detects based on package manager files.",
+)
+@click.option(
+    "--build-command",
+    help="Custom build command to run from the langgraph.json directory (Node projects only).",
+)
+@build_spec.command("verify")
+@log_command
+def build_spec_verify(
+    config: pathlib.Path,
+    spec_path: pathlib.Path,
+    base_image: str | None,
+    api_version: str | None,
+    install_command: str | None,
+    build_command: str | None,
+) -> None:
+    config_json = langgraph_cli.config.validate_config_file(config)
+    warn_non_wolfi_distro(config_json)
+
+    is_js_project = config_json.get("node_version") and not config_json.get(
+        "python_version"
+    )
+    if is_js_project and (build_command or install_command):
+        build_context = str(pathlib.Path.cwd())
+    else:
+        build_context = str(config.parent)
+
+    expected = langgraph_cli.config.config_to_build_spec(
+        config_path=config,
+        config=config_json,
+        base_image=base_image,
+        api_version=api_version,
+        install_command=install_command,
+        build_command=build_command,
+        build_context=build_context,
+    )
+    expected_str = _format_json(expected)
+
+    with open(spec_path, encoding="utf-8") as f:
+        actual = json.load(f)
+    actual_str = _format_json(actual)
+
+    if actual_str == expected_str:
+        secho(f"✅ Build spec is in sync: {spec_path}", fg="green")
+        return
+
+    diff = "\n".join(
+        difflib.unified_diff(
+            actual_str.splitlines(),
+            expected_str.splitlines(),
+            fromfile=str(spec_path),
+            tofile="generated",
+            lineterm="",
+        )
+    )
+    raise click.ClickException(
+        f"Build spec is out of sync: {spec_path}\n\n{diff}"
+    ) from None
 
 
 @click.option(
