@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import pytest
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command
+
+pytestmark = pytest.mark.anyio
 
 
 async def test_parent_command_from_nested_subgraph() -> None:
