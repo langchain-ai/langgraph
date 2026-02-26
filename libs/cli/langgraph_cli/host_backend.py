@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -33,14 +34,15 @@ class HostBackendClient:
             data = json.dumps(payload).encode("utf-8")
         else:
             data = None
-        headers = {
-            "Content-Type": "application/json",
+        headers: dict[str, str] = {
             "X-Api-Key": self._api_key,
             "Accept": "application/json",
         }
+        if data is not None:
+            headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(req) as resp:  # noqa: S310
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 body = resp.read()
         except urllib.error.HTTPError as err:
             detail = err.read().decode("utf-8", errors="ignore")
@@ -63,17 +65,48 @@ class HostBackendClient:
     def create_deployment(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/v2/deployments", payload)
 
+    def list_deployments(self, name_contains: str) -> dict[str, Any]:
+        encoded = urllib.parse.quote(name_contains, safe="")
+        return self._request("GET", f"/v2/deployments?name_contains={encoded}")
+
+    def get_deployment(self, deployment_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/v2/deployments/{deployment_id}")
+
     def request_push_token(self, deployment_id: str) -> dict[str, Any]:
         return self._request(
             "POST",
             f"/v2/deployments/{deployment_id}/push-token",
         )
 
-    def update_deployment_image(
-        self, deployment_id: str, image_uri: str
+    def update_deployment(
+        self,
+        deployment_id: str,
+        image_uri: str,
+        secrets: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "source_revision_config": {"image_uri": image_uri},
+        }
+        if secrets is not None:
+            payload["secrets"] = secrets
         return self._request(
             "PATCH",
             f"/v2/deployments/{deployment_id}",
-            {"source_revision_config": {"image_uri": image_uri}},
+            payload,
+        )
+
+    def list_revisions(
+        self, deployment_id: str, limit: int = 1
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/v2/deployments/{deployment_id}/revisions?limit={limit}",
+        )
+
+    def get_revision(
+        self, deployment_id: str, revision_id: str
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/v2/deployments/{deployment_id}/revisions/{revision_id}",
         )
