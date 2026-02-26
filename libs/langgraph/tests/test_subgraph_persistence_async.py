@@ -7,6 +7,8 @@ Covers three checkpointer settings for subgraph state:
 - checkpointer=True: "session scope" — state accumulates across invocations
 """
 
+import sys
+
 import pytest
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -25,9 +27,15 @@ from tests.subgraph_persistence_helpers import (
 
 pytestmark = pytest.mark.anyio
 
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
+
 # -- checkpointer=None (tool scope) --
 
 
+@NEEDS_CONTEXTVARS
 async def test_tool_scope_interrupt_resume_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -56,6 +64,7 @@ async def test_tool_scope_interrupt_resume_async(
     assert result == {"result": "Done"}
 
 
+@NEEDS_CONTEXTVARS
 async def test_tool_scope_state_resets_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -96,6 +105,7 @@ async def test_tool_scope_state_resets_async(
     ]
 
 
+@NEEDS_CONTEXTVARS
 async def test_tool_scope_state_resets_with_interrupt_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -143,6 +153,7 @@ async def test_tool_scope_state_resets_with_interrupt_async(
 # -- checkpointer=False --
 
 
+@NEEDS_CONTEXTVARS
 async def test_checkpointer_false_no_persistence_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -186,6 +197,7 @@ async def test_checkpointer_false_no_persistence_async(
 # -- checkpointer=True (session scope) --
 
 
+@NEEDS_CONTEXTVARS
 async def test_session_scope_state_accumulates_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -227,6 +239,7 @@ async def test_session_scope_state_accumulates_async(
     ]
 
 
+@NEEDS_CONTEXTVARS
 async def test_session_scope_state_accumulates_with_interrupt_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -273,6 +286,7 @@ async def test_session_scope_state_accumulates_with_interrupt_async(
     ]
 
 
+@NEEDS_CONTEXTVARS
 async def test_session_scope_interrupt_resume_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -333,6 +347,7 @@ async def test_session_scope_interrupt_resume_async(
     ]
 
 
+@NEEDS_CONTEXTVARS
 async def test_session_scope_namespace_isolation_async(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
