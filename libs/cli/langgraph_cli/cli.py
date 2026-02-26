@@ -630,7 +630,7 @@ def build(
 @click.option(
     "--host-url",
     envvar="LANGGRAPH_HOST_URL",
-    default="https://api.smith.langchain.com",
+    default="https://api.host.langchain.com",
     hidden=True,
 )
 @click.option("--image-name", hidden=True)
