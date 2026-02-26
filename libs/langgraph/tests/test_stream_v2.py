@@ -103,12 +103,13 @@ def _make_subgraph() -> Any:
     return outer_builder.compile()
 
 
-# --- payload assertion helpers ---
+# --- shared assertion helpers ---
 
 _STREAM_PART_KEYS = {"type", "ns", "data"}
 
 
 def _assert_stream_part_shape(part: StreamPart) -> None:
+    """Assert a v2 stream part has the required keys and correct types."""
     assert isinstance(part, dict), f"Expected dict, got {type(part)}"
     assert _STREAM_PART_KEYS <= part.keys(), (
         f"Missing keys: {_STREAM_PART_KEYS - part.keys()}"
@@ -117,160 +118,6 @@ def _assert_stream_part_shape(part: StreamPart) -> None:
     assert isinstance(part["ns"], tuple)
     for elem in part["ns"]:
         assert isinstance(elem, str)
-
-
-_CHECKPOINT_PAYLOAD_KEYS = {
-    "config",
-    "metadata",
-    "values",
-    "next",
-    "parent_config",
-    "tasks",
-}
-_TASK_START_KEYS = {"id", "name", "input", "triggers"}
-_TASK_RESULT_KEYS = {"id", "name", "error", "interrupts", "result"}
-_DEBUG_ENVELOPE_KEYS = {"step", "timestamp", "type", "payload"}
-
-
-def _assert_checkpoint_payload(payload: Any) -> None:
-    assert _CHECKPOINT_PAYLOAD_KEYS <= payload.keys()
-    assert isinstance(payload["values"], dict)
-    assert isinstance(payload["next"], list)
-    assert isinstance(payload["tasks"], list)
-    assert isinstance(payload["metadata"], dict)
-
-
-def _assert_task_start_payload(payload: Any) -> None:
-    assert _TASK_START_KEYS <= payload.keys()
-    assert isinstance(payload["id"], str)
-    assert isinstance(payload["name"], str)
-    assert isinstance(payload["triggers"], (list, tuple))
-
-
-def _assert_task_result_payload(payload: Any) -> None:
-    assert _TASK_RESULT_KEYS <= payload.keys()
-    assert isinstance(payload["id"], str)
-    assert isinstance(payload["name"], str)
-    assert isinstance(payload["interrupts"], list)
-    assert isinstance(payload["result"], dict)
-
-
-def _assert_debug_envelope(envelope: Any) -> None:
-    assert _DEBUG_ENVELOPE_KEYS <= envelope.keys()
-    assert isinstance(envelope["step"], int)
-    assert isinstance(envelope["timestamp"], str)
-    assert envelope["type"] in ("checkpoint", "task", "task_result")
-    assert isinstance(envelope["payload"], dict)
-    if envelope["type"] == "checkpoint":
-        _assert_checkpoint_payload(envelope["payload"])
-    elif envelope["type"] == "task":
-        _assert_task_start_payload(envelope["payload"])
-    elif envelope["type"] == "task_result":
-        _assert_task_result_payload(envelope["payload"])
-
-
-# --- chunk-level assertion helpers (shared by sync and async tests) ---
-
-
-def _assert_values_chunks(chunks: list[StreamPart]) -> None:
-    assert len(chunks) >= 1
-    for c in chunks:
-        _assert_stream_part_shape(c)
-        assert c["type"] == "values"
-        assert c["ns"] == ()
-        assert isinstance(c["data"], dict)
-
-
-def _assert_updates_chunks(chunks: list[StreamPart]) -> None:
-    assert len(chunks) == 2
-    for c in chunks:
-        _assert_stream_part_shape(c)
-        assert c["type"] == "updates"
-        assert c["ns"] == ()
-        assert isinstance(c["data"], dict)
-    assert "node_a" in chunks[0]["data"]
-    assert "node_b" in chunks[1]["data"]
-
-
-def _assert_messages_chunks(chunks: list[StreamPart]) -> None:
-    msg_chunks = [c for c in chunks if c["type"] == "messages"]
-    assert len(msg_chunks) >= 1
-    for c in msg_chunks:
-        _assert_stream_part_shape(c)
-        assert c["ns"] == ()
-        data = c["data"]
-        assert isinstance(data, tuple) and len(data) == 2
-        message, metadata = data
-        assert isinstance(message, BaseMessage)
-        assert isinstance(metadata, dict)
-        assert "langgraph_node" in metadata
-        assert "langgraph_triggers" in metadata
-
-
-def _assert_custom_chunks(chunks: list[StreamPart]) -> None:
-    custom_chunks = [c for c in chunks if c["type"] == "custom"]
-    assert len(custom_chunks) == 2
-    for c in custom_chunks:
-        _assert_stream_part_shape(c)
-    assert custom_chunks[0]["data"] == "hello"
-    assert custom_chunks[1]["data"] == 42
-
-
-def _assert_multiple_modes_chunks(chunks: list[StreamPart]) -> None:
-    assert len(chunks) > 0
-    types_seen = {c["type"] for c in chunks}
-    assert "values" in types_seen
-    assert "updates" in types_seen
-    for c in chunks:
-        _assert_stream_part_shape(c)
-
-
-def _assert_subgraph_chunks(chunks: list[StreamPart]) -> None:
-    for c in chunks:
-        _assert_stream_part_shape(c)
-    root = [c for c in chunks if c["ns"] == ()]
-    sub = [c for c in chunks if c["ns"] != ()]
-    assert len(root) >= 1
-    assert len(sub) >= 1
-    for c in sub:
-        assert len(c["ns"]) > 0
-
-
-def _assert_checkpoint_chunks(chunks: list[StreamPart]) -> None:
-    ckpt = [c for c in chunks if c["type"] == "checkpoints"]
-    assert len(ckpt) >= 1
-    for c in ckpt:
-        _assert_stream_part_shape(c)
-        assert c["ns"] == ()
-        _assert_checkpoint_payload(c["data"])
-
-
-def _assert_task_chunks(chunks: list[StreamPart]) -> None:
-    tasks = [c for c in chunks if c["type"] == "tasks"]
-    assert len(tasks) >= 2
-    for c in tasks:
-        _assert_stream_part_shape(c)
-        assert c["ns"] == ()
-        assert isinstance(c["data"], dict)
-        assert "id" in c["data"]
-        assert "name" in c["data"]
-    starts = [c for c in tasks if "input" in c["data"] and "triggers" in c["data"]]
-    results = [c for c in tasks if "result" in c["data"]]
-    assert len(starts) >= 2
-    for c in starts:
-        _assert_task_start_payload(c["data"])
-    assert len(results) >= 2
-    for c in results:
-        _assert_task_result_payload(c["data"])
-
-
-def _assert_debug_chunks(chunks: list[StreamPart]) -> None:
-    debug = [c for c in chunks if c["type"] == "debug"]
-    assert len(debug) >= 1
-    for c in debug:
-        _assert_stream_part_shape(c)
-        assert c["ns"] == ()
-        _assert_debug_envelope(c["data"])
 
 
 # --- v1 backwards compatibility ---
@@ -318,28 +165,54 @@ class TestV2Stream:
         chunks = list(
             graph.stream(_SIMPLE_INPUT, stream_mode="values", stream_version="v2")
         )
-        _assert_values_chunks(chunks)
+        assert len(chunks) >= 1
+        for c in chunks:
+            _assert_stream_part_shape(c)
+            assert c["type"] == "values"
+            assert c["ns"] == ()
+            assert isinstance(c["data"], dict)
 
     def test_updates(self) -> None:
         graph = _make_simple_graph().compile()
         chunks = list(
             graph.stream(_SIMPLE_INPUT, stream_mode="updates", stream_version="v2")
         )
-        _assert_updates_chunks(chunks)
+        assert len(chunks) == 2
+        for c in chunks:
+            _assert_stream_part_shape(c)
+            assert c["type"] == "updates"
+            assert c["ns"] == ()
+        assert "node_a" in chunks[0]["data"]
+        assert "node_b" in chunks[1]["data"]
 
     def test_messages(self) -> None:
         graph = _make_messages_graph().compile()
         chunks = list(
             graph.stream(_MSG_INPUT, stream_mode="messages", stream_version="v2")
         )
-        _assert_messages_chunks(chunks)
+        msg_chunks = [c for c in chunks if c["type"] == "messages"]
+        assert len(msg_chunks) >= 1
+        for c in msg_chunks:
+            _assert_stream_part_shape(c)
+            assert c["ns"] == ()
+            data = c["data"]
+            assert isinstance(data, tuple) and len(data) == 2
+            message, metadata = data
+            assert isinstance(message, BaseMessage)
+            assert isinstance(metadata, dict)
+            assert "langgraph_node" in metadata
 
     def test_custom(self) -> None:
         graph = _make_custom_graph()
         chunks = list(
             graph.stream({"key": "val"}, stream_mode="custom", stream_version="v2")
         )
-        _assert_custom_chunks(chunks)
+        custom = [c for c in chunks if c["type"] == "custom"]
+        assert len(custom) == 2
+        for c in custom:
+            _assert_stream_part_shape(c)
+        assert custom[0]["data"] == "hello"
+        assert custom[1]["data"] == 42
 
     def test_multiple_modes(self) -> None:
         graph = _make_simple_graph().compile()
@@ -350,7 +223,10 @@ class TestV2Stream:
                 stream_version="v2",
             )
         )
-        _assert_multiple_modes_chunks(chunks)
+        types_seen = {c["type"] for c in chunks}
+        assert {"values", "updates"} <= types_seen
+        for c in chunks:
+            _assert_stream_part_shape(c)
 
     def test_subgraphs_ns(self) -> None:
         outer = _make_subgraph()
@@ -362,7 +238,12 @@ class TestV2Stream:
                 stream_version="v2",
             )
         )
-        _assert_subgraph_chunks(chunks)
+        for c in chunks:
+            _assert_stream_part_shape(c)
+        root = [c for c in chunks if c["ns"] == ()]
+        sub = [c for c in chunks if c["ns"] != ()]
+        assert len(root) >= 1
+        assert len(sub) >= 1
 
     def test_checkpoints(self) -> None:
         graph = _make_simple_graph().compile(checkpointer=InMemorySaver())
@@ -375,7 +256,13 @@ class TestV2Stream:
                 stream_version="v2",
             )
         )
-        _assert_checkpoint_chunks(chunks)
+        ckpt = [c for c in chunks if c["type"] == "checkpoints"]
+        assert len(ckpt) >= 1
+        for c in ckpt:
+            _assert_stream_part_shape(c)
+            assert c["ns"] == ()
+            payload = c["data"]
+            assert {"config", "metadata", "values", "next", "tasks"} <= payload.keys()
 
     def test_tasks(self) -> None:
         graph = _make_simple_graph().compile(checkpointer=InMemorySaver())
@@ -388,7 +275,16 @@ class TestV2Stream:
                 stream_version="v2",
             )
         )
-        _assert_task_chunks(chunks)
+        tasks = [c for c in chunks if c["type"] == "tasks"]
+        assert len(tasks) >= 2
+        for c in tasks:
+            _assert_stream_part_shape(c)
+            assert c["ns"] == ()
+            assert "id" in c["data"] and "name" in c["data"]
+        starts = [c for c in tasks if "triggers" in c["data"]]
+        results = [c for c in tasks if "result" in c["data"]]
+        assert len(starts) >= 2
+        assert len(results) >= 2
 
     def test_debug(self) -> None:
         graph = _make_simple_graph().compile(checkpointer=InMemorySaver())
@@ -401,7 +297,14 @@ class TestV2Stream:
                 stream_version="v2",
             )
         )
-        _assert_debug_chunks(chunks)
+        debug = [c for c in chunks if c["type"] == "debug"]
+        assert len(debug) >= 1
+        for c in debug:
+            _assert_stream_part_shape(c)
+            assert c["ns"] == ()
+            envelope = c["data"]
+            assert {"step", "timestamp", "type", "payload"} <= envelope.keys()
+            assert envelope["type"] in ("checkpoint", "task", "task_result")
 
     def test_subgraphs_param_does_not_change_format(self) -> None:
         """In v2, subgraphs=True/False should not change the output format."""
@@ -453,7 +356,10 @@ class TestV2Invoke:
         modes: Any = ["values", "updates"]
         result = graph.invoke(_SIMPLE_INPUT, stream_mode=modes, stream_version="v2")
         assert isinstance(result, list)
-        _assert_multiple_modes_chunks(result)
+        types_seen = {c["type"] for c in result}
+        assert {"values", "updates"} <= types_seen
+        for c in result:
+            _assert_stream_part_shape(c)
 
     def test_v1_default_unchanged(self) -> None:
         graph = _make_simple_graph().compile()
@@ -483,7 +389,12 @@ class TestV2StreamAsync:
                 _SIMPLE_INPUT, stream_mode="values", stream_version="v2"
             )
         ]
-        _assert_values_chunks(chunks)
+        assert len(chunks) >= 1
+        for c in chunks:
+            _assert_stream_part_shape(c)
+            assert c["type"] == "values"
+            assert c["ns"] == ()
+            assert isinstance(c["data"], dict)
 
     @pytest.mark.anyio
     async def test_updates(self) -> None:
@@ -494,7 +405,13 @@ class TestV2StreamAsync:
                 _SIMPLE_INPUT, stream_mode="updates", stream_version="v2"
             )
         ]
-        _assert_updates_chunks(chunks)
+        assert len(chunks) == 2
+        for c in chunks:
+            _assert_stream_part_shape(c)
+            assert c["type"] == "updates"
+            assert c["ns"] == ()
+        assert "node_a" in chunks[0]["data"]
+        assert "node_b" in chunks[1]["data"]
 
     @pytest.mark.anyio
     async def test_messages(self) -> None:
@@ -505,7 +422,17 @@ class TestV2StreamAsync:
                 _MSG_INPUT, stream_mode="messages", stream_version="v2"
             )
         ]
-        _assert_messages_chunks(chunks)
+        msg_chunks = [c for c in chunks if c["type"] == "messages"]
+        assert len(msg_chunks) >= 1
+        for c in msg_chunks:
+            _assert_stream_part_shape(c)
+            assert c["ns"] == ()
+            data = c["data"]
+            assert isinstance(data, tuple) and len(data) == 2
+            message, metadata = data
+            assert isinstance(message, BaseMessage)
+            assert isinstance(metadata, dict)
+            assert "langgraph_node" in metadata
 
     @NEEDS_CONTEXTVARS
     @pytest.mark.anyio
@@ -517,7 +444,12 @@ class TestV2StreamAsync:
                 {"key": "val"}, stream_mode="custom", stream_version="v2"
             )
         ]
-        _assert_custom_chunks(chunks)
+        custom = [c for c in chunks if c["type"] == "custom"]
+        assert len(custom) == 2
+        for c in custom:
+            _assert_stream_part_shape(c)
+        assert custom[0]["data"] == "hello"
+        assert custom[1]["data"] == 42
 
     @pytest.mark.anyio
     async def test_multiple_modes(self) -> None:
@@ -530,7 +462,10 @@ class TestV2StreamAsync:
                 stream_version="v2",
             )
         ]
-        _assert_multiple_modes_chunks(chunks)
+        types_seen = {c["type"] for c in chunks}
+        assert {"values", "updates"} <= types_seen
+        for c in chunks:
+            _assert_stream_part_shape(c)
 
     @pytest.mark.anyio
     async def test_subgraphs_ns(self) -> None:
@@ -544,7 +479,12 @@ class TestV2StreamAsync:
                 stream_version="v2",
             )
         ]
-        _assert_subgraph_chunks(chunks)
+        for c in chunks:
+            _assert_stream_part_shape(c)
+        root = [c for c in chunks if c["ns"] == ()]
+        sub = [c for c in chunks if c["ns"] != ()]
+        assert len(root) >= 1
+        assert len(sub) >= 1
 
     @pytest.mark.anyio
     async def test_checkpoints(self) -> None:
@@ -559,7 +499,13 @@ class TestV2StreamAsync:
                 stream_version="v2",
             )
         ]
-        _assert_checkpoint_chunks(chunks)
+        ckpt = [c for c in chunks if c["type"] == "checkpoints"]
+        assert len(ckpt) >= 1
+        for c in ckpt:
+            _assert_stream_part_shape(c)
+            assert c["ns"] == ()
+            payload = c["data"]
+            assert {"config", "metadata", "values", "next", "tasks"} <= payload.keys()
 
     @pytest.mark.anyio
     async def test_tasks(self) -> None:
@@ -574,7 +520,16 @@ class TestV2StreamAsync:
                 stream_version="v2",
             )
         ]
-        _assert_task_chunks(chunks)
+        tasks = [c for c in chunks if c["type"] == "tasks"]
+        assert len(tasks) >= 2
+        for c in tasks:
+            _assert_stream_part_shape(c)
+            assert c["ns"] == ()
+            assert "id" in c["data"] and "name" in c["data"]
+        starts = [c for c in tasks if "triggers" in c["data"]]
+        results = [c for c in tasks if "result" in c["data"]]
+        assert len(starts) >= 2
+        assert len(results) >= 2
 
     @pytest.mark.anyio
     async def test_debug(self) -> None:
@@ -589,7 +544,14 @@ class TestV2StreamAsync:
                 stream_version="v2",
             )
         ]
-        _assert_debug_chunks(chunks)
+        debug = [c for c in chunks if c["type"] == "debug"]
+        assert len(debug) >= 1
+        for c in debug:
+            _assert_stream_part_shape(c)
+            assert c["ns"] == ()
+            envelope = c["data"]
+            assert {"step", "timestamp", "type", "payload"} <= envelope.keys()
+            assert envelope["type"] in ("checkpoint", "task", "task_result")
 
 
 # --- v2 async invoke ---
@@ -626,7 +588,10 @@ class TestV2InvokeAsync:
             _SIMPLE_INPUT, stream_mode=modes, stream_version="v2"
         )
         assert isinstance(result, list)
-        _assert_multiple_modes_chunks(result)
+        types_seen = {c["type"] for c in result}
+        assert {"values", "updates"} <= types_seen
+        for c in result:
+            _assert_stream_part_shape(c)
 
 
 # --- type narrowing compile-time checks ---
