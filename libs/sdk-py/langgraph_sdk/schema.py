@@ -15,7 +15,7 @@ from typing import (
     Union,
 )
 
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 Json = dict[str, Any] | None
 """Represents a JSON-like structure, which can be None or a dictionary with string keys and any values."""
@@ -146,7 +146,9 @@ AssistantSortBy = Literal[
 The field to sort by.
 """
 
-ThreadSortBy = Literal["thread_id", "status", "created_at", "updated_at"]
+ThreadSortBy = Literal[
+    "thread_id", "status", "created_at", "updated_at", "state_updated_at"
+]
 """
 The field to sort by.
 """
@@ -302,6 +304,8 @@ class Thread(TypedDict):
     """The current state of the thread."""
     interrupts: dict[str, list[Interrupt]]
     """Mapping of task ids to interrupts that were raised in that task."""
+    extracted: NotRequired[dict[str, Any]]
+    """Extracted values from thread data. Only present when `extract` is used in search."""
 
 
 class ThreadTask(TypedDict):
@@ -422,6 +426,14 @@ class CronUpdate(TypedDict, total=False):
     """What to do with the thread after the run completes."""
     enabled: bool
     """Enable or disable the cron job."""
+    stream_mode: StreamMode | list[StreamMode]
+    """The stream mode(s) to use."""
+    stream_subgraphs: bool
+    """Whether to stream output from subgraphs."""
+    stream_resumable: bool
+    """Whether to persist the stream chunks in order to resume the stream later."""
+    durability: Durability
+    """Durability level for the run. Must be one of 'sync', 'async', or 'exit'."""
 
 
 # Select field aliases for client-side typing of `select` parameters.

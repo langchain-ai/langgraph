@@ -167,6 +167,26 @@ class CheckpointerConfig(TypedDict, total=False):
     If omitted, no checkpointer is set up (the object store will still be present, however).
     """
 
+    path: str
+    """Import path to an async context manager that yields a `BaseCheckpointSaver`
+    instance.
+
+    The referenced object should be an `@asynccontextmanager`-decorated function
+    so that the server can properly manage the checkpointer's lifecycle (e.g.
+    opening and closing connections).
+
+    Examples:
+    - "./my_checkpointer.py:create_checkpointer"
+    - "my_package.checkpointer:create_checkpointer"
+
+    When provided, this replaces the default checkpointer.
+
+    You can use the `langgraph-checkpoint-conformance` package
+    (https://pypi.org/project/langgraph-checkpoint-conformance/) to run simple
+    conformance tests against your custom checkpointer and catch
+    incompatibilities early.
+    """
+
     ttl: ThreadTTLConfig | None
     """Optional. Defines the TTL (time-to-live) behavior configuration.
     
@@ -509,6 +529,21 @@ class WebhookUrlPolicy(TypedDict, total=False):
     """Disallow relative URLs (internal loopback calls) when true."""
 
 
+class GraphDef(TypedDict, total=False):
+    """Definition of a graph with additional metadata."""
+
+    path: str
+    """Required. Import path to the graph object.
+
+    Format: "path/to/file.py:object_name"
+    """
+    description: str | None
+    """Optional. A description of the graph's purpose and functionality.
+
+    This description is surfaced in the API and can help users understand what the graph does.
+    """
+
+
 class WebhooksConfig(TypedDict, total=False):
     env_prefix: str
     """Required prefix for environment variables referenced in header templates.
@@ -599,19 +634,23 @@ class Config(TypedDict, total=False):
     Defaults to an empty list, meaning no additional packages installed beyond your base environment.
     """
 
-    graphs: dict[str, str]
+    graphs: dict[str, str | GraphDef]
     """Optional. Named definitions of graphs, each pointing to a Python object.
 
-    
+
     Graphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context
     managers that accept a single configuration argument (of type RunnableConfig) and return a pregel object
     (instance of Stategraph, etc.).
-    
-    Keys are graph names, values are "path/to/file.py:object_name".
+
+    Keys are graph names, values are either "path/to/file.py:object_name" strings
+    or objects with a "path" key and optional "description" key.
     Example:
         {
             "mygraph": "graphs/my_graph.py:graph_definition",
-            "anothergraph": "graphs/another.py:get_graph"
+            "anothergraph": {
+                "path": "graphs/another.py:get_graph",
+                "description": "A graph that does X"
+            }
         }
     """
 
@@ -676,6 +715,7 @@ class Config(TypedDict, total=False):
 
 __all__ = [
     "Config",
+    "GraphDef",
     "StoreConfig",
     "CheckpointerConfig",
     "AuthConfig",

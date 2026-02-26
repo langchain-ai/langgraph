@@ -31,6 +31,8 @@ jobs:
             workdir: libs/cli/examples/graphs_reqs_b
             tag: langgraph-test-d
     name: "CLI integration test"
+    env:
+      HAS_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY != '' }}
     defaults:
       run:
         working-directory: libs/cli
@@ -58,7 +60,7 @@ jobs:
         run: |
           langgraph build -t ${{ matrix.example.tag }}
       - name: Test service ${{ matrix.example.name }}
-        if: ${{ steps.changed-files.outputs.all && secrets.LANGSMITH_API_KEY != '' }}
+        if: ${{ steps.changed-files.outputs.all && env.HAS_LANGSMITH_API_KEY == 'true' }}
         working-directory: ${{ matrix.example.workdir }}
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
@@ -89,7 +91,7 @@ jobs:
         run: |
           langgraph build -t langgraph-test-g -c apps/agent/langgraph.json
       - name: Test Python monorepo service
-        if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' && secrets.LANGSMITH_API_KEY != '' }}
+        if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
         working-directory: libs/cli/python-monorepo-example
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
@@ -104,7 +106,7 @@ jobs:
         run: |
           langgraph build -t langgraph-test-h
       - name: Test prerelease reqs service
-        if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' && secrets.LANGSMITH_API_KEY != '' }}
+        if: ${{ steps.changed-files.outputs.all && matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
         working-directory: libs/cli/examples/graph_prerelease_reqs
         env:
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
