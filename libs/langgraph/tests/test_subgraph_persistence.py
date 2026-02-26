@@ -102,7 +102,71 @@ def test_tool_invocation_scope_interrupt_resume(
 
 
 # ---------------------------------------------------------------------------
-# Test 2: Tool invocation scope — state resets between calls
+# Test 2: checkpointer=False explicitly disables persistence
+# ---------------------------------------------------------------------------
+
+
+def test_checkpointer_false_no_persistence(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Subgraph with checkpointer=False never persists state, even when parent has one.
+
+    Unlike omitting the checkpointer (which inherits from parent),
+    checkpointer=False explicitly opts out of checkpointing.
+    State should reset on every invocation.
+    """
+
+    def process(state: MessagesState):
+        last_content = state["messages"][-1].content
+        return {"messages": [AIMessage(content=f"Processed: {last_content}")]}
+
+    inner = (
+        StateGraph(MessagesState)
+        .add_node("process", process)
+        .add_edge(START, "process")
+        .compile(checkpointer=False)  # explicitly disabled
+    )
+
+    message_counts: list[int] = []
+    call_count = 0
+
+    class ParentState(TypedDict):
+        result: str
+
+    def call_inner(state: ParentState):
+        nonlocal call_count
+        call_count += 1
+        topic = "apples" if call_count == 1 else "bananas"
+        response = inner.invoke(
+            {"messages": [HumanMessage(content=f"tell me about {topic}")]}
+        )
+        message_counts.append(len(response["messages"]))
+        return {"result": response["messages"][-1].content}
+
+    parent = (
+        StateGraph(ParentState)
+        .add_node("call_inner", call_inner)
+        .add_edge(START, "call_inner")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Two invocations on the same thread
+    parent.invoke({"result": ""}, config)
+    parent.invoke({"result": ""}, config)
+
+    # Both should have the same count — no accumulation despite parent having
+    # a checkpointer, because checkpointer=False explicitly disables it
+    assert len(message_counts) == 2
+    assert message_counts[0] == message_counts[1], (
+        f"checkpointer=False should prevent state accumulation, "
+        f"got counts {message_counts}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 3: Tool invocation scope — state resets between calls
 # ---------------------------------------------------------------------------
 
 
