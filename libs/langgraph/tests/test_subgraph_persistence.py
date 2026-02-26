@@ -1,8 +1,10 @@
 """Tests for subgraph persistence behavior.
 
-Covers two scoping modes for subgraph state:
-- Tool invocation scope (no checkpointer on subgraph): state resets each call
-- Session scope (checkpointer=True on subgraph): state accumulates across calls
+Covers three checkpointer settings for subgraph state:
+- checkpointer=False: no persistence, even when parent has a checkpointer
+- checkpointer=None (default): "tool scope" — inherits parent checkpointer for
+  interrupt support, but state resets each invocation
+- checkpointer=True: "session scope" — state accumulates across invocations
 
 These tests use deterministic node functions (no LLM calls) and validate
 interrupt/resume, state reset vs accumulation, namespace isolation via
@@ -56,18 +58,18 @@ def _make_inner_graph() -> StateGraph:
 
 
 # ---------------------------------------------------------------------------
-# Test 1: Tool invocation scope — interrupt and resume
+# checkpointer=None (tool scope) — interrupt and resume
 # ---------------------------------------------------------------------------
 
 
 def test_tool_invocation_scope_interrupt_resume(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Subgraph without its own checkpointer supports interrupt/resume.
+    """Subgraph with checkpointer=None (tool scope) supports interrupt/resume.
 
     Maps to tool_invocation_scope.py Case 1.
     """
-    inner = _make_inner_graph().compile()  # no checkpointer
+    inner = _make_inner_graph().compile()  # checkpointer=None (default)
 
     class ParentState(TypedDict):
         result: str
@@ -102,7 +104,7 @@ def test_tool_invocation_scope_interrupt_resume(
 
 
 # ---------------------------------------------------------------------------
-# Test 2: checkpointer=False explicitly disables persistence
+# checkpointer=False — explicitly disables persistence
 # ---------------------------------------------------------------------------
 
 
@@ -166,20 +168,20 @@ def test_checkpointer_false_no_persistence(
 
 
 # ---------------------------------------------------------------------------
-# Test 3: Tool invocation scope — state resets between calls
+# checkpointer=None (tool scope) — state resets between calls
 # ---------------------------------------------------------------------------
 
 
 def test_tool_invocation_scope_state_resets(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Subgraph without checkpointer resets state on each invocation.
+    """Subgraph with checkpointer=None (tool scope) resets state on each invocation.
 
     Maps to tool_invocation_scope.py Case 2. The inner subgraph is called
     twice on the same thread. Both calls should produce the same message
     count because the subgraph has no memory.
     """
-    inner = _make_inner_graph().compile()  # no checkpointer
+    inner = _make_inner_graph().compile()  # checkpointer=None (default)
 
     call_count = 0
     message_counts: list[int] = []
@@ -215,7 +217,7 @@ def test_tool_invocation_scope_state_resets(
     parent.invoke(Command(resume=True), config)
 
     # Both invocations should have produced the same message count
-    # because the inner subgraph has no checkpointer (state resets)
+    # because the inner subgraph uses checkpointer=None (tool scope — state resets)
     assert len(message_counts) == 2
     assert message_counts[0] == message_counts[1], (
         f"Expected equal message counts (state reset), got {message_counts}"
@@ -223,14 +225,14 @@ def test_tool_invocation_scope_state_resets(
 
 
 # ---------------------------------------------------------------------------
-# Test 3: Session scope — state accumulates across calls
+# checkpointer=True (session scope) — state accumulates across calls
 # ---------------------------------------------------------------------------
 
 
 def test_session_scope_state_accumulates(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Subgraph with checkpointer=True accumulates state across invocations.
+    """Subgraph with checkpointer=True (session scope) accumulates state across invocations.
 
     Maps to session_scope.py Case 2. The inner subgraph is wrapped in a
     StateGraph (for namespace isolation) and compiled with checkpointer=True.
@@ -264,7 +266,7 @@ def test_session_scope_state_accumulates(
         StateGraph(MessagesState)
         .add_node("inner_agent", inner_graph)
         .add_edge(START, "inner_agent")
-        .compile(checkpointer=True)  # session scope
+        .compile(checkpointer=True)
     )
 
     message_counts: list[int] = []
@@ -307,14 +309,14 @@ def test_session_scope_state_accumulates(
 
 
 # ---------------------------------------------------------------------------
-# Test 4: Session scope — parallel different agents, namespace isolation
+# checkpointer=True (session scope) — parallel different agents, namespace isolation
 # ---------------------------------------------------------------------------
 
 
 def test_session_scope_parallel_different_agents_namespace_isolation(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Two different session-scope subgraphs maintain independent state.
+    """Two different checkpointer=True (session scope) subgraphs maintain independent state.
 
     Maps to session_scope.py Case 3 + sydney_test.py. Each subgraph is
     wrapped in its own StateGraph with a unique node name, giving each
@@ -426,14 +428,14 @@ def test_session_scope_parallel_different_agents_namespace_isolation(
 
 
 # ---------------------------------------------------------------------------
-# Test 5: Session scope — same agent called across invocations, shared checkpoint
+# checkpointer=True (session scope) — same agent, shared checkpoint
 # ---------------------------------------------------------------------------
 
 
 def test_session_scope_parallel_same_agent_checkpoint_collision(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Same session-scope subgraph shares one checkpoint across all calls.
+    """Same checkpointer=True (session scope) subgraph shares one checkpoint across all calls.
 
     Maps to session_scope.py Case 4. When the same checkpointer=True subgraph
     is called multiple times (whether sequentially or in parallel), all calls
@@ -502,11 +504,11 @@ def test_session_scope_parallel_same_agent_checkpoint_collision(
     parent.invoke({"result": ""}, config)
     second_count = message_counts[1]
 
-    # The same session-scope subgraph accumulates state across invocations
+    # The same checkpointer=True subgraph accumulates state across invocations
     # because all calls share a single checkpoint namespace. This is the
     # mechanism that causes unexpected state merging when parallel tool calls
     # target the same subgraph within one invocation.
     assert second_count > first_count, (
-        f"Same session-scope subgraph should accumulate state across invocations "
+        f"Same checkpointer=True subgraph should accumulate state across invocations "
         f"(shared checkpoint): first={first_count}, second={second_count}"
     )
