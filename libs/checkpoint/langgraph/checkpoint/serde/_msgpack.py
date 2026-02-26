@@ -46,6 +46,24 @@ SAFE_MSGPACK_TYPES: frozenset[tuple[str, ...]] = frozenset(
         ("zoneinfo", "ZoneInfo"),
         # regex
         ("re", "compile"),
+        # langchain-core messages (safe container types used by graph state)
+        ("langchain_core.messages.base", "BaseMessage"),
+        ("langchain_core.messages.base", "BaseMessageChunk"),
+        ("langchain_core.messages.human", "HumanMessage"),
+        ("langchain_core.messages.human", "HumanMessageChunk"),
+        ("langchain_core.messages.ai", "AIMessage"),
+        ("langchain_core.messages.ai", "AIMessageChunk"),
+        ("langchain_core.messages.system", "SystemMessage"),
+        ("langchain_core.messages.system", "SystemMessageChunk"),
+        ("langchain_core.messages.chat", "ChatMessage"),
+        ("langchain_core.messages.chat", "ChatMessageChunk"),
+        ("langchain_core.messages.tool", "ToolMessage"),
+        ("langchain_core.messages.tool", "ToolMessageChunk"),
+        ("langchain_core.messages.function", "FunctionMessage"),
+        ("langchain_core.messages.function", "FunctionMessageChunk"),
+        ("langchain_core.messages.modifier", "RemoveMessage"),
+        # langchain-core document model
+        ("langchain_core.documents.base", "Document"),
         # langgraph
         ("langgraph.types", "Send"),
         ("langgraph.types", "Interrupt"),

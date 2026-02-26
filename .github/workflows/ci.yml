@@ -7,6 +7,7 @@ on:
     branches:
       - main
   pull_request:
+  
 
 permissions:
   contents: read
@@ -25,11 +26,12 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      python: ${{ steps.filter.outputs.python }}
-      deps: ${{ steps.filter.outputs.deps }}
+      python: ${{ steps.filter.outputs.python || 'true' }}
+      deps: ${{ steps.filter.outputs.deps || 'true' }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
+        if: github.event_name != 'workflow_dispatch'
         id: filter
         with:
           filters: |
