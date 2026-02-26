@@ -199,8 +199,15 @@ class BranchSpec(NamedTuple):
         if not isinstance(result, (list, tuple)):
             result = [result]
         if self.ends:
+            # END is always a valid terminal destination: pass it through
+            # without requiring an explicit entry in `path_map`.  Previously
+            # returning END from a router that also had a path_map raised a
+            # KeyError at runtime because the dict lookup used `self.ends[r]`
+            # unconditionally.  This is consistent with the no-path_map
+            # behaviour.  Fixes #6770.
             destinations: Sequence[Send | str] = [
-                r if isinstance(r, Send) else self.ends[r] for r in result
+                r if (isinstance(r, Send) or r == END) else self.ends[r]
+                for r in result
             ]
         else:
             destinations = cast(Sequence[Send | str], result)
