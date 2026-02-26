@@ -42,6 +42,7 @@ lint = [
 dev = [
   {include-group = "test"},
   {include-group = "lint"},
+  "pycryptodome>=3.23.0",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import logging
 import pathlib
 import re
 import sys
@@ -13,15 +14,20 @@ from zoneinfo import ZoneInfo
 
 import dataclasses_json
 import numpy as np
+import ormsgpack
 import pandas as pd
 import pytest
 from pydantic import BaseModel, SecretStr
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import SecretStr as SecretStrV1
 
+from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
+from langgraph.checkpoint.serde._msgpack import AllowedMsgpackModules
 from langgraph.checkpoint.serde.jsonplus import (
+    EXT_METHOD_SINGLE_ARG,
     InvalidModuleError,
     JsonPlusSerializer,
+    _msgpack_enc,
     _msgpack_ext_hook_to_json,
 )
 from langgraph.store.base import Item
@@ -35,6 +41,10 @@ class MyPydantic(BaseModel):
     foo: str
     bar: int
     inner: InnerPydantic
+
+
+class AnotherPydantic(BaseModel):
+    foo: str
 
 
 class InnerPydanticV1(BaseModelV1):
@@ -138,7 +148,27 @@ def test_serde_jsonplus() -> None:
         )
         to_serialize["my_secret_str_v1"] = SecretStrV1("meow")
 
-    serde = JsonPlusSerializer()
+    allowed_msgpack_modules: AllowedMsgpackModules = [
+        InnerDataclass,
+        MyDataclass,
+        MyDataclassWSlots,
+        MyEnum,
+        InnerPydantic,
+        MyPydantic,
+        # Testing that it supports both.
+        (Person.__module__, Person.__name__),
+        (SecretStr.__module__, SecretStr.__name__),
+    ]
+    if sys.version_info < (3, 14):
+        allowed_msgpack_modules.extend(  # type: ignore
+            [
+                (InnerPydanticV1.__module__, InnerPydanticV1.__name__),
+                (MyPydanticV1.__module__, MyPydanticV1.__name__),
+                (SecretStrV1.__module__, SecretStrV1.__name__),
+            ]
+        )
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=allowed_msgpack_modules)
 
     dumped = serde.dumps_typed(to_serialize)
 
@@ -512,5 +542,337 @@ def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
 
     assert dumped[0] == "pickle"
     result = serde.loads_typed(dumped)
-
     assert result.equals(series)
+
+
+def test_msgpack_safe_types_no_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """Test safe types deserialize without warnings."""
+
+    serde = JsonPlusSerializer()
+
+    safe_objects = [
+        datetime.now(),
+        date.today(),
+        time(12, 30),
+        timezone.utc,
+        uuid.uuid4(),
+        Decimal("123.45"),
+        {1, 2, 3},
+        frozenset([1, 2, 3]),
+        deque([1, 2, 3]),
+        IPv4Address("192.168.1.1"),
+        pathlib.Path("/tmp/test"),
+    ]
+
+    for obj in safe_objects:
+        caplog.clear()
+        dumped = serde.dumps_typed(obj)
+        result = serde.loads_typed(dumped)
+        assert "unregistered type" not in caplog.text.lower(), (
+            f"Unexpected warning for {type(obj)}"
+        )
+        assert result is not None
+
+
+def test_msgpack_pydantic_warns_by_default(caplog: pytest.LogCaptureFixture) -> None:
+    """Pydantic models not in allowlist should log warning but still deserialize."""
+    current = _lg_msgpack.STRICT_MSGPACK_ENABLED
+    _lg_msgpack.STRICT_MSGPACK_ENABLED = False
+    serde = JsonPlusSerializer()
+
+    obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
+
+    caplog.clear()
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+
+    assert "unregistered type" in caplog.text.lower()
+    assert "allowed_msgpack_modules" in caplog.text
+    assert result == obj
+    _lg_msgpack.STRICT_MSGPACK_ENABLED = current
+
+
+def test_msgpack_env_strict_default(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Strict msgpack env should default to blocking unregistered types."""
+    current = _lg_msgpack.STRICT_MSGPACK_ENABLED
+    _lg_msgpack.STRICT_MSGPACK_ENABLED = True
+    serde = JsonPlusSerializer()
+
+    obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
+
+    caplog.clear()
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+
+    assert "blocked" in caplog.text.lower()
+    assert result == obj.model_dump()
+    _lg_msgpack.STRICT_MSGPACK_ENABLED = current
+
+
+def test_msgpack_allowlist_silences_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """Types in allowed_msgpack_modules should deserialize without warnings."""
+
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[
+            ("tests.test_jsonplus", "MyPydantic"),
+            ("tests.test_jsonplus", "InnerPydantic"),
+        ]
+    )
+
+    obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
+
+    caplog.clear()
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+
+    assert "unregistered type" not in caplog.text.lower()
+    assert result == obj
+
+
+def test_msgpack_none_blocks_unregistered(caplog: pytest.LogCaptureFixture) -> None:
+    """allowed_msgpack_modules=None should block unregistered types."""
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+
+    obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
+
+    caplog.clear()
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+
+    assert "blocked" in caplog.text.lower()
+    expected = obj.model_dump()
+    assert result == expected
+
+
+def test_msgpack_allowlist_blocks_non_listed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Allowlists should block unregistered types even if msgpack is enabled."""
+
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("tests.test_jsonplus", "MyPydantic")]
+    )
+
+    obj = AnotherPydantic(foo="nope")
+
+    caplog.clear()
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+
+    assert "blocked" in caplog.text.lower()
+    expected = obj.model_dump()
+    # It's not allowed, so we just leave it as a dict
+    assert result == expected
+
+
+def test_msgpack_strict_allows_safe_types(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Safe types should still deserialize in strict mode without warnings."""
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    safe = uuid.uuid4()
+
+    caplog.clear()
+    dumped = serde.dumps_typed(safe)
+    result = serde.loads_typed(dumped)
+
+    assert "blocked" not in caplog.text.lower()
+    assert result == safe
+
+
+def test_msgpack_regex_safe_type(caplog: pytest.LogCaptureFixture) -> None:
+    """re.compile patterns should deserialize without warnings as a safe type."""
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    pattern = re.compile(r"foo.*bar", re.IGNORECASE | re.DOTALL)
+
+    caplog.clear()
+    dumped = serde.dumps_typed(pattern)
+    result = serde.loads_typed(dumped)
+
+    assert "blocked" not in caplog.text.lower()
+    assert "unregistered" not in caplog.text.lower()
+    assert result.pattern == pattern.pattern
+    assert result.flags == pattern.flags
+
+
+def test_msgpack_method_pathlib_blocked_in_strict(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    target = tmp_path / "secret.txt"
+    target.write_text("secret")
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    payload = ormsgpack.packb(
+        ormsgpack.Ext(
+            EXT_METHOD_SINGLE_ARG,
+            _msgpack_enc(("pathlib", "Path", target, "read_text")),
+        ),
+        option=ormsgpack.OPT_NON_STR_KEYS,
+    )
+
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+    caplog.clear()
+    result = serde.loads_typed(("msgpack", payload))
+
+    assert result == target
+    assert "blocked deserialization of method call pathlib.path.read_text" in (
+        caplog.text.lower()
+    )
+
+
+def test_msgpack_method_pathlib_blocked_default_mode(
+    tmp_path: pathlib.Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    target = tmp_path / "secret.txt"
+    target.write_text("secret")
+    serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+    payload = ormsgpack.packb(
+        ormsgpack.Ext(
+            EXT_METHOD_SINGLE_ARG,
+            _msgpack_enc(("pathlib", "Path", target, "read_text")),
+        ),
+        option=ormsgpack.OPT_NON_STR_KEYS,
+    )
+
+    caplog.set_level(logging.WARNING, logger="langgraph.checkpoint.serde.jsonplus")
+    caplog.clear()
+    result = serde.loads_typed(("msgpack", payload))
+
+    assert result == target
+    assert "blocked deserialization of method call pathlib.path.read_text" in (
+        caplog.text.lower()
+    )
+
+
+def test_msgpack_regex_still_works_strict(caplog: pytest.LogCaptureFixture) -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    pattern = re.compile(r"pattern", re.IGNORECASE | re.MULTILINE)
+
+    caplog.clear()
+    result = serde.loads_typed(serde.dumps_typed(pattern))
+
+    assert "blocked" not in caplog.text.lower()
+    assert result.pattern == pattern.pattern
+    assert result.flags == pattern.flags
+
+
+def test_msgpack_path_constructor_still_works() -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    path_obj = pathlib.Path("/tmp/foo")
+
+    result = serde.loads_typed(serde.dumps_typed(path_obj))
+
+    assert result == path_obj
+
+
+def test_with_msgpack_allowlist_noop_returns_same_instance() -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+
+    result = serde.with_msgpack_allowlist(())
+
+    assert result is serde
+
+
+@pytest.mark.skipif(sys.version_info >= (3, 14), reason="pydantic v1 not on 3.14+")
+def test_msgpack_pydantic_v1_allowlist(caplog: pytest.LogCaptureFixture) -> None:
+    """Pydantic v1 models in allowlist should deserialize without warnings."""
+
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[
+            ("tests.test_jsonplus", "MyPydanticV1"),
+            ("tests.test_jsonplus", "InnerPydanticV1"),
+        ]
+    )
+
+    obj = MyPydanticV1(foo="test", bar=42, inner=InnerPydanticV1(hello="world"))
+
+    caplog.clear()
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+
+    assert "unregistered type" not in caplog.text.lower()
+    assert "blocked" not in caplog.text.lower()
+    assert result == obj
+
+
+def test_msgpack_dataclass_allowlist(caplog: pytest.LogCaptureFixture) -> None:
+    """Dataclasses in allowlist should deserialize without warnings."""
+
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[
+            ("tests.test_jsonplus", "MyDataclass"),
+            ("tests.test_jsonplus", "InnerDataclass"),
+        ]
+    )
+
+    obj = MyDataclass(foo="test", bar=42, inner=InnerDataclass(hello="world"))
+
+    caplog.clear()
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+
+    assert "unregistered type" not in caplog.text.lower()
+    assert "blocked" not in caplog.text.lower()
+    assert result == obj
+
+
+def test_msgpack_safe_types_value_equality(caplog: pytest.LogCaptureFixture) -> None:
+    """Verify safe types are correctly restored with proper values."""
+
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+
+    test_cases = [
+        datetime(2024, 1, 15, 12, 30, 45, 123456),
+        date(2024, 6, 15),
+        time(14, 30, 0),
+        uuid.UUID("12345678-1234-5678-1234-567812345678"),
+        Decimal("123.456789"),
+        {1, 2, 3, 4, 5},
+        frozenset(["a", "b", "c"]),
+        deque([1, 2, 3]),
+        IPv4Address("10.0.0.1"),
+        pathlib.Path("/some/test/path"),
+        re.compile(r"\d+", re.MULTILINE),
+    ]
+
+    for obj in test_cases:
+        caplog.clear()
+        dumped = serde.dumps_typed(obj)
+        result = serde.loads_typed(dumped)
+
+        assert "blocked" not in caplog.text.lower(), f"Blocked for {type(obj)}"
+        # For regex patterns, compare pattern and flags
+        if isinstance(obj, re.Pattern):
+            assert result.pattern == obj.pattern
+            assert result.flags == obj.flags
+        else:
+            assert result == obj, f"Value mismatch for {type(obj)}: {result} != {obj}"
+
+
+def test_msgpack_nested_pydantic_serializes_as_dict(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Nested Pydantic models are serialized via model_dump() as dicts.
+
+    This means nested models don't go through the ext hook and don't need
+    to be in the allowlist - only the outer type does.
+    """
+
+    # Only allow outer type - inner is serialized as dict via model_dump()
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("tests.test_jsonplus", "MyPydantic")]
+    )
+
+    obj = MyPydantic(foo="test", bar=42, inner=InnerPydantic(hello="world"))
+
+    caplog.clear()
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+
+    # No blocking should occur - inner is serialized as dict, not ext
+    assert "blocked" not in caplog.text.lower()
+    assert result == obj
