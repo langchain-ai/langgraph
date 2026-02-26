@@ -630,6 +630,7 @@ def build(
 @click.option(
     "--host-url",
     envvar="LANGGRAPH_HOST_URL",
+    default="https://api.smith.langchain.com",
     hidden=True,
 )
 @click.option("--image-name", hidden=True)
@@ -682,9 +683,6 @@ def deploy(
     no_wait: bool,
     docker_build_args: Sequence[str],
 ):
-    if not host_url:
-        raise click.UsageError("Provide --host-url or set LANGGRAPH_HOST_URL")
-
     config_json = langgraph_cli.config.validate_config_file(config)
     warn_non_wolfi_distro(config_json)
 
