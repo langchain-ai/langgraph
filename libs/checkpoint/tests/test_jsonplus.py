@@ -777,6 +777,43 @@ def test_with_msgpack_allowlist_noop_returns_same_instance() -> None:
     assert result is serde
 
 
+def test_with_msgpack_allowlist_supports_subclass_without_init_kwargs() -> None:
+    class CustomSerializer(JsonPlusSerializer):
+        def __init__(self) -> None:
+            super().__init__(allowed_msgpack_modules=None)
+
+    serde = CustomSerializer()
+    result = serde.with_msgpack_allowlist([MyDataclass])
+
+    assert isinstance(result, CustomSerializer)
+    assert result is not serde
+    assert serde._allowed_msgpack_modules is None
+    assert result._allowed_msgpack_modules == {
+        (MyDataclass.__module__, MyDataclass.__name__)
+    }
+
+
+def test_with_msgpack_allowlist_rebuilds_default_unpack_hook() -> None:
+    serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+    original_hook = serde._unpack_ext_hook
+
+    result = serde.with_msgpack_allowlist([MyDataclass])
+
+    assert result._unpack_ext_hook is not original_hook
+
+
+def test_with_msgpack_allowlist_preserves_custom_unpack_hook() -> None:
+    def custom_hook(code: int, data: bytes) -> None:
+        return None
+
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=None, __unpack_ext_hook__=custom_hook
+    )
+    result = serde.with_msgpack_allowlist([MyDataclass])
+
+    assert result._unpack_ext_hook is custom_hook
+
+
 @pytest.mark.skipif(sys.version_info >= (3, 14), reason="pydantic v1 not on 3.14+")
 def test_msgpack_pydantic_v1_allowlist(caplog: pytest.LogCaptureFixture) -> None:
     """Pydantic v1 models in allowlist should deserialize without warnings."""
