@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import dataclasses
 import decimal
 import importlib
@@ -106,14 +107,15 @@ class JsonPlusSerializer(SerializerProtocol):
             allowed_msgpack_modules = tuple(self._allowed_msgpack_modules)
         else:
             allowed_msgpack_modules = self._allowed_msgpack_modules
-        return self.__class__(
-            pickle_fallback=self.pickle_fallback,
-            allowed_json_modules=self._allowed_json_modules,
-            allowed_msgpack_modules=allowed_msgpack_modules,
-            __unpack_ext_hook__=(
-                self._unpack_ext_hook if self._custom_unpack_ext_hook else None
-            ),
-        )
+
+        clone = copy.copy(self)
+        clone._allowed_json_modules = _normalize_allowlist(self._allowed_json_modules)
+        clone._allowed_msgpack_modules = _normalize_allowlist(allowed_msgpack_modules)
+        if not clone._custom_unpack_ext_hook:
+            clone._unpack_ext_hook = _create_msgpack_ext_hook(
+                clone._allowed_msgpack_modules
+            )
+        return clone
 
     def _encode_constructor_args(
         self,
