@@ -3105,11 +3105,11 @@ class Pregel(
             durability=durability,
             **kwargs,
         ):
-            # when subgraphs=True with a single stream_mode, stream()
-            # yields (namespace, payload) tuples — unwrap them
-            if subgraphs and isinstance(chunk, tuple):
-                chunk = chunk[-1]
             if stream_mode == "values":
+                # when subgraphs=True with a single stream_mode, stream()
+                # yields (namespace, payload) tuples — unwrap them
+                if subgraphs and isinstance(chunk, tuple):
+                    chunk = chunk[-1]
                 latest = chunk
                 if (
                     isinstance(chunk, dict)
@@ -3191,11 +3191,11 @@ class Pregel(
             durability=durability,
             **kwargs,
         ):
-            # when subgraphs=True with a single stream_mode, astream()
-            # yields (namespace, payload) tuples — unwrap them
-            if subgraphs and isinstance(chunk, tuple):
-                chunk = chunk[-1]
             if stream_mode == "values":
+                # when subgraphs=True with a single stream_mode, astream()
+                # yields (namespace, payload) tuples — unwrap them
+                if subgraphs and isinstance(chunk, tuple):
+                    chunk = chunk[-1]
                 latest = chunk
                 if (
                     isinstance(chunk, dict)
