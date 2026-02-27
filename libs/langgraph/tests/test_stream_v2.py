@@ -124,7 +124,6 @@ def _assert_stream_part_shape(part: StreamPart) -> None:
     assert isinstance(part["ns"], tuple)
     for elem in part["ns"]:
         assert isinstance(elem, str)
-    # values stream parts always have an interrupts field in v2
     if part["type"] == "values":
         assert "interrupts" in part, "values stream part missing 'interrupts' field"
         assert isinstance(part["interrupts"], tuple)
@@ -793,7 +792,7 @@ class TestV2TypeSafeStreaming:
             assert type(c["data"]) is dict
 
     def test_values_interrupt_v2(self) -> None:
-        """v2 values + interrupt -> interrupts field populated, __interrupt__ not in data."""
+        """v2 values + interrupt -> interrupts in typed field, not in data."""
 
         def my_node(state: SimpleState) -> dict[str, Any]:
             answer = interrupt("what is your name?")
