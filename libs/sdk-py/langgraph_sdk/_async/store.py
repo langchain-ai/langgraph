@@ -138,7 +138,7 @@ class StoreClient:
         if refresh_ttl is not None:
             get_params["refresh_ttl"] = refresh_ttl
         if params:
-            get_params = {**get_params, **params}
+            get_params = {**get_params, **dict(params)}
         return await self.http.get("/store/items", params=get_params, headers=headers)
 
     async def delete_item(

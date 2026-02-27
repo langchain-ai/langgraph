@@ -17,18 +17,18 @@
     "lint": "eslint 'apps/**/*.ts' 'libs/**/*.ts'"
   },
   "devDependencies": {
-    "turbo": "^2.5.0",
-    "typescript": "^5.3.3",
-    "@tsconfig/recommended": "^1.0.7",
-    "@eslint/eslintrc": "^3.1.0",
-    "@eslint/js": "^9.9.1",
-    "eslint": "^8.41.0",
-    "eslint-config-prettier": "^8.8.0",
+    "turbo": "^2.8.10",
+    "typescript": "^5.9.3",
+    "@tsconfig/recommended": "^1.0.13",
+    "@eslint/eslintrc": "^3.3.3",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.1",
+    "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.27.5",
     "eslint-plugin-no-instanceof": "^1.0.1",
-    "eslint-plugin-prettier": "^4.2.1",
-    "@typescript-eslint/eslint-plugin": "^5.59.8",
-    "@typescript-eslint/parser": "^5.59.8",
-    "prettier": "^3.3.3"
+    "eslint-plugin-prettier": "^5.5.5",
+    "@typescript-eslint/eslint-plugin": "^8.56.0",
+    "@typescript-eslint/parser": "^8.56.0",
+    "prettier": "^3.8.1"
   }
 }

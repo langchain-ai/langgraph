@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 readme = "README.md"
 license = "MIT"
 license-files = ['LICENSE']
-dependencies = ["httpx>=0.25.2", "orjson>=3.10.1"]
+dependencies = ["httpx>=0.25.2", "orjson>=3.11.5"]
 
 [tool.hatch.version]
 path = "langgraph_sdk/__init__.py"
@@ -30,10 +30,10 @@ test = [
     "pytest-watch",
 ]
 lint = [
-    "ruff==0.14.11",
+    "ruff==0.15.1",
     "codespell",
-    "mypy==1.19.0",
-    "ty==0.0.1a27",
+    "mypy==1.19.1",
+    "ty==0.0.17",
     "starlette",
 ]
 dev = [
