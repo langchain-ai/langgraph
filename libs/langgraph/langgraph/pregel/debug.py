@@ -127,6 +127,7 @@ def map_debug_checkpoint(
     pending_writes: list[PendingWrite],
     parent_config: RunnableConfig | None,
     output_keys: str | Sequence[str],
+    state_mapper: Any | None = None,
 ) -> Iterator[CheckpointPayload]:
     """Produce "checkpoint" events for stream_mode=debug."""
 
@@ -150,10 +151,17 @@ def map_debug_checkpoint(
             }
         }
 
+    values = read_channels(channels, stream_channels)
+    if state_mapper and isinstance(values, dict):
+        try:
+            values = state_mapper(values)
+        except Exception:
+            pass  # partial state at early ticks, keep raw dict
+
     yield {
         "config": rm_pregel_keys(patch_checkpoint_map(config, metadata)),
         "parent_config": rm_pregel_keys(patch_checkpoint_map(parent_config, metadata)),
-        "values": read_channels(channels, stream_channels),
+        "values": values,
         "metadata": metadata,
         "next": [t.name for t in tasks],
         "tasks": [

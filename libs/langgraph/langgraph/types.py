@@ -28,6 +28,13 @@ from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
+# Local TypeVars for generic stream TypedDicts.
+# We use separate TypeVars here (rather than importing from langgraph.typing)
+# because the typing module TypeVars have defaults that cause mypy issues
+# when used in standalone type aliases.
+StateT = TypeVar("StateT")
+OutputT = TypeVar("OutputT")
+
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
 
@@ -137,14 +144,14 @@ class TaskPayload(TypedDict):
     triggers: list[str]
 
 
-class TaskResultPayload(TypedDict):
+class TaskResultPayload(TypedDict, Generic[StateT]):
     """Payload for a task result event."""
 
     id: str
     name: str
     error: str | None
     interrupts: list[dict]
-    result: dict[str, Any]
+    result: StateT
 
 
 class CheckpointTask(TypedDict):
@@ -165,22 +172,22 @@ class CheckpointTask(TypedDict):
     state: StateSnapshot | RunnableConfig | None
 
 
-class CheckpointPayload(TypedDict):
+class CheckpointPayload(TypedDict, Generic[StateT]):
     """Payload for a checkpoint event."""
 
     config: RunnableConfig | None
     metadata: CheckpointMetadata
-    values: dict[str, Any]
+    values: StateT
     next: list[str]
     parent_config: RunnableConfig | None
     tasks: list[CheckpointTask]
 
 
-class _DebugCheckpointPayload(TypedDict):
+class _DebugCheckpointPayload(TypedDict, Generic[StateT]):
     step: int
     timestamp: str
     type: Literal["checkpoint"]
-    payload: CheckpointPayload
+    payload: CheckpointPayload[StateT]
 
 
 class _DebugTaskPayload(TypedDict):
@@ -190,18 +197,22 @@ class _DebugTaskPayload(TypedDict):
     payload: TaskPayload
 
 
-class _DebugTaskResultPayload(TypedDict):
+class _DebugTaskResultPayload(TypedDict, Generic[StateT]):
     step: int
     timestamp: str
     type: Literal["task_result"]
-    payload: TaskResultPayload
+    payload: TaskResultPayload[StateT]
 
 
-DebugPayload = _DebugCheckpointPayload | _DebugTaskPayload | _DebugTaskResultPayload
+DebugPayload = (
+    _DebugCheckpointPayload[StateT]
+    | _DebugTaskPayload
+    | _DebugTaskResultPayload[StateT]
+)
 """Wrapper payload for debug events. Discriminate on `type`."""
 
 
-class ValuesStreamPart(TypedDict):
+class ValuesStreamPart(TypedDict, Generic[OutputT]):
     """Stream part emitted for `stream_mode="values"`.
 
     `data` contains the full state after each step, as returned by `read_channels()`.
@@ -209,7 +220,8 @@ class ValuesStreamPart(TypedDict):
 
     type: Literal["values"]
     ns: tuple[str, ...]
-    data: dict[str, Any]
+    data: OutputT
+    interrupts: tuple[Interrupt, ...]
 
 
 class UpdatesStreamPart(TypedDict):
@@ -248,15 +260,15 @@ class CustomStreamPart(TypedDict):
     data: Any
 
 
-class CheckpointStreamPart(TypedDict):
+class CheckpointStreamPart(TypedDict, Generic[StateT]):
     """Stream part emitted for `stream_mode="checkpoints"`."""
 
     type: Literal["checkpoints"]
     ns: tuple[str, ...]
-    data: CheckpointPayload
+    data: CheckpointPayload[StateT]
 
 
-class TasksStreamPart(TypedDict):
+class TasksStreamPart(TypedDict, Generic[StateT]):
     """Stream part emitted for `stream_mode="tasks"`.
 
     For task start events, `data` is a `TaskPayload` with `id`, `name`,
@@ -268,10 +280,10 @@ class TasksStreamPart(TypedDict):
 
     type: Literal["tasks"]
     ns: tuple[str, ...]
-    data: TaskPayload | TaskResultPayload
+    data: TaskPayload | TaskResultPayload[StateT]
 
 
-class DebugStreamPart(TypedDict):
+class DebugStreamPart(TypedDict, Generic[StateT]):
     """Stream part emitted for `stream_mode="debug"`."""
 
     type: Literal["debug"]
@@ -280,13 +292,13 @@ class DebugStreamPart(TypedDict):
 
 
 StreamPart = (
-    ValuesStreamPart
+    ValuesStreamPart[OutputT]
     | UpdatesStreamPart
     | MessagesStreamPart
     | CustomStreamPart
-    | CheckpointStreamPart
-    | TasksStreamPart
-    | DebugStreamPart
+    | CheckpointStreamPart[StateT]
+    | TasksStreamPart[StateT]
+    | DebugStreamPart[StateT]
 )
 """A discriminated union of all v2 stream part types.
 
@@ -295,7 +307,7 @@ Use `part["type"]` to narrow the type:
 ```python
 async for part in graph.astream(input, version="v2"):
     if part["type"] == "values":
-        part["data"]  # dict[str, Any] — full state
+        part["data"]  # OutputT — full state (pydantic/dataclass/dict)
     elif part["type"] == "messages":
         part["data"]  # tuple[BaseMessage, dict] — (message, metadata)
     elif part["type"] == "custom":

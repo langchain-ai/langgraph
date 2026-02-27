@@ -11,6 +11,7 @@ from contextlib import (
     AsyncExitStack,
     ExitStack,
 )
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from inspect import signature
 from types import TracebackType
@@ -115,6 +116,7 @@ from langgraph.types import (
     CachePolicy,
     Command,
     Durability,
+    Interrupt,
     PregelExecutableTask,
     RetryPolicy,
     Send,
@@ -126,6 +128,14 @@ P = ParamSpec("P")
 
 
 WritesT = Sequence[tuple[str, Any]]
+
+
+@dataclass(frozen=True, slots=True)
+class _ValuesWithInterrupts:
+    """Internal wrapper to carry coerced values and interrupts together through the stream queue."""
+
+    values: Any
+    interrupts: tuple[Interrupt, ...]
 
 
 def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
@@ -201,6 +211,8 @@ class PregelLoop:
     tasks: dict[str, PregelExecutableTask]
     output: None | dict[str, Any] | Any = None
     updated_channels: set[str] | None = None
+    output_mapper: Callable[[dict[str, Any]], Any] | None
+    state_mapper: Callable[[dict[str, Any]], Any] | None
 
     # public
 
@@ -226,6 +238,8 @@ class PregelLoop:
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        output_mapper: Callable[[dict[str, Any]], Any] | None = None,
+        state_mapper: Callable[[dict[str, Any]], Any] | None = None,
     ) -> None:
         self.stream = stream
         self.config = config
@@ -250,6 +264,8 @@ class PregelLoop:
         self.retry_policy = retry_policy
         self.cache_policy = cache_policy
         self.durability = durability
+        self.output_mapper = output_mapper
+        self.state_mapper = state_mapper
         if self.stream is not None and CONFIG_KEY_STREAM in config[CONF]:
             self.stream = DuplexStream(self.stream, config[CONF][CONFIG_KEY_STREAM])
         scratchpad: PregelScratchpad | None = config[CONF].get(CONFIG_KEY_SCRATCHPAD)
@@ -507,6 +523,7 @@ class PregelLoop:
                 self.checkpoint_pending_writes,
                 self.prev_checkpoint_config,
                 self.output_keys,
+                self.state_mapper,
             )
 
         # if no more tasks, we're done
@@ -553,7 +570,12 @@ class PregelLoop:
             else self.output_keys
         ):
             self._emit(
-                "values", map_output_values, self.output_keys, writes, self.channels
+                "values",
+                map_output_values,
+                self.output_keys,
+                writes,
+                self.channels,
+                self.output_mapper,
             )
         # clear pending writes
         self.checkpoint_pending_writes.clear()
@@ -923,28 +945,34 @@ class PregelLoop:
                 # we don't emit the interrupt as it'll be emitted by the parent
                 if task.path[0] == PUSH and task.path[-1] is True:
                     return
-                interrupts = [
-                    {
-                        INTERRUPT: tuple(
-                            v
-                            for w in writes
-                            if w[0] == INTERRUPT
-                            for v in (w[1] if isinstance(w[1], Sequence) else (w[1],))
-                        )
-                    }
-                ]
+                interrupt_tuple = tuple(
+                    v
+                    for w in writes
+                    if w[0] == INTERRUPT
+                    for v in (w[1] if isinstance(w[1], Sequence) else (w[1],))
+                )
+                interrupts = [{INTERRUPT: interrupt_tuple}]
                 stream_modes = self.stream.modes if self.stream else []
                 if "updates" in stream_modes:
                     self._emit("updates", lambda: iter(interrupts))
                 if "values" in stream_modes:
                     current_values = read_channels(self.channels, self.output_keys)
-                    # self.output_keys is a sequence, stream chunk contains entire state and interrupts
-                    if isinstance(current_values, dict):
-                        current_values[INTERRUPT] = interrupts[0][INTERRUPT]
-                        self._emit("values", lambda: iter([current_values]))
-                    # self.output_keys is a string, stream chunk contains only interrupts
-                    else:
-                        self._emit("values", lambda: iter(interrupts))
+                    if self.output_mapper and isinstance(current_values, dict):
+                        try:
+                            current_values = self.output_mapper(current_values)
+                        except Exception:
+                            pass  # partial state, keep raw dict
+                    self._emit(
+                        "values",
+                        lambda: iter(
+                            [
+                                _ValuesWithInterrupts(
+                                    values=current_values,
+                                    interrupts=interrupt_tuple,
+                                )
+                            ]
+                        ),
+                    )
             elif writes[0][0] != ERROR:
                 self._emit(
                     "updates",
@@ -985,6 +1013,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        output_mapper: Callable[[dict[str, Any]], Any] | None = None,
+        state_mapper: Callable[[dict[str, Any]], Any] | None = None,
     ) -> None:
         super().__init__(
             input,
@@ -1006,6 +1036,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            output_mapper=output_mapper,
+            state_mapper=state_mapper,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -1161,6 +1193,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         migrate_checkpoint: Callable[[Checkpoint], None] | None = None,
         retry_policy: Sequence[RetryPolicy] = (),
         cache_policy: CachePolicy | None = None,
+        output_mapper: Callable[[dict[str, Any]], Any] | None = None,
+        state_mapper: Callable[[dict[str, Any]], Any] | None = None,
     ) -> None:
         super().__init__(
             input,
@@ -1182,6 +1216,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             retry_policy=retry_policy,
             cache_policy=cache_policy,
             durability=durability,
+            output_mapper=output_mapper,
+            state_mapper=state_mapper,
         )
         self.stack = AsyncExitStack()
         if checkpointer:

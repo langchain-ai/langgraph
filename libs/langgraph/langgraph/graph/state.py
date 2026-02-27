@@ -1164,6 +1164,28 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
 
+        # Add output schema mapper (for values stream coercion)
+        if self.output_schema not in compiled.schema_to_mapper:
+            oc = (
+                [output_channels]
+                if isinstance(output_channels, str)
+                else output_channels
+            )
+            compiled.schema_to_mapper[self.output_schema] = _pick_mapper(
+                oc, self.output_schema
+            )
+
+        # Add state schema mapper (for checkpoint values coercion)
+        if self.state_schema not in compiled.schema_to_mapper:
+            sc = (
+                [stream_channels]
+                if isinstance(stream_channels, str)
+                else stream_channels
+            )
+            compiled.schema_to_mapper[self.state_schema] = _pick_mapper(
+                sc, self.state_schema
+            )
+
         for start, end in self.edges:
             compiled.attach_edge(start, end)
 

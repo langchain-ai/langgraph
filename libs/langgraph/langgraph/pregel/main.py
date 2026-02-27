@@ -123,7 +123,11 @@ from langgraph.pregel._checkpoint import (
 )
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
-from langgraph.pregel._loop import AsyncPregelLoop, SyncPregelLoop
+from langgraph.pregel._loop import (
+    AsyncPregelLoop,
+    SyncPregelLoop,
+    _ValuesWithInterrupts,
+)
 from langgraph.pregel._messages import StreamMessagesHandler
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
@@ -2644,6 +2648,16 @@ class Pregel(
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
+            # resolve mappers for v2 stream coercion
+            _output_mapper = None
+            _state_mapper = None
+            if stream_version == "v2":
+                _s2m = getattr(self, "schema_to_mapper", None)
+                _bldr = getattr(self, "builder", None)
+                if _s2m is not None and _bldr is not None:
+                    _output_mapper = _s2m.get(_bldr.output_schema)
+                    _state_mapper = _s2m.get(_bldr.state_schema)
+
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
@@ -2664,6 +2678,8 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                output_mapper=_output_mapper,
+                state_mapper=_state_mapper,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -3002,6 +3018,16 @@ class Pregel(
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
+            # resolve mappers for v2 stream coercion
+            _output_mapper = None
+            _state_mapper = None
+            if stream_version == "v2":
+                _s2m = getattr(self, "schema_to_mapper", None)
+                _bldr = getattr(self, "builder", None)
+                if _s2m is not None and _bldr is not None:
+                    _output_mapper = _s2m.get(_bldr.output_schema)
+                    _state_mapper = _s2m.get(_bldr.state_schema)
+
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
@@ -3022,6 +3048,8 @@ class Pregel(
                 migrate_checkpoint=self._migrate_checkpoint,
                 retry_policy=self.retry_policy,
                 cache_policy=self.cache_policy,
+                output_mapper=_output_mapper,
+                state_mapper=_state_mapper,
             ) as loop:
                 # create runner
                 runner = PregelRunner(
@@ -3520,15 +3548,37 @@ def _output(
                 )
         if mode in stream_mode:
             if stream_version == "v2":
-                yield {"type": mode, "ns": ns, "data": payload}
-            elif stream_subgraphs and isinstance(stream_mode, list):
-                yield (ns, mode, payload)
-            elif isinstance(stream_mode, list):
-                yield (mode, payload)
-            elif stream_subgraphs:
-                yield (ns, payload)
+                if mode == "values" and isinstance(payload, _ValuesWithInterrupts):
+                    yield {
+                        "type": mode,
+                        "ns": ns,
+                        "data": payload.values,
+                        "interrupts": payload.interrupts,
+                    }
+                elif mode == "values":
+                    yield {
+                        "type": mode,
+                        "ns": ns,
+                        "data": payload,
+                        "interrupts": (),
+                    }
+                else:
+                    yield {"type": mode, "ns": ns, "data": payload}
             else:
-                yield payload
+                # v1 compat: reconstruct old format for _ValuesWithInterrupts
+                if mode == "values" and isinstance(payload, _ValuesWithInterrupts):
+                    if isinstance(payload.values, dict):
+                        payload = {**payload.values, INTERRUPT: payload.interrupts}
+                    else:
+                        payload = {INTERRUPT: payload.interrupts}
+                if stream_subgraphs and isinstance(stream_mode, list):
+                    yield (ns, mode, payload)
+                elif isinstance(stream_mode, list):
+                    yield (mode, payload)
+                elif stream_subgraphs:
+                    yield (ns, payload)
+                else:
+                    yield payload
 
 
 def _coerce_context(

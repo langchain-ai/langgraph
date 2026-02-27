@@ -101,6 +101,7 @@ def map_output_values(
     output_channels: str | Sequence[str],
     pending_writes: Literal[True] | Sequence[tuple[str, Any]],
     channels: Mapping[str, BaseChannel],
+    mapper: Any | None = None,
 ) -> Iterator[dict[str, Any] | Any]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
@@ -112,7 +113,13 @@ def map_output_values(
         if pending_writes is True or {
             c for c, _ in pending_writes if c in output_channels
         }:
-            yield read_channels(channels, output_channels)
+            result = read_channels(channels, output_channels)
+            if mapper and isinstance(result, dict):
+                try:
+                    result = mapper(result)
+                except Exception:
+                    pass  # partial state, keep raw dict
+            yield result
 
 
 def map_output_updates(

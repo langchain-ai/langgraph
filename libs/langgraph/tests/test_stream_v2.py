@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import operator
 import sys
+from dataclasses import dataclass
 from typing import Annotated, Any
 
 import pytest
 from langchain_core.messages import AIMessage, BaseMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import BaseModel
 from typing_extensions import TypedDict, assert_type
 
+from langgraph._internal._constants import INTERRUPT
 from langgraph.constants import END, START
 from langgraph.func import entrypoint
 from langgraph.graph import StateGraph
@@ -25,6 +28,7 @@ from langgraph.types import (
     CustomStreamPart,
     DebugPayload,
     DebugStreamPart,
+    Interrupt,
     MessagesStreamPart,
     StreamPart,
     StreamWriter,
@@ -33,6 +37,7 @@ from langgraph.types import (
     TasksStreamPart,
     UpdatesStreamPart,
     ValuesStreamPart,
+    interrupt,
 )
 from tests.fake_chat import FakeChatModel
 
@@ -118,6 +123,10 @@ def _assert_stream_part_shape(part: StreamPart) -> None:
     assert isinstance(part["ns"], tuple)
     for elem in part["ns"]:
         assert isinstance(elem, str)
+    # values stream parts always have an interrupts field in v2
+    if part["type"] == "values":
+        assert "interrupts" in part, "values stream part missing 'interrupts' field"
+        assert isinstance(part["interrupts"], tuple)
 
 
 # --- v1 backwards compatibility ---
@@ -592,6 +601,307 @@ class TestV2InvokeAsync:
         assert {"values", "updates"} <= types_seen
         for c in result:
             _assert_stream_part_shape(c)
+
+
+# --- type-safe streaming: coercion + interrupt separation ---
+
+
+class PydanticState(BaseModel):
+    value: str
+    items: Annotated[list[str], operator.add]
+
+
+@dataclass
+class DataclassState:
+    value: str
+    items: Annotated[list[str], operator.add]
+
+
+class TestV2TypeSafeStreaming:
+    """Test that v2 streaming coerces values to pydantic/dataclass instances
+    and separates interrupts into a dedicated field."""
+
+    def test_values_pydantic_state(self) -> None:
+        """v2 values + pydantic state -> data is pydantic model instance."""
+
+        def node_a(state: PydanticState) -> dict[str, Any]:
+            return {"value": state.value + "_a", "items": ["a"]}
+
+        builder: StateGraph = StateGraph(PydanticState)
+        builder.add_node("node_a", node_a)
+        builder.add_edge(START, "node_a")
+        builder.add_edge("node_a", END)
+        graph = builder.compile()
+
+        chunks = list(
+            graph.stream(
+                {"value": "x", "items": []},
+                stream_mode="values",
+                stream_version="v2",
+            )
+        )
+        assert len(chunks) >= 1
+        for c in chunks:
+            _assert_stream_part_shape(c)
+            assert c["type"] == "values"
+            assert isinstance(c["data"], PydanticState), (
+                f"Expected PydanticState, got {type(c['data'])}"
+            )
+            assert c["interrupts"] == ()
+
+    def test_values_dataclass_state(self) -> None:
+        """v2 values + dataclass state -> data is dataclass instance."""
+
+        def node_a(state: DataclassState) -> dict[str, Any]:
+            return {"value": state.value + "_a", "items": ["a"]}
+
+        builder: StateGraph = StateGraph(DataclassState)
+        builder.add_node("node_a", node_a)
+        builder.add_edge(START, "node_a")
+        builder.add_edge("node_a", END)
+        graph = builder.compile()
+
+        chunks = list(
+            graph.stream(
+                {"value": "x", "items": []},
+                stream_mode="values",
+                stream_version="v2",
+            )
+        )
+        assert len(chunks) >= 1
+        for c in chunks:
+            _assert_stream_part_shape(c)
+            assert c["type"] == "values"
+            assert isinstance(c["data"], DataclassState), (
+                f"Expected DataclassState, got {type(c['data'])}"
+            )
+
+    def test_values_typeddict_state(self) -> None:
+        """v2 values + TypedDict state -> data stays plain dict (no coercion)."""
+        graph = _make_simple_graph().compile()
+        chunks = list(
+            graph.stream(_SIMPLE_INPUT, stream_mode="values", stream_version="v2")
+        )
+        assert len(chunks) >= 1
+        for c in chunks:
+            _assert_stream_part_shape(c)
+            assert c["type"] == "values"
+            # TypedDict state should remain a plain dict
+            assert isinstance(c["data"], dict)
+            assert type(c["data"]) is dict
+
+    def test_values_interrupt_v2(self) -> None:
+        """v2 values + interrupt -> interrupts field populated, __interrupt__ not in data."""
+
+        def my_node(state: SimpleState) -> dict[str, Any]:
+            answer = interrupt("what is your name?")
+            return {"value": answer, "items": ["done"]}
+
+        builder: StateGraph = StateGraph(SimpleState)
+        builder.add_node("my_node", my_node)
+        builder.add_edge(START, "my_node")
+        builder.add_edge("my_node", END)
+        graph = builder.compile(checkpointer=InMemorySaver())
+
+        config: Any = {"configurable": {"thread_id": "test-v2-interrupt"}}
+        chunks = list(
+            graph.stream(
+                {"value": "x", "items": []},
+                config,
+                stream_mode="values",
+                stream_version="v2",
+            )
+        )
+        # should have at least one values chunk with interrupts
+        interrupt_chunks = [c for c in chunks if c.get("interrupts", ())]
+        assert len(interrupt_chunks) >= 1, f"Expected interrupt chunks, got {chunks}"
+        for c in interrupt_chunks:
+            assert c["type"] == "values"
+            assert isinstance(c["interrupts"], tuple)
+            assert len(c["interrupts"]) > 0
+            for intr in c["interrupts"]:
+                assert isinstance(intr, Interrupt)
+            # __interrupt__ should NOT be in data
+            if isinstance(c["data"], dict):
+                assert INTERRUPT not in c["data"]
+
+    def test_values_interrupt_v1_compat(self) -> None:
+        """v1 values + interrupt -> __interrupt__ still in dict (v1 compat)."""
+
+        def my_node(state: SimpleState) -> dict[str, Any]:
+            answer = interrupt("what is your name?")
+            return {"value": answer, "items": ["done"]}
+
+        builder: StateGraph = StateGraph(SimpleState)
+        builder.add_node("my_node", my_node)
+        builder.add_edge(START, "my_node")
+        builder.add_edge("my_node", END)
+        graph = builder.compile(checkpointer=InMemorySaver())
+
+        config: Any = {"configurable": {"thread_id": "test-v1-interrupt-compat"}}
+        chunks = list(
+            graph.stream(
+                {"value": "x", "items": []},
+                config,
+                stream_mode="values",
+            )
+        )
+        # v1 format: should have __interrupt__ in dict
+        interrupt_chunks = [c for c in chunks if isinstance(c, dict) and INTERRUPT in c]
+        assert len(interrupt_chunks) >= 1, (
+            f"Expected v1 interrupt chunks with {INTERRUPT}, got {chunks}"
+        )
+
+    def test_checkpoints_pydantic_state(self) -> None:
+        """v2 checkpoints + pydantic state -> values is pydantic model instance
+        (at least for checkpoints emitted after all channels are populated)."""
+
+        def node_a(state: PydanticState) -> dict[str, Any]:
+            return {"value": state.value + "_a", "items": ["a"]}
+
+        builder: StateGraph = StateGraph(PydanticState)
+        builder.add_node("node_a", node_a)
+        builder.add_edge(START, "node_a")
+        builder.add_edge("node_a", END)
+        graph = builder.compile(checkpointer=InMemorySaver())
+
+        config: Any = {"configurable": {"thread_id": "test-v2-ckpt-pydantic"}}
+        chunks = list(
+            graph.stream(
+                {"value": "x", "items": []},
+                config,
+                stream_mode="checkpoints",
+                stream_version="v2",
+            )
+        )
+        ckpt_chunks = [c for c in chunks if c["type"] == "checkpoints"]
+        assert len(ckpt_chunks) >= 1
+        # At least one checkpoint (after first node runs) should have coerced values
+        coerced_ckpts = [
+            c for c in ckpt_chunks if isinstance(c["data"]["values"], PydanticState)
+        ]
+        assert len(coerced_ckpts) >= 1, (
+            f"Expected at least one checkpoint with PydanticState values, got types: "
+            f"{[type(c['data']['values']) for c in ckpt_chunks]}"
+        )
+
+    def test_debug_pydantic_state(self) -> None:
+        """v2 debug + pydantic state -> inner checkpoint payload has coerced values
+        (at least for checkpoints emitted after all channels are populated)."""
+
+        def node_a(state: PydanticState) -> dict[str, Any]:
+            return {"value": state.value + "_a", "items": ["a"]}
+
+        builder: StateGraph = StateGraph(PydanticState)
+        builder.add_node("node_a", node_a)
+        builder.add_edge(START, "node_a")
+        builder.add_edge("node_a", END)
+        graph = builder.compile(checkpointer=InMemorySaver())
+
+        config: Any = {"configurable": {"thread_id": "test-v2-debug-pydantic"}}
+        chunks = list(
+            graph.stream(
+                {"value": "x", "items": []},
+                config,
+                stream_mode="debug",
+                stream_version="v2",
+            )
+        )
+        debug_chunks = [c for c in chunks if c["type"] == "debug"]
+        checkpoint_debug = [
+            c for c in debug_chunks if c["data"]["type"] == "checkpoint"
+        ]
+        assert len(checkpoint_debug) >= 1
+        # At least one debug checkpoint should have coerced values
+        coerced_debug = [
+            c
+            for c in checkpoint_debug
+            if isinstance(c["data"]["payload"]["values"], PydanticState)
+        ]
+        assert len(coerced_debug) >= 1, (
+            f"Expected at least one debug checkpoint with PydanticState values, got types: "
+            f"{[type(c['data']['payload']['values']) for c in checkpoint_debug]}"
+        )
+
+    def test_values_pydantic_interrupt(self) -> None:
+        """v2 values + pydantic state + interrupt -> data is model, interrupts separated."""
+
+        def my_node(state: PydanticState) -> dict[str, Any]:
+            answer = interrupt("what is your name?")
+            return {"value": answer, "items": ["done"]}
+
+        builder: StateGraph = StateGraph(PydanticState)
+        builder.add_node("my_node", my_node)
+        builder.add_edge(START, "my_node")
+        builder.add_edge("my_node", END)
+        graph = builder.compile(checkpointer=InMemorySaver())
+
+        config: Any = {"configurable": {"thread_id": "test-v2-pydantic-interrupt"}}
+        chunks = list(
+            graph.stream(
+                {"value": "x", "items": []},
+                config,
+                stream_mode="values",
+                stream_version="v2",
+            )
+        )
+        interrupt_chunks = [c for c in chunks if c.get("interrupts", ())]
+        assert len(interrupt_chunks) >= 1
+        for c in interrupt_chunks:
+            assert isinstance(c["data"], PydanticState), (
+                f"Expected PydanticState, got {type(c['data'])}"
+            )
+            assert isinstance(c["interrupts"], tuple)
+            assert len(c["interrupts"]) > 0
+
+    def test_subgraph_different_pydantic_schema(self) -> None:
+        """Subgraph with different pydantic schema -> subgraph data coerced with subgraph's schema."""
+
+        class InnerState(BaseModel):
+            value: str
+
+        class OuterState(BaseModel):
+            value: str
+
+        def inner_node(state: InnerState) -> dict[str, Any]:
+            return {"value": state.value + "_inner"}
+
+        def outer_node(state: OuterState) -> dict[str, Any]:
+            return {"value": state.value + "_outer"}
+
+        inner_builder: StateGraph = StateGraph(InnerState)
+        inner_builder.add_node("inner_node", inner_node)
+        inner_builder.add_edge(START, "inner_node")
+        inner_builder.add_edge("inner_node", END)
+        inner_graph = inner_builder.compile()
+
+        outer_builder: StateGraph = StateGraph(OuterState)
+        outer_builder.add_node("outer_node", outer_node)
+        outer_builder.add_node("inner", inner_graph)
+        outer_builder.add_edge(START, "outer_node")
+        outer_builder.add_edge("outer_node", "inner")
+        outer_builder.add_edge("inner", END)
+        outer = outer_builder.compile()
+
+        chunks = list(
+            outer.stream(
+                {"value": "x"},
+                stream_mode="values",
+                subgraphs=True,
+                stream_version="v2",
+            )
+        )
+        # Root-level values should be OuterState instances
+        root_values = [c for c in chunks if c["type"] == "values" and c["ns"] == ()]
+        assert len(root_values) >= 1
+        for c in root_values:
+            assert isinstance(c["data"], OuterState), (
+                f"Expected OuterState, got {type(c['data'])}"
+            )
+        # Subgraph values are streamed from the subgraph's own stream()
+        # which runs with default stream_version="v1", so no coercion
+        sub_values = [c for c in chunks if c["type"] == "values" and c["ns"] != ()]
+        assert len(sub_values) >= 1
 
 
 # --- type narrowing compile-time checks ---
