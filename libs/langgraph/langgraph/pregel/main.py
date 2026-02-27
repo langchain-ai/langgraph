@@ -3105,7 +3105,10 @@ class Pregel(
         ):
             if stream_mode == "values":
                 latest = chunk
-                if isinstance(chunk, dict) and (ints := chunk.get(INTERRUPT)) is not None:
+                if (
+                    isinstance(chunk, dict)
+                    and (ints := chunk.get(INTERRUPT)) is not None
+                ):
                     interrupts.extend(ints)
             else:
                 chunks.append(chunk)
@@ -3182,7 +3185,10 @@ class Pregel(
         ):
             if stream_mode == "values":
                 latest = chunk
-                if isinstance(chunk, dict) and (ints := chunk.get(INTERRUPT)) is not None:
+                if (
+                    isinstance(chunk, dict)
+                    and (ints := chunk.get(INTERRUPT)) is not None
+                ):
                     interrupts.extend(ints)
             else:
                 chunks.append(chunk)
