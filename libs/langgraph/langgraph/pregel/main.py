@@ -1000,6 +1000,16 @@ class Pregel(
         for name, node in self.get_subgraphs(namespace=namespace, recurse=recurse):
             yield name, node
 
+    @property
+    def _output_mapper(self) -> Callable[[dict[str, Any]], Any] | None:
+        """Mapper for coercing output values in v2 streams. None for base Pregel."""
+        return None
+
+    @property
+    def _state_mapper(self) -> Callable[[dict[str, Any]], Any] | None:
+        """Mapper for coercing state values in v2 streams. None for base Pregel."""
+        return None
+
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a saved checkpoint to new channel layout."""
         if checkpoint["v"] < 4 and checkpoint.get("pending_sends"):
@@ -2649,14 +2659,8 @@ class Pregel(
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
             # resolve mappers for v2 stream coercion
-            _output_mapper = None
-            _state_mapper = None
-            if stream_version == "v2":
-                _s2m = getattr(self, "schema_to_mapper", None)
-                _bldr = getattr(self, "builder", None)
-                if _s2m is not None and _bldr is not None:
-                    _output_mapper = _s2m.get(_bldr.output_schema)
-                    _state_mapper = _s2m.get(_bldr.state_schema)
+            _output_mapper = self._output_mapper if stream_version == "v2" else None
+            _state_mapper = self._state_mapper if stream_version == "v2" else None
 
             with SyncPregelLoop(
                 input,
@@ -3021,14 +3025,8 @@ class Pregel(
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
             # resolve mappers for v2 stream coercion
-            _output_mapper = None
-            _state_mapper = None
-            if stream_version == "v2":
-                _s2m = getattr(self, "schema_to_mapper", None)
-                _bldr = getattr(self, "builder", None)
-                if _s2m is not None and _bldr is not None:
-                    _output_mapper = _s2m.get(_bldr.output_schema)
-                    _state_mapper = _s2m.get(_bldr.state_schema)
+            _output_mapper = self._output_mapper if stream_version == "v2" else None
+            _state_mapper = self._state_mapper if stream_version == "v2" else None
 
             async with AsyncPregelLoop(
                 input,

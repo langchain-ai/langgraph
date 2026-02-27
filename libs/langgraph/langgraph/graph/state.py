@@ -1217,6 +1217,14 @@ class CompiledStateGraph(
         self.builder = builder
         self.schema_to_mapper = schema_to_mapper
 
+    @property
+    def _output_mapper(self) -> Callable[[Any], Any] | None:
+        return self.schema_to_mapper.get(self.builder.output_schema)
+
+    @property
+    def _state_mapper(self) -> Callable[[Any], Any] | None:
+        return self.schema_to_mapper.get(self.builder.state_schema)
+
     def get_input_jsonschema(
         self, config: RunnableConfig | None = None
     ) -> dict[str, Any]:
