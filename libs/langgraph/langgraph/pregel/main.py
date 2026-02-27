@@ -1110,9 +1110,20 @@ class Pregel(
             self.stream_channels_asis,
         )
         # assemble the state snapshot
+        # If a task has writes but also has an interrupt pending, it should still
+        # be included in `next` because the graph is waiting for user input
+        pending_interrupt_task_ids = {
+            pw[0]
+            for pw in saved.pending_writes or []
+            if pw[1] == INTERRUPT
+        }
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
-            tuple(t.name for t in next_tasks.values() if not t.writes),
+            tuple(
+                t.name
+                for t in next_tasks.values()
+                if not t.writes or t.id in pending_interrupt_task_ids
+            ),
             patch_checkpoint_map(saved.config, saved.metadata),
             saved.metadata,
             saved.checkpoint["ts"],
@@ -1230,9 +1241,20 @@ class Pregel(
             self.stream_channels_asis,
         )
         # assemble the state snapshot
+        # If a task has writes but also has an interrupt pending, it should still
+        # be included in `next` because the graph is waiting for user input
+        pending_interrupt_task_ids = {
+            pw[0]
+            for pw in saved.pending_writes or []
+            if pw[1] == INTERRUPT
+        }
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
-            tuple(t.name for t in next_tasks.values() if not t.writes),
+            tuple(
+                t.name
+                for t in next_tasks.values()
+                if not t.writes or t.id in pending_interrupt_task_ids
+            ),
             patch_checkpoint_map(saved.config, saved.metadata),
             saved.metadata,
             saved.checkpoint["ts"],
