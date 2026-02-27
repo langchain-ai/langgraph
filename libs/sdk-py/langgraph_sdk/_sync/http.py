@@ -51,9 +51,7 @@ class SyncHttpClient:
         except httpx.TimeoutException as e:
             raise APITimeoutError(request=e.request) from e
         except httpx.HTTPError as e:
-            raise APIConnectionError(
-                message=str(e), request=e.request
-            ) from e
+            raise APIConnectionError(message=str(e), request=e.request) from e
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -82,9 +80,7 @@ class SyncHttpClient:
         except httpx.TimeoutException as e:
             raise APITimeoutError(request=e.request) from e
         except httpx.HTTPError as e:
-            raise APIConnectionError(
-                message=str(e), request=e.request
-            ) from e
+            raise APIConnectionError(message=str(e), request=e.request) from e
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -111,9 +107,7 @@ class SyncHttpClient:
         except httpx.TimeoutException as e:
             raise APITimeoutError(request=e.request) from e
         except httpx.HTTPError as e:
-            raise APIConnectionError(
-                message=str(e), request=e.request
-            ) from e
+            raise APIConnectionError(message=str(e), request=e.request) from e
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -139,9 +133,7 @@ class SyncHttpClient:
         except httpx.TimeoutException as e:
             raise APITimeoutError(request=e.request) from e
         except httpx.HTTPError as e:
-            raise APIConnectionError(
-                message=str(e), request=e.request
-            ) from e
+            raise APIConnectionError(message=str(e), request=e.request) from e
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -164,9 +156,7 @@ class SyncHttpClient:
         except httpx.TimeoutException as e:
             raise APITimeoutError(request=e.request) from e
         except httpx.HTTPError as e:
-            raise APIConnectionError(
-                message=str(e), request=e.request
-            ) from e
+            raise APIConnectionError(message=str(e), request=e.request) from e
         if on_response:
             on_response(r)
         _raise_for_status_typed(r)
@@ -186,38 +176,43 @@ class SyncHttpClient:
         request_headers, content = _encode_json(json)
         if headers:
             request_headers.update(headers)
-        with self.client.stream(
-            method, path, headers=request_headers, content=content, params=params
-        ) as r:
-            if on_response:
-                on_response(r)
-            try:
-                r.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                body = r.read().decode()
-                if sys.version_info >= (3, 11):
-                    e.add_note(body)
-                else:
-                    logger.error(f"Error from langgraph-api: {body}", exc_info=e)
-                raise e
-            loc = r.headers.get("location")
-            if reconnect_limit <= 0 or not loc:
-                return _decode_json(r)
-            try:
-                return _decode_json(r)
-            except httpx.HTTPError:
-                warnings.warn(
-                    f"Request failed, attempting reconnect to Location: {loc}",
-                    stacklevel=2,
-                )
-                r.close()
-                return self.request_reconnect(
-                    loc,
-                    "GET",
-                    headers=request_headers,
-                    # don't pass on_response so it's only called once
-                    reconnect_limit=reconnect_limit - 1,
-                )
+        try:
+            with self.client.stream(
+                method, path, headers=request_headers, content=content, params=params
+            ) as r:
+                if on_response:
+                    on_response(r)
+                try:
+                    r.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    body = r.read().decode()
+                    if sys.version_info >= (3, 11):
+                        e.add_note(body)
+                    else:
+                        logger.error(f"Error from langgraph-api: {body}", exc_info=e)
+                    raise e
+                loc = r.headers.get("location")
+                if reconnect_limit <= 0 or not loc:
+                    return _decode_json(r)
+                try:
+                    return _decode_json(r)
+                except httpx.HTTPError:
+                    warnings.warn(
+                        f"Request failed, attempting reconnect to Location: {loc}",
+                        stacklevel=2,
+                    )
+                    r.close()
+                    return self.request_reconnect(
+                        loc,
+                        "GET",
+                        headers=request_headers,
+                        # don't pass on_response so it's only called once
+                        reconnect_limit=reconnect_limit - 1,
+                    )
+        except httpx.TimeoutException as e:
+            raise APITimeoutError(request=e.request) from e
+        except httpx.TransportError as e:
+            raise APIConnectionError(message=str(e), request=e.request) from e
 
     def stream(
         self,
@@ -262,52 +257,57 @@ class SyncHttpClient:
             current_params = params if reconnect_path is None else None
 
             retry = False
-            with self.client.stream(
-                current_method,
-                reconnect_path or path,
-                headers=current_headers,
-                content=current_content,
-                params=current_params,
-            ) as res:
-                if reconnect_path is None and on_response:
-                    on_response(res)
-                # check status
-                _raise_for_status_typed(res)
-                # check content type
-                content_type = res.headers.get("content-type", "").partition(";")[0]
-                if "text/event-stream" not in content_type:
-                    raise httpx.TransportError(
-                        "Expected response header Content-Type to contain 'text/event-stream', "
-                        f"got {content_type!r}"
-                    )
+            try:
+                with self.client.stream(
+                    current_method,
+                    reconnect_path or path,
+                    headers=current_headers,
+                    content=current_content,
+                    params=current_params,
+                ) as res:
+                    if reconnect_path is None and on_response:
+                        on_response(res)
+                    # check status
+                    _raise_for_status_typed(res)
+                    # check content type
+                    content_type = res.headers.get("content-type", "").partition(";")[0]
+                    if "text/event-stream" not in content_type:
+                        raise httpx.TransportError(
+                            "Expected response header Content-Type to contain 'text/event-stream', "
+                            f"got {content_type!r}"
+                        )
 
-                reconnect_location = res.headers.get("location")
-                if reconnect_location:
-                    reconnect_path = reconnect_location
+                    reconnect_location = res.headers.get("location")
+                    if reconnect_location:
+                        reconnect_path = reconnect_location
 
-                decoder = SSEDecoder()
-                try:
-                    for line in iter_lines_raw(res):
-                        sse = decoder.decode(cast(bytes, line).rstrip(b"\n"))
-                        if sse is not None:
+                    decoder = SSEDecoder()
+                    try:
+                        for line in iter_lines_raw(res):
+                            sse = decoder.decode(cast(bytes, line).rstrip(b"\n"))
+                            if sse is not None:
+                                if decoder.last_event_id is not None:
+                                    last_event_id = decoder.last_event_id
+                                if sse.event or sse.data is not None:
+                                    yield sse
+                    except httpx.HTTPError:
+                        # httpx.TransportError inherits from HTTPError, so transient
+                        # disconnects during streaming land here.
+                        if reconnect_path is None:
+                            raise
+                        retry = True
+                    else:
+                        if sse := decoder.decode(b""):
                             if decoder.last_event_id is not None:
                                 last_event_id = decoder.last_event_id
                             if sse.event or sse.data is not None:
+                                # See async stream implementation for rationale on
+                                # skipping empty flush events.
                                 yield sse
-                except httpx.HTTPError:
-                    # httpx.TransportError inherits from HTTPError, so transient
-                    # disconnects during streaming land here.
-                    if reconnect_path is None:
-                        raise
-                    retry = True
-                else:
-                    if sse := decoder.decode(b""):
-                        if decoder.last_event_id is not None:
-                            last_event_id = decoder.last_event_id
-                        if sse.event or sse.data is not None:
-                            # See async stream implementation for rationale on
-                            # skipping empty flush events.
-                            yield sse
+            except httpx.TimeoutException as e:
+                raise APITimeoutError(request=e.request) from e
+            except httpx.TransportError as e:
+                raise APIConnectionError(message=str(e), request=e.request) from e
             if retry:
                 reconnect_attempts += 1
                 if reconnect_attempts > max_reconnect_attempts:
