@@ -3091,6 +3091,8 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
+        subgraphs = kwargs.get("subgraphs", False)
+
         for chunk in self.stream(
             input,
             config,
@@ -3103,6 +3105,10 @@ class Pregel(
             durability=durability,
             **kwargs,
         ):
+            # when subgraphs=True with a single stream_mode, stream()
+            # yields (namespace, payload) tuples — unwrap them
+            if subgraphs and isinstance(chunk, tuple):
+                chunk = chunk[-1]
             if stream_mode == "values":
                 latest = chunk
                 if (
@@ -3171,6 +3177,8 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
+        subgraphs = kwargs.get("subgraphs", False)
+
         async for chunk in self.astream(
             input,
             config,
@@ -3183,6 +3191,10 @@ class Pregel(
             durability=durability,
             **kwargs,
         ):
+            # when subgraphs=True with a single stream_mode, astream()
+            # yields (namespace, payload) tuples — unwrap them
+            if subgraphs and isinstance(chunk, tuple):
+                chunk = chunk[-1]
             if stream_mode == "values":
                 latest = chunk
                 if (
