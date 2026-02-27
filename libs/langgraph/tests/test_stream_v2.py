@@ -28,6 +28,7 @@ from langgraph.types import (
     CustomStreamPart,
     DebugPayload,
     DebugStreamPart,
+    GraphOutput,
     Interrupt,
     MessagesStreamPart,
     StreamPart,
@@ -345,9 +346,77 @@ class TestV2Invoke:
     def test_values_default(self) -> None:
         graph = _make_simple_graph().compile()
         result = graph.invoke(_SIMPLE_INPUT, stream_version="v2")
-        assert isinstance(result, dict)
+        assert isinstance(result, GraphOutput)
+        assert result.value == {"value": "x_a_b", "items": ["a", "b"]}
+        assert result.interrupts == ()
+        # backward compat dict access
         assert result["value"] == "x_a_b"
         assert result["items"] == ["a", "b"]
+
+    def test_invoke_v2_graph_output_with_interrupts(self) -> None:
+        def my_node(state: SimpleState) -> dict[str, Any]:
+            answer = interrupt("what is your name?")
+            return {"value": answer, "items": ["done"]}
+
+        builder: StateGraph = StateGraph(SimpleState)
+        builder.add_node("my_node", my_node)
+        builder.add_edge(START, "my_node")
+        builder.add_edge("my_node", END)
+        graph = builder.compile(checkpointer=InMemorySaver())
+
+        config: Any = {"configurable": {"thread_id": "test-invoke-v2-interrupts"}}
+        result = graph.invoke({"value": "x", "items": []}, config, stream_version="v2")
+        assert isinstance(result, GraphOutput)
+        assert len(result.interrupts) > 0
+        for intr in result.interrupts:
+            assert isinstance(intr, Interrupt)
+        # value should still be the state (not None or empty)
+        assert isinstance(result.value, dict)
+
+    def test_invoke_v2_graph_output_interrupt_compat(self) -> None:
+        """result['__interrupt__'] works via __getitem__."""
+
+        def my_node(state: SimpleState) -> dict[str, Any]:
+            answer = interrupt("what is your name?")
+            return {"value": answer, "items": ["done"]}
+
+        builder: StateGraph = StateGraph(SimpleState)
+        builder.add_node("my_node", my_node)
+        builder.add_edge(START, "my_node")
+        builder.add_edge("my_node", END)
+        graph = builder.compile(checkpointer=InMemorySaver())
+
+        config: Any = {"configurable": {"thread_id": "test-invoke-v2-compat"}}
+        result = graph.invoke({"value": "x", "items": []}, config, stream_version="v2")
+        assert isinstance(result, GraphOutput)
+        assert INTERRUPT in result
+        assert result[INTERRUPT] == result.interrupts
+        assert len(result[INTERRUPT]) > 0
+
+    def test_invoke_v2_graph_output_no_interrupts(self) -> None:
+        graph = _make_simple_graph().compile()
+        result = graph.invoke(_SIMPLE_INPUT, stream_version="v2")
+        assert isinstance(result, GraphOutput)
+        assert result.interrupts == ()
+        assert INTERRUPT not in result
+
+    def test_invoke_v2_pydantic_state(self) -> None:
+        """invoke with v2 and pydantic state returns GraphOutput with pydantic value."""
+
+        def node_a(state: PydanticState) -> dict[str, Any]:
+            return {"value": state.value + "_a", "items": ["a"]}
+
+        builder: StateGraph = StateGraph(PydanticState)
+        builder.add_node("node_a", node_a)
+        builder.add_edge(START, "node_a")
+        builder.add_edge("node_a", END)
+        graph = builder.compile()
+
+        result = graph.invoke({"value": "x", "items": []}, stream_version="v2")
+        assert isinstance(result, GraphOutput)
+        assert isinstance(result.value, PydanticState)
+        assert result.value.value == "x_a"
+        assert result.interrupts == ()
 
     def test_updates_mode(self) -> None:
         graph = _make_simple_graph().compile()
@@ -571,9 +640,42 @@ class TestV2InvokeAsync:
     async def test_values_default(self) -> None:
         graph = _make_simple_graph().compile()
         result = await graph.ainvoke(_SIMPLE_INPUT, stream_version="v2")
-        assert isinstance(result, dict)
+        assert isinstance(result, GraphOutput)
+        assert result.value == {"value": "x_a_b", "items": ["a", "b"]}
+        assert result.interrupts == ()
+        # backward compat dict access
         assert result["value"] == "x_a_b"
         assert result["items"] == ["a", "b"]
+
+    @pytest.mark.anyio
+    async def test_ainvoke_v2_graph_output_with_interrupts(self) -> None:
+        def my_node(state: SimpleState) -> dict[str, Any]:
+            answer = interrupt("what is your name?")
+            return {"value": answer, "items": ["done"]}
+
+        builder: StateGraph = StateGraph(SimpleState)
+        builder.add_node("my_node", my_node)
+        builder.add_edge(START, "my_node")
+        builder.add_edge("my_node", END)
+        graph = builder.compile(checkpointer=InMemorySaver())
+
+        config: Any = {"configurable": {"thread_id": "test-ainvoke-v2-interrupts"}}
+        result = await graph.ainvoke(
+            {"value": "x", "items": []}, config, stream_version="v2"
+        )
+        assert isinstance(result, GraphOutput)
+        assert len(result.interrupts) > 0
+        for intr in result.interrupts:
+            assert isinstance(intr, Interrupt)
+        assert isinstance(result.value, dict)
+
+    @pytest.mark.anyio
+    async def test_ainvoke_v2_graph_output_no_interrupts(self) -> None:
+        graph = _make_simple_graph().compile()
+        result = await graph.ainvoke(_SIMPLE_INPUT, stream_version="v2")
+        assert isinstance(result, GraphOutput)
+        assert result.interrupts == ()
+        assert INTERRUPT not in result
 
     @pytest.mark.anyio
     async def test_updates_mode(self) -> None:

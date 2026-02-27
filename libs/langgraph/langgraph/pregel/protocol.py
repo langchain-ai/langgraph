@@ -11,6 +11,7 @@ from typing_extensions import Self
 from langgraph.types import (
     All,
     Command,
+    GraphOutput,
     StateSnapshot,
     StateUpdate,
     StreamMode,
@@ -202,7 +203,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         stream_version: Literal["v2"],
-    ) -> dict[str, Any]: ...
+    ) -> GraphOutput[dict[str, Any]]: ...
 
     @overload
     @abstractmethod
@@ -240,7 +241,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         stream_version: Literal["v2"],
-    ) -> dict[str, Any]: ...
+    ) -> GraphOutput[dict[str, Any]]: ...
 
     @overload
     @abstractmethod

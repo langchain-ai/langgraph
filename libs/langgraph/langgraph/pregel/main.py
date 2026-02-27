@@ -144,6 +144,7 @@ from langgraph.types import (
     Checkpointer,
     Command,
     Durability,
+    GraphOutput,
     Interrupt,
     Send,
     StateSnapshot,
@@ -3180,7 +3181,7 @@ class Pregel(
         durability: Durability | None = None,
         stream_version: Literal["v2"],
         **kwargs: Any,
-    ) -> dict[str, Any]: ...
+    ) -> GraphOutput[dict[str, Any]]: ...
 
     @overload
     def invoke(
@@ -3293,7 +3294,11 @@ class Pregel(
                         _, mode, payload = cast(
                             tuple[tuple[str, ...], StreamMode, Any], chunk
                         )
-                if (
+                if stream_version == "v2" and mode == "values":
+                    latest = payload
+                    if chunk_ints := chunk.get("interrupts", ()):
+                        interrupts.extend(chunk_ints)  # type: ignore[arg-type]
+                elif (
                     mode == "updates"
                     and isinstance(payload, dict)
                     and (ints := payload.get(INTERRUPT)) is not None
@@ -3305,6 +3310,8 @@ class Pregel(
                 chunks.append(chunk)
 
         if stream_mode == "values":
+            if stream_version == "v2":
+                return GraphOutput(value=latest, interrupts=tuple(interrupts))
             if interrupts:
                 return (
                     {**latest, INTERRUPT: interrupts}
@@ -3330,7 +3337,7 @@ class Pregel(
         durability: Durability | None = None,
         stream_version: Literal["v2"],
         **kwargs: Any,
-    ) -> dict[str, Any]: ...
+    ) -> GraphOutput[dict[str, Any]]: ...
 
     @overload
     async def ainvoke(
@@ -3443,7 +3450,11 @@ class Pregel(
                         _, mode, payload = cast(
                             tuple[tuple[str, ...], StreamMode, Any], chunk
                         )
-                if (
+                if stream_version == "v2" and mode == "values":
+                    latest = payload
+                    if chunk_ints := chunk.get("interrupts", ()):
+                        interrupts.extend(chunk_ints)  # type: ignore[arg-type]
+                elif (
                     mode == "updates"
                     and isinstance(payload, dict)
                     and (ints := payload.get(INTERRUPT)) is not None
@@ -3455,6 +3466,8 @@ class Pregel(
                 chunks.append(chunk)
 
         if stream_mode == "values":
+            if stream_version == "v2":
+                return GraphOutput(value=latest, interrupts=tuple(interrupts))
             if interrupts:
                 return (
                     {**latest, INTERRUPT: interrupts}

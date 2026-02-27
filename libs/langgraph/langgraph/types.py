@@ -23,6 +23,7 @@ from typing_extensions import NotRequired, TypedDict, Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
+from langgraph._internal._constants import INTERRUPT as _INTERRUPT_KEY
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
@@ -77,6 +78,7 @@ __all__ = (
     "Durability",
     "interrupt",
     "Overwrite",
+    "GraphOutput",
     "ensure_valid_checkpointer",
 )
 
@@ -314,6 +316,35 @@ async for part in graph.astream(input, version="v2"):
         part["data"]  # Any — user-defined
 ```
 """
+
+
+@dataclass(frozen=True)
+class GraphOutput(Generic[OutputT]):
+    """Typed container returned by `invoke()` / `ainvoke()` with `stream_version="v2"`.
+
+    Attributes:
+        value: The final output of the graph (dict, Pydantic model, dataclass, etc.).
+        interrupts: Any interrupts that occurred during execution.
+    """
+
+    value: OutputT
+    interrupts: tuple[Interrupt, ...] = ()
+
+    def __getitem__(self, key: str) -> Any:
+        """Backward compat: `result['__interrupt__']` and dict-key access."""
+        if key == _INTERRUPT_KEY:
+            return self.interrupts
+        if isinstance(self.value, dict):
+            return self.value[key]
+        raise KeyError(key)
+
+    def __contains__(self, key: object) -> bool:
+        if key == _INTERRUPT_KEY:
+            return bool(self.interrupts)
+        if isinstance(self.value, dict):
+            return key in self.value
+        return False
+
 
 _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 
