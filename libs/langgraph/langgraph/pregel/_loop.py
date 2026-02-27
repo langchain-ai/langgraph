@@ -128,7 +128,6 @@ P = ParamSpec("P")
 WritesT = Sequence[tuple[str, Any]]
 
 
-
 def DuplexStream(*streams: StreamProtocol) -> StreamProtocol:
     def __call__(value: StreamChunk) -> None:
         for stream in streams:
@@ -554,11 +553,7 @@ class PregelLoop:
             else self.output_keys
         ):
             self._emit(
-                "values",
-                map_output_values,
-                self.output_keys,
-                writes,
-                self.channels,
+                "values", map_output_values, self.output_keys, writes, self.channels
             )
         # clear pending writes
         self.checkpoint_pending_writes.clear()
@@ -928,13 +923,16 @@ class PregelLoop:
                 # we don't emit the interrupt as it'll be emitted by the parent
                 if task.path[0] == PUSH and task.path[-1] is True:
                     return
-                interrupt_tuple = tuple(
-                    v
-                    for w in writes
-                    if w[0] == INTERRUPT
-                    for v in (w[1] if isinstance(w[1], Sequence) else (w[1],))
-                )
-                interrupts = [{INTERRUPT: interrupt_tuple}]
+                interrupts = [
+                    {
+                        INTERRUPT: tuple(
+                            v
+                            for w in writes
+                            if w[0] == INTERRUPT
+                            for v in (w[1] if isinstance(w[1], Sequence) else (w[1],))
+                        )
+                    }
+                ]
                 stream_modes = self.stream.modes if self.stream else []
                 if "updates" in stream_modes:
                     self._emit("updates", lambda: iter(interrupts))
@@ -942,7 +940,7 @@ class PregelLoop:
                     current_values = read_channels(self.channels, self.output_keys)
                     # self.output_keys is a sequence, stream chunk contains entire state and interrupts
                     if isinstance(current_values, dict):
-                        current_values[INTERRUPT] = interrupt_tuple
+                        current_values[INTERRUPT] = interrupts[0][INTERRUPT]
                         self._emit("values", lambda: iter([current_values]))
                     # self.output_keys is a string, stream chunk contains only interrupts
                     else:
