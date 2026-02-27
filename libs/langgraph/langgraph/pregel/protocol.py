@@ -203,7 +203,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         stream_version: Literal["v2"],
-    ) -> GraphOutput[dict[str, Any]]: ...
+    ) -> GraphOutput[OutputT]: ...
 
     @overload
     @abstractmethod
@@ -241,7 +241,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         stream_version: Literal["v2"],
-    ) -> GraphOutput[dict[str, Any]]: ...
+    ) -> GraphOutput[OutputT]: ...
 
     @overload
     @abstractmethod

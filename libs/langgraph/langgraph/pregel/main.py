@@ -3184,7 +3184,7 @@ class Pregel(
         durability: Durability | None = None,
         stream_version: Literal["v2"],
         **kwargs: Any,
-    ) -> GraphOutput[dict[str, Any]]: ...
+    ) -> GraphOutput[OutputT]: ...
 
     @overload
     def invoke(
@@ -3356,7 +3356,7 @@ class Pregel(
         durability: Durability | None = None,
         stream_version: Literal["v2"],
         **kwargs: Any,
-    ) -> GraphOutput[dict[str, Any]]: ...
+    ) -> GraphOutput[OutputT]: ...
 
     @overload
     async def ainvoke(
