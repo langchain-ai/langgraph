@@ -4,7 +4,6 @@ import logging
 from collections.abc import AsyncIterator, Iterator, Sequence
 from dataclasses import asdict
 from typing import (
-    TYPE_CHECKING,
     Any,
     Literal,
     cast,
@@ -43,9 +42,6 @@ from langgraph_sdk.schema import (
 )
 from typing_extensions import Self
 
-if TYPE_CHECKING:
-    from langchain_core.messages import AnyMessage
-
 from langgraph._internal._config import merge_configs
 from langgraph._internal._constants import (
     CONF,
@@ -66,6 +62,7 @@ from langgraph.types import (
     PregelTask,
     StateSnapshot,
     StreamMode,
+    StreamPart,
 )
 
 logger = logging.getLogger(__name__)
@@ -693,14 +690,15 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
-        stream_mode: Literal["values"],
+        stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
+        subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        stream_version: Literal["v2"],
         **kwargs: Any,
-    ) -> Iterator[dict[str, Any]]: ...
+    ) -> Iterator[StreamPart]: ...
 
     @overload
     def stream(
@@ -708,134 +706,15 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
-        stream_mode: Literal["updates"],
+        stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
+        subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        stream_version: Literal["v1"] = ...,
         **kwargs: Any,
-    ) -> Iterator[dict[str, Any]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["messages"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[AnyMessage, dict[str, Any]]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["custom"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[Any]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["values"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["updates"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["messages"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[tuple[str, ...], tuple[AnyMessage, dict[str, Any]]]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["custom"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[tuple[str, ...], Any]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: list[StreamMode],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[str, Any]]: ...
-
-    @overload
-    def stream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: list[StreamMode],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[tuple[str, ...], str, Any]]: ...
+    ) -> Iterator[dict[str, Any] | Any]: ...
 
     def stream(
         self,
@@ -848,6 +727,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        stream_version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> Iterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -929,10 +809,12 @@ class RemoteGraph(PregelProtocol):
                 continue
 
             if chunk.event.startswith("messages"):
-                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+                chunk = chunk._replace(data=tuple(chunk.data))
 
             # emit chunk
-            if subgraphs:
+            if stream_version == "v2":
+                yield {"type": mode, "ns": ns, "data": chunk.data}
+            elif subgraphs:
                 if NS_SEP in chunk.event:
                     mode, ns_ = chunk.event.split(NS_SEP, 1)
                     ns = tuple(ns_.split(NS_SEP))
@@ -953,14 +835,15 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
-        stream_mode: Literal["values"],
+        stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
+        subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        stream_version: Literal["v2"],
         **kwargs: Any,
-    ) -> AsyncIterator[dict[str, Any]]: ...
+    ) -> AsyncIterator[StreamPart]: ...
 
     @overload
     def astream(
@@ -968,134 +851,15 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
-        stream_mode: Literal["updates"],
+        stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
+        subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        stream_version: Literal["v1"] = ...,
         **kwargs: Any,
-    ) -> AsyncIterator[dict[str, Any]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["messages"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[AnyMessage, dict[str, Any]]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["custom"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[Any]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["values"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["updates"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[tuple[str, ...], dict[str, Any]]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["messages"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[tuple[str, ...], tuple[AnyMessage, dict[str, Any]]]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: Literal["custom"],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[tuple[str, ...], Any]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: list[StreamMode],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[False] = False,
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[str, Any]]: ...
-
-    @overload
-    def astream(
-        self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
-        *,
-        stream_mode: list[StreamMode],
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: Literal[True],
-        headers: dict[str, str] | None = None,
-        params: QueryParamTypes | None = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[tuple[str, ...], str, Any]]: ...
+    ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
     async def astream(
         self,
@@ -1108,6 +872,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        stream_version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -1189,10 +954,12 @@ class RemoteGraph(PregelProtocol):
                 continue
 
             if chunk.event.startswith("messages"):
-                chunk = chunk._replace(data=tuple(chunk.data))  # type: ignore
+                chunk = chunk._replace(data=tuple(chunk.data))
 
             # emit chunk
-            if subgraphs:
+            if stream_version == "v2":
+                yield {"type": mode, "ns": ns, "data": chunk.data}
+            elif subgraphs:
                 if NS_SEP in chunk.event:
                     mode, ns_ = chunk.event.split(NS_SEP, 1)
                     ns = tuple(ns_.split(NS_SEP))
@@ -1223,6 +990,7 @@ class RemoteGraph(PregelProtocol):
     ) -> AsyncIterator[dict[str, Any]]:
         raise NotImplementedError
 
+    @overload
     def invoke(
         self,
         input: dict[str, Any] | Any,
@@ -1232,6 +1000,34 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        stream_version: Literal["v2"],
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    def invoke(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        stream_version: Literal["v1"] = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any: ...
+
+    def invoke(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        stream_version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -1242,12 +1038,14 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             headers: Additional headers to pass to the request.
+            stream_version: The streaming format version. `"v1"` (default) returns the
+                traditional format, `"v2"` returns `StreamPart` typed dicts.
             **kwargs: Additional params to pass to RemoteGraph.stream.
 
         Returns:
             The output of the graph.
         """
-        for chunk in self.stream(
+        for chunk in self.stream(  # type: ignore[misc, call-overload]
             input,
             config=config,
             interrupt_before=interrupt_before,
@@ -1255,14 +1053,45 @@ class RemoteGraph(PregelProtocol):
             headers=headers,
             stream_mode="values",
             params=params,
+            stream_version=stream_version,
             **kwargs,
         ):
             pass
         try:
+            if stream_version == "v2":
+                return chunk["data"]
             return chunk
         except UnboundLocalError:
             logger.warning("No events received from remote graph")
             return None
+
+    @overload
+    async def ainvoke(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        stream_version: Literal["v2"],
+        **kwargs: Any,
+    ) -> dict[str, Any]: ...
+
+    @overload
+    async def ainvoke(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        *,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        headers: dict[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        stream_version: Literal["v1"] = ...,
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any: ...
 
     async def ainvoke(
         self,
@@ -1273,6 +1102,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
+        stream_version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -1283,12 +1113,14 @@ class RemoteGraph(PregelProtocol):
             interrupt_before: Interrupt the graph before these nodes.
             interrupt_after: Interrupt the graph after these nodes.
             headers: Additional headers to pass to the request.
+            stream_version: The streaming format version. `"v1"` (default) returns the
+                traditional format, `"v2"` returns `StreamPart` typed dicts.
             **kwargs: Additional params to pass to RemoteGraph.astream.
 
         Returns:
             The output of the graph.
         """
-        async for chunk in self.astream(
+        async for chunk in self.astream(  # type: ignore[misc, call-overload]
             input,
             config=config,
             interrupt_before=interrupt_before,
@@ -1296,10 +1128,13 @@ class RemoteGraph(PregelProtocol):
             headers=headers,
             stream_mode="values",
             params=params,
+            stream_version=stream_version,
             **kwargs,
         ):
             pass
         try:
+            if stream_version == "v2":
+                return chunk["data"]
             return chunk
         except UnboundLocalError:
             logger.warning("No events received from remote graph")

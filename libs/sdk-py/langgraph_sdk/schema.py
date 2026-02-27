@@ -588,6 +588,206 @@ class StreamPart(NamedTuple):
     """The ID of the event."""
 
 
+StreamVersion = Literal["v1", "v2"]
+"""Stream format version.
+
+- ``"v1"``: Traditional format — raw SSE ``StreamPart`` NamedTuples.
+- ``"v2"``: Each event is a typed dict with ``type``, ``ns``, and ``data`` keys.
+"""
+
+
+# --- Typed payload dicts (JSON-deserialized from the server) ---
+
+
+class TaskPayload(TypedDict):
+    """Payload for a task start event."""
+
+    id: str
+    name: str
+    input: Any
+    triggers: list[str]
+
+
+class TaskResultPayload(TypedDict):
+    """Payload for a task result event."""
+
+    id: str
+    name: str
+    error: str | None
+    interrupts: list[dict[str, Any]]
+    result: dict[str, Any]
+
+
+class CheckpointTaskPayload(TypedDict):
+    """A task entry within a ``CheckpointPayload``.
+
+    The keys present depend on the task's state:
+
+    - **Error:** ``id``, ``name``, ``error``, ``state``
+    - **Has result:** ``id``, ``name``, ``result``, ``interrupts``, ``state``
+    - **Pending:** ``id``, ``name``, ``interrupts``, ``state``
+    """
+
+    id: str
+    name: str
+    error: NotRequired[str]
+    result: NotRequired[Any]
+    interrupts: NotRequired[list[dict[str, Any]]]
+    state: dict[str, Any] | None
+
+
+class CheckpointPayload(TypedDict):
+    """Payload for a checkpoint event."""
+
+    config: dict[str, Any] | None
+    metadata: dict[str, Any]
+    values: dict[str, Any]
+    next: list[str]
+    parent_config: dict[str, Any] | None
+    tasks: list[CheckpointTaskPayload]
+
+
+class _DebugCheckpointPayload(TypedDict):
+    step: int
+    timestamp: str
+    type: Literal["checkpoint"]
+    payload: CheckpointPayload
+
+
+class _DebugTaskPayload(TypedDict):
+    step: int
+    timestamp: str
+    type: Literal["task"]
+    payload: TaskPayload
+
+
+class _DebugTaskResultPayload(TypedDict):
+    step: int
+    timestamp: str
+    type: Literal["task_result"]
+    payload: TaskResultPayload
+
+
+DebugPayload = _DebugCheckpointPayload | _DebugTaskPayload | _DebugTaskResultPayload
+"""Wrapper payload for debug events. Discriminate on ``type``."""
+
+
+class RunMetadataPayload(TypedDict):
+    """Payload for the ``metadata`` control event."""
+
+    run_id: str
+
+
+# --- v2 stream part TypedDicts ---
+
+
+class ValuesStreamPart(TypedDict):
+    """Stream part emitted for ``stream_mode="values"``."""
+
+    type: Literal["values"]
+    ns: list[str]
+    data: dict[str, Any]
+
+
+class UpdatesStreamPart(TypedDict):
+    """Stream part emitted for ``stream_mode="updates"``."""
+
+    type: Literal["updates"]
+    ns: list[str]
+    data: dict[str, Any]
+
+
+class MessagesPartialStreamPart(TypedDict):
+    """Stream part emitted for partial message chunks (``messages/partial``)."""
+
+    type: Literal["messages/partial"]
+    ns: list[str]
+    data: list[dict[str, Any]]
+
+
+class MessagesCompleteStreamPart(TypedDict):
+    """Stream part emitted for complete messages (``messages/complete``)."""
+
+    type: Literal["messages/complete"]
+    ns: list[str]
+    data: list[dict[str, Any]]
+
+
+class MessagesMetadataStreamPart(TypedDict):
+    """Stream part emitted for message metadata (``messages/metadata``)."""
+
+    type: Literal["messages/metadata"]
+    ns: list[str]
+    data: dict[str, Any]
+
+
+class MessagesTupleStreamPart(TypedDict):
+    """Stream part emitted for ``stream_mode="messages"`` (raw message+metadata pair)."""
+
+    type: Literal["messages"]
+    ns: list[str]
+    data: list[dict[str, Any]]
+
+
+class CustomStreamPart(TypedDict):
+    """Stream part emitted for ``stream_mode="custom"``."""
+
+    type: Literal["custom"]
+    ns: list[str]
+    data: Any
+
+
+class CheckpointsStreamPart(TypedDict):
+    """Stream part emitted for ``stream_mode="checkpoints"``."""
+
+    type: Literal["checkpoints"]
+    ns: list[str]
+    data: CheckpointPayload
+
+
+class TasksStreamPart(TypedDict):
+    """Stream part emitted for ``stream_mode="tasks"``."""
+
+    type: Literal["tasks"]
+    ns: list[str]
+    data: TaskPayload | TaskResultPayload
+
+
+class DebugStreamPart(TypedDict):
+    """Stream part emitted for ``stream_mode="debug"``."""
+
+    type: Literal["debug"]
+    ns: list[str]
+    data: DebugPayload
+
+
+class MetadataStreamPart(TypedDict):
+    """Control event with ``run_id`` and other run metadata."""
+
+    type: Literal["metadata"]
+    ns: list[str]
+    data: RunMetadataPayload
+
+
+StreamPartV2 = (
+    ValuesStreamPart
+    | UpdatesStreamPart
+    | MessagesPartialStreamPart
+    | MessagesCompleteStreamPart
+    | MessagesMetadataStreamPart
+    | MessagesTupleStreamPart
+    | CustomStreamPart
+    | CheckpointsStreamPart
+    | TasksStreamPart
+    | DebugStreamPart
+    | MetadataStreamPart
+)
+"""Discriminated union of all v2 stream part types.
+
+Use ``part["type"]`` to narrow the type.
+"""
+
+
 class Send(TypedDict):
     """Represents a message to be sent to a specific node in the graph.
 

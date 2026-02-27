@@ -16,9 +16,10 @@ from typing import (
 )
 from warnings import warn
 
+from langchain_core.messages import AnyMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from typing_extensions import Unpack, deprecated
+from typing_extensions import NotRequired, TypedDict, Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
@@ -44,6 +45,19 @@ __all__ = (
     "Checkpointer",
     "StreamMode",
     "StreamWriter",
+    "StreamPart",
+    "ValuesStreamPart",
+    "UpdatesStreamPart",
+    "MessagesStreamPart",
+    "CustomStreamPart",
+    "CheckpointStreamPart",
+    "TasksStreamPart",
+    "DebugStreamPart",
+    "TaskPayload",
+    "TaskResultPayload",
+    "CheckpointTask",
+    "CheckpointPayload",
+    "DebugPayload",
     "RetryPolicy",
     "CachePolicy",
     "Interrupt",
@@ -112,6 +126,182 @@ StreamWriter = Callable[[Any], None]
 """`Callable` that accepts a single argument and writes it to the output stream.
 Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using `stream_mode="custom"`."""
+
+
+class TaskPayload(TypedDict):
+    """Payload for a task start event."""
+
+    id: str
+    name: str
+    input: Any
+    triggers: list[str]
+
+
+class TaskResultPayload(TypedDict):
+    """Payload for a task result event."""
+
+    id: str
+    name: str
+    error: str | None
+    interrupts: list[dict]
+    result: dict[str, Any]
+
+
+class CheckpointTask(TypedDict):
+    """A task entry within a `CheckpointPayload`.
+
+    The keys present depend on the task's state:
+
+    - **Error:** `id`, `name`, `error`, `state`
+    - **Has result:** `id`, `name`, `result`, `interrupts`, `state`
+    - **Pending:** `id`, `name`, `interrupts`, `state`
+    """
+
+    id: str
+    name: str
+    error: NotRequired[str]
+    result: NotRequired[Any]
+    interrupts: NotRequired[list[dict]]
+    state: StateSnapshot | RunnableConfig | None
+
+
+class CheckpointPayload(TypedDict):
+    """Payload for a checkpoint event."""
+
+    config: RunnableConfig | None
+    metadata: CheckpointMetadata
+    values: dict[str, Any]
+    next: list[str]
+    parent_config: RunnableConfig | None
+    tasks: list[CheckpointTask]
+
+
+class _DebugCheckpointPayload(TypedDict):
+    step: int
+    timestamp: str
+    type: Literal["checkpoint"]
+    payload: CheckpointPayload
+
+
+class _DebugTaskPayload(TypedDict):
+    step: int
+    timestamp: str
+    type: Literal["task"]
+    payload: TaskPayload
+
+
+class _DebugTaskResultPayload(TypedDict):
+    step: int
+    timestamp: str
+    type: Literal["task_result"]
+    payload: TaskResultPayload
+
+
+DebugPayload = _DebugCheckpointPayload | _DebugTaskPayload | _DebugTaskResultPayload
+"""Wrapper payload for debug events. Discriminate on `type`."""
+
+
+class ValuesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="values"`.
+
+    `data` contains the full state after each step, as returned by `read_channels()`.
+    """
+
+    type: Literal["values"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+class UpdatesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="updates"`.
+
+    `data` maps node names to their outputs. May also contain
+    `__interrupt__` (tuple of `Interrupt` dicts) and `__metadata__` keys.
+    """
+
+    type: Literal["updates"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+class MessagesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="messages"`.
+
+    `data` is a 2-tuple of `(message, metadata)` where `message` is a
+    `BaseMessage` (e.g. `AIMessageChunk`) and `metadata` is a dict containing
+    keys like `langgraph_step`, `langgraph_node`, `langgraph_triggers`, etc.
+    """
+
+    type: Literal["messages"]
+    ns: tuple[str, ...]
+    data: tuple[AnyMessage, dict[str, Any]]
+
+
+class CustomStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="custom"`.
+
+    `data` is whatever value was passed to `StreamWriter` inside a node.
+    """
+
+    type: Literal["custom"]
+    ns: tuple[str, ...]
+    data: Any
+
+
+class CheckpointStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="checkpoints"`."""
+
+    type: Literal["checkpoints"]
+    ns: tuple[str, ...]
+    data: CheckpointPayload
+
+
+class TasksStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="tasks"`.
+
+    For task start events, `data` is a `TaskPayload` with `id`, `name`,
+    `input`, and `triggers` keys.
+
+    For task result events, `data` is a `TaskResultPayload` with `id`,
+    `name`, `error`, `interrupts`, and `result` keys.
+    """
+
+    type: Literal["tasks"]
+    ns: tuple[str, ...]
+    data: TaskPayload | TaskResultPayload
+
+
+class DebugStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="debug"`."""
+
+    type: Literal["debug"]
+    ns: tuple[str, ...]
+    data: DebugPayload
+
+
+StreamPart = (
+    ValuesStreamPart
+    | UpdatesStreamPart
+    | MessagesStreamPart
+    | CustomStreamPart
+    | CheckpointStreamPart
+    | TasksStreamPart
+    | DebugStreamPart
+)
+"""A discriminated union of all v2 stream part types.
+
+Use `part["type"]` to narrow the type:
+
+```python
+async for part in graph.astream(input, version="v2"):
+    if part["type"] == "values":
+        part["data"]  # dict[str, Any] — full state
+    elif part["type"] == "messages":
+        part["data"]  # tuple[BaseMessage, dict] — (message, metadata)
+    elif part["type"] == "custom":
+        part["data"]  # Any — user-defined
+```
+"""
 
 _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 
