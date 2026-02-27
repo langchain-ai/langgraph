@@ -32,6 +32,7 @@ from langchain_core.load.load import Reviver
 
 from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
 from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.event_hooks import emit_serde_event
 from langgraph.checkpoint.serde.types import SendProtocol
 from langgraph.store.base import Item
 
@@ -519,6 +520,13 @@ def _create_msgpack_ext_hook(
 
         if allowed_modules is True:
             # default is to warn but allow unregistered types
+            emit_serde_event(
+                {
+                    "kind": "msgpack_unregistered_allowed",
+                    "module": module,
+                    "name": name,
+                }
+            )
             logger.warning(
                 "Deserializing unregistered type %s.%s from checkpoint. "
                 "This will be blocked in a future version. "
@@ -533,6 +541,13 @@ def _create_msgpack_ext_hook(
             if key in allowed_modules:
                 return True
         # strict mode blocks unregistered types
+        emit_serde_event(
+            {
+                "kind": "msgpack_blocked",
+                "module": module,
+                "name": name,
+            }
+        )
         logger.warning(
             "Blocked deserialization of %s.%s - not in allowed_msgpack_modules. "
             "Add to allowed_msgpack_modules to allow: [(%r, %r)]",
@@ -548,6 +563,14 @@ def _create_msgpack_ext_hook(
         key = (module, name, method)
         if key in _lg_msgpack.SAFE_MSGPACK_METHODS:
             return True
+        emit_serde_event(
+            {
+                "kind": "msgpack_method_blocked",
+                "module": module,
+                "name": name,
+                "method": method,
+            }
+        )
         logger.warning(
             "Blocked deserialization of method call %s.%s.%s - "
             "not in allowed methods set.",

@@ -25,6 +25,10 @@ from pydantic.v1 import SecretStr as SecretStrV1
 
 from langgraph.checkpoint.serde import _msgpack as _lg_msgpack
 from langgraph.checkpoint.serde._msgpack import AllowedMsgpackModules
+from langgraph.checkpoint.serde.event_hooks import (
+    SerdeEvent,
+    register_serde_event_listener,
+)
 from langgraph.checkpoint.serde.jsonplus import (
     EXT_METHOD_SINGLE_ARG,
     InvalidModuleError,
@@ -668,6 +672,40 @@ def test_msgpack_allowlist_blocks_non_listed(
     expected = obj.model_dump()
     # It's not allowed, so we just leave it as a dict
     assert result == expected
+
+
+def test_msgpack_blocked_emits_event() -> None:
+    events: list[SerdeEvent] = []
+    unregister = register_serde_event_listener(events.append)
+    try:
+        serde = JsonPlusSerializer(allowed_msgpack_modules=None)
+        obj = AnotherPydantic(foo="nope")
+        serde.loads_typed(serde.dumps_typed(obj))
+    finally:
+        unregister()
+
+    assert {
+        "kind": "msgpack_blocked",
+        "module": "tests.test_jsonplus",
+        "name": "AnotherPydantic",
+    } in events
+
+
+def test_msgpack_unregistered_allowed_emits_event() -> None:
+    events: list[SerdeEvent] = []
+    unregister = register_serde_event_listener(events.append)
+    try:
+        serde = JsonPlusSerializer(allowed_msgpack_modules=True)
+        obj = AnotherPydantic(foo="ok")
+        serde.loads_typed(serde.dumps_typed(obj))
+    finally:
+        unregister()
+
+    assert {
+        "kind": "msgpack_unregistered_allowed",
+        "module": "tests.test_jsonplus",
+        "name": "AnotherPydantic",
+    } in events
 
 
 def test_msgpack_strict_allows_safe_types(
