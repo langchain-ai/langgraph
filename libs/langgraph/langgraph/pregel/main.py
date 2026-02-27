@@ -3095,9 +3095,7 @@ class Pregel(
             input,
             config,
             context=context,
-            stream_mode=["updates", "values"]
-            if stream_mode == "values"
-            else stream_mode,
+            stream_mode="values" if stream_mode == "values" else stream_mode,
             print_mode=print_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
@@ -3106,20 +3104,9 @@ class Pregel(
             **kwargs,
         ):
             if stream_mode == "values":
-                if len(chunk) == 2:
-                    mode, payload = cast(tuple[StreamMode, Any], chunk)
-                else:
-                    _, mode, payload = cast(
-                        tuple[tuple[str, ...], StreamMode, Any], chunk
-                    )
-                if (
-                    mode == "updates"
-                    and isinstance(payload, dict)
-                    and (ints := payload.get(INTERRUPT)) is not None
-                ):
+                latest = chunk
+                if isinstance(chunk, dict) and (ints := chunk.get(INTERRUPT)) is not None:
                     interrupts.extend(ints)
-                elif mode == "values":
-                    latest = payload
             else:
                 chunks.append(chunk)
 
@@ -3185,9 +3172,7 @@ class Pregel(
             input,
             config,
             context=context,
-            stream_mode=["updates", "values"]
-            if stream_mode == "values"
-            else stream_mode,
+            stream_mode="values" if stream_mode == "values" else stream_mode,
             print_mode=print_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
@@ -3196,20 +3181,9 @@ class Pregel(
             **kwargs,
         ):
             if stream_mode == "values":
-                if len(chunk) == 2:
-                    mode, payload = cast(tuple[StreamMode, Any], chunk)
-                else:
-                    _, mode, payload = cast(
-                        tuple[tuple[str, ...], StreamMode, Any], chunk
-                    )
-                if (
-                    mode == "updates"
-                    and isinstance(payload, dict)
-                    and (ints := payload.get(INTERRUPT)) is not None
-                ):
+                latest = chunk
+                if isinstance(chunk, dict) and (ints := chunk.get(INTERRUPT)) is not None:
                     interrupts.extend(ints)
-                elif mode == "values":
-                    latest = payload
             else:
                 chunks.append(chunk)
 
