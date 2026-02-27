@@ -13,7 +13,11 @@ import httpx
 import orjson
 
 from langgraph_sdk._shared.utilities import _orjson_default
-from langgraph_sdk.errors import _araise_for_status_typed
+from langgraph_sdk.errors import (
+    APIConnectionError,
+    APITimeoutError,
+    _araise_for_status_typed,
+)
 from langgraph_sdk.schema import QueryParamTypes, StreamPart
 from langgraph_sdk.sse import SSEDecoder, aiter_lines_raw
 
@@ -42,7 +46,14 @@ class HttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> Any:
         """Send a `GET` request."""
-        r = await self.client.get(path, params=params, headers=headers)
+        try:
+            r = await self.client.get(path, params=params, headers=headers)
+        except httpx.TimeoutException as e:
+            raise APITimeoutError(request=e.request) from e
+        except httpx.HTTPError as e:
+            raise APIConnectionError(
+                message=str(e), request=e.request
+            ) from e
         if on_response:
             on_response(r)
         await _araise_for_status_typed(r)
@@ -65,9 +76,16 @@ class HttpClient:
         # Merge headers, with runtime headers taking precedence
         if headers:
             request_headers.update(headers)
-        r = await self.client.post(
-            path, headers=request_headers, content=content, params=params
-        )
+        try:
+            r = await self.client.post(
+                path, headers=request_headers, content=content, params=params
+            )
+        except httpx.TimeoutException as e:
+            raise APITimeoutError(request=e.request) from e
+        except httpx.HTTPError as e:
+            raise APIConnectionError(
+                message=str(e), request=e.request
+            ) from e
         if on_response:
             on_response(r)
         await _araise_for_status_typed(r)
@@ -86,9 +104,16 @@ class HttpClient:
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
-        r = await self.client.put(
-            path, headers=request_headers, content=content, params=params
-        )
+        try:
+            r = await self.client.put(
+                path, headers=request_headers, content=content, params=params
+            )
+        except httpx.TimeoutException as e:
+            raise APITimeoutError(request=e.request) from e
+        except httpx.HTTPError as e:
+            raise APIConnectionError(
+                message=str(e), request=e.request
+            ) from e
         if on_response:
             on_response(r)
         await _araise_for_status_typed(r)
@@ -107,9 +132,16 @@ class HttpClient:
         request_headers, content = await _aencode_json(json)
         if headers:
             request_headers.update(headers)
-        r = await self.client.patch(
-            path, headers=request_headers, content=content, params=params
-        )
+        try:
+            r = await self.client.patch(
+                path, headers=request_headers, content=content, params=params
+            )
+        except httpx.TimeoutException as e:
+            raise APITimeoutError(request=e.request) from e
+        except httpx.HTTPError as e:
+            raise APIConnectionError(
+                message=str(e), request=e.request
+            ) from e
         if on_response:
             on_response(r)
         await _araise_for_status_typed(r)
@@ -125,9 +157,16 @@ class HttpClient:
         on_response: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """Send a `DELETE` request."""
-        r = await self.client.request(
-            "DELETE", path, json=json, params=params, headers=headers
-        )
+        try:
+            r = await self.client.request(
+                "DELETE", path, json=json, params=params, headers=headers
+            )
+        except httpx.TimeoutException as e:
+            raise APITimeoutError(request=e.request) from e
+        except httpx.HTTPError as e:
+            raise APIConnectionError(
+                message=str(e), request=e.request
+            ) from e
         if on_response:
             on_response(r)
         await _araise_for_status_typed(r)
