@@ -146,14 +146,14 @@ class TaskPayload(TypedDict):
     triggers: list[str]
 
 
-class TaskResultPayload(TypedDict, Generic[StateT]):
+class TaskResultPayload(TypedDict):
     """Payload for a task result event."""
 
     id: str
     name: str
     error: str | None
     interrupts: list[dict]
-    result: StateT
+    result: dict[str, Any]
 
 
 class CheckpointTask(TypedDict):
@@ -199,17 +199,17 @@ class _DebugTaskPayload(TypedDict):
     payload: TaskPayload
 
 
-class _DebugTaskResultPayload(TypedDict, Generic[StateT]):
+class _DebugTaskResultPayload(TypedDict):
     step: int
     timestamp: str
     type: Literal["task_result"]
-    payload: TaskResultPayload[StateT]
+    payload: TaskResultPayload
 
 
 DebugPayload = (
     _DebugCheckpointPayload[StateT]
     | _DebugTaskPayload
-    | _DebugTaskResultPayload[StateT]
+    | _DebugTaskResultPayload
 )
 """Wrapper payload for debug events. Discriminate on `type`."""
 
@@ -270,7 +270,7 @@ class CheckpointStreamPart(TypedDict, Generic[StateT]):
     data: CheckpointPayload[StateT]
 
 
-class TasksStreamPart(TypedDict, Generic[StateT]):
+class TasksStreamPart(TypedDict):
     """Stream part emitted for `stream_mode="tasks"`.
 
     For task start events, `data` is a `TaskPayload` with `id`, `name`,
@@ -282,7 +282,7 @@ class TasksStreamPart(TypedDict, Generic[StateT]):
 
     type: Literal["tasks"]
     ns: tuple[str, ...]
-    data: TaskPayload | TaskResultPayload[StateT]
+    data: TaskPayload | TaskResultPayload
 
 
 class DebugStreamPart(TypedDict, Generic[StateT]):
@@ -299,7 +299,7 @@ StreamPart = (
     | MessagesStreamPart
     | CustomStreamPart
     | CheckpointStreamPart[StateT]
-    | TasksStreamPart[StateT]
+    | TasksStreamPart
     | DebugStreamPart[StateT]
 )
 """A discriminated union of all v2 stream part types.
