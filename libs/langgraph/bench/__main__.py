@@ -1,9 +1,10 @@
 import random
-import sys
 from uuid import uuid4
 
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from pyperf._runner import Runner
+from uvloop import new_event_loop
 
 from bench.fanout_to_subgraph import fanout_to_subgraph, fanout_to_subgraph_sync
 from bench.pydantic_state import pydantic_state
@@ -462,54 +463,6 @@ benchmarks = (
     ),
 )
 
-
-if "--profile" in sys.argv:
-    import asyncio
-    import cProfile
-    import pstats
-    from pathlib import Path
-
-    out_dir = Path("out")
-    out_dir.mkdir(exist_ok=True)
-
-    for name, agraph, graph, input_data in benchmarks:
-        # Profile async variant
-        prof = cProfile.Profile()
-        prof.enable()
-        asyncio.run(arun(agraph, input_data))
-        prof.disable()
-
-        prof_path = out_dir / f"{name}.prof"
-        prof.dump_stats(str(prof_path))
-
-        print(f"\n{'=' * 60}")
-        print(f"PROFILE: {name}")
-        print(f"{'=' * 60}")
-        stats = pstats.Stats(prof)
-        stats.sort_stats("cumulative")
-        stats.print_stats(20)
-
-        # Profile sync variant
-        if graph is not None:
-            prof = cProfile.Profile()
-            prof.enable()
-            run(graph, input_data)
-            prof.disable()
-
-            prof_path = out_dir / f"{name}_sync.prof"
-            prof.dump_stats(str(prof_path))
-
-            print(f"\n{'=' * 60}")
-            print(f"PROFILE: {name}_sync")
-            print(f"{'=' * 60}")
-            stats = pstats.Stats(prof)
-            stats.sort_stats("cumulative")
-            stats.print_stats(20)
-
-    sys.exit(0)
-
-from pyperf._runner import Runner  # noqa: E402
-from uvloop import new_event_loop  # noqa: E402
 
 r = Runner()
 
