@@ -180,6 +180,8 @@ class PregelLoop:
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
+    _has_untracked_channels: bool
+    _available_channels: set[str]
     managed: ManagedValueMapping
     checkpoint: Checkpoint
     checkpoint_id_saved: str
@@ -545,6 +547,7 @@ class PregelLoop:
             self.tasks.values(),
             self.checkpointer_get_next_version,
             self.trigger_to_nodes,
+            available_channels=self._available_channels,
         )
         # produce values output
         if not self.updated_channels.isdisjoint(
@@ -675,6 +678,7 @@ class PregelLoop:
                 [PregelTaskWrites((), INPUT, null_writes, [])],
                 self.checkpointer_get_next_version,
                 self.trigger_to_nodes,
+                available_channels=self._available_channels,
             )
             if updated_channels is not None:
                 updated_channels.update(null_updated_channels)
@@ -717,6 +721,7 @@ class PregelLoop:
                 ],
                 self.checkpointer_get_next_version,
                 self.trigger_to_nodes,
+                available_channels=self._available_channels,
             )
             # save input checkpoint
             self.updated_channels = updated_channels
@@ -844,6 +849,7 @@ class PregelLoop:
                     self.tasks.values(),
                     self.checkpointer_get_next_version,
                     self.trigger_to_nodes,
+                    available_channels=self._available_channels,
                 )
                 if not updated_channels.isdisjoint(
                     (self.output_keys,)
@@ -1114,6 +1120,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
         )
+        self._available_channels: set[str] = {
+            k for k, v in self.channels.items() if v.is_available()
+        }
         self.stack.push(self._suppress_interrupt)
         self.status = "input"
         self.step = self.checkpoint_metadata["step"] + 1
@@ -1295,6 +1304,9 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
         )
+        self._available_channels: set[str] = {
+            k for k, v in self.channels.items() if v.is_available()
+        }
         self.stack.push(self._suppress_interrupt)
         self.status = "input"
         self.step = self.checkpoint_metadata["step"] + 1
