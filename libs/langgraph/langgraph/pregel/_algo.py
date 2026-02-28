@@ -220,6 +220,7 @@ def apply_writes(
     tasks: Iterable[WritesProtocol],
     get_next_version: GetNextVersion | None,
     trigger_to_nodes: Mapping[str, Sequence[str]],
+    available_channels: set[str] | None = None,
 ) -> set[str]:
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
     to the checkpoint and channels, and return managed values writes to be applied
@@ -275,6 +276,11 @@ def apply_writes(
     }:
         if channels[chan].consume() and next_version is not None:
             checkpoint["channel_versions"][chan] = next_version
+        if available_channels is not None:
+            if channels[chan].is_available():
+                available_channels.add(chan)
+            else:
+                available_channels.discard(chan)
 
     # Group writes by channel
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
@@ -298,16 +304,35 @@ def apply_writes(
                 # unavailable channels can't trigger tasks, so don't add them
                 if channels[chan].is_available():
                     updated_channels.add(chan)
+                    if available_channels is not None:
+                        available_channels.add(chan)
+                elif available_channels is not None:
+                    available_channels.discard(chan)
+            elif available_channels is not None:
+                if channels[chan].is_available():
+                    available_channels.add(chan)
+                else:
+                    available_channels.discard(chan)
 
     # Channels that weren't updated in this step are notified of a new step
     if bump_step:
-        for chan in channels:
-            if channels[chan].is_available() and chan not in updated_channels:
-                if channels[chan].update(EMPTY_SEQ) and next_version is not None:
-                    checkpoint["channel_versions"][chan] = next_version
-                    # unavailable channels can't trigger tasks, so don't add them
-                    if channels[chan].is_available():
-                        updated_channels.add(chan)
+        candidates = (
+            available_channels - updated_channels
+            if available_channels is not None
+            else (
+                chan
+                for chan in channels
+                if channels[chan].is_available() and chan not in updated_channels
+            )
+        )
+        for chan in candidates:
+            if channels[chan].update(EMPTY_SEQ) and next_version is not None:
+                checkpoint["channel_versions"][chan] = next_version
+                # unavailable channels can't trigger tasks, so don't add them
+                if channels[chan].is_available():
+                    updated_channels.add(chan)
+                elif available_channels is not None:
+                    available_channels.discard(chan)
 
     # If this is (tentatively) the last superstep, notify all channels of finish
     if bump_step and updated_channels.isdisjoint(trigger_to_nodes):
@@ -317,6 +342,15 @@ def apply_writes(
                 # unavailable channels can't trigger tasks, so don't add them
                 if channels[chan].is_available():
                     updated_channels.add(chan)
+                    if available_channels is not None:
+                        available_channels.add(chan)
+                elif available_channels is not None:
+                    available_channels.discard(chan)
+            elif available_channels is not None:
+                if channels[chan].is_available():
+                    available_channels.add(chan)
+                else:
+                    available_channels.discard(chan)
 
     # Return managed values writes to be applied externally
     return updated_channels
