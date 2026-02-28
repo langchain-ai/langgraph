@@ -187,6 +187,11 @@ class JsonPlusSerializer(SerializerProtocol):
                 except Exception:
                     continue
         except Exception:
+            logger.warning(
+                "Failed to revive LC2 object %s",
+                value.get("id"),
+                exc_info=True,
+            )
             return None
 
     def _check_allowed_json_modules(self, value: dict[str, Any]) -> None:
@@ -594,6 +599,11 @@ def _create_msgpack_ext_hook(
                 # module, name, arg
                 return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
             except Exception:
+                logger.warning(
+                    "Failed to deserialize object with single arg constructor: %s",
+                    data[:64],
+                    exc_info=True,
+                )
                 return None
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
             try:
@@ -605,6 +615,11 @@ def _create_msgpack_ext_hook(
                 # module, name, args
                 return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
             except Exception:
+                logger.warning(
+                    "Failed to deserialize object with positional args constructor: %s",
+                    data[:64],
+                    exc_info=True,
+                )
                 return None
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
             try:
@@ -616,6 +631,11 @@ def _create_msgpack_ext_hook(
                 # module, name, kwargs
                 return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
             except Exception:
+                logger.warning(
+                    "Failed to deserialize object with keyword args constructor: %s",
+                    data[:64],
+                    exc_info=True,
+                )
                 return None
         elif code == EXT_METHOD_SINGLE_ARG:
             try:
@@ -629,6 +649,11 @@ def _create_msgpack_ext_hook(
                     getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
                 )(tup[2])
             except Exception:
+                logger.warning(
+                    "Failed to deserialize object with method single arg: %s",
+                    data[:64],
+                    exc_info=True,
+                )
                 return None
         elif code == EXT_PYDANTIC_V1:
             try:
@@ -646,6 +671,10 @@ def _create_msgpack_ext_hook(
             except Exception:
                 # for pydantic objects we can't find/reconstruct
                 # let's return the kwargs dict instead
+                logger.warning(
+                    "Failed to deserialize Pydantic v1 object, returning raw kwargs",
+                    exc_info=True,
+                )
                 try:
                     return tup[2]
                 except NameError:
@@ -666,6 +695,10 @@ def _create_msgpack_ext_hook(
             except Exception:
                 # for pydantic objects we can't find/reconstruct
                 # let's return the kwargs dict instead
+                logger.warning(
+                    "Failed to deserialize Pydantic v2 object, returning raw kwargs",
+                    exc_info=True,
+                )
                 try:
                     return tup[2]
                 except NameError:
@@ -680,6 +713,11 @@ def _create_msgpack_ext_hook(
                 arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
                 return arr.reshape(shape, order=order)
             except Exception:
+                logger.warning(
+                    "Failed to deserialize numpy array: %s",
+                    data[:64],
+                    exc_info=True,
+                )
                 return None
         return None
 
