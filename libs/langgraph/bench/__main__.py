@@ -508,8 +508,8 @@ if "--profile" in sys.argv:
 
     sys.exit(0)
 
-from pyperf._runner import Runner
-from uvloop import new_event_loop
+from pyperf._runner import Runner  # noqa: E402
+from uvloop import new_event_loop  # noqa: E402
 
 r = Runner()
 
