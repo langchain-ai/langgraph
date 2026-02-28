@@ -1,0 +1,98 @@
+name: lint
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+        description: "From which folder this pipeline executes"
+
+permissions:
+  contents: read
+
+env:
+  # This env var allows us to get inline annotations when ruff has complaints.
+  RUFF_OUTPUT_FORMAT: github
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Only lint on the min and max supported Python versions.
+        # It's extremely unlikely that there's a lint issue on any version in between
+        # that doesn't show up on the min or max versions.
+        #
+        # GitHub rate-limits how many jobs can be running at any one time.
+        # Starting new jobs is also relatively slow,
+        # so linting on fewer versions makes CI faster.
+        python-version:
+          - "3.12"
+    name: "lint #${{ matrix.python-version }}"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get changed files
+        id: changed-files
+        if: github.event_name != 'workflow_dispatch'
+        uses: Ana06/get-changed-files@v2.3.0
+        with:
+          filter: "${{ inputs.working-directory }}/**"
+      - name: Set up Python ${{ matrix.python-version }}
+        if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-suffix: lint-${{ inputs.working-directory }}
+
+      - name: Install dependencies
+        if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
+        working-directory: ${{ inputs.working-directory }}
+        run: uv sync --frozen --group lint
+
+      - name: Get .mypy_cache to speed up mypy
+        if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
+        uses: actions/cache@v5
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
+        with:
+          path: |
+            ${{ inputs.working-directory }}/.mypy_cache
+          key: mypy-lint-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/uv.lock', inputs.working-directory)) }}
+
+      - name: Analysing package code with our lint
+        if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if make lint_package > /dev/null 2>&1; then
+            make lint_package
+          else
+            echo "lint_package command not found, using lint instead"
+            make lint
+          fi
+
+      - name: Install test dependencies
+        if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
+        working-directory: ${{ inputs.working-directory }}
+        run: uv sync --group lint
+
+      - name: Get .mypy_cache_test to speed up mypy
+        if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
+        uses: actions/cache@v5
+        env:
+          SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
+        with:
+          path: |
+            ${{ inputs.working-directory }}/.mypy_cache_test
+          key: mypy-test-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/uv.lock', inputs.working-directory)) }}
+
+      - name: Analysing tests with our lint
+        if: steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch'
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if make lint_tests > /dev/null 2>&1; then
+            make lint_tests
+          else
+            echo "lint_tests command not found, skipping step"
+          fi

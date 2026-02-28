@@ -1,0 +1,183 @@
+---
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+  
+
+permissions:
+  contents: read
+
+# If another push to the same PR or branch happens while this workflow is still running,
+# cancel the earlier run in favor of the next run.
+#
+# There's no point in testing an outdated version of the code. GitHub only allows
+# a limited number of job runners to be active at the same time, so it's better to cancel
+# pointless jobs early so that more useful jobs can run sooner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python || 'true' }}
+      deps: ${{ steps.filter.outputs.deps || 'true' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        if: github.event_name != 'workflow_dispatch'
+        id: filter
+        with:
+          filters: |
+            python:
+              - 'libs/langgraph/**'
+              - 'libs/sdk-py/**'
+              - 'libs/cli/**'
+              - 'libs/checkpoint/**'
+              - 'libs/checkpoint-sqlite/**'
+              - 'libs/checkpoint-postgres/**'
+              - 'libs/checkpoint-conformance/**'
+              - 'libs/prebuilt/**'
+            deps:
+              - '**/pyproject.toml'
+              - '**/uv.lock'
+
+  lint:
+    needs: changes
+    name: cd ${{ matrix.working-directory }}
+    strategy:
+      matrix:
+        working-directory:
+          [
+            "libs/langgraph",
+            "libs/sdk-py",
+            "libs/cli",
+            "libs/checkpoint",
+            "libs/checkpoint-sqlite",
+            "libs/checkpoint-postgres",
+            "libs/checkpoint-conformance",
+            "libs/prebuilt",
+          ]
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
+    uses: ./.github/workflows/_lint.yml
+    with:
+      working-directory: ${{ matrix.working-directory }}
+    secrets: inherit
+
+  test:
+    needs: changes
+    name: cd ${{ matrix.working-directory }}
+    strategy:
+      matrix:
+        working-directory:
+          [
+            "libs/cli",
+            "libs/checkpoint",
+            "libs/checkpoint-sqlite",
+            "libs/checkpoint-postgres",
+            "libs/checkpoint-conformance",
+            "libs/prebuilt",
+            "libs/sdk-py",
+          ]
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
+    uses: ./.github/workflows/_test.yml
+    with:
+      working-directory: ${{ matrix.working-directory }}
+    secrets: inherit
+
+  # NOTE: we're testing langgraph separately because it requires a different matrix
+  test-langgraph:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
+    name: "cd libs/langgraph"
+    uses: ./.github/workflows/_test_langgraph.yml
+    secrets: inherit
+
+  check-sdk-methods:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    name: "Check SDK methods matching"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Run check_sdk_methods script
+        run: python .github/scripts/check_sdk_methods.py
+
+  check-schema:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    name: "Check CLI schema hasn't changed #${{ matrix.python-version }}"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.13"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-suffix: "schema-check-cli"
+      - name: Install CLI dependencies
+        run: |
+          cd libs/cli
+          uv sync
+      - name: Generate schema and check for changes
+        run: |
+          cd libs/cli
+          # Create a temporary copy of the current schema
+          cp schemas/schema.json schemas/schema.current.json
+          # Generate new schema
+          uv run python generate_schema.py
+          # Compare the new schema with the original
+          if ! diff -q schemas/schema.json schemas/schema.current.json > /dev/null; then
+            echo "Error: Langgraph.json configuration schema has changed. Please run 'uv run python generate_schema.py' in the libs/cli directory and commit the changes."
+            diff schemas/schema.json schemas/schema.current.json
+            exit 1
+          fi
+          echo "Schema check passed - no changes detected"
+
+  integration-test:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
+    name: CLI integration test
+    uses: ./.github/workflows/_integration_test.yml
+    secrets: inherit
+
+  ci_success:
+    name: "CI Success"
+    needs:
+      [
+        lint,
+        test,
+        test-langgraph,
+        check-sdk-methods,
+        check-schema,
+        integration-test,
+      ]
+    if: |
+      always()
+    runs-on: ubuntu-latest
+    env:
+      JOBS_JSON: ${{ toJSON(needs) }}
+      RESULTS_JSON: ${{ toJSON(needs.*.result) }}
+      EXIT_CODE: ${{!contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && '0' || '1'}}
+    steps:
+      - name: "CI Success"
+        run: |
+          echo $JOBS_JSON
+          echo $RESULTS_JSON
+          echo "Exiting with $EXIT_CODE"
+          exit $EXIT_CODE

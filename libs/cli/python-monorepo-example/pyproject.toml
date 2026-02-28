@@ -1,0 +1,46 @@
+[project]
+name = "python-monorepo-example"
+version = "0.0.1"
+description = "A Python monorepo example with LangGraph agents and shared packages"
+authors = [
+    { name = "Developer", email = "dev@example.com" },
+]
+license = { text = "MIT" }
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "langgraph>=0.6.0,<2",
+    "langchain-core>=0.2.14",
+]
+
+[tool.uv.workspace]
+members = ["apps/*", "libs/shared"]
+
+[tool.uv.sources]
+shared = { workspace = true }
+
+[project.optional-dependencies]
+dev = ["mypy>=1.11.1", "ruff>=0.6.1"]
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+lint.select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "D",    # pydocstyle
+    "UP",
+]
+lint.ignore = [
+    "D100",  # Missing docstring in public module
+    "D101",  # Missing docstring in public class
+    "D102",  # Missing docstring in public method
+    "D103",  # Missing docstring in public function
+    "D104",  # Missing docstring in public package
+    "D105",  # Missing docstring in magic method
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

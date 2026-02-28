@@ -1,0 +1,139 @@
+name: CLI integration test
+
+on:
+  workflow_call:
+    secrets:
+      LANGSMITH_API_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.14"
+        example:
+          - name: A
+            workdir: libs/cli/examples
+            tag: langgraph-test-a
+          - name: B
+            workdir: libs/cli/examples/graphs
+            tag: langgraph-test-b
+          - name: C
+            workdir: libs/cli/examples/graphs_reqs_a
+            tag: langgraph-test-c
+          - name: D
+            workdir: libs/cli/examples/graphs_reqs_b
+            tag: langgraph-test-d
+    name: "CLI integration test"
+    env:
+      HAS_LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY != '' }}
+    defaults:
+      run:
+        working-directory: libs/cli
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get changed files
+        id: changed-files
+        if: github.event_name != 'workflow_dispatch'
+        uses: Ana06/get-changed-files@v2.3.0
+        with:
+          filter: "libs/cli/**"
+      - name: Set up Python ${{ matrix.python-version }}
+        if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-suffix: "cli-integration-test"
+          ignore-nothing-to-cache: true
+      - name: Install cli globally
+        if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
+        run: pip install -e .
+      - name: Build service ${{ matrix.example.name }}
+        if: (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch')
+        working-directory: ${{ matrix.example.workdir }}
+        run: |
+          langgraph build -t ${{ matrix.example.tag }}
+      - name: Test service ${{ matrix.example.name }}
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&env.HAS_LANGSMITH_API_KEY == 'true' }}
+        working-directory: ${{ matrix.example.workdir }}
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
+          # Prepare environment file from local or parent example directory
+          if [ -f .env.example ]; then cp .env.example .env; elif [ -f ../.env.example ]; then cp ../.env.example .env && cp ../.env.example ../.env; fi
+          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
+          if [ -f ../.env ]; then echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> ../.env; fi
+          # Run the integration test using the built tag
+          REPO_ROOT=$(git rev-parse --show-toplevel)
+          timeout 60 python "$REPO_ROOT/.github/scripts/run_langgraph_cli_test.py" -t ${{ matrix.example.tag }}
+
+      - name: Build JS service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
+        working-directory: libs/cli/js-examples
+        run: |
+          langgraph build -t langgraph-test-e
+
+      - name: Build JS monorepo service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
+        working-directory: libs/cli/js-monorepo-example
+        run: |
+          langgraph build -t langgraph-test-f -c apps/agent/langgraph.json --build-command "yarn run turbo build" --install-command "yarn install"
+
+      - name: Build Python monorepo service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
+        working-directory: libs/cli/python-monorepo-example
+        run: |
+          langgraph build -t langgraph-test-g -c apps/agent/langgraph.json
+      - name: Test Python monorepo service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        working-directory: libs/cli/python-monorepo-example
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
+          cp apps/agent/.env.example apps/agent/.env
+          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> apps/agent/.env
+          timeout 60 python ../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-g -c apps/agent/langgraph.json
+
+      - name: Build prerelease reqs service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
+        working-directory: libs/cli/examples/graph_prerelease_reqs
+        run: |
+          langgraph build -t langgraph-test-h
+      - name: Test prerelease reqs service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' && env.HAS_LANGSMITH_API_KEY == 'true' }}
+        working-directory: libs/cli/examples/graph_prerelease_reqs
+        env:
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
+          cp ../.env.example .env
+          echo "LANGSMITH_API_KEY=${{ secrets.LANGSMITH_API_KEY }}" >> .env
+          timeout 60 python ../../../../.github/scripts/run_langgraph_cli_test.py -t langgraph-test-h
+          echo "Finished starting up langgraph-test-h"
+          LANGGRAPH_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langgraph'); print(v);")
+          if [ "$LANGGRAPH_VERSION" != "1.0.8" ]; then
+            echo "LANGGRAPH_VERSION != 1.0.8; $LANGGRAPH_VERSION"
+            exit 1
+          fi
+          LANGCHAIN_OPENAI_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-openai'); print(v);")
+          if [ "$LANGCHAIN_OPENAI_VERSION" != "1.0.1" ]; then
+            echo "LANGCHAIN_OPENAI_VERSION != 1.0.1; $LANGCHAIN_OPENAI_VERSION"
+            exit 1
+          fi
+          LANGCHAIN_ANTHROPIC_VERSION=$(docker run --rm --entrypoint "" langgraph-test-h python -c "import sys; from importlib.metadata import version; v = version('langchain-anthropic'); print(v);")
+          if [ "$LANGCHAIN_ANTHROPIC_VERSION" != "1.0.0a5" ]; then
+            echo "LANGCHAIN_ANTHROPIC_VERSION != 1.0.0a5; $LANGCHAIN_ANTHROPIC_VERSION"
+            exit 1
+          fi
+
+      - name: Build and test prerelease reqs fail service
+        if: ${{ (steps.changed-files.outputs.all || github.event_name == 'workflow_dispatch') &&matrix.example.name == 'A' }}
+        working-directory: libs/cli/examples/graph_prerelease_reqs_fail
+        run: |
+          langgraph build -t langgraph-test-i || [ $? -eq 1 ]

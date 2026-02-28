@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langgraph-cli"
+dynamic = ["version"]
+description = "CLI for interacting with LangGraph API"
+authors = []
+requires-python = ">=3.10"
+readme = "README.md"
+license = "MIT"
+license-files = ['LICENSE']
+dependencies = [
+    "click>=8.1.7",
+    "langgraph-sdk>=0.1.0 ; python_version >= '3.11'",
+]
+[tool.hatch.version]
+path = "langgraph_cli/__init__.py"
+[project.optional-dependencies]
+inmem = [
+    "langgraph-api>=0.5.35,<0.8.0 ; python_version >= '3.11'",
+    "langgraph-runtime-inmem>=0.7 ; python_version >= '3.11'",
+    "python-dotenv>=0.8.0",
+]
+
+[project.urls]
+Source = "https://github.com/langchain-ai/langgraph/tree/main/libs/cli"
+Twitter = "https://x.com/LangChain"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
+
+[project.scripts]
+langgraph = "langgraph_cli.cli:cli"
+
+[dependency-groups]
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
+    "pytest-watch",
+    "msgspec",
+]
+lint = [
+    "ruff",
+    "codespell",
+    "mypy",
+]
+dev = [
+    {include-group = "test"},
+    {include-group = "lint"},
+    "hatch>=1.16.2",
+]
+
+[tool.uv]
+default-groups = ['dev']
+
+[tool.hatch.build.targets.wheel]
+include = ["langgraph_cli"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config --durations=5 -vv"
+asyncio_mode = "auto"
+
+[tool.ruff]
+lint.select = [
+  "E",  # pycodestyle
+  "F",  # Pyflakes
+  "UP", # pyupgrade
+  "B",  # flake8-bugbear
+  "I",  # isort
+  "UP", # pyupgrade
+]
+lint.ignore = ["E501", "B008"]
+target-version = "py310"

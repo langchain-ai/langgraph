@@ -1,0 +1,1274 @@
+# serializer version: 1
+# name: test_conditional_entrypoint_graph_state
+  '{"properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}, "steps": {"items": {"type": "string"}, "title": "Steps", "type": "array"}}, "title": "AgentState", "type": "object"}'
+# ---
+# name: test_conditional_entrypoint_graph_state.1
+  '{"properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}, "steps": {"items": {"type": "string"}, "title": "Steps", "type": "array"}}, "title": "AgentState", "type": "object"}'
+# ---
+# name: test_conditional_entrypoint_graph_state.2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "left",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "left"
+        }
+      },
+      {
+        "id": "right",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "right"
+        }
+      },
+      {
+        "id": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "left",
+        "data": "go-left",
+        "conditional": true
+      },
+      {
+        "source": "__start__",
+        "target": "right",
+        "data": "go-right",
+        "conditional": true
+      },
+      {
+        "source": "left",
+        "target": "__end__",
+        "conditional": true
+      },
+      {
+        "source": "right",
+        "target": "__end__"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_entrypoint_graph_state.3
+  '''
+  graph TD;
+  	__start__ -. &nbsp;go-left&nbsp; .-> left;
+  	__start__ -. &nbsp;go-right&nbsp; .-> right;
+  	left -.-> __end__;
+  	right --> __end__;
+  
+  '''
+# ---
+# name: test_conditional_entrypoint_to_multiple_state_graph
+  '{"properties": {"locations": {"items": {"type": "string"}, "title": "Locations", "type": "array"}, "results": {"items": {"type": "string"}, "title": "Results", "type": "array"}}, "required": ["locations", "results"], "title": "OverallState", "type": "object"}'
+# ---
+# name: test_conditional_entrypoint_to_multiple_state_graph.1
+  '{"properties": {"locations": {"items": {"type": "string"}, "title": "Locations", "type": "array"}, "results": {"items": {"type": "string"}, "title": "Results", "type": "array"}}, "required": ["locations", "results"], "title": "OverallState", "type": "object"}'
+# ---
+# name: test_conditional_entrypoint_to_multiple_state_graph.2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "get_weather",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "get_weather"
+        }
+      },
+      {
+        "id": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "get_weather",
+        "conditional": true
+      },
+      {
+        "source": "get_weather",
+        "target": "__end__"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_entrypoint_to_multiple_state_graph.3
+  '''
+  graph TD;
+  	__start__ -.-> get_weather;
+  	get_weather --> __end__;
+  
+  '''
+# ---
+# name: test_conditional_state_graph_with_list_edge_inputs
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "A",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "A"
+        }
+      },
+      {
+        "id": "B",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "B"
+        }
+      },
+      {
+        "id": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "A"
+      },
+      {
+        "source": "__start__",
+        "target": "B"
+      },
+      {
+        "source": "A",
+        "target": "__end__"
+      },
+      {
+        "source": "B",
+        "target": "__end__"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_state_graph_with_list_edge_inputs.1
+  '''
+  graph TD;
+  	__start__ --> A;
+  	__start__ --> B;
+  	A --> __end__;
+  	B --> __end__;
+  
+  '''
+# ---
+# name: test_get_graph_loop
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "human",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "human"
+        }
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "human"
+      },
+      {
+        "source": "agent",
+        "target": "human"
+      },
+      {
+        "source": "human",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_get_graph_loop.1
+  '''
+  graph TD;
+  	__start__ --> human;
+  	agent --> human;
+  	human --> agent;
+  	agent -.-> __end__;
+  
+  '''
+# ---
+# name: test_get_graph_nonterminal_last_step_source
+  '''
+  {
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "human"
+      },
+      {
+        "conditional": true,
+        "source": "chatbot",
+        "target": "human"
+      },
+      {
+        "conditional": true,
+        "source": "chatbot",
+        "target": "tools"
+      },
+      {
+        "conditional": true,
+        "source": "human",
+        "target": "__end__"
+      },
+      {
+        "conditional": true,
+        "source": "human",
+        "target": "chatbot"
+      },
+      {
+        "source": "tools",
+        "target": "chatbot"
+      }
+    ],
+    "nodes": [
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        },
+        "id": "__start__",
+        "type": "runnable"
+      },
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "chatbot"
+        },
+        "id": "chatbot",
+        "type": "runnable"
+      },
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "id": "tools",
+        "type": "runnable"
+      },
+      {
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "human"
+        },
+        "id": "human",
+        "type": "runnable"
+      },
+      {
+        "id": "__end__"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_get_graph_root_channel
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "child",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "graph",
+            "state",
+            "CompiledStateGraph"
+          ],
+          "name": "child"
+        }
+      },
+      {
+        "id": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "child"
+      },
+      {
+        "source": "child",
+        "target": "__end__"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_get_graph_root_channel.1
+  '''
+  graph TD;
+  	__start__ --> child;
+  	child --> __end__;
+  
+  '''
+# ---
+# name: test_get_graph_self_loop
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "__start__"
+        }
+      },
+      {
+        "id": "worker_node",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "_internal",
+            "_runnable",
+            "RunnableCallable"
+          ],
+          "name": "worker_node"
+        }
+      },
+      {
+        "id": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "worker_node"
+      },
+      {
+        "source": "worker_node",
+        "target": "__end__",
+        "conditional": true
+      },
+      {
+        "source": "worker_node",
+        "target": "worker_node",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_get_graph_self_loop.1
+  '''
+  graph TD;
+  	__start__ --> worker_node;
+  	worker_node -.-> __end__;
+  	worker_node -.-> worker_node;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_defer_node[memory-False]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one -.-> qa;
+  	retriever_one --> analyzer_one;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> retriever_one;
+  	rewrite_query --> retriever_two;
+  	qa --> __end__;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_defer_node[memory-True]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one -.-> qa;
+  	retriever_one --> analyzer_one;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> retriever_one;
+  	rewrite_query --> retriever_two;
+  	qa --> __end__;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge[memory]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query --> retriever_two;
+  	qa --> __end__;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  	qa --> __end__;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory].1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
+    'title': 'Input',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory].2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[memory]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  	qa --> __end__;
+  
+  '''
+# ---
+# name: test_migration_graph
+  '''
+  graph TD;
+  	B -. &nbsp;X&nbsp; .-> C;
+  	B -. &nbsp;Y&nbsp; .-> D;
+  	D --> B;
+  	__start__ --> B;
+  	C --> __end__;
+  
+  '''
+# ---
+# name: test_multiple_sinks_subgraphs
+  '''
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	uno(uno)
+  	dos(dos)
+  	__end__([<p>__end__</p>]):::last
+  	__start__ --> uno;
+  	uno -.-> dos;
+  	uno -.-> subgraph\3aone;
+  	dos --> __end__;
+  	subgraph\3a__end__ --> __end__;
+  	subgraph subgraph
+  	subgraph\3aone(one)
+  	subgraph\3atwo(two)
+  	subgraph\3athree(three)
+  	subgraph\3a__end__(<p>__end__</p>)
+  	subgraph\3aone -.-> subgraph\3athree;
+  	subgraph\3aone -.-> subgraph\3atwo;
+  	subgraph\3athree --> subgraph\3a__end__;
+  	subgraph\3atwo --> subgraph\3a__end__;
+  	end
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_nested_graph
+  '''
+  graph TD;
+  	__start__ --> inner;
+  	inner --> side;
+  	side --> __end__;
+  
+  '''
+# ---
+# name: test_nested_graph.1
+  '''
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	side(side)
+  	__end__([<p>__end__</p>]):::last
+  	__start__ --> inner\3aup;
+  	inner\3aup --> side;
+  	side --> __end__;
+  	subgraph inner
+  	inner\3aup(up)
+  	end
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_nested_graph_xray
+  dict({
+    'edges': list([
+      dict({
+        'conditional': True,
+        'source': '__start__',
+        'target': 'tool_one',
+      }),
+      dict({
+        'conditional': True,
+        'source': '__start__',
+        'target': 'tool_three',
+      }),
+      dict({
+        'conditional': True,
+        'source': '__start__',
+        'target': 'tool_two:__start__',
+      }),
+      dict({
+        'source': 'tool_one',
+        'target': '__end__',
+      }),
+      dict({
+        'source': 'tool_three',
+        'target': '__end__',
+      }),
+      dict({
+        'source': 'tool_two:__end__',
+        'target': '__end__',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'tool_two:__start__',
+        'target': 'tool_two:tool_two_fast',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'tool_two:__start__',
+        'target': 'tool_two:tool_two_slow',
+      }),
+      dict({
+        'source': 'tool_two:tool_two_fast',
+        'target': 'tool_two:__end__',
+      }),
+      dict({
+        'source': 'tool_two:tool_two_slow',
+        'target': 'tool_two:__end__',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': '__start__',
+        }),
+        'id': '__start__',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'tool_one',
+        }),
+        'id': 'tool_one',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'tool_three',
+        }),
+        'id': 'tool_three',
+        'type': 'runnable',
+      }),
+      dict({
+        'id': '__end__',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'tool_two:__start__',
+        }),
+        'id': 'tool_two:__start__',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'tool_two:tool_two_slow',
+        }),
+        'id': 'tool_two:tool_two_slow',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'tool_two:tool_two_fast',
+        }),
+        'id': 'tool_two:tool_two_fast',
+        'type': 'runnable',
+      }),
+      dict({
+        'id': 'tool_two:__end__',
+      }),
+    ]),
+  })
+# ---
+# name: test_nested_graph_xray.1
+  '''
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	tool_one(tool_one)
+  	tool_three(tool_three)
+  	__end__([<p>__end__</p>]):::last
+  	__start__ -.-> tool_one;
+  	__start__ -.-> tool_three;
+  	__start__ -.-> tool_two\3a__start__;
+  	tool_one --> __end__;
+  	tool_three --> __end__;
+  	tool_two\3a__end__ --> __end__;
+  	subgraph tool_two
+  	tool_two\3a__start__(<p>__start__</p>)
+  	tool_two\3atool_two_slow(tool_two_slow)
+  	tool_two\3atool_two_fast(tool_two_fast)
+  	tool_two\3a__end__(<p>__end__</p>)
+  	tool_two\3a__start__ -.-> tool_two\3atool_two_fast;
+  	tool_two\3a__start__ -.-> tool_two\3atool_two_slow;
+  	tool_two\3atool_two_fast --> tool_two\3a__end__;
+  	tool_two\3atool_two_slow --> tool_two\3a__end__;
+  	end
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_repeat_condition
+  '''
+  graph TD;
+  	Call\20Tool -.-> Chart\20Generator;
+  	Call\20Tool -.-> Researcher;
+  	Chart\20Generator -. &nbsp;call_tool&nbsp; .-> Call\20Tool;
+  	Chart\20Generator -. &nbsp;continue&nbsp; .-> Researcher;
+  	Chart\20Generator -. &nbsp;end&nbsp; .-> __end__;
+  	Researcher -. &nbsp;call_tool&nbsp; .-> Call\20Tool;
+  	Researcher -. &nbsp;continue&nbsp; .-> Chart\20Generator;
+  	Researcher -. &nbsp;end&nbsp; .-> __end__;
+  	__start__ --> Researcher;
+  	Researcher -. &nbsp;redo&nbsp; .-> Researcher;
+  
+  '''
+# ---
+# name: test_simple_multi_edge
+  '''
+  graph TD;
+  	__start__ --> up;
+  	side --> down;
+  	up --> down;
+  	up --> other;
+  	up --> side;
+  	down --> __end__;
+  	other --> __end__;
+  
+  '''
+# ---
+# name: test_state_graph_w_config_inherited_state_keys
+  '{"properties": {"tools": {"items": {"type": "string"}, "title": "Tools", "type": "array"}}, "title": "Context", "type": "object"}'
+# ---
+# name: test_state_graph_w_config_inherited_state_keys.1
+  '{"$defs": {"AgentAction": {"description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"anyOf": [{"type": "string"}, {"additionalProperties": true, "type": "object"}], "title": "Tool Input"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentAction", "default": "AgentAction", "title": "Type", "type": "string"}}, "required": ["tool", "tool_input", "log"], "title": "AgentAction", "type": "object"}, "AgentFinish": {"description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "properties": {"return_values": {"additionalProperties": true, "title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentFinish", "default": "AgentFinish", "title": "Type", "type": "string"}}, "required": ["return_values", "log"], "title": "AgentFinish", "type": "object"}}, "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"anyOf": [{"$ref": "#/$defs/AgentAction"}, {"$ref": "#/$defs/AgentFinish"}, {"type": "null"}], "title": "Agent Outcome"}, "intermediate_steps": {"items": {"maxItems": 2, "minItems": 2, "prefixItems": [{"$ref": "#/$defs/AgentAction"}, {"type": "string"}], "type": "array"}, "title": "Intermediate Steps", "type": "array"}}, "required": ["input", "agent_outcome"], "title": "AgentState", "type": "object"}'
+# ---
+# name: test_state_graph_w_config_inherited_state_keys.2
+  '{"$defs": {"AgentAction": {"description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"anyOf": [{"type": "string"}, {"additionalProperties": true, "type": "object"}], "title": "Tool Input"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentAction", "default": "AgentAction", "title": "Type", "type": "string"}}, "required": ["tool", "tool_input", "log"], "title": "AgentAction", "type": "object"}, "AgentFinish": {"description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "properties": {"return_values": {"additionalProperties": true, "title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"const": "AgentFinish", "default": "AgentFinish", "title": "Type", "type": "string"}}, "required": ["return_values", "log"], "title": "AgentFinish", "type": "object"}}, "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"anyOf": [{"$ref": "#/$defs/AgentAction"}, {"$ref": "#/$defs/AgentFinish"}, {"type": "null"}], "title": "Agent Outcome"}, "intermediate_steps": {"items": {"maxItems": 2, "minItems": 2, "prefixItems": [{"$ref": "#/$defs/AgentAction"}, {"type": "string"}], "type": "array"}, "title": "Intermediate Steps", "type": "array"}}, "required": ["input", "agent_outcome"], "title": "AgentState", "type": "object"}'
+# ---
+# name: test_xray_bool
+  '''
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	gp_one(gp_one)
+  	__end__([<p>__end__</p>]):::last
+  	__start__ --> gp_one;
+  	gp_one -. &nbsp;1&nbsp; .-> __end__;
+  	gp_one -. &nbsp;0&nbsp; .-> gp_two\3a__start__;
+  	gp_two\3a__end__ --> gp_one;
+  	subgraph gp_two
+  	gp_two\3a__start__(<p>__start__</p>)
+  	gp_two\3ap_one(p_one)
+  	gp_two\3a__end__(<p>__end__</p>)
+  	gp_two\3a__start__ --> gp_two\3ap_one;
+  	gp_two\3ap_one -. &nbsp;1&nbsp; .-> gp_two\3a__end__;
+  	gp_two\3ap_one -. &nbsp;0&nbsp; .-> gp_two\3ap_two\3a__start__;
+  	gp_two\3ap_two\3a__end__ --> gp_two\3ap_one;
+  	subgraph p_two
+  	gp_two\3ap_two\3a__start__(<p>__start__</p>)
+  	gp_two\3ap_two\3ac_one(c_one)
+  	gp_two\3ap_two\3ac_two(c_two)
+  	gp_two\3ap_two\3a__end__(<p>__end__</p>)
+  	gp_two\3ap_two\3a__start__ --> gp_two\3ap_two\3ac_one;
+  	gp_two\3ap_two\3ac_one -. &nbsp;1&nbsp; .-> gp_two\3ap_two\3a__end__;
+  	gp_two\3ap_two\3ac_one -. &nbsp;0&nbsp; .-> gp_two\3ap_two\3ac_two;
+  	gp_two\3ap_two\3ac_two --> gp_two\3ap_two\3ac_one;
+  	end
+  	end
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_xray_issue
+  '''
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	p_one(p_one)
+  	__end__([<p>__end__</p>]):::last
+  	__start__ --> p_one;
+  	p_one -. &nbsp;1&nbsp; .-> __end__;
+  	p_one -. &nbsp;0&nbsp; .-> p_two\3a__start__;
+  	p_two\3a__end__ --> p_one;
+  	subgraph p_two
+  	p_two\3a__start__(<p>__start__</p>)
+  	p_two\3ac_one(c_one)
+  	p_two\3ac_two(c_two)
+  	p_two\3a__end__(<p>__end__</p>)
+  	p_two\3a__start__ --> p_two\3ac_one;
+  	p_two\3ac_one -. &nbsp;1&nbsp; .-> p_two\3a__end__;
+  	p_two\3ac_one -. &nbsp;0&nbsp; .-> p_two\3ac_two;
+  	p_two\3ac_two --> p_two\3ac_one;
+  	end
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_xray_lance
+  dict({
+    'edges': list([
+      dict({
+        'source': '__start__',
+        'target': 'ask_question',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'answer_question',
+        'target': '__end__',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'answer_question',
+        'target': 'ask_question',
+      }),
+      dict({
+        'source': 'ask_question',
+        'target': 'answer_question',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': '__start__',
+        }),
+        'id': '__start__',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'ask_question',
+        }),
+        'id': 'ask_question',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'answer_question',
+        }),
+        'id': 'answer_question',
+        'type': 'runnable',
+      }),
+      dict({
+        'id': '__end__',
+      }),
+    ]),
+  })
+# ---
+# name: test_xray_lance.1
+  dict({
+    'edges': list([
+      dict({
+        'source': '__start__',
+        'target': 'generate_analysts',
+      }),
+      dict({
+        'source': 'conduct_interview',
+        'target': 'generate_sections',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'generate_analysts',
+        'target': 'conduct_interview',
+      }),
+      dict({
+        'source': 'generate_sections',
+        'target': '__end__',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': '__start__',
+        }),
+        'id': '__start__',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'generate_analysts',
+        }),
+        'id': 'generate_analysts',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'graph',
+            'state',
+            'CompiledStateGraph',
+          ]),
+          'name': 'conduct_interview',
+        }),
+        'id': 'conduct_interview',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'generate_sections',
+        }),
+        'id': 'generate_sections',
+        'type': 'runnable',
+      }),
+      dict({
+        'id': '__end__',
+      }),
+    ]),
+  })
+# ---
+# name: test_xray_lance.2
+  dict({
+    'edges': list([
+      dict({
+        'source': '__start__',
+        'target': 'generate_analysts',
+      }),
+      dict({
+        'source': 'conduct_interview:__end__',
+        'target': 'generate_sections',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'generate_analysts',
+        'target': 'conduct_interview:__start__',
+      }),
+      dict({
+        'source': 'generate_sections',
+        'target': '__end__',
+      }),
+      dict({
+        'source': 'conduct_interview:__start__',
+        'target': 'conduct_interview:ask_question',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'conduct_interview:answer_question',
+        'target': 'conduct_interview:__end__',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'conduct_interview:answer_question',
+        'target': 'conduct_interview:ask_question',
+      }),
+      dict({
+        'source': 'conduct_interview:ask_question',
+        'target': 'conduct_interview:answer_question',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': '__start__',
+        }),
+        'id': '__start__',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'generate_analysts',
+        }),
+        'id': 'generate_analysts',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'generate_sections',
+        }),
+        'id': 'generate_sections',
+        'type': 'runnable',
+      }),
+      dict({
+        'id': '__end__',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'conduct_interview:__start__',
+        }),
+        'id': 'conduct_interview:__start__',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'conduct_interview:ask_question',
+        }),
+        'id': 'conduct_interview:ask_question',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            '_internal',
+            '_runnable',
+            'RunnableCallable',
+          ]),
+          'name': 'conduct_interview:answer_question',
+        }),
+        'id': 'conduct_interview:answer_question',
+        'type': 'runnable',
+      }),
+      dict({
+        'id': 'conduct_interview:__end__',
+      }),
+    ]),
+  })
+# ---

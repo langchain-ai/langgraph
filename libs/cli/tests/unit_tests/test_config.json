@@ -1,0 +1,19 @@
+{
+    "python_version": "3.12",
+    "pip_config_file": "pipconfig.txt",
+    "dockerfile_lines": [
+        "ARG meow=woof"
+    ],
+    "dependencies": [
+        "langchain_openai",
+        "starlette",
+        "."
+    ],
+    "graphs": {
+        "agent": "graphs/agent.py:graph"
+    },
+    "env": ".env",
+    "http": {
+        "app": "../../examples/my_app.py:app" 
+    }
+}

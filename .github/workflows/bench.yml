@@ -1,0 +1,71 @@
+name: bench
+
+on:
+  pull_request:
+    paths:
+      - "libs/**"
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: libs/langgraph
+    steps:
+      - uses: actions/checkout@v6
+      - id: files
+        name: Get changed files
+        uses: Ana06/get-changed-files@v2.3.0
+        with:
+          format: json
+      - name: Set up Python 3.11
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: "bench"
+      - name: Install dependencies
+        run: uv sync --group test
+      - name: Download baseline
+        uses: actions/cache/restore@v5
+        with:
+          key: ${{ runner.os }}-benchmark-baseline
+          restore-keys: |
+            ${{ runner.os }}-benchmark-baseline-
+          fail-on-cache-miss: true
+          path: |
+            libs/langgraph/out/benchmark-baseline.json
+      - name: Run benchmarks
+        id: benchmark
+        run: |
+          {
+            echo 'OUTPUT<<EOF'
+            make -s benchmark-fast
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+      - name: Compare benchmarks
+        id: compare
+        run: |
+          {
+            echo 'OUTPUT<<EOF'
+            mv out/benchmark-baseline.json out/main.json
+            mv out/benchmark.json out/changes.json
+            uv run pyperf compare_to out/main.json out/changes.json --table --group-by-speed
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+      - name: Annotation
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const file = JSON.parse(`${{ steps.files.outputs.added_modified_renamed }}`)[0]
+            core.notice(`${{ steps.benchmark.outputs.OUTPUT }}`, {
+              title: 'Benchmark results',
+              file,
+            })
+            core.notice(`${{ steps.compare.outputs.OUTPUT }}`, {
+              title: 'Comparison against main',
+              file,
+            })

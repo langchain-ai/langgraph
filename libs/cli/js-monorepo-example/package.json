@@ -1,0 +1,34 @@
+{
+  "name": "js-monorepo-example",
+  "version": "0.0.1",
+  "packageManager": "yarn@1.22.22",
+  "description": "A simple monorepo example for LangGraph integration testing.",
+  "private": true,
+  "workspaces": [
+    "libs/*",
+    "apps/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "turbo build",
+    "clean": "turbo clean",
+    "test": "turbo test",
+    "format": "prettier --write .",
+    "lint": "eslint 'apps/**/*.ts' 'libs/**/*.ts'"
+  },
+  "devDependencies": {
+    "turbo": "^2.8.10",
+    "typescript": "^5.9.3",
+    "@tsconfig/recommended": "^1.0.13",
+    "@eslint/eslintrc": "^3.3.3",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.27.5",
+    "eslint-plugin-no-instanceof": "^1.0.1",
+    "eslint-plugin-prettier": "^5.5.5",
+    "@typescript-eslint/eslint-plugin": "^8.56.0",
+    "@typescript-eslint/parser": "^8.56.0",
+    "prettier": "^3.8.1"
+  }
+}

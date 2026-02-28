@@ -1,0 +1,17 @@
+{
+  "$schema": "https://langgra.ph/schema.json",
+  "python_version": "3.12",
+  "dependencies": [
+    "langchain_community",
+    "langchain_anthropic",
+    "langchain_openai",
+    "wikipedia",
+    "scikit-learn",
+    "."
+  ],
+  "graphs": {
+    "agent": "./agent.py:graph",
+    "storm": "./storm.py:graph"
+  },
+  "env": "../.env"
+}

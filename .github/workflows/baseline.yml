@@ -1,0 +1,37 @@
+name: baseline
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "libs/**"
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: libs/langgraph
+    steps:
+      - uses: actions/checkout@v6
+      - run: SHA=$(git rev-parse HEAD) && echo "SHA=$SHA" >> $GITHUB_ENV
+      - name: Set up Python 3.11
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: "bench"
+      - name: Install dependencies
+        run: uv sync --group test
+      - name: Run benchmarks
+        run: OUTPUT=out/benchmark-baseline.json make -s benchmark
+      - name: Save outputs
+        uses: actions/cache/save@v5
+        with:
+          key: ${{ runner.os }}-benchmark-baseline-${{ env.SHA }}
+          path: |
+            libs/langgraph/out/benchmark-baseline.json

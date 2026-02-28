@@ -1,0 +1,327 @@
+name: release
+run-name: Release ${{ inputs.working-directory }} by @${{ github.actor }}
+on:
+  workflow_dispatch:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+        default: "libs/langgraph"
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    outputs:
+      pkg-name: ${{ steps.check-version.outputs.pkg-name }}
+      short-pkg-name: ${{ steps.check-version.outputs.short-pkg-name }}
+      version: ${{ steps.check-version.outputs.version }}
+      tag: ${{ steps.check-version.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-suffix: "release"
+
+      # We want to keep this build stage *separate* from the release stage,
+      # so that there's no sharing of permissions between them.
+      # The release stage has trusted publishing and GitHub repo contents write access,
+      # and we want to keep the scope of that access limited just to the release job.
+      # Otherwise, a malicious `build` step (e.g. via a compromised dependency)
+      # could get access to our GitHub or PyPI credentials.
+      #
+      # Per the trusted publishing GitHub Action:
+      # > It is strongly advised to separate jobs for building [...]
+      # > from the publish job.
+      # https://github.com/pypa/gh-action-pypi-publish#non-goals
+      - name: Build project for distribution
+        run: uv build
+        working-directory: ${{ inputs.working-directory }}
+
+      - name: Upload build
+        uses: actions/upload-artifact@v6
+        with:
+          name: dist
+          path: ${{ inputs.working-directory }}/dist/
+
+      - name: Check Version
+        id: check-version
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          PKG_NAME=$(grep -m 1 "^name = " pyproject.toml | cut -d '"' -f 2)
+          if grep -q 'dynamic.*=.*\[.*"version".*\]' pyproject.toml; then
+            # handle dynamic versioning
+            DIR_NAME=$(echo "$PKG_NAME" | tr '-' '_')
+            VERSION=$(grep -m 1 '^__version__' "${DIR_NAME}/__init__.py" | cut -d '"' -f 2)
+          else
+            VERSION=$(grep -m 1 "^version = " pyproject.toml | cut -d '"' -f 2)
+          fi
+          SHORT_PKG_NAME="$(echo "$PKG_NAME" | sed -e 's/langgraph//g' -e 's/-//g')"
+          if [ -z $SHORT_PKG_NAME ]; then
+            TAG="$VERSION"
+          else
+            TAG="${SHORT_PKG_NAME}==${VERSION}"
+          fi
+          echo pkg-name="$PKG_NAME" >> $GITHUB_OUTPUT
+          echo short-pkg-name="$SHORT_PKG_NAME" >> $GITHUB_OUTPUT
+          echo version="$VERSION" >> $GITHUB_OUTPUT
+          echo tag="$TAG" >> $GITHUB_OUTPUT
+
+  release-notes:
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    outputs:
+      release-body: ${{ steps.generate-release-body.outputs.release-body }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: langchain-ai/langgraph
+          path: langgraph
+          sparse-checkout: | # this only grabs files for relevant dir
+            ${{ inputs.working-directory }}
+          ref: main # this scopes to just master branch
+          fetch-depth: 0 # this fetches entire commit history
+      - name: Check Tags
+        id: check-tags
+        shell: bash
+        working-directory: langgraph/${{ inputs.working-directory }}
+        env:
+          PKG_NAME: ${{ needs.build.outputs.pkg-name }}
+          SHORT_PKG_NAME: ${{ needs.build.outputs.short-pkg-name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          if [ -z $SHORT_PKG_NAME ]; then
+            REGEX="^\\d+\\.\\d+\\.\\d+((a|b|rc)\\d+)?\$"
+          else
+            REGEX="^$SHORT_PKG_NAME==\\d+\\.\\d+\\.\\d+((a|b|rc)\\d+)?\$"
+          fi
+          echo $REGEX
+          PREV_TAG=$(git tag --sort=-creatordate | grep -P $REGEX | head -1 || echo "")
+          echo $PREV_TAG
+          if [ "$TAG" == "$PREV_TAG" ]; then
+            echo "No new version to release"
+            exit 1
+          fi
+          echo prev-tag="$PREV_TAG" >> $GITHUB_OUTPUT
+      - name: Generate release body
+        id: generate-release-body
+        working-directory: langgraph
+        env:
+          WORKING_DIR: ${{ inputs.working-directory }}
+          PKG_NAME: ${{ needs.build.outputs.pkg-name }}
+          TAG: ${{ needs.build.outputs.tag }}
+          PREV_TAG: ${{ steps.check-tags.outputs.prev-tag }}
+        run: |
+          {
+            echo 'release-body<<EOF'
+            if [ -z "$PREV_TAG" ]; then
+              echo "Initial release"
+            else
+              echo "Changes since $PREV_TAG"
+              echo
+              git log --format="%s" "$PREV_TAG"..HEAD -- $WORKING_DIR | awk '{print "* " $0}'
+            fi
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+
+  test-pypi-publish:
+    needs:
+      - build
+      - release-notes
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/_test_release.yml
+    with:
+      working-directory: ${{ inputs.working-directory }}
+    secrets: inherit
+
+  pre-release-checks:
+    needs:
+      - build
+      - release-notes
+      - test-pypi-publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # We explicitly *don't* set up caching here. This ensures our tests are
+      # maximally sensitive to catching breakage.
+      #
+      # For example, here's a way that caching can cause a falsely-passing test:
+      # - Make the langchain package manifest no longer list a dependency package
+      #   as a requirement. This means it won't be installed by `pip install`,
+      #   and attempting to use it would cause a crash.
+      # - That dependency used to be required, so it may have been cached.
+      #   When restoring the venv packages from cache, that dependency gets included.
+      # - Tests pass, because the dependency is present even though it wasn't specified.
+      # - The package is published, and it breaks on the missing dependency when
+      #   used in the real world.
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Import published package
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          PKG_NAME: ${{ needs.build.outputs.pkg-name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        # Here we use:
+        # - The default regular PyPI index as the *primary* index, meaning
+        #   that it takes priority (https://pypi.org/simple)
+        # - The test PyPI index as an extra index, so that any dependencies that
+        #   are not found on test PyPI can be resolved and installed anyway.
+        #   (https://test.pypi.org/simple). This will include the PKG_NAME==VERSION
+        #   package because VERSION will not have been uploaded to regular PyPI yet.
+        # - attempt install again after 5 seconds if it fails because there is
+        #   sometimes a delay in availability on test pypi
+        run: |
+          uv run pip install \
+            --extra-index-url https://test.pypi.org/simple/ \
+            "$PKG_NAME==$VERSION" || \
+          ( \
+            sleep 5 && \
+            uv run pip install \
+              --extra-index-url https://test.pypi.org/simple/ \
+              "$PKG_NAME==$VERSION" \
+          )
+
+          if [[ "$PKG_NAME" == *prebuilt* ]]; then
+            uv run pip install langgraph
+          fi
+
+          if [[ "$PKG_NAME" == *checkpoint* || "$PKG_NAME" == *prebuilt* ]]; then
+            # since checkpoint packages are namespace packages, import them with . convention
+            # i.e. import langgraph.checkpoint or langgraph.checkpoint.sqlite
+            IMPORT_NAME="$(echo "$PKG_NAME" | sed s/-/./g)"
+          else
+            # Replace all dashes in the package name with underscores,
+            # since that's how Python imports packages with dashes in the name.
+            IMPORT_NAME="$(echo "$PKG_NAME" | sed s/-/_/g)"
+          fi
+
+          uv run python -c "import $IMPORT_NAME; print(dir($IMPORT_NAME))"
+
+      - name: Import test dependencies
+        run: uv sync --group test
+        working-directory: ${{ inputs.working-directory }}
+
+      # Overwrite the local version of the package with the test PyPI version.
+      - name: Import published package (again)
+        working-directory: ${{ inputs.working-directory }}
+        shell: bash
+        env:
+          PKG_NAME: ${{ needs.build.outputs.pkg-name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          uv run pip install \
+            --extra-index-url https://test.pypi.org/simple/ \
+            "$PKG_NAME==$VERSION"
+
+      - name: Run unit tests
+        run: make test
+        working-directory: ${{ inputs.working-directory }}
+
+  publish:
+    needs:
+      - build
+      - release-notes
+      - test-pypi-publish
+      - pre-release-checks
+    runs-on: ubuntu-latest
+    permissions:
+      # This permission is used for trusted publishing:
+      # https://blog.pypi.org/posts/2023-04-20-introducing-trusted-publishers/
+      #
+      # Trusted publishing has to also be configured on PyPI for each package:
+      # https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+      id-token: write
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-suffix: "release"
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: ${{ inputs.working-directory }}/dist/
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ inputs.working-directory }}/dist/
+          verbose: true
+          print-hash: true
+          # Temp workaround since attestations are on by default as of gh-action-pypi-publish v1.11.0
+          attestations: false
+
+  mark-release:
+    needs:
+      - build
+      - release-notes
+      - test-pypi-publish
+      - pre-release-checks
+      - publish
+    runs-on: ubuntu-latest
+    permissions:
+      # This permission is needed by `ncipollo/release-action` to
+      # create the GitHub release.
+      contents: write
+
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-suffix: "release"
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: dist
+          path: ${{ inputs.working-directory }}/dist/
+
+      - name: Create Tag
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "dist/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          generateReleaseNotes: false
+          tag: ${{needs.build.outputs.tag}}
+          name: ${{ needs.build.outputs.pkg-name }}==${{ needs.build.outputs.version }}
+          body: ${{ needs.release-notes.outputs.release-body }}
+          commit: ${{ github.sha }}

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langgraph-examples"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "langgraph-cli",
+    "langgraph-sdk",
+]
+
+[tool.uv.sources]
+langgraph-cli = { path = "../cli", editable = true }
+langgraph-sdk = { path = "../sdk_py", editable = true }
+
+[tool.hatch.build]
+packages = []

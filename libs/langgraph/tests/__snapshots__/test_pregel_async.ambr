@@ -1,0 +1,143 @@
+# serializer version: 1
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  	qa --> __end__;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory].1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory].2
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_send_react_interrupt_control[memory]
+  '''
+  ---
+  config:
+    flowchart:
+      curve: linear
+  ---
+  graph TD;
+  	__start__([<p>__start__</p>]):::first
+  	agent(agent)
+  	foo(foo)
+  	__end__([<p>__end__</p>]):::last
+  	__start__ --> agent;
+  	agent -.-> foo;
+  	foo --> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---

@@ -1,0 +1,7 @@
+{
+  "$schema": "https://langgra.ph/schema.json",
+  "graphs": {
+    "app": "tests/example_app/example_graph.py:app"
+  },
+  "dependencies": ["tests/example_app"]
+}

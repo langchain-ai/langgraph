@@ -1,0 +1,17 @@
+{
+  "pip_config_file": "./pipconf.txt",
+  "dependencies": [
+    "langchain_community",
+    "langchain_anthropic",
+    "langchain_openai",
+    "wikipedia",
+    "scikit-learn",
+    "./graphs"
+  ],
+  "keep_pkg_tools": false, 
+  "graphs": {
+    "agent": "./graphs/agent.py:graph",
+    "storm": "./graphs/storm.py:graph"
+  },
+  "env": ".env"
+}
