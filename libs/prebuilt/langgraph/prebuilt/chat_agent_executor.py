@@ -638,15 +638,18 @@ def create_react_agent(
             messages = (
                 _get_state_value(state, "llm_input_messages")
             ) or _get_state_value(state, "messages")
-            error_msg = f"Expected input to call_model to have 'llm_input_messages' or 'messages' key, but got {state}"
         else:
             messages = _get_state_value(state, "messages")
-            error_msg = (
-                f"Expected input to call_model to have 'messages' key, but got {state}"
-            )
 
         if messages is None:
-            raise ValueError(error_msg)
+            if pre_model_hook is not None:
+                raise ValueError(
+                    f"Expected input to call_model to have 'llm_input_messages' or 'messages' key, but got {state}"
+                )
+            else:
+                raise ValueError(
+                    f"Expected input to call_model to have 'messages' key, but got {state}"
+                )
 
         _validate_chat_history(messages)
         # we're passing messages under `messages` key, as this is expected by the prompt
