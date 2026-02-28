@@ -1,4 +1,4 @@
-.PHONY: all format lint type test test_watch integration_tests spell_check spell_fix benchmark profile start-dev-server integration_tests
+.PHONY: all format lint type test test_watch integration_tests spell_check spell_fix benchmark benchmark-profile benchmark-profile-spy profile start-dev-server integration_tests
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -23,6 +23,14 @@ benchmark-fast:
 	mkdir -p out
 	rm -f $(OUTPUT)
 	uv run python -m bench -o $(OUTPUT) --fast
+
+benchmark-profile:
+	mkdir -p out
+	uv run python -m bench --profile
+
+benchmark-profile-spy:
+	mkdir -p out
+	sudo uv run py-spy record -g -o out/benchmark-flamegraph.svg -- python -m bench --fast
 
 GRAPH ?= bench/fanout_to_subgraph.py
 
