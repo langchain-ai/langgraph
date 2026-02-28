@@ -196,13 +196,24 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
             if cancel:
                 task.cancel(self.sentinel)
         # wait for all tasks to finish
+        # In Python 3.11+, CancelledError inherits BaseException and can
+        # propagate into asyncio.wait's internal waiter when the parent task
+        # is cancelled, breaking cleanup (see #6950). Catch and handle
+        # gracefully so __aexit__ can finish its exception-handling below.
         if tasks:
-            await asyncio.wait(tasks)
+            try:
+                await asyncio.wait(tasks)
+            except asyncio.CancelledError:
+                # Cancelled during cleanup — cancel remaining background tasks
+                # to avoid orphaned coroutines.
+                for task in tasks:
+                    if not task.done():
+                        task.cancel(self.sentinel)
         # if there's already an exception being raised, don't raise another one
         if exc_type is None:
             # re-raise the first exception that occurred in a task
             for task, (_, reraise) in tasks.items():
-                if not reraise:
+                if not reraise or not task.done():
                     continue
                 try:
                     if exc := task.exception():
