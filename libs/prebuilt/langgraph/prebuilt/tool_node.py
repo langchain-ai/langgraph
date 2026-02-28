@@ -692,6 +692,14 @@ class ToolNode(RunnableCallable):
 
             Allows custom state schemas with different message field names.
 
+        timeout: Optional timeout in seconds for each individual tool call.
+            If a tool call exceeds this duration, it will be cancelled and either
+            raise a `TimeoutError` (if `handle_tool_errors` is `False`) or return
+            a `ToolMessage` with an error status (if `handle_tool_errors` is enabled).
+
+            This is particularly useful when tools involve network calls (e.g., MCP
+            servers) that may hang due to connection issues or read timeouts.
+
     Examples:
         Basic usage:
 
@@ -748,6 +756,7 @@ class ToolNode(RunnableCallable):
         messages_key: str = "messages",
         wrap_tool_call: ToolCallWrapper | None = None,
         awrap_tool_call: AsyncToolCallWrapper | None = None,
+        timeout: float | None = None,
     ) -> None:
         """Initialize `ToolNode` with tools and configuration.
 
@@ -762,6 +771,9 @@ class ToolNode(RunnableCallable):
                 Enables retries, caching, request modification, and control flow.
             awrap_tool_call: Async wrapper function to intercept tool execution.
                 If not provided, falls back to wrap_tool_call for async execution.
+            timeout: Optional timeout in seconds for each individual tool call.
+                If a tool exceeds this duration, it will be cancelled and handled
+                according to the handle_tool_errors configuration.
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self._tools_by_name: dict[str, BaseTool] = {}
@@ -770,6 +782,7 @@ class ToolNode(RunnableCallable):
         self._messages_key = messages_key
         self._wrap_tool_call = wrap_tool_call
         self._awrap_tool_call = awrap_tool_call
+        self._timeout = timeout
         for tool in tools:
             if not isinstance(tool, BaseTool):
                 tool_ = create_tool(cast("type[BaseTool]", tool))
@@ -842,7 +855,12 @@ class ToolNode(RunnableCallable):
         # Pass original tool calls without injection
         coros = []
         for call, tool_runtime in zip(tool_calls, tool_runtimes, strict=False):
-            coros.append(self._arun_one(call, input_type, tool_runtime))  # type: ignore[arg-type]
+            coro = self._arun_one(call, input_type, tool_runtime)  # type: ignore[arg-type]
+            if self._timeout is not None:
+                coro = self._arun_one_with_timeout(
+                    coro, call, input_type, self._timeout
+                )
+            coros.append(coro)
         outputs = await asyncio.gather(*coros)
 
         return self._combine_tool_outputs(outputs, input_type)
@@ -1202,6 +1220,41 @@ class ToolNode(RunnableCallable):
                 content=content,
                 name=tool_request.tool_call["name"],
                 tool_call_id=tool_request.tool_call["id"],
+                status="error",
+            )
+
+    async def _arun_one_with_timeout(
+        self,
+        coro: Any,
+        call: ToolCall,
+        input_type: Literal["list", "dict", "tool_calls"],
+        timeout: float,
+    ) -> ToolMessage | Command:
+        """Wrap a tool execution coroutine with a timeout.
+
+        Args:
+            coro: The coroutine to wrap.
+            call: Tool call dict.
+            input_type: Input format.
+            timeout: Timeout in seconds.
+
+        Returns:
+            ToolMessage or Command.
+        """
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout)
+        except TimeoutError:
+            if not self._handle_tool_errors:
+                raise
+            content = (
+                f"Tool '{call['name']}' timed out after {timeout} seconds. "
+                "Consider increasing the timeout or checking the tool's "
+                "responsiveness."
+            )
+            return ToolMessage(
+                content=content,
+                name=call["name"],
+                tool_call_id=call["id"],
                 status="error",
             )
 
