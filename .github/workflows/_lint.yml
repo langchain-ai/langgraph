@@ -95,3 +95,13 @@ jobs:
           else
             echo "lint_tests command not found, skipping step"
           fi
+
+      - name: Check spelling with codespell
+        if: steps.changed-files.outputs.all
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          if make spell_check > /dev/null 2>&1; then
+            make spell_check
+          else
+            echo "spell_check command not found, skipping step"
+          fi

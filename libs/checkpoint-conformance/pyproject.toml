@@ -25,6 +25,7 @@ test = [
 lint = [
   "ruff",
   "ty",
+  "codespell",
 ]
 dev = [
   {include-group = "test"},
