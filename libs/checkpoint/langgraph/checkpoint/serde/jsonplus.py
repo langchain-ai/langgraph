@@ -62,11 +62,12 @@ class JsonPlusSerializer(SerializerProtocol):
             if allowed_json_modules and allowed_json_modules is not True
             else (allowed_json_modules if allowed_json_modules is True else None)
         )
-        self._unpack_ext_hook = (
-            __unpack_ext_hook__
-            if __unpack_ext_hook__ is not None
-            else _msgpack_ext_hook
-        )
+        if __unpack_ext_hook__ is not None:
+            self._unpack_ext_hook = __unpack_ext_hook__
+        elif self._allowed_modules is not None:
+            self._unpack_ext_hook = self._msgpack_ext_hook_with_allowed_modules
+        else:
+            self._unpack_ext_hook = _msgpack_ext_hook
 
     def _encode_constructor_args(
         self,
@@ -110,34 +111,137 @@ class JsonPlusSerializer(SerializerProtocol):
         self._check_allowed_modules(value)
 
         [*module, name] = value["id"]
-        try:
-            mod = importlib.import_module(".".join(module))
-            cls = getattr(mod, name)
-            method = value.get("method")
-            if isinstance(method, str):
-                methods = [getattr(cls, method)]
-            elif isinstance(method, list):
-                methods = [cls if m is None else getattr(cls, m) for m in method]
-            else:
-                methods = [cls]
-            args = value.get("args")
-            kwargs = value.get("kwargs")
-            for method in methods:
-                try:
-                    if isclass(method) and issubclass(method, BaseException):
-                        return None
-                    if args and kwargs:
-                        return method(*args, **kwargs)
-                    elif args:
-                        return method(*args)
-                    elif kwargs:
-                        return method(**kwargs)
-                    else:
-                        return method()
-                except Exception:
-                    continue
-        except Exception:
-            return None
+        mod = importlib.import_module(".".join(module))
+        cls = getattr(mod, name)
+        method = value.get("method")
+        if isinstance(method, str):
+            methods = [getattr(cls, method)]
+        elif isinstance(method, list):
+            methods = [cls if m is None else getattr(cls, m) for m in method]
+        else:
+            methods = [cls]
+        args = value.get("args")
+        kwargs = value.get("kwargs")
+        last_error: Exception | None = None
+        for method in methods:
+            try:
+                if isclass(method) and issubclass(method, BaseException):
+                    raise ValueError("Cannot deserialize BaseException")
+                if args and kwargs:
+                    return method(*args, **kwargs)
+                elif args:
+                    return method(*args)
+                elif kwargs:
+                    return method(**kwargs)
+                else:
+                    return method()
+            except Exception as e:
+                last_error = e
+        if last_error:
+            raise last_error
+
+    def _msgpack_ext_hook_with_allowed_modules(self, code: int, data: bytes) -> Any:
+        if code == EXT_CONSTRUCTOR_SINGLE_ARG:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=self._msgpack_ext_hook_with_allowed_modules,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            needed = (tup[0], tup[1])
+            self._check_allowed_modules_msgpack(needed)
+            return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+        elif code == EXT_CONSTRUCTOR_POS_ARGS:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=self._msgpack_ext_hook_with_allowed_modules,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            needed = (tup[0], tup[1])
+            self._check_allowed_modules_msgpack(needed)
+            return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
+        elif code == EXT_CONSTRUCTOR_KW_ARGS:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=self._msgpack_ext_hook_with_allowed_modules,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            needed = (tup[0], tup[1])
+            self._check_allowed_modules_msgpack(needed)
+            return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+        elif code == EXT_METHOD_SINGLE_ARG:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=self._msgpack_ext_hook_with_allowed_modules,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            needed = (tup[0], tup[1])
+            self._check_allowed_modules_msgpack(needed)
+            return getattr(getattr(importlib.import_module(tup[0]), tup[1]), tup[3])(
+                tup[2]
+            )
+        elif code == EXT_PYDANTIC_V1:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=self._msgpack_ext_hook_with_allowed_modules,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            needed = (tup[0], tup[1])
+            self._check_allowed_modules_msgpack(needed)
+            cls = getattr(importlib.import_module(tup[0]), tup[1])
+            try:
+                return cls(**tup[2])
+            except Exception:
+                return cls.construct(**tup[2])
+        elif code == EXT_PYDANTIC_V2:
+            tup = ormsgpack.unpackb(
+                data,
+                ext_hook=self._msgpack_ext_hook_with_allowed_modules,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            needed = (tup[0], tup[1])
+            self._check_allowed_modules_msgpack(needed)
+            cls = getattr(importlib.import_module(tup[0]), tup[1])
+            try:
+                return cls(**tup[2])
+            except Exception:
+                return cls.model_construct(**tup[2])
+        elif code == EXT_NUMPY_ARRAY:
+            import numpy as _np
+
+            dtype_str, shape, order, buf = ormsgpack.unpackb(
+                data,
+                ext_hook=self._msgpack_ext_hook_with_allowed_modules,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+            arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
+            return arr.reshape(shape, order=order)
+
+    def _check_allowed_modules_msgpack(self, needed: tuple[str, str]) -> None:
+        dotted = ".".join(needed)
+        if not self._allowed_modules:
+            raise InvalidModuleError(
+                f"Refused to deserialize msgpack constructor: {dotted}. "
+                "No allowed_json_modules configured.\n\n"
+                "Unblock with ONE of:\n"
+                f"  • JsonPlusSerializer(allowed_json_modules=[{needed!r}, ...])\n"
+                "  • (DANGEROUS) JsonPlusSerializer(allowed_json_modules=True)\n\n"
+                "Note: Prefix allowlists are intentionally unsupported; prefer exact symbols "
+                "or plain-JSON representations revived without import-time side effects."
+            )
+
+        if self._allowed_modules is True:
+            return
+        if needed in self._allowed_modules:
+            return
+
+        raise InvalidModuleError(
+            f"Refused to deserialize msgpack constructor: {dotted}. "
+            "Symbol is not in the deserialization allowlist.\n\n"
+            "Add exactly this symbol to unblock:\n"
+            f"  JsonPlusSerializer(allowed_json_modules=[{needed!r}, ...])\n"
+            "Or, as a last resort (DANGEROUS):\n"
+            "  JsonPlusSerializer(allowed_json_modules=True)"
+        )
 
     def _check_allowed_modules(self, value: dict[str, Any]) -> None:
         needed = tuple(value["id"])

@@ -514,3 +514,42 @@ def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
     result = serde.loads_typed(dumped)
 
     assert result.equals(series)
+
+
+def test_serde_jsonplus_raises_on_missing_allowed_module() -> None:
+    """Test that deserialization raises error when allowed module is missing.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6970
+    """
+    import importlib
+    import os
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        module_path = Path(temp_dir) / "temp_model.py"
+        module_path.write_text(
+            "from dataclasses import dataclass\n"
+            "@dataclass\n"
+            "class SavedObject:\n"
+            "    value: int\n"
+        )
+
+        sys.path.insert(0, temp_dir)
+        try:
+            from temp_model import SavedObject  # type: ignore[import-not-found]
+
+            serde = JsonPlusSerializer(
+                allowed_json_modules=(("temp_model", "SavedObject"),)
+            )
+            dumped = serde.dumps_typed(SavedObject(123))
+
+            sys.modules.pop("temp_model", None)
+            os.remove(module_path)
+            importlib.invalidate_caches()
+
+            with pytest.raises((ValueError, InvalidModuleError)):
+                serde.loads_typed(dumped)
+        finally:
+            if temp_dir in sys.path:
+                sys.path.remove(temp_dir)
