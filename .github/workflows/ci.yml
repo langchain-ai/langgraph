@@ -146,6 +146,28 @@ jobs:
           fi
           echo "Schema check passed - no changes detected"
 
+  test-cli-windows:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
+    name: "cd libs/cli (windows)"
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-suffix: test-cli-windows
+      - name: Install dependencies
+        shell: bash
+        working-directory: libs/cli
+        run: uv sync --frozen --group test --no-dev
+      - name: Run tests
+        shell: bash
+        working-directory: libs/cli
+        run: uv run pytest tests/unit_tests
+
   integration-test:
     needs: changes
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.deps == 'true'
@@ -160,6 +182,7 @@ jobs:
         lint,
         test,
         test-langgraph,
+        test-cli-windows,
         check-sdk-methods,
         check-schema,
         integration-test,
