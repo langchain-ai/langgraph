@@ -348,6 +348,7 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
             self._ttl_stop_event.set()
             # We don't wait for the task to complete here to avoid blocking
             # The task will clean up itself gracefully
+        await self.aclose()
 
     async def abatch(self, ops: Iterable[Op]) -> list[Result]:
         """Execute a batch of operations asynchronously.
