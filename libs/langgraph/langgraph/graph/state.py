@@ -23,6 +23,7 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.runnables.graph import Graph
 from langgraph.cache.base import BaseCache
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.store.base import BaseStore
@@ -181,13 +182,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         ```
     """
 
-    edges: set[tuple[str, str]]
+    edges: list[tuple[str, str]]
     nodes: dict[str, StateNodeSpec[Any, ContextT]]
     branches: defaultdict[str, dict[str, BranchSpec]]
     channels: dict[str, BaseChannel]
     managed: dict[str, ManagedValueSpec]
     schemas: dict[type[Any], dict[str, BaseChannel | ManagedValueSpec]]
-    waiting_edges: set[tuple[tuple[str, ...], str]]
+    waiting_edges: list[tuple[tuple[str, ...], str]]
+    _edge_sequence: list[tuple[tuple[str, ...], str]]
 
     compiled: bool
     state_schema: type[StateT]
@@ -232,13 +234,14 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                 output_schema = cast(type[OutputT], output)
 
         self.nodes = {}
-        self.edges = set()
+        self.edges = []
         self.branches = defaultdict(dict)
         self.schemas = {}
         self.channels = {}
         self.managed = {}
         self.compiled = False
-        self.waiting_edges = set()
+        self.waiting_edges = []
+        self._edge_sequence = []
 
         self.state_schema = state_schema
         self.input_schema = cast(type[InputT], input_schema or state_schema)
@@ -251,7 +254,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
     @property
     def _all_edges(self) -> set[tuple[str, str]]:
-        return self.edges | {
+        return set(self.edges) | {
             (start, end) for starts, end in self.waiting_edges for start in starts
         }
 
@@ -821,7 +824,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
                     "For multiple edges, use StateGraph with an Annotated state key."
                 )
 
-            self.edges.add((start_key, end_key))
+            edge = (start_key, end_key)
+            if edge not in self.edges:
+                self.edges.append(edge)
+                self._edge_sequence.append(((start_key,), end_key))
             return self
 
         for start in start_key:
@@ -834,7 +840,10 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         if end_key != END and end_key not in self.nodes:
             raise ValueError(f"Need to add_node `{end_key}` first")
 
-        self.waiting_edges.add((tuple(start_key), end_key))
+        waiting_edge = (tuple(start_key), end_key)
+        if waiting_edge not in self.waiting_edges:
+            self.waiting_edges.append(waiting_edge)
+            self._edge_sequence.append((waiting_edge[0], end_key))
         return self
 
     def add_conditional_edges(
@@ -1164,11 +1173,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
 
-        for start, end in self.edges:
-            compiled.attach_edge(start, end)
-
-        for starts, end in self.waiting_edges:
-            compiled.attach_edge(starts, end)
+        for starts, end in self._edge_sequence:
+            if len(starts) == 1:
+                compiled.attach_edge(starts[0], end)
+            else:
+                compiled.attach_edge(starts, end)
 
         for start, branches in self.branches.items():
             for name, branch in branches.items():
@@ -1203,6 +1212,60 @@ class CompiledStateGraph(
             schemas=self.builder.schemas,
             channels=self.builder.channels,
             name=self.get_name("Input"),
+        )
+
+    def _ordered_declared_edges(self) -> list[tuple[str, str]]:
+        ordered_edges: list[tuple[str, str]] = []
+        for starts, end in self.builder._edge_sequence:
+            ordered_edges.extend((start, end) for start in starts)
+        return ordered_edges
+
+    def _reorder_graph_edges(self, graph: Graph) -> Graph:
+        ordered_pairs = self._ordered_declared_edges()
+        if not ordered_pairs:
+            return graph
+
+        static_edges = [edge for edge in graph.edges if not edge.conditional]
+        if not static_edges:
+            return graph
+
+        used_indices: set[int] = set()
+        ordered_static_edges = []
+
+        for source, target in ordered_pairs:
+            for idx, edge in enumerate(static_edges):
+                if idx in used_indices:
+                    continue
+                if edge.source == source and edge.target == target and not edge.conditional:
+                    ordered_static_edges.append(edge)
+                    used_indices.add(idx)
+                    break
+
+        for idx, edge in enumerate(static_edges):
+            if idx not in used_indices:
+                ordered_static_edges.append(edge)
+
+        rebuilt_edges = []
+        static_iter = iter(ordered_static_edges)
+        for edge in graph.edges:
+            if edge.conditional:
+                rebuilt_edges.append(edge)
+            else:
+                rebuilt_edges.append(next(static_iter))
+
+        graph.edges = rebuilt_edges
+        return graph
+
+    def get_graph(
+        self, config: RunnableConfig | None = None, *, xray: int | bool = False
+    ) -> Graph:
+        return self._reorder_graph_edges(super().get_graph(config=config, xray=xray))
+
+    async def aget_graph(
+        self, config: RunnableConfig | None = None, *, xray: int | bool = False
+    ) -> Graph:
+        return self._reorder_graph_edges(
+            await super().aget_graph(config=config, xray=xray)
         )
 
     def get_output_jsonschema(
