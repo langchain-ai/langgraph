@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+import copy
+import logging
+from collections.abc import AsyncIterator, Collection, Iterator, Mapping, Sequence
 from typing import (  # noqa: UP035
     Any,
     Generic,
@@ -14,6 +16,7 @@ from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
     ERROR,
@@ -25,6 +28,7 @@ from langgraph.checkpoint.serde.types import (
 
 V = TypeVar("V", int, float, str)
 PendingWrite = tuple[str, str, Any]
+logger = logging.getLogger(__name__)
 
 
 # Marked as total=False to allow for future expansion.
@@ -473,6 +477,37 @@ class BaseCheckpointSaver(Generic[V]):
             return 1
         else:
             return current + 1
+
+    def with_allowlist(
+        self, extra_allowlist: Collection[tuple[str, ...]]
+    ) -> BaseCheckpointSaver[V]:
+        """Return a shallow clone with a derived msgpack allowlist."""
+        serde = _with_msgpack_allowlist(self.serde, extra_allowlist)
+        if serde is self.serde:
+            return self
+        clone = copy.copy(self)
+        clone.serde = maybe_add_typed_methods(serde)
+        return clone
+
+
+def _with_msgpack_allowlist(
+    serde: SerializerProtocol, extra_allowlist: Collection[tuple[str, ...]]
+) -> SerializerProtocol:
+    if isinstance(serde, JsonPlusSerializer):
+        return serde.with_msgpack_allowlist(extra_allowlist)
+    if isinstance(serde, EncryptedSerializer):
+        inner = serde.serde
+        if isinstance(inner, JsonPlusSerializer):
+            updated_inner = inner.with_msgpack_allowlist(extra_allowlist)
+            if updated_inner is inner:
+                return serde
+            return EncryptedSerializer(serde.cipher, updated_inner)
+    logger.warning(
+        "Serializer %s does not support msgpack allowlist. "
+        "Strict msgpack deserialization will not be enforced.",
+        type(serde).__name__,
+    )
+    return serde
 
 
 class EmptyChannelError(Exception):
