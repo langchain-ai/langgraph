@@ -29,6 +29,7 @@ from langgraph.store.base import BaseStore
 from pydantic import BaseModel, TypeAdapter
 from typing_extensions import NotRequired, Required, Self, Unpack, is_typeddict
 
+from langgraph._internal import _serde
 from langgraph._internal._constants import (
     INTERRUPT,
     NS_END,
@@ -1079,6 +1080,28 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             CompiledStateGraph: The compiled `StateGraph`.
         """
         checkpointer = ensure_valid_checkpointer(checkpointer)
+        serde_allowlist: set[tuple[str, ...]] | None = None
+        if _serde.STRICT_MSGPACK_ENABLED:
+            schema_types: list[type[Any]] = [
+                self.state_schema,
+                self.input_schema,
+                self.output_schema,
+            ]
+            if self.context_schema is not None:
+                schema_types.append(self.context_schema)
+            for node in self.nodes.values():
+                schema_types.append(node.input_schema)
+            for branches in self.branches.values():
+                for branch in branches.values():
+                    if branch.input_schema is not None:
+                        schema_types.append(branch.input_schema)
+            serde_allowlist = _serde.build_serde_allowlist(
+                schemas=schema_types,
+                channels=self.channels,
+            )
+            checkpointer = _serde.apply_checkpointer_allowlist(
+                checkpointer, serde_allowlist
+            )
 
         # assign default values
         interrupt_before = interrupt_before or []
@@ -1135,6 +1158,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             cache=cache,
             name=name or "LangGraph",
         )
+        compiled._serde_allowlist = serde_allowlist
 
         compiled.attach_node(START, None)
         for key, node in self.nodes.items():
