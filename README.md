@@ -1,7 +1,7 @@
 <picture class="github-only">
-  <source media="(prefers-color-scheme: light)" srcset="https://langchain-ai.github.io/langgraph/images/logo-light.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="https://langchain-ai.github.io/langgraph/images/logo-dark.svg">
-  <img alt="LangGraph Logo" src="https://langchain-ai.github.io/langgraph/images/logo-dark.svg" width="80%">
+  <source media="(prefers-color-scheme: light)" srcset=".github/images/logo-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-dark.svg">
+  <img alt="LangGraph Logo" src=".github/images/logo-dark.svg" width="80%">
 </picture>
 
 <div>
