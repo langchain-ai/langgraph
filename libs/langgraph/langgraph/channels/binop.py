@@ -48,24 +48,19 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     ```
     """
 
-    __slots__ = ("value", "operator")
+    __slots__ = ("value", "operator", "default")
 
     def __init__(self, typ: type[Value], operator: Callable[[Value, Value], Value]):
         super().__init__(typ)
         self.operator = operator
-        # special forms from typing or collections.abc are not instantiable
-        # so we need to replace them with their concrete counterparts
-        typ = _strip_extras(typ)
-        if typ in (collections.abc.Sequence, collections.abc.MutableSequence):
-            typ = list
-        if typ in (collections.abc.Set, collections.abc.MutableSet):
-            typ = set
-        if typ in (collections.abc.Mapping, collections.abc.MutableMapping):
-            typ = dict
-        try:
-            self.value = typ()
-        except Exception:
-            self.value = MISSING
+        # Initialize value as MISSING to allow schema defaults (e.g., dataclass
+        # default values) to be used when constructing state objects.
+        # Previously, we tried to create a default via typ(), but this caused
+        # issues where primitive types like int would get their zero-value (0)
+        # instead of the schema-defined default.
+        self.value = MISSING
+        # Store schema default value, set later by _get_channels in state.py
+        self.default: Value = MISSING
 
     def __eq__(self, value: object) -> bool:
         return isinstance(value, BinaryOperatorAggregate) and (
@@ -90,13 +85,18 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         empty = self.__class__(self.typ, self.operator)
         empty.key = self.key
         empty.value = self.value
+        empty.default = self.default
         return empty
 
     def from_checkpoint(self, checkpoint: Value) -> Self:
         empty = self.__class__(self.typ, self.operator)
         empty.key = self.key
+        empty.default = self.default
         if checkpoint is not MISSING:
             empty.value = checkpoint
+        elif self.default is not MISSING:
+            # Use schema default value when no checkpoint exists
+            empty.value = self.default
         return empty
 
     def update(self, values: Sequence[Value]) -> bool:
