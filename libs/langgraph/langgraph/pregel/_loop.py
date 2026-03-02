@@ -338,7 +338,7 @@ class PregelLoop:
                     else (c, v)
                 )
                 for c, v in writes_to_save
-                # dont persist UntrackedValue channel writes
+                # don't persist UntrackedValue channel writes
                 if not isinstance(self.specs.get(c), UntrackedValue)
             ]
 
