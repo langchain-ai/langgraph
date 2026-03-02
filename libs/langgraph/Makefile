@@ -87,15 +87,15 @@ integration_tests:
 
 WORKERS ?= auto
 XDIST_ARGS := $(if $(WORKERS),-n $(WORKERS) --dist worksteal,)
-MAXFAIL ?=
-MAXFAIL_ARGS := $(if $(MAXFAIL),--maxfail $(MAXFAIL),)
+MAXFAIL ?= 1
+MAXFAIL_ARGS = $(if $(MAXFAIL),--maxfail $(MAXFAIL),)
 # Add an '-x' if xdist is enabled
 XDIST_ARGS := $(if $(WORKERS),-x $(XDIST_ARGS),)
 
 test_watch:
 	make start-services &&\
 	make start-dev-server &&\
-	uv run ptw . -- --ff -vv $(XDIST_ARGS) $(MAXFAIL_ARGS) $(TEST); \
+	uv run ptw -- --ff -vv $(XDIST_ARGS) $(MAXFAIL_ARGS) $(TEST); \
 	EXIT_CODE=$$?; \
 	make stop-services; \
 	make stop-dev-server; \
@@ -130,7 +130,7 @@ type:
 
 format format_diff:
 	uv run ruff format $(PYTHON_FILES)
-	uv run ruff check --select I --fix $(PYTHON_FILES)
+	uv run ruff check --fix $(PYTHON_FILES)
 
 spell_check:
 	uv run codespell --toml pyproject.toml

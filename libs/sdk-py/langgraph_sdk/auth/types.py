@@ -233,13 +233,20 @@ class StudioUser:
 
     ???+ example "Examples"
 
+        Use `@auth.on` to deny by default, but allow Studio users through:
+
         ```python
         @auth.on
-        async def allow_developers(ctx: Auth.types.AuthContext, value: Any) -> None:
+        async def deny_all_except_studio(ctx: Auth.types.AuthContext, value: Any) -> bool:
+            # Allow Studio users, deny everyone else by default
             if isinstance(ctx.user, Auth.types.StudioUser):
-                return None
-            ...
+                return True
             return False
+
+        # Then add specific handlers to allow access for non-Studio users
+        @auth.on.threads
+        async def allow_thread_access(ctx: Auth.types.AuthContext, value: Any) -> Auth.types.FilterType:
+            return {"owner": ctx.user.identity}
         ```
     """
 
@@ -973,24 +980,27 @@ class on:
     and search operations across different resources (threads, assistants, crons).
 
     ???+ note "Usage"
+        Start by denying all requests by default, then add handlers to allow access:
+
         ```python
         from langgraph_sdk import Auth
 
         auth = Auth()
 
+        # Default deny: reject all requests without a specific handler
         @auth.on
-        def handle_all(params: Auth.on.value):
-            raise Exception("Not authorized")
+        async def deny_all(ctx: Auth.types.AuthContext, value: Auth.on.value):
+            return False
 
+        # Allow thread creation, stamping the owner
         @auth.on.threads.create
-        def handle_thread_create(params: Auth.on.threads.create.value):
-            # Handle thread creation
-            pass
+        async def allow_thread_create(ctx: Auth.types.AuthContext, value: Auth.on.threads.create.value):
+            value.setdefault("metadata", {})["owner"] = ctx.user.identity
 
+        # Allow assistant search, scoped to user's resources
         @auth.on.assistants.search
-        def handle_assistant_search(params: Auth.on.assistants.search.value):
-            # Handle assistant search
-            pass
+        async def allow_assistant_search(ctx: Auth.types.AuthContext, value: Auth.on.assistants.search.value):
+            return {"owner": ctx.user.identity}
         ```
     """
 
