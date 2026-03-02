@@ -765,6 +765,8 @@ def dev(
         allow_blocking=allow_blocking,
         tunnel=tunnel,
         server_level=server_log_level,
+        checkpointer=config_json.get("checkpointer"),
+        disable_persistence=config_json.get("disable_persistence", False),
     )
 
 
