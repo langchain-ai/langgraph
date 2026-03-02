@@ -1,7 +1,7 @@
 <picture class="github-only">
   <source media="(prefers-color-scheme: light)" srcset=".github/images/logo-light.svg">
   <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-dark.svg">
-  <img alt="LangGraph Logo" src=".github/images/logo-dark.svg" width="80%">
+  <img alt="LangGraph Logo" src=".github/images/logo-dark.svg" width="50%">
 </picture>
 
 <div>
