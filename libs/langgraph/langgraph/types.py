@@ -305,7 +305,7 @@ StreamPart = (
 Use `part["type"]` to narrow the type:
 
 ```python
-async for part in graph.astream(input, version="v2"):
+async for part in graph.astream(input, stream_version="v2"):
     if part["type"] == "values":
         part["data"]  # OutputT — full state (pydantic/dataclass/dict)
     elif part["type"] == "messages":
@@ -334,14 +334,17 @@ class GraphOutput(Generic[OutputT]):
             return self.interrupts
         if isinstance(self.value, dict):
             return self.value[key]
-        raise KeyError(key)
+        try:
+            return getattr(self.value, key)
+        except AttributeError:
+            raise KeyError(key)
 
     def __contains__(self, key: object) -> bool:
         if key == _INTERRUPT_KEY:
             return bool(self.interrupts)
         if isinstance(self.value, dict):
             return key in self.value
-        return False
+        return isinstance(key, str) and hasattr(self.value, key)
 
 
 _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}

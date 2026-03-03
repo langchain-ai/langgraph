@@ -14,6 +14,7 @@ from typing import (
     Any,
     Generic,
     Literal,
+    TypeVar,
     Union,
     cast,
     get_args,
@@ -1164,27 +1165,9 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
 
-        # Add output schema mapper (for values stream coercion)
-        if self.output_schema not in compiled.schema_to_mapper:
-            oc = (
-                [output_channels]
-                if isinstance(output_channels, str)
-                else output_channels
-            )
-            compiled.schema_to_mapper[self.output_schema] = _pick_mapper(
-                oc, self.output_schema
-            )
-
-        # Add state schema mapper (for checkpoint values coercion)
-        if self.state_schema not in compiled.schema_to_mapper:
-            sc = (
-                [stream_channels]
-                if isinstance(stream_channels, str)
-                else stream_channels
-            )
-            compiled.schema_to_mapper[self.state_schema] = _pick_mapper(
-                sc, self.state_schema
-            )
+        # Record output/state schemas for v2 stream coercion (pydantic/dataclass only)
+        compiled._output_coerce_schema = _coercible_schema(self.output_schema)
+        compiled._state_coerce_schema = _coercible_schema(self.state_schema)
 
         for start, end in self.edges:
             compiled.attach_edge(start, end)
@@ -1205,6 +1188,8 @@ class CompiledStateGraph(
 ):
     builder: StateGraph[StateT, ContextT, InputT, OutputT]
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
+    _output_coerce_schema: type[Any] | None
+    _state_coerce_schema: type[Any] | None
 
     def __init__(
         self,
@@ -1216,14 +1201,6 @@ class CompiledStateGraph(
         super().__init__(**kwargs)
         self.builder = builder
         self.schema_to_mapper = schema_to_mapper
-
-    @property
-    def _output_mapper(self) -> Callable[[Any], Any] | None:
-        return self.schema_to_mapper.get(self.builder.output_schema)
-
-    @property
-    def _state_mapper(self) -> Callable[[Any], Any] | None:
-        return self.schema_to_mapper.get(self.builder.state_schema)
 
     def get_input_jsonschema(
         self, config: RunnableConfig | None = None
@@ -1532,15 +1509,29 @@ class CompiledStateGraph(
 def _pick_mapper(
     state_keys: Sequence[str], schema: type[Any]
 ) -> Callable[[Any], Any] | None:
+    from dataclasses import is_dataclass
+
     if state_keys == ["__root__"]:
         return None
-    if isclass(schema) and issubclass(schema, dict):
-        return None
-    return partial(_coerce_state, schema)
+    if isclass(schema) and (issubclass(schema, BaseModel) or is_dataclass(schema)):
+        return partial(_coerce_state, schema)
+    return None
 
 
-def _coerce_state(schema: type[Any], input: dict[str, Any]) -> dict[str, Any]:
+_S = TypeVar("_S")
+
+
+def _coerce_state(schema: type[_S], input: dict[str, Any]) -> _S:
     return schema(**input)
+
+
+def _coercible_schema(schema: type[Any]) -> type[Any] | None:
+    """Return `schema` if it is a pydantic model or dataclass, else `None`."""
+    from dataclasses import is_dataclass
+
+    if isclass(schema) and (issubclass(schema, BaseModel) or is_dataclass(schema)):
+        return schema
+    return None
 
 
 def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:

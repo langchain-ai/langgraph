@@ -1000,15 +1000,10 @@ class Pregel(
         for name, node in self.get_subgraphs(namespace=namespace, recurse=recurse):
             yield name, node
 
-    @property
-    def _output_mapper(self) -> Callable[[dict[str, Any]], Any] | None:
-        """Mapper for coercing output values in v2 streams. None for base Pregel."""
-        return None
-
-    @property
-    def _state_mapper(self) -> Callable[[dict[str, Any]], Any] | None:
-        """Mapper for coercing state values in v2 streams. None for base Pregel."""
-        return None
+    # Schema types for v2 stream coercion (pydantic/dataclass).
+    # Set by CompiledStateGraph; None for base Pregel.
+    _output_coerce_schema: type[Any] | None = None
+    _state_coerce_schema: type[Any] | None = None
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a saved checkpoint to new channel layout."""
@@ -2658,9 +2653,13 @@ class Pregel(
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
-            # resolve mappers for v2 stream coercion
-            _output_mapper = self._output_mapper if stream_version == "v2" else None
-            _state_mapper = self._state_mapper if stream_version == "v2" else None
+            # resolve schemas for v2 stream coercion
+            _output_schema = (
+                self._output_coerce_schema if stream_version == "v2" else None
+            )
+            _state_schema = (
+                self._state_coerce_schema if stream_version == "v2" else None
+            )
 
             with SyncPregelLoop(
                 input,
@@ -2740,8 +2739,8 @@ class Pregel(
                             stream.get,
                             queue.Empty,
                             stream_version,
-                            _output_mapper,
-                            _state_mapper,
+                            _output_schema,
+                            _state_schema,
                         )
                     loop.after_tick()
                     # wait for checkpoint
@@ -2755,8 +2754,8 @@ class Pregel(
                 stream.get,
                 queue.Empty,
                 stream_version,
-                _output_mapper,
-                _state_mapper,
+                _output_schema,
+                _state_schema,
             )
             # handle exit
             if loop.status == "out_of_steps":
@@ -3024,9 +3023,13 @@ class Pregel(
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
-            # resolve mappers for v2 stream coercion
-            _output_mapper = self._output_mapper if stream_version == "v2" else None
-            _state_mapper = self._state_mapper if stream_version == "v2" else None
+            # resolve schemas for v2 stream coercion
+            _output_schema = (
+                self._output_coerce_schema if stream_version == "v2" else None
+            )
+            _state_schema = (
+                self._state_coerce_schema if stream_version == "v2" else None
+            )
 
             async with AsyncPregelLoop(
                 input,
@@ -3125,8 +3128,8 @@ class Pregel(
                                 stream.get_nowait,
                                 asyncio.QueueEmpty,
                                 stream_version,
-                                _output_mapper,
-                                _state_mapper,
+                                _output_schema,
+                                _state_schema,
                             ):
                                 yield o
                         loop.after_tick()
@@ -3146,8 +3149,8 @@ class Pregel(
                 stream.get_nowait,
                 asyncio.QueueEmpty,
                 stream_version,
-                _output_mapper,
-                _state_mapper,
+                _output_schema,
+                _state_schema,
             ):
                 yield o
             # handle exit
@@ -3562,8 +3565,8 @@ def _output(
     getter: Callable[[], tuple[tuple[str, ...], str, Any]],
     empty_exc: type[Exception],
     stream_version: Literal["v1", "v2"] = "v1",
-    output_mapper: Callable[[dict[str, Any]], Any] | None = None,
-    state_mapper: Callable[[dict[str, Any]], Any] | None = None,
+    output_schema: type[Any] | None = None,
+    state_schema: type[Any] | None = None,
 ) -> Iterator:
     while True:
         try:
@@ -3597,16 +3600,13 @@ def _output(
                     ints: tuple[Interrupt, ...] = ()
                     if isinstance(payload, dict):
                         ints = payload.pop(INTERRUPT, ())
-                        if output_mapper:
-                            try:
-                                payload = output_mapper(payload)
-                            except Exception:
-                                pass
+                        if output_schema:
+                            payload = output_schema(**payload)
                     yield {"type": mode, "ns": ns, "data": payload, "interrupts": ints}
                 elif mode in ("checkpoints", "debug"):
                     # coerce state values in checkpoint/debug payloads
-                    if state_mapper:
-                        _coerce_checkpoint_values(payload, state_mapper)
+                    if state_schema:
+                        _coerce_checkpoint_values(payload, state_schema)
                     yield {"type": mode, "ns": ns, "data": payload}
                 else:
                     yield {"type": mode, "ns": ns, "data": payload}
@@ -3620,27 +3620,29 @@ def _output(
                 yield payload
 
 
-def _coerce_checkpoint_values(
-    payload: Any, state_mapper: Callable[[dict[str, Any]], Any]
-) -> None:
-    """Coerce `values` dicts inside checkpoint or debug payloads in-place."""
-    # direct checkpoint payload: {"values": dict, ...}
-    if isinstance(payload, dict) and isinstance(payload.get("values"), dict):
-        try:
-            payload["values"] = state_mapper(payload["values"])
-        except Exception:
-            pass
+def _coerce_checkpoint_values(payload: Any, state_schema: type[Any]) -> None:
+    """Coerce `values` dicts inside checkpoint or debug payloads in-place.
+
+    Skips the initial checkpoint (where next contains ``__start__``) because
+    not all channels are populated yet and coercion would fail.
+    """
+    _START = "__start__"
     # debug wrapper: {"type": "checkpoint", "payload": {"values": dict, ...}}
     if (
         isinstance(payload, dict)
         and payload.get("type") == "checkpoint"
         and isinstance(payload.get("payload"), dict)
         and isinstance(payload["payload"].get("values"), dict)
+        and _START not in payload["payload"].get("next", ())
     ):
-        try:
-            payload["payload"]["values"] = state_mapper(payload["payload"]["values"])
-        except Exception:
-            pass
+        payload["payload"]["values"] = state_schema(**payload["payload"]["values"])
+    # direct checkpoint payload: {"values": dict, ...}
+    elif (
+        isinstance(payload, dict)
+        and isinstance(payload.get("values"), dict)
+        and _START not in payload.get("next", ())
+    ):
+        payload["values"] = state_schema(**payload["values"])
 
 
 def _coerce_context(
