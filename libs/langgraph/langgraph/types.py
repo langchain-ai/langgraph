@@ -27,7 +27,7 @@ from langgraph._internal._constants import INTERRUPT as _INTERRUPT_KEY
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV10, LangGraphDeprecatedSinceV11
 
 # Local TypeVars for generic stream TypedDicts.
 # We use separate TypeVars here (rather than importing from langgraph.typing)
@@ -334,6 +334,13 @@ class GraphOutput(Generic[OutputT]):
 
     def __getitem__(self, key: str) -> Any:
         """Backward compat: `result['__interrupt__']` and dict-key access."""
+        warn(
+            "Accessing GraphOutput via `result[key]` is deprecated. "
+            "Use `result.value` to access the output value directly, "
+            "or `result.interrupts` for interrupts.",
+            LangGraphDeprecatedSinceV11,
+            stacklevel=2,
+        )
         if key == _INTERRUPT_KEY:
             return self.interrupts
         if isinstance(self.value, dict):
@@ -344,6 +351,13 @@ class GraphOutput(Generic[OutputT]):
             raise KeyError(key)
 
     def __contains__(self, key: object) -> bool:
+        warn(
+            "Accessing GraphOutput via `key in result` is deprecated. "
+            "Use `result.value` to access the output value directly, "
+            "or `result.interrupts` for interrupts.",
+            LangGraphDeprecatedSinceV11,
+            stacklevel=2,
+        )
         if key == _INTERRUPT_KEY:
             return bool(self.interrupts)
         if isinstance(self.value, dict):
