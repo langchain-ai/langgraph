@@ -6,6 +6,7 @@ import typing
 import warnings
 from collections import defaultdict
 from collections.abc import Awaitable, Callable, Hashable, Sequence
+from dataclasses import is_dataclass
 from functools import partial
 from inspect import isclass, isfunction, ismethod, signature
 from types import FunctionType
@@ -1165,9 +1166,13 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         for key, node in self.nodes.items():
             compiled.attach_node(key, node)
 
-        # Record output/state schemas for v2 stream coercion (pydantic/dataclass only)
-        compiled._output_coerce_schema = _coercible_schema(self.output_schema)
-        compiled._state_coerce_schema = _coercible_schema(self.state_schema)
+        # Record output/state mappers for v2 stream coercion (pydantic/dataclass only)
+        compiled._output_mapper = _pick_mapper(
+            list(self._output_channels), self.output_schema
+        )
+        compiled._state_mapper = _pick_mapper(
+            list(self._state_channels), self.state_schema
+        )
 
         for start, end in self.edges:
             compiled.attach_edge(start, end)
@@ -1188,8 +1193,8 @@ class CompiledStateGraph(
 ):
     builder: StateGraph[StateT, ContextT, InputT, OutputT]
     schema_to_mapper: dict[type[Any], Callable[[Any], Any] | None]
-    _output_coerce_schema: type[Any] | None
-    _state_coerce_schema: type[Any] | None
+    _output_mapper: Callable[[Any], Any] | None
+    _state_mapper: Callable[[Any], Any] | None
 
     def __init__(
         self,
@@ -1509,8 +1514,6 @@ class CompiledStateGraph(
 def _pick_mapper(
     state_keys: Sequence[str], schema: type[Any]
 ) -> Callable[[Any], Any] | None:
-    from dataclasses import is_dataclass
-
     if state_keys == ["__root__"]:
         return None
     if isclass(schema) and (issubclass(schema, BaseModel) or is_dataclass(schema)):
@@ -1523,15 +1526,6 @@ _S = TypeVar("_S")
 
 def _coerce_state(schema: type[_S], input: dict[str, Any]) -> _S:
     return schema(**input)
-
-
-def _coercible_schema(schema: type[Any]) -> type[Any] | None:
-    """Return `schema` if it is a pydantic model or dataclass, else `None`."""
-    from dataclasses import is_dataclass
-
-    if isclass(schema) and (issubclass(schema, BaseModel) or is_dataclass(schema)):
-        return schema
-    return None
 
 
 def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
