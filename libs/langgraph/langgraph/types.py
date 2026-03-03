@@ -55,6 +55,7 @@ __all__ = (
     "Command",
     "Durability",
     "interrupt",
+    "is_interrupted",
     "Overwrite",
     "ensure_valid_checkpointer",
 )
@@ -541,6 +542,37 @@ def interrupt(value: Any) -> Any:
             ),
         )
     )
+
+
+def is_interrupted(values: Any) -> bool:
+    """Check if the given values contain an interrupt.
+
+    Use this to detect whether the result of `invoke()` or a `stream()`
+    chunk includes pending interrupts.
+
+    Example::
+
+        from langgraph.constants import INTERRUPT
+        from langgraph.types import Interrupt, is_interrupted
+
+        result = graph.invoke({"foo": "bar"}, config)
+        if is_interrupted(result):
+            interrupts = result[INTERRUPT]
+
+    Args:
+        values: The return value from `invoke()` / `ainvoke()` or a
+            stream chunk.
+
+    Returns:
+        `True` if *values* is a dict containing the `INTERRUPT` key
+        with a non-empty sequence of `Interrupt` objects.
+    """
+    from langgraph._internal._constants import INTERRUPT
+
+    if not isinstance(values, dict):
+        return False
+    ints = values.get(INTERRUPT)
+    return isinstance(ints, (list, tuple)) and len(ints) > 0
 
 
 @dataclass(slots=True)
