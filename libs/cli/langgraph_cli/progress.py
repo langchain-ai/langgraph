@@ -44,9 +44,7 @@ class Progress:
                 time.sleep(self.delay)
                 continue
             if self._show_elapsed:
-                self.message = self._format_elapsed(
-                    time.monotonic() - start
-                )
+                self.message = self._format_elapsed(time.monotonic() - start)
             message = self.message
             if not message:
                 continue

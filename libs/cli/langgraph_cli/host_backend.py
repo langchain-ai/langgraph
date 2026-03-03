@@ -95,17 +95,13 @@ class HostBackendClient:
             payload,
         )
 
-    def list_revisions(
-        self, deployment_id: str, limit: int = 1
-    ) -> dict[str, Any]:
+    def list_revisions(self, deployment_id: str, limit: int = 1) -> dict[str, Any]:
         return self._request(
             "GET",
             f"/v2/deployments/{deployment_id}/revisions?limit={limit}",
         )
 
-    def get_revision(
-        self, deployment_id: str, revision_id: str
-    ) -> dict[str, Any]:
+    def get_revision(self, deployment_id: str, revision_id: str) -> dict[str, Any]:
         return self._request(
             "GET",
             f"/v2/deployments/{deployment_id}/revisions/{revision_id}",
