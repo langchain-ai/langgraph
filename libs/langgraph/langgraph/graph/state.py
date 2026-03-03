@@ -1168,10 +1168,16 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         # Record output/state mappers for v2 stream coercion (pydantic/dataclass only)
         compiled._output_mapper = _pick_mapper(
-            list(self._output_channels), self.output_schema
+            list(output_channels)
+            if isinstance(output_channels, list)
+            else [output_channels],
+            self.output_schema,
         )
         compiled._state_mapper = _pick_mapper(
-            list(self._state_channels), self.state_schema
+            list(stream_channels)
+            if isinstance(stream_channels, list)
+            else [stream_channels],
+            self.state_schema,
         )
 
         for start, end in self.edges:

@@ -2654,12 +2654,8 @@ class Pregel(
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
             # resolve mappers for v2 stream coercion
-            _output_mapper = (
-                self._output_mapper if stream_version == "v2" else None
-            )
-            _state_mapper = (
-                self._state_mapper if stream_version == "v2" else None
-            )
+            _output_mapper = self._output_mapper if stream_version == "v2" else None
+            _state_mapper = self._state_mapper if stream_version == "v2" else None
 
             with SyncPregelLoop(
                 input,
@@ -3024,12 +3020,8 @@ class Pregel(
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
             # resolve mappers for v2 stream coercion
-            _output_mapper = (
-                self._output_mapper if stream_version == "v2" else None
-            )
-            _state_mapper = (
-                self._state_mapper if stream_version == "v2" else None
-            )
+            _output_mapper = self._output_mapper if stream_version == "v2" else None
+            _state_mapper = self._state_mapper if stream_version == "v2" else None
 
             async with AsyncPregelLoop(
                 input,
@@ -3620,9 +3612,7 @@ def _output(
                 yield payload
 
 
-def _coerce_checkpoint_values(
-    payload: Any, mapper: Callable[[Any], Any]
-) -> None:
+def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> None:
     """Coerce `values` dicts inside checkpoint or debug payloads in-place.
 
     Skips the initial checkpoint (where next contains ``__start__``) because

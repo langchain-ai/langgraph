@@ -14,7 +14,7 @@ from typing import Annotated, Any
 import pytest
 from langchain_core.messages import AIMessage, BaseMessage
 from langgraph.checkpoint.memory import InMemorySaver
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from typing_extensions import TypedDict, assert_type
 
 from langgraph._internal._constants import INTERRUPT
@@ -417,6 +417,47 @@ class TestV2Invoke:
         assert result.value.value == "x_a"
         assert result.interrupts == ()
 
+    def test_invoke_v2_dataclass_state(self) -> None:
+        """invoke with v2 and dataclass state returns GraphOutput with dataclass value."""
+
+        def node_a(state: DataclassState) -> dict[str, Any]:
+            return {"value": state.value + "_a", "items": ["a"]}
+
+        builder: StateGraph = StateGraph(DataclassState)
+        builder.add_node("node_a", node_a)
+        builder.add_edge(START, "node_a")
+        builder.add_edge("node_a", END)
+        graph = builder.compile()
+
+        result = graph.invoke({"value": "x", "items": []}, stream_version="v2")
+        assert isinstance(result, GraphOutput)
+        assert isinstance(result.value, DataclassState)
+        assert result.value.value == "x_a"
+        assert result.value.items == ["a"]
+        assert result.interrupts == ()
+
+    def test_invoke_v2_non_values_mode_pydantic(self) -> None:
+        """invoke with v2 + non-values mode + pydantic state returns list[StreamPart]."""
+
+        def node_a(state: PydanticState) -> dict[str, Any]:
+            return {"value": state.value + "_a", "items": ["a"]}
+
+        builder: StateGraph = StateGraph(PydanticState)
+        builder.add_node("node_a", node_a)
+        builder.add_edge(START, "node_a")
+        builder.add_edge("node_a", END)
+        graph = builder.compile()
+
+        result = graph.invoke(
+            {"value": "x", "items": []}, stream_mode="updates", stream_version="v2"
+        )
+        assert isinstance(result, list)
+        for chunk in result:
+            _assert_stream_part_shape(chunk)
+            assert chunk["type"] == "updates"
+            # updates data should be plain dicts, not coerced to pydantic
+            assert isinstance(chunk["data"], dict)
+
     def test_updates_mode(self) -> None:
         graph = _make_simple_graph().compile()
         result = graph.invoke(_SIMPLE_INPUT, stream_mode="updates", stream_version="v2")
@@ -668,6 +709,46 @@ class TestV2InvokeAsync:
         for intr in result.interrupts:
             assert isinstance(intr, Interrupt)
         assert isinstance(result.value, dict)
+
+    @pytest.mark.anyio
+    async def test_ainvoke_v2_pydantic_state(self) -> None:
+        """ainvoke with v2 and pydantic state returns GraphOutput with pydantic value."""
+
+        def node_a(state: PydanticState) -> dict[str, Any]:
+            return {"value": state.value + "_a", "items": ["a"]}
+
+        builder: StateGraph = StateGraph(PydanticState)
+        builder.add_node("node_a", node_a)
+        builder.add_edge(START, "node_a")
+        builder.add_edge("node_a", END)
+        graph = builder.compile()
+
+        result = await graph.ainvoke({"value": "x", "items": []}, stream_version="v2")
+        assert isinstance(result, GraphOutput)
+        assert isinstance(result.value, PydanticState)
+        assert result.value.value == "x_a"
+        assert result.value.items == ["a"]
+        assert result.interrupts == ()
+
+    @pytest.mark.anyio
+    async def test_ainvoke_v2_dataclass_state(self) -> None:
+        """ainvoke with v2 and dataclass state returns GraphOutput with dataclass value."""
+
+        def node_a(state: DataclassState) -> dict[str, Any]:
+            return {"value": state.value + "_a", "items": ["a"]}
+
+        builder: StateGraph = StateGraph(DataclassState)
+        builder.add_node("node_a", node_a)
+        builder.add_edge(START, "node_a")
+        builder.add_edge("node_a", END)
+        graph = builder.compile()
+
+        result = await graph.ainvoke({"value": "x", "items": []}, stream_version="v2")
+        assert isinstance(result, GraphOutput)
+        assert isinstance(result.value, DataclassState)
+        assert result.value.value == "x_a"
+        assert result.value.items == ["a"]
+        assert result.interrupts == ()
 
     @pytest.mark.anyio
     async def test_ainvoke_v2_graph_output_no_interrupts(self) -> None:
@@ -1004,6 +1085,56 @@ class TestV2TypeSafeStreaming:
         # which runs with default stream_version="v1", so no coercion
         sub_values = [c for c in chunks if c["type"] == "values" and c["ns"] != ()]
         assert len(sub_values) >= 1
+
+
+# --- v2 validation errors ---
+
+
+def _make_pydantic_graph() -> Any:
+    """Build a simple graph with PydanticState for validation error tests."""
+
+    def node_a(state: PydanticState) -> dict[str, Any]:
+        return {"value": state.value + "_a", "items": ["a"]}
+
+    builder: StateGraph = StateGraph(PydanticState)
+    builder.add_node("node_a", node_a)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", END)
+    return builder.compile()
+
+
+class TestV2ValidationErrors:
+    """Validation errors propagate for pydantic state in both v1 and v2.
+
+    Uses `value=[1, 2, 3]` which channels accept (LastValue stores anything)
+    but pydantic rejects (list is not coercible to str even in lax mode).
+    """
+
+    _INVALID_INPUT: dict[str, Any] = {"value": [1, 2, 3], "items": []}
+
+    def test_stream_v2_pydantic_validation_error(self) -> None:
+        """Invalid input to stream with v2 + pydantic state raises ValidationError."""
+        graph = _make_pydantic_graph()
+        with pytest.raises(ValidationError):
+            list(
+                graph.stream(
+                    self._INVALID_INPUT,
+                    stream_mode="values",
+                    stream_version="v2",
+                )
+            )
+
+    def test_invoke_v2_pydantic_validation_error(self) -> None:
+        """Invalid input to invoke with v2 + pydantic state raises ValidationError."""
+        graph = _make_pydantic_graph()
+        with pytest.raises(ValidationError):
+            graph.invoke(self._INVALID_INPUT, stream_version="v2")
+
+    def test_invoke_v1_pydantic_validation_error(self) -> None:
+        """Regression: invalid input to invoke without stream_version raises ValidationError."""
+        graph = _make_pydantic_graph()
+        with pytest.raises(ValidationError):
+            graph.invoke(self._INVALID_INPUT)
 
 
 # --- type narrowing compile-time checks ---
