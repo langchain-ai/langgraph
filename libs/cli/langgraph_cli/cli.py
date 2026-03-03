@@ -5,6 +5,7 @@ import copy
 import json as json_mod
 import os
 import pathlib
+import platform
 import re
 import shutil
 import sys
@@ -97,7 +98,12 @@ def _parse_dotenv_file(path: pathlib.Path) -> dict[str, str]:
         key, _, value = line.partition("=")
         key = key.strip()
         value = value.strip()
-        if value and len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        if (
+            value
+            and len(value) >= 2
+            and value[0] == value[-1]
+            and value[0] in ("'", '"')
+        ):
             value = value[1:-1]
         if key:
             result[key] = value
@@ -125,9 +131,7 @@ def _secrets_from_env(
     secrets: list[dict[str, str]] = []
     for name, value in env_vars.items():
         if name in RESERVED_ENV_VARS:
-            click.secho(
-                f"   Skipping reserved env var: {name}", fg="yellow"
-            )
+            click.secho(f"   Skipping reserved env var: {name}", fg="yellow")
             continue
         if not value:
             continue
@@ -148,37 +152,18 @@ _TERMINAL_STATUSES = frozenset(
 
 @contextmanager
 def _docker_config_for_token(registry_host: str, token: str):
-    """Create a temporary Docker config using the push token.
+    """Create a temporary Docker config with only the push token.
 
-    This avoids interference from system credential helpers (e.g. gcloud)
-    that would otherwise take precedence over ``docker login`` credentials.
+    Yields the path to a temporary config directory that can be passed
+    to ``docker --config <path>`` so that system credential helpers
+    (e.g. gcloud) don't interfere with the push token.
     """
-    auth_b64 = base64.b64encode(
-        f"oauth2accesstoken:{token}".encode()
-    ).decode()
+    auth_b64 = base64.b64encode(f"oauth2accesstoken:{token}".encode()).decode()
     config_data = {"auths": {registry_host: {"auth": auth_b64}}}
     with tempfile.TemporaryDirectory() as tmpdir:
-        config_path = os.path.join(tmpdir, "config.json")
-        with open(config_path, "w") as f:
+        with open(os.path.join(tmpdir, "config.json"), "w") as f:
             json_mod.dump(config_data, f)
-
-        # Symlink cli-plugins so Docker can still discover buildx etc.
-        real_docker_dir = os.environ.get(
-            "DOCKER_CONFIG", os.path.expanduser("~/.docker")
-        )
-        real_plugins = os.path.join(real_docker_dir, "cli-plugins")
-        if os.path.isdir(real_plugins):
-            os.symlink(real_plugins, os.path.join(tmpdir, "cli-plugins"))
-
-        old_value = os.environ.get("DOCKER_CONFIG")
-        os.environ["DOCKER_CONFIG"] = tmpdir
-        try:
-            yield
-        finally:
-            if old_value is None:
-                os.environ.pop("DOCKER_CONFIG", None)
-            else:
-                os.environ["DOCKER_CONFIG"] = old_value
+        yield tmpdir
 
 
 OPT_DOCKER_COMPOSE = click.option(
@@ -615,12 +600,6 @@ def build(
     help="Deployment type (used when creating a new deployment).",
 )
 @click.option(
-    "--platforms",
-    default="linux/amd64,linux/arm64",
-    show_default=True,
-    help="Comma-separated list of target platforms.",
-)
-@click.option(
     "--no-wait",
     is_flag=True,
     default=False,
@@ -676,7 +655,6 @@ def deploy(
     name: str | None,
     image_name: str | None,
     image_tag: str,
-    platforms: str,
     base_image: str | None,
     install_command: str | None,
     build_command: str | None,
@@ -702,14 +680,16 @@ def deploy(
 
     secrets = _secrets_from_env(env_vars)
 
-    build_platforms = _normalize_platforms(platforms)
+    # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
+    # (e.g. Apple Silicon). On amd64 hosts, plain docker build is sufficient.
+    needs_buildx = platform.machine() != "x86_64"
     local_tag = f"langgraph-deploy-tmp:{int(time.time())}"
 
     with Runner() as runner:
         langgraph_cli.docker.check_capabilities(
             runner,
             require_compose=False,
-            require_buildx=bool(build_platforms),
+            require_buildx=needs_buildx,
         )
 
         def log_step(message: str) -> None:
@@ -717,11 +697,14 @@ def deploy(
 
         step = 1
 
-        # -- Step: Build image locally first (before creating deployment) --
+        # -- Step: Build image --
         log_step(f"{step}. Building image")
-        if build_platforms:
-            # TODO: deduplicate Dockerfile generation between the two _build() calls
-            build_flags: list[str] = ["--platform", build_platforms]
+        if needs_buildx:
+            build_flags: list[str] = [
+                "--platform",
+                "linux/amd64",
+                "--load",
+            ]
             if not verbose:
                 build_flags.append("--progress=quiet")
             with Progress(message="Building...", elapsed=not verbose):
@@ -790,18 +773,14 @@ def deploy(
                     "secrets": secrets,
                 }
                 created = client.create_deployment(payload)
-                created_id = (
-                    created.get("id") if isinstance(created, dict) else None
-                )
+                created_id = created.get("id") if isinstance(created, dict) else None
                 if not isinstance(created_id, str) or not created_id:
                     raise HostBackendError(
                         "POST /v2/deployments succeeded but response "
                         "missing a valid 'id'"
                     )
                 deployment_id = created_id
-                click.secho(
-                    f"   Deployment ID: {deployment_id}", fg="green"
-                )
+                click.secho(f"   Deployment ID: {deployment_id}", fg="green")
             step += 1
 
         # -- Step: Get push token and authenticate --
@@ -827,7 +806,7 @@ def deploy(
 
         # Use a clean Docker config with only the push token so that
         # system credential helpers (e.g. gcloud) don't interfere.
-        with _docker_config_for_token(registry_host, deployment_token):
+        with _docker_config_for_token(registry_host, deployment_token) as cfg:
             log_step(f"{step}. Logging into {registry_host}")
             token_input = (
                 deployment_token
@@ -837,6 +816,8 @@ def deploy(
             runner.run(
                 subp_exec(
                     "docker",
+                    "--config",
+                    cfg,
                     "login",
                     "-u",
                     "oauth2accesstoken",
@@ -850,41 +831,26 @@ def deploy(
 
             # -- Step: Tag and push --
             log_step(f"{step}. Pushing image {remote_image}")
-            if build_platforms:
-                push_flags = ["--platform", build_platforms, "--push"]
-                if not verbose:
-                    push_flags.append("--progress=quiet")
-                with Progress(message="Pushing...", elapsed=not verbose):
-                    _build(
-                        runner,
-                        lambda _msg: None,
-                        config,
-                        config_json,
-                        base_image,
-                        api_version,
-                        False,
-                        remote_image,
-                        docker_build_args,
-                        install_command,
-                        build_command,
-                        docker_command=("docker", "buildx", "build"),
-                        extra_flags=push_flags,
-                        verbose=verbose,
-                    )
-            else:
+            runner.run(
+                subp_exec(
+                    "docker",
+                    "tag",
+                    local_tag,
+                    remote_image,
+                    verbose=verbose,
+                )
+            )
+            with Progress(message="Pushing...", elapsed=not verbose):
                 runner.run(
                     subp_exec(
-                        "docker", "tag", local_tag, remote_image,
+                        "docker",
+                        "--config",
+                        cfg,
+                        "push",
+                        remote_image,
                         verbose=verbose,
                     )
                 )
-                with Progress(message="Pushing...", elapsed=not verbose):
-                    runner.run(
-                        subp_exec(
-                            "docker", "push", remote_image,
-                            verbose=verbose,
-                        )
-                    )
         step += 1
 
         # -- Step: Update deployment --
@@ -914,9 +880,7 @@ def deploy(
             while time.time() < deadline:
                 rev = client.get_revision(deployment_id, revision_id)
                 status = (
-                    rev.get("status", "UNKNOWN")
-                    if isinstance(rev, dict)
-                    else "UNKNOWN"
+                    rev.get("status", "UNKNOWN") if isinstance(rev, dict) else "UNKNOWN"
                 )
                 if status != last_status:
                     last_status = status
@@ -945,8 +909,7 @@ def deploy(
             raise click.exceptions.Exit(1)
         else:
             click.secho(
-                "   Timed out waiting for deployment "
-                f"(last status: {last_status}).",
+                f"   Timed out waiting for deployment (last status: {last_status}).",
                 fg="yellow",
             )
             if custom_url:
@@ -976,15 +939,6 @@ def _normalize_image_tag(value: str) -> str:
             "Image tag may only contain characters A-Z, a-z, 0-9, '_', '-', '.'"
         )
     return value
-
-
-def _normalize_platforms(value: str | None) -> str | None:
-    if not value:
-        return None
-    entries = [item.strip() for item in value.split(",") if item.strip()]
-    if not entries:
-        return None
-    return ",".join(entries)
 
 
 def _get_docker_ignore_content() -> str:
