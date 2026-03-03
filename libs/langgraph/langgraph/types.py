@@ -207,9 +207,7 @@ class _DebugTaskResultPayload(TypedDict):
 
 
 DebugPayload = (
-    _DebugCheckpointPayload[StateT]
-    | _DebugTaskPayload
-    | _DebugTaskResultPayload
+    _DebugCheckpointPayload[StateT] | _DebugTaskPayload | _DebugTaskResultPayload
 )
 """Wrapper payload for debug events. Discriminate on `type`."""
 

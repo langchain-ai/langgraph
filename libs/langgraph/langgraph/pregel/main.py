@@ -3271,7 +3271,7 @@ class Pregel(
 
         if stream_version == "v2":
             # v2: values stream parts carry interrupts directly
-            for chunk in self.stream(  # type: ignore[misc]
+            for chunk in self.stream(
                 input,
                 config,
                 context=context,
@@ -3281,25 +3281,23 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
-                stream_version=stream_version,  # type: ignore[arg-type]
+                stream_version=stream_version,
                 **kwargs,
             ):
                 if stream_mode == "values":
                     latest = chunk["data"]
                     if chunk_ints := chunk.get("interrupts", ()):
-                        interrupts.extend(chunk_ints)
+                        interrupts.extend(chunk_ints)  # type: ignore[arg-type]
                 else:
                     chunks.append(chunk)
         else:
             # v1: collect interrupts from updates stream
-            for chunk in self.stream(  # type: ignore[misc]
+            for chunk in self.stream(
                 input,
                 config,
                 context=context,
                 stream_mode=(
-                    ["updates", "values"]
-                    if stream_mode == "values"
-                    else stream_mode
+                    ["updates", "values"] if stream_mode == "values" else stream_mode
                 ),
                 print_mode=print_mode,
                 output_keys=output_keys,
@@ -3320,7 +3318,7 @@ class Pregel(
                         and isinstance(payload, dict)
                         and (ints := payload.get(INTERRUPT)) is not None
                     ):
-                        interrupts.extend(ints)  # type: ignore[arg-type]
+                        interrupts.extend(ints)
                     elif mode == "values":
                         latest = payload
                 else:
@@ -3443,7 +3441,7 @@ class Pregel(
 
         if stream_version == "v2":
             # v2: values stream parts carry interrupts directly
-            async for chunk in self.astream(  # type: ignore[misc]
+            async for chunk in self.astream(
                 input,
                 config,
                 context=context,
@@ -3453,25 +3451,23 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
-                stream_version=stream_version,  # type: ignore[arg-type]
+                stream_version=stream_version,
                 **kwargs,
             ):
                 if stream_mode == "values":
                     latest = chunk["data"]
                     if chunk_ints := chunk.get("interrupts", ()):
-                        interrupts.extend(chunk_ints)
+                        interrupts.extend(chunk_ints)  # type: ignore[arg-type]
                 else:
                     chunks.append(chunk)
         else:
             # v1: collect interrupts from updates stream
-            async for chunk in self.astream(  # type: ignore[misc]
+            async for chunk in self.astream(
                 input,
                 config,
                 context=context,
                 stream_mode=(
-                    ["updates", "values"]
-                    if stream_mode == "values"
-                    else stream_mode
+                    ["updates", "values"] if stream_mode == "values" else stream_mode
                 ),
                 print_mode=print_mode,
                 output_keys=output_keys,
@@ -3492,7 +3488,7 @@ class Pregel(
                         and isinstance(payload, dict)
                         and (ints := payload.get(INTERRUPT)) is not None
                     ):
-                        interrupts.extend(ints)  # type: ignore[arg-type]
+                        interrupts.extend(ints)
                     elif mode == "values":
                         latest = payload
                 else:
