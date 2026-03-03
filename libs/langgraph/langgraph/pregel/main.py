@@ -2491,7 +2491,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[dict[str, Any] | Any]:
         """Stream graph steps for a single input.
@@ -2822,7 +2822,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Asynchronously stream graph steps for a single input.
@@ -3225,7 +3225,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Run the graph with a single input and config.
@@ -3395,7 +3395,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Asynchronously run the graph with a single input and config.
@@ -3556,7 +3556,7 @@ def _output(
     stream_subgraphs: bool,
     getter: Callable[[], tuple[tuple[str, ...], str, Any]],
     empty_exc: type[Exception],
-    stream_version: Literal["v1", "v2"] = "v1",
+    stream_version: Literal["v1", "v2"] = "v2",
     output_mapper: Callable[[Any], Any] | None = None,
     state_mapper: Callable[[Any], Any] | None = None,
 ) -> Iterator:

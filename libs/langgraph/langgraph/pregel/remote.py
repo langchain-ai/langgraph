@@ -728,7 +728,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> Iterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -873,7 +873,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -1028,7 +1028,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -1106,7 +1106,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
