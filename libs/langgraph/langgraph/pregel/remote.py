@@ -697,9 +697,9 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v1"],
         **kwargs: Any,
-    ) -> Iterator[StreamPart]: ...
+    ) -> Iterator[dict[str, Any] | Any]: ...
 
     @overload
     def stream(
@@ -713,9 +713,9 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1"] = ...,
+        stream_version: Literal["v2"] = ...,
         **kwargs: Any,
-    ) -> Iterator[dict[str, Any] | Any]: ...
+    ) -> Iterator[StreamPart]: ...
 
     def stream(
         self,
@@ -728,7 +728,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> Iterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -842,9 +842,9 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v1"],
         **kwargs: Any,
-    ) -> AsyncIterator[StreamPart]: ...
+    ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
     @overload
     def astream(
@@ -858,9 +858,9 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1"] = ...,
+        stream_version: Literal["v2"] = ...,
         **kwargs: Any,
-    ) -> AsyncIterator[dict[str, Any] | Any]: ...
+    ) -> AsyncIterator[StreamPart]: ...
 
     async def astream(
         self,
@@ -873,7 +873,7 @@ class RemoteGraph(PregelProtocol):
         subgraphs: bool = False,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Create a run and stream the results.
@@ -1001,9 +1001,9 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v1"],
         **kwargs: Any,
-    ) -> GraphOutput[dict[str, Any]]: ...
+    ) -> dict[str, Any] | Any: ...
 
     @overload
     def invoke(
@@ -1015,9 +1015,9 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1"] = ...,
+        stream_version: Literal["v2"] = ...,
         **kwargs: Any,
-    ) -> dict[str, Any] | Any: ...
+    ) -> GraphOutput[dict[str, Any]]: ...
 
     def invoke(
         self,
@@ -1028,7 +1028,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.
@@ -1079,9 +1079,9 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v1"],
         **kwargs: Any,
-    ) -> GraphOutput[dict[str, Any]]: ...
+    ) -> dict[str, Any] | Any: ...
 
     @overload
     async def ainvoke(
@@ -1093,9 +1093,9 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1"] = ...,
+        stream_version: Literal["v2"] = ...,
         **kwargs: Any,
-    ) -> dict[str, Any] | Any: ...
+    ) -> GraphOutput[dict[str, Any]]: ...
 
     async def ainvoke(
         self,
@@ -1106,7 +1106,7 @@ class RemoteGraph(PregelProtocol):
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Create a run, wait until it finishes and return the final state.

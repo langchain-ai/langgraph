@@ -116,12 +116,41 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v1"],
+    ) -> Iterator[dict[str, Any] | Any]: ...
+
+    @overload
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: bool = False,
+        stream_version: Literal["v2"] = ...,
+    ) -> Iterator[StreamPart[OutputT, StateT]]: ...
+
+    @abstractmethod
+    def stream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: bool = False,
+        stream_version: Literal["v1", "v2"] = "v2",
     ) -> Iterator[StreamPart[OutputT, StateT]]: ...
 
     @overload
     @abstractmethod
-    def stream(
+    def astream(
         self,
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
@@ -131,22 +160,8 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-        stream_version: Literal["v1"] = ...,
-    ) -> Iterator[dict[str, Any] | Any]: ...
-
-    @abstractmethod
-    def stream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: StreamMode | list[StreamMode] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: bool = False,
-        stream_version: Literal["v1", "v2"] = "v1",
-    ) -> Iterator[dict[str, Any] | Any]: ...
+        stream_version: Literal["v1"],
+    ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
     @overload
     @abstractmethod
@@ -160,37 +175,35 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         subgraphs: bool = False,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v2"] = ...,
+    ) -> AsyncIterator[StreamPart[OutputT, StateT]]: ...
+
+    @abstractmethod
+    def astream(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        stream_mode: StreamMode | list[StreamMode] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        subgraphs: bool = False,
+        stream_version: Literal["v1", "v2"] = "v2",
     ) -> AsyncIterator[StreamPart[OutputT, StateT]]: ...
 
     @overload
     @abstractmethod
-    def astream(
+    def invoke(
         self,
         input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
-        stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: bool = False,
-        stream_version: Literal["v1"] = ...,
-    ) -> AsyncIterator[dict[str, Any] | Any]: ...
-
-    @abstractmethod
-    def astream(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: StreamMode | list[StreamMode] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        subgraphs: bool = False,
-        stream_version: Literal["v1", "v2"] = "v1",
-    ) -> AsyncIterator[dict[str, Any] | Any]: ...
+        stream_version: Literal["v1"],
+    ) -> dict[str, Any] | Any: ...
 
     @overload
     @abstractmethod
@@ -202,10 +215,9 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v2"] = ...,
     ) -> GraphOutput[OutputT]: ...
 
-    @overload
     @abstractmethod
     def invoke(
         self,
@@ -215,32 +227,7 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        stream_version: Literal["v1"] = ...,
-    ) -> dict[str, Any] | Any: ...
-
-    @abstractmethod
-    def invoke(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
-    ) -> dict[str, Any] | Any: ...
-
-    @overload
-    @abstractmethod
-    async def ainvoke(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v1", "v2"] = "v2",
     ) -> GraphOutput[OutputT]: ...
 
     @overload
@@ -253,8 +240,21 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        stream_version: Literal["v1"] = ...,
+        stream_version: Literal["v1"],
     ) -> dict[str, Any] | Any: ...
+
+    @overload
+    @abstractmethod
+    async def ainvoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        stream_version: Literal["v2"] = ...,
+    ) -> GraphOutput[OutputT]: ...
 
     @abstractmethod
     async def ainvoke(
@@ -265,8 +265,8 @@ class PregelProtocol(Runnable[InputT, Any], Generic[StateT, ContextT, InputT, Ou
         context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
-    ) -> dict[str, Any] | Any: ...
+        stream_version: Literal["v1", "v2"] = "v2",
+    ) -> GraphOutput[OutputT]: ...
 
 
 StreamChunk = tuple[tuple[str, ...], str, Any]

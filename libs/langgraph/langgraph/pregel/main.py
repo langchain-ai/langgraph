@@ -2454,9 +2454,9 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v1"],
         **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[StreamPart[OutputT, StateT]]: ...
+    ) -> Iterator[dict[str, Any] | Any]: ...
 
     @overload
     def stream(
@@ -2473,9 +2473,9 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v1"] = ...,
+        stream_version: Literal["v2"] = ...,
         **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[dict[str, Any] | Any]: ...
+    ) -> Iterator[StreamPart[OutputT, StateT]]: ...
 
     def stream(
         self,
@@ -2491,7 +2491,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[dict[str, Any] | Any]:
         """Stream graph steps for a single input.
@@ -2785,9 +2785,9 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v1"],
         **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[StreamPart[OutputT, StateT]]: ...
+    ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
     @overload
     def astream(
@@ -2804,9 +2804,9 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v1"] = ...,
+        stream_version: Literal["v2"] = ...,
         **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[dict[str, Any] | Any]: ...
+    ) -> AsyncIterator[StreamPart[OutputT, StateT]]: ...
 
     async def astream(
         self,
@@ -2822,7 +2822,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Asynchronously stream graph steps for a single input.
@@ -3169,13 +3169,30 @@ class Pregel(
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
+        stream_mode: StreamMode = "values",
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        stream_version: Literal["v1"],
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any: ...
+
+    @overload
+    def invoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
         stream_mode: Literal["values"] = ...,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v2"] = ...,
         **kwargs: Any,
     ) -> GraphOutput[OutputT]: ...
 
@@ -3192,11 +3209,10 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v2"] = ...,
         **kwargs: Any,
     ) -> list[StreamPart[OutputT, StateT]]: ...
 
-    @overload
     def invoke(
         self,
         input: InputT | Command | None,
@@ -3209,23 +3225,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v1"] = ...,
-        **kwargs: Any,
-    ) -> dict[str, Any] | Any: ...
-
-    def invoke(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: StreamMode = "values",
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Run the graph with a single input and config.
@@ -3339,13 +3339,30 @@ class Pregel(
         config: RunnableConfig | None = None,
         *,
         context: ContextT | None = None,
+        stream_mode: StreamMode = "values",
+        print_mode: StreamMode | Sequence[StreamMode] = (),
+        output_keys: str | Sequence[str] | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        durability: Durability | None = None,
+        stream_version: Literal["v1"],
+        **kwargs: Any,
+    ) -> dict[str, Any] | Any: ...
+
+    @overload
+    async def ainvoke(
+        self,
+        input: InputT | Command | None,
+        config: RunnableConfig | None = None,
+        *,
+        context: ContextT | None = None,
         stream_mode: Literal["values"] = ...,
         print_mode: StreamMode | Sequence[StreamMode] = (),
         output_keys: str | Sequence[str] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v2"] = ...,
         **kwargs: Any,
     ) -> GraphOutput[OutputT]: ...
 
@@ -3362,11 +3379,10 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v2"] = ...,
         **kwargs: Any,
     ) -> list[StreamPart[OutputT, StateT]]: ...
 
-    @overload
     async def ainvoke(
         self,
         input: InputT | Command | None,
@@ -3379,23 +3395,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v1"] = ...,
-        **kwargs: Any,
-    ) -> dict[str, Any] | Any: ...
-
-    async def ainvoke(
-        self,
-        input: InputT | Command | None,
-        config: RunnableConfig | None = None,
-        *,
-        context: ContextT | None = None,
-        stream_mode: StreamMode = "values",
-        print_mode: StreamMode | Sequence[StreamMode] = (),
-        output_keys: str | Sequence[str] | None = None,
-        interrupt_before: All | Sequence[str] | None = None,
-        interrupt_after: All | Sequence[str] | None = None,
-        durability: Durability | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        stream_version: Literal["v1", "v2"] = "v2",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Asynchronously run the graph with a single input and config.
@@ -3556,7 +3556,7 @@ def _output(
     stream_subgraphs: bool,
     getter: Callable[[], tuple[tuple[str, ...], str, Any]],
     empty_exc: type[Exception],
-    stream_version: Literal["v1", "v2"] = "v1",
+    stream_version: Literal["v1", "v2"] = "v2",
     output_mapper: Callable[[Any], Any] | None = None,
     state_mapper: Callable[[Any], Any] | None = None,
 ) -> Iterator:
