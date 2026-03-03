@@ -133,11 +133,14 @@ def _assert_stream_part_shape(part: StreamPart[Any, Any]) -> None:
 
 
 class TestV1BackwardsCompat:
-    def test_stream_default_is_v1(self) -> None:
+    def test_stream_default_is_v2(self) -> None:
         graph = _make_simple_graph().compile()
         chunks = list(graph.stream(_SIMPLE_INPUT))
         for chunk in chunks:
             assert isinstance(chunk, dict)
+            assert "type" in chunk
+            assert "ns" in chunk
+            assert "data" in chunk
 
     def test_stream_v1_updates_mode(self) -> None:
         graph = _make_simple_graph().compile()
@@ -1082,7 +1085,7 @@ class TestV2TypeSafeStreaming:
                 f"Expected OuterState, got {type(c['data'])}"
             )
         # Subgraph values are streamed from the subgraph's own stream()
-        # which runs with default stream_version="v1", so no coercion
+        # which runs with default stream_version="v2", so coercion is applied
         sub_values = [c for c in chunks if c["type"] == "values" and c["ns"] != ()]
         assert len(sub_values) >= 1
 

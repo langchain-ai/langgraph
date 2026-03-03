@@ -96,7 +96,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-        stream_version: Literal["v1"] = "v1",
+        stream_version: Literal["v1"],
     ) -> AsyncIterator[StreamPart]: ...
 
     @overload
@@ -127,7 +127,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v2"] = "v2",
     ) -> AsyncIterator[StreamPartV2]: ...
 
     @overload
@@ -155,7 +155,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-        stream_version: Literal["v1"] = "v1",
+        stream_version: Literal["v1"],
     ) -> AsyncIterator[StreamPart]: ...
 
     @overload
@@ -183,7 +183,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-        stream_version: Literal["v2"],
+        stream_version: Literal["v2"] = "v2",
     ) -> AsyncIterator[StreamPartV2]: ...
 
     def stream(
@@ -215,7 +215,7 @@ class RunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-        stream_version: StreamVersion = "v1",
+        stream_version: StreamVersion = "v2",
     ) -> AsyncIterator[StreamPart | StreamPartV2]:
         """Create a run and stream the results.
 
