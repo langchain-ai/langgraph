@@ -58,6 +58,7 @@ from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
 from langgraph.types import (
     All,
     Command,
+    GraphOutput,
     Interrupt,
     PregelTask,
     StateSnapshot,
@@ -1002,7 +1003,7 @@ class RemoteGraph(PregelProtocol):
         params: QueryParamTypes | None = None,
         stream_version: Literal["v2"],
         **kwargs: Any,
-    ) -> dict[str, Any]: ...
+    ) -> GraphOutput[dict[str, Any]]: ...
 
     @overload
     def invoke(
@@ -1059,7 +1060,10 @@ class RemoteGraph(PregelProtocol):
             pass
         try:
             if stream_version == "v2":
-                return chunk["data"]
+                return GraphOutput(
+                    value=chunk["data"],
+                    interrupts=tuple(chunk.get("interrupts", ())),
+                )
             return chunk
         except UnboundLocalError:
             logger.warning("No events received from remote graph")
@@ -1077,7 +1081,7 @@ class RemoteGraph(PregelProtocol):
         params: QueryParamTypes | None = None,
         stream_version: Literal["v2"],
         **kwargs: Any,
-    ) -> dict[str, Any]: ...
+    ) -> GraphOutput[dict[str, Any]]: ...
 
     @overload
     async def ainvoke(
@@ -1134,7 +1138,10 @@ class RemoteGraph(PregelProtocol):
             pass
         try:
             if stream_version == "v2":
-                return chunk["data"]
+                return GraphOutput(
+                    value=chunk["data"],
+                    interrupts=tuple(chunk.get("interrupts", ())),
+                )
             return chunk
         except UnboundLocalError:
             logger.warning("No events received from remote graph")

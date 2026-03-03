@@ -123,7 +123,10 @@ from langgraph.pregel._checkpoint import (
 )
 from langgraph.pregel._draw import draw_graph
 from langgraph.pregel._io import map_input, read_channels
-from langgraph.pregel._loop import AsyncPregelLoop, SyncPregelLoop
+from langgraph.pregel._loop import (
+    AsyncPregelLoop,
+    SyncPregelLoop,
+)
 from langgraph.pregel._messages import StreamMessagesHandler
 from langgraph.pregel._read import DEFAULT_BOUND, PregelNode
 from langgraph.pregel._retry import RetryPolicy
@@ -140,6 +143,7 @@ from langgraph.types import (
     Checkpointer,
     Command,
     Durability,
+    GraphOutput,
     Interrupt,
     Send,
     StateSnapshot,
@@ -995,6 +999,11 @@ class Pregel(
         """
         for name, node in self.get_subgraphs(namespace=namespace, recurse=recurse):
             yield name, node
+
+    # Mappers for v2 stream coercion (pydantic/dataclass).
+    # Set by CompiledStateGraph; None for base Pregel.
+    _output_mapper: Callable[[Any], Any] | None = None
+    _state_mapper: Callable[[Any], Any] | None = None
 
     def _migrate_checkpoint(self, checkpoint: Checkpoint) -> None:
         """Migrate a saved checkpoint to new channel layout."""
@@ -2644,6 +2653,10 @@ class Pregel(
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
+            # resolve mappers for v2 stream coercion
+            _output_mapper = self._output_mapper if stream_version == "v2" else None
+            _state_mapper = self._state_mapper if stream_version == "v2" else None
+
             with SyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put, stream_modes),
@@ -2722,6 +2735,8 @@ class Pregel(
                             stream.get,
                             queue.Empty,
                             stream_version,
+                            _output_mapper,
+                            _state_mapper,
                         )
                     loop.after_tick()
                     # wait for checkpoint
@@ -2735,6 +2750,8 @@ class Pregel(
                 stream.get,
                 queue.Empty,
                 stream_version,
+                _output_mapper,
+                _state_mapper,
             )
             # handle exit
             if loop.status == "out_of_steps":
@@ -3002,6 +3019,10 @@ class Pregel(
             runtime = parent_runtime.merge(runtime)
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
+            # resolve mappers for v2 stream coercion
+            _output_mapper = self._output_mapper if stream_version == "v2" else None
+            _state_mapper = self._state_mapper if stream_version == "v2" else None
+
             async with AsyncPregelLoop(
                 input,
                 stream=StreamProtocol(stream.put_nowait, stream_modes),
@@ -3099,6 +3120,8 @@ class Pregel(
                                 stream.get_nowait,
                                 asyncio.QueueEmpty,
                                 stream_version,
+                                _output_mapper,
+                                _state_mapper,
                             ):
                                 yield o
                         loop.after_tick()
@@ -3118,6 +3141,8 @@ class Pregel(
                 stream.get_nowait,
                 asyncio.QueueEmpty,
                 stream_version,
+                _output_mapper,
+                _state_mapper,
             ):
                 yield o
             # handle exit
@@ -3152,7 +3177,7 @@ class Pregel(
         durability: Durability | None = None,
         stream_version: Literal["v2"],
         **kwargs: Any,
-    ) -> dict[str, Any]: ...
+    ) -> GraphOutput[OutputT]: ...
 
     @overload
     def invoke(
@@ -3239,44 +3264,64 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
-        for chunk in self.stream(  # type: ignore[misc]
-            input,
-            config,
-            context=context,
-            stream_mode=(
-                ["updates", "values"] if stream_mode == "values" else stream_mode
-            ),
-            print_mode=print_mode,
-            output_keys=output_keys,
-            interrupt_before=interrupt_before,
-            interrupt_after=interrupt_after,
-            durability=durability,
-            stream_version=stream_version,  # type: ignore[arg-type]
-            **kwargs,
-        ):
-            if stream_mode == "values":
-                if stream_version == "v2":
-                    mode = chunk["type"]
-                    payload = chunk["data"]
+        if stream_version == "v2":
+            # v2: values stream parts carry interrupts directly
+            for chunk in self.stream(
+                input,
+                config,
+                context=context,
+                stream_mode="values" if stream_mode == "values" else stream_mode,
+                print_mode=print_mode,
+                output_keys=output_keys,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                durability=durability,
+                stream_version=stream_version,
+                **kwargs,
+            ):
+                if stream_mode == "values":
+                    latest = chunk["data"]
+                    if chunk_ints := chunk.get("interrupts", ()):
+                        interrupts.extend(chunk_ints)  # type: ignore[arg-type]
                 else:
+                    chunks.append(chunk)
+        else:
+            # v1: collect interrupts from updates stream
+            for chunk in self.stream(
+                input,
+                config,
+                context=context,
+                stream_mode=(
+                    ["updates", "values"] if stream_mode == "values" else stream_mode
+                ),
+                print_mode=print_mode,
+                output_keys=output_keys,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                durability=durability,
+                **kwargs,
+            ):
+                if stream_mode == "values":
                     if len(chunk) == 2:
                         mode, payload = cast(tuple[StreamMode, Any], chunk)
                     else:
                         _, mode, payload = cast(
                             tuple[tuple[str, ...], StreamMode, Any], chunk
                         )
-                if (
-                    mode == "updates"
-                    and isinstance(payload, dict)
-                    and (ints := payload.get(INTERRUPT)) is not None
-                ):
-                    interrupts.extend(ints)  # type: ignore[arg-type]
-                elif mode == "values":
-                    latest = payload
-            else:
-                chunks.append(chunk)
+                    if (
+                        mode == "updates"
+                        and isinstance(payload, dict)
+                        and (ints := payload.get(INTERRUPT)) is not None
+                    ):
+                        interrupts.extend(ints)
+                    elif mode == "values":
+                        latest = payload
+                else:
+                    chunks.append(chunk)
 
         if stream_mode == "values":
+            if stream_version == "v2":
+                return GraphOutput(value=latest, interrupts=tuple(interrupts))
             if interrupts:
                 return (
                     {**latest, INTERRUPT: interrupts}
@@ -3302,7 +3347,7 @@ class Pregel(
         durability: Durability | None = None,
         stream_version: Literal["v2"],
         **kwargs: Any,
-    ) -> dict[str, Any]: ...
+    ) -> GraphOutput[OutputT]: ...
 
     @overload
     async def ainvoke(
@@ -3389,44 +3434,64 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
-        async for chunk in self.astream(  # type: ignore[misc]
-            input,
-            config,
-            context=context,
-            stream_mode=(
-                ["updates", "values"] if stream_mode == "values" else stream_mode
-            ),
-            print_mode=print_mode,
-            output_keys=output_keys,
-            interrupt_before=interrupt_before,
-            interrupt_after=interrupt_after,
-            durability=durability,
-            stream_version=stream_version,  # type: ignore[arg-type]
-            **kwargs,
-        ):
-            if stream_mode == "values":
-                if stream_version == "v2":
-                    mode = chunk["type"]
-                    payload = chunk["data"]
+        if stream_version == "v2":
+            # v2: values stream parts carry interrupts directly
+            async for chunk in self.astream(
+                input,
+                config,
+                context=context,
+                stream_mode="values" if stream_mode == "values" else stream_mode,
+                print_mode=print_mode,
+                output_keys=output_keys,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                durability=durability,
+                stream_version=stream_version,
+                **kwargs,
+            ):
+                if stream_mode == "values":
+                    latest = chunk["data"]
+                    if chunk_ints := chunk.get("interrupts", ()):
+                        interrupts.extend(chunk_ints)  # type: ignore[arg-type]
                 else:
+                    chunks.append(chunk)
+        else:
+            # v1: collect interrupts from updates stream
+            async for chunk in self.astream(
+                input,
+                config,
+                context=context,
+                stream_mode=(
+                    ["updates", "values"] if stream_mode == "values" else stream_mode
+                ),
+                print_mode=print_mode,
+                output_keys=output_keys,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
+                durability=durability,
+                **kwargs,
+            ):
+                if stream_mode == "values":
                     if len(chunk) == 2:
                         mode, payload = cast(tuple[StreamMode, Any], chunk)
                     else:
                         _, mode, payload = cast(
                             tuple[tuple[str, ...], StreamMode, Any], chunk
                         )
-                if (
-                    mode == "updates"
-                    and isinstance(payload, dict)
-                    and (ints := payload.get(INTERRUPT)) is not None
-                ):
-                    interrupts.extend(ints)  # type: ignore[arg-type]
-                elif mode == "values":
-                    latest = payload
-            else:
-                chunks.append(chunk)
+                    if (
+                        mode == "updates"
+                        and isinstance(payload, dict)
+                        and (ints := payload.get(INTERRUPT)) is not None
+                    ):
+                        interrupts.extend(ints)
+                    elif mode == "values":
+                        latest = payload
+                else:
+                    chunks.append(chunk)
 
         if stream_mode == "values":
+            if stream_version == "v2":
+                return GraphOutput(value=latest, interrupts=tuple(interrupts))
             if interrupts:
                 return (
                     {**latest, INTERRUPT: interrupts}
@@ -3492,6 +3557,8 @@ def _output(
     getter: Callable[[], tuple[tuple[str, ...], str, Any]],
     empty_exc: type[Exception],
     stream_version: Literal["v1", "v2"] = "v1",
+    output_mapper: Callable[[Any], Any] | None = None,
+    state_mapper: Callable[[Any], Any] | None = None,
 ) -> Iterator:
     while True:
         try:
@@ -3520,7 +3587,21 @@ def _output(
                 )
         if mode in stream_mode:
             if stream_version == "v2":
-                yield {"type": mode, "ns": ns, "data": payload}
+                if mode == "values":
+                    # pop __interrupt__ into typed field, coerce data
+                    ints: tuple[Interrupt, ...] = ()
+                    if isinstance(payload, dict):
+                        ints = payload.pop(INTERRUPT, ())
+                        if output_mapper:
+                            payload = output_mapper(payload)
+                    yield {"type": mode, "ns": ns, "data": payload, "interrupts": ints}
+                elif mode in ("checkpoints", "debug"):
+                    # coerce state values in checkpoint/debug payloads
+                    if state_mapper:
+                        _coerce_checkpoint_values(payload, state_mapper)
+                    yield {"type": mode, "ns": ns, "data": payload}
+                else:
+                    yield {"type": mode, "ns": ns, "data": payload}
             elif stream_subgraphs and isinstance(stream_mode, list):
                 yield (ns, mode, payload)
             elif isinstance(stream_mode, list):
@@ -3529,6 +3610,31 @@ def _output(
                 yield (ns, payload)
             else:
                 yield payload
+
+
+def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> None:
+    """Coerce `values` dicts inside checkpoint or debug payloads in-place.
+
+    Skips the initial checkpoint (where next contains ``__start__``) because
+    not all channels are populated yet and coercion would fail.
+    """
+    _START = "__start__"
+    # debug wrapper: {"type": "checkpoint", "payload": {"values": dict, ...}}
+    if (
+        isinstance(payload, dict)
+        and payload.get("type") == "checkpoint"
+        and isinstance(payload.get("payload"), dict)
+        and isinstance(payload["payload"].get("values"), dict)
+        and _START not in payload["payload"].get("next", ())
+    ):
+        payload["payload"]["values"] = mapper(payload["payload"]["values"])
+    # direct checkpoint payload: {"values": dict, ...}
+    elif (
+        isinstance(payload, dict)
+        and isinstance(payload.get("values"), dict)
+        and _START not in payload.get("next", ())
+    ):
+        payload["values"] = mapper(payload["values"])
 
 
 def _coerce_context(
