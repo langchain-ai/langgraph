@@ -646,6 +646,7 @@ class TestV2InvokeAsync:
         assert result["value"] == "x_a_b"
         assert result["items"] == ["a", "b"]
 
+    @NEEDS_CONTEXTVARS
     @pytest.mark.anyio
     async def test_ainvoke_v2_graph_output_with_interrupts(self) -> None:
         def my_node(state: SimpleState) -> dict[str, Any]:
