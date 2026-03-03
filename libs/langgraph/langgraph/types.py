@@ -19,7 +19,7 @@ from warnings import warn
 from langchain_core.messages import AnyMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from typing_extensions import NotRequired, TypedDict, Unpack, deprecated
+from typing_extensions import NotRequired, TypeAliasType, TypedDict, Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
@@ -206,8 +206,10 @@ class _DebugTaskResultPayload(TypedDict):
     payload: TaskResultPayload
 
 
-DebugPayload = (
-    _DebugCheckpointPayload[StateT] | _DebugTaskPayload | _DebugTaskResultPayload
+DebugPayload = TypeAliasType(
+    "DebugPayload",
+    _DebugCheckpointPayload[StateT] | _DebugTaskPayload | _DebugTaskResultPayload,
+    type_params=(StateT,),
 )
 """Wrapper payload for debug events. Discriminate on `type`."""
 
@@ -288,17 +290,19 @@ class DebugStreamPart(TypedDict, Generic[StateT]):
 
     type: Literal["debug"]
     ns: tuple[str, ...]
-    data: DebugPayload
+    data: DebugPayload[StateT]
 
 
-StreamPart = (
+StreamPart = TypeAliasType(
+    "StreamPart",
     ValuesStreamPart[OutputT]
     | UpdatesStreamPart
     | MessagesStreamPart
     | CustomStreamPart
     | CheckpointStreamPart[StateT]
     | TasksStreamPart
-    | DebugStreamPart[StateT]
+    | DebugStreamPart[StateT],
+    type_params=(OutputT, StateT),
 )
 """A discriminated union of all v2 stream part types.
 
