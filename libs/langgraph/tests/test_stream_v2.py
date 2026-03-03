@@ -9,7 +9,7 @@ from __future__ import annotations
 import operator
 import sys
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeVar
 
 import pytest
 from langchain_core.messages import AIMessage, BaseMessage
@@ -114,7 +114,7 @@ def _make_subgraph() -> Any:
 _STREAM_PART_KEYS = {"type", "ns", "data"}
 
 
-def _assert_stream_part_shape(part: StreamPart) -> None:
+def _assert_stream_part_shape(part: StreamPart[Any, Any]) -> None:
     """Assert a v2 stream part has the required keys and correct types."""
     assert isinstance(part, dict), f"Expected dict, got {type(part)}"
     assert _STREAM_PART_KEYS <= part.keys(), (
@@ -1141,11 +1141,14 @@ class TestV2ValidationErrors:
 # These assert_type calls verify that mypy narrows the union correctly.
 
 
-def _check_type_narrowing(part: StreamPart) -> None:
+_OutputT = TypeVar("_OutputT")
+_StateT = TypeVar("_StateT")
+
+
+def _check_type_narrowing(part: StreamPart[_OutputT, _StateT]) -> None:
     """Compile-time type narrowing checks — never called at runtime."""
     if part["type"] == "values":
-        assert_type(part, ValuesStreamPart)
-        assert_type(part["data"], dict[str, Any])
+        assert_type(part, ValuesStreamPart[_OutputT])
     elif part["type"] == "updates":
         assert_type(part, UpdatesStreamPart)
         assert_type(part["data"], dict[str, Any])
@@ -1154,12 +1157,12 @@ def _check_type_narrowing(part: StreamPart) -> None:
     elif part["type"] == "custom":
         assert_type(part, CustomStreamPart)
     elif part["type"] == "checkpoints":
-        assert_type(part, CheckpointStreamPart)
-        assert_type(part["data"], CheckpointPayload)
+        assert_type(part, CheckpointStreamPart[_StateT])
+        assert_type(part["data"], CheckpointPayload[_StateT])
     elif part["type"] == "tasks":
         assert_type(part, TasksStreamPart)
         assert_type(part["data"], TaskPayload | TaskResultPayload)
     elif part["type"] == "debug":
-        assert_type(part, DebugStreamPart)
-        assert_type(part["data"], DebugPayload)
+        assert_type(part, DebugStreamPart[_StateT])
+        assert_type(part["data"], DebugPayload[_StateT])
     assert_type(part["ns"], tuple[str, ...])
