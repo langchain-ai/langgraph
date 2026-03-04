@@ -309,7 +309,7 @@ StreamPart = TypeAliasType(
 Use `part["type"]` to narrow the type:
 
 ```python
-async for part in graph.astream(input, stream_version="v2"):
+async for part in graph.astream(input, version="v2"):
     if part["type"] == "values":
         part["data"]  # OutputT — full state (pydantic/dataclass/dict)
     elif part["type"] == "messages":
@@ -322,7 +322,7 @@ async for part in graph.astream(input, stream_version="v2"):
 
 @dataclass(frozen=True)
 class GraphOutput(Generic[OutputT]):
-    """Typed container returned by `invoke()` / `ainvoke()` with `stream_version="v2"`.
+    """Typed container returned by `invoke()` / `ainvoke()` with `version="v2"`.
 
     Attributes:
         value: The final output of the graph (dict, Pydantic model, dataclass, etc.).
