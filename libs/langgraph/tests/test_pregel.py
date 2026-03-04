@@ -5316,6 +5316,79 @@ def test_multiple_interrupt_state_persistence(
     assert state.values["steps"] == ["step1", "step2"]
 
 
+def test_fork_from_resolved_interrupt_retriggers(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replaying from a checkpoint before an interrupt node should re-trigger
+    the interrupt rather than reusing cached resume values from the original
+    execution. This covers both the checkpoint that directly resolved the
+    interrupt and an earlier checkpoint (before the interrupt node)."""
+
+    called: list[str] = []
+
+    class State(TypedDict):
+        value: Annotated[list[str], operator.add]
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("What is your input?")
+        return {"value": [f"human:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_human", ask_human)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_human")
+        .add_edge("ask_human", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # 1. Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    # 2. Resume with answer — completes the full graph
+    result = graph.invoke(Command(resume="hello"), config)
+    assert result == {"value": ["a", "human:hello", "b"]}
+
+    # 3. Find checkpoint before ask_human (after node_a completed)
+    history = list(graph.get_state_history(config))
+    before_ask = [s for s in history if s.next == ("ask_human",)][-1]
+
+    # 4. Replay from that checkpoint — interrupt should re-fire
+    called.clear()
+    replay_result = graph.invoke(None, before_ask.config)
+
+    assert "__interrupt__" in replay_result
+    assert replay_result["value"] == ["a"]
+    assert replay_result["__interrupt__"][0].value == "What is your input?"
+    # ask_human was called but hit interrupt before returning
+    assert "ask_human" in called
+    # node_a should NOT run (it's before our checkpoint)
+    assert "node_a" not in called
+    # node_b should NOT run (interrupt halted execution)
+    assert "node_b" not in called
+
+    # 5. Resume the re-triggered interrupt with a new answer
+    called.clear()
+    result = graph.invoke(Command(resume="world"), before_ask.config)
+    assert result == {"value": ["a", "human:world", "b"]}
+    assert "ask_human" in called
+    assert "node_b" in called
+
+
 def test_concurrent_execution_thread_safety():
     """Test thread safety during concurrent execution."""
 

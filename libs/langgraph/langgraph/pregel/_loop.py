@@ -1109,6 +1109,22 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if saved.pending_writes is not None
             else []
         )
+        # When re-invoking from a specific checkpoint (not skip_done_tasks)
+        # that isn't a subgraph being resumed by its parent (CONFIG_KEY_RESUMING),
+        # clear cached RESUME writes so that interrupt() re-fires instead of
+        # returning stale cached values. This mirrors the behavior of fork
+        # checkpoints created via update_state, which start with no writes.
+        # Command(resume=...) will add its own fresh RESUME writes in _first().
+        if (
+            not self.skip_done_tasks
+            and CONFIG_KEY_RESUMING
+            not in self.config.get(CONF, {})
+        ):
+            self.checkpoint_pending_writes = [
+                w
+                for w in self.checkpoint_pending_writes
+                if w[1] != RESUME
+            ]
 
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = channels_from_checkpoint(
@@ -1288,6 +1304,22 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if saved.pending_writes is not None
             else []
         )
+        # When re-invoking from a specific checkpoint (not skip_done_tasks)
+        # that isn't a subgraph being resumed by its parent (CONFIG_KEY_RESUMING),
+        # clear cached RESUME writes so that interrupt() re-fires instead of
+        # returning stale cached values. This mirrors the behavior of fork
+        # checkpoints created via update_state, which start with no writes.
+        # Command(resume=...) will add its own fresh RESUME writes in _first().
+        if (
+            not self.skip_done_tasks
+            and CONFIG_KEY_RESUMING
+            not in self.config.get(CONF, {})
+        ):
+            self.checkpoint_pending_writes = [
+                w
+                for w in self.checkpoint_pending_writes
+                if w[1] != RESUME
+            ]
 
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
