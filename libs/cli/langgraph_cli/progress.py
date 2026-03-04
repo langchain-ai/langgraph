@@ -24,6 +24,7 @@ class Progress:
         sys.stdout.write(next(self.spinner_generator) + " " + message)
         sys.stdout.flush()
         time.sleep(self.delay)
+        # clear the spinner and message
         sys.stdout.write(
             "\b" * (len(message) + 2)
             + " " * (len(message) + 2)

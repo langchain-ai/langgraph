@@ -24,9 +24,9 @@ DockerComposeType = Literal["plugin", "standalone"]
 
 class DockerCapabilities(NamedTuple):
     version_docker: Version
-    version_compose: Version | None
+    version_compose: Version
     healthcheck_start_interval: bool
-    compose_type: DockerComposeType | None = None
+    compose_type: DockerComposeType = "plugin"
 
 
 def _parse_version(version: str) -> Version:
@@ -45,9 +45,7 @@ def _parse_version(version: str) -> Version:
     )
 
 
-def check_capabilities(
-    runner, *, require_compose: bool = True, require_buildx: bool = False
-) -> DockerCapabilities:
+def check_capabilities(runner) -> DockerCapabilities:
     # check docker available
     if shutil.which("docker") is None:
         raise click.UsageError("Docker not installed") from None
@@ -63,33 +61,25 @@ def check_capabilities(
     if not info["ServerVersion"]:
         raise click.UsageError("Docker not running") from None
 
-    compose_type: DockerComposeType | None = None
-    compose_version: Version | None = None
-    if require_compose:
-        try:
-            compose = next(
-                p for p in info["ClientInfo"]["Plugins"] if p["Name"] == "compose"
-            )
-            compose_version_str = compose["Version"]
-            compose_type = "plugin"
-        except (KeyError, StopIteration):
-            if shutil.which("docker-compose") is None:
-                raise click.UsageError("Docker Compose not installed") from None
+    compose_type: DockerComposeType
+    try:
+        compose = next(
+            p for p in info["ClientInfo"]["Plugins"] if p["Name"] == "compose"
+        )
+        compose_version_str = compose["Version"]
+        compose_type = "plugin"
+    except (KeyError, StopIteration):
+        if shutil.which("docker-compose") is None:
+            raise click.UsageError("Docker Compose not installed") from None
 
-            compose_version_str, _ = runner.run(
-                subp_exec("docker-compose", "--version", "--short", collect=True)
-            )
-            compose_type = "standalone"
-        compose_version = _parse_version(compose_version_str)
-
-    if require_buildx:
-        try:
-            runner.run(subp_exec("docker", "buildx", "version", collect=True))
-        except click.exceptions.Exit:
-            raise click.UsageError("Docker Buildx not installed") from None
+        compose_version_str, _ = runner.run(
+            subp_exec("docker-compose", "--version", "--short", collect=True)
+        )
+        compose_type = "standalone"
 
     # parse versions
     docker_version = _parse_version(info["ServerVersion"])
+    compose_version = _parse_version(compose_version_str)
 
     # check capabilities
     return DockerCapabilities(
