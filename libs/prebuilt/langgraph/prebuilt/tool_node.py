@@ -691,6 +691,13 @@ class ToolNode(RunnableCallable):
             This same key will be used for the output `ToolMessage` objects.
 
             Allows custom state schemas with different message field names.
+        timeout: Optional timeout in seconds for async tool execution.
+            When specified, the entire tool execution (all tools in parallel) will
+            timeout if it takes longer than this duration. If `None` (default),
+            no timeout is applied, maintaining backward compatibility.
+
+            This is useful for preventing hang when tools (like MCP tools with
+            `sse_read_timeout`) experience timeouts that aren't properly propagated.
 
     Examples:
         Basic usage:
@@ -748,6 +755,7 @@ class ToolNode(RunnableCallable):
         messages_key: str = "messages",
         wrap_tool_call: ToolCallWrapper | None = None,
         awrap_tool_call: AsyncToolCallWrapper | None = None,
+        timeout: float | None = None,
     ) -> None:
         """Initialize `ToolNode` with tools and configuration.
 
@@ -762,6 +770,8 @@ class ToolNode(RunnableCallable):
                 Enables retries, caching, request modification, and control flow.
             awrap_tool_call: Async wrapper function to intercept tool execution.
                 If not provided, falls back to wrap_tool_call for async execution.
+            timeout: Optional timeout in seconds for async tool execution.
+                If specified, tool execution will timeout after this duration.
         """
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self._tools_by_name: dict[str, BaseTool] = {}
@@ -770,6 +780,7 @@ class ToolNode(RunnableCallable):
         self._messages_key = messages_key
         self._wrap_tool_call = wrap_tool_call
         self._awrap_tool_call = awrap_tool_call
+        self._timeout = timeout
         for tool in tools:
             if not isinstance(tool, BaseTool):
                 tool_ = create_tool(cast("type[BaseTool]", tool))
@@ -843,7 +854,18 @@ class ToolNode(RunnableCallable):
         coros = []
         for call, tool_runtime in zip(tool_calls, tool_runtimes, strict=False):
             coros.append(self._arun_one(call, input_type, tool_runtime))  # type: ignore[arg-type]
-        outputs = await asyncio.gather(*coros)
+
+        # Apply timeout if specified
+        if self._timeout is not None:
+            try:
+                async with asyncio.timeout(self._timeout):
+                    outputs = await asyncio.gather(*coros)
+            except asyncio.TimeoutError as e:
+                tool_names = [call["name"] for call in tool_calls]
+                timeout_msg = f"Tool execution timed out after {self._timeout}s. Tools: {', '.join(tool_names)}"
+                raise asyncio.TimeoutError(timeout_msg) from e
+        else:
+            outputs = await asyncio.gather(*coros)
 
         return self._combine_tool_outputs(outputs, input_type)
 

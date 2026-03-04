@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import dataclasses
 import json
@@ -2008,3 +2009,233 @@ async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() 
     tool_message = result["messages"][-1]
     assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_2"
     assert tool_message.tool_call_id == "call_dynamic_2"
+
+
+# ================== TIMEOUT TESTS ==================
+
+
+async def slow_tool(delay: float) -> str:
+    """A tool that takes time to execute, simulating slow operations like MCP calls."""
+    await asyncio.sleep(delay)
+    return f"Completed after {delay}s"
+
+
+async def fast_tool(value: str) -> str:
+    """A tool that executes quickly."""
+    return f"Fast result: {value}"
+
+
+async def test_tool_node_timeout_single_tool():
+    """Test that ToolNode correctly times out when a single tool takes longer than specified."""
+    tool_node = ToolNode([slow_tool], timeout=0.1)  # 100ms timeout
+
+    tool_call = {
+        "name": "slow_tool",
+        "args": {"delay": 0.5},  # Tool will take 500ms
+        "id": "call_slow",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    with pytest.raises(asyncio.TimeoutError) as exc_info:
+        await tool_node.ainvoke(
+            {"messages": [msg]},
+            config=_create_config_with_runtime(),
+        )
+
+    # Check that the error message is helpful
+    assert "Tool execution timed out after 0.1s" in str(exc_info.value)
+    assert "slow_tool" in str(exc_info.value)
+
+
+async def test_tool_node_timeout_propagation():
+    """Test that timeout exceptions are properly propagated and not silently caught."""
+    tool_node = ToolNode([slow_tool], timeout=0.05)  # 50ms timeout
+
+    tool_call = {
+        "name": "slow_tool",
+        "args": {"delay": 0.2},  # Tool will take 200ms
+        "id": "call_slow_2",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    # Timeout should be raised, not caught and converted to error message
+    with pytest.raises(asyncio.TimeoutError):
+        await tool_node.ainvoke(
+            {"messages": [msg]},
+            config=_create_config_with_runtime(),
+        )
+
+
+async def test_tool_node_no_timeout_backward_compatibility():
+    """Test that ToolNode works normally when no timeout is specified (default behavior)."""
+    tool_node = ToolNode([slow_tool])  # No timeout specified
+
+    tool_call = {
+        "name": "slow_tool",
+        "args": {"delay": 0.05},  # Short delay
+        "id": "call_slow_3",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    # Should complete successfully without timeout
+    result = await tool_node.ainvoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "Completed after 0.05s"
+    assert tool_message.tool_call_id == "call_slow_3"
+
+
+async def test_tool_node_timeout_multiple_tools_parallel():
+    """Test timeout behavior with multiple tools running in parallel."""
+    tool_node = ToolNode([slow_tool, fast_tool], timeout=0.1)  # 100ms timeout
+
+    tool_calls = [
+        {
+            "name": "slow_tool",
+            "args": {"delay": 0.3},  # Will timeout
+            "id": "call_slow_4",
+            "type": "tool_call",
+        },
+        {
+            "name": "fast_tool",
+            "args": {"value": "test"},  # Would complete quickly
+            "id": "call_fast_1",
+            "type": "tool_call",
+        },
+    ]
+    msg = AIMessage("", tool_calls=tool_calls)
+
+    with pytest.raises(asyncio.TimeoutError) as exc_info:
+        await tool_node.ainvoke(
+            {"messages": [msg]},
+            config=_create_config_with_runtime(),
+        )
+
+    # Error message should mention all tools being executed
+    error_msg = str(exc_info.value)
+    assert "Tool execution timed out after 0.1s" in error_msg
+    assert "slow_tool" in error_msg and "fast_tool" in error_msg
+
+
+async def test_tool_node_timeout_with_successful_completion():
+    """Test that tools complete successfully when they finish before timeout."""
+    tool_node = ToolNode([fast_tool], timeout=1.0)  # 1 second timeout, plenty of time
+
+    tool_call = {
+        "name": "fast_tool",
+        "args": {"value": "success"},
+        "id": "call_fast_2",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    # Should complete successfully
+    result = await tool_node.ainvoke(
+        {"messages": [msg]},
+        config=_create_config_with_runtime(),
+    )
+
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "Fast result: success"
+    assert tool_message.tool_call_id == "call_fast_2"
+
+
+async def test_tool_node_timeout_with_error_handling():
+    """Test that timeout works correctly when error handling is enabled."""
+
+    def error_tool(x: int) -> str:
+        if x == 0:
+            raise ValueError("Test error")
+        return f"Result: {x}"
+
+    tool_node = ToolNode([error_tool, slow_tool], handle_tool_errors=True, timeout=0.1)
+
+    tool_calls = [
+        {
+            "name": "slow_tool",
+            "args": {"delay": 0.3},  # Will timeout
+            "id": "call_slow_5",
+            "type": "tool_call",
+        }
+    ]
+    msg = AIMessage("", tool_calls=tool_calls)
+
+    # Timeout should take precedence over error handling
+    with pytest.raises(asyncio.TimeoutError):
+        await tool_node.ainvoke(
+            {"messages": [msg]},
+            config=_create_config_with_runtime(),
+        )
+
+
+async def test_tool_node_timeout_with_sync_tools():
+    """Test timeout behavior with synchronous tools that run in thread executors."""
+    import time
+
+    def sync_slow_tool(delay: float) -> str:
+        """Synchronous tool that sleeps."""
+        time.sleep(delay)
+        return f"Sync completed after {delay}s"
+
+    tool_node = ToolNode([sync_slow_tool], timeout=0.1)
+
+    tool_call = {
+        "name": "sync_slow_tool",
+        "args": {"delay": 0.3},  # Will timeout
+        "id": "call_sync_slow",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    # Should timeout even with sync tools running in executor
+    with pytest.raises(asyncio.TimeoutError):
+        await tool_node.ainvoke(
+            {"messages": [msg]},
+            config=_create_config_with_runtime(),
+        )
+
+
+async def test_tool_node_timeout_zero():
+    """Test edge case with zero timeout."""
+    tool_node = ToolNode([fast_tool], timeout=0)
+
+    tool_call = {
+        "name": "fast_tool",
+        "args": {"value": "test"},
+        "id": "call_fast_3",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    # Zero timeout should immediately timeout
+    with pytest.raises(asyncio.TimeoutError):
+        await tool_node.ainvoke(
+            {"messages": [msg]},
+            config=_create_config_with_runtime(),
+        )
+
+
+async def test_tool_node_timeout_with_list_input():
+    """Test timeout functionality with list input format instead of dict."""
+    tool_node = ToolNode([slow_tool], timeout=0.1)
+
+    tool_call = {
+        "name": "slow_tool",
+        "args": {"delay": 0.3},  # Will timeout
+        "id": "call_slow_6",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    # Test with list input format
+    with pytest.raises(asyncio.TimeoutError):
+        await tool_node.ainvoke(
+            [msg],  # List format instead of dict
+            config=_create_config_with_runtime(),
+        )
