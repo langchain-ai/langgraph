@@ -19,12 +19,11 @@ import operator
 from typing import Annotated
 
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from typing_extensions import TypedDict
 
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import START, StateGraph
 from langgraph.types import Command, interrupt
-
 
 # ---------------------------------------------------------------------------
 # Section 1: No subgraph, no interrupt
@@ -185,10 +184,7 @@ def test_no_subgraph_interrupt_replay_from_before(
     history = list(graph.get_state_history(config))
     # There may be multiple checkpoints with next=(ask_human,):
     # one before it ran, one where it interrupted. We want the one before.
-    before_ask_candidates = [
-        s for s in history
-        if s.next == ("ask_human",)
-    ]
+    before_ask_candidates = [s for s in history if s.next == ("ask_human",)]
     # The one without interrupt tasks is "before"
     before_ask = before_ask_candidates[-1]  # Earliest in reverse-chronological
 
@@ -246,7 +242,7 @@ def test_no_subgraph_interrupt_replay_node_reexecutes(
     assert call_count["ask_human"] == 1
 
     # Resume
-    result = graph.invoke(Command(resume="hello"), config)
+    graph.invoke(Command(resume="hello"), config)
     assert call_count["ask_human"] == 2  # Re-executes on resume
     assert call_count["node_b"] == 1
     assert interrupt_returns == ["hello"]
@@ -286,9 +282,7 @@ def test_no_subgraph_interrupt_fork_from_before(
 
     # Find checkpoint before ask_human
     history = list(graph.get_state_history(config))
-    before_ask_candidates = [
-        s for s in history if s.next == ("ask_human",)
-    ]
+    before_ask_candidates = [s for s in history if s.next == ("ask_human",)]
     before_ask = before_ask_candidates[-1]
 
     # Fork from that checkpoint
@@ -326,9 +320,7 @@ def test_no_subgraph_interrupt_replay_from_of(
     interrupt_checkpoint = next(
         s
         for s in history
-        if s.next == ("ask_human",)
-        and s.tasks
-        and any(t.interrupts for t in s.tasks)
+        if s.next == ("ask_human",) and s.tasks and any(t.interrupts for t in s.tasks)
     )
 
     # Replay from that checkpoint — uses cached resume
@@ -357,15 +349,11 @@ def test_no_subgraph_interrupt_fork_from_of(
     interrupt_checkpoint = next(
         s
         for s in history
-        if s.next == ("ask_human",)
-        and s.tasks
-        and any(t.interrupts for t in s.tasks)
+        if s.next == ("ask_human",) and s.tasks and any(t.interrupts for t in s.tasks)
     )
 
     # Fork from that checkpoint
-    fork_config = graph.update_state(
-        interrupt_checkpoint.config, {"value": ["forked"]}
-    )
+    fork_config = graph.update_state(interrupt_checkpoint.config, {"value": ["forked"]})
 
     # Interrupt IS re-triggered
     fork_result = graph.invoke(None, fork_config)
@@ -578,9 +566,7 @@ def test_subgraph_interrupt_replay_from_parent_before(
 
     # Find parent checkpoint before subgraph_node
     history = list(graph.get_state_history(config))
-    before_sub_candidates = [
-        s for s in history if s.next == ("subgraph_node",)
-    ]
+    before_sub_candidates = [s for s in history if s.next == ("subgraph_node",)]
     before_sub = before_sub_candidates[-1]  # Earliest
 
     # Replay — interrupt NOT re-triggered (cached resume used)
@@ -611,9 +597,7 @@ def test_subgraph_interrupt_fork_from_parent_before(
 
     # Find parent checkpoint before subgraph_node
     history = list(graph.get_state_history(config))
-    before_sub_candidates = [
-        s for s in history if s.next == ("subgraph_node",)
-    ]
+    before_sub_candidates = [s for s in history if s.next == ("subgraph_node",)]
     before_sub = before_sub_candidates[-1]
 
     # Fork from parent
@@ -688,9 +672,7 @@ def test_subgraph_interrupt_fork_from_parent_before_no_sub_checkpointer(
 
     # Find parent checkpoint before subgraph_node
     history = list(graph.get_state_history(config))
-    before_sub_candidates = [
-        s for s in history if s.next == ("subgraph_node",)
-    ]
+    before_sub_candidates = [s for s in history if s.next == ("subgraph_node",)]
     before_sub = before_sub_candidates[-1]
 
     # Fork from parent
@@ -718,7 +700,7 @@ def test_subgraph_interrupt_fork_from_subgraph_of(
 
     # Run until interrupt, then resume
     graph.invoke({"value": []}, config)
-    completed_result = graph.invoke(Command(resume="answer"), config)
+    graph.invoke(Command(resume="answer"), config)
 
     # Find the parent checkpoint where the interrupt fired
     history = list(graph.get_state_history(config))
@@ -732,9 +714,7 @@ def test_subgraph_interrupt_fork_from_subgraph_of(
 
     # Fork from the interrupt checkpoint at parent level
     called.clear()
-    fork_config = graph.update_state(
-        interrupt_checkpoint.config, {"value": ["forked"]}
-    )
+    fork_config = graph.update_state(interrupt_checkpoint.config, {"value": ["forked"]})
     fork_result = graph.invoke(None, fork_config)
 
     # With checkpointer=True, whether interrupt re-triggers depends on
@@ -855,9 +835,7 @@ def test_subgraph_interrupt_fork_from_subgraph_checkpoint_full_flow_no_sub_check
 
     # Step 3: Find parent checkpoint before subgraph_node
     history = list(graph.get_state_history(config))
-    before_sub_candidates = [
-        s for s in history if s.next == ("subgraph_node",)
-    ]
+    before_sub_candidates = [s for s in history if s.next == ("subgraph_node",)]
     before_sub = before_sub_candidates[-1]
 
     # Step 4: Fork from parent checkpoint
@@ -1011,17 +989,12 @@ def test_checkpoint_ns_accessible_in_subgraph_node(
         data: str
 
     def sub_node(state: SubS, config: RunnableConfig) -> SubS:
-        captured_config["checkpoint_ns"] = config["configurable"].get(
-            "checkpoint_ns"
-        )
+        captured_config["checkpoint_ns"] = config["configurable"].get("checkpoint_ns")
         captured_config["thread_id"] = config["configurable"].get("thread_id")
         return {"data": "done"}
 
     subgraph = (
-        StateGraph(SubS)
-        .add_node("inner", sub_node)
-        .add_edge(START, "inner")
-        .compile()
+        StateGraph(SubS).add_node("inner", sub_node).add_edge(START, "inner").compile()
     )
 
     class PS(TypedDict):
@@ -1144,9 +1117,7 @@ def test_replay_interrupt_stable_across_multiple_replays(
 
     # Find checkpoint before ask
     history = list(graph.get_state_history(config))
-    before_ask_candidates = [
-        s for s in history if s.next == ("ask_human",)
-    ]
+    before_ask_candidates = [s for s in history if s.next == ("ask_human",)]
     before_ask = before_ask_candidates[-1]
 
     # Replay multiple times — each should produce same result
