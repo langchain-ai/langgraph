@@ -61,6 +61,7 @@ RESERVED_ENV_VARS = frozenset(
         "LANGCHAIN_CALLBACKS_BACKGROUND",
         "DD_TRACE_PSYCOPG_ENABLED",
         "DD_TRACE_REDIS_ENABLED",
+        "LANGSMITH_DEPLOYMENT_NAME",
         "LANGGRAPH_CLOUD_LICENSE_KEY",
         # ALLOWED_SELF_HOSTED_ENV_VARS (rejected for non-self-hosted)
         "LANGSMITH_API_KEY",
@@ -82,6 +83,8 @@ _API_KEY_ENV_NAMES = (
     "LANGSMITH_API_KEY",
     "LANGCHAIN_API_KEY",
 )
+
+_DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
 
 
 def _parse_dotenv_file(path: pathlib.Path) -> dict[str, str]:
@@ -452,6 +455,7 @@ def _build(
     extra_flags: Sequence[str] = (),
     verbose: bool = True,
 ):
+    # pull latest images
     if pull:
         runner.run(
             subp_exec(
@@ -462,15 +466,19 @@ def _build(
             )
         )
     set("Building...")
+    # apply options
     args = [
         "-f",
         "-",  # stdin
         "-t",
         tag,
     ]
+    # determine build context: use current directory for JS projects, config parent for Python
     is_js_project = config_json.get("node_version") and not config_json.get(
         "python_version"
     )
+    # build/install commands only apply to JS projects for now
+    # without install/build command, JS projects will follow the old behavior
     if is_js_project and (build_command or install_command):
         build_context = str(pathlib.Path.cwd())
     else:
@@ -488,6 +496,7 @@ def _build(
         build_command=build_command,
         build_context=build_context,
     )
+    # add additional_contexts
     if additional_contexts:
         for k, v in additional_contexts.items():
             args.extend(["--build-context", f"{k}={v}"])
@@ -576,12 +585,16 @@ def build(
 @click.option(
     "--api-key",
     envvar="LANGGRAPH_HOST_API_KEY",
-    help="API key. If omitted, resolved from .env or prompted.",
+    help=(
+        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
+        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY in your .env file."
+    ),
 )
 @click.option(
     "--name",
     help=(
-        "Deployment name. Defaults to current directory name "
+        "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
+        "in your .env file. Defaults to current directory name "
         "if --deployment-id is not provided."
     ),
 )
@@ -675,6 +688,8 @@ def deploy(
         api_key = click.prompt("Host API key", hide_input=True)
 
     if not deployment_id and not name:
+        name = env_vars.get(_DEPLOYMENT_NAME_ENV)
+    if not deployment_id and not name:
         default_name = _normalize_image_name(pathlib.Path.cwd().name)
         name = click.prompt("Deployment name", default=default_name)
 
@@ -686,11 +701,13 @@ def deploy(
     local_tag = f"langgraph-deploy-tmp:{int(time.time())}"
 
     with Runner() as runner:
-        langgraph_cli.docker.check_capabilities(
-            runner,
-            require_compose=False,
-            require_buildx=needs_buildx,
-        )
+        if shutil.which("docker") is None:
+            raise click.UsageError("Docker not installed")
+        if needs_buildx:
+            try:
+                runner.run(subp_exec("docker", "buildx", "version", collect=True))
+            except click.exceptions.Exit:
+                raise click.UsageError("Docker Buildx not installed") from None
 
         def log_step(message: str) -> None:
             click.secho(message, fg="cyan")
@@ -884,6 +901,7 @@ def deploy(
                 )
                 if status != last_status:
                     last_status = status
+                    # pause spinner so we can avoid conflict when writing status
                     set_progress("")
                     click.secho(f"   Status: {status}", fg="cyan")
                     if status in _TERMINAL_STATUSES:
