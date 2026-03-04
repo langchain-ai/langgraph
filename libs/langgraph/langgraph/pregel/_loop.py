@@ -1109,12 +1109,11 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if saved.pending_writes is not None
             else []
         )
-        # When re-invoking from a specific checkpoint (not skip_done_tasks)
-        # that isn't a subgraph being resumed by its parent (CONFIG_KEY_RESUMING),
-        # clear cached RESUME writes so that interrupt() re-fires instead of
-        # returning stale cached values. This mirrors the behavior of fork
-        # checkpoints created via update_state, which start with no writes.
-        # Command(resume=...) will add its own fresh RESUME writes in _first().
+        # When resuming from a specific checkpoint_id (skip_done_tasks=False)
+        # and this is NOT a subgraph being resumed by its parent graph
+        # (CONFIG_KEY_RESUMING), drop stale RESUME writes so that interrupt()
+        # calls re-fire instead of returning cached values.
+        # Command(resume=...) will supply fresh RESUME writes in _first().
         if not self.skip_done_tasks and CONFIG_KEY_RESUMING not in self.config.get(
             CONF, {}
         ):
@@ -1300,12 +1299,11 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if saved.pending_writes is not None
             else []
         )
-        # When re-invoking from a specific checkpoint (not skip_done_tasks)
-        # that isn't a subgraph being resumed by its parent (CONFIG_KEY_RESUMING),
-        # clear cached RESUME writes so that interrupt() re-fires instead of
-        # returning stale cached values. This mirrors the behavior of fork
-        # checkpoints created via update_state, which start with no writes.
-        # Command(resume=...) will add its own fresh RESUME writes in _first().
+        # When resuming from a specific checkpoint_id (skip_done_tasks=False)
+        # and this is NOT a subgraph being resumed by its parent graph
+        # (CONFIG_KEY_RESUMING), drop stale RESUME writes so that interrupt()
+        # calls re-fire instead of returning cached values.
+        # Command(resume=...) will supply fresh RESUME writes in _first().
         if not self.skip_done_tasks and CONFIG_KEY_RESUMING not in self.config.get(
             CONF, {}
         ):
