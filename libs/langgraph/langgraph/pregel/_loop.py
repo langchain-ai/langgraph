@@ -1115,15 +1115,11 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         # returning stale cached values. This mirrors the behavior of fork
         # checkpoints created via update_state, which start with no writes.
         # Command(resume=...) will add its own fresh RESUME writes in _first().
-        if (
-            not self.skip_done_tasks
-            and CONFIG_KEY_RESUMING
-            not in self.config.get(CONF, {})
+        if not self.skip_done_tasks and CONFIG_KEY_RESUMING not in self.config.get(
+            CONF, {}
         ):
             self.checkpoint_pending_writes = [
-                w
-                for w in self.checkpoint_pending_writes
-                if w[1] != RESUME
+                w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
 
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
@@ -1310,15 +1306,11 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         # returning stale cached values. This mirrors the behavior of fork
         # checkpoints created via update_state, which start with no writes.
         # Command(resume=...) will add its own fresh RESUME writes in _first().
-        if (
-            not self.skip_done_tasks
-            and CONFIG_KEY_RESUMING
-            not in self.config.get(CONF, {})
+        if not self.skip_done_tasks and CONFIG_KEY_RESUMING not in self.config.get(
+            CONF, {}
         ):
             self.checkpoint_pending_writes = [
-                w
-                for w in self.checkpoint_pending_writes
-                if w[1] != RESUME
+                w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
 
         self.submit = await self.stack.enter_async_context(
