@@ -1,29 +1,27 @@
-"""Tests for time travel (replay and fork) behavior.
+"""Async variants of time travel (replay and fork) tests.
 
-Covers the intersection of replay vs fork across graph structures:
-- No subgraph, no interrupt
-- No subgraph, with interrupt
-- With subgraph, no interrupt in subgraph
-- With subgraph, with interrupt in subgraph
-- Additional scenarios (multiple interrupts, get_state with subgraphs, etc.)
-- Edge cases
-
-Key concepts:
-- Replay (invoke with checkpoint_id): Re-executes nodes after the checkpoint.
-  For interrupt nodes, cached resume values are used so interrupts don't re-fire.
-- Fork (update_state then invoke): Creates a new checkpoint without cached
-  pending writes. Nodes re-execute and interrupts DO re-fire.
+Mirrors test_time_travel.py with async graph operations (ainvoke, aget_state,
+aget_state_history).
 """
 
 import operator
+import sys
 from typing import Annotated
 
+import pytest
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from typing_extensions import TypedDict
 
 from langgraph.graph import START, StateGraph
 from langgraph.types import Command, interrupt
+
+pytestmark = pytest.mark.anyio
+
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 
 # ---------------------------------------------------------------------------
 # Section 1: No subgraph, no interrupt
@@ -34,8 +32,8 @@ class SimpleState(TypedDict):
     value: Annotated[list[str], operator.add]
 
 
-def test_no_subgraph_no_interrupt_replay(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_no_subgraph_no_interrupt_replay_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Replay from checkpoint before node_b. node_b re-executes (it's after
     the checkpoint), producing the same result."""
@@ -56,21 +54,21 @@ def test_no_subgraph_no_interrupt_replay(
         .add_node("node_b", node_b)
         .add_edge(START, "node_a")
         .add_edge("node_a", "node_b")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
 
     config = {"configurable": {"thread_id": "1"}}
-    result = graph.invoke({"value": []}, config)
+    result = await graph.ainvoke({"value": []}, config)
     assert result == {"value": ["a", "b"]}
     assert called == ["node_a", "node_b"]
 
     # Find checkpoint before node_b (next=(node_b,))
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_b = next(s for s in history if s.next == ("node_b",))
 
     # Replay from checkpoint before node_b
     called.clear()
-    replay_result = graph.invoke(None, before_b.config)
+    replay_result = await graph.ainvoke(None, before_b.config)
 
     # node_b re-executes (it's after the checkpoint), same final state
     assert replay_result == {"value": ["a", "b"]}
@@ -79,8 +77,8 @@ def test_no_subgraph_no_interrupt_replay(
     assert "node_a" not in called
 
 
-def test_no_subgraph_no_interrupt_fork(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_no_subgraph_no_interrupt_fork_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Fork from checkpoint before node_b with modified state. node_b
     re-executes with the new state."""
@@ -101,20 +99,20 @@ def test_no_subgraph_no_interrupt_fork(
         .add_node("node_b", node_b)
         .add_edge(START, "node_a")
         .add_edge("node_a", "node_b")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
 
     config = {"configurable": {"thread_id": "1"}}
-    graph.invoke({"value": []}, config)
+    await graph.ainvoke({"value": []}, config)
 
     # Find checkpoint before node_b
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_b = next(s for s in history if s.next == ("node_b",))
 
     # Fork: update_state creates a new checkpoint with modified values
     called.clear()
-    fork_config = graph.update_state(before_b.config, {"value": ["x"]})
-    fork_result = graph.invoke(None, fork_config)
+    fork_config = await graph.aupdate_state(before_b.config, {"value": ["x"]})
+    fork_result = await graph.ainvoke(None, fork_config)
 
     # node_b re-executes with the forked state
     assert "node_b" in called
@@ -162,54 +160,49 @@ def _build_interrupt_graph(
     return graph
 
 
-def test_no_subgraph_interrupt_replay_from_before(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_no_subgraph_interrupt_replay_from_before_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Replay from checkpoint before interrupt node. ask_human re-executes but
     interrupt() returns cached resume value — interrupt NOT re-triggered."""
 
     called: list[str] = []
-    graph = _build_interrupt_graph(sync_checkpointer, called)
+    graph = _build_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt
-    result = graph.invoke({"value": []}, config)
+    result = await graph.ainvoke({"value": []}, config)
     assert "__interrupt__" in result
 
     # Resume with answer
-    result = graph.invoke(Command(resume="hello"), config)
+    result = await graph.ainvoke(Command(resume="hello"), config)
     assert result == {"value": ["a", "human:hello", "b"]}
 
-    # Find checkpoint before ask_human (where next=(ask_human,) and no interrupts)
-    history = list(graph.get_state_history(config))
-    # There may be multiple checkpoints with next=(ask_human,):
-    # one before it ran, one where it interrupted. We want the one before.
+    # Find checkpoint before ask_human
+    history = [s async for s in graph.aget_state_history(config)]
     before_ask_candidates = [s for s in history if s.next == ("ask_human",)]
-    # The one without interrupt tasks is "before"
     before_ask = before_ask_candidates[-1]  # Earliest in reverse-chronological
 
     # Replay from that checkpoint
     called.clear()
-    replay_result = graph.invoke(None, before_ask.config)
+    replay_result = await graph.ainvoke(None, before_ask.config)
 
     # Interrupt is NOT re-triggered — cached resume value used
     assert replay_result == {"value": ["a", "human:hello", "b"]}
     assert "__interrupt__" not in replay_result
-    # The node code DID re-execute (ask_human was called), but interrupt()
-    # returned the cached resume value instead of raising GraphInterrupt
     assert "ask_human" in called
     assert "node_b" in called
 
 
-def test_no_subgraph_interrupt_replay_node_reexecutes(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_no_subgraph_interrupt_replay_node_reexecutes_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Verify that during replay, ALL node code re-executes — it's only
-    interrupt() that uses cached values. Non-interrupt logic (like LLM calls)
-    runs again and can produce different results."""
+    interrupt() that uses cached values."""
 
     call_count: dict[str, int] = {"ask_human": 0, "node_b": 0}
-    # Track what interrupt() returned each time
     interrupt_returns: list[str] = []
 
     class ReplayState(TypedDict):
@@ -223,7 +216,6 @@ def test_no_subgraph_interrupt_replay_node_reexecutes(
 
     def node_b(state: ReplayState) -> ReplayState:
         call_count["node_b"] += 1
-        # Simulate non-deterministic logic: output includes call count
         return {"value": [f"b_call_{call_count['node_b']}"]}
 
     graph = (
@@ -232,91 +224,89 @@ def test_no_subgraph_interrupt_replay_node_reexecutes(
         .add_node("node_b", node_b)
         .add_edge(START, "ask_human")
         .add_edge("ask_human", "node_b")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
 
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt
-    graph.invoke({"value": []}, config)
+    await graph.ainvoke({"value": []}, config)
     assert call_count["ask_human"] == 1
 
     # Resume
-    graph.invoke(Command(resume="hello"), config)
-    assert call_count["ask_human"] == 2  # Re-executes on resume
+    await graph.ainvoke(Command(resume="hello"), config)
+    assert call_count["ask_human"] == 2
     assert call_count["node_b"] == 1
     assert interrupt_returns == ["hello"]
 
     # Find checkpoint before ask_human
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_ask = [s for s in history if s.next == ("ask_human",)][-1]
 
     # Replay
     interrupt_returns.clear()
-    replay_result = graph.invoke(None, before_ask.config)
+    replay_result = await graph.ainvoke(None, before_ask.config)
 
-    # ask_human re-executed (call count incremented)
     assert call_count["ask_human"] == 3
-    # interrupt() returned the cached value "hello" — not re-triggered
     assert interrupt_returns == ["hello"]
     assert "__interrupt__" not in replay_result
-    # node_b also re-executed (call count incremented)
     assert call_count["node_b"] == 2
-    # node_b produced DIFFERENT output because it's non-deterministic
     assert "b_call_2" in replay_result["value"]
 
 
-def test_no_subgraph_interrupt_fork_from_before(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_no_subgraph_interrupt_fork_from_before_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Fork from checkpoint before interrupt node. Interrupt IS re-triggered
     because fork has no cached resume values."""
 
     called: list[str] = []
-    graph = _build_interrupt_graph(sync_checkpointer, called)
+    graph = _build_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt, then resume
-    graph.invoke({"value": []}, config)
-    graph.invoke(Command(resume="hello"), config)
+    await graph.ainvoke({"value": []}, config)
+    await graph.ainvoke(Command(resume="hello"), config)
 
     # Find checkpoint before ask_human
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_ask_candidates = [s for s in history if s.next == ("ask_human",)]
     before_ask = before_ask_candidates[-1]
 
     # Fork from that checkpoint
     called.clear()
-    fork_config = graph.update_state(before_ask.config, {"value": ["forked"]})
+    fork_config = await graph.aupdate_state(before_ask.config, {"value": ["forked"]})
 
     # Invoke from fork — interrupt IS re-triggered
-    fork_result = graph.invoke(None, fork_config)
+    fork_result = await graph.ainvoke(None, fork_config)
     assert "__interrupt__" in fork_result
     assert fork_result["__interrupt__"][0].value == "What is your input?"
 
     # Resume the forked interrupt with a different answer
-    final = graph.invoke(Command(resume="world"), fork_config)
+    final = await graph.ainvoke(Command(resume="world"), fork_config)
     assert final == {"value": ["a", "forked", "human:world", "b"]}
 
 
-def test_no_subgraph_interrupt_replay_from_of(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_no_subgraph_interrupt_replay_from_of_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Replay from the interrupt checkpoint itself (where interrupt fired).
     Uses cached resume, completes without re-triggering interrupt."""
 
     called: list[str] = []
-    graph = _build_interrupt_graph(sync_checkpointer, called)
+    graph = _build_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt
-    graph.invoke({"value": []}, config)
+    await graph.ainvoke({"value": []}, config)
 
     # Resume
-    graph.invoke(Command(resume="hello"), config)
+    await graph.ainvoke(Command(resume="hello"), config)
 
     # Find the checkpoint where interrupt fired
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     interrupt_checkpoint = next(
         s
         for s in history
@@ -325,27 +315,28 @@ def test_no_subgraph_interrupt_replay_from_of(
 
     # Replay from that checkpoint — uses cached resume
     called.clear()
-    replay_result = graph.invoke(None, interrupt_checkpoint.config)
+    replay_result = await graph.ainvoke(None, interrupt_checkpoint.config)
     assert replay_result == {"value": ["a", "human:hello", "b"]}
     assert "__interrupt__" not in replay_result
 
 
-def test_no_subgraph_interrupt_fork_from_of(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_no_subgraph_interrupt_fork_from_of_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Fork from the interrupt checkpoint. Interrupt re-triggered because
     fork clears cached data."""
 
     called: list[str] = []
-    graph = _build_interrupt_graph(sync_checkpointer, called)
+    graph = _build_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt, then resume
-    graph.invoke({"value": []}, config)
-    graph.invoke(Command(resume="hello"), config)
+    await graph.ainvoke({"value": []}, config)
+    await graph.ainvoke(Command(resume="hello"), config)
 
     # Find interrupt checkpoint
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     interrupt_checkpoint = next(
         s
         for s in history
@@ -353,14 +344,16 @@ def test_no_subgraph_interrupt_fork_from_of(
     )
 
     # Fork from that checkpoint
-    fork_config = graph.update_state(interrupt_checkpoint.config, {"value": ["forked"]})
+    fork_config = await graph.aupdate_state(
+        interrupt_checkpoint.config, {"value": ["forked"]}
+    )
 
     # Interrupt IS re-triggered
-    fork_result = graph.invoke(None, fork_config)
+    fork_result = await graph.ainvoke(None, fork_config)
     assert "__interrupt__" in fork_result
 
     # Resume forked interrupt with different answer
-    final = graph.invoke(Command(resume="different"), fork_config)
+    final = await graph.ainvoke(Command(resume="different"), fork_config)
     assert "human:different" in final["value"]
 
 
@@ -421,53 +414,51 @@ def _build_subgraph_no_interrupt(
     return graph
 
 
-def test_subgraph_no_interrupt_replay_from_parent_before(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_subgraph_no_interrupt_replay_from_parent_before_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Replay from parent checkpoint before subgraph node. Subgraph and
     post_process re-execute (they're after the checkpoint)."""
 
     called: list[str] = []
-    graph = _build_subgraph_no_interrupt(sync_checkpointer, called)
+    graph = _build_subgraph_no_interrupt(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
-    result = graph.invoke({"value": []}, config)
-    # Subgraph inherits parent state, so "parent" appears from parent_node
-    # and again when subgraph returns state including the inherited value
+    result = await graph.ainvoke({"value": []}, config)
     initial_value = result["value"]
 
     # Find checkpoint before subgraph (next=(subgraph,))
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_sub = next(s for s in history if s.next == ("subgraph",))
 
     # Replay from that checkpoint
     called.clear()
-    replay_result = graph.invoke(None, before_sub.config)
+    replay_result = await graph.ainvoke(None, before_sub.config)
 
     # Same result as original execution
     assert replay_result["value"] == initial_value
     assert "parent_node" not in called  # Before checkpoint — not re-executed
 
 
-def test_subgraph_no_interrupt_fork_from_parent_before(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_subgraph_no_interrupt_fork_from_parent_before_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Fork from parent checkpoint before subgraph node with modified state.
     Subgraph re-executes with forked state."""
 
     called: list[str] = []
-    graph = _build_subgraph_no_interrupt(sync_checkpointer, called)
+    graph = _build_subgraph_no_interrupt(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
-    graph.invoke({"value": []}, config)
+    await graph.ainvoke({"value": []}, config)
 
     # Find checkpoint before subgraph
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_sub = next(s for s in history if s.next == ("subgraph",))
 
     # Fork with modified state
     called.clear()
-    fork_config = graph.update_state(before_sub.config, {"value": ["forked"]})
-    fork_result = graph.invoke(None, fork_config)
+    fork_config = await graph.aupdate_state(before_sub.config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
 
     # Subgraph re-executes with forked state included
     assert "step_a" in called
@@ -542,68 +533,65 @@ def _build_subgraph_interrupt_graph(
     return graph
 
 
-def test_subgraph_interrupt_replay_from_parent_before(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_interrupt_replay_from_parent_before_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Replay from parent checkpoint before subgraph. Subgraph re-executes
     but interrupt uses cached resume — interrupt NOT re-triggered."""
 
     called: list[str] = []
-    graph = _build_subgraph_interrupt_graph(sync_checkpointer, called)
+    graph = _build_subgraph_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt
-    result = graph.invoke({"value": []}, config)
+    result = await graph.ainvoke({"value": []}, config)
     assert "__interrupt__" in result
 
     # Resume
-    completed_result = graph.invoke(Command(resume="answer"), config)
-    # Capture actual completed values (subgraph may inherit parent state)
+    completed_result = await graph.ainvoke(Command(resume="answer"), config)
     completed_value = completed_result["value"]
     assert "human:answer" in completed_value
     assert "sub_b" in completed_value
     assert "post" in completed_value
 
     # Find parent checkpoint before subgraph_node
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_sub_candidates = [s for s in history if s.next == ("subgraph_node",)]
     before_sub = before_sub_candidates[-1]  # Earliest
 
     # Replay — interrupt NOT re-triggered (cached resume used)
     called.clear()
-    replay_result = graph.invoke(None, before_sub.config)
+    replay_result = await graph.ainvoke(None, before_sub.config)
     assert replay_result["value"] == completed_value
     assert "__interrupt__" not in replay_result
 
 
-def test_subgraph_interrupt_fork_from_parent_before(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_interrupt_fork_from_parent_before_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Fork from parent checkpoint before subgraph (checkpointer=True).
     The subgraph's OWN checkpoint state persists independently — the parent
-    fork does NOT clear subgraph checkpoints. The subgraph interrupt uses
-    its cached resume and is NOT re-triggered.
-
-    This is jtamsen's exact issue: forking the parent doesn't re-trigger
-    subgraph interrupts when the subgraph has checkpointer=True."""
+    fork does NOT clear subgraph checkpoints."""
 
     called: list[str] = []
-    graph = _build_subgraph_interrupt_graph(sync_checkpointer, called)
+    graph = _build_subgraph_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt, then resume
-    graph.invoke({"value": []}, config)
-    graph.invoke(Command(resume="answer"), config)
+    await graph.ainvoke({"value": []}, config)
+    await graph.ainvoke(Command(resume="answer"), config)
 
     # Find parent checkpoint before subgraph_node
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_sub_candidates = [s for s in history if s.next == ("subgraph_node",)]
     before_sub = before_sub_candidates[-1]
 
     # Fork from parent
     called.clear()
-    fork_config = graph.update_state(before_sub.config, {"value": ["forked"]})
-    fork_result = graph.invoke(None, fork_config)
+    fork_config = await graph.aupdate_state(before_sub.config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
 
     # With checkpointer=True, subgraph has its own persistent state.
     # Parent fork does NOT clear subgraph checkpoints, so the subgraph
@@ -612,31 +600,32 @@ def test_subgraph_interrupt_fork_from_parent_before(
     assert "human:answer" in fork_result["value"]
 
 
-def test_subgraph_interrupt_replay_from_subgraph_of(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_interrupt_replay_from_subgraph_of_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Replay from the parent checkpoint where subgraph interrupt fired.
     Uses cached resume, completes without re-triggering interrupt."""
 
     called: list[str] = []
-    graph = _build_subgraph_interrupt_graph(sync_checkpointer, called)
+    graph = _build_subgraph_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt
-    graph.invoke({"value": []}, config)
+    await graph.ainvoke({"value": []}, config)
 
     # Get state with subgraphs at the interrupt point to verify structure
-    parent_state = graph.get_state(config, subgraphs=True)
+    parent_state = await graph.aget_state(config, subgraphs=True)
     assert len(parent_state.tasks) > 0
     sub_task = parent_state.tasks[0]
     assert sub_task.state is not None
 
     # Resume
-    completed_result = graph.invoke(Command(resume="answer"), config)
+    completed_result = await graph.ainvoke(Command(resume="answer"), config)
     completed_value = completed_result["value"]
 
     # Find the parent checkpoint where the interrupt fired
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     interrupt_checkpoint = next(
         s
         for s in history
@@ -647,63 +636,61 @@ def test_subgraph_interrupt_replay_from_subgraph_of(
 
     # Replay from that checkpoint — uses cached resume
     called.clear()
-    replay_result = graph.invoke(None, interrupt_checkpoint.config)
+    replay_result = await graph.ainvoke(None, interrupt_checkpoint.config)
     assert replay_result["value"] == completed_value
     assert "__interrupt__" not in replay_result
 
 
-def test_subgraph_interrupt_fork_from_parent_before_no_sub_checkpointer(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_interrupt_fork_from_parent_before_no_sub_checkpointer_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Fork from parent checkpoint before subgraph with DEFAULT checkpointer
-    (no sub-checkpointer). The subgraph inherits parent's checkpointer for
-    interrupt support only. Forking the parent DOES re-trigger the interrupt
-    because subgraph state flows through parent's checkpoint."""
+    (no sub-checkpointer). Forking the parent DOES re-trigger the interrupt."""
 
     called: list[str] = []
     graph = _build_subgraph_interrupt_graph(
-        sync_checkpointer, called, subgraph_checkpointer=None
+        async_checkpointer, called, subgraph_checkpointer=None
     )
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt, then resume
-    graph.invoke({"value": []}, config)
-    graph.invoke(Command(resume="answer"), config)
+    await graph.ainvoke({"value": []}, config)
+    await graph.ainvoke(Command(resume="answer"), config)
 
     # Find parent checkpoint before subgraph_node
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_sub_candidates = [s for s in history if s.next == ("subgraph_node",)]
     before_sub = before_sub_candidates[-1]
 
     # Fork from parent
     called.clear()
-    fork_config = graph.update_state(before_sub.config, {"value": ["forked"]})
-    fork_result = graph.invoke(None, fork_config)
+    fork_config = await graph.aupdate_state(before_sub.config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
 
-    # With default (no) subgraph checkpointer, the subgraph state is managed
-    # through the parent's checkpointer. Forking the parent clears downstream
-    # state, so the interrupt IS re-triggered.
+    # With default (no) subgraph checkpointer, forking the parent clears
+    # downstream state, so the interrupt IS re-triggered.
     assert "__interrupt__" in fork_result
     assert fork_result["__interrupt__"][0].value == "Provide input:"
 
 
-def test_subgraph_interrupt_fork_from_subgraph_of(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_interrupt_fork_from_subgraph_of_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Fork from the parent checkpoint where subgraph interrupt fired
-    (checkpointer=True). With checkpointer=True, the subgraph has its own
-    persistent checkpoints, so parent fork may not clear subgraph state."""
+    (checkpointer=True)."""
 
     called: list[str] = []
-    graph = _build_subgraph_interrupt_graph(sync_checkpointer, called)
+    graph = _build_subgraph_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt, then resume
-    graph.invoke({"value": []}, config)
-    graph.invoke(Command(resume="answer"), config)
+    await graph.ainvoke({"value": []}, config)
+    await graph.ainvoke(Command(resume="answer"), config)
 
     # Find the parent checkpoint where the interrupt fired
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     interrupt_checkpoint = next(
         s
         for s in history
@@ -714,134 +701,124 @@ def test_subgraph_interrupt_fork_from_subgraph_of(
 
     # Fork from the interrupt checkpoint at parent level
     called.clear()
-    fork_config = graph.update_state(interrupt_checkpoint.config, {"value": ["forked"]})
-    fork_result = graph.invoke(None, fork_config)
+    fork_config = await graph.aupdate_state(
+        interrupt_checkpoint.config, {"value": ["forked"]}
+    )
+    fork_result = await graph.ainvoke(None, fork_config)
 
-    # With checkpointer=True, whether interrupt re-triggers depends on
-    # whether the subgraph's checkpoint is cleared by the parent fork.
-    # The result confirms actual behavior.
     assert "value" in fork_result
 
 
-def test_subgraph_interrupt_fork_from_subgraph_checkpoint(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_interrupt_fork_from_subgraph_checkpoint_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Fork from the subgraph's own checkpoint (using subgraph config from
     get_state with subgraphs=True). This directly modifies the subgraph's
     checkpoint, so the interrupt IS re-triggered."""
 
     called: list[str] = []
-    graph = _build_subgraph_interrupt_graph(sync_checkpointer, called)
+    graph = _build_subgraph_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt
-    result = graph.invoke({"value": []}, config)
+    result = await graph.ainvoke({"value": []}, config)
     assert "__interrupt__" in result
 
     # Get state with subgraphs to find the subgraph's own config
-    parent_state = graph.get_state(config, subgraphs=True)
+    parent_state = await graph.aget_state(config, subgraphs=True)
     sub_task = parent_state.tasks[0]
     assert sub_task.state is not None
     sub_config = sub_task.state.config
 
     # Fork from the subgraph's own checkpoint
     called.clear()
-    fork_config = graph.update_state(sub_config, {"value": ["sub_forked"]})
+    fork_config = await graph.aupdate_state(sub_config, {"value": ["sub_forked"]})
 
-    # Resume from forked subgraph checkpoint — this creates a new subgraph
-    # checkpoint, causing the interrupt to re-fire
-    fork_result = graph.invoke(None, fork_config)
+    # Resume from forked subgraph checkpoint — interrupt re-fires
+    fork_result = await graph.ainvoke(None, fork_config)
     assert "__interrupt__" in fork_result or "ask_human" in called
 
 
-def test_subgraph_interrupt_fork_from_subgraph_checkpoint_full_flow(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_interrupt_fork_from_subgraph_checkpoint_full_flow_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Fork from the subgraph's own checkpoint, resume the interrupt with a
     new answer, and verify the FULL flow: subgraph completes (step_b runs)
-    AND execution continues back to the parent graph (post_process runs).
-
-    This is the key test for jtamsen's use case: time travel to a subgraph
-    checkpoint, re-trigger the interrupt, provide a new answer, and have
-    the entire graph complete normally including parent nodes after the
-    subgraph."""
+    AND execution continues back to the parent graph (post_process runs)."""
 
     called: list[str] = []
-    graph = _build_subgraph_interrupt_graph(sync_checkpointer, called)
+    graph = _build_subgraph_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Step 1: Run until interrupt fires in subgraph
-    result = graph.invoke({"value": []}, config)
+    result = await graph.ainvoke({"value": []}, config)
     assert "__interrupt__" in result
     assert "router" in called
     assert "step_a" in called
     assert "ask_human" in called
 
     # Step 2: Get subgraph's own checkpoint config
-    parent_state = graph.get_state(config, subgraphs=True)
+    parent_state = await graph.aget_state(config, subgraphs=True)
     sub_task = parent_state.tasks[0]
     assert sub_task.state is not None
     sub_config = sub_task.state.config
 
     # Step 3: Fork from subgraph checkpoint
     called.clear()
-    fork_config = graph.update_state(sub_config, {"value": ["sub_forked"]})
+    fork_config = await graph.aupdate_state(sub_config, {"value": ["sub_forked"]})
 
     # Step 4: Invoke from fork — interrupt should re-fire
-    fork_result = graph.invoke(None, fork_config)
+    fork_result = await graph.ainvoke(None, fork_config)
     assert "__interrupt__" in fork_result
     assert fork_result["__interrupt__"][0].value == "Provide input:"
 
     # Step 5: Resume the re-triggered interrupt with a NEW answer
     called.clear()
-    final_result = graph.invoke(Command(resume="new_answer"), fork_config)
+    final_result = await graph.ainvoke(Command(resume="new_answer"), fork_config)
 
     # Step 6: Verify full completion
-    # ask_human should have run with the new answer
     assert "ask_human" in called
     assert "human:new_answer" in final_result["value"]
-    # step_b should have run (subgraph continued after interrupt)
     assert "step_b" in called
     assert "sub_b" in final_result["value"]
-    # post_process should have run (parent graph continued after subgraph)
     assert "post_process" in called
     assert "post" in final_result["value"]
 
 
-def test_subgraph_interrupt_fork_from_subgraph_checkpoint_full_flow_no_sub_checkpointer(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_interrupt_fork_from_subgraph_checkpoint_full_flow_no_sub_checkpointer_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Same as the above test but with the DEFAULT subgraph checkpointer
-    (no checkpointer=True). Fork from the parent checkpoint before the
-    subgraph, re-trigger interrupt, resume, and verify full parent completion.
-
-    With the default checkpointer, forking the parent DOES re-trigger
-    subgraph interrupts (subgraph state flows through parent's checkpoint)."""
+    """Same as the above test but with the DEFAULT subgraph checkpointer.
+    Fork from the parent checkpoint before the subgraph, re-trigger interrupt,
+    resume, and verify full parent completion."""
 
     called: list[str] = []
     graph = _build_subgraph_interrupt_graph(
-        sync_checkpointer, called, subgraph_checkpointer=None
+        async_checkpointer, called, subgraph_checkpointer=None
     )
     config = {"configurable": {"thread_id": "1"}}
 
     # Step 1: Run until interrupt
-    result = graph.invoke({"value": []}, config)
+    result = await graph.ainvoke({"value": []}, config)
     assert "__interrupt__" in result
 
     # Step 2: Resume with original answer to complete the graph
-    original_result = graph.invoke(Command(resume="original"), config)
+    original_result = await graph.ainvoke(Command(resume="original"), config)
     assert "human:original" in original_result["value"]
     assert "post" in original_result["value"]
 
     # Step 3: Find parent checkpoint before subgraph_node
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_sub_candidates = [s for s in history if s.next == ("subgraph_node",)]
     before_sub = before_sub_candidates[-1]
 
     # Step 4: Fork from parent checkpoint
     called.clear()
-    fork_config = graph.update_state(before_sub.config, {"value": ["forked"]})
-    fork_result = graph.invoke(None, fork_config)
+    fork_config = await graph.aupdate_state(before_sub.config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
 
     # Step 5: Interrupt IS re-triggered (default checkpointer)
     assert "__interrupt__" in fork_result
@@ -849,7 +826,7 @@ def test_subgraph_interrupt_fork_from_subgraph_checkpoint_full_flow_no_sub_check
 
     # Step 6: Resume with new answer
     called.clear()
-    final_result = graph.invoke(Command(resume="new_answer"), fork_config)
+    final_result = await graph.ainvoke(Command(resume="new_answer"), fork_config)
 
     # Step 7: Verify full completion back through parent
     assert "human:new_answer" in final_result["value"]
@@ -927,42 +904,43 @@ def _build_subgraph_multi_interrupt_graph(
     return graph
 
 
-def test_subgraph_multi_interrupt_full_flow_checkpointer_true(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_multi_interrupt_full_flow_checkpointer_true_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Subgraph with two interrupt nodes (ask_a, ask_b), checkpointer=True.
     Run through both interrupts, then fork from parent before subgraph and
     verify behavior — with checkpointer=True, cached resumes are used."""
 
     called: list[str] = []
-    graph = _build_subgraph_multi_interrupt_graph(sync_checkpointer, called)
+    graph = _build_subgraph_multi_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Hit first interrupt (ask_a)
-    r1 = graph.invoke({"value": []}, config)
+    r1 = await graph.ainvoke({"value": []}, config)
     assert "__interrupt__" in r1
     assert r1["__interrupt__"][0].value == "Question A"
 
     # Resume ask_a -> hits ask_b
-    r2 = graph.invoke(Command(resume="ans_a"), config)
+    r2 = await graph.ainvoke(Command(resume="ans_a"), config)
     assert "__interrupt__" in r2
     assert r2["__interrupt__"][0].value == "Question B"
 
     # Resume ask_b -> completes
-    r3 = graph.invoke(Command(resume="ans_b"), config)
+    r3 = await graph.ainvoke(Command(resume="ans_b"), config)
     assert "a:ans_a" in r3["value"]
     assert "b:ans_b" in r3["value"]
     assert "sub_c" in r3["value"]
     assert "post" in r3["value"]
 
     # Fork from parent checkpoint before subgraph_node
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_sub_candidates = [s for s in history if s.next == ("subgraph_node",)]
     before_sub = before_sub_candidates[-1]
 
     called.clear()
-    fork_config = graph.update_state(before_sub.config, {"value": ["forked"]})
-    fork_result = graph.invoke(None, fork_config)
+    fork_config = await graph.aupdate_state(before_sub.config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
 
     # With checkpointer=True, subgraph has its own persistent state.
     # Parent fork does NOT clear subgraph checkpoints — cached resumes used.
@@ -971,8 +949,9 @@ def test_subgraph_multi_interrupt_full_flow_checkpointer_true(
     assert "b:ans_b" in fork_result["value"]
 
 
-def test_subgraph_multi_interrupt_full_flow_checkpointer_none(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_multi_interrupt_full_flow_checkpointer_none_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Subgraph with two interrupt nodes (ask_a, ask_b), checkpointer=None.
     Run through both interrupts, then fork from parent before subgraph.
@@ -980,111 +959,112 @@ def test_subgraph_multi_interrupt_full_flow_checkpointer_none(
 
     called: list[str] = []
     graph = _build_subgraph_multi_interrupt_graph(
-        sync_checkpointer, called, subgraph_checkpointer=None
+        async_checkpointer, called, subgraph_checkpointer=None
     )
     config = {"configurable": {"thread_id": "1"}}
 
     # Hit first interrupt (ask_a)
-    r1 = graph.invoke({"value": []}, config)
+    r1 = await graph.ainvoke({"value": []}, config)
     assert "__interrupt__" in r1
     assert r1["__interrupt__"][0].value == "Question A"
 
     # Resume ask_a -> hits ask_b
-    r2 = graph.invoke(Command(resume="ans_a"), config)
+    r2 = await graph.ainvoke(Command(resume="ans_a"), config)
     assert "__interrupt__" in r2
     assert r2["__interrupt__"][0].value == "Question B"
 
     # Resume ask_b -> completes
-    r3 = graph.invoke(Command(resume="ans_b"), config)
+    r3 = await graph.ainvoke(Command(resume="ans_b"), config)
     assert "a:ans_a" in r3["value"]
     assert "b:ans_b" in r3["value"]
     assert "post" in r3["value"]
 
     # Fork from parent checkpoint before subgraph_node
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_sub_candidates = [s for s in history if s.next == ("subgraph_node",)]
     before_sub = before_sub_candidates[-1]
 
     called.clear()
-    fork_config = graph.update_state(before_sub.config, {"value": ["forked"]})
-    fork_result = graph.invoke(None, fork_config)
+    fork_config = await graph.aupdate_state(before_sub.config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
 
     # With no sub-checkpointer, forking parent re-triggers the first interrupt
     assert "__interrupt__" in fork_result
     assert fork_result["__interrupt__"][0].value == "Question A"
 
     # Resume ask_a with new answer -> hits ask_b
-    r4 = graph.invoke(Command(resume="new_a"), fork_config)
+    r4 = await graph.ainvoke(Command(resume="new_a"), fork_config)
     assert "__interrupt__" in r4
     assert r4["__interrupt__"][0].value == "Question B"
 
     # Resume ask_b with new answer -> completes
-    final = graph.invoke(Command(resume="new_b"), fork_config)
+    final = await graph.ainvoke(Command(resume="new_b"), fork_config)
     assert "a:new_a" in final["value"]
     assert "b:new_b" in final["value"]
     assert "post" in final["value"]
 
 
-def test_subgraph_multi_interrupt_fork_from_subgraph_between_interrupts(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_multi_interrupt_fork_from_subgraph_between_interrupts_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Subgraph with two interrupt nodes (ask_a, ask_b), checkpointer=True.
     Fork from within the subgraph at the ask_b interrupt point using
-    update_state. With checkpointer=True, the subgraph's cached resume is
+    aupdate_state. With checkpointer=True, the subgraph's cached resume is
     used so the interrupt does NOT re-fire — the graph completes."""
 
     called: list[str] = []
-    graph = _build_subgraph_multi_interrupt_graph(sync_checkpointer, called)
+    graph = _build_subgraph_multi_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Hit first interrupt (ask_a)
-    r1 = graph.invoke({"value": []}, config)
+    r1 = await graph.ainvoke({"value": []}, config)
     assert "__interrupt__" in r1
     assert r1["__interrupt__"][0].value == "Question A"
 
     # Resume ask_a -> hits ask_b
-    r2 = graph.invoke(Command(resume="ans_a"), config)
+    r2 = await graph.ainvoke(Command(resume="ans_a"), config)
     assert "__interrupt__" in r2
     assert r2["__interrupt__"][0].value == "Question B"
 
     # Get subgraph state to find the checkpoint at the ask_b interrupt
-    parent_state = graph.get_state(config, subgraphs=True)
+    parent_state = await graph.aget_state(config, subgraphs=True)
     sub_task = parent_state.tasks[0]
     assert sub_task.state is not None
     sub_config = sub_task.state.config
 
     # Fork from the subgraph's checkpoint (at the ask_b interrupt)
     called.clear()
-    fork_config = graph.update_state(sub_config, {"value": ["sub_forked"]})
+    fork_config = await graph.aupdate_state(sub_config, {"value": ["sub_forked"]})
 
     # Invoke — with checkpointer=True, cached resume is used so the
     # interrupt does NOT re-fire. The graph completes through parent.
-    fork_result = graph.invoke(None, fork_config)
+    fork_result = await graph.ainvoke(None, fork_config)
     assert "__interrupt__" not in fork_result
     assert "sub_c" in fork_result["value"]
     assert "post" in fork_result["value"]
 
 
-def test_subgraph_multi_interrupt_resume_from_parent_at_second_interrupt(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_multi_interrupt_resume_from_parent_at_second_interrupt_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Subgraph with two interrupts, checkpointer=True. Resume from the parent
-    level when paused at the second interrupt (ask_b). Verifies that resuming
-    at the subgraph_node level correctly forwards to the subgraph."""
+    level when paused at the second interrupt (ask_b)."""
 
     called: list[str] = []
-    graph = _build_subgraph_multi_interrupt_graph(sync_checkpointer, called)
+    graph = _build_subgraph_multi_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Hit first interrupt (ask_a)
-    graph.invoke({"value": []}, config)
+    await graph.ainvoke({"value": []}, config)
 
     # Resume ask_a -> hits ask_b
-    graph.invoke(Command(resume="ans_a"), config)
+    await graph.ainvoke(Command(resume="ans_a"), config)
 
     # Now resume ask_b from the parent level
     called.clear()
-    final = graph.invoke(Command(resume="ans_b"), config)
+    final = await graph.ainvoke(Command(resume="ans_b"), config)
 
     assert "a:ans_a" in final["value"]
     assert "b:ans_b" in final["value"]
@@ -1095,12 +1075,13 @@ def test_subgraph_multi_interrupt_resume_from_parent_at_second_interrupt(
 
 
 # ---------------------------------------------------------------------------
-# Section 5: Additional scenarios from customer thread
+# Section 5: Additional scenarios
 # ---------------------------------------------------------------------------
 
 
-def test_multiple_sequential_interrupts_fork_from_middle(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_multiple_sequential_interrupts_fork_from_middle_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Graph with two sequential interrupt nodes (A, B). Fork from between
     them. Only B re-fires, A's result is preserved."""
@@ -1127,48 +1108,47 @@ def test_multiple_sequential_interrupts_fork_from_middle(
         .add_edge(START, "ask_a")
         .add_edge("ask_a", "ask_b")
         .add_edge("ask_b", "final_node")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
 
     config = {"configurable": {"thread_id": "1"}}
 
     # Hit first interrupt
-    r1 = graph.invoke({"value": []}, config)
+    r1 = await graph.ainvoke({"value": []}, config)
     assert r1["__interrupt__"][0].value == "Question A"
 
     # Resume A
-    r2 = graph.invoke(Command(resume="ans_a"), config)
+    r2 = await graph.ainvoke(Command(resume="ans_a"), config)
     assert r2["__interrupt__"][0].value == "Question B"
 
     # Resume B
-    r3 = graph.invoke(Command(resume="ans_b"), config)
+    r3 = await graph.ainvoke(Command(resume="ans_b"), config)
     assert r3 == {"value": ["a:ans_a", "b:ans_b", "done"]}
 
     # Find checkpoint between A and B (after A completed, before B)
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     between_candidates = [s for s in history if s.next == ("ask_b",)]
-    # Get the one without interrupts (before ask_b started)
     between = between_candidates[-1]
 
     # Fork from between — only B should re-fire
-    fork_config = graph.update_state(between.config, {"value": ["mid_fork"]})
-    fork_result = graph.invoke(None, fork_config)
+    fork_config = await graph.aupdate_state(between.config, {"value": ["mid_fork"]})
+    fork_result = await graph.ainvoke(None, fork_config)
 
     # B re-fires because we forked
     assert "__interrupt__" in fork_result
     assert fork_result["__interrupt__"][0].value == "Question B"
 
     # Resume B with new answer
-    final_result = graph.invoke(Command(resume="new_b"), fork_config)
+    final_result = await graph.ainvoke(Command(resume="new_b"), fork_config)
     assert "b:new_b" in final_result["value"]
-    # A's answer is preserved from before the fork
     assert "a:ans_a" in final_result["value"]
 
 
-def test_subgraph_get_state_with_subgraphs_true(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_subgraph_get_state_with_subgraphs_true_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Verify get_state(config, subgraphs=True) returns subgraph state and
+    """Verify aget_state(config, subgraphs=True) returns subgraph state and
     checkpoint config when paused at interrupt."""
 
     class SubS(TypedDict):
@@ -1192,14 +1172,14 @@ def test_subgraph_get_state_with_subgraphs_true(
         StateGraph(PS)
         .add_node("sub", subgraph)
         .add_edge(START, "sub")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
 
     config = {"configurable": {"thread_id": "1"}}
-    graph.invoke({"data": "input"}, config)
+    await graph.ainvoke({"data": "input"}, config)
 
     # Get state with subgraphs
-    state = graph.get_state(config, subgraphs=True)
+    state = await graph.aget_state(config, subgraphs=True)
 
     # Should have tasks with subgraph state
     assert len(state.tasks) > 0
@@ -1212,8 +1192,8 @@ def test_subgraph_get_state_with_subgraphs_true(
     assert "thread_id" in sub_config["configurable"]
 
 
-def test_checkpoint_ns_accessible_in_subgraph_node(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_checkpoint_ns_accessible_in_subgraph_node_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Verify RunnableConfig exposes checkpoint_ns and thread_id inside
     subgraph nodes."""
@@ -1239,11 +1219,11 @@ def test_checkpoint_ns_accessible_in_subgraph_node(
         StateGraph(PS)
         .add_node("outer", subgraph)
         .add_edge(START, "outer")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
 
     config = {"configurable": {"thread_id": "1"}}
-    graph.invoke({"data": "test"}, config)
+    await graph.ainvoke({"data": "test"}, config)
 
     # checkpoint_ns should be set inside subgraph
     assert captured_config["checkpoint_ns"] is not None
@@ -1251,8 +1231,8 @@ def test_checkpoint_ns_accessible_in_subgraph_node(
     assert captured_config["thread_id"] == "1"
 
 
-def test_multiple_forks_from_same_checkpoint(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_multiple_forks_from_same_checkpoint_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Two independent forks from same checkpoint create independent branches."""
 
@@ -1271,23 +1251,23 @@ def test_multiple_forks_from_same_checkpoint(
         .add_node("node_b", node_b)
         .add_edge(START, "node_a")
         .add_edge("node_a", "node_b")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
 
     config = {"configurable": {"thread_id": "1"}}
-    graph.invoke({"value": []}, config)
+    await graph.ainvoke({"value": []}, config)
 
     # Find checkpoint before node_b
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_b = next(s for s in history if s.next == ("node_b",))
 
     # Fork 1
-    fork1_config = graph.update_state(before_b.config, {"value": ["fork1"]})
-    result1 = graph.invoke(None, fork1_config)
+    fork1_config = await graph.aupdate_state(before_b.config, {"value": ["fork1"]})
+    result1 = await graph.ainvoke(None, fork1_config)
 
     # Fork 2 from SAME checkpoint
-    fork2_config = graph.update_state(before_b.config, {"value": ["fork2"]})
-    result2 = graph.invoke(None, fork2_config)
+    fork2_config = await graph.aupdate_state(before_b.config, {"value": ["fork2"]})
+    result2 = await graph.ainvoke(None, fork2_config)
 
     # Both forks are independent
     assert "fork1" in result1["value"]
@@ -1301,8 +1281,8 @@ def test_multiple_forks_from_same_checkpoint(
 # ---------------------------------------------------------------------------
 
 
-def test_replay_from_final_checkpoint_is_noop(
-    sync_checkpointer: BaseCheckpointSaver,
+async def test_replay_from_final_checkpoint_is_noop_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Replay from completed checkpoint (no next) is a no-op."""
 
@@ -1316,49 +1296,50 @@ def test_replay_from_final_checkpoint_is_noop(
         StateGraph(SimpleState)
         .add_node("node_a", node_a)
         .add_edge(START, "node_a")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
 
     config = {"configurable": {"thread_id": "1"}}
-    result = graph.invoke({"value": []}, config)
+    result = await graph.ainvoke({"value": []}, config)
     assert result == {"value": ["a"]}
 
     # Get the final checkpoint (no next)
-    state = graph.get_state(config)
+    state = await graph.aget_state(config)
     assert state.next == ()
 
     # Replay from final checkpoint — nothing to do
     called.clear()
-    replay_result = graph.invoke(None, state.config)
+    replay_result = await graph.ainvoke(None, state.config)
     assert replay_result == {"value": ["a"]}
     assert called == []
 
 
-def test_replay_interrupt_stable_across_multiple_replays(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_replay_interrupt_stable_across_multiple_replays_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Replaying same checkpoint multiple times consistently uses same cached
     resume values — produces identical results each time."""
 
     called: list[str] = []
-    graph = _build_interrupt_graph(sync_checkpointer, called)
+    graph = _build_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt
-    graph.invoke({"value": []}, config)
+    await graph.ainvoke({"value": []}, config)
 
     # Resume
-    graph.invoke(Command(resume="cached_answer"), config)
+    await graph.ainvoke(Command(resume="cached_answer"), config)
 
     # Find checkpoint before ask
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_ask_candidates = [s for s in history if s.next == ("ask_human",)]
     before_ask = before_ask_candidates[-1]
 
     # Replay multiple times — each should produce same result
     results = []
     for _ in range(3):
-        r = graph.invoke(None, before_ask.config)
+        r = await graph.ainvoke(None, before_ask.config)
         results.append(r)
 
     assert all(r == results[0] for r in results)
@@ -1370,109 +1351,107 @@ def test_replay_interrupt_stable_across_multiple_replays(
 # ---------------------------------------------------------------------------
 
 
-def test_copy_fork_retriggers_interrupt(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_copy_fork_retriggers_interrupt_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Fork using __copy__ (no state changes) from checkpoint before interrupt.
-    The interrupt should be re-triggered because __copy__ creates a new
-    checkpoint without cached resume values."""
+    The interrupt should be re-triggered."""
 
     called: list[str] = []
-    graph = _build_interrupt_graph(sync_checkpointer, called)
+    graph = _build_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt, then resume
-    graph.invoke({"value": []}, config)
-    graph.invoke(Command(resume="hello"), config)
+    await graph.ainvoke({"value": []}, config)
+    await graph.ainvoke(Command(resume="hello"), config)
 
     # Find checkpoint before ask_human
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_ask = [s for s in history if s.next == ("ask_human",)][-1]
 
     # Fork using __copy__ — no state modification
     called.clear()
-    fork_config = graph.update_state(before_ask.config, None, as_node="__copy__")
+    fork_config = await graph.aupdate_state(before_ask.config, None, as_node="__copy__")
 
     # Invoke from fork — interrupt should be re-triggered
-    fork_result = graph.invoke(None, fork_config)
+    fork_result = await graph.ainvoke(None, fork_config)
     assert "__interrupt__" in fork_result
     assert fork_result["__interrupt__"][0].value == "What is your input?"
 
     # Resume the re-triggered interrupt
-    final = graph.invoke(Command(resume="new_answer"), fork_config)
+    final = await graph.ainvoke(Command(resume="new_answer"), fork_config)
     assert final == {"value": ["a", "human:new_answer", "b"]}
 
 
-def test_copy_fork_vs_replay_interrupt_behavior(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_copy_fork_vs_replay_interrupt_behavior_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Compare replay vs __copy__ fork from the same checkpoint before an
     interrupt. Replay should use cached resume, __copy__ should re-trigger."""
 
     called: list[str] = []
-    graph = _build_interrupt_graph(sync_checkpointer, called)
+    graph = _build_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt, then resume
-    graph.invoke({"value": []}, config)
-    graph.invoke(Command(resume="hello"), config)
+    await graph.ainvoke({"value": []}, config)
+    await graph.ainvoke(Command(resume="hello"), config)
 
     # Find checkpoint before ask_human
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_ask = [s for s in history if s.next == ("ask_human",)][-1]
 
     # Replay — uses cached resume, completes without re-triggering
     called.clear()
-    replay_result = graph.invoke(None, before_ask.config)
+    replay_result = await graph.ainvoke(None, before_ask.config)
     assert "__interrupt__" not in replay_result
     assert replay_result == {"value": ["a", "human:hello", "b"]}
 
     # __copy__ fork — re-triggers interrupt
     called.clear()
-    fork_config = graph.update_state(before_ask.config, None, as_node="__copy__")
-    fork_result = graph.invoke(None, fork_config)
+    fork_config = await graph.aupdate_state(before_ask.config, None, as_node="__copy__")
+    fork_result = await graph.ainvoke(None, fork_config)
     assert "__interrupt__" in fork_result
     assert fork_result["__interrupt__"][0].value == "What is your input?"
 
 
-def test_update_state_with_none_values(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_update_state_with_none_values_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Call update_state with None as values (not __copy__). This goes through
-    the normal update path, running the node's writers with None. Test what
-    actually happens — does this work at all?"""
+    """Call aupdate_state with None as values (not __copy__)."""
 
     called: list[str] = []
-    graph = _build_interrupt_graph(sync_checkpointer, called)
+    graph = _build_interrupt_graph(async_checkpointer, called)
     config = {"configurable": {"thread_id": "1"}}
 
     # Run until interrupt, then resume
-    graph.invoke({"value": []}, config)
-    graph.invoke(Command(resume="hello"), config)
+    await graph.ainvoke({"value": []}, config)
+    await graph.ainvoke(Command(resume="hello"), config)
 
     # Find checkpoint before ask_human
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_ask = [s for s in history if s.next == ("ask_human",)][-1]
 
-    # update_state with None values (no __copy__) — goes through the normal
-    # update path, infers as_node, runs node writers with None.
-    # This ALSO creates a new checkpoint and re-triggers interrupts.
-    fork_config = graph.update_state(before_ask.config, None)
-    fork_result = graph.invoke(None, fork_config)
+    # aupdate_state with None values (no __copy__)
+    fork_config = await graph.aupdate_state(before_ask.config, None)
+    fork_result = await graph.ainvoke(None, fork_config)
     assert "__interrupt__" in fork_result
     assert fork_result["__interrupt__"][0].value == "What is your input?"
 
     # The checkpoint is marked as "update" (not "fork" like __copy__)
-    fork_state = graph.get_state(fork_config)
+    fork_state = await graph.aget_state(fork_config)
     assert fork_state.metadata["source"] == "update"
 
 
-def test_copy_fork_creates_sibling_checkpoint(
-    sync_checkpointer: BaseCheckpointSaver,
+@NEEDS_CONTEXTVARS
+async def test_copy_fork_creates_sibling_checkpoint_async(
+    async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """__copy__ creates a sibling checkpoint (branching from the parent of the
-    source checkpoint), while regular update_state creates a child. Verify the
-    checkpoint metadata reflects this."""
+    """__copy__ creates a sibling checkpoint, while regular update_state
+    creates a child. Verify the checkpoint metadata reflects this."""
 
     def node_a(state: SimpleState) -> SimpleState:
         return {"value": ["a"]}
@@ -1486,22 +1465,22 @@ def test_copy_fork_creates_sibling_checkpoint(
         .add_node("node_b", node_b)
         .add_edge(START, "node_a")
         .add_edge("node_a", "node_b")
-        .compile(checkpointer=sync_checkpointer)
+        .compile(checkpointer=async_checkpointer)
     )
 
     config = {"configurable": {"thread_id": "1"}}
-    graph.invoke({"value": []}, config)
+    await graph.ainvoke({"value": []}, config)
 
     # Find checkpoint before node_b
-    history = list(graph.get_state_history(config))
+    history = [s async for s in graph.aget_state_history(config)]
     before_b = next(s for s in history if s.next == ("node_b",))
 
     # __copy__ fork
-    copy_config = graph.update_state(before_b.config, None, as_node="__copy__")
-    copy_state = graph.get_state(copy_config)
+    copy_config = await graph.aupdate_state(before_b.config, None, as_node="__copy__")
+    copy_state = await graph.aget_state(copy_config)
     assert copy_state.metadata["source"] == "fork"
 
     # Regular fork
-    regular_config = graph.update_state(before_b.config, {"value": ["x"]})
-    regular_state = graph.get_state(regular_config)
+    regular_config = await graph.aupdate_state(before_b.config, {"value": ["x"]})
+    regular_state = await graph.aget_state(regular_config)
     assert regular_state.metadata["source"] == "update"
