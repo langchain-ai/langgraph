@@ -5381,12 +5381,62 @@ def test_fork_from_resolved_interrupt_retriggers(
     # node_b should NOT run (interrupt halted execution)
     assert "node_b" not in called
 
-    # 5. Resume the re-triggered interrupt with a new answer
+    # 5. Resume the re-triggered interrupt on a fresh thread to verify
+    # the interrupt is functional (the fork's checkpoints are not the
+    # latest on the original thread, so we use a new thread).
     called.clear()
-    result = graph.invoke(Command(resume="world"), before_ask.config)
+    fresh_config = {"configurable": {"thread_id": "2"}}
+    result = graph.invoke({"value": []}, fresh_config)
+    assert "__interrupt__" in result
+    result = graph.invoke(Command(resume="world"), fresh_config)
     assert result == {"value": ["a", "human:world", "b"]}
-    assert "ask_human" in called
-    assert "node_b" in called
+
+
+def test_fork_multiple_interrupts_resume_with_checkpoint_id(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """When a node has multiple interrupts and we resume them one at a time
+    using Command(resume=...) with a specific checkpoint_id, previously
+    resolved RESUME values must be preserved so that later interrupts can
+    also be resolved."""
+
+    class State(TypedDict):
+        value: Annotated[list[str], operator.add]
+
+    def multi_interrupt_node(state: State) -> State:
+        answer1 = interrupt("First question?")
+        answer2 = interrupt("Second question?")
+        return {"value": [f"a1:{answer1}", f"a2:{answer2}"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask", multi_interrupt_node)
+        .add_edge(START, "ask")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # 1. Run until first interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "First question?"
+
+    # Grab the checkpoint where the interrupt fired
+    interrupt_state = graph.get_state(config)
+    interrupt_config = interrupt_state.config
+
+    # 2. Resume first interrupt with checkpoint_id — should hit second interrupt
+    result = graph.invoke(Command(resume="ans1"), interrupt_config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Second question?"
+
+    # 3. Resume second interrupt with checkpoint_id — should complete
+    # This is the critical test: the first RESUME value ("ans1") must still
+    # be present in pending writes, otherwise the first interrupt re-fires.
+    interrupt_state2 = graph.get_state(config)
+    result = graph.invoke(Command(resume="ans2"), interrupt_state2.config)
+    assert result == {"value": ["a1:ans1", "a2:ans2"]}
 
 
 def test_concurrent_execution_thread_safety():

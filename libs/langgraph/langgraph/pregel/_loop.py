@@ -1109,14 +1109,15 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if saved.pending_writes is not None
             else []
         )
-        # When resuming from a specific checkpoint_id (skip_done_tasks=False)
-        # and this is NOT a subgraph being resumed by its parent graph
-        # (CONFIG_KEY_RESUMING), drop stale RESUME writes so that interrupt()
-        # calls re-fire instead of returning cached values.
-        # Command(resume=...) will supply fresh RESUME writes in _first().
-        if not self.skip_done_tasks and CONFIG_KEY_RESUMING not in self.config.get(
-            CONF, {}
-        ):
+        # Drop stale RESUME writes when forking from a specific checkpoint
+        # so that interrupt() calls re-fire instead of returning cached values.
+        # We must NOT drop them when resuming (subgraph via CONFIG_KEY_RESUMING,
+        # or top graph via Command(resume=...)) because with multiple interrupts
+        # previously resolved RESUME values need to be preserved.
+        is_resuming = CONFIG_KEY_RESUMING in self.config.get(CONF, {}) or (
+            isinstance(self.input, Command) and self.input.resume is not None
+        )
+        if not self.skip_done_tasks and not is_resuming:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
@@ -1299,14 +1300,15 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if saved.pending_writes is not None
             else []
         )
-        # When resuming from a specific checkpoint_id (skip_done_tasks=False)
-        # and this is NOT a subgraph being resumed by its parent graph
-        # (CONFIG_KEY_RESUMING), drop stale RESUME writes so that interrupt()
-        # calls re-fire instead of returning cached values.
-        # Command(resume=...) will supply fresh RESUME writes in _first().
-        if not self.skip_done_tasks and CONFIG_KEY_RESUMING not in self.config.get(
-            CONF, {}
-        ):
+        # Drop stale RESUME writes when forking from a specific checkpoint
+        # so that interrupt() calls re-fire instead of returning cached values.
+        # We must NOT drop them when resuming (subgraph via CONFIG_KEY_RESUMING,
+        # or top graph via Command(resume=...)) because with multiple interrupts
+        # previously resolved RESUME values need to be preserved.
+        is_resuming = CONFIG_KEY_RESUMING in self.config.get(CONF, {}) or (
+            isinstance(self.input, Command) and self.input.resume is not None
+        )
+        if not self.skip_done_tasks and not is_resuming:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
