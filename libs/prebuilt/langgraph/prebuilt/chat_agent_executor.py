@@ -968,6 +968,7 @@ def create_react_agent(
     )
 
     def route_tool_responses(state: StateSchema) -> str:
+        m = None
         for m in reversed(_get_state_value(state, "messages")):
             if not isinstance(m, ToolMessage):
                 break

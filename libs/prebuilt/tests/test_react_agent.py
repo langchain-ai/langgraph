@@ -1084,6 +1084,41 @@ async def test_return_direct(version: str) -> None:
     ]
 
 
+@pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
+async def test_return_direct_empty_messages(version: str) -> None:
+    """Test that route_tool_responses does not raise UnboundLocalError on empty messages.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/7017.
+    """
+
+    @dec_tool(return_direct=True)
+    def tool_return_direct(input: str) -> str:
+        """A tool that returns directly."""
+        return f"Direct result: {input}"
+
+    first_tool_call = [
+        ToolCall(
+            name="tool_return_direct",
+            args={"input": "Test direct"},
+            id="1",
+        ),
+    ]
+    model = FakeToolCallingModel(tool_calls=[first_tool_call, []])
+    agent = create_react_agent(
+        model,
+        [tool_return_direct],
+        version=version,
+    )
+
+    # Access the route_tool_responses function from the graph's conditional edges.
+    # It is registered on the "tools" node when should_return_direct is non-empty.
+    tools_branches = agent.builder.branches["tools"]
+    route_fn = tools_branches["route_tool_responses"].path
+    # Calling with empty messages should not raise UnboundLocalError
+    result = route_fn.invoke({"messages": []})
+    assert result == "agent"
+
+
 def test_inspect_react() -> None:
     model = FakeToolCallingModel(tool_calls=[])
     agent = create_react_agent(model, [])
