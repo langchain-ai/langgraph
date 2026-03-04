@@ -23,7 +23,7 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
 
 from langgraph.checkpoint.postgres import _internal
-from langgraph.checkpoint.postgres.base import BasePostgresSaver
+from langgraph.checkpoint.postgres.base import BasePostgresSaver, _check_version
 from langgraph.checkpoint.postgres.shallow import ShallowPostgresSaver
 
 Conn = _internal.Conn  # For backward compatibility
@@ -41,6 +41,7 @@ class PostgresSaver(BasePostgresSaver):
         serde: SerializerProtocol | None = None,
     ) -> None:
         super().__init__(serde=serde)
+        _check_version()
         if isinstance(conn, ConnectionPool) and pipe is not None:
             raise ValueError(
                 "Pipeline should be used only with a single Connection, not ConnectionPool."
