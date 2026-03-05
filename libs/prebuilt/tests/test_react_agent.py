@@ -493,6 +493,16 @@ def test__infer_handled_types() -> None:
 
         _infer_handled_types(handler)
 
+    # Non-class type annotations should raise ValueError, not AttributeError
+    T = TypeVar("T", bound=Exception)
+
+    with pytest.raises(ValueError):
+
+        def handler(e: T) -> str:  # type: ignore[valid-type]
+            return ""
+
+        _infer_handled_types(handler)
+
 
 @pytest.mark.parametrize("version", REACT_TOOL_CALL_VERSIONS)
 def test_react_agent_with_structured_response(version: str) -> None:
