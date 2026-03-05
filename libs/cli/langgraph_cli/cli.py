@@ -579,6 +579,7 @@ def build(
 )
 @click.option(
     "--name",
+    envvar="LANGSMITH_DEPLOYMENT_NAME",
     help=(
         "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
         "environment variable or .env file. Defaults to current directory name "
@@ -678,7 +679,7 @@ def deploy(
         api_key = click.prompt("Host API key", hide_input=True)
 
     if not deployment_id and not name:
-        name = env_vars.get(_DEPLOYMENT_NAME_ENV) or os.environ.get(_DEPLOYMENT_NAME_ENV)
+        name = env_vars.get(_DEPLOYMENT_NAME_ENV)
     if not deployment_id and not name:
         default_name = _normalize_image_name(pathlib.Path.cwd().name)
         name = click.prompt("Deployment name", default=default_name)
