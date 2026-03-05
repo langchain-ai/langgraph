@@ -45,6 +45,7 @@ lint = [
     "ruff",
     "codespell",
     "mypy",
+    "ty>=0.0.20",
 ]
 dev = [
     {include-group = "test"},
@@ -73,3 +74,15 @@ lint.select = [
 ]
 lint.ignore = ["E501", "B008"]
 target-version = "py310"
+
+[tool.ty.rules]
+# TODO: incrementally enable these rules as type errors are fixed
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-key = "ignore"
+invalid-return-type = "ignore"
+missing-argument = "ignore"
+not-subscriptable = "ignore"
+unresolved-attribute = "ignore"
+unresolved-import = "ignore"
+unsupported-operator = "ignore"

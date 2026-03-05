@@ -313,12 +313,14 @@ dev = [
     { name = "redis" },
     { name = "ruff" },
     { name = "syrupy" },
+    { name = "ty", specifier = ">=0.0.20" },
     { name = "types-requests" },
     { name = "uvloop", specifier = "==0.22.1" },
 ]
 lint = [
     { name = "mypy" },
     { name = "ruff" },
+    { name = "ty", specifier = ">=0.0.20" },
     { name = "types-requests" },
 ]
 test = [
@@ -377,11 +379,13 @@ dev = [
     { name = "pytest-watcher" },
     { name = "redis" },
     { name = "ruff" },
+    { name = "ty", specifier = ">=0.0.20" },
 ]
 lint = [
     { name = "codespell" },
     { name = "mypy" },
     { name = "ruff" },
+    { name = "ty", specifier = ">=0.0.20" },
 ]
 test = [
     { name = "dataclasses-json" },
@@ -426,11 +430,13 @@ dev = [
     { name = "pytest-watcher" },
     { name = "ruff" },
     { name = "syrupy" },
+    { name = "ty", specifier = ">=0.0.20" },
 ]
 lint = [
     { name = "codespell" },
     { name = "mypy" },
     { name = "ruff" },
+    { name = "ty", specifier = ">=0.0.20" },
 ]
 test = [
     { name = "langchain-core" },

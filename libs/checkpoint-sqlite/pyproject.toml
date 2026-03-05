@@ -36,6 +36,7 @@ lint = [
   "ruff",
   "codespell",
   "mypy",
+  "ty>=0.0.20",
 ]
 dev = [
   {include-group = "test"},
@@ -82,3 +83,14 @@ warn_unused_ignores = "True"
 warn_redundant_casts = "True"
 allow_redefinition = "True"
 disable_error_code = "typeddict-item, return-value"
+
+[tool.ty.rules]
+# TODO: incrementally enable these rules as type errors are fixed
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-key = "ignore"
+invalid-method-override = "ignore"
+not-iterable = "ignore"
+not-subscriptable = "ignore"
+unresolved-attribute = "ignore"
+unsupported-operator = "ignore"

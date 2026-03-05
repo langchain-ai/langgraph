@@ -71,6 +71,7 @@ test = [
 lint = [
     "mypy",
     "ruff",
+    "ty>=0.0.20",
     "types-requests",
 ]
 dev = [
@@ -108,6 +109,26 @@ warn_unused_ignores = "True"
 warn_redundant_casts = "True"
 allow_redefinition = "True"
 disable_error_code = "typeddict-item, return-value, override, has-type"
+
+[tool.ty.rules]
+# TODO: incrementally enable these rules as type errors are fixed
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+invalid-key = "ignore"
+invalid-method-override = "ignore"
+invalid-paramspec = "ignore"
+invalid-return-type = "ignore"
+invalid-type-arguments = "ignore"
+invalid-type-form = "ignore"
+invalid-typed-dict-statement = "ignore"
+missing-argument = "ignore"
+missing-typed-dict-key = "ignore"
+no-matching-overload = "ignore"
+not-iterable = "ignore"
+not-subscriptable = "ignore"
+unknown-argument = "ignore"
+unresolved-attribute = "ignore"
+unsupported-operator = "ignore"
 
 [tool.coverage.run]
 omit = ["tests/*"]
