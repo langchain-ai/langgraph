@@ -637,6 +637,7 @@ class PregelLoop:
 
         # map command to writes
         if isinstance(self.input, Command):
+            resume_is_map = False
             if (resume := self.input.resume) is not None:
                 if not self.checkpointer:
                     raise RuntimeError(
