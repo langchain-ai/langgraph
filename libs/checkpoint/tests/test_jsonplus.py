@@ -575,7 +575,7 @@ def test_serde_jsonplus_raises_on_missing_allowed_module() -> None:
             from temp_model import SavedObject  # type: ignore[import-not-found]
 
             serde = JsonPlusSerializer(
-                allowed_json_modules=(("temp_model", "SavedObject"),)
+                allowed_msgpack_modules=(("temp_model", "SavedObject"),)
             )
             dumped = serde.dumps_typed(SavedObject(123))
 

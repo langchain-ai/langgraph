@@ -145,14 +145,7 @@ class JsonPlusSerializer(SerializerProtocol):
             and value.get("type", None) == "constructor"
             and value.get("id", None) is not None
         ):
-            try:
-                return self._revive_lc2(value)
-            except InvalidModuleError as e:
-                logger.warning(
-                    "Object %s is not in the deserialization allowlist.\n%s",
-                    value["id"],
-                    e.message,
-                )
+            return self._revive_lc2(value)
 
         return LC_REVIVER(value)
 
@@ -267,7 +260,7 @@ class JsonPlusSerializer(SerializerProtocol):
 
     def _check_allowed_modules_msgpack(self, needed: tuple[str, str]) -> None:
         dotted = ".".join(needed)
-        if not self._allowed_modules:
+        if not self._allowed_json_modules:
             raise InvalidModuleError(
                 f"Refused to deserialize msgpack constructor: {dotted}. "
                 "No allowed_json_modules configured.\n\n"
@@ -278,9 +271,9 @@ class JsonPlusSerializer(SerializerProtocol):
                 "or plain-JSON representations revived without import-time side effects."
             )
 
-        if self._allowed_modules is True:
+        if self._allowed_json_modules is True:
             return
-        if needed in self._allowed_modules:
+        if needed in self._allowed_json_modules:
             return
 
         raise InvalidModuleError(
@@ -690,12 +683,16 @@ def _create_msgpack_ext_hook(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
                 )
                 if not _check_allowed(tup[0], tup[1]):
-                    # We default to returning the raw data. If the user
-                    # is using this in the context of a pydantic state, etc., then
-                    # it would be validated upon construction.
                     return tup[2]
-                # module, name, arg
+            except InvalidModuleError:
+                raise
+            try:
                 return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+            except ImportError as e:
+                raise ValueError(
+                    f"Cannot deserialize {tup[0]}.{tup[1]}: module not found. "
+                    "The module may have been deleted or is not available."
+                ) from e
             except Exception:
                 return None
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
@@ -705,8 +702,15 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
-                # module, name, args
+            except InvalidModuleError:
+                raise
+            try:
                 return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
+            except ImportError as e:
+                raise ValueError(
+                    f"Cannot deserialize {tup[0]}.{tup[1]}: module not found. "
+                    "The module may have been deleted or is not available."
+                ) from e
             except Exception:
                 return None
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
@@ -716,8 +720,15 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
-                # module, name, kwargs
+            except InvalidModuleError:
+                raise
+            try:
                 return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+            except ImportError as e:
+                raise ValueError(
+                    f"Cannot deserialize {tup[0]}.{tup[1]}: module not found. "
+                    "The module may have been deleted or is not available."
+                ) from e
             except Exception:
                 return None
         elif code == EXT_METHOD_SINGLE_ARG:
@@ -727,10 +738,17 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed_method(tup[0], tup[1], tup[3]):
                     return tup[2]
-                # module, name, arg, method
+            except InvalidModuleError:
+                raise
+            try:
                 return getattr(
                     getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
                 )(tup[2])
+            except ImportError as e:
+                raise ValueError(
+                    f"Cannot deserialize {tup[0]}.{tup[1]}: module not found. "
+                    "The module may have been deleted or is not available."
+                ) from e
             except Exception:
                 return None
         elif code == EXT_PYDANTIC_V1:
@@ -740,15 +758,20 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
-                # module, name, kwargs
+            except InvalidModuleError:
+                raise
+            try:
                 cls = getattr(importlib.import_module(tup[0]), tup[1])
                 try:
                     return cls(**tup[2])
                 except Exception:
                     return cls.construct(**tup[2])
+            except ImportError as e:
+                raise ValueError(
+                    f"Cannot deserialize {tup[0]}.{tup[1]}: module not found. "
+                    "The module may have been deleted or is not available."
+                ) from e
             except Exception:
-                # for pydantic objects we can't find/reconstruct
-                # let's return the kwargs dict instead
                 try:
                     return tup[2]
                 except NameError:
@@ -760,15 +783,20 @@ def _create_msgpack_ext_hook(
                 )
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
-                # module, name, kwargs, method
+            except InvalidModuleError:
+                raise
+            try:
                 cls = getattr(importlib.import_module(tup[0]), tup[1])
                 try:
                     return cls(**tup[2])
                 except Exception:
                     return cls.model_construct(**tup[2])
+            except ImportError as e:
+                raise ValueError(
+                    f"Cannot deserialize {tup[0]}.{tup[1]}: module not found. "
+                    "The module may have been deleted or is not available."
+                ) from e
             except Exception:
-                # for pydantic objects we can't find/reconstruct
-                # let's return the kwargs dict instead
                 try:
                     return tup[2]
                 except NameError:
