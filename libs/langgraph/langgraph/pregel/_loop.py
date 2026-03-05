@@ -153,7 +153,7 @@ class PregelLoop:
     input_keys: str | Sequence[str]
     output_keys: str | Sequence[str]
     stream_keys: str | Sequence[str]
-    skip_done_tasks: bool
+    is_replaying: bool
     is_nested: bool
     manager: None | AsyncParentRunManager | ParentRunManager
     interrupt_after: All | Sequence[str]
@@ -245,9 +245,9 @@ class PregelLoop:
         self.interrupt_before = interrupt_before
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
-        self.skip_done_tasks = CONFIG_KEY_CHECKPOINT_ID not in config[
+        self.is_replaying = CONFIG_KEY_CHECKPOINT_ID in config[
             CONF
-        ] and not config[CONF].get(CONFIG_KEY_REPLAYING, False)
+        ] or config[CONF].get(CONFIG_KEY_REPLAYING, False)
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
@@ -454,7 +454,7 @@ class PregelLoop:
             # save the new task
             self.tasks[pushed.id] = pushed
             # match any pending writes to the new task
-            if self.skip_done_tasks:
+            if not self.is_replaying:
                 self._match_writes({pushed.id: pushed})
             # return the new task, to be started if not run before
             return pushed
@@ -518,7 +518,7 @@ class PregelLoop:
             return False
 
         # if there are pending writes from a previous loop, apply them
-        if self.skip_done_tasks and self.checkpoint_pending_writes:
+        if not self.is_replaying and self.checkpoint_pending_writes:
             self._match_writes(self.tasks)
 
         # before execution, check if we should interrupt
@@ -560,8 +560,8 @@ class PregelLoop:
             )
         # clear pending writes
         self.checkpoint_pending_writes.clear()
-        # "not skip_done_tasks" only applies to first tick after resuming
-        self.skip_done_tasks = True
+        # only replay (re-execute) done tasks on the first tick
+        self.is_replaying = False
         # save checkpoint
         self._put_checkpoint({"source": "loop"})
         # after execution, check if we should interrupt
@@ -735,12 +735,11 @@ class PregelLoop:
             raise EmptyInputError(f"Received no input for {input_keys}")
         # Propagate resuming and replaying flags to subgraphs.
         if not self.is_nested:
-            is_replaying = not self.skip_done_tasks
             self.config = patch_configurable(
                 self.config,
                 {
                     CONFIG_KEY_RESUMING: is_resuming,
-                    CONFIG_KEY_REPLAYING: is_replaying,
+                    CONFIG_KEY_REPLAYING: self.is_replaying,
                 },
             )
         # set flag
@@ -1137,7 +1136,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         # stale values. But if a resume value is being provided (e.g.
         # Command(resume=...) on a specific checkpoint), keep them —
         # multi-interrupt scenarios need previously resolved values preserved.
-        if not self.skip_done_tasks:
+        if self.is_replaying:
             has_resume_value = (
                 isinstance(self.input, Command) and self.input.resume is not None
             ) or self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING, False)
@@ -1337,7 +1336,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         # stale values. But if a resume value is being provided (e.g.
         # Command(resume=...) on a specific checkpoint), keep them —
         # multi-interrupt scenarios need previously resolved values preserved.
-        if not self.skip_done_tasks:
+        if self.is_replaying:
             has_resume_value = (
                 isinstance(self.input, Command) and self.input.resume is not None
             ) or self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING, False)
