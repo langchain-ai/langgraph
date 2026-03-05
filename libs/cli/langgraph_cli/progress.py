@@ -16,6 +16,7 @@ class Progress:
         self.message = message
         self._base_message = message
         self._show_elapsed = elapsed
+        # use this to make sure we don't kill thread when we set msg to ""
         self._stop = threading.Event()
         self.spinner_generator = self.spinning_cursor()
 
@@ -52,6 +53,7 @@ class Progress:
             sys.stdout.write(next(self.spinner_generator) + " " + message)
             sys.stdout.flush()
             time.sleep(self.delay)
+            # clear the spinner and message
             sys.stdout.write(
                 "\b" * (len(message) + 2)
                 + " " * (len(message) + 2)
