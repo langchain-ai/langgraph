@@ -781,10 +781,15 @@ def test_subgraph_interrupt_replay_from_parent(
     history = list(graph.get_state_history(config))
     before_sub = [s for s in history if s.next == ("subgraph_node",)][-1]
 
-    # Replay — interrupt re-fires
+    # Replay from before subgraph — subgraph starts fresh, interrupt re-fires
     called.clear()
     replay_result = graph.invoke(None, before_sub.config)
     assert "__interrupt__" in replay_result
+    # Subgraph ran from scratch (step_a and ask_human called)
+    assert "step_a" in called
+    assert "ask_human" in called
+    # step_b should NOT be called (interrupt stops execution)
+    assert "step_b" not in called
 
 
 def test_subgraph_interrupt_fork_from_parent(
@@ -930,6 +935,11 @@ def test_subgraph_interrupt_replay_from_interrupt_checkpoint(
     called.clear()
     replay_result = graph.invoke(None, interrupt_checkpoint.config)
     assert "__interrupt__" in replay_result
+    # Subgraph starts fresh during replay — all nodes re-run from scratch.
+    # step_a re-runs, ask_human re-fires interrupt, step_b not reached.
+    assert "step_a" in called
+    assert "ask_human" in called
+    assert "step_b" not in called
 
 
 def test_subgraph_interrupt_fork_no_sub_checkpointer(

@@ -562,19 +562,8 @@ class PregelLoop:
         self.checkpoint_pending_writes.clear()
         # "not skip_done_tasks" only applies to first tick after resuming
         self.skip_done_tasks = True
-        # collect child checkpoint mappings from subgraph tasks
-        children: dict[str, str] = {}
-        parent_ns = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
-        for task in self.tasks.values():
-            task_map = task.config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_MAP, {})
-            for ns, ckpt_id in task_map.items():
-                if ns != parent_ns:
-                    children[ns] = ckpt_id
         # save checkpoint
-        metadata: CheckpointMetadata = {"source": "loop"}
-        if children:
-            metadata["children"] = children
-        self._put_checkpoint(metadata)
+        self._put_checkpoint({"source": "loop"})
         # after execution, check if we should interrupt
         if self.interrupt_after and should_interrupt(
             self.checkpoint, self.interrupt_after, self.tasks.values()
@@ -747,24 +736,12 @@ class PregelLoop:
         # Propagate resuming and replaying flags to subgraphs.
         if not self.is_nested:
             is_replaying = not self.skip_done_tasks
-            patch: dict[str, Any] = {
-                CONFIG_KEY_RESUMING: is_resuming,
-                CONFIG_KEY_REPLAYING: is_replaying,
-            }
-            # Load child checkpoint mappings from metadata so that
-            # checkpointer=True subgraphs can load the correct checkpoint
-            # during replay (instead of always loading the latest).
-            if is_replaying:
-                children = self.checkpoint_metadata.get("children", {})
-                if children:
-                    current_map = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
-                    patch[CONFIG_KEY_CHECKPOINT_MAP] = {
-                        **current_map,
-                        **children,
-                    }
             self.config = patch_configurable(
                 self.config,
-                patch,
+                {
+                    CONFIG_KEY_RESUMING: is_resuming,
+                    CONFIG_KEY_REPLAYING: is_replaying,
+                },
             )
         # set flag
         self.status = "pending"
@@ -910,19 +887,6 @@ class PregelLoop:
         elif exc_type is None:
             # save final output
             self.output = read_channels(self.channels, self.output_keys)
-        # Write back checkpoint_id to CONFIG_KEY_CHECKPOINT_MAP so the parent
-        # can record which subgraph checkpoint corresponds to its own checkpoint.
-        # Only for checkpointer=True subgraphs (recast ns has no NS_END).
-        if (
-            self.is_nested
-            and self.checkpoint_ns
-            and all(NS_END not in part for part in self.checkpoint_ns)
-            and CONFIG_KEY_CHECKPOINT_MAP in self.config[CONF]
-        ):
-            recast_ns = NS_SEP.join(self.checkpoint_ns)
-            self.config[CONF][CONFIG_KEY_CHECKPOINT_MAP][recast_ns] = self.checkpoint[
-                "id"
-            ]
 
     def _emit(
         self,
