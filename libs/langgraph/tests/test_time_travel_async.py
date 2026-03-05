@@ -17,6 +17,7 @@ Key concepts:
 """
 
 import operator
+import sys
 from typing import Annotated
 
 import pytest
@@ -29,6 +30,11 @@ from langgraph.types import Command, interrupt
 
 pytestmark = pytest.mark.anyio
 
+NEEDS_CONTEXTVARS = pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
+
 
 class State(TypedDict):
     value: Annotated[list[str], operator.add]
@@ -39,6 +45,7 @@ class State(TypedDict):
 # ---------------------------------------------------------------------------
 
 
+@NEEDS_CONTEXTVARS
 async def test_replay_reruns_nodes_after_checkpoint(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -82,6 +89,7 @@ async def test_replay_reruns_nodes_after_checkpoint(
     assert "node_a" not in called
 
 
+@NEEDS_CONTEXTVARS
 async def test_replay_from_final_checkpoint_is_noop(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -113,6 +121,7 @@ async def test_replay_from_final_checkpoint_is_noop(
     assert called == []
 
 
+@NEEDS_CONTEXTVARS
 async def test_fork_reruns_with_modified_state(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -152,6 +161,7 @@ async def test_fork_reruns_with_modified_state(
     assert fork_result == {"value": ["a", "x", "b"]}
 
 
+@NEEDS_CONTEXTVARS
 async def test_multiple_forks_from_same_checkpoint(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -196,6 +206,7 @@ async def test_multiple_forks_from_same_checkpoint(
 # ---------------------------------------------------------------------------
 
 
+@NEEDS_CONTEXTVARS
 async def test_replay_from_before_interrupt_refires(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -255,6 +266,7 @@ async def test_replay_from_before_interrupt_refires(
     assert call_count["node_b"] == 1  # NOT re-executed (after interrupt)
 
 
+@NEEDS_CONTEXTVARS
 async def test_replay_from_interrupt_checkpoint_refires(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -305,6 +317,7 @@ async def test_replay_from_interrupt_checkpoint_refires(
     assert "__interrupt__" in replay_result
 
 
+@NEEDS_CONTEXTVARS
 async def test_replay_interrupt_stable_across_replays(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -349,6 +362,7 @@ async def test_replay_interrupt_stable_across_replays(
     assert "__interrupt__" in results[0]
 
 
+@NEEDS_CONTEXTVARS
 async def test_fork_from_before_interrupt_refires(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -401,6 +415,7 @@ async def test_fork_from_before_interrupt_refires(
     assert final == {"value": ["a", "forked", "human:world", "b"]}
 
 
+@NEEDS_CONTEXTVARS
 async def test_fork_from_interrupt_checkpoint_refires(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -461,6 +476,7 @@ async def test_fork_from_interrupt_checkpoint_refires(
 # ---------------------------------------------------------------------------
 
 
+@NEEDS_CONTEXTVARS
 async def test_sequential_interrupts_fork_from_middle(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -540,6 +556,7 @@ async def test_sequential_interrupts_fork_from_middle(
     assert "interrupt_2" not in called
 
 
+@NEEDS_CONTEXTVARS
 async def test_multiple_interrupts_in_one_node(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -591,6 +608,7 @@ async def test_multiple_interrupts_in_one_node(
 # ---------------------------------------------------------------------------
 
 
+@NEEDS_CONTEXTVARS
 async def test_subgraph_replay_from_before(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -653,6 +671,7 @@ async def test_subgraph_replay_from_before(
     assert "parent_node" not in called
 
 
+@NEEDS_CONTEXTVARS
 async def test_subgraph_fork_from_before(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -720,6 +739,7 @@ async def test_subgraph_fork_from_before(
 # ---------------------------------------------------------------------------
 
 
+@NEEDS_CONTEXTVARS
 async def test_subgraph_interrupt_replay_from_parent(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -792,6 +812,7 @@ async def test_subgraph_interrupt_replay_from_parent(
     assert "__interrupt__" in replay_result
 
 
+@NEEDS_CONTEXTVARS
 async def test_subgraph_interrupt_fork_from_parent(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -858,6 +879,7 @@ async def test_subgraph_interrupt_fork_from_parent(
     assert "__interrupt__" in fork_result
 
 
+@NEEDS_CONTEXTVARS
 async def test_subgraph_interrupt_replay_from_interrupt_checkpoint(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -937,6 +959,7 @@ async def test_subgraph_interrupt_replay_from_interrupt_checkpoint(
     assert "__interrupt__" in replay_result
 
 
+@NEEDS_CONTEXTVARS
 async def test_subgraph_interrupt_fork_no_sub_checkpointer(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -1005,6 +1028,7 @@ async def test_subgraph_interrupt_fork_no_sub_checkpointer(
     assert fork_result["__interrupt__"][0].value == "Provide input:"
 
 
+@NEEDS_CONTEXTVARS
 async def test_subgraph_interrupt_fork_from_interrupt_checkpoint(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -1080,6 +1104,7 @@ async def test_subgraph_interrupt_fork_from_interrupt_checkpoint(
     assert "value" in fork_result
 
 
+@NEEDS_CONTEXTVARS
 async def test_subgraph_interrupt_fork_from_subgraph_checkpoint(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -1148,6 +1173,7 @@ async def test_subgraph_interrupt_fork_from_subgraph_checkpoint(
     assert "__interrupt__" in fork_result or "ask_human" in called
 
 
+@NEEDS_CONTEXTVARS
 async def test_subgraph_interrupt_full_flow(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -1241,6 +1267,7 @@ async def test_subgraph_interrupt_full_flow(
     assert "post" in final_result["value"]
 
 
+@NEEDS_CONTEXTVARS
 async def test_subgraph_interrupt_full_flow_no_sub_checkpointer(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -1333,6 +1360,7 @@ async def test_subgraph_interrupt_full_flow_no_sub_checkpointer(
 # ---------------------------------------------------------------------------
 
 
+@NEEDS_CONTEXTVARS
 async def test_copy_fork_retriggers_interrupt(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -1385,6 +1413,7 @@ async def test_copy_fork_retriggers_interrupt(
     assert final == {"value": ["a", "human:new_answer", "b"]}
 
 
+@NEEDS_CONTEXTVARS
 async def test_copy_fork_creates_sibling_checkpoint(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -1423,6 +1452,7 @@ async def test_copy_fork_creates_sibling_checkpoint(
     assert regular_state.metadata["source"] == "update"
 
 
+@NEEDS_CONTEXTVARS
 async def test_update_state_with_none_values(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -1472,6 +1502,7 @@ async def test_update_state_with_none_values(
 # ---------------------------------------------------------------------------
 
 
+@NEEDS_CONTEXTVARS
 async def test_get_state_with_subgraphs_returns_subgraph_state(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -1516,6 +1547,7 @@ async def test_get_state_with_subgraphs_returns_subgraph_state(
     assert "thread_id" in sub_config["configurable"]
 
 
+@NEEDS_CONTEXTVARS
 async def test_checkpoint_ns_accessible_in_subgraph(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
