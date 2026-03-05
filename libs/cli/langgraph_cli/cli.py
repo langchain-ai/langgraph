@@ -931,6 +931,11 @@ def deploy(
 
 
 def _normalize_image_name(value: str | None) -> str:
+    """Sanitize a deployment/directory name into a valid Docker repository name.
+
+    Docker repository names must be lowercase and may only contain
+    [a-z0-9._-].  Invalid characters are replaced with hyphens.
+    """
     if not value:
         return "app"
     slug = re.sub(r"[^a-z0-9._-]+", "-", value.lower()).strip("-.")
@@ -938,6 +943,10 @@ def _normalize_image_name(value: str | None) -> str:
 
 
 def _normalize_image_tag(value: str) -> str:
+    """Validate and return a Docker image tag.
+
+    Tags may only contain [A-Za-z0-9_.-].  Defaults to "latest" when empty.
+    """
     if not value:
         value = "latest"
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", value):
