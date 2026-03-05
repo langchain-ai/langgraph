@@ -645,6 +645,20 @@ class PregelLoop:
             configurable.get(CONFIG_KEY_RESUMING, input_signals_resume)
         )
 
+        # When replaying from a specific checkpoint, drop cached RESUME
+        # writes so that interrupt() calls re-fire instead of returning
+        # stale values. But if a resume value is being provided (e.g.
+        # Command(resume=...) or CONFIG_KEY_RESUMING), keep them —
+        # multi-interrupt scenarios need previously resolved values preserved.
+        if self.is_replaying:
+            is_resume_with_value = (
+                isinstance(self.input, Command) and self.input.resume is not None
+            ) or configurable.get(CONFIG_KEY_RESUMING, False)
+            if not is_resume_with_value:
+                self.checkpoint_pending_writes = [
+                    w for w in self.checkpoint_pending_writes if w[1] != RESUME
+                ]
+
         # map command to writes
         if isinstance(self.input, Command):
             if (resume := self.input.resume) is not None:
@@ -1131,20 +1145,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if saved.pending_writes is not None
             else []
         )
-        # When replaying from a specific checkpoint, drop cached RESUME
-        # writes so that interrupt() calls re-fire instead of returning
-        # stale values. But if a resume value is being provided (e.g.
-        # Command(resume=...) on a specific checkpoint), keep them —
-        # multi-interrupt scenarios need previously resolved values preserved.
-        if self.is_replaying:
-            has_resume_value = (
-                isinstance(self.input, Command) and self.input.resume is not None
-            ) or self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING, False)
-            if not has_resume_value:
-                self.checkpoint_pending_writes = [
-                    w for w in self.checkpoint_pending_writes if w[1] != RESUME
-                ]
-
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
@@ -1331,20 +1331,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if saved.pending_writes is not None
             else []
         )
-        # When replaying from a specific checkpoint, drop cached RESUME
-        # writes so that interrupt() calls re-fire instead of returning
-        # stale values. But if a resume value is being provided (e.g.
-        # Command(resume=...) on a specific checkpoint), keep them —
-        # multi-interrupt scenarios need previously resolved values preserved.
-        if self.is_replaying:
-            has_resume_value = (
-                isinstance(self.input, Command) and self.input.resume is not None
-            ) or self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING, False)
-            if not has_resume_value:
-                self.checkpoint_pending_writes = [
-                    w for w in self.checkpoint_pending_writes if w[1] != RESUME
-                ]
-
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )
