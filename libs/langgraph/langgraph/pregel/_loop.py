@@ -735,7 +735,10 @@ class PregelLoop:
             # (fork scenario), True when resuming from latest checkpoint.
             self.config = patch_configurable(
                 self.config,
-                {CONFIG_KEY_RESUMING: has_resume or (is_resuming and self.skip_done_tasks)},
+                {
+                    CONFIG_KEY_RESUMING: has_resume
+                    or (is_resuming and self.skip_done_tasks)
+                },
             )
         # set flag
         self.status = "pending"
@@ -1123,9 +1126,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         # We must NOT drop them when resuming (subgraph via CONFIG_KEY_RESUMING,
         # or top graph via Command(resume=...)) because with multiple interrupts
         # previously resolved RESUME values need to be preserved.
-        is_resuming = (
-            self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True
-        ) or (isinstance(self.input, Command) and self.input.resume is not None)
+        is_resuming = (self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True) or (
+            isinstance(self.input, Command) and self.input.resume is not None
+        )
         if not self.skip_done_tasks and not is_resuming:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
@@ -1314,9 +1317,9 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         # We must NOT drop them when resuming (subgraph via CONFIG_KEY_RESUMING,
         # or top graph via Command(resume=...)) because with multiple interrupts
         # previously resolved RESUME values need to be preserved.
-        is_resuming = (
-            self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True
-        ) or (isinstance(self.input, Command) and self.input.resume is not None)
+        is_resuming = (self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True) or (
+            isinstance(self.input, Command) and self.input.resume is not None
+        )
         if not self.skip_done_tasks and not is_resuming:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
