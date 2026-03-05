@@ -17,6 +17,7 @@ from contextlib import contextmanager
 import click
 import click.exceptions
 from click import secho
+from dotenv import dotenv_values
 
 import langgraph_cli.config
 import langgraph_cli.docker
@@ -87,32 +88,6 @@ _API_KEY_ENV_NAMES = (
 _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
 
 
-def _parse_dotenv_file(path: pathlib.Path) -> dict[str, str]:
-    """Parse a .env file into a dict, skipping comments and blank lines."""
-    result: dict[str, str] = {}
-    if not path.is_file():
-        return result
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key = key.strip()
-        value = value.strip()
-        if (
-            value
-            and len(value) >= 2
-            and value[0] == value[-1]
-            and value[0] in ("'", '"')
-        ):
-            value = value[1:-1]
-        if key:
-            result[key] = value
-    return result
-
-
 def _parse_env_from_config(
     config_json: dict, config_path: pathlib.Path
 ) -> dict[str, str]:
@@ -122,9 +97,9 @@ def _parse_env_from_config(
         return {str(k): str(v) for k, v in env_field.items()}
     if isinstance(env_field, str):
         env_path = (config_path.parent / env_field).resolve()
-        return _parse_dotenv_file(env_path)
-    fallback = pathlib.Path.cwd() / ".env"
-    return _parse_dotenv_file(fallback)
+    else:
+        env_path = pathlib.Path.cwd() / ".env"
+    return {k: v for k, v in dotenv_values(env_path).items() if v is not None}
 
 
 def _secrets_from_env(
