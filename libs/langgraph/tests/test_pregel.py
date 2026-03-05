@@ -5316,13 +5316,12 @@ def test_multiple_interrupt_state_persistence(
     assert state.values["steps"] == ["step1", "step2"]
 
 
-def test_fork_from_resolved_interrupt_retriggers(
+def test_fork_before_all_interrupts(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Replaying from a checkpoint before an interrupt node should re-trigger
+    """Replaying from a checkpoint before any interrupt node should re-trigger
     the interrupt rather than reusing cached resume values from the original
-    execution. This covers both the checkpoint that directly resolved the
-    interrupt and an earlier checkpoint (before the interrupt node)."""
+    execution."""
 
     called: list[str] = []
 
@@ -5374,44 +5373,51 @@ def test_fork_from_resolved_interrupt_retriggers(
     assert "__interrupt__" in replay_result
     assert replay_result["value"] == ["a"]
     assert replay_result["__interrupt__"][0].value == "What is your input?"
-    # ask_human was called but hit interrupt before returning
     assert "ask_human" in called
-    # node_a should NOT run (it's before our checkpoint)
     assert "node_a" not in called
-    # node_b should NOT run (interrupt halted execution)
     assert "node_b" not in called
 
-    # 5. Resume the re-triggered interrupt on a fresh thread to verify
-    # the interrupt is functional (the fork's checkpoints are not the
-    # latest on the original thread, so we use a new thread).
-    called.clear()
-    fresh_config = {"configurable": {"thread_id": "2"}}
-    result = graph.invoke({"value": []}, fresh_config)
-    assert "__interrupt__" in result
-    result = graph.invoke(Command(resume="world"), fresh_config)
-    assert result == {"value": ["a", "human:world", "b"]}
 
-
-def test_fork_multiple_interrupts_resume_with_checkpoint_id(
+def test_fork_between_two_interrupt_nodes(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """When a node has multiple interrupts and we resume them one at a time
-    using Command(resume=...) with a specific checkpoint_id, previously
-    resolved RESUME values must be preserved so that later interrupts can
-    also be resolved."""
+    """Replaying from a checkpoint between two interrupt nodes (after the first
+    interrupt was resolved, before the second) should re-trigger the second
+    interrupt."""
+
+    called: list[str] = []
 
     class State(TypedDict):
         value: Annotated[list[str], operator.add]
 
-    def multi_interrupt_node(state: State) -> State:
-        answer1 = interrupt("First question?")
-        answer2 = interrupt("Second question?")
-        return {"value": [f"a1:{answer1}", f"a2:{answer2}"]}
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def interrupt_1(state: State) -> State:
+        called.append("interrupt_1")
+        answer = interrupt("First question?")
+        return {"value": [f"i1:{answer}"]}
+
+    def interrupt_2(state: State) -> State:
+        called.append("interrupt_2")
+        answer = interrupt("Second question?")
+        return {"value": [f"i2:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
 
     graph = (
         StateGraph(State)
-        .add_node("ask", multi_interrupt_node)
-        .add_edge(START, "ask")
+        .add_node("node_a", node_a)
+        .add_node("interrupt_1", interrupt_1)
+        .add_node("interrupt_2", interrupt_2)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "interrupt_1")
+        .add_edge("interrupt_1", "interrupt_2")
+        .add_edge("interrupt_2", "node_b")
         .compile(checkpointer=sync_checkpointer)
     )
 
@@ -5422,21 +5428,354 @@ def test_fork_multiple_interrupts_resume_with_checkpoint_id(
     assert "__interrupt__" in result
     assert result["__interrupt__"][0].value == "First question?"
 
-    # Grab the checkpoint where the interrupt fired
-    interrupt_state = graph.get_state(config)
-    interrupt_config = interrupt_state.config
+    # 2. Resume first interrupt
+    result = graph.invoke(Command(resume="ans1"), config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Second question?"
+
+    # 3. Resume second interrupt — completes the full graph
+    result = graph.invoke(Command(resume="ans2"), config)
+    assert result == {"value": ["a", "i1:ans1", "i2:ans2", "b"]}
+
+    # 4. Find checkpoint between the two interrupts (after interrupt_1, before
+    #    interrupt_2)
+    history = list(graph.get_state_history(config))
+    between = [s for s in history if s.next == ("interrupt_2",)][-1]
+
+    # 5. Replay from that checkpoint — second interrupt should re-fire
+    called.clear()
+    replay_result = graph.invoke(None, between.config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Second question?"
+    assert "interrupt_2" in called
+    assert "interrupt_1" not in called
+    assert "node_a" not in called
+    assert "node_b" not in called
+
+    # 6. Also replay from before interrupt_1 — first interrupt should re-fire
+    before_i1 = [s for s in history if s.next == ("interrupt_1",)][-1]
+    called.clear()
+    replay_result = graph.invoke(None, before_i1.config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "First question?"
+    assert "interrupt_1" in called
+    assert "interrupt_2" not in called
+
+
+def test_fork_multiple_interrupts_in_one_node(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replaying from a checkpoint before a node with multiple interrupts
+    should re-trigger the first interrupt. Resuming with checkpoint_id should
+    preserve previously resolved RESUME values."""
+
+    class State(TypedDict):
+        value: Annotated[list[str], operator.add]
+
+    def multi_interrupt_node(state: State) -> State:
+        answer1 = interrupt("First question?")
+        answer2 = interrupt("Second question?")
+        return {"value": [f"a1:{answer1}", f"a2:{answer2}"]}
+
+    def after(state: State) -> State:
+        return {"value": ["done"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("ask", multi_interrupt_node)
+        .add_node("after", after)
+        .add_edge(START, "ask")
+        .add_edge("ask", "after")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # 1. Run until first interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "First question?"
 
     # 2. Resume first interrupt with checkpoint_id — should hit second interrupt
-    result = graph.invoke(Command(resume="ans1"), interrupt_config)
+    interrupt_state = graph.get_state(config)
+    result = graph.invoke(Command(resume="ans1"), interrupt_state.config)
     assert "__interrupt__" in result
     assert result["__interrupt__"][0].value == "Second question?"
 
     # 3. Resume second interrupt with checkpoint_id — should complete
-    # This is the critical test: the first RESUME value ("ans1") must still
-    # be present in pending writes, otherwise the first interrupt re-fires.
     interrupt_state2 = graph.get_state(config)
     result = graph.invoke(Command(resume="ans2"), interrupt_state2.config)
-    assert result == {"value": ["a1:ans1", "a2:ans2"]}
+    assert result == {"value": ["a1:ans1", "a2:ans2", "done"]}
+
+    # 4. Replay from before the multi-interrupt node — first interrupt re-fires
+    history = list(graph.get_state_history(config))
+    before_ask = [s for s in history if s.next == ("ask",)][-1]
+    replay_result = graph.invoke(None, before_ask.config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "First question?"
+
+
+def test_fork_after_all_interrupts(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replaying from the final checkpoint (after all interrupts resolved and
+    graph completed) should not re-trigger any interrupts."""
+
+    class State(TypedDict):
+        value: Annotated[list[str], operator.add]
+
+    called: list[str] = []
+
+    def node_a(state: State) -> State:
+        called.append("node_a")
+        return {"value": ["a"]}
+
+    def ask_human(state: State) -> State:
+        called.append("ask_human")
+        answer = interrupt("Question?")
+        return {"value": [f"human:{answer}"]}
+
+    def node_b(state: State) -> State:
+        called.append("node_b")
+        return {"value": ["b"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("ask_human", ask_human)
+        .add_node("node_b", node_b)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "ask_human")
+        .add_edge("ask_human", "node_b")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # 1. Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+
+    # 2. Resume — completes the full graph
+    result = graph.invoke(Command(resume="hello"), config)
+    assert result == {"value": ["a", "human:hello", "b"]}
+
+    # 3. Get the final checkpoint (graph completed, no next nodes)
+    history = list(graph.get_state_history(config))
+    final = [s for s in history if not s.next][0]
+
+    # 4. Replay from final checkpoint — nothing should run
+    called.clear()
+    replay_result = graph.invoke(None, final.config)
+    assert "__interrupt__" not in replay_result
+    assert "ask_human" not in called
+    assert "node_b" not in called
+
+
+def test_fork_subgraph_interrupt_no_checkpointer(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Fork/replay with a subgraph that has no checkpointer (checkpointer=False/None).
+    The subgraph inherits the parent's checkpointer via config and its saved
+    checkpoint retains RESUME writes (CONFIG_KEY_RESUMING is propagated from
+    the parent). So the subgraph does NOT re-fire the interrupt on replay —
+    it uses the cached resume value and completes."""
+
+    called: list[str] = []
+
+    class State(TypedDict):
+        value: Annotated[list[str], operator.add]
+
+    def sub_interrupt(state: State) -> State:
+        called.append("sub_interrupt")
+        answer = interrupt("Sub question?")
+        return {"value": [f"sub:{answer}"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("sub_interrupt", sub_interrupt)
+        .add_edge(START, "sub_interrupt")
+        .compile()  # no checkpointer
+    )
+
+    def call_subgraph(state: State) -> State:
+        called.append("call_subgraph")
+        return subgraph.invoke(state)
+
+    def after(state: State) -> State:
+        called.append("after")
+        return {"value": ["after"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("call_subgraph", call_subgraph)
+        .add_node("after", after)
+        .add_edge(START, "call_subgraph")
+        .add_edge("call_subgraph", "after")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # 1. Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Sub question?"
+
+    # 2. Resume — completes
+    result = graph.invoke(Command(resume="answer"), config)
+    assert result == {"value": ["sub:answer", "after"]}
+
+    # 3. Find checkpoint before subgraph node
+    history = list(graph.get_state_history(config))
+    before_sub = [s for s in history if s.next == ("call_subgraph",)][-1]
+
+    # 4. Replay — subgraph uses cached resume value, does NOT re-fire interrupt
+    called.clear()
+    replay_result = graph.invoke(None, before_sub.config)
+    assert "__interrupt__" not in replay_result
+    assert replay_result == {"value": ["sub:answer", "after"]}
+    assert "call_subgraph" in called
+    assert "after" in called
+
+
+def test_fork_subgraph_interrupt_checkpointer_true(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Fork/replay with a subgraph that has checkpointer=True.
+    Same behavior as no checkpointer — the subgraph's checkpoint retains
+    RESUME writes and the interrupt does NOT re-fire on replay."""
+
+    called: list[str] = []
+
+    class State(TypedDict):
+        value: Annotated[list[str], operator.add]
+
+    def sub_node(state: State) -> State:
+        called.append("sub_node")
+        return {"value": ["sub_node"]}
+
+    def sub_interrupt(state: State) -> State:
+        called.append("sub_interrupt")
+        answer = interrupt("Sub question?")
+        return {"value": [f"sub:{answer}"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("sub_node", sub_node)
+        .add_node("sub_interrupt", sub_interrupt)
+        .add_edge(START, "sub_node")
+        .add_edge("sub_node", "sub_interrupt")
+        .compile(checkpointer=True)
+    )
+
+    def call_subgraph(state: State) -> State:
+        called.append("call_subgraph")
+        return subgraph.invoke(state)
+
+    def after(state: State) -> State:
+        called.append("after")
+        return {"value": ["after"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("call_subgraph", call_subgraph)
+        .add_node("after", after)
+        .add_edge(START, "call_subgraph")
+        .add_edge("call_subgraph", "after")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # 1. Run until interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Sub question?"
+
+    # 2. Resume — completes
+    result = graph.invoke(Command(resume="answer"), config)
+    assert result == {"value": ["sub_node", "sub:answer", "after"]}
+
+    # 3. Find checkpoint before subgraph node
+    history = list(graph.get_state_history(config))
+    before_sub = [s for s in history if s.next == ("call_subgraph",)][-1]
+
+    # 4. Replay — subgraph uses cached resume value, does NOT re-fire interrupt
+    called.clear()
+    replay_result = graph.invoke(None, before_sub.config)
+    assert "__interrupt__" not in replay_result
+    assert replay_result == {"value": ["sub_node", "sub:answer", "after"]}
+    assert "call_subgraph" in called
+    assert "after" in called
+
+
+def test_fork_subgraph_two_interrupts_no_checkpointer(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Fork/replay with a subgraph (no checkpointer) containing two interrupt
+    nodes. Same as single interrupt — the subgraph uses cached resume values
+    and completes without re-firing interrupts."""
+
+    called: list[str] = []
+
+    class State(TypedDict):
+        value: Annotated[list[str], operator.add]
+
+    def sub_int_1(state: State) -> State:
+        called.append("sub_int_1")
+        answer = interrupt("Sub Q1?")
+        return {"value": [f"s1:{answer}"]}
+
+    def sub_int_2(state: State) -> State:
+        called.append("sub_int_2")
+        answer = interrupt("Sub Q2?")
+        return {"value": [f"s2:{answer}"]}
+
+    subgraph = (
+        StateGraph(State)
+        .add_node("sub_int_1", sub_int_1)
+        .add_node("sub_int_2", sub_int_2)
+        .add_edge(START, "sub_int_1")
+        .add_edge("sub_int_1", "sub_int_2")
+        .compile()  # no checkpointer
+    )
+
+    def call_subgraph(state: State) -> State:
+        called.append("call_subgraph")
+        return subgraph.invoke(state)
+
+    graph = (
+        StateGraph(State)
+        .add_node("call_subgraph", call_subgraph)
+        .add_edge(START, "call_subgraph")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # 1. Run until first sub-interrupt
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Sub Q1?"
+
+    # 2. Resume first
+    result = graph.invoke(Command(resume="a1"), config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Sub Q2?"
+
+    # 3. Resume second — completes
+    result = graph.invoke(Command(resume="a2"), config)
+    assert result == {"value": ["s1:a1", "s2:a2"]}
+
+    # 4. Replay from before subgraph — uses cached resume values
+    history = list(graph.get_state_history(config))
+    before_sub = [s for s in history if s.next == ("call_subgraph",)][-1]
+
+    called.clear()
+    replay_result = graph.invoke(None, before_sub.config)
+    assert "__interrupt__" not in replay_result
+    assert replay_result == {"value": ["s1:a1", "s2:a2"]}
 
 
 def test_concurrent_execution_thread_safety():
