@@ -562,14 +562,14 @@ def build(
     envvar="LANGGRAPH_HOST_API_KEY",
     help=(
         "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
-        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY in your .env file."
+        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
     ),
 )
 @click.option(
     "--name",
     help=(
         "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
-        "in your .env file. Defaults to current directory name "
+        "environment variable or .env file. Defaults to current directory name "
         "if --deployment-id is not provided."
     ),
 )
@@ -658,14 +658,15 @@ def deploy(
 
     if not api_key:
         for key_name in _API_KEY_ENV_NAMES:
-            if key_name in env_vars:
-                api_key = env_vars[key_name]
+            val = env_vars.get(key_name) or os.environ.get(key_name)
+            if val:
+                api_key = val
                 break
     if not api_key:
         api_key = click.prompt("Host API key", hide_input=True)
 
     if not deployment_id and not name:
-        name = env_vars.get(_DEPLOYMENT_NAME_ENV)
+        name = env_vars.get(_DEPLOYMENT_NAME_ENV) or os.environ.get(_DEPLOYMENT_NAME_ENV)
     if not deployment_id and not name:
         default_name = _normalize_image_name(pathlib.Path.cwd().name)
         name = click.prompt("Deployment name", default=default_name)
