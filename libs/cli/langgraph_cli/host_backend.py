@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.parse
-import urllib.request
 from typing import Any
 
 import click
+import httpx
 
 
 class HostBackendError(click.ClickException):
@@ -21,53 +18,45 @@ class HostBackendClient:
     def __init__(self, base_url: str, api_key: str):
         if not base_url:
             raise click.UsageError("Host backend URL is required")
-        base_url = base_url.rstrip("/")
-        self._base_url = base_url
-        self._api_key = api_key
+        transport = httpx.HTTPTransport(retries=3)
+        self._client = httpx.Client(
+            base_url=base_url.rstrip("/"),
+            headers={
+                "X-Api-Key": api_key,
+                "Accept": "application/json",
+            },
+            transport=transport,
+            timeout=30,
+        )
 
     def _request(
         self, method: str, path: str, payload: dict[str, Any] | None = None
     ) -> Any:
-        url = f"{self._base_url}{path}"
-        data: bytes | None
-        if payload is not None:
-            data = json.dumps(payload).encode("utf-8")
-        else:
-            data = None
-        headers: dict[str, str] = {
-            "X-Api-Key": self._api_key,
-            "Accept": "application/json",
-        }
-        if data is not None:
-            headers["Content-Type"] = "application/json"
-        req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                body = resp.read()
-        except urllib.error.HTTPError as err:
-            detail = err.read().decode("utf-8", errors="ignore")
-            message = detail or err.reason
+            resp = self._client.request(method, path, json=payload)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as err:
+            detail = err.response.text or str(err.response.status_code)
             raise HostBackendError(
-                f"{method} {path} failed with status {err.code}: {message}"
+                f"{method} {path} failed with status {err.response.status_code}: {detail}"
             ) from None
-        except urllib.error.URLError as err:
-            raise HostBackendError(str(err.reason)) from None
+        except httpx.TransportError as err:
+            raise HostBackendError(str(err)) from None
 
-        if not body:
+        if not resp.content:
             return None
         try:
-            return json.loads(body)
-        except json.JSONDecodeError as err:
+            return resp.json()
+        except ValueError as err:
             raise HostBackendError(
-                f"Failed to decode response from {path}: {err.msg}"
+                f"Failed to decode response from {path}: {err}"
             ) from None
 
     def create_deployment(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/v2/deployments", payload)
 
     def list_deployments(self, name_contains: str) -> dict[str, Any]:
-        encoded = urllib.parse.quote(name_contains, safe="")
-        return self._request("GET", f"/v2/deployments?name_contains={encoded}")
+        return self._request("GET", f"/v2/deployments?name_contains={name_contains}")
 
     def get_deployment(self, deployment_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v2/deployments/{deployment_id}")

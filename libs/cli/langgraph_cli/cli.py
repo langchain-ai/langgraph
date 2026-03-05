@@ -623,7 +623,9 @@ def build(
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(
     help=(
-        "Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
+        "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
+        "This command is in beta and under active development. "
+        "Expect frequent updates and improvements.\n\n"
         "Run from the root of your LangGraph project (where langgraph.json "
         "is located). This command also accepts build flags (--base-image, "
         "--pull, etc.). See 'langgraph build --help' for details."
@@ -677,12 +679,23 @@ def deploy(
 
     with Runner() as runner:
         if shutil.which("docker") is None:
-            raise click.UsageError("Docker not installed")
+            raise click.UsageError(
+                "Docker is required but not installed.\n"
+                "Install Docker Desktop: https://docs.docker.com/get-docker/\n\n"
+                "Remote builds (no Docker required) are coming in a future update."
+            )
         if needs_buildx:
             try:
                 runner.run(subp_exec("docker", "buildx", "version", collect=True))
             except click.exceptions.Exit:
-                raise click.UsageError("Docker Buildx not installed") from None
+                raise click.UsageError(
+                    "Docker Buildx is required but not installed.\n"
+                    "Your machine architecture ("
+                    + platform.machine()
+                    + ") requires Buildx to cross-compile images for linux/amd64.\n"
+                    "Install Buildx: https://docs.docker.com/build/install-buildx/\n\n"
+                    "Remote builds (no Docker required) are coming in a future update."
+                ) from None
 
         def log_step(message: str) -> None:
             click.secho(message, fg="cyan")
