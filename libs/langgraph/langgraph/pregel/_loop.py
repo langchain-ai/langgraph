@@ -618,21 +618,27 @@ class PregelLoop:
     def _first(
         self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
     ) -> set[str] | None:
-        # resuming from previous checkpoint requires
-        # - finding a previous checkpoint
-        # - receiving None input (outer graph) or RESUMING flag (subgraph)
+        # Resuming from a previous checkpoint requires two things:
+        # 1. A prior checkpoint exists (channel_versions is non-empty)
+        # 2. The input signals continuation (not a fresh run with new input)
         configurable = self.config.get(CONF, {})
-        is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
-            configurable.get(
-                CONFIG_KEY_RESUMING,
-                self.input is None
-                or isinstance(self.input, Command)
-                or (
-                    not self.is_nested
-                    and self.config.get("metadata", {}).get("run_id")
-                    == self.checkpoint_metadata.get("run_id", MISSING)
-                ),
+        has_prior_checkpoint = bool(self.checkpoint["channel_versions"])
+        # For subgraphs, the parent explicitly sets CONFIG_KEY_RESUMING.
+        # For the outer graph, we infer from the input:
+        #   - None input: resume after interrupt (invoke(None, config))
+        #   - Command input: any Command operates on existing state
+        #   - Same run_id: re-entry into an ongoing run (e.g. stream reconnect)
+        input_signals_resume = (
+            self.input is None
+            or isinstance(self.input, Command)
+            or (
+                not self.is_nested
+                and self.config.get("metadata", {}).get("run_id")
+                == self.checkpoint_metadata.get("run_id", MISSING)
             )
+        )
+        is_resuming = has_prior_checkpoint and bool(
+            configurable.get(CONFIG_KEY_RESUMING, input_signals_resume)
         )
 
         # map command to writes
@@ -723,22 +729,18 @@ class PregelLoop:
             self._put_checkpoint({"source": "input"})
         elif CONFIG_KEY_RESUMING not in configurable:
             raise EmptyInputError(f"Received no input for {input_keys}")
-        # update config
+        # Propagate resuming flag to subgraphs (only the outer graph does this).
         if not self.is_nested:
-            has_resume = (
+            has_resume_value = (
                 isinstance(self.input, Command) and self.input.resume is not None
             )
-            # Propagate CONFIG_KEY_RESUMING to subgraphs:
-            # - True: genuine resume → subgraphs resume and preserve RESUME writes
-            # - False: fork from old checkpoint → subgraphs start fresh
-            # skip_done_tasks is False when a specific checkpoint_id was provided
-            # (fork scenario), True when resuming from latest checkpoint.
+            # When forking (skip_done_tasks=False, i.e. specific checkpoint_id),
+            # subgraphs should NOT resume — they start fresh.
+            # When genuinely resuming from latest, subgraphs should also resume.
+            is_fork = not self.skip_done_tasks
+            subgraph_should_resume = has_resume_value or (is_resuming and not is_fork)
             self.config = patch_configurable(
-                self.config,
-                {
-                    CONFIG_KEY_RESUMING: has_resume
-                    or (is_resuming and self.skip_done_tasks)
-                },
+                self.config, {CONFIG_KEY_RESUMING: subgraph_should_resume}
             )
         # set flag
         self.status = "pending"
@@ -1121,15 +1123,17 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if saved.pending_writes is not None
             else []
         )
-        # Drop stale RESUME writes when forking from a specific checkpoint
-        # so that interrupt() calls re-fire instead of returning cached values.
-        # We must NOT drop them when resuming (subgraph via CONFIG_KEY_RESUMING,
-        # or top graph via Command(resume=...)) because with multiple interrupts
-        # previously resolved RESUME values need to be preserved.
-        is_resuming = (self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True) or (
-            isinstance(self.input, Command) and self.input.resume is not None
+        # When replaying from a specific checkpoint (fork), drop cached
+        # RESUME writes so that interrupt() calls re-fire instead of
+        # returning stale values. But if the input directly carries a
+        # resume value, keep them — multi-interrupt scenarios need
+        # previously resolved RESUME values preserved.
+        is_replaying = not self.skip_done_tasks
+        has_resume_value = (
+            (self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True)
+            or (isinstance(self.input, Command) and self.input.resume is not None)
         )
-        if not self.skip_done_tasks and not is_resuming:
+        if is_replaying and not has_resume_value:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
@@ -1312,15 +1316,17 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if saved.pending_writes is not None
             else []
         )
-        # Drop stale RESUME writes when forking from a specific checkpoint
-        # so that interrupt() calls re-fire instead of returning cached values.
-        # We must NOT drop them when resuming (subgraph via CONFIG_KEY_RESUMING,
-        # or top graph via Command(resume=...)) because with multiple interrupts
-        # previously resolved RESUME values need to be preserved.
-        is_resuming = (self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True) or (
-            isinstance(self.input, Command) and self.input.resume is not None
+        # When replaying from a specific checkpoint (fork), drop cached
+        # RESUME writes so that interrupt() calls re-fire instead of
+        # returning stale values. But if the input directly carries a
+        # resume value, keep them — multi-interrupt scenarios need
+        # previously resolved RESUME values preserved.
+        is_replaying = not self.skip_done_tasks
+        has_resume_value = (
+            (self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True)
+            or (isinstance(self.input, Command) and self.input.resume is not None)
         )
-        if not self.skip_done_tasks and not is_resuming:
+        if is_replaying and not has_resume_value:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
             ]
