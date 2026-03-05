@@ -6779,9 +6779,9 @@ async def test_fork_after_all_interrupts(
 async def test_fork_subgraph_interrupt_no_checkpointer(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Fork/replay with subgraph (no checkpointer). The subgraph inherits the
-    parent's checkpointer and CONFIG_KEY_RESUMING, so it uses cached resume
-    values and does NOT re-fire the interrupt."""
+    """Fork/replay with subgraph (no checkpointer). On fork, the parent
+    propagates CONFIG_KEY_RESUMING=False so the subgraph strips RESUME writes
+    and re-fires the interrupt — consistent with top-level behavior."""
 
     called: list[str] = []
 
@@ -6831,17 +6831,17 @@ async def test_fork_subgraph_interrupt_no_checkpointer(
 
     called.clear()
     replay_result = await graph.ainvoke(None, before_sub.config)
-    assert "__interrupt__" not in replay_result
-    assert replay_result == {"value": ["sub:answer", "after"]}
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Sub question?"
     assert "call_subgraph" in called
-    assert "after" in called
+    assert "after" not in called
 
 
 async def test_fork_subgraph_interrupt_checkpointer_true(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Fork/replay with subgraph (checkpointer=True). Same as no checkpointer —
-    uses cached resume values, does NOT re-fire the interrupt."""
+    """Fork/replay with subgraph (checkpointer=True). On fork, subgraph
+    re-fires interrupts — consistent with top-level behavior."""
 
     called: list[str] = []
 
@@ -6897,17 +6897,18 @@ async def test_fork_subgraph_interrupt_checkpointer_true(
 
     called.clear()
     replay_result = await graph.ainvoke(None, before_sub.config)
-    assert "__interrupt__" not in replay_result
-    assert replay_result == {"value": ["sub_node", "sub:answer", "after"]}
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Sub question?"
     assert "call_subgraph" in called
-    assert "after" in called
+    assert "after" not in called
 
 
 async def test_fork_subgraph_two_interrupts_no_checkpointer(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
     """Fork/replay with subgraph (no checkpointer) with two interrupt nodes.
-    Same behavior — uses cached resume values, does NOT re-fire interrupts."""
+    On fork, subgraph re-fires the first interrupt — consistent with
+    top-level behavior."""
 
     called: list[str] = []
 
@@ -6962,8 +6963,8 @@ async def test_fork_subgraph_two_interrupts_no_checkpointer(
 
     called.clear()
     replay_result = await graph.ainvoke(None, before_sub.config)
-    assert "__interrupt__" not in replay_result
-    assert replay_result == {"value": ["s1:a1", "s2:a2"]}
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Sub Q1?"
 
 
 async def test_concurrent_execution():
