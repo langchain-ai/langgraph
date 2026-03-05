@@ -1130,9 +1130,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         # previously resolved RESUME values preserved.
         is_replaying = not self.skip_done_tasks
         has_resume_value = (
-            (self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True)
-            or (isinstance(self.input, Command) and self.input.resume is not None)
-        )
+            self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True
+        ) or (isinstance(self.input, Command) and self.input.resume is not None)
         if is_replaying and not has_resume_value:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
@@ -1323,9 +1322,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         # previously resolved RESUME values preserved.
         is_replaying = not self.skip_done_tasks
         has_resume_value = (
-            (self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True)
-            or (isinstance(self.input, Command) and self.input.resume is not None)
-        )
+            self.config.get(CONF, {}).get(CONFIG_KEY_RESUMING) is True
+        ) or (isinstance(self.input, Command) and self.input.resume is not None)
         if is_replaying and not has_resume_value:
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
