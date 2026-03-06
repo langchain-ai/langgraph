@@ -1738,6 +1738,32 @@ def test_conditional_state_graph_with_list_edge_inputs(snapshot: SnapshotAsserti
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
 
+def test_state_graph_serialization_preserves_declared_edge_order() -> None:
+    class State(TypedDict):
+        foo: Annotated[list[str], operator.add]
+
+    graph_builder = StateGraph(State)
+    graph_builder.add_node("z", lambda _: {"foo": ["z"]})
+    graph_builder.add_node("a", lambda _: {"foo": ["a"]})
+    graph_builder.add_node("join", lambda _: {"foo": ["join"]})
+    graph_builder.add_edge(START, "z")
+    graph_builder.add_edge(START, "a")
+    graph_builder.add_edge(["z", "a"], "join")
+    graph_builder.add_edge("join", END)
+
+    app = graph_builder.compile()
+    edges = app.get_graph().to_json()["edges"]
+    pairs = [(edge["source"], edge["target"]) for edge in edges]
+
+    assert pairs == [
+        (START, "z"),
+        (START, "a"),
+        ("z", "join"),
+        ("a", "join"),
+        ("join", END),
+    ]
+
+
 def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) -> None:
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
