@@ -1106,33 +1106,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             },
         )
 
-    def _get_parent_checkpoint_id(self) -> str | None:
-        """Get the parent checkpoint_id to use as an upper bound for finding
-        the subgraph's checkpoint. For forks, we need the original parent
-        checkpoint (not the fork), so we look up the parent checkpoint's
-        parent_config."""
-        checkpoint_map = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
-        parent_ns = NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
-        parent_checkpoint_id = checkpoint_map.get(parent_ns)
-        if not parent_checkpoint_id or not self.checkpointer:
-            return None
-        # Check if this is a fork (source=update) — if so, use the fork's
-        # parent checkpoint_id instead, since the fork was created after
-        # the subgraph's checkpoints from the original execution.
-        parent_config: RunnableConfig = {
-            **self.checkpoint_config,
-            CONF: {
-                **self.checkpoint_config.get(CONF, {}),
-                CONFIG_KEY_CHECKPOINT_NS: parent_ns,
-                CONFIG_KEY_CHECKPOINT_ID: parent_checkpoint_id,
-            },
-        }
-        parent_saved = self.checkpointer.get_tuple(parent_config)
-        if parent_saved and parent_saved.metadata.get("source") == "update":
-            if parent_saved.parent_config:
-                return parent_saved.parent_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
-        return parent_checkpoint_id
-
     def _get_checkpoint_after_parent(self) -> CheckpointTuple | None:
         """Find the right subgraph checkpoint to restore when the parent replays.
 
@@ -1145,44 +1118,48 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
         We query for `source="input"` + `parents={parent_ns: parent_id}` to
         find the starting checkpoint from the invocation that ran under the
-        given parent checkpoint — one bounded query, one result.
-
-        We then clear `versions_seen` so all nodes re-trigger from that state.
-        The existing `is_replaying` logic in `_first()` handles dropping any
-        cached RESUME writes so that interrupts re-fire.
+        given parent checkpoint. Node re-triggering is handled by `_triggers`
+        which skips `versions_seen` when `CONFIG_KEY_REPLAYING` is set.
 
         Returns None to start fresh if no such checkpoint exists."""
-        parent_checkpoint_id = self._get_parent_checkpoint_id()
-        if parent_checkpoint_id:
-            parent_ns = (
-                NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
-            )
-            for saved in self.checkpointer.list(
-                self.checkpoint_config,
-                filter={
-                    "source": "input",
-                    "parents": {parent_ns: parent_checkpoint_id},
-                },
-                limit=1,
-            ):
-                saved.checkpoint["versions_seen"] = {}
-                return saved
+        checkpoint_map = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
+        parent_ns = NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
+        parent_checkpoint_id = checkpoint_map.get(parent_ns)
+        if not parent_checkpoint_id or not self.checkpointer:
+            return None
+        for saved in self.checkpointer.list(
+            self.checkpoint_config,
+            filter={
+                "source": "input",
+                "parents": {parent_ns: parent_checkpoint_id},
+            },
+            limit=1,
+        ):
+            return saved
         return None
 
     # context manager
 
     def __enter__(self) -> Self:
-        if self.checkpointer:
-            saved = self.checkpointer.get_tuple(self.checkpoint_config)
-        else:
-            saved = None
-        # When replaying a subgraph, find the checkpoint that was current
-        # at the parent's checkpoint time. For stateless subgraphs (no
-        # checkpointer), this returns None and we start fresh as usual.
-        if self.config[CONF].get(
+        is_subgraph_replay = self.config[CONF].get(
             CONFIG_KEY_REPLAYING
-        ) and not self.checkpoint_config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_ID):
+        ) and not self.checkpoint_config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_ID)
+
+        if not self.checkpointer:
+            saved = None
+        elif is_subgraph_replay:
+            # Subgraph replay: the parent graph is replaying from an earlier
+            # checkpoint, so we need to restore the subgraph checkpoint that
+            # corresponds to that parent checkpoint — not the subgraph's
+            # latest. We find it by matching the parent checkpoint timeline.
             saved = self._get_checkpoint_after_parent()
+        else:
+            # Normal case: fetch the most recent checkpoint for this
+            # graph/thread. If a specific checkpoint_id is in the config,
+            # fetch that exact checkpoint; otherwise fetch the latest one.
+            # Returns None on first invocation (no checkpoints exist yet).
+            saved = self.checkpointer.get_tuple(self.checkpoint_config)
+
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
@@ -1354,59 +1331,46 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             },
         )
 
-    async def _aget_parent_checkpoint_id(self) -> str | None:
+    async def _aget_checkpoint_after_parent(self) -> CheckpointTuple | None:
+        """Async version of `_get_checkpoint_after_parent`."""
         checkpoint_map = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
         parent_ns = NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
         parent_checkpoint_id = checkpoint_map.get(parent_ns)
         if not parent_checkpoint_id or not self.checkpointer:
             return None
-        parent_config: RunnableConfig = {
-            **self.checkpoint_config,
-            CONF: {
-                **self.checkpoint_config.get(CONF, {}),
-                CONFIG_KEY_CHECKPOINT_NS: parent_ns,
-                CONFIG_KEY_CHECKPOINT_ID: parent_checkpoint_id,
+        async for saved in self.checkpointer.alist(
+            self.checkpoint_config,
+            filter={
+                "source": "input",
+                "parents": {parent_ns: parent_checkpoint_id},
             },
-        }
-        parent_saved = await self.checkpointer.aget_tuple(parent_config)
-        if parent_saved and parent_saved.metadata.get("source") == "update":
-            if parent_saved.parent_config:
-                return parent_saved.parent_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
-        return parent_checkpoint_id
-
-    async def _aget_checkpoint_after_parent(self) -> CheckpointTuple | None:
-        """Async version of `_get_checkpoint_after_parent`."""
-        parent_checkpoint_id = await self._aget_parent_checkpoint_id()
-        if parent_checkpoint_id:
-            parent_ns = (
-                NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
-            )
-            async for saved in self.checkpointer.alist(
-                self.checkpoint_config,
-                filter={
-                    "source": "input",
-                    "parents": {parent_ns: parent_checkpoint_id},
-                },
-                limit=1,
-            ):
-                saved.checkpoint["versions_seen"] = {}
-                return saved
+            limit=1,
+        ):
+            return saved
         return None
 
     # context manager
 
     async def __aenter__(self) -> Self:
-        if self.checkpointer:
-            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
-        else:
-            saved = None
-        # When replaying a subgraph, find the checkpoint that was current
-        # at the parent's checkpoint time. For stateless subgraphs (no
-        # checkpointer), this returns None and we start fresh as usual.
-        if self.config[CONF].get(
+        is_subgraph_replay = self.config[CONF].get(
             CONFIG_KEY_REPLAYING
-        ) and not self.checkpoint_config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_ID):
+        ) and not self.checkpoint_config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_ID)
+
+        if not self.checkpointer:
+            saved = None
+        elif is_subgraph_replay:
+            # Subgraph replay: the parent graph is replaying from an earlier
+            # checkpoint, so we need to restore the subgraph checkpoint that
+            # corresponds to that parent checkpoint — not the subgraph's
+            # latest. We find it by matching the parent checkpoint timeline.
             saved = await self._aget_checkpoint_after_parent()
+        else:
+            # Normal case: fetch the most recent checkpoint for this
+            # graph/thread. If a specific checkpoint_id is in the config,
+            # fetch that exact checkpoint; otherwise fetch the latest one.
+            # Returns None on first invocation (no checkpoints exist yet).
+            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []

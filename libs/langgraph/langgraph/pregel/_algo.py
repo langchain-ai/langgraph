@@ -40,6 +40,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
+    CONFIG_KEY_REPLAYING,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SCRATCHPAD,
@@ -579,11 +580,14 @@ def prepare_single_task(
         proc = processes[name]
         if checkpoint_null_version is None:
             return
-        # If any of the channels read by this process were updated
+        # If any of the channels read by this process were updated.
+        # When replaying, ignore versions_seen so all nodes with available
+        # channels re-trigger (same as first invocation).
+        is_replaying = configurable.get(CONFIG_KEY_REPLAYING, False)
         if _triggers(
             channels,
             checkpoint["channel_versions"],
-            checkpoint["versions_seen"].get(name),
+            None if is_replaying else checkpoint["versions_seen"].get(name),
             checkpoint_null_version,
             proc,
         ):
