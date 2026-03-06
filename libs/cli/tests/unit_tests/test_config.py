@@ -10,6 +10,7 @@ import pytest
 
 from langgraph_cli.config import (
     _BUILD_TOOLS,
+    _calculate_relative_workdir,
     _get_pip_cleanup_lines,
     config_to_compose,
     config_to_docker,
@@ -1692,3 +1693,100 @@ def test_config_to_compose_with_api_version():
 
     # Check that the compose file includes the correct FROM line with api_version
     assert "FROM langchain/langgraphjs-api:0.2.74-node20" in actual_compose_str
+
+
+# -- Windows path tests --
+
+
+def test_calculate_relative_workdir_returns_posix(tmp_path):
+    """Verify _calculate_relative_workdir always returns forward-slash paths."""
+    # Create nested directory: tmp_path/subdir/nested/
+    nested = tmp_path / "subdir" / "nested"
+    nested.mkdir(parents=True)
+    config_path = nested / "langgraph.json"
+    config_path.touch()
+
+    result = _calculate_relative_workdir(config_path, str(tmp_path))
+    assert "\\" not in result, f"Expected POSIX path, got: {result}"
+    assert result == "subdir/nested"
+
+
+def test_calculate_relative_workdir_same_dir(tmp_path):
+    """Verify _calculate_relative_workdir returns empty string for same directory."""
+    config_path = tmp_path / "langgraph.json"
+    config_path.touch()
+
+    result = _calculate_relative_workdir(config_path, str(tmp_path))
+    assert result == ""
+
+
+def test_config_to_docker_auth_path_posix():
+    """Verify auth path in Docker output uses forward slashes."""
+    graphs = {"agent": "./agent.py:graph"}
+    actual_docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+                "auth": {"path": "./agent.py:my_auth"},
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    assert "LANGGRAPH_AUTH=" in actual_docker_stdin
+    # Verify no backslashes in the auth path
+    for line in actual_docker_stdin.splitlines():
+        if "LANGGRAPH_AUTH=" in line:
+            assert "\\" not in line or "\\'" in line or '\\"' in line, (
+                f"Auth ENV line contains backslashes: {line}"
+            )
+
+
+def test_config_to_docker_encryption_path_posix():
+    """Verify encryption path in Docker output uses forward slashes."""
+    graphs = {"agent": "./graphs/agent.py:graph"}
+    actual_docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+                "encryption": {"path": "./agent.py:my_encryption"},
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    assert "LANGGRAPH_ENCRYPTION=" in actual_docker_stdin
+    for line in actual_docker_stdin.splitlines():
+        if "LANGGRAPH_ENCRYPTION=" in line:
+            assert "\\" not in line or "\\'" in line or '\\"' in line, (
+                f"Encryption ENV line contains backslashes: {line}"
+            )
+
+
+def test_config_to_docker_all_paths_posix():
+    """End-to-end: verify no backslash paths leak into Dockerfile output."""
+    graphs = {"agent": "./agent.py:graph"}
+    actual_docker_stdin, _ = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": graphs,
+            }
+        ),
+        base_image="langchain/langgraph-api",
+    )
+    # Check all ADD/COPY/ENV lines for Windows-style backslashes
+    for line in actual_docker_stdin.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("ADD ", "COPY ", "ENV ", "WORKDIR ")):
+            # Allow escaped quotes but not path separators
+            cleaned = stripped.replace("\\'", "").replace('\\"', "")
+            assert "\\" not in cleaned, (
+                f"Docker instruction contains backslash path: {line}"
+            )

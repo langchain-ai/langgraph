@@ -615,7 +615,7 @@ def _update_auth_path(
     # Check faux packages first (higher priority)
     for faux_path, (_, destpath) in local_deps.faux_pkgs.items():
         if resolved.is_relative_to(faux_path):
-            new_path = f"{destpath}/{resolved.relative_to(faux_path)}:{attr_str}"
+            new_path = f"{destpath}/{resolved.relative_to(faux_path).as_posix()}:{attr_str}"
             auth_conf["path"] = new_path
             return
 
@@ -623,7 +623,7 @@ def _update_auth_path(
     for real_path in local_deps.real_pkgs:
         if resolved.is_relative_to(real_path):
             new_path = (
-                f"/deps/{real_path.name}/{resolved.relative_to(real_path)}:{attr_str}"
+                f"/deps/{real_path.name}/{resolved.relative_to(real_path).as_posix()}:{attr_str}"
             )
             auth_conf["path"] = new_path
             return
@@ -658,7 +658,7 @@ def _update_encryption_path(
     # Check faux packages first (higher priority)
     for faux_path, (_, destpath) in local_deps.faux_pkgs.items():
         if resolved.is_relative_to(faux_path):
-            new_path = f"{destpath}/{resolved.relative_to(faux_path)}:{attr_str}"
+            new_path = f"{destpath}/{resolved.relative_to(faux_path).as_posix()}:{attr_str}"
             encryption_conf["path"] = new_path
             return
 
@@ -666,7 +666,7 @@ def _update_encryption_path(
     for real_path in local_deps.real_pkgs:
         if resolved.is_relative_to(real_path):
             new_path = (
-                f"/deps/{real_path.name}/{resolved.relative_to(real_path)}:{attr_str}"
+                f"/deps/{real_path.name}/{resolved.relative_to(real_path).as_posix()}:{attr_str}"
             )
             encryption_conf["path"] = new_path
             return
@@ -703,7 +703,7 @@ def _update_checkpointer_path(
     # Check faux packages first (higher priority)
     for faux_path, (_, destpath) in local_deps.faux_pkgs.items():
         if resolved.is_relative_to(faux_path):
-            new_path = f"{destpath}/{resolved.relative_to(faux_path)}:{attr_str}"
+            new_path = f"{destpath}/{resolved.relative_to(faux_path).as_posix()}:{attr_str}"
             checkpointer_conf["path"] = new_path
             return
 
@@ -711,7 +711,7 @@ def _update_checkpointer_path(
     for real_path in local_deps.real_pkgs:
         if resolved.is_relative_to(real_path):
             new_path = (
-                f"/deps/{real_path.name}/{resolved.relative_to(real_path)}:{attr_str}"
+                f"/deps/{real_path.name}/{resolved.relative_to(real_path).as_posix()}:{attr_str}"
             )
             checkpointer_conf["path"] = new_path
             return
@@ -935,7 +935,7 @@ def python_config_to_docker(
             (
                 f"COPY --from=outer-{reqpath.name} requirements.txt {destpath}"
                 if reqpath.parent in local_deps.additional_contexts
-                else f"ADD {reqpath.relative_to(config_path.parent)} {destpath}"
+                else f"ADD {reqpath.relative_to(config_path.parent).as_posix()} {destpath}"
             )
             for reqpath, destpath in local_deps.pip_reqs
         )
@@ -1251,7 +1251,8 @@ def _calculate_relative_workdir(config_path: pathlib.Path, build_context: str) -
 
     try:
         relative_path = config_dir.relative_to(build_context_path)
-        return str(relative_path) if str(relative_path) != "." else ""
+        posix = relative_path.as_posix()
+        return posix if posix != "." else ""
     except ValueError as _:
         raise ValueError(
             f"Configuration file {config_path} is not under the build context {build_context}. "
