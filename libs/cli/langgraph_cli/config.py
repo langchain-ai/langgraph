@@ -52,6 +52,24 @@ DEFAULT_IMAGE_DISTRO = "debian"
 _BUILD_TOOLS = ("pip", "setuptools", "wheel")
 
 
+def _build_server_config_env(config: Config) -> str:
+    """Build the AGENT_SERVER_CONFIG env var line from a validated config."""
+    server_config: dict = {"graphs": config["graphs"]}
+    for key in (
+        "store",
+        "auth",
+        "encryption",
+        "http",
+        "webhooks",
+        "checkpointer",
+        "ui",
+        "ui_config",
+    ):
+        if (value := config.get(key)) is not None:
+            server_config[key] = value
+    return f"ENV AGENT_SERVER_CONFIG='{json.dumps(server_config)}'"
+
+
 def _get_pip_cleanup_lines(
     install_cmd: str,
     to_uninstall: tuple[str] | None,
@@ -1036,36 +1054,13 @@ ADD {relpath} /deps/{name}
         )
     )
 
-    env_vars = []
-
-    if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
-
-    if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
-
-    if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
-
-    if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
-
-    # Inject webhooks configuration if provided
-    if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
-
-    if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
-        )
-
+    env_vars = [_build_server_config_env(config)]
+    # JS build/runtime scripts read these env vars directly
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
     if (ui := config.get("ui")) is not None:
         env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
-
     if (ui_config := config.get("ui_config")) is not None:
         env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
-
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
 
     js_inst_str: str = ""
     if (config.get("ui") or config.get("node_version")) and local_deps.working_dir:
@@ -1167,36 +1162,13 @@ def node_config_to_docker(
 
     image_str = docker_tag(config, base_image, api_version)
 
-    env_vars: list[str] = []
-
-    if (store_config := config.get("store")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_STORE='{json.dumps(store_config)}'")
-
-    if (auth_config := config.get("auth")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_AUTH='{json.dumps(auth_config)}'")
-
-    if (encryption_config := config.get("encryption")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_ENCRYPTION='{json.dumps(encryption_config)}'")
-
-    if (http_config := config.get("http")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_HTTP='{json.dumps(http_config)}'")
-
-    # Inject webhooks configuration if provided
-    if (webhooks_config := config.get("webhooks")) is not None:
-        env_vars.append(f"ENV LANGGRAPH_WEBHOOKS='{json.dumps(webhooks_config)}'")
-
-    if (checkpointer_config := config.get("checkpointer")) is not None:
-        env_vars.append(
-            f"ENV LANGGRAPH_CHECKPOINTER='{json.dumps(checkpointer_config)}'"
-        )
-
+    env_vars: list[str] = [_build_server_config_env(config)]
+    # JS build/runtime scripts read these env vars directly
+    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
     if ui := config.get("ui"):
         env_vars.append(f"ENV LANGGRAPH_UI='{json.dumps(ui)}'")
-
     if ui_config := config.get("ui_config"):
         env_vars.append(f"ENV LANGGRAPH_UI_CONFIG='{json.dumps(ui_config)}'")
-
-    env_vars.append(f"ENV LANGSERVE_GRAPHS='{json.dumps(config['graphs'])}'")
 
     # For monorepo support, we need to handle install and build commands differently
     if build_context:
