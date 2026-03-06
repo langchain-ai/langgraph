@@ -11,20 +11,29 @@ import httpx
 class HostBackendError(click.ClickException):
     """Raised when the host backend returns an error response."""
 
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class HostBackendClient:
     """Minimal JSON HTTP client for the host backend deployment service."""
 
-    def __init__(self, base_url: str, api_key: str):
+    def __init__(self, base_url: str, api_key: str, tenant_id: str | None = None):
         if not base_url:
             raise click.UsageError("Host backend URL is required")
         transport = httpx.HTTPTransport(retries=3)
+        headers: dict[str, str] = {
+            "X-Api-Key": api_key,
+            "Accept": "application/json",
+        }
+        if tenant_id:
+            headers["X-Tenant-ID"] = tenant_id
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
         self._client = httpx.Client(
-            base_url=base_url.rstrip("/"),
-            headers={
-                "X-Api-Key": api_key,
-                "Accept": "application/json",
-            },
+            base_url=self._base_url,
+            headers=headers,
             transport=transport,
             timeout=30,
         )
@@ -38,7 +47,8 @@ class HostBackendClient:
         except httpx.HTTPStatusError as err:
             detail = err.response.text or str(err.response.status_code)
             raise HostBackendError(
-                f"{method} {path} failed with status {err.response.status_code}: {detail}"
+                f"{method} {path} failed with status {err.response.status_code}: {detail}",
+                status_code=err.response.status_code,
             ) from None
         except httpx.TransportError as err:
             raise HostBackendError(str(err)) from None

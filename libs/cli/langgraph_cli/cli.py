@@ -97,6 +97,12 @@ def _parse_env_from_config(
         return {str(k): str(v) for k, v in env_field.items()}
     if isinstance(env_field, str):
         env_path = (config_path.parent / env_field).resolve()
+        if not env_path.exists():
+            click.secho(
+                f"Warning: env file '{env_field}' specified in langgraph.json not found.",
+                fg="yellow",
+            )
+            return {}
     else:
         env_path = pathlib.Path.cwd() / ".env"
     return {k: v for k, v in dotenv_values(env_path).items() if v is not None}
@@ -664,6 +670,11 @@ def deploy(
     no_wait: bool,
     docker_build_args: Sequence[str],
 ):
+    click.secho(
+        "Note: 'langgraph deploy' is in beta. Expect frequent updates and improvements.",
+        fg="yellow",
+    )
+    click.echo()
     config_json = langgraph_cli.config.validate_config_file(config)
     warn_non_wolfi_distro(config_json)
 
@@ -769,7 +780,23 @@ def deploy(
             step += 1
         else:
             log_step(f"{step}. Looking up deployment '{name}'")
-            existing = client.list_deployments(name_contains=name)
+            try:
+                existing = client.list_deployments(name_contains=name)
+            except HostBackendError as err:
+                if err.status_code == 403 and "requires workspace specification" in err.message:
+                    click.secho(
+                        "Your API key is org-scoped and requires a workspace ID.",
+                        fg="yellow",
+                    )
+                    click.secho(
+                        "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                        fg="yellow",
+                    )
+                    tenant_id = click.prompt("Workspace ID")
+                    client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
+                    existing = client.list_deployments(name_contains=name)
+                else:
+                    raise
             found_id = None
             if isinstance(existing, dict):
                 for dep in existing.get("resources", []):
@@ -804,7 +831,20 @@ def deploy(
 
         # -- Step: Get push token and authenticate --
         log_step(f"{step}. Requesting push token")
-        push_data = client.request_push_token(deployment_id)
+        try:
+            push_data = client.request_push_token(deployment_id)
+        except HostBackendError as err:
+            if (
+                err.status_code == 400
+                and "only available for 'internal_docker' source deployments" in err.message
+            ):
+                raise click.ClickException(
+                    f"Deployment '{deployment_id}' was not created by 'langgraph deploy' "
+                    "and cannot be updated with this command.\n"
+                    "Please create a new deployment by running 'langgraph deploy' "
+                    "without --deployment-id, or use a different --name."
+                ) from None
+            raise
         deployment_token = push_data.get("token")
         registry_url = push_data.get("registry_url")
         if not deployment_token or not registry_url:
@@ -859,22 +899,41 @@ def deploy(
                     verbose=verbose,
                 )
             )
-            with Progress(message="Pushing...", elapsed=not verbose):
-                runner.run(
-                    subp_exec(
-                        "docker",
-                        "--config",
-                        cfg,
-                        "push",
-                        remote_image,
-                        verbose=verbose,
-                    )
-                )
+            max_push_retries = 3
+            for attempt in range(max_push_retries):
+                try:
+                    with Progress(message="Pushing...", elapsed=not verbose):
+                        runner.run(
+                            subp_exec(
+                                "docker",
+                                "--config",
+                                cfg,
+                                "push",
+                                remote_image,
+                                verbose=verbose,
+                            )
+                        )
+                    break
+                except click.exceptions.Exit:
+                    if attempt < max_push_retries - 1:
+                        click.secho(
+                            f"   Push failed, retrying (attempt {attempt + 2} of {max_push_retries})...",
+                            fg="yellow",
+                        )
+                    else:
+                        raise
         step += 1
 
         # -- Step: Update deployment --
         log_step(f"{step}. Updating deployment {deployment_id}")
-        client.update_deployment(deployment_id, remote_image, secrets=secrets)
+        updated = client.update_deployment(deployment_id, remote_image, secrets=secrets)
+        tenant_id = updated.get("tenant_id") if isinstance(updated, dict) else None
+        if tenant_id:
+            status_url = (
+                f"https://smith.langchain.com/o/{tenant_id}"
+                f"/host/deployments/{deployment_id}"
+            )
+            click.secho(f"   View status: {status_url}", fg="cyan")
 
         if no_wait:
             click.secho("   Deployment updated", fg="green")
