@@ -489,11 +489,12 @@ def test_serde_jsonplus_numpy_array_json_hook(arr: np.ndarray) -> None:
     ],
 )
 def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
-    serde = JsonPlusSerializer(pickle_fallback=True)
+    serde = JsonPlusSerializer()
 
     dumped = serde.dumps_typed(df)
-    assert dumped[0] == "pickle"
+    assert dumped[0] == "msgpack"
     result = serde.loads_typed(dumped)
+    assert isinstance(result, pd.DataFrame)
     assert result.equals(df)
 
 
@@ -543,12 +544,33 @@ def test_serde_jsonplus_pandas_dataframe(df: pd.DataFrame) -> None:
     ],
 )
 def test_serde_jsonplus_pandas_series(series: pd.Series) -> None:
-    serde = JsonPlusSerializer(pickle_fallback=True)
+    serde = JsonPlusSerializer()
     dumped = serde.dumps_typed(series)
 
-    assert dumped[0] == "pickle"
+    assert dumped[0] == "msgpack"
     result = serde.loads_typed(dumped)
+    assert isinstance(result, pd.Series)
     assert result.equals(series)
+
+
+def test_serde_jsonplus_pandas_dataframe_json_hook() -> None:
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
+    dumped = serde.dumps_typed(df)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, dict)
+    assert result == {"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]}
+
+
+def test_serde_jsonplus_pandas_series_json_hook() -> None:
+    serde = JsonPlusSerializer(__unpack_ext_hook__=_msgpack_ext_hook_to_json)
+    series = pd.Series([1, 2, 3])
+    dumped = serde.dumps_typed(series)
+    assert dumped[0] == "msgpack"
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, list)
+    assert result == [1, 2, 3]
 
 
 def test_msgpack_safe_types_no_warning(caplog: pytest.LogCaptureFixture) -> None:

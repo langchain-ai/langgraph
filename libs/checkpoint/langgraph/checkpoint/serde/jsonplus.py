@@ -269,6 +269,8 @@ EXT_METHOD_SINGLE_ARG = 3
 EXT_PYDANTIC_V1 = 4
 EXT_PYDANTIC_V2 = 5
 EXT_NUMPY_ARRAY = 6
+EXT_PANDAS_DATAFRAME = 7
+EXT_PANDAS_SERIES = 8
 
 
 def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
@@ -476,6 +478,14 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
                 ),
             ),
         )
+    elif (pd_mod := sys.modules.get("pandas")) is not None and isinstance(
+        obj, pd_mod.DataFrame
+    ):
+        return ormsgpack.Ext(EXT_PANDAS_DATAFRAME, _msgpack_enc(pickle.dumps(obj)))
+    elif (pd_mod := sys.modules.get("pandas")) is not None and isinstance(
+        obj, pd_mod.Series
+    ):
+        return ormsgpack.Ext(EXT_PANDAS_SERIES, _msgpack_enc(pickle.dumps(obj)))
     elif (np_mod := sys.modules.get("numpy")) is not None and isinstance(
         obj, np_mod.ndarray
     ):
@@ -681,6 +691,22 @@ def _create_msgpack_ext_hook(
                 return arr.reshape(shape, order=order)
             except Exception:
                 return None
+        elif code == EXT_PANDAS_DATAFRAME:
+            try:
+                buf = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                return pickle.loads(buf)
+            except Exception:
+                return None
+        elif code == EXT_PANDAS_SERIES:
+            try:
+                buf = ormsgpack.unpackb(
+                    data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
+                )
+                return pickle.loads(buf)
+            except Exception:
+                return None
         return None
 
     return ext_hook
@@ -779,6 +805,30 @@ def _msgpack_ext_hook_to_json(code: int, data: bytes) -> Any:
             )
             arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
             return arr.reshape(shape, order=order).tolist()
+        except Exception:
+            return
+    elif code == EXT_PANDAS_DATAFRAME:
+        try:
+            buf = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+
+            df = pickle.loads(buf)
+            return df.to_dict(orient="list")
+        except Exception:
+            return
+    elif code == EXT_PANDAS_SERIES:
+        try:
+            buf = ormsgpack.unpackb(
+                data,
+                ext_hook=_msgpack_ext_hook_to_json,
+                option=ormsgpack.OPT_NON_STR_KEYS,
+            )
+
+            series = pickle.loads(buf)
+            return series.tolist()
         except Exception:
             return
 
