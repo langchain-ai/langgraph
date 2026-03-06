@@ -1,3 +1,4 @@
+import asyncio
 import contextlib
 import dataclasses
 import json
@@ -2008,3 +2009,90 @@ async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() 
     tool_message = result["messages"][-1]
     assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_2"
     assert tool_message.tool_call_id == "call_dynamic_2"
+
+
+# ────────────────────────────────────────────────────────────────
+#  Timeout tests
+# ────────────────────────────────────────────────────────────────
+
+
+@dec_tool
+async def slow_tool(x: int) -> str:
+    """A slow tool for testing timeouts."""
+    await asyncio.sleep(10)
+    return f"result: {x}"
+
+
+@dec_tool
+async def fast_tool(x: int) -> str:
+    """A fast tool for testing timeouts."""
+    return f"result: {x}"
+
+
+async def test_tool_node_timeout_returns_error_message() -> None:
+    """Timeout returns an error ToolMessage when handle_tool_errors is enabled."""
+    tool_node = ToolNode([slow_tool], timeout=0.1)
+    msg = AIMessage("", tool_calls=[ToolCall(name="slow_tool", args={"x": 1}, id="1")])
+    result = await tool_node.ainvoke(
+        {"messages": [msg]}, config=_create_config_with_runtime()
+    )
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.status == "error"
+    assert "timed out" in tool_message.content
+    assert "slow_tool" in tool_message.content
+
+
+async def test_tool_node_timeout_raises_when_errors_not_handled() -> None:
+    """Timeout raises TimeoutError when handle_tool_errors is False."""
+    tool_node = ToolNode([slow_tool], timeout=0.1, handle_tool_errors=False)
+    msg = AIMessage("", tool_calls=[ToolCall(name="slow_tool", args={"x": 1}, id="1")])
+    with pytest.raises(TimeoutError):
+        await tool_node.ainvoke(
+            {"messages": [msg]}, config=_create_config_with_runtime()
+        )
+
+
+async def test_tool_node_timeout_succeeds_when_tool_is_fast() -> None:
+    """Tools that complete before the timeout return normally."""
+    tool_node = ToolNode([fast_tool], timeout=5.0)
+    msg = AIMessage("", tool_calls=[ToolCall(name="fast_tool", args={"x": 42}, id="1")])
+    result = await tool_node.ainvoke(
+        {"messages": [msg]}, config=_create_config_with_runtime()
+    )
+    tool_message = result["messages"][-1]
+    assert isinstance(tool_message, ToolMessage)
+    assert tool_message.content == "result: 42"
+    assert tool_message.status == "success"
+
+
+async def test_tool_node_no_timeout_by_default() -> None:
+    """Without timeout parameter, fast tools work as before (backward compat)."""
+    tool_node = ToolNode([fast_tool])
+    msg = AIMessage("", tool_calls=[ToolCall(name="fast_tool", args={"x": 1}, id="1")])
+    result = await tool_node.ainvoke(
+        {"messages": [msg]}, config=_create_config_with_runtime()
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "result: 1"
+
+
+async def test_tool_node_timeout_parallel_tools() -> None:
+    """Timeout applies to each tool individually in parallel execution."""
+    tool_node = ToolNode([slow_tool, fast_tool], timeout=0.5)
+    msg = AIMessage(
+        "",
+        tool_calls=[
+            ToolCall(name="slow_tool", args={"x": 1}, id="1"),
+            ToolCall(name="fast_tool", args={"x": 2}, id="2"),
+        ],
+    )
+    result = await tool_node.ainvoke(
+        {"messages": [msg]}, config=_create_config_with_runtime()
+    )
+    messages = result["messages"]
+    assert len(messages) == 2
+    # One should succeed, one should timeout
+    statuses = {m.name: m.status for m in messages}
+    assert statuses["fast_tool"] == "success"
+    assert statuses["slow_tool"] == "error"
