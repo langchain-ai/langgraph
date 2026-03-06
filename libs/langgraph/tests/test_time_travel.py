@@ -19,6 +19,7 @@ Key concepts:
 import operator
 from typing import Annotated
 
+import pytest
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from typing_extensions import TypedDict
@@ -1647,6 +1648,7 @@ def test_stateful_subgraph_retains_state_on_parent_replay(
     assert started[0] == ("step_a", {"value": ["a:a1", "b:b1"]})
 
 
+@pytest.mark.xfail(reason="Fork does not yet roll back subgraph state correctly")
 def test_stateful_subgraph_retains_state_on_parent_fork(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:

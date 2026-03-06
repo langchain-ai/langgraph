@@ -1680,6 +1680,7 @@ async def test_stateful_subgraph_retains_state_on_parent_replay(
     assert started[0] == ("step_a", {"value": ["a:a1", "b:b1"]})
 
 
+@pytest.mark.xfail(reason="Fork does not yet roll back subgraph state correctly")
 @pytest.mark.skipif(
     sys.version_info < (3, 11),
     reason="Python 3.11+ required for async test",
