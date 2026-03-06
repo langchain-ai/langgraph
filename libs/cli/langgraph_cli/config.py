@@ -42,6 +42,7 @@ def has_disallowed_build_command_content(command: str) -> bool:
         return True
     return False
 
+
 MIN_PYTHON_VERSION = "3.11"
 DEFAULT_PYTHON_VERSION = "3.11"
 
