@@ -1137,9 +1137,14 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         """Find the subgraph checkpoint that was current at the parent's
         checkpoint time, using the parent checkpoint_id as an upper bound.
 
-        Returns a CheckpointTuple with the historical channel_values but fresh
-        execution state (empty channel_versions/versions_seen) so the subgraph
-        re-runs its nodes while retaining accumulated data.
+        We return a checkpoint with the historical channel_values but empty
+        channel_versions and versions_seen (via `empty_checkpoint()`). This is
+        intentional: the node scheduling logic in `_triggers()` decides whether
+        to run a node by comparing channel_versions against that node's
+        versions_seen. By clearing both, every channel looks "new" to every
+        node, which forces all nodes to re-trigger. Without this, the restored
+        checkpoint's versions would show all nodes as up-to-date and nothing
+        would be scheduled to run.
 
         Returns None to start fresh if no such checkpoint exists."""
         parent_checkpoint_id = self._get_parent_checkpoint_id()
@@ -1368,6 +1373,9 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         return parent_checkpoint_id
 
     async def _aget_checkpoint_before_parent(self) -> CheckpointTuple | None:
+        """Async version of `_get_checkpoint_before_parent`. See that method's
+        docstring for details on why we use empty_checkpoint() with only
+        channel_values restored."""
         parent_checkpoint_id = await self._aget_parent_checkpoint_id()
         if parent_checkpoint_id and self.checkpointer:
             before_config: RunnableConfig = {
