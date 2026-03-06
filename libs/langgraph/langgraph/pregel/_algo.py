@@ -40,6 +40,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
+    CONFIG_KEY_REPLAYING,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RUNTIME,
     CONFIG_KEY_SCRATCHPAD,
@@ -579,13 +580,15 @@ def prepare_single_task(
         proc = processes[name]
         if checkpoint_null_version is None:
             return
-        # If any of the channels read by this process were updated
+        # If any of the channels read by this process were updated.
+        is_replaying = configurable.get(CONFIG_KEY_REPLAYING, False)
         if _triggers(
             channels,
             checkpoint["channel_versions"],
             checkpoint["versions_seen"].get(name),
             checkpoint_null_version,
             proc,
+            is_replaying=is_replaying,
         ):
             triggers = tuple(sorted(proc.triggers))
             # create task id
@@ -1036,8 +1039,10 @@ def _triggers(
     seen: ChannelVersions | None,
     null_version: V,
     proc: PregelNode,
+    *,
+    is_replaying: bool = False,
 ) -> bool:
-    if seen is None:
+    if is_replaying or seen is None:
         for chan in proc.triggers:
             if channels[chan].is_available():
                 return True
