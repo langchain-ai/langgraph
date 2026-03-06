@@ -245,9 +245,9 @@ class PregelLoop:
         self.interrupt_before = interrupt_before
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
-        self.is_replaying = CONFIG_KEY_CHECKPOINT_ID in config[
+        self.is_replaying = CONFIG_KEY_CHECKPOINT_ID in config[CONF] or config[
             CONF
-        ] or config[CONF].get(CONFIG_KEY_REPLAYING, False)
+        ].get(CONFIG_KEY_REPLAYING, False)
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
@@ -1106,6 +1106,59 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             },
         )
 
+    def _get_parent_checkpoint_id(self) -> str | None:
+        """Get the parent checkpoint_id to use as an upper bound for finding
+        the subgraph's checkpoint. For forks, we need the original parent
+        checkpoint (not the fork), so we look up the parent checkpoint's
+        parent_config."""
+        checkpoint_map = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
+        parent_ns = NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
+        parent_checkpoint_id = checkpoint_map.get(parent_ns)
+        if not parent_checkpoint_id or not self.checkpointer:
+            return None
+        # Check if this is a fork (source=update) — if so, use the fork's
+        # parent checkpoint_id instead, since the fork was created after
+        # the subgraph's checkpoints from the original execution.
+        parent_config: RunnableConfig = {
+            **self.checkpoint_config,
+            CONF: {
+                **self.checkpoint_config.get(CONF, {}),
+                CONFIG_KEY_CHECKPOINT_NS: parent_ns,
+                CONFIG_KEY_CHECKPOINT_ID: parent_checkpoint_id,
+            },
+        }
+        parent_saved = self.checkpointer.get_tuple(parent_config)
+        if parent_saved and parent_saved.metadata.get("source") == "update":
+            if parent_saved.parent_config:
+                return parent_saved.parent_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
+        return parent_checkpoint_id
+
+    def _get_checkpoint_before_parent(self) -> CheckpointTuple | None:
+        """Find the subgraph checkpoint that was current at the parent's
+        checkpoint time, using the parent checkpoint_id as an upper bound.
+
+        Returns a CheckpointTuple with the historical channel_values but fresh
+        execution state (empty channel_versions/versions_seen) so the subgraph
+        re-runs its nodes while retaining accumulated data.
+
+        Returns None to start fresh if no such checkpoint exists."""
+        parent_checkpoint_id = self._get_parent_checkpoint_id()
+        if parent_checkpoint_id and self.checkpointer:
+            before_config: RunnableConfig = {
+                CONF: {"checkpoint_id": parent_checkpoint_id}
+            }
+            for saved in self.checkpointer.list(
+                self.checkpoint_config, before=before_config, limit=1
+            ):
+                checkpoint = empty_checkpoint()
+                checkpoint["channel_values"] = saved.checkpoint.get(
+                    "channel_values", {}
+                )
+                return CheckpointTuple(
+                    self.checkpoint_config, checkpoint, {"step": -2}, None, []
+                )
+        return None
+
     # context manager
 
     def __enter__(self) -> Self:
@@ -1115,12 +1168,14 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             saved = None
         # When replaying a subgraph that wasn't in the checkpoint map
         # (parent checkpoint predates this subgraph), start fresh.
+        # For stateful subgraphs (checkpointer=True), find the checkpoint
+        # that was current at the parent's checkpoint time.
         if (
             saved is not None
             and self.config[CONF].get(CONFIG_KEY_REPLAYING)
             and not self.checkpoint_config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_ID)
         ):
-            saved = None
+            saved = self._get_checkpoint_before_parent()
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
@@ -1292,6 +1347,48 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             },
         )
 
+    async def _aget_parent_checkpoint_id(self) -> str | None:
+        checkpoint_map = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
+        parent_ns = NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
+        parent_checkpoint_id = checkpoint_map.get(parent_ns)
+        if not parent_checkpoint_id or not self.checkpointer:
+            return None
+        parent_config: RunnableConfig = {
+            **self.checkpoint_config,
+            CONF: {
+                **self.checkpoint_config.get(CONF, {}),
+                CONFIG_KEY_CHECKPOINT_NS: parent_ns,
+                CONFIG_KEY_CHECKPOINT_ID: parent_checkpoint_id,
+            },
+        }
+        parent_saved = await self.checkpointer.aget_tuple(parent_config)
+        if parent_saved and parent_saved.metadata.get("source") == "update":
+            if parent_saved.parent_config:
+                return parent_saved.parent_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
+        return parent_checkpoint_id
+
+    async def _aget_checkpoint_before_parent(self) -> CheckpointTuple | None:
+        parent_checkpoint_id = await self._aget_parent_checkpoint_id()
+        if parent_checkpoint_id and self.checkpointer:
+            before_config: RunnableConfig = {
+                CONF: {"checkpoint_id": parent_checkpoint_id}
+            }
+            async for saved in self.checkpointer.alist(
+                self.checkpoint_config, before=before_config, limit=1
+            ):
+                checkpoint = empty_checkpoint()
+                checkpoint["channel_values"] = saved.checkpoint.get(
+                    "channel_values", {}
+                )
+                return CheckpointTuple(
+                    self.checkpoint_config,
+                    checkpoint,
+                    {"step": -2},
+                    None,
+                    [],
+                )
+        return None
+
     # context manager
 
     async def __aenter__(self) -> Self:
@@ -1301,12 +1398,14 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             saved = None
         # When replaying a subgraph that wasn't in the checkpoint map
         # (parent checkpoint predates this subgraph), start fresh.
+        # For stateful subgraphs (checkpointer=True), find the checkpoint
+        # that was current at the parent's checkpoint time.
         if (
             saved is not None
             and self.config[CONF].get(CONFIG_KEY_REPLAYING)
             and not self.checkpoint_config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_ID)
         ):
-            saved = None
+            saved = await self._aget_checkpoint_before_parent()
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
