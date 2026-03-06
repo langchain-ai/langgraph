@@ -1613,6 +1613,112 @@ def test_tool_node_stream_writer() -> None:
     ]
 
 
+async def test_async_tool_node_stream_writer() -> None:
+    """Regression: get_stream_writer() must work inside async tools via ToolNode.astream."""
+
+    @dec_tool
+    async def async_streaming_tool(x: int) -> str:
+        """Do something async with writer."""
+        my_writer = get_stream_writer()
+        for value in ["foo", "bar", "baz"]:
+            my_writer({"custom_tool_value": value})
+        return str(x)
+
+    tool_node = ToolNode([async_streaming_tool])
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("tools", tool_node)
+        .add_edge(START, "tools")
+        .compile()
+    )
+
+    tool_call = {
+        "name": "async_streaming_tool",
+        "args": {"x": 1},
+        "id": "1",
+        "type": "tool_call",
+    }
+    inputs = {"messages": [AIMessage("", tool_calls=[tool_call])]}
+
+    chunks = [c async for c in graph.astream(inputs, stream_mode="custom")]
+    assert chunks == [
+        {"custom_tool_value": "foo"},
+        {"custom_tool_value": "bar"},
+        {"custom_tool_value": "baz"},
+    ]
+
+    chunks = [c async for c in graph.astream(inputs, stream_mode=["custom", "updates"])]
+    assert chunks == [
+        ("custom", {"custom_tool_value": "foo"}),
+        ("custom", {"custom_tool_value": "bar"}),
+        ("custom", {"custom_tool_value": "baz"}),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        _AnyIdToolMessage(
+                            content="1",
+                            name="async_streaming_tool",
+                            tool_call_id="1",
+                        ),
+                    ],
+                },
+            },
+        ),
+    ]
+
+
+async def test_async_tool_node_stream_writer_parallel() -> None:
+    """Regression: get_stream_writer() must work for parallel async tools via asyncio.gather."""
+
+    @dec_tool
+    async def tool_a(x: int) -> str:
+        """Tool A."""
+        get_stream_writer()({"tool": "a", "x": x})
+        return f"a:{x}"
+
+    @dec_tool
+    async def tool_b(x: int) -> str:
+        """Tool B."""
+        get_stream_writer()({"tool": "b", "x": x})
+        return f"b:{x}"
+
+    tool_node = ToolNode([tool_a, tool_b])
+    graph = (
+        StateGraph(MessagesState)
+        .add_node("tools", tool_node)
+        .add_edge(START, "tools")
+        .compile()
+    )
+
+    inputs = {
+        "messages": [
+            AIMessage(
+                "",
+                tool_calls=[
+                    {
+                        "name": "tool_a",
+                        "args": {"x": 1},
+                        "id": "id_a",
+                        "type": "tool_call",
+                    },
+                    {
+                        "name": "tool_b",
+                        "args": {"x": 2},
+                        "id": "id_b",
+                        "type": "tool_call",
+                    },
+                ],
+            )
+        ],
+    }
+
+    chunks = [c async for c in graph.astream(inputs, stream_mode="custom")]
+    assert {"tool": "a", "x": 1} in chunks
+    assert {"tool": "b", "x": 2} in chunks
+
+
 def test_tool_call_request_setattr_deprecation_warning():
     """Test that ToolCallRequest raises a deprecation warning on direct attribute modification."""
     import warnings
