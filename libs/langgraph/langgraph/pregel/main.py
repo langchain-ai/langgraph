@@ -2454,7 +2454,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v2"],
+        version: Literal["v2"],
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[StreamPart[OutputT, StateT]]: ...
 
@@ -2473,7 +2473,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v1"] = ...,
+        version: Literal["v1"] = ...,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[dict[str, Any] | Any]: ...
 
@@ -2491,7 +2491,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> Iterator[dict[str, Any] | Any]:
         """Stream graph steps for a single input.
@@ -2654,8 +2654,8 @@ class Pregel(
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
             # resolve mappers for v2 stream coercion
-            _output_mapper = self._output_mapper if stream_version == "v2" else None
-            _state_mapper = self._state_mapper if stream_version == "v2" else None
+            _output_mapper = self._output_mapper if version == "v2" else None
+            _state_mapper = self._state_mapper if version == "v2" else None
 
             with SyncPregelLoop(
                 input,
@@ -2734,7 +2734,7 @@ class Pregel(
                             subgraphs,
                             stream.get,
                             queue.Empty,
-                            stream_version,
+                            version,
                             _output_mapper,
                             _state_mapper,
                         )
@@ -2749,7 +2749,7 @@ class Pregel(
                 subgraphs,
                 stream.get,
                 queue.Empty,
-                stream_version,
+                version,
                 _output_mapper,
                 _state_mapper,
             )
@@ -2785,7 +2785,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v2"],
+        version: Literal["v2"],
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[StreamPart[OutputT, StateT]]: ...
 
@@ -2804,7 +2804,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v1"] = ...,
+        version: Literal["v1"] = ...,
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[dict[str, Any] | Any]: ...
 
@@ -2822,7 +2822,7 @@ class Pregel(
         durability: Durability | None = None,
         subgraphs: bool = False,
         debug: bool | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Unpack[DeprecatedKwargs],
     ) -> AsyncIterator[dict[str, Any] | Any]:
         """Asynchronously stream graph steps for a single input.
@@ -3020,8 +3020,8 @@ class Pregel(
             config[CONF][CONFIG_KEY_RUNTIME] = runtime
 
             # resolve mappers for v2 stream coercion
-            _output_mapper = self._output_mapper if stream_version == "v2" else None
-            _state_mapper = self._state_mapper if stream_version == "v2" else None
+            _output_mapper = self._output_mapper if version == "v2" else None
+            _state_mapper = self._state_mapper if version == "v2" else None
 
             async with AsyncPregelLoop(
                 input,
@@ -3119,7 +3119,7 @@ class Pregel(
                                 subgraphs,
                                 stream.get_nowait,
                                 asyncio.QueueEmpty,
-                                stream_version,
+                                version,
                                 _output_mapper,
                                 _state_mapper,
                             ):
@@ -3140,7 +3140,7 @@ class Pregel(
                 subgraphs,
                 stream.get_nowait,
                 asyncio.QueueEmpty,
-                stream_version,
+                version,
                 _output_mapper,
                 _state_mapper,
             ):
@@ -3175,7 +3175,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v2"],
+        version: Literal["v2"],
         **kwargs: Any,
     ) -> GraphOutput[OutputT]: ...
 
@@ -3192,7 +3192,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v2"],
+        version: Literal["v2"],
         **kwargs: Any,
     ) -> list[StreamPart[OutputT, StateT]]: ...
 
@@ -3209,7 +3209,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v1"] = ...,
+        version: Literal["v1"] = ...,
         **kwargs: Any,
     ) -> dict[str, Any] | Any: ...
 
@@ -3225,7 +3225,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Run the graph with a single input and config.
@@ -3249,7 +3249,7 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
-            stream_version: The streaming format version. `"v1"` (default) returns the
+            version: The streaming format version. `"v1"` (default) returns the
                 traditional format, `"v2"` returns `StreamPart` typed dicts when
                 `stream_mode` is not `"values"`.
             **kwargs: Additional keyword arguments to pass to the graph run.
@@ -3264,7 +3264,7 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
-        if stream_version == "v2":
+        if version == "v2":
             # v2: values stream parts carry interrupts directly
             for chunk in self.stream(
                 input,
@@ -3276,7 +3276,7 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
-                stream_version=stream_version,
+                version=version,
                 **kwargs,
             ):
                 if stream_mode == "values":
@@ -3320,7 +3320,7 @@ class Pregel(
                     chunks.append(chunk)
 
         if stream_mode == "values":
-            if stream_version == "v2":
+            if version == "v2":
                 return GraphOutput(value=latest, interrupts=tuple(interrupts))
             if interrupts:
                 return (
@@ -3345,7 +3345,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v2"],
+        version: Literal["v2"],
         **kwargs: Any,
     ) -> GraphOutput[OutputT]: ...
 
@@ -3362,7 +3362,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v2"],
+        version: Literal["v2"],
         **kwargs: Any,
     ) -> list[StreamPart[OutputT, StateT]]: ...
 
@@ -3379,7 +3379,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v1"] = ...,
+        version: Literal["v1"] = ...,
         **kwargs: Any,
     ) -> dict[str, Any] | Any: ...
 
@@ -3395,7 +3395,7 @@ class Pregel(
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         durability: Durability | None = None,
-        stream_version: Literal["v1", "v2"] = "v1",
+        version: Literal["v1", "v2"] = "v1",
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         """Asynchronously run the graph with a single input and config.
@@ -3419,7 +3419,7 @@ class Pregel(
                 - `"sync"`: Changes are persisted synchronously before the next step starts.
                 - `"async"`: Changes are persisted asynchronously while the next step executes.
                 - `"exit"`: Changes are persisted only when the graph exits.
-            stream_version: The streaming format version. `"v1"` (default) returns the
+            version: The streaming format version. `"v1"` (default) returns the
                 traditional format, `"v2"` returns `StreamPart` typed dicts when
                 `stream_mode` is not `"values"`.
             **kwargs: Additional keyword arguments to pass to the graph run.
@@ -3434,7 +3434,7 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
-        if stream_version == "v2":
+        if version == "v2":
             # v2: values stream parts carry interrupts directly
             async for chunk in self.astream(
                 input,
@@ -3446,7 +3446,7 @@ class Pregel(
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 durability=durability,
-                stream_version=stream_version,
+                version=version,
                 **kwargs,
             ):
                 if stream_mode == "values":
@@ -3490,7 +3490,7 @@ class Pregel(
                     chunks.append(chunk)
 
         if stream_mode == "values":
-            if stream_version == "v2":
+            if version == "v2":
                 return GraphOutput(value=latest, interrupts=tuple(interrupts))
             if interrupts:
                 return (
@@ -3556,7 +3556,7 @@ def _output(
     stream_subgraphs: bool,
     getter: Callable[[], tuple[tuple[str, ...], str, Any]],
     empty_exc: type[Exception],
-    stream_version: Literal["v1", "v2"] = "v1",
+    version: Literal["v1", "v2"] = "v1",
     output_mapper: Callable[[Any], Any] | None = None,
     state_mapper: Callable[[Any], Any] | None = None,
 ) -> Iterator:
@@ -3586,7 +3586,7 @@ def _output(
                     )
                 )
         if mode in stream_mode:
-            if stream_version == "v2":
+            if version == "v2":
                 if mode == "values":
                     # pop __interrupt__ into typed field, coerce data
                     ints: tuple[Interrupt, ...] = ()

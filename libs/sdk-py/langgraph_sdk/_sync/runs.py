@@ -95,7 +95,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-        stream_version: Literal["v1"] = "v1",
+        version: Literal["v1"] = "v1",
     ) -> Iterator[StreamPart]: ...
 
     @overload
@@ -125,7 +125,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-        stream_version: Literal["v2"],
+        version: Literal["v2"],
     ) -> Iterator[StreamPartV2]: ...
 
     @overload
@@ -154,7 +154,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-        stream_version: Literal["v1"] = "v1",
+        version: Literal["v1"] = "v1",
     ) -> Iterator[StreamPart]: ...
 
     @overload
@@ -183,7 +183,7 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-        stream_version: Literal["v2"],
+        version: Literal["v2"],
     ) -> Iterator[StreamPartV2]: ...
 
     def stream(
@@ -215,7 +215,7 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-        stream_version: StreamVersion = "v1",
+        version: StreamVersion = "v1",
     ) -> Iterator[StreamPart | StreamPartV2]:
         """Create a run and stream the results.
 
@@ -256,7 +256,7 @@ class SyncRunsClient:
                 "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
                 "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
-            stream_version: Stream format version. "v1" (default) returns raw SSE StreamPart
+            version: Stream format version. "v1" (default) returns raw SSE StreamPart
                 NamedTuples. "v2" returns typed dicts with `type`, `ns`, and `data` keys.
 
         Returns:
@@ -341,7 +341,7 @@ class SyncRunsClient:
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
-        if stream_version == "v2":
+        if version == "v2":
             return _wrap_stream_v2_sync(raw)
         return raw
 
