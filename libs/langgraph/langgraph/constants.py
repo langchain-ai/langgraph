@@ -5,6 +5,7 @@ from warnings import warn
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINTER,
+    INTERRUPT,
     TASKS,
 )
 from langgraph.warnings import LangGraphDeprecatedSinceV10
@@ -14,6 +15,7 @@ __all__ = (
     "TAG_HIDDEN",
     "START",
     "END",
+    "INTERRUPT",
     # retained for backwards compatibility (mostly langgraph-api), should be removed in v2 (or earlier)
     "CONF",
     "TASKS",
