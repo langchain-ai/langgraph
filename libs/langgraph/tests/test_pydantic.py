@@ -6,14 +6,14 @@ import re
 import sys
 import uuid
 from enum import Enum
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
 import pytest
-
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import (
     BaseModel,
     ByteSize,
+    ConfigDict,
     Field,
     SecretStr,
     confloat,
@@ -562,3 +562,132 @@ async def test_pydantic_aliased_fields_async():
     result = await graph.ainvoke({"q": "hello"})
     assert result["query"] == "hello"
     assert result["result"] == "processed: hello"
+
+
+def test_pydantic_aliased_channel_naming_wire_format_integration() -> None:
+    """Integration test: alias channel naming keeps wire-format keys consistent."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    class Payload(BaseModel):
+        model_config = ConfigDict(serialize_by_alias=True)
+        foo_zero: str = Field(alias="fooZero")
+
+    class State(BaseModel):
+        model_config = ConfigDict(serialize_by_alias=True)
+        channel_zero: str = Field(alias="channelZero")
+        channel_one: Payload = Field(alias="channelOne")
+        step_count: int = Field(default=0, alias="stepCount")
+
+    def node_a(state: State) -> dict[str, Any]:
+        return {"step_count": state.step_count + 1}
+
+    def node_b(state: State) -> dict[str, Any]:
+        return {"step_count": state.step_count + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_b", END)
+
+    graph = builder.compile(
+        checkpointer=InMemorySaver(),
+        interrupt_after=["node_a"],
+        channel_naming="alias",
+    )
+
+    config = {"configurable": {"thread_id": "alias-wire-format"}}
+    first = graph.invoke(
+        {
+            "channelZero": "Alice",
+            "channelOne": {"fooZero": "payload"},
+        },
+        config,
+    )
+    assert first["channelZero"] == "Alice"
+    assert first["stepCount"] == 1
+    assert "step_count" not in first
+
+    snapshot = graph.get_state(config)
+    assert snapshot.values["channelZero"] == "Alice"
+    assert snapshot.values["stepCount"] == 1
+    assert "step_count" not in snapshot.values
+
+    resumed_values = list(graph.stream(None, config, stream_mode="values"))
+    assert resumed_values[-1]["stepCount"] == 2
+    assert "step_count" not in resumed_values[-1]
+
+    updates = list(
+        graph.stream(
+            {
+                "channelZero": "Bob",
+                "channelOne": {"fooZero": "payload2"},
+            },
+            {"configurable": {"thread_id": "alias-wire-format-updates"}},
+            stream_mode="updates",
+        )
+    )
+    assert updates[0]["node_a"]["stepCount"] == 1
+    assert "step_count" not in updates[0]["node_a"]
+
+
+def test_pydantic_aliased_debug_stream_and_snapshot_integration() -> None:
+    """Integration test: debug stream + snapshots use alias keys with alias naming."""
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    class State(BaseModel):
+        channel_zero: str = Field(alias="channelZero")
+        step_count: int = Field(default=0, alias="stepCount")
+
+    def node_a(state: State) -> dict[str, Any]:
+        return {"step_count": state.step_count + 1}
+
+    def node_b(state: State) -> dict[str, Any]:
+        return {"step_count": state.step_count + 1}
+
+    builder = StateGraph(State)
+    builder.add_node("node_a", node_a)
+    builder.add_node("node_b", node_b)
+    builder.add_edge(START, "node_a")
+    builder.add_edge("node_a", "node_b")
+    builder.add_edge("node_b", END)
+
+    graph = builder.compile(
+        checkpointer=InMemorySaver(),
+        channel_naming="alias",
+    )
+
+    config = {"configurable": {"thread_id": "alias-debug-snapshots"}}
+    saw_checkpoint_payload = False
+    saw_step_alias_in_checkpoint = False
+    saw_inline_snapshot = False
+
+    for mode, event in graph.stream(
+        {"channelZero": "streamed"}, config, stream_mode=["debug"]
+    ):
+        assert mode == "debug"
+        if event["type"] != "checkpoint":
+            continue
+        values = event["payload"]["values"]
+        if not values:
+            continue
+        saw_checkpoint_payload = True
+        assert "channelZero" in values
+        assert "channel_zero" not in values
+        if "stepCount" in values:
+            saw_step_alias_in_checkpoint = True
+        inline_snapshot = graph.get_state(config)
+        if inline_snapshot.values:
+            saw_inline_snapshot = True
+            assert "channelZero" in inline_snapshot.values
+            assert "channel_zero" not in inline_snapshot.values
+
+    assert saw_checkpoint_payload
+    assert saw_step_alias_in_checkpoint
+    assert saw_inline_snapshot
+
+    history = list(graph.get_state_history(config))
+    assert history
+    assert any("channelZero" in snap.values for snap in history if snap.values)
+    assert all("channel_zero" not in snap.values for snap in history if snap.values)

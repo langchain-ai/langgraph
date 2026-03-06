@@ -1043,6 +1043,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
         store: BaseStore | None = None,
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
+        channel_naming: Literal["field", "alias"] = "field",
         debug: bool = False,
         name: str | None = None,
     ) -> CompiledStateGraph[StateT, ContextT, InputT, OutputT]:
@@ -1075,6 +1076,8 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
             interrupt_before: An optional list of node names to interrupt before.
             interrupt_after: An optional list of node names to interrupt after.
+            channel_naming: Top-level key naming for graph outputs and snapshots.
+                `"field"` uses schema field names, `"alias"` uses Pydantic aliases.
             debug: A flag indicating whether to enable debug mode.
             name: The name to use for the compiled graph.
 
@@ -1139,6 +1142,11 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
 
         # Compute alias map for input schema (Pydantic models with aliased fields)
         input_alias_map = _get_pydantic_alias_map(self.input_schema) or None
+        output_alias_map = (
+            _get_pydantic_field_alias_map(self.state_schema) or None
+            if channel_naming == "alias"
+            else None
+        )
 
         compiled = CompiledStateGraph[StateT, ContextT, InputT, OutputT](
             builder=self,
@@ -1152,6 +1160,7 @@ class StateGraph(Generic[StateT, ContextT, InputT, OutputT]):
             },
             input_channels=START,
             input_alias_map=input_alias_map,
+            output_alias_map=output_alias_map,
             stream_mode="updates",
             output_channels=output_channels,
             stream_channels=stream_channels,
@@ -1647,6 +1656,12 @@ def _get_pydantic_alias_map(schema: type[Any]) -> dict[str, str]:
             alias_map[alias] = field_name
 
     return alias_map
+
+
+def _get_pydantic_field_alias_map(schema: type[Any]) -> dict[str, str]:
+    """Extract a mapping of field_name -> alias for Pydantic models."""
+    alias_map = _get_pydantic_alias_map(schema)
+    return {field_name: alias for alias, field_name in alias_map.items()}
 
 
 def _get_channels(
