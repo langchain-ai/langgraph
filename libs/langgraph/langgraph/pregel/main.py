@@ -3091,13 +3091,13 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
+        subgraphs = kwargs.get("subgraphs", False)
+
         for chunk in self.stream(
             input,
             config,
             context=context,
-            stream_mode=["updates", "values"]
-            if stream_mode == "values"
-            else stream_mode,
+            stream_mode="values" if stream_mode == "values" else stream_mode,
             print_mode=print_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
@@ -3106,20 +3106,16 @@ class Pregel(
             **kwargs,
         ):
             if stream_mode == "values":
-                if len(chunk) == 2:
-                    mode, payload = cast(tuple[StreamMode, Any], chunk)
-                else:
-                    _, mode, payload = cast(
-                        tuple[tuple[str, ...], StreamMode, Any], chunk
-                    )
+                # when subgraphs=True with a single stream_mode, stream()
+                # yields (namespace, payload) tuples — unwrap them
+                if subgraphs and isinstance(chunk, tuple):
+                    chunk = chunk[-1]
+                latest = chunk
                 if (
-                    mode == "updates"
-                    and isinstance(payload, dict)
-                    and (ints := payload.get(INTERRUPT)) is not None
+                    isinstance(chunk, dict)
+                    and (ints := chunk.get(INTERRUPT)) is not None
                 ):
                     interrupts.extend(ints)
-                elif mode == "values":
-                    latest = payload
             else:
                 chunks.append(chunk)
 
@@ -3181,13 +3177,13 @@ class Pregel(
         chunks: list[dict[str, Any] | Any] = []
         interrupts: list[Interrupt] = []
 
+        subgraphs = kwargs.get("subgraphs", False)
+
         async for chunk in self.astream(
             input,
             config,
             context=context,
-            stream_mode=["updates", "values"]
-            if stream_mode == "values"
-            else stream_mode,
+            stream_mode="values" if stream_mode == "values" else stream_mode,
             print_mode=print_mode,
             output_keys=output_keys,
             interrupt_before=interrupt_before,
@@ -3196,20 +3192,16 @@ class Pregel(
             **kwargs,
         ):
             if stream_mode == "values":
-                if len(chunk) == 2:
-                    mode, payload = cast(tuple[StreamMode, Any], chunk)
-                else:
-                    _, mode, payload = cast(
-                        tuple[tuple[str, ...], StreamMode, Any], chunk
-                    )
+                # when subgraphs=True with a single stream_mode, astream()
+                # yields (namespace, payload) tuples — unwrap them
+                if subgraphs and isinstance(chunk, tuple):
+                    chunk = chunk[-1]
+                latest = chunk
                 if (
-                    mode == "updates"
-                    and isinstance(payload, dict)
-                    and (ints := payload.get(INTERRUPT)) is not None
+                    isinstance(chunk, dict)
+                    and (ints := chunk.get(INTERRUPT)) is not None
                 ):
                     interrupts.extend(ints)
-                elif mode == "values":
-                    latest = payload
             else:
                 chunks.append(chunk)
 
