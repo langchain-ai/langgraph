@@ -1153,7 +1153,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
 
         Returns None to start fresh if no such checkpoint exists."""
         parent_checkpoint_id = self._get_parent_checkpoint_id()
-        if parent_checkpoint_id and self.checkpointer:
+        if parent_checkpoint_id:
             parent_ns = (
                 NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
             )
@@ -1377,7 +1377,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     async def _aget_checkpoint_after_parent(self) -> CheckpointTuple | None:
         """Async version of `_get_checkpoint_after_parent`."""
         parent_checkpoint_id = await self._aget_parent_checkpoint_id()
-        if parent_checkpoint_id and self.checkpointer:
+        if parent_checkpoint_id:
             parent_ns = (
                 NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
             )
