@@ -1601,16 +1601,9 @@ async def test_checkpoint_ns_accessible_in_subgraph(
 async def test_stateful_subgraph_retains_state_on_parent_replay(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """With checkpointer=True, the subgraph retains its accumulated state
-    across parent invocations. Graph: parent_node -> sub_node.
-
-    Invoke the graph twice on the same thread. Each invocation triggers
-    two interrupts (step_a, step_b). After both complete, replay from the
-    checkpoint before sub_node in the 2nd invocation. The stateful subgraph
-    should see accumulated state from the 1st invocation (a:Alice, b:30)
-    but not the 2nd invocation's state (a:Bob, b:25)."""
-
-    observed_sub_input: list[tuple[str, dict]] = []
+    """Stateful subgraph (checkpointer=True) remembers accumulated state
+    from prior invocations when the parent replays."""
+    observed: list[tuple[str, dict]] = []
 
     class SubState(TypedDict):
         value: Annotated[list[str], operator.add]
@@ -1622,13 +1615,13 @@ async def test_stateful_subgraph_retains_state_on_parent_replay(
         return {"results": ["p"]}
 
     def step_a(state: SubState) -> SubState:
-        observed_sub_input.append(("step_a", dict(state)))
-        answer = interrupt("Question A")
+        observed.append(("step_a", dict(state)))
+        answer = interrupt("question_a")
         return {"value": [f"a:{answer}"]}
 
     def step_b(state: SubState) -> SubState:
-        observed_sub_input.append(("step_b", dict(state)))
-        answer = interrupt("Question B")
+        observed.append(("step_b", dict(state)))
+        answer = interrupt("question_b")
         return {"value": [f"b:{answer}"]}
 
     sub = (
@@ -1651,47 +1644,37 @@ async def test_stateful_subgraph_retains_state_on_parent_replay(
 
     config = {"configurable": {"thread_id": "1"}}
 
-    # 1st invocation: complete with 2 interrupts
-    await graph.ainvoke({"results": []}, config)  # step_a interrupt
-    await graph.ainvoke(Command(resume="Alice"), config)  # step_b interrupt
-    await graph.ainvoke(Command(resume="30"), config)  # complete
+    # === 1st invocation: answer "a1" and "b1" ===
+    await graph.ainvoke({"results": []}, config)       # hits step_a interrupt
+    await graph.ainvoke(Command(resume="a1"), config)   # hits step_b interrupt
+    await graph.ainvoke(Command(resume="b1"), config)   # completes
 
-    # Verify 1st invocation: subgraph started fresh
-    step_a_entries = [e for e in observed_sub_input if e[0] == "step_a"]
-    step_b_entries = [e for e in observed_sub_input if e[0] == "step_b"]
-    assert step_a_entries[0] == ("step_a", {"value": []})
-    assert step_b_entries[0] == ("step_b", {"value": ["a:Alice"]})
+    # step_a saw empty state (fresh subgraph)
+    assert observed[0] == ("step_a", {"value": []})
+    # step_b saw step_a's answer
+    assert observed[1] == ("step_b", {"value": ["a:a1"]})
 
-    # 2nd invocation: complete with 2 interrupts
-    observed_sub_input.clear()
-    await graph.ainvoke({"results": []}, config)  # step_a interrupt
-    await graph.ainvoke(Command(resume="Bob"), config)  # step_b interrupt
-    await graph.ainvoke(Command(resume="25"), config)  # complete
+    # === 2nd invocation: answer "a2" and "b2" ===
+    observed.clear()
+    await graph.ainvoke({"results": []}, config)       # hits step_a interrupt
+    await graph.ainvoke(Command(resume="a2"), config)   # hits step_b interrupt
+    await graph.ainvoke(Command(resume="b2"), config)   # completes
 
-    # Verify 2nd invocation: subgraph retained state from 1st invocation
-    step_a_entries = [e for e in observed_sub_input if e[0] == "step_a"]
-    step_b_entries = [e for e in observed_sub_input if e[0] == "step_b"]
-    assert step_a_entries[0] == ("step_a", {"value": ["a:Alice", "b:30"]})
-    assert step_b_entries[0] == (
-        "step_b",
-        {"value": ["a:Alice", "b:30", "a:Bob"]},
-    )
+    # Stateful subgraph retained state from 1st invocation
+    assert observed[0] == ("step_a", {"value": ["a:a1", "b:b1"]})
+    assert observed[1] == ("step_b", {"value": ["a:a1", "b:b1", "a:a2"]})
 
-    # Replay from the checkpoint before sub_node in the 2nd invocation
+    # === Replay from checkpoint before sub_node in 2nd invocation ===
     history = [s async for s in graph.aget_state_history(config)]
-    before_sub = [s for s in history if s.next == ("sub_node",)]
-    # First match is from the 2nd invocation (history is newest-first)
-    before_sub_2nd = before_sub[0]
+    # History is newest-first, so first match = 2nd invocation
+    before_sub_2nd = [s for s in history if s.next == ("sub_node",)][0]
 
-    observed_sub_input.clear()
+    observed.clear()
     replay = await graph.ainvoke(None, before_sub_2nd.config)
-    assert "__interrupt__" in replay
 
-    # Stateful subgraph retains state from 1st invocation, not from 2nd
-    assert len(observed_sub_input) > 0
-    step_a_state = observed_sub_input[0]
-    assert step_a_state[0] == "step_a"
-    assert step_a_state[1]["value"] == ["a:Alice", "b:30"]
+    assert "__interrupt__" in replay
+    # Replay sees 1st invocation's final state, NOT 2nd invocation's
+    assert observed[0] == ("step_a", {"value": ["a:a1", "b:b1"]})
 
 
 @pytest.mark.skipif(
@@ -1701,11 +1684,9 @@ async def test_stateful_subgraph_retains_state_on_parent_replay(
 async def test_stateful_subgraph_retains_state_on_parent_fork(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """With checkpointer=True, forking from the parent checkpoint before the
-    2nd sub_node execution preserves the subgraph's accumulated state from
-    the 1st invocation."""
-
-    observed_sub_input: list[tuple[str, dict]] = []
+    """Stateful subgraph (checkpointer=True) remembers accumulated state
+    from prior invocations when the parent forks."""
+    observed: list[tuple[str, dict]] = []
 
     class SubState(TypedDict):
         value: Annotated[list[str], operator.add]
@@ -1717,13 +1698,13 @@ async def test_stateful_subgraph_retains_state_on_parent_fork(
         return {"results": ["p"]}
 
     def step_a(state: SubState) -> SubState:
-        observed_sub_input.append(("step_a", dict(state)))
-        answer = interrupt("Question A")
+        observed.append(("step_a", dict(state)))
+        answer = interrupt("question_a")
         return {"value": [f"a:{answer}"]}
 
     def step_b(state: SubState) -> SubState:
-        observed_sub_input.append(("step_b", dict(state)))
-        answer = interrupt("Question B")
+        observed.append(("step_b", dict(state)))
+        answer = interrupt("question_b")
         return {"value": [f"b:{answer}"]}
 
     sub = (
@@ -1746,34 +1727,30 @@ async def test_stateful_subgraph_retains_state_on_parent_fork(
 
     config = {"configurable": {"thread_id": "1"}}
 
-    # 1st invocation: complete with 2 interrupts
-    await graph.ainvoke({"results": []}, config)  # step_a interrupt
-    await graph.ainvoke(Command(resume="Alice"), config)  # step_b interrupt
-    await graph.ainvoke(Command(resume="30"), config)  # complete
+    # === 1st invocation: answer "a1" and "b1" ===
+    await graph.ainvoke({"results": []}, config)       # hits step_a interrupt
+    await graph.ainvoke(Command(resume="a1"), config)   # hits step_b interrupt
+    await graph.ainvoke(Command(resume="b1"), config)   # completes
 
-    # 2nd invocation: complete with 2 interrupts
-    await graph.ainvoke({"results": []}, config)  # step_a interrupt
-    await graph.ainvoke(Command(resume="Bob"), config)  # step_b interrupt
-    await graph.ainvoke(Command(resume="25"), config)  # complete
+    # === 2nd invocation: answer "a2" and "b2" ===
+    await graph.ainvoke({"results": []}, config)       # hits step_a interrupt
+    await graph.ainvoke(Command(resume="a2"), config)   # hits step_b interrupt
+    await graph.ainvoke(Command(resume="b2"), config)   # completes
 
-    # Fork from the checkpoint before sub_node in the 2nd invocation
+    # === Fork from checkpoint before sub_node in 2nd invocation ===
     history = [s async for s in graph.aget_state_history(config)]
-    before_sub = [s for s in history if s.next == ("sub_node",)]
-    before_sub_2nd = before_sub[0]
+    before_sub_2nd = [s for s in history if s.next == ("sub_node",)][0]
 
     fork_config = await graph.aupdate_state(
         before_sub_2nd.config, {"results": ["forked"]}
     )
 
-    observed_sub_input.clear()
+    observed.clear()
     fork_result = await graph.ainvoke(None, fork_config)
-    assert "__interrupt__" in fork_result
 
-    # Forked subgraph retains state from 1st invocation, not from 2nd
-    assert len(observed_sub_input) > 0
-    step_a_state = observed_sub_input[0]
-    assert step_a_state[0] == "step_a"
-    assert step_a_state[1]["value"] == ["a:Alice", "b:30"]
+    assert "__interrupt__" in fork_result
+    # Fork sees 1st invocation's final state, NOT 2nd invocation's
+    assert observed[0] == ("step_a", {"value": ["a:a1", "b:b1"]})
 
 
 @pytest.mark.skipif(
@@ -1783,15 +1760,9 @@ async def test_stateful_subgraph_retains_state_on_parent_fork(
 async def test_stateless_subgraph_starts_fresh_on_parent_replay(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
-    """Without checkpointer=True, the subgraph starts fresh when the parent
-    replays. Graph: parent_node -> sub_node.
-
-    Invoke the graph twice on the same thread. Each invocation triggers
-    two interrupts (step_a, step_b). After both complete, replay from the
-    checkpoint before sub_node in the 2nd invocation. The stateless subgraph
-    should see empty state because it has no persistent checkpoint history."""
-
-    observed_sub_input: list[tuple[str, dict]] = []
+    """Stateless subgraph (no checkpointer) always starts with empty state,
+    even after prior invocations have completed."""
+    observed: list[tuple[str, dict]] = []
 
     class SubState(TypedDict):
         value: Annotated[list[str], operator.add]
@@ -1803,13 +1774,13 @@ async def test_stateless_subgraph_starts_fresh_on_parent_replay(
         return {"results": ["p"]}
 
     def step_a(state: SubState) -> SubState:
-        observed_sub_input.append(("step_a", dict(state)))
-        answer = interrupt("Question A")
+        observed.append(("step_a", dict(state)))
+        answer = interrupt("question_a")
         return {"value": [f"a:{answer}"]}
 
     def step_b(state: SubState) -> SubState:
-        observed_sub_input.append(("step_b", dict(state)))
-        answer = interrupt("Question B")
+        observed.append(("step_b", dict(state)))
+        answer = interrupt("question_b")
         return {"value": [f"b:{answer}"]}
 
     sub = (
@@ -1818,7 +1789,7 @@ async def test_stateless_subgraph_starts_fresh_on_parent_replay(
         .add_node("step_b", step_b)
         .add_edge(START, "step_a")
         .add_edge("step_a", "step_b")
-        .compile()  # No checkpointer
+        .compile()  # no checkpointer — stateless
     )
 
     graph = (
@@ -1832,43 +1803,32 @@ async def test_stateless_subgraph_starts_fresh_on_parent_replay(
 
     config = {"configurable": {"thread_id": "1"}}
 
-    # 1st invocation: complete with 2 interrupts
-    await graph.ainvoke({"results": []}, config)  # step_a interrupt
-    await graph.ainvoke(Command(resume="Alice"), config)  # step_b interrupt
-    await graph.ainvoke(Command(resume="30"), config)  # complete
+    # === 1st invocation: answer "a1" and "b1" ===
+    await graph.ainvoke({"results": []}, config)       # hits step_a interrupt
+    await graph.ainvoke(Command(resume="a1"), config)   # hits step_b interrupt
+    await graph.ainvoke(Command(resume="b1"), config)   # completes
 
-    # Verify 1st invocation: subgraph started fresh
-    step_a_entries = [e for e in observed_sub_input if e[0] == "step_a"]
-    step_b_entries = [e for e in observed_sub_input if e[0] == "step_b"]
-    assert step_a_entries[0] == ("step_a", {"value": []})
-    assert step_b_entries[0] == ("step_b", {"value": ["a:Alice"]})
+    # step_a saw empty state, step_b saw only step_a's answer
+    assert observed[0] == ("step_a", {"value": []})
+    assert observed[1] == ("step_b", {"value": ["a:a1"]})
 
-    # 2nd invocation: complete with 2 interrupts
-    observed_sub_input.clear()
-    await graph.ainvoke({"results": []}, config)  # step_a interrupt
-    await graph.ainvoke(Command(resume="Bob"), config)  # step_b interrupt
-    await graph.ainvoke(Command(resume="25"), config)  # complete
+    # === 2nd invocation: answer "a2" and "b2" ===
+    observed.clear()
+    await graph.ainvoke({"results": []}, config)       # hits step_a interrupt
+    await graph.ainvoke(Command(resume="a2"), config)   # hits step_b interrupt
+    await graph.ainvoke(Command(resume="b2"), config)   # completes
 
-    # Verify 2nd invocation: stateless subgraph starts fresh again
-    step_a_entries = [e for e in observed_sub_input if e[0] == "step_a"]
-    step_b_entries = [e for e in observed_sub_input if e[0] == "step_b"]
-    assert step_a_entries[0] == ("step_a", {"value": []})
-    assert step_b_entries[0] == ("step_b", {"value": ["a:Bob"]})
+    # Stateless subgraph starts fresh — no memory of 1st invocation
+    assert observed[0] == ("step_a", {"value": []})
+    assert observed[1] == ("step_b", {"value": ["a:a2"]})
 
-    # Replay from the checkpoint before sub_node in the 2nd invocation
+    # === Replay from checkpoint before sub_node in 2nd invocation ===
     history = [s async for s in graph.aget_state_history(config)]
-    before_sub = [s for s in history if s.next == ("sub_node",)]
-    # First match is from the 2nd invocation (history is newest-first)
-    before_sub_2nd = before_sub[0]
+    before_sub_2nd = [s for s in history if s.next == ("sub_node",)][0]
 
-    observed_sub_input.clear()
+    observed.clear()
     replay = await graph.ainvoke(None, before_sub_2nd.config)
-    assert "__interrupt__" in replay
 
-    # Stateless subgraph starts fresh — no prior state
-    assert len(observed_sub_input) > 0
-    step_a_state = observed_sub_input[0]
-    assert step_a_state[0] == "step_a"
-    assert step_a_state[1]["value"] == [], (
-        "Stateless subgraph should start fresh on replay"
-    )
+    assert "__interrupt__" in replay
+    # Stateless subgraph starts completely fresh on replay
+    assert observed[0] == ("step_a", {"value": []})
