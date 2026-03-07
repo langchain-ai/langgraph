@@ -93,6 +93,14 @@ class MyEnum(Enum):
     BAR = "bar"
 
 
+class OuterContainer:
+    """Container with nested enum for testing nested enum serialization."""
+
+    class NestedEnum(str, Enum):
+        ALPHA = "alpha"
+        BETA = "beta"
+
+
 @dataclasses_json.dataclass_json
 @dataclasses.dataclass
 class Person:
@@ -983,3 +991,21 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_nested_enum_serde_roundtrip() -> None:
+    """Test that nested enum classes (defined inside another class) survive serialization.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6718.
+    Nested enums have __qualname__ like 'Outer.Inner' while __name__ is just 'Inner'.
+    Previously, serialization used __name__, making deserialization fail with
+    getattr(module, 'Inner') since 'Inner' isn't a top-level module attribute.
+    """
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("tests.test_jsonplus", "OuterContainer.NestedEnum")]
+    )
+    data = {"status": OuterContainer.NestedEnum.ALPHA}
+    dumped = serde.dumps_typed(data)
+    loaded = serde.loads_typed(dumped)
+    assert loaded["status"] == OuterContainer.NestedEnum.ALPHA
+    assert type(loaded["status"]) is OuterContainer.NestedEnum
