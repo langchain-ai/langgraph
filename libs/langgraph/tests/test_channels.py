@@ -9,6 +9,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
+from langgraph.types import Overwrite
 
 pytestmark = pytest.mark.anyio
 
@@ -88,6 +89,36 @@ def test_binop() -> None:
     checkpoint = channel.checkpoint()
     channel = BinaryOperatorAggregate(int, operator.add).from_checkpoint(checkpoint)
     assert channel.get() == 10
+
+
+def test_binop_overwrite_when_missing() -> None:
+    """Overwrite on a MISSING channel must unwrap the value and set the guard.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6909.
+    """
+    from dataclasses import dataclass
+
+    @dataclass
+    class Metrics:
+        count: int
+
+        def __add__(self, other: "Metrics") -> "Metrics":
+            return Metrics(self.count + other.count)
+
+    # Metrics has no zero-arg constructor → channel starts as MISSING
+    channel = BinaryOperatorAggregate(Metrics, operator.add)
+    assert channel.value is MISSING
+
+    # Bug 1: Overwrite should be unwrapped, not stored as wrapper
+    channel.update([Overwrite(Metrics(count=42))])
+    result = channel.get()
+    assert isinstance(result, Metrics), f"Expected Metrics, got {type(result)}"
+    assert result.count == 42
+
+    # Bug 2: Two Overwrites in same super-step must raise InvalidUpdateError
+    channel2 = BinaryOperatorAggregate(Metrics, operator.add)
+    with pytest.raises(InvalidUpdateError):
+        channel2.update([Overwrite(Metrics(1)), Overwrite(Metrics(2))])
 
 
 def test_untracked_value() -> None:
