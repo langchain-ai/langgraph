@@ -952,9 +952,12 @@ class Pregel(
             An iterator of the `(namespace, subgraph)` pairs.
         """
         for name, node in self.nodes.items():
-            # filter by prefix
+            # Filter by namespace using a delimiter-aware check rather than a
+            # plain startswith so that a node whose name is a string prefix of
+            # another node's name (e.g. "agent" vs "agent_v2") does not
+            # incorrectly match the longer namespace.  Fixes #6924.
             if namespace is not None:
-                if not namespace.startswith(name):
+                if namespace != name and not namespace.startswith(name + NS_SEP):
                     continue
 
             # find the subgraph, if any
