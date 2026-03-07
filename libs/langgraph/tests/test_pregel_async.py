@@ -273,6 +273,39 @@ async def test_py_async_with_cancel_behavior() -> None:
         assert False, "Task should be cancelled"
 
 
+async def test_async_executor_cleanup_on_cancel() -> None:
+    """Test that AsyncBackgroundExecutor.__aexit__ completes waiting for
+    background tasks even when the parent task is cancelled (issue #6950)."""
+    from langgraph.pregel._executor import AsyncBackgroundExecutor
+
+    task_started = asyncio.Event()
+    task_completed = asyncio.Event()
+
+    async def slow_background_work() -> str:
+        task_started.set()
+        await asyncio.sleep(0.3)
+        task_completed.set()
+        return "done"
+
+    async def run_executor() -> None:
+        config: RunnableConfig = {"configurable": {}}
+        async with AsyncBackgroundExecutor(config) as submit:
+            submit(slow_background_work)
+            await asyncio.sleep(10)
+
+    t = asyncio.create_task(run_executor())
+    await task_started.wait()
+    t.cancel()
+    try:
+        await t
+    except asyncio.CancelledError:
+        pass
+    await asyncio.sleep(0.5)
+    assert task_completed.is_set(), (
+        "Background task should complete despite parent cancellation"
+    )
+
+
 async def test_checkpoint_put_after_cancellation() -> None:
     logs: list[str] = []
 
