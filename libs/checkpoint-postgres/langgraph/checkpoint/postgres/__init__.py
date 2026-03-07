@@ -15,6 +15,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     get_checkpoint_id,
     get_serializable_checkpoint_metadata,
+    validate_checkpoint_schema,
 )
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from psycopg import Capabilities, Connection, Cursor, Pipeline
@@ -442,6 +443,16 @@ class PostgresSaver(BasePostgresSaver):
             including its configuration, metadata, parent checkpoint (if any),
             and pending writes.
         """
+        loaded_checkpoint = validate_checkpoint_schema(
+            {
+                **value["checkpoint"],
+                "channel_values": {
+                    **(value["checkpoint"].get("channel_values") or {}),
+                    **self._load_blobs(value["channel_values"]),
+                },
+            },
+            source="postgres checkpoint",
+        )
         return CheckpointTuple(
             {
                 "configurable": {
@@ -450,13 +461,7 @@ class PostgresSaver(BasePostgresSaver):
                     "checkpoint_id": value["checkpoint_id"],
                 }
             },
-            {
-                **value["checkpoint"],
-                "channel_values": {
-                    **(value["checkpoint"].get("channel_values") or {}),
-                    **self._load_blobs(value["channel_values"]),
-                },
-            },
+            loaded_checkpoint,
             value["metadata"],
             (
                 {
