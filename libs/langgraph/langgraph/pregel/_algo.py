@@ -579,7 +579,7 @@ def prepare_single_task(
         proc = processes[name]
         if checkpoint_null_version is None:
             return
-        # If any of the channels read by this process were updated.
+        # If any of the channels read by this process were updated
         if _triggers(
             channels,
             checkpoint["channel_versions"],
