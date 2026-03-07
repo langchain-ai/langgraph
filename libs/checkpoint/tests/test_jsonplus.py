@@ -30,6 +30,9 @@ from langgraph.checkpoint.serde.event_hooks import (
     register_serde_event_listener,
 )
 from langgraph.checkpoint.serde.jsonplus import (
+    EXT_CONSTRUCTOR_KW_ARGS,
+    EXT_CONSTRUCTOR_POS_ARGS,
+    EXT_CONSTRUCTOR_SINGLE_ARG,
     EXT_METHOD_SINGLE_ARG,
     InvalidModuleError,
     JsonPlusSerializer,
@@ -958,6 +961,60 @@ def test_msgpack_safe_types_value_equality(caplog: pytest.LogCaptureFixture) -> 
             assert result.flags == obj.flags
         else:
             assert result == obj, f"Value mismatch for {type(obj)}: {result} != {obj}"
+
+
+def test_msgpack_deserialization_failure_returns_raw_data() -> None:
+    """When a type cannot be reconstructed, return raw data instead of None."""
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("nonexistent_module", "MissingClass")]
+    )
+
+    payload_kw = ormsgpack.Ext(
+        EXT_CONSTRUCTOR_KW_ARGS,
+        _msgpack_enc(("nonexistent_module", "MissingClass", {"value": 123})),
+    )
+    packed = ormsgpack.packb(payload_kw, option=ormsgpack.OPT_NON_STR_KEYS)
+    result = serde.loads_typed(("msgpack", packed))
+    assert result == {"value": 123}
+
+    payload_single = ormsgpack.Ext(
+        EXT_CONSTRUCTOR_SINGLE_ARG,
+        _msgpack_enc(("nonexistent_module", "MissingClass", "hello")),
+    )
+    packed = ormsgpack.packb(payload_single, option=ormsgpack.OPT_NON_STR_KEYS)
+    result = serde.loads_typed(("msgpack", packed))
+    assert result == "hello"
+
+    payload_pos = ormsgpack.Ext(
+        EXT_CONSTRUCTOR_POS_ARGS,
+        _msgpack_enc(("nonexistent_module", "MissingClass", [1, 2, 3])),
+    )
+    packed = ormsgpack.packb(payload_pos, option=ormsgpack.OPT_NON_STR_KEYS)
+    result = serde.loads_typed(("msgpack", packed))
+    assert result == [1, 2, 3]
+
+    payload_method = ormsgpack.Ext(
+        EXT_METHOD_SINGLE_ARG,
+        _msgpack_enc(("nonexistent_module", "MissingClass", "arg_val", "some_method")),
+    )
+    packed = ormsgpack.packb(payload_method, option=ormsgpack.OPT_NON_STR_KEYS)
+    result = serde.loads_typed(("msgpack", packed))
+    assert result == "arg_val"
+
+
+def test_msgpack_dataclass_missing_module_returns_raw_data() -> None:
+    """Dataclass whose module is gone at load time should return kwargs dict."""
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("tests.test_jsonplus", "MyDataclass")]
+    )
+
+    patched = ormsgpack.Ext(
+        EXT_CONSTRUCTOR_KW_ARGS,
+        _msgpack_enc(("vanished_module", "MyDataclass", {"foo": "test", "bar": 42})),
+    )
+    packed = ormsgpack.packb(patched, option=ormsgpack.OPT_NON_STR_KEYS)
+    result = serde.loads_typed(("msgpack", packed))
+    assert result == {"foo": "test", "bar": 42}
 
 
 def test_msgpack_nested_pydantic_serializes_as_dict(
