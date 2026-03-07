@@ -215,14 +215,11 @@ def main():
     """Generate the schema and write it to a file."""
     schema = generate_schema()
 
-    # Add versioning to the schema
-    import importlib.metadata
+    # Add versioning to the schema - use hardcoded version for performance
+    from langgraph_cli import __version__
 
-    try:
-        version = importlib.metadata.version("langgraph_cli").split(".")
-        schema_version = f"v{version[0]}"
-    except importlib.metadata.PackageNotFoundError:
-        schema_version = "v1"
+    version = __version__.split(".")
+    schema_version = f"v{version[0]}"
 
     # Add version to schema
     schema["version"] = schema_version
