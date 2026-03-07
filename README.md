@@ -1,7 +1,7 @@
 <picture class="github-only">
-  <source media="(prefers-color-scheme: light)" srcset="https://langchain-ai.github.io/langgraph/static/wordmark_dark.svg">
-  <source media="(prefers-color-scheme: dark)" srcset="https://langchain-ai.github.io/langgraph/static/wordmark_light.svg">
-  <img alt="LangGraph Logo" src="https://langchain-ai.github.io/langgraph/static/wordmark_dark.svg" width="80%">
+  <source media="(prefers-color-scheme: light)" srcset=".github/images/logo-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-dark.svg">
+  <img alt="LangGraph Logo" src=".github/images/logo-dark.svg" width="50%">
 </picture>
 
 <div>
@@ -55,6 +55,9 @@ print(graph.compile().invoke({"text": ""}))
 Get started with the [LangGraph Quickstart](https://docs.langchain.com/oss/python/langgraph/quickstart).
 
 To quickly build agents with LangChain's `create_agent` (built on LangGraph), see the [LangChain Agents documentation](https://docs.langchain.com/oss/python/langchain/agents).
+
+> [!TIP]
+> For developing, debugging, and deploying AI agents and LLM applications, see [LangSmith](https://docs.langchain.com/langsmith/home).
 
 ## Core benefits
 
