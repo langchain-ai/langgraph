@@ -195,9 +195,15 @@ class AsyncBackgroundExecutor(AbstractAsyncContextManager):
         for task, (cancel, _) in tasks.items():
             if cancel:
                 task.cancel(self.sentinel)
-        # wait for all tasks to finish
+        # wait for all tasks to finish, shielded from cancellation
+        # so that cleanup always completes even if the parent task
+        # is cancelled (see issue #6950)
         if tasks:
-            await asyncio.wait(tasks)
+            wait_fut = asyncio.ensure_future(asyncio.wait(tasks))
+            try:
+                await asyncio.shield(wait_fut)
+            except asyncio.CancelledError:
+                await wait_fut
         # if there's already an exception being raised, don't raise another one
         if exc_type is None:
             # re-raise the first exception that occurred in a task
