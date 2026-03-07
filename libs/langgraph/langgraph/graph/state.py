@@ -1657,21 +1657,22 @@ def _is_field_channel(typ: type[Any]) -> BaseChannel | None:
 def _is_field_binop(typ: type[Any]) -> BinaryOperatorAggregate | None:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
-        if len(meta) >= 1 and callable(meta[-1]):
-            sig = signature(meta[-1])
-            params = list(sig.parameters.values())
-            if (
-                sum(
-                    p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
-                    for p in params
-                )
-                == 2
-            ):
-                return BinaryOperatorAggregate(typ, meta[-1])
-            else:
-                raise ValueError(
-                    f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"
-                )
+        for item in meta:
+            if callable(item):
+                sig = signature(item)
+                params = list(sig.parameters.values())
+                if (
+                    sum(
+                        p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+                        for p in params
+                    )
+                    == 2
+                ):
+                    return BinaryOperatorAggregate(typ, item)
+                else:
+                    raise ValueError(
+                        f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"
+                    )
     return None
 
 
