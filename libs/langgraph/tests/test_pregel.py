@@ -6958,6 +6958,50 @@ def test_stream_mode_messages_command() -> None:
     ]
 
 
+def test_stream_mode_messages_with_messages_key_filter() -> None:
+    from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+
+    class State(TypedDict):
+        messages: Annotated[list[BaseMessage], add_messages]
+        agent_messages: Annotated[list[BaseMessage], add_messages]
+
+    def public_node(state: State) -> State:
+        return {"messages": [AIMessage(content="Public response")]}
+
+    def internal_node(state: State) -> State:
+        return {"agent_messages": [AIMessage(content="SECRET internal reasoning")]}
+
+    workflow = StateGraph(State)
+    workflow.add_node("public", public_node)
+    workflow.add_node("internal", internal_node)
+    workflow.add_edge(START, "public")
+    workflow.add_edge("public", "internal")
+    workflow.add_edge("internal", END)
+
+    app = workflow.compile()
+    app_with_filter = workflow.compile(messages_key="messages")
+
+    state = {"messages": [HumanMessage(content="hi")], "agent_messages": []}
+
+    all_contents = [
+        message.content for message, _ in app.stream(state, stream_mode="messages")
+    ]
+    filtered_runtime_contents = [
+        message.content
+        for message, _ in app.stream(
+            state, stream_mode="messages", messages_key="messages"
+        )
+    ]
+    filtered_compile_contents = [
+        message.content
+        for message, _ in app_with_filter.stream(state, stream_mode="messages")
+    ]
+
+    assert all_contents == ["Public response", "SECRET internal reasoning"]
+    assert filtered_runtime_contents == ["Public response"]
+    assert filtered_compile_contents == ["Public response"]
+
+
 def test_node_destinations() -> None:
     class State(TypedDict):
         foo: Annotated[str, operator.add]
