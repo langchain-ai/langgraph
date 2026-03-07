@@ -2944,7 +2944,31 @@ def test_function_in_conditional_edges_with_no_path_map() -> None:
     }
 
 
-def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
+def test_conditional_edges_end_without_path_map_entry() -> None:
+    """Router returning END should work even when path_map omits __end__.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6770.
+    """
+
+    def router(state: dict) -> str:
+        if state.get("counter", 0) >= 5:
+            return END
+        return "worker"
+
+    def worker(state: dict) -> dict:
+        return {"counter": state.get("counter", 0) + 1}
+
+    g = StateGraph(dict)
+    g.add_node("entry", lambda s: dict(s))
+    g.add_node("worker", worker)
+    g.set_entry_point("entry")
+    g.add_conditional_edges("entry", router, {"worker": "worker"})
+    g.add_edge("worker", END)
+    app = g.compile()
+
+    # counter=5 → router returns END → should terminate, not KeyError
+    result = app.invoke({"counter": 5})
+    assert result == {"counter": 5}
     def sorted_add(x: list[str], y: list[str] | list[tuple[str, str]]) -> list[str]:
         if isinstance(y[0], tuple):
             for rem, _ in y:
