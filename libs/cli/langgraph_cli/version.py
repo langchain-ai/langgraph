@@ -1,10 +1,4 @@
 """Main entrypoint into package."""
 
-from importlib import metadata
-
-try:
-    __version__ = metadata.version(__package__)
-except metadata.PackageNotFoundError:
-    # Case where package metadata is not available.
-    __version__ = ""
-del metadata  # optional, avoids polluting the results of dir(__package__)
+# Import version from __init__.py to avoid importlib.metadata overhead
+from langgraph_cli import __version__
