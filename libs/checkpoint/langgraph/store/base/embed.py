@@ -83,12 +83,11 @@ def ensure_embeddings(
     if isinstance(embed, str):
         init_embeddings = _get_init_embeddings()
         if init_embeddings is None:
-            from importlib.metadata import PackageNotFoundError, version
-
             try:
-                lc_version = version("langchain")
+                from langchain import __version__ as lc_version
+
                 version_info = f"Found langchain version {lc_version}, but"
-            except PackageNotFoundError:
+            except ImportError:
                 version_info = "langchain is not installed;"
 
             raise ValueError(
