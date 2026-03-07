@@ -358,3 +358,40 @@ def test_get_checkpoint_no_channel_values(
 
         checkpoint = saver.get_tuple(config)
         assert checkpoint.checkpoint["channel_values"] == {}
+
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe"])
+def test_thread_id_bytes_conversion(monkeypatch, saver_name: str, test_data) -> None:
+    """Test that thread_id is correctly converted from bytes to string.
+
+    This tests the fix for issue #6623 where thread_id could be stored in
+    mixed formats (string vs bytes) when using PostgreSQL checkpointer
+    with interrupt/resume operations.
+    """
+    with _saver(saver_name) as saver:
+        config = {
+            "configurable": {
+                "thread_id": "thread-bytes-test",
+                "checkpoint_ns": "",
+            },
+        }
+        chkpnt: Checkpoint = create_checkpoint(empty_checkpoint(), {}, 1)
+        saver.put(config, chkpnt, {}, {})
+
+        load_checkpoint_tuple = saver._load_checkpoint_tuple
+
+        def patched_load_checkpoint_tuple(value):
+            # Simulate psycopg3 returning bytes for thread_id
+            # (this can happen in certain edge cases with binary mode)
+            value = dict(value)
+            value["thread_id"] = b"thread-bytes-test"
+            return load_checkpoint_tuple(value)
+
+        monkeypatch.setattr(
+            saver, "_load_checkpoint_tuple", patched_load_checkpoint_tuple
+        )
+
+        checkpoint = saver.get_tuple(config)
+        # Verify that thread_id is converted to string, not left as bytes
+        assert checkpoint.config["configurable"]["thread_id"] == "thread-bytes-test"
+        assert isinstance(checkpoint.config["configurable"]["thread_id"], str)
