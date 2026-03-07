@@ -983,3 +983,89 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for #6102 (Pydantic v2 generics) and #6718 (nested enums)
+# ---------------------------------------------------------------------------
+
+from typing import Generic, TypeVar
+
+T = TypeVar("T")
+
+
+class GenericModel(BaseModel, Generic[T]):
+    value: T
+
+
+class Inner(BaseModel):
+    x: int
+
+
+class DatasetArtifact(BaseModel):
+    class PhaseEnum(str, Enum):
+        TRAIN = "train"
+        TEST = "test"
+
+    phase: PhaseEnum
+
+
+@dataclasses.dataclass
+class OuterDC:
+    class InnerDC:
+        def __init__(self, v: int) -> None:
+            self.v = v
+
+    val: int
+
+
+def test_serde_jsonplus_pydantic_v2_generic() -> None:
+    """Generic Pydantic v2 model round-trips correctly (#6102)."""
+    serde = JsonPlusSerializer()
+    obj = GenericModel[Inner](value=Inner(x=42))
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, GenericModel)
+    assert result.value == Inner(x=42)
+
+
+def test_serde_jsonplus_pydantic_v2_nested_generic() -> None:
+    """Nested generics round-trip correctly."""
+    serde = JsonPlusSerializer()
+    obj = GenericModel[GenericModel[Inner]](
+        value=GenericModel[Inner](value=Inner(x=7))
+    )
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, GenericModel)
+    assert isinstance(result.value, GenericModel)
+    assert result.value.value == Inner(x=7)
+
+
+def test_serde_jsonplus_nested_enum() -> None:
+    """Nested Enum round-trips correctly (#6718)."""
+    serde = JsonPlusSerializer()
+    obj = DatasetArtifact.PhaseEnum.TRAIN
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+    assert result is DatasetArtifact.PhaseEnum.TRAIN
+
+
+def test_serde_jsonplus_nested_enum_in_pydantic() -> None:
+    """Pydantic model containing a nested enum round-trips correctly (#6718)."""
+    serde = JsonPlusSerializer()
+    obj = DatasetArtifact(phase=DatasetArtifact.PhaseEnum.TEST)
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, DatasetArtifact)
+    assert result.phase is DatasetArtifact.PhaseEnum.TEST
+
+
+def test_serde_jsonplus_pydantic_v2_backward_compat() -> None:
+    """Old-format serialized data (using __name__ and method string) still loads."""
+    serde = JsonPlusSerializer()
+    obj = MyPydantic(foo="hello", bar=1, inner=InnerPydantic(hello="world"))
+    dumped = serde.dumps_typed(obj)
+    result = serde.loads_typed(dumped)
+    assert isinstance(result, MyPydantic)
+    assert result == obj
