@@ -8882,6 +8882,65 @@ def test_null_resume_disallowed_with_multiple_interrupts(
     }
 
 
+def test_command_resume_none(sync_checkpointer: BaseCheckpointSaver) -> None:
+    """Test that Command(resume=None) raises EmptyInputError, not UnboundLocalError.
+
+    Regression test: previously, using Command(resume=None) would raise
+    UnboundLocalError because `resume_is_map` was only defined inside
+    `if (resume := self.input.resume) is not None` but referenced
+    unconditionally outside that block in _first().
+
+    After the fix, this now correctly raises EmptyInputError since None
+    is used as the sentinel for "no resume provided" and cannot be
+    distinguished from a missing resume value.
+    """
+    from langgraph.errors import EmptyInputError
+
+    class State(TypedDict):
+        result: str
+
+    def checkpoint_node(state: State):
+        """Pause for a checkpoint snapshot, then continue."""
+        interrupt(None)
+        return {}
+
+    def work_node(state: State):
+        return {"result": "done"}
+
+    builder = StateGraph(State)
+    builder.add_node("checkpoint", checkpoint_node)
+    builder.add_node("work", work_node)
+    builder.add_edge(START, "checkpoint")
+    builder.add_edge("checkpoint", "work")
+    builder.add_edge("work", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    # First invocation — should hit interrupt(None) and pause
+    result = [e for e in graph.stream({"result": ""}, config)]
+    assert result == [
+        {
+            "__interrupt__": (
+                Interrupt(
+                    value=None,
+                    id=AnyStr(),
+                ),
+            )
+        }
+    ]
+
+    # Verify graph is paused at checkpoint node
+    state = graph.get_state(config)
+    assert state.next == ("checkpoint",)
+
+    # Resume with Command(resume=None) — this previously raised
+    # UnboundLocalError: cannot access local variable 'resume_is_map'
+    # After fix, it correctly raises EmptyInputError instead
+    with pytest.raises(EmptyInputError, match="Received empty Command input"):
+        list(graph.stream(Command(resume=None), config))
+
+
 def test_interrupt_stream_mode_values(sync_checkpointer: BaseCheckpointSaver):
     """Test that interrupts are surfaced on 'values' stream mode"""
 
