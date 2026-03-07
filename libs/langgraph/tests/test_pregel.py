@@ -155,6 +155,42 @@ def test_graph_validation_with_command() -> None:
     assert graph.invoke({"foo": ""}) == {"foo": "bar", "bar": "baz"}
 
 
+def test_command_resume_none_does_not_crash() -> None:
+    """Command(resume=None) should raise EmptyInputError, not UnboundLocalError.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/7034.
+    """
+
+    class State(TypedDict):
+        result: str
+
+    def checkpoint_node(state: State) -> dict:
+        interrupt(None)
+        return {}
+
+    def work_node(state: State) -> dict:
+        return {"result": "done"}
+
+    builder = StateGraph(State)
+    builder.add_node("checkpoint", checkpoint_node)
+    builder.add_node("work", work_node)
+    builder.add_edge(START, "checkpoint")
+    builder.add_edge("checkpoint", "work")
+    builder.add_edge("work", END)
+
+    graph = builder.compile(checkpointer=InMemorySaver())
+    config = {"configurable": {"thread_id": "resume-none-test"}}
+
+    # Run until interrupt
+    graph.invoke({"result": ""}, config)
+
+    # Resume with None — should not crash with UnboundLocalError
+    from langgraph.errors import EmptyInputError
+
+    with pytest.raises(EmptyInputError):
+        graph.invoke(Command(resume=None), config)
+
+
 def test_checkpoint_errors() -> None:
     class FaultyGetCheckpointer(InMemorySaver):
         def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
