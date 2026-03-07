@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import inspect
 import sys
 from collections import deque
-from collections.abc import Callable, Hashable, Sequence
+from collections.abc import Awaitable, Callable, Hashable, Sequence
 from dataclasses import asdict, dataclass
 from typing import (
     TYPE_CHECKING,
@@ -12,7 +13,9 @@ from typing import (
     Literal,
     NamedTuple,
     TypeVar,
+    cast,
     final,
+    overload,
 )
 from warnings import warn
 
@@ -24,6 +27,7 @@ from xxhash import xxh3_128_hexdigest
 from langgraph._internal._cache import default_cache_key
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
+from langgraph._internal._types import _get_resume_value
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
 from langgraph.warnings import LangGraphDeprecatedSinceV10
 
@@ -55,6 +59,7 @@ __all__ = (
     "Command",
     "Durability",
     "interrupt",
+    "ainterrupt",
     "Overwrite",
     "ensure_valid_checkpointer",
 )
@@ -139,6 +144,7 @@ class RetryPolicy(NamedTuple):
 
 
 KeyFuncT = TypeVar("KeyFuncT", bound=Callable[..., str | bytes])
+InterruptValueT = TypeVar("InterruptValueT")
 
 
 @dataclass(**_DC_KWARGS)
@@ -417,7 +423,17 @@ class Command(Generic[N], ToolOutputMixin):
     PARENT: ClassVar[Literal["__parent__"]] = "__parent__"
 
 
-def interrupt(value: Any) -> Any:
+@overload
+def interrupt(value: InterruptValueT) -> InterruptValueT: ...
+
+
+@overload
+def interrupt(*, deferred: Callable[[], InterruptValueT]) -> InterruptValueT: ...
+
+
+def interrupt(
+    value: Any = MISSING, *, deferred: Callable[[], Any] | object = MISSING
+) -> Any:
     """Interrupt the graph with a resumable exception from within a node.
 
     The `interrupt` function enables human-in-the-loop workflows by pausing graph
@@ -500,6 +516,8 @@ def interrupt(value: Any) -> Any:
 
     Args:
         value: The value to surface to the client when the graph is interrupted.
+        deferred: Callable to lazily compute the interrupt value. Only invoked
+            when no resume value is found for the current interrupt index.
 
     Returns:
         Any: On subsequent invocations within the same node (same task to be precise), returns the value provided during the first invocation
@@ -507,36 +525,95 @@ def interrupt(value: Any) -> Any:
     Raises:
         GraphInterrupt: On the first invocation within the node, halts execution and surfaces the provided value to the client.
     """
-    from langgraph._internal._constants import (
-        CONFIG_KEY_CHECKPOINT_NS,
-        CONFIG_KEY_SCRATCHPAD,
-        CONFIG_KEY_SEND,
-        RESUME,
-    )
+    from langgraph._internal._constants import CONFIG_KEY_CHECKPOINT_NS
     from langgraph.config import get_config
     from langgraph.errors import GraphInterrupt
 
     conf = get_config()["configurable"]
-    # track interrupt index
-    scratchpad = conf[CONFIG_KEY_SCRATCHPAD]
-    idx = scratchpad.interrupt_counter()
-    # find previous resume values
-    if scratchpad.resume:
-        if idx < len(scratchpad.resume):
-            conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
-            return scratchpad.resume[idx]
-    # find current resume value
-    v = scratchpad.get_null_resume(True)
-    if v is not None:
-        assert len(scratchpad.resume) == idx, (scratchpad.resume, idx)
-        scratchpad.resume.append(v)
-        conf[CONFIG_KEY_SEND]([(RESUME, scratchpad.resume)])
-        return v
+    has_resume, resume_value = _get_resume_value(conf)
+    if has_resume:
+        return resume_value
     # no resume value found
+    if value is MISSING and deferred is MISSING:
+        raise TypeError("interrupt() requires either value or deferred.")
+    if value is not MISSING and deferred is not MISSING:
+        raise TypeError("interrupt() accepts either value or deferred, not both.")
+    if deferred is not MISSING:
+        deferred_callable = cast(Callable[[], Any], deferred)
+        interrupt_value = deferred_callable()
+    else:
+        interrupt_value = value
+    if inspect.isawaitable(interrupt_value):
+        if hasattr(interrupt_value, "close"):
+            interrupt_value.close()
+        raise TypeError("interrupt() received an awaitable; use ainterrupt() instead.")
     raise GraphInterrupt(
         (
             Interrupt.from_ns(
-                value=value,
+                value=interrupt_value,
+                ns=conf[CONFIG_KEY_CHECKPOINT_NS],
+            ),
+        )
+    )
+
+
+@overload
+async def ainterrupt(value: InterruptValueT) -> InterruptValueT: ...
+
+
+@overload
+async def ainterrupt(
+    *,
+    deferred: Callable[[], Awaitable[InterruptValueT]] | Callable[[], InterruptValueT],
+) -> InterruptValueT: ...
+
+
+async def ainterrupt(
+    value: Any = MISSING, *, deferred: Callable[[], Any] | object = MISSING
+) -> Any:
+    """Async version of `interrupt`, supporting lazy and awaitable values.
+
+    Use this when your interrupt value needs async work (DB/API calls) or when
+    you want to lazily compute the value only if the graph actually interrupts.
+    Use `deferred=` to defer execution until no resume value is found
+    for the current interrupt index.
+    This function must be awaited.
+
+    Args:
+        value: A value to surface.
+        deferred: Callable that returns the interrupt value (sync or awaitable).
+
+    Returns:
+        Any: On subsequent invocations within the same node (same task),
+            returns the resume value.
+
+    Raises:
+        GraphInterrupt: On the first invocation within the node, halts execution
+            and surfaces the value to the client.
+    """
+    from langgraph._internal._constants import CONFIG_KEY_CHECKPOINT_NS
+    from langgraph.config import get_config
+    from langgraph.errors import GraphInterrupt
+
+    conf = get_config()["configurable"]
+    has_resume, resume_value = _get_resume_value(conf)
+    if has_resume:
+        return resume_value
+    if value is MISSING and deferred is MISSING:
+        raise TypeError("ainterrupt() requires either value or deferred.")
+    if value is not MISSING and deferred is not MISSING:
+        raise TypeError("ainterrupt() accepts either value or deferred, not both.")
+    if deferred is not MISSING:
+        deferred_callable = cast(Callable[[], Any], deferred)
+        interrupt_value = deferred_callable()
+    else:
+        interrupt_value = value
+    if inspect.isawaitable(interrupt_value):
+        interrupt_value = await interrupt_value
+    raise GraphInterrupt(
+        (
+            Interrupt.from_ns(
+                value=interrupt_value,
                 ns=conf[CONFIG_KEY_CHECKPOINT_NS],
             ),
         )
