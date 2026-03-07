@@ -6530,6 +6530,30 @@ async def test_multiple_interrupt_state_persistence(
     assert state.values["steps"] == ["step1", "step2"]
 
 
+async def test_get_state_next_after_double_interrupt(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """get_state().next must include the node name after a second interrupt."""
+
+    def node(state):
+        interrupt("first question")
+        interrupt("second question")
+
+    app = (
+        StateGraph(dict)
+        .add_node("node", node)
+        .add_edge(START, "node")
+        .add_edge("node", END)
+        .compile(checkpointer=async_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    await app.ainvoke({}, config)
+    await app.ainvoke(Command(resume="ans1"), config)
+
+    assert (await app.aget_state(config)).next == ("node",)
+
+
 async def test_concurrent_execution():
     """Test concurrent execution with async nodes."""
 
