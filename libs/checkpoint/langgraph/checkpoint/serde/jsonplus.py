@@ -587,14 +587,14 @@ def _create_msgpack_ext_hook(
                     data, ext_hook=ext_hook, option=ormsgpack.OPT_NON_STR_KEYS
                 )
                 if not _check_allowed(tup[0], tup[1]):
-                    # We default to returning the raw data. If the user
-                    # is using this in the context of a pydantic state, etc., then
-                    # it would be validated upon construction.
                     return tup[2]
                 # module, name, arg
                 return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
             except Exception:
-                return None
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
             try:
                 tup = ormsgpack.unpackb(
@@ -605,7 +605,10 @@ def _create_msgpack_ext_hook(
                 # module, name, args
                 return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
             except Exception:
-                return None
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
             try:
                 tup = ormsgpack.unpackb(
@@ -616,7 +619,10 @@ def _create_msgpack_ext_hook(
                 # module, name, kwargs
                 return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
             except Exception:
-                return None
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_METHOD_SINGLE_ARG:
             try:
                 tup = ormsgpack.unpackb(
@@ -629,7 +635,10 @@ def _create_msgpack_ext_hook(
                     getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
                 )(tup[2])
             except Exception:
-                return None
+                try:
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_PYDANTIC_V1:
             try:
                 tup = ormsgpack.unpackb(
