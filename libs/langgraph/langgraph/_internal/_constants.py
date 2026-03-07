@@ -42,7 +42,7 @@ CONFIG_KEY_CACHE = sys.intern("__pregel_cache")
 CONFIG_KEY_RESUMING = sys.intern("__pregel_resuming")
 # holds a boolean indicating if subgraphs should resume from a previous checkpoint
 CONFIG_KEY_REPLAYING = sys.intern("__pregel_replaying")
-# holds a boolean indicating if subgraphs should replay (re-run tasks, drop cached RESUME writes)
+# signals to subgraphs that the parent is replaying from an earlier checkpoint
 CONFIG_KEY_TASK_ID = sys.intern("__pregel_task_id")
 # holds the task ID for the current task
 CONFIG_KEY_THREAD_ID = sys.intern("thread_id")

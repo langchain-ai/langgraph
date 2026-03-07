@@ -748,11 +748,14 @@ class PregelLoop:
         elif CONFIG_KEY_RESUMING not in configurable:
             raise EmptyInputError(f"Received no input for {input_keys}")
         # Propagate resuming and replaying flags to subgraphs.
+        # When replaying, don't tell subgraphs to resume — they should
+        # re-apply input so that triggers fire naturally.
         if not self.is_nested:
             self.config = patch_configurable(
                 self.config,
                 {
-                    CONFIG_KEY_RESUMING: is_resuming,
+                    CONFIG_KEY_RESUMING: is_resuming
+                    and not self.is_replaying,
                     CONFIG_KEY_REPLAYING: self.is_replaying,
                 },
             )
@@ -1106,22 +1109,23 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             },
         )
 
-    def _get_checkpoint_after_parent(self) -> CheckpointTuple | None:
-        """Find the right subgraph checkpoint to restore when the parent replays.
+    def _get_checkpoint_before_invocation(self) -> RunnableConfig | None:
+        """Find the config for the subgraph checkpoint from just before a
+        previous invocation.
 
-        Each time the parent invokes a subgraph, the subgraph creates a series
-        of checkpoints. Every checkpoint records which parent checkpoint was
-        active when it was created (in `metadata["parents"]`). The first
-        checkpoint in each invocation has `source="input"` and contains the
-        accumulated channel_values from prior invocations but hasn't run any
-        nodes yet.
+        When a parent graph replays from an earlier checkpoint, it re-invokes
+        the subgraph with the same input. Instead of loading the subgraph's
+        latest checkpoint (which may be from a later parent step), we find the
+        state the subgraph was in *before* the original invocation so that
+        `_first()` can re-apply the input naturally — no trigger hacks needed.
 
-        We query for `source="input"` + `parents={parent_ns: parent_id}` to
-        find the starting checkpoint from the invocation that ran under the
-        given parent checkpoint. Node re-triggering is handled by `_triggers`
-        which skips `versions_seen` when `CONFIG_KEY_REPLAYING` is set.
+        We find the `source="input"` checkpoint that was created under the
+        matching parent checkpoint, then return the config for its parent
+        (the pre-input state). The caller uses this config with `get_tuple()`
+        to load the actual checkpoint.
 
-        Returns None to start fresh if no such checkpoint exists."""
+        Returns None to start fresh if no matching checkpoint exists or if
+        this is the subgraph's first invocation."""
         checkpoint_map = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
         parent_ns = NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
         parent_checkpoint_id = checkpoint_map.get(parent_ns)
@@ -1135,8 +1139,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             },
             limit=1,
         ):
-            return saved
-        return None
+            return saved.parent_config  # None for first invocation → start fresh
+        return None  # no matching checkpoint (e.g. fork) — start fresh
 
     # context manager
 
@@ -1148,11 +1152,14 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         if not self.checkpointer:
             saved = None
         elif is_subgraph_replay:
-            # Subgraph replay: the parent graph is replaying from an earlier
-            # checkpoint, so we need to restore the subgraph checkpoint that
-            # corresponds to that parent checkpoint — not the subgraph's
-            # latest. We find it by matching the parent checkpoint timeline.
-            saved = self._get_checkpoint_after_parent()
+            # Subgraph replay: load the pre-input checkpoint so _first()
+            # can re-apply input naturally — triggers fire without hacks.
+            pre_input_config = self._get_checkpoint_before_invocation()
+            saved = (
+                self.checkpointer.get_tuple(pre_input_config)
+                if pre_input_config
+                else None
+            )
         else:
             # Normal case: fetch the most recent checkpoint for this
             # graph/thread. If a specific checkpoint_id is in the config,
@@ -1331,8 +1338,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             },
         )
 
-    async def _aget_checkpoint_after_parent(self) -> CheckpointTuple | None:
-        """Async version of `_get_checkpoint_after_parent`."""
+    async def _aget_checkpoint_before_invocation(self) -> RunnableConfig | None:
+        """Async version of `_get_checkpoint_before_invocation`."""
         checkpoint_map = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
         parent_ns = NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
         parent_checkpoint_id = checkpoint_map.get(parent_ns)
@@ -1346,8 +1353,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             },
             limit=1,
         ):
-            return saved
-        return None
+            return saved.parent_config  # None for first invocation → start fresh
+        return None  # no matching checkpoint (e.g. fork) — start fresh
 
     # context manager
 
@@ -1359,11 +1366,14 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         if not self.checkpointer:
             saved = None
         elif is_subgraph_replay:
-            # Subgraph replay: the parent graph is replaying from an earlier
-            # checkpoint, so we need to restore the subgraph checkpoint that
-            # corresponds to that parent checkpoint — not the subgraph's
-            # latest. We find it by matching the parent checkpoint timeline.
-            saved = await self._aget_checkpoint_after_parent()
+            # Subgraph replay: load the pre-input checkpoint so _first()
+            # can re-apply input naturally — triggers fire without hacks.
+            pre_input_config = await self._aget_checkpoint_before_invocation()
+            saved = (
+                await self.checkpointer.aget_tuple(pre_input_config)
+                if pre_input_config
+                else None
+            )
         else:
             # Normal case: fetch the most recent checkpoint for this
             # graph/thread. If a specific checkpoint_id is in the config,
