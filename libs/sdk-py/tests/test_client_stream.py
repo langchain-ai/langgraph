@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from langgraph_sdk.client import HttpClient, SyncHttpClient
+from langgraph_sdk.errors import APIConnectionError, APITimeoutError
 from langgraph_sdk.schema import StreamPart
 from langgraph_sdk.sse import BytesLike, BytesLineDecoder, SSEDecoder
 
@@ -246,3 +247,144 @@ def test_sync_http_client_stream_flushes_trailing_event():
         parts = list(http_client.stream("/stream", "GET"))
 
     assert parts == [StreamPart(event="foo", data={"bar": 1})]
+
+
+# ---------------------------------------------------------------------------
+# Transport error wrapping - non-streaming methods
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "exc_cls,expected_type",
+    [
+        (httpx.ReadError, APIConnectionError),
+        (httpx.ConnectError, APIConnectionError),
+        (httpx.ConnectTimeout, APITimeoutError),
+        (httpx.ReadTimeout, APITimeoutError),
+    ],
+)
+@pytest.mark.asyncio
+async def test_http_client_get_wraps_transport_errors(exc_cls, expected_type):
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise exc_cls("simulated error")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        http_client = HttpClient(client)
+        with pytest.raises(expected_type):
+            await http_client.get("/test")
+
+
+@pytest.mark.parametrize(
+    "exc_cls,expected_type",
+    [
+        (httpx.ReadError, APIConnectionError),
+        (httpx.ConnectError, APIConnectionError),
+        (httpx.ConnectTimeout, APITimeoutError),
+        (httpx.ReadTimeout, APITimeoutError),
+    ],
+)
+@pytest.mark.asyncio
+async def test_http_client_post_wraps_transport_errors(exc_cls, expected_type):
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise exc_cls("simulated error")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        http_client = HttpClient(client)
+        with pytest.raises(expected_type):
+            await http_client.post("/test", json={"key": "value"})
+
+
+@pytest.mark.parametrize(
+    "exc_cls,expected_type",
+    [
+        (httpx.ReadError, APIConnectionError),
+        (httpx.ConnectError, APIConnectionError),
+        (httpx.ConnectTimeout, APITimeoutError),
+        (httpx.ReadTimeout, APITimeoutError),
+    ],
+)
+def test_sync_http_client_get_wraps_transport_errors(exc_cls, expected_type):
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise exc_cls("simulated error")
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        with pytest.raises(expected_type):
+            http_client.get("/test")
+
+
+@pytest.mark.parametrize(
+    "exc_cls,expected_type",
+    [
+        (httpx.ReadError, APIConnectionError),
+        (httpx.ConnectError, APIConnectionError),
+        (httpx.ConnectTimeout, APITimeoutError),
+        (httpx.ReadTimeout, APITimeoutError),
+    ],
+)
+def test_sync_http_client_post_wraps_transport_errors(exc_cls, expected_type):
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise exc_cls("simulated error")
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        with pytest.raises(expected_type):
+            http_client.post("/test", json={"key": "value"})
+
+
+# ---------------------------------------------------------------------------
+# Transport error wrapping - stream() connection setup
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "exc_cls,expected_type",
+    [
+        (httpx.ConnectError, APIConnectionError),
+        (httpx.ConnectTimeout, APITimeoutError),
+    ],
+)
+@pytest.mark.asyncio
+async def test_http_client_stream_wraps_connection_errors(exc_cls, expected_type):
+    """Transport errors during stream connection setup are wrapped as SDK errors."""
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise exc_cls("simulated error")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        http_client = HttpClient(client)
+        with pytest.raises(expected_type):
+            async for _ in http_client.stream("/stream", "GET"):
+                pass
+
+
+@pytest.mark.parametrize(
+    "exc_cls,expected_type",
+    [
+        (httpx.ConnectError, APIConnectionError),
+        (httpx.ConnectTimeout, APITimeoutError),
+    ],
+)
+def test_sync_http_client_stream_wraps_connection_errors(exc_cls, expected_type):
+    """Transport errors during stream connection setup are wrapped as SDK errors."""
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise exc_cls("simulated error")
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        http_client = SyncHttpClient(client)
+        with pytest.raises(expected_type):
+            for _ in http_client.stream("/stream", "GET"):
+                pass
