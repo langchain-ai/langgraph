@@ -42,6 +42,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_REPLAYING,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SCRATCHPAD,
@@ -152,7 +153,7 @@ class PregelLoop:
     input_keys: str | Sequence[str]
     output_keys: str | Sequence[str]
     stream_keys: str | Sequence[str]
-    skip_done_tasks: bool
+    is_replaying: bool
     is_nested: bool
     manager: None | AsyncParentRunManager | ParentRunManager
     interrupt_after: All | Sequence[str]
@@ -244,7 +245,9 @@ class PregelLoop:
         self.interrupt_before = interrupt_before
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
-        self.skip_done_tasks = CONFIG_KEY_CHECKPOINT_ID not in config[CONF]
+        self.is_replaying = CONFIG_KEY_CHECKPOINT_ID in config[CONF] or config[
+            CONF
+        ].get(CONFIG_KEY_REPLAYING, False)
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
@@ -451,7 +454,7 @@ class PregelLoop:
             # save the new task
             self.tasks[pushed.id] = pushed
             # match any pending writes to the new task
-            if self.skip_done_tasks:
+            if not self.is_replaying:
                 self._match_writes({pushed.id: pushed})
             # return the new task, to be started if not run before
             return pushed
@@ -515,7 +518,7 @@ class PregelLoop:
             return False
 
         # if there are pending writes from a previous loop, apply them
-        if self.skip_done_tasks and self.checkpoint_pending_writes:
+        if not self.is_replaying and self.checkpoint_pending_writes:
             self._match_writes(self.tasks)
 
         # before execution, check if we should interrupt
@@ -557,8 +560,8 @@ class PregelLoop:
             )
         # clear pending writes
         self.checkpoint_pending_writes.clear()
-        # "not skip_done_tasks" only applies to first tick after resuming
-        self.skip_done_tasks = True
+        # only replay (re-execute) done tasks on the first tick
+        self.is_replaying = False
         # save checkpoint
         self._put_checkpoint({"source": "loop"})
         # after execution, check if we should interrupt
@@ -567,8 +570,9 @@ class PregelLoop:
         ):
             self.status = "interrupt_after"
             raise GraphInterrupt()
-        # unset resuming flag
+        # unset resuming/replaying flags
         self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
+        self.config[CONF].pop(CONFIG_KEY_REPLAYING, None)
 
     def match_cached_writes(self) -> Sequence[PregelExecutableTask]:
         raise NotImplementedError
@@ -618,22 +622,42 @@ class PregelLoop:
     def _first(
         self, *, input_keys: str | Sequence[str], updated_channels: set[str] | None
     ) -> set[str] | None:
-        # resuming from previous checkpoint requires
-        # - finding a previous checkpoint
-        # - receiving None input (outer graph) or RESUMING flag (subgraph)
+        # Resuming from a previous checkpoint requires two things:
+        # 1. A prior checkpoint exists (channel_versions is non-empty)
+        # 2. The input signals continuation (not a fresh run with new input)
         configurable = self.config.get(CONF, {})
-        is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
-            configurable.get(
-                CONFIG_KEY_RESUMING,
-                self.input is None
-                or isinstance(self.input, Command)
-                or (
-                    not self.is_nested
-                    and self.config.get("metadata", {}).get("run_id")
-                    == self.checkpoint_metadata.get("run_id", MISSING)
-                ),
+        has_prior_checkpoint = bool(self.checkpoint["channel_versions"])
+        # For subgraphs, the parent explicitly sets CONFIG_KEY_RESUMING.
+        # For the outer graph, we infer from the input:
+        #   - None input: resume after interrupt (invoke(None, config))
+        #   - Command input: any Command operates on existing state
+        #   - Same run_id: re-entry into an ongoing run (e.g. stream reconnect)
+        input_signals_resume = (
+            self.input is None
+            or isinstance(self.input, Command)
+            or (
+                not self.is_nested
+                and self.config.get("metadata", {}).get("run_id")
+                == self.checkpoint_metadata.get("run_id", MISSING)
             )
         )
+        is_resuming = has_prior_checkpoint and bool(
+            configurable.get(CONFIG_KEY_RESUMING, input_signals_resume)
+        )
+
+        # When replaying from a specific checkpoint, drop cached RESUME
+        # writes so that interrupt() calls re-fire instead of returning
+        # stale values. But if a resume value is being provided (e.g.
+        # Command(resume=...) or CONFIG_KEY_RESUMING), keep them —
+        # multi-interrupt scenarios need previously resolved values preserved.
+        if self.is_replaying:
+            is_resume_with_value = (
+                isinstance(self.input, Command) and self.input.resume is not None
+            ) or configurable.get(CONFIG_KEY_RESUMING, False)
+            if not is_resume_with_value:
+                self.checkpoint_pending_writes = [
+                    w for w in self.checkpoint_pending_writes if w[1] != RESUME
+                ]
 
         # map command to writes
         if isinstance(self.input, Command):
@@ -723,10 +747,17 @@ class PregelLoop:
             self._put_checkpoint({"source": "input"})
         elif CONFIG_KEY_RESUMING not in configurable:
             raise EmptyInputError(f"Received no input for {input_keys}")
-        # update config
+        # Propagate resuming and replaying flags to subgraphs.
+        # When replaying, don't tell subgraphs to resume — they should
+        # re-apply input so that triggers fire naturally.
         if not self.is_nested:
             self.config = patch_configurable(
-                self.config, {CONFIG_KEY_RESUMING: is_resuming}
+                self.config,
+                {
+                    CONFIG_KEY_RESUMING: is_resuming
+                    and not self.is_replaying,
+                    CONFIG_KEY_REPLAYING: self.is_replaying,
+                },
             )
         # set flag
         self.status = "pending"
@@ -1078,13 +1109,64 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             },
         )
 
+    def _get_checkpoint_before_invocation(self) -> RunnableConfig | None:
+        """Find the config for the subgraph checkpoint from just before a
+        previous invocation.
+
+        When a parent graph replays from an earlier checkpoint, it re-invokes
+        the subgraph with the same input. Instead of loading the subgraph's
+        latest checkpoint (which may be from a later parent step), we find the
+        state the subgraph was in *before* the original invocation so that
+        `_first()` can re-apply the input naturally — no trigger hacks needed.
+
+        We find the `source="input"` checkpoint that was created under the
+        matching parent checkpoint, then return the config for its parent
+        (the pre-input state). The caller uses this config with `get_tuple()`
+        to load the actual checkpoint.
+
+        Returns None to start fresh if no matching checkpoint exists or if
+        this is the subgraph's first invocation."""
+        checkpoint_map = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
+        parent_ns = NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
+        parent_checkpoint_id = checkpoint_map.get(parent_ns)
+        if not parent_checkpoint_id or not self.checkpointer:
+            return None
+        for saved in self.checkpointer.list(
+            self.checkpoint_config,
+            filter={
+                "source": "input",
+                "parents": {parent_ns: parent_checkpoint_id},
+            },
+            limit=1,
+        ):
+            return saved.parent_config  # None for first invocation → start fresh
+        return None  # no matching checkpoint (e.g. fork) — start fresh
+
     # context manager
 
     def __enter__(self) -> Self:
-        if self.checkpointer:
-            saved = self.checkpointer.get_tuple(self.checkpoint_config)
-        else:
+        is_subgraph_replay = self.config[CONF].get(
+            CONFIG_KEY_REPLAYING
+        ) and not self.checkpoint_config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_ID)
+
+        if not self.checkpointer:
             saved = None
+        elif is_subgraph_replay:
+            # Subgraph replay: load the pre-input checkpoint so _first()
+            # can re-apply input naturally — triggers fire without hacks.
+            pre_input_config = self._get_checkpoint_before_invocation()
+            saved = (
+                self.checkpointer.get_tuple(pre_input_config)
+                if pre_input_config
+                else None
+            )
+        else:
+            # Normal case: fetch the most recent checkpoint for this
+            # graph/thread. If a specific checkpoint_id is in the config,
+            # fetch that exact checkpoint; otherwise fetch the latest one.
+            # Returns None on first invocation (no checkpoints exist yet).
+            saved = self.checkpointer.get_tuple(self.checkpoint_config)
+
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
@@ -1109,7 +1191,6 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             if saved.pending_writes is not None
             else []
         )
-
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
@@ -1257,13 +1338,49 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             },
         )
 
+    async def _aget_checkpoint_before_invocation(self) -> RunnableConfig | None:
+        """Async version of `_get_checkpoint_before_invocation`."""
+        checkpoint_map = self.config[CONF].get(CONFIG_KEY_CHECKPOINT_MAP, {})
+        parent_ns = NS_SEP.join(self.checkpoint_ns[:-1]) if self.checkpoint_ns else ""
+        parent_checkpoint_id = checkpoint_map.get(parent_ns)
+        if not parent_checkpoint_id or not self.checkpointer:
+            return None
+        async for saved in self.checkpointer.alist(
+            self.checkpoint_config,
+            filter={
+                "source": "input",
+                "parents": {parent_ns: parent_checkpoint_id},
+            },
+            limit=1,
+        ):
+            return saved.parent_config  # None for first invocation → start fresh
+        return None  # no matching checkpoint (e.g. fork) — start fresh
+
     # context manager
 
     async def __aenter__(self) -> Self:
-        if self.checkpointer:
-            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
-        else:
+        is_subgraph_replay = self.config[CONF].get(
+            CONFIG_KEY_REPLAYING
+        ) and not self.checkpoint_config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_ID)
+
+        if not self.checkpointer:
             saved = None
+        elif is_subgraph_replay:
+            # Subgraph replay: load the pre-input checkpoint so _first()
+            # can re-apply input naturally — triggers fire without hacks.
+            pre_input_config = await self._aget_checkpoint_before_invocation()
+            saved = (
+                await self.checkpointer.aget_tuple(pre_input_config)
+                if pre_input_config
+                else None
+            )
+        else:
+            # Normal case: fetch the most recent checkpoint for this
+            # graph/thread. If a specific checkpoint_id is in the config,
+            # fetch that exact checkpoint; otherwise fetch the latest one.
+            # Returns None on first invocation (no checkpoints exist yet).
+            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+
         if saved is None:
             saved = CheckpointTuple(
                 self.checkpoint_config, empty_checkpoint(), {"step": -2}, None, []
@@ -1288,7 +1405,6 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             if saved.pending_writes is not None
             else []
         )
-
         self.submit = await self.stack.enter_async_context(
             AsyncBackgroundExecutor(self.config)
         )

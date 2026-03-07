@@ -41,6 +41,8 @@ CONFIG_KEY_CACHE = sys.intern("__pregel_cache")
 # holds a `BaseCache` made available to subgraphs
 CONFIG_KEY_RESUMING = sys.intern("__pregel_resuming")
 # holds a boolean indicating if subgraphs should resume from a previous checkpoint
+CONFIG_KEY_REPLAYING = sys.intern("__pregel_replaying")
+# signals to subgraphs that the parent is replaying from an earlier checkpoint
 CONFIG_KEY_TASK_ID = sys.intern("__pregel_task_id")
 # holds the task ID for the current task
 CONFIG_KEY_THREAD_ID = sys.intern("thread_id")
@@ -98,6 +100,7 @@ RESERVED = {
     CONFIG_KEY_STREAM,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_REPLAYING,
     CONFIG_KEY_TASK_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_ID,
