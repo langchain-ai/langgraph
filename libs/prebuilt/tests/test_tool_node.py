@@ -1382,8 +1382,14 @@ def test_tool_node_inject_state(schema_: type[T]) -> None:
             with contextlib.suppress(Exception):
                 failure_input = schema_(messages=[msg], notfoo="bar")
             if failure_input is not None:
-                with pytest.raises(KeyError):
-                    node.invoke(failure_input, config=_create_config_with_runtime())
+                # Missing state fields inject None (safe for NotRequired).
+                # The tool itself validates args, so a missing required
+                # field surfaces as a tool invocation error, not KeyError.
+                result = node.invoke(
+                    failure_input, config=_create_config_with_runtime()
+                )
+                tool_message = result["messages"][-1]
+                assert tool_message.status == "error"
 
                 with pytest.raises(ValueError):
                     node.invoke([msg], config=_create_config_with_runtime())
@@ -2008,3 +2014,42 @@ async def test_tool_node_inject_runtime_dynamic_tool_via_wrap_tool_call_async() 
     tool_message = result["messages"][-1]
     assert tool_message.content == "dynamic: x=42, tool_call_id=call_dynamic_2"
     assert tool_message.tool_call_id == "call_dynamic_2"
+
+
+def test_tool_node_inject_state_not_required_missing() -> None:
+    """Regression: InjectedState with NotRequired field should not raise KeyError.
+
+    When a state field is declared as NotRequired and is missing from the
+    state dict, InjectedState should inject None instead of raising KeyError.
+
+    See: https://github.com/langchain-ai/langchain/issues/35585
+    """
+
+    def weather_tool(
+        city: Annotated[str | None, InjectedState("city")],
+    ) -> str:
+        """Get weather for a city."""
+        if city is None:
+            return "No city provided"
+        return f"Sunny in {city}"
+
+    node = ToolNode([weather_tool], handle_tool_errors=True)
+    tool_call = {
+        "name": "weather_tool",
+        "args": {},
+        "id": "call_1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("weather?", tool_calls=[tool_call])
+
+    # State dict WITHOUT the 'city' key (simulating NotRequired field missing)
+    result = node.invoke({"messages": [msg]}, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "No city provided"
+
+    # State dict WITH the 'city' key
+    result = node.invoke(
+        {"messages": [msg], "city": "Rome"}, config=_create_config_with_runtime()
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "Sunny in Rome"
