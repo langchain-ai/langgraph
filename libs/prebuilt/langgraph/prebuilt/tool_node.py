@@ -1101,6 +1101,20 @@ class ToolNode(RunnableCallable):
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         except GraphBubbleUp:
             raise
+        except asyncio.CancelledError:
+            # asyncio.CancelledError inherits from BaseException (not Exception)
+            # in Python 3.8+, so it bypasses the `except Exception` block below.
+            # When handle_tool_errors is set we convert the cancellation into a
+            # proper error ToolMessage so the chat history stays valid; otherwise
+            # we re-raise to let the caller handle it.  Fixes #6726.
+            if self._handle_tool_errors:
+                return ToolMessage(
+                    content="Tool execution was cancelled.",
+                    name=call["name"],
+                    tool_call_id=call["id"],
+                    status="error",
+                )
+            raise
         except Exception as e:
             # Determine which exception types are handled
             handled_types: tuple[type[Exception], ...]
@@ -1192,6 +1206,19 @@ class ToolNode(RunnableCallable):
             # None check was performed above already
             self._wrap_tool_call = cast("ToolCallWrapper", self._wrap_tool_call)
             return self._wrap_tool_call(tool_request, _sync_execute)
+        except asyncio.CancelledError:
+            # Mirror the same CancelledError handling that _execute_tool_async
+            # applies: convert to an error ToolMessage when handle_tool_errors
+            # is set, otherwise propagate.  Without this the wrapper level was
+            # blind to cancellations.  Fixes #6726.
+            if self._handle_tool_errors:
+                return ToolMessage(
+                    content="Tool execution was cancelled.",
+                    name=tool_request.tool_call["name"],
+                    tool_call_id=tool_request.tool_call["id"],
+                    status="error",
+                )
+            raise
         except Exception as e:
             # Wrapper threw an exception
             if not self._handle_tool_errors:
