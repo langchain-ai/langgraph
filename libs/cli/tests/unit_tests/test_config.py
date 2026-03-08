@@ -1557,7 +1557,7 @@ def test_docker_tag_with_api_version(in_config: bool):
     assert tag == f"my-registry/custom-image:{version}-py3.11"
 
     # Test 6: api_version with different Python versions
-    for python_version in ["3.11", "3.12", "3.13"]:
+    for python_version in ["3.11", "3.12", "3.13", "3.14"]:
         config = validate_config(
             {
                 "python_version": python_version,
