@@ -187,7 +187,12 @@ class JsonPlusSerializer(SerializerProtocol):
                 except Exception:
                     continue
         except Exception:
-            return None
+            logger.warning(
+                "Failed to deserialize %s.%s, returning raw value",
+                ".".join(module),
+                name,
+            )
+            return value.get("kwargs") or value.get("args")
 
     def _check_allowed_json_modules(self, value: dict[str, Any]) -> None:
         needed = tuple(value["id"])
@@ -594,7 +599,15 @@ def _create_msgpack_ext_hook(
                 # module, name, arg
                 return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
             except Exception:
-                return None
+                try:
+                    logger.warning(
+                        "Failed to deserialize %s.%s, returning raw data",
+                        tup[0],
+                        tup[1],
+                    )
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
             try:
                 tup = ormsgpack.unpackb(
@@ -605,7 +618,15 @@ def _create_msgpack_ext_hook(
                 # module, name, args
                 return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
             except Exception:
-                return None
+                try:
+                    logger.warning(
+                        "Failed to deserialize %s.%s, returning raw data",
+                        tup[0],
+                        tup[1],
+                    )
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
             try:
                 tup = ormsgpack.unpackb(
@@ -616,7 +637,15 @@ def _create_msgpack_ext_hook(
                 # module, name, kwargs
                 return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
             except Exception:
-                return None
+                try:
+                    logger.warning(
+                        "Failed to deserialize %s.%s, returning raw data",
+                        tup[0],
+                        tup[1],
+                    )
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_METHOD_SINGLE_ARG:
             try:
                 tup = ormsgpack.unpackb(
@@ -629,7 +658,15 @@ def _create_msgpack_ext_hook(
                     getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
                 )(tup[2])
             except Exception:
-                return None
+                try:
+                    logger.warning(
+                        "Failed to deserialize %s.%s, returning raw data",
+                        tup[0],
+                        tup[1],
+                    )
+                    return tup[2]
+                except NameError:
+                    return None
         elif code == EXT_PYDANTIC_V1:
             try:
                 tup = ormsgpack.unpackb(
@@ -680,6 +717,9 @@ def _create_msgpack_ext_hook(
                 arr = _np.frombuffer(buf, dtype=_np.dtype(dtype_str))
                 return arr.reshape(shape, order=order)
             except Exception:
+                logger.warning(
+                    "Failed to deserialize numpy array, returning None"
+                )
                 return None
         return None
 

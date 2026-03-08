@@ -983,3 +983,58 @@ def test_msgpack_nested_pydantic_serializes_as_dict(
     # No blocking should occur - inner is serialized as dict, not ext
     assert "blocked" not in caplog.text.lower()
     assert result == obj
+
+
+def test_deserialization_failure_returns_raw_data_not_none(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When a type's module is unavailable during deserialization, the raw
+    data should be returned instead of silently replacing the value with None.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/6970
+    """
+    import importlib
+    import os
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        module_path = os.path.join(temp_dir, "temp_model_6970.py")
+        with open(module_path, "w") as f:
+            f.write(
+                "from dataclasses import dataclass\n"
+                "@dataclass\n"
+                "class SavedObject:\n"
+                "    value: int\n"
+            )
+
+        sys.path.insert(0, temp_dir)
+        try:
+            module = importlib.import_module("temp_model_6970")
+            SavedObject = module.SavedObject
+
+            serde = JsonPlusSerializer(
+                allowed_msgpack_modules=(("temp_model_6970", "SavedObject"),)
+            )
+
+            obj = SavedObject(value=123)
+            dumped = serde.dumps_typed(obj)
+
+            # Remove the module so deserialization can't find the class
+            sys.modules.pop("temp_model_6970", None)
+            os.remove(module_path)
+            importlib.invalidate_caches()
+
+            caplog.clear()
+            with caplog.at_level(logging.WARNING):
+                result = serde.loads_typed(dumped)
+
+            # Must NOT be None — should return raw data instead
+            assert result is not None, (
+                "Deserialization failure silently returned None instead of "
+                "preserving the raw data"
+            )
+            # Should have logged a warning about the failure
+            assert "failed to deserialize" in caplog.text.lower()
+        finally:
+            sys.path.remove(temp_dir)
+            sys.modules.pop("temp_model_6970", None)
