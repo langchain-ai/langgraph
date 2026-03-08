@@ -11,7 +11,7 @@ from typing import Any, cast
 import httpx
 
 import langgraph_sdk
-from langgraph_sdk.schema import RunCreateMetadata
+from langgraph_sdk.schema import GraphOutput, RunCreateMetadata
 
 RESERVED_HEADERS = ("x-api-key",)
 
@@ -107,6 +107,33 @@ def _get_run_metadata_from_response(
     return None
 
 
+def _sse_to_v2_dict(event: str, data: Any) -> dict[str, Any] | None:
+    """Convert an SSE event+data pair into a v2 stream part dict.
+
+    Returns None for ``end`` events (signals end of stream).
+    """
+    if event == "end":
+        return None
+    parts = event.split("|")
+    event_type = parts[0]
+    ns = parts[1:] if len(parts) > 1 else []
+    return {"type": event_type, "ns": ns, "data": data}
+
+
+def _parse_wait_v2(
+    response: dict[str, Any] | list[dict[str, Any]],
+) -> GraphOutput[dict[str, Any]] | list[GraphOutput[dict[str, Any]]]:
+    if isinstance(response, list):
+        return [_parse_wait_v2_single(r) for r in response]
+    return _parse_wait_v2_single(response)
+
+
+def _parse_wait_v2_single(response: dict[str, Any]) -> GraphOutput[dict[str, Any]]:
+    response_copy = dict(response)
+    interrupts = response_copy.pop("__interrupt__", ())
+    if interrupts and not isinstance(interrupts, tuple):
+        interrupts = tuple(interrupts)
+    return GraphOutput(value=response_copy, interrupts=interrupts)
 def _provided_vals(d: Mapping[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in d.items() if v is not None}
 

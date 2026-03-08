@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import Field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import (
     Any,
     ClassVar,
+    Generic,
     Literal,
     NamedTuple,
     Protocol,
     TypeAlias,
+    TypeVar,
     Union,
 )
 
@@ -206,6 +208,56 @@ class Checkpoint(TypedDict):
     """Optional unique identifier for the checkpoint itself."""
     checkpoint_map: dict[str, Any] | None
     """Optional dictionary containing checkpoint-specific data."""
+
+
+OutputT = TypeVar("OutputT")
+
+
+@dataclass(frozen=True)
+class GraphOutput(Generic[OutputT]):
+    """Typed container returned by `wait()` with `version="v2"`.
+
+    Attributes:
+        value: The final output of the run (dict, Pydantic model, dataclass, etc.).
+        interrupts: Any interrupts that occurred during execution.
+    """
+
+    value: OutputT
+    interrupts: tuple[Interrupt, ...] = ()
+
+    def __getitem__(self, key: str) -> Any:
+        """Backward compat: `result['__interrupt__']` and dict-key access."""
+        import warnings
+        warnings.warn(
+            "Accessing GraphOutput via `result[key]` is deprecated. "
+            "Use `result.value` to access the output value directly, "
+            "or `result.interrupts` for interrupts.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if key == "__interrupt__":
+            return self.interrupts
+        if isinstance(self.value, dict):
+            return self.value[key]
+        try:
+            return getattr(self.value, key)
+        except AttributeError:
+            raise KeyError(key)
+
+    def __contains__(self, key: object) -> bool:
+        import warnings
+        warnings.warn(
+            "Accessing GraphOutput via `key in result` is deprecated. "
+            "Use `result.value` to access the output value directly, "
+            "or `result.interrupts` for interrupts.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if key == "__interrupt__":
+            return bool(self.interrupts)
+        if isinstance(self.value, dict):
+            return key in self.value
+        return isinstance(key, str) and hasattr(self.value, key)
 
 
 class GraphSchema(TypedDict):

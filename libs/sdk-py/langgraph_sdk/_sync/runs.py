@@ -9,7 +9,11 @@ from typing import Any, overload
 
 import httpx
 
-from langgraph_sdk._shared.utilities import _get_run_metadata_from_response
+from langgraph_sdk._shared.utilities import (
+    _get_run_metadata_from_response,
+    _parse_wait_v2,
+    _sse_to_v2_dict,
+)
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import (
     All,
@@ -18,9 +22,9 @@ from langgraph_sdk.schema import (
     Checkpoint,
     Command,
     Config,
-    Context,
     DisconnectMode,
     Durability,
+    GraphOutput,
     IfNotExists,
     Input,
     MultitaskStrategy,
@@ -544,6 +548,61 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        version: Literal["v1"] = "v1",
+    ) -> builtins.list[dict] | dict[str, Any]: ...
+
+    @overload
+    def wait(
+        self,
+        thread_id: str,
+        assistant_id: str,
+        *,
+        input: Input | None = None,
+        command: Command | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        config: Config | None = None,
+        context: Context | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        raise_error: bool = True,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        version: Literal["v2"],
+    ) -> builtins.list[GraphOutput[dict[str, Any]]] | GraphOutput[dict[str, Any]]: ...
+
+    @overload
+    def wait(
+        self,
+        thread_id: None,
+        assistant_id: str,
+        *,
+        input: Input | None = None,
+        command: Command | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        config: Config | None = None,
+        context: Context | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        raise_error: bool = True,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        version: Literal["v1"] = "v1",
     ) -> builtins.list[dict] | dict[str, Any]: ...
 
     @overload
@@ -569,7 +628,8 @@ class SyncRunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> builtins.list[dict] | dict[str, Any]: ...
+        version: Literal["v2"],
+    ) -> builtins.list[GraphOutput[dict[str, Any]]] | GraphOutput[dict[str, Any]]: ...
 
     def wait(
         self,
@@ -597,7 +657,13 @@ class SyncRunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-    ) -> builtins.list[dict] | dict[str, Any]:
+        version: StreamVersion = "v1",
+    ) -> (
+        builtins.list[dict]
+        | dict[str, Any]
+        | builtins.list[GraphOutput[dict[str, Any]]]
+        | GraphOutput[dict[str, Any]]
+    ):
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -633,6 +699,8 @@ class SyncRunsClient:
                 "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
                 "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
+            version: Stream format version. "v1" (default) returns plain dicts. "v2" returns
+                ``GraphOutput`` objects with ``value`` and ``interrupts`` attributes.
 
         Returns:
             The output of the `Run`.
@@ -725,7 +793,7 @@ class SyncRunsClient:
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
         )
-        return self.http.request_reconnect(
+        response = self.http.request_reconnect(
             endpoint,
             "POST",
             json={k: v for k, v in payload.items() if v is not None},
@@ -733,6 +801,13 @@ class SyncRunsClient:
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
+        if hasattr(response, "get") and response.get("__error__"):
+            raise Exception(
+                f"{response['__error__'].get('error')}: {response['__error__'].get('message')}"
+            )
+        if version == "v2":
+            return _parse_wait_v2(response)  # type: ignore[arg-type]
+        return response
 
     def list(
         self,
