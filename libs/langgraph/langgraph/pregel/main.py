@@ -80,6 +80,7 @@ from langgraph._internal._constants import (
     NS_SEP,
     NULL_TASK_ID,
     PUSH,
+    RESUME,
     TASKS,
 )
 from langgraph._internal._pydantic import create_model
@@ -1094,7 +1095,7 @@ class Pregel(
             )
         if apply_pending_writes and saved.pending_writes:
             for tid, k, v in saved.pending_writes:
-                if k in (ERROR, INTERRUPT):
+                if k in (ERROR, INTERRUPT, RESUME):
                     continue
                 if tid not in next_tasks:
                     continue
@@ -1213,7 +1214,7 @@ class Pregel(
             )
         if apply_pending_writes and saved.pending_writes:
             for tid, k, v in saved.pending_writes:
-                if k in (ERROR, INTERRUPT):
+                if k in (ERROR, INTERRUPT, RESUME):
                     continue
                 if tid not in next_tasks:
                     continue

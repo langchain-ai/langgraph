@@ -5299,6 +5299,7 @@ def test_multiple_interrupt_state_persistence(
     # State should still be empty since node hasn't returned
     state = app.get_state(config)
     assert state.values == {"steps": []}
+    assert state.next == ("node",)
 
     # Resume after first interrupt - should hit second interrupt
     app.invoke(Command(resume="step1"), config)
@@ -5306,6 +5307,7 @@ def test_multiple_interrupt_state_persistence(
     # State should still be empty since node hasn't returned
     state = app.get_state(config)
     assert state.values == {"steps": []}
+    assert state.next == ("node",)
 
     # Resume after second interrupt - node should complete
     result = app.invoke(Command(resume="step2"), config)
@@ -5314,6 +5316,7 @@ def test_multiple_interrupt_state_persistence(
     assert result["steps"] == ["step1", "step2"]
     state = app.get_state(config)
     assert state.values["steps"] == ["step1", "step2"]
+    assert state.next == ()
 
 
 def test_concurrent_execution_thread_safety():
