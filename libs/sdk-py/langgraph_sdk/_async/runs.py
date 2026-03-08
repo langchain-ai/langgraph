@@ -10,7 +10,11 @@ from typing import Any, overload
 import httpx
 
 from langgraph_sdk._async.http import HttpClient
-from langgraph_sdk._shared.utilities import _get_run_metadata_from_response
+from langgraph_sdk._shared.utilities import (
+    _get_run_metadata_from_response,
+    _parse_wait_v2,
+    _sse_to_v2_dict,
+)
 from langgraph_sdk.schema import (
     All,
     BulkCancelRunsStatus,
@@ -21,6 +25,7 @@ from langgraph_sdk.schema import (
     Context,
     DisconnectMode,
     Durability,
+    GraphOutput,
     IfNotExists,
     Input,
     MultitaskStrategy,
@@ -548,6 +553,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        version: Literal["v1"] = "v1",
     ) -> builtins.list[dict] | dict[str, Any]: ...
 
     @overload
@@ -573,7 +579,34 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        version: Literal["v1"] = "v1",
     ) -> builtins.list[dict] | dict[str, Any]: ...
+
+    @overload
+    async def wait(
+        self,
+        thread_id: None,
+        assistant_id: str,
+        *,
+        input: Input | None = None,
+        command: Command | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        config: Config | None = None,
+        context: Context | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        webhook: str | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        raise_error: bool = True,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        version: Literal["v2"],
+    ) -> builtins.list[GraphOutput[dict[str, Any]]] | GraphOutput[dict[str, Any]]: ...
 
     async def wait(
         self,
@@ -601,7 +634,13 @@ class RunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-    ) -> builtins.list[dict] | dict[str, Any]:
+        version: StreamVersion = "v1",
+    ) -> (
+        builtins.list[dict]
+        | dict[str, Any]
+        | builtins.list[GraphOutput[dict[str, Any]]]
+        | GraphOutput[dict[str, Any]]
+    ):
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -636,6 +675,8 @@ class RunsClient:
                 "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
                 "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
+            version: Stream format version. "v1" (default) returns plain dicts. "v2" returns
+                ``GraphOutput`` objects with ``value`` and ``interrupts`` attributes.
 
         Returns:
             The output of the run.
@@ -743,6 +784,8 @@ class RunsClient:
             raise Exception(
                 f"{response['__error__'].get('error')}: {response['__error__'].get('message')}"
             )
+        if version == "v2":
+            return _parse_wait_v2(response)  # type: ignore[arg-type]
         return response
 
     async def list(
