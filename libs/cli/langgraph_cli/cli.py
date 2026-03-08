@@ -409,6 +409,18 @@ def build(
     install_command: str | None,
     build_command: str | None,
 ):
+    if install_command and langgraph_cli.config.has_disallowed_build_command_content(
+        install_command
+    ):
+        raise click.UsageError(
+            "install_command contains disallowed characters or patterns."
+        )
+    if build_command and langgraph_cli.config.has_disallowed_build_command_content(
+        build_command
+    ):
+        raise click.UsageError(
+            "build_command contains disallowed characters or patterns."
+        )
     with Runner() as runner, Progress(message="Pulling...") as set:
         if shutil.which("docker") is None:
             raise click.UsageError("Docker not installed") from None
@@ -765,6 +777,8 @@ def dev(
         allow_blocking=allow_blocking,
         tunnel=tunnel,
         server_level=server_log_level,
+        checkpointer=config_json.get("checkpointer"),
+        disable_persistence=config_json.get("disable_persistence", False),
     )
 
 
