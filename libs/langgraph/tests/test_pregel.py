@@ -46,7 +46,12 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.config import get_stream_writer
-from langgraph.errors import GraphRecursionError, InvalidUpdateError, ParentCommand
+from langgraph.errors import (
+    EmptyInputError,
+    GraphRecursionError,
+    InvalidUpdateError,
+    ParentCommand,
+)
 from langgraph.func import entrypoint, task
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState, add_messages
@@ -5848,6 +5853,35 @@ def test_task_before_interrupt_resume(
     # Resume with answer for topic 2 - should get final result
     result = workflow.invoke(Command(resume="answer2"), config=config)
     assert result == {"answers": ["answer1", "answer2"]}
+
+
+def test_command_resume_none_raises_empty_input_error(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        result: str
+
+    def checkpoint_node(state: State):
+        interrupt(None)
+        return {}
+
+    def work_node(state: State):
+        return {"result": "done"}
+
+    builder = StateGraph(State)
+    builder.add_node("checkpoint", checkpoint_node)
+    builder.add_node("work", work_node)
+    builder.add_edge(START, "checkpoint")
+    builder.add_edge("checkpoint", "work")
+    builder.add_edge("work", END)
+
+    graph = builder.compile(checkpointer=sync_checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    graph.invoke({"result": ""}, config)
+
+    with pytest.raises(EmptyInputError):
+        graph.invoke(Command(resume=None), config)
 
 
 def test_multiple_tasks_before_interrupt_resume(
