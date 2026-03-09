@@ -1902,6 +1902,7 @@ async def test_fork_creates_branch_in_subgraph(
     }
 
 
+@NEEDS_CONTEXTVARS
 async def test_stateless_subgraph_starts_fresh_on_parent_replay(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -1982,7 +1983,7 @@ async def test_stateless_subgraph_starts_fresh_on_parent_replay(
     assert started[0] == ("step_a", {"value": []})
 
 
-@pytest.mark.asyncio
+@NEEDS_CONTEXTVARS
 async def test_stateful_subgraph_loads_latest_after_replay(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -2046,7 +2047,7 @@ async def test_stateful_subgraph_loads_latest_after_replay(
     assert observed[0] == ("sub_step", {"value": ["s", "s"]})
 
 
-@pytest.mark.asyncio
+@NEEDS_CONTEXTVARS
 async def test_three_level_nested_subgraph_loads_state_on_replay(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -2138,7 +2139,7 @@ async def test_three_level_nested_subgraph_loads_state_on_replay(
     ]
 
 
-@pytest.mark.asyncio
+@NEEDS_CONTEXTVARS
 async def test_three_level_nested_subgraph_loads_state_on_fork(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -2215,7 +2216,7 @@ async def test_three_level_nested_subgraph_loads_state_on_fork(
     ]
 
 
-@pytest.mark.asyncio
+@NEEDS_CONTEXTVARS
 async def test_replay_from_first_invocation_checkpoint(
     async_checkpointer: BaseCheckpointSaver,
 ) -> None:
