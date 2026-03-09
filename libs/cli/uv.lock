@@ -1023,7 +1023,6 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1.7" },
-    { name = "click", specifier = ">=8.1.7" },
     { name = "httpx", specifier = ">=0.24.0" },
     { name = "langgraph-api", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.5.35,<0.8.0" },
     { name = "langgraph-runtime-inmem", marker = "python_full_version >= '3.11' and extra == 'inmem'", specifier = ">=0.7" },
