@@ -141,19 +141,28 @@ class TaskPayload(TypedDict):
     """Payload for a task start event."""
 
     id: str
+    """Unique identifier for this task."""
     name: str
+    """Name of the node being executed."""
     input: Any
+    """Input data passed to the task."""
     triggers: list[str]
+    """List of triggers that caused this task to be executed (e.g. channel writes)."""
 
 
 class TaskResultPayload(TypedDict):
     """Payload for a task result event."""
 
     id: str
+    """Unique identifier for this task."""
     name: str
+    """Name of the node that was executed."""
     error: str | None
+    """Error message if the task failed, otherwise `None`."""
     interrupts: list[dict]
+    """List of interrupts that occurred during task execution."""
     result: dict[str, Any]
+    """Mapping of channel names to the values written by this task."""
 
 
 class CheckpointTask(TypedDict):
@@ -167,43 +176,67 @@ class CheckpointTask(TypedDict):
     """
 
     id: str
+    """Unique identifier for this task."""
     name: str
+    """Name of the node being executed."""
     error: NotRequired[str]
+    """Error message, present only if the task failed."""
     result: NotRequired[Any]
+    """Result of the task, present only if the task completed successfully."""
     interrupts: NotRequired[list[dict]]
+    """List of interrupts, present when the task has been interrupted or completed."""
     state: StateSnapshot | RunnableConfig | None
+    """Snapshot of the subgraph state, or a `RunnableConfig` pointing to it. `None` if not a subgraph."""
 
 
 class CheckpointPayload(TypedDict, Generic[StateT]):
     """Payload for a checkpoint event."""
 
     config: RunnableConfig | None
+    """Configuration for this checkpoint, including the `thread_id` and `checkpoint_id`."""
     metadata: CheckpointMetadata
+    """Metadata associated with this checkpoint (e.g. step number, source, writes)."""
     values: StateT
+    """Current state values at the time of this checkpoint."""
     next: list[str]
+    """Names of the nodes scheduled to execute next."""
     parent_config: RunnableConfig | None
+    """Configuration of the parent checkpoint, or `None` if this is the first checkpoint."""
     tasks: list[CheckpointTask]
+    """List of tasks associated with this checkpoint."""
 
 
 class _DebugCheckpointPayload(TypedDict, Generic[StateT]):
     step: int
+    """The step number in the graph execution."""
     timestamp: str
+    """ISO 8601 timestamp of when this event occurred."""
     type: Literal["checkpoint"]
+    """Event type discriminator, always `"checkpoint"`."""
     payload: CheckpointPayload[StateT]
+    """The checkpoint payload."""
 
 
 class _DebugTaskPayload(TypedDict):
     step: int
+    """The step number in the graph execution."""
     timestamp: str
+    """ISO 8601 timestamp of when this event occurred."""
     type: Literal["task"]
+    """Event type discriminator, always `"task"`."""
     payload: TaskPayload
+    """The task start payload."""
 
 
 class _DebugTaskResultPayload(TypedDict):
     step: int
+    """The step number in the graph execution."""
     timestamp: str
+    """ISO 8601 timestamp of when this event occurred."""
     type: Literal["task_result"]
+    """Event type discriminator, always `"task_result"`."""
     payload: TaskResultPayload
+    """The task result payload."""
 
 
 DebugPayload = TypeAliasType(
