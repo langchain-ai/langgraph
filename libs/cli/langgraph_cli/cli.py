@@ -93,7 +93,8 @@ def _parse_env_from_config(
 ) -> dict[str, str]:
     """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
     env_field = config_json.get("env")
-    if isinstance(env_field, dict):
+    # validate_config_file will default env to {}
+    if isinstance(env_field, dict) and env_field:
         return {str(k): str(v) for k, v in env_field.items()}
     if isinstance(env_field, str):
         env_path = (config_path.parent / env_field).resolve()

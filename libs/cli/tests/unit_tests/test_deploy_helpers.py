@@ -104,6 +104,16 @@ class TestParseEnvFromConfig:
         result = _parse_env_from_config({}, config_path)
         assert result == {"DEFAULT_KEY": "default_val"}
 
+    def test_env_empty_dict_falls_back_to_dotenv(self, tmp_path, monkeypatch):
+        """validate_config defaults env to {}, should still fall back to .env."""
+        env_file = tmp_path / ".env"
+        env_file.write_text("MY_KEY=my_val\n")
+        monkeypatch.chdir(tmp_path)
+        config_path = tmp_path / "langgraph.json"
+        config_path.touch()
+        result = _parse_env_from_config({"env": {}}, config_path)
+        assert result == {"MY_KEY": "my_val"}
+
     def test_env_missing_no_dotenv_returns_empty(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         config_path = tmp_path / "langgraph.json"
