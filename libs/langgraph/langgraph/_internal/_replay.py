@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from langgraph._internal._constants import NS_END
 
@@ -61,7 +61,7 @@ class ReplayState:
         normal latest-checkpoint loading.
         """
         if self._is_first_visit(checkpoint_ns):
-            for saved in cast("BaseCheckpointSaver", checkpointer).list(
+            for saved in checkpointer.list(
                 checkpoint_config,
                 before={"configurable": {"checkpoint_id": self.checkpoint_id}},
                 limit=1,
@@ -78,7 +78,7 @@ class ReplayState:
     ) -> CheckpointTuple | None:
         """Async version of `get_checkpoint`."""
         if self._is_first_visit(checkpoint_ns):
-            async for saved in cast("BaseCheckpointSaver", checkpointer).alist(
+            async for saved in checkpointer.alist(
                 checkpoint_config,
                 before={"configurable": {"checkpoint_id": self.checkpoint_id}},
                 limit=1,
