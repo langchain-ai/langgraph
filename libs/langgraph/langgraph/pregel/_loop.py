@@ -644,11 +644,15 @@ class PregelLoop:
 
         # When replaying from a specific checkpoint, drop cached RESUME
         # writes so that interrupt() calls re-fire instead of returning
-        # stale values. But if a resume value is being provided (e.g.
-        # Command(resume=...) or CONFIG_KEY_RESUMING), keep them —
+        # stale values. But if we're actively resuming, keep them —
         # multi-interrupt scenarios need previously resolved values preserved.
+        # We check two conditions because resume signals arrive differently:
+        # - Command(resume=...): the outer graph receives resume via input
+        # - CONFIG_KEY_RESUMING: child subgraphs receive it via config from
+        #   the parent (their input is a Send arg, not a Command)
         if self.is_replaying and not (
-            isinstance(self.input, Command) and self.input.resume is not None
+            (isinstance(self.input, Command) and self.input.resume is not None)
+            or configurable.get(CONFIG_KEY_RESUMING, False)
         ):
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
