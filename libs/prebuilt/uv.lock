@@ -599,16 +599,16 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
     { name = "pytest-watch" },
-    { name = "ruff", specifier = "==0.15.1" },
+    { name = "ruff", specifier = "==0.15.5" },
     { name = "starlette" },
-    { name = "ty", specifier = "==0.0.17" },
+    { name = "ty", specifier = "==0.0.21" },
 ]
 lint = [
     { name = "codespell" },
     { name = "mypy", specifier = "==1.19.1" },
-    { name = "ruff", specifier = "==0.15.1" },
+    { name = "ruff", specifier = "==0.15.5" },
     { name = "starlette" },
-    { name = "ty", specifier = "==0.0.17" },
+    { name = "ty", specifier = "==0.0.21" },
 ]
 test = [
     { name = "pytest" },
