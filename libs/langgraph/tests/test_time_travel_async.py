@@ -2312,3 +2312,289 @@ async def test_stateless_subgraph_starts_fresh_on_parent_replay(
     assert "__interrupt__" in replay
     # Stateless subgraph starts completely fresh on replay
     assert started[0] == ("step_a", {"value": []})
+
+
+@pytest.mark.asyncio
+async def test_stateful_subgraph_loads_latest_after_replay(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """After replaying a parent checkpoint, a subsequent (3rd) invocation should
+    load the subgraph state created by the replay — not the state from the
+    checkpoint we replayed from."""
+    observed: list[tuple[str, dict]] = []
+
+    class SubState(TypedDict):
+        value: Annotated[list[str], operator.add]
+
+    class ParentState(TypedDict):
+        results: Annotated[list[str], operator.add]
+
+    def parent_node(state: ParentState) -> ParentState:
+        return {"results": ["p"]}
+
+    def sub_step(state: SubState) -> SubState:
+        observed.append(("sub_step", dict(state)))
+        return {"value": ["s"]}
+
+    sub = (
+        StateGraph(SubState)
+        .add_node("sub_step", sub_step)
+        .add_edge(START, "sub_step")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(ParentState)
+        .add_node("parent_node", parent_node)
+        .add_node("sub_node", sub)
+        .add_edge(START, "parent_node")
+        .add_edge("parent_node", "sub_node")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # 1st invocation — subgraph starts fresh
+    await graph.ainvoke({"results": []}, config)
+    assert observed[-1] == ("sub_step", {"value": []})
+
+    # 2nd invocation — subgraph sees state from 1st
+    await graph.ainvoke({"results": []}, config)
+    assert observed[-1] == ("sub_step", {"value": ["s"]})
+
+    # Replay from checkpoint before parent_node in 2nd invocation
+    history = [s async for s in graph.aget_state_history(config)]
+    before_parent_2nd = [s for s in history if s.next == ("parent_node",)][0]
+
+    observed.clear()
+    await graph.ainvoke(None, before_parent_2nd.config)
+    # Replay should load subgraph state from end of 1st invocation
+    assert observed[0] == ("sub_step", {"value": ["s"]})
+
+    # 3rd invocation — should see state from the replay (2 × "s"), not from
+    # the checkpoint we replayed from (1 × "s")
+    observed.clear()
+    await graph.ainvoke({"results": []}, config)
+    assert observed[0] == ("sub_step", {"value": ["s", "s"]})
+
+
+@pytest.mark.asyncio
+async def test_three_level_nested_subgraph_loads_state_on_replay(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Three levels of nesting: parent -> mid -> inner.
+    Replaying from the parent should load correct state at all levels."""
+    observed: list[tuple[str, dict]] = []
+
+    class InnerState(TypedDict):
+        inner_trail: Annotated[list[str], operator.add]
+
+    class MidState(TypedDict):
+        mid_trail: Annotated[list[str], operator.add]
+
+    class ParentState(TypedDict):
+        results: Annotated[list[str], operator.add]
+
+    def inner_step(state: InnerState) -> InnerState:
+        observed.append(("inner_step", dict(state)))
+        return {"inner_trail": ["inner"]}
+
+    def mid_step(state: MidState) -> MidState:
+        observed.append(("mid_step", dict(state)))
+        return {"mid_trail": ["mid"]}
+
+    def parent_step(state: ParentState) -> ParentState:
+        return {"results": ["p"]}
+
+    inner = (
+        StateGraph(InnerState)
+        .add_node("inner_step", inner_step)
+        .add_edge(START, "inner_step")
+        .compile(checkpointer=True)
+    )
+
+    mid = (
+        StateGraph(MidState)
+        .add_node("mid_step", mid_step)
+        .add_node("inner_node", inner)
+        .add_edge(START, "mid_step")
+        .add_edge("mid_step", "inner_node")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(ParentState)
+        .add_node("parent_step", parent_step)
+        .add_node("mid_node", mid)
+        .add_edge(START, "parent_step")
+        .add_edge("parent_step", "mid_node")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # 1st invocation — everything starts fresh
+    await graph.ainvoke({"results": []}, config)
+    assert observed == [
+        ("mid_step", {"mid_trail": []}),
+        ("inner_step", {"inner_trail": []}),
+    ]
+
+    # 2nd invocation — both levels see accumulated state
+    observed.clear()
+    await graph.ainvoke({"results": []}, config)
+    assert observed == [
+        ("mid_step", {"mid_trail": ["mid"]}),
+        ("inner_step", {"inner_trail": ["inner"]}),
+    ]
+
+    # Replay from checkpoint before parent_step in 2nd invocation
+    history = [s async for s in graph.aget_state_history(config)]
+    before_parent_2nd = [s for s in history if s.next == ("parent_step",)][0]
+
+    observed.clear()
+    await graph.ainvoke(None, before_parent_2nd.config)
+
+    # Both mid and inner should load state from end of 1st invocation
+    assert observed == [
+        ("mid_step", {"mid_trail": ["mid"]}),
+        ("inner_step", {"inner_trail": ["inner"]}),
+    ]
+
+    # 3rd invocation — sees state from replay, not from the replayed checkpoint
+    observed.clear()
+    await graph.ainvoke({"results": []}, config)
+    assert observed == [
+        ("mid_step", {"mid_trail": ["mid", "mid"]}),
+        ("inner_step", {"inner_trail": ["inner", "inner"]}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_three_level_nested_subgraph_loads_state_on_fork(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Three levels of nesting with fork instead of replay."""
+    observed: list[tuple[str, dict]] = []
+
+    class InnerState(TypedDict):
+        inner_trail: Annotated[list[str], operator.add]
+
+    class MidState(TypedDict):
+        mid_trail: Annotated[list[str], operator.add]
+
+    class ParentState(TypedDict):
+        results: Annotated[list[str], operator.add]
+
+    def inner_step(state: InnerState) -> InnerState:
+        observed.append(("inner_step", dict(state)))
+        return {"inner_trail": ["inner"]}
+
+    def mid_step(state: MidState) -> MidState:
+        observed.append(("mid_step", dict(state)))
+        return {"mid_trail": ["mid"]}
+
+    def parent_step(state: ParentState) -> ParentState:
+        return {"results": ["p"]}
+
+    inner = (
+        StateGraph(InnerState)
+        .add_node("inner_step", inner_step)
+        .add_edge(START, "inner_step")
+        .compile(checkpointer=True)
+    )
+
+    mid = (
+        StateGraph(MidState)
+        .add_node("mid_step", mid_step)
+        .add_node("inner_node", inner)
+        .add_edge(START, "mid_step")
+        .add_edge("mid_step", "inner_node")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(ParentState)
+        .add_node("parent_step", parent_step)
+        .add_node("mid_node", mid)
+        .add_edge(START, "parent_step")
+        .add_edge("parent_step", "mid_node")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # 1st invocation
+    await graph.ainvoke({"results": []}, config)
+
+    # 2nd invocation
+    await graph.ainvoke({"results": []}, config)
+
+    # Fork from checkpoint before parent_step in 2nd invocation
+    history = [s async for s in graph.aget_state_history(config)]
+    before_parent_2nd = [s for s in history if s.next == ("parent_step",)][0]
+    fork_config = await graph.aupdate_state(
+        before_parent_2nd.config, {"results": ["forked"]}
+    )
+
+    observed.clear()
+    await graph.ainvoke(None, fork_config)
+
+    # Both mid and inner should load state from end of 1st invocation
+    assert observed == [
+        ("mid_step", {"mid_trail": ["mid"]}),
+        ("inner_step", {"inner_trail": ["inner"]}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_replay_from_first_invocation_checkpoint(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replaying from the 1st invocation's checkpoint should load the subgraph
+    state from before that invocation (i.e. empty)."""
+    observed: list[tuple[str, dict]] = []
+
+    class SubState(TypedDict):
+        value: Annotated[list[str], operator.add]
+
+    class ParentState(TypedDict):
+        results: Annotated[list[str], operator.add]
+
+    def parent_node(state: ParentState) -> ParentState:
+        return {"results": ["p"]}
+
+    def sub_step(state: SubState) -> SubState:
+        observed.append(("sub_step", dict(state)))
+        return {"value": ["s"]}
+
+    sub = (
+        StateGraph(SubState)
+        .add_node("sub_step", sub_step)
+        .add_edge(START, "sub_step")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(ParentState)
+        .add_node("parent_node", parent_node)
+        .add_node("sub_node", sub)
+        .add_edge(START, "parent_node")
+        .add_edge("parent_node", "sub_node")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run twice so subgraph accumulates state
+    await graph.ainvoke({"results": []}, config)
+    await graph.ainvoke({"results": []}, config)
+
+    # Replay from before sub_node in 1st invocation (furthest back)
+    history = [s async for s in graph.aget_state_history(config)]
+    before_sub_1st = [s for s in history if s.next == ("sub_node",)][-1]
+
+    observed.clear()
+    await graph.ainvoke(None, before_sub_1st.config)
+    # Should see empty state — no prior subgraph checkpoints exist
+    assert observed[0] == ("sub_step", {"value": []})

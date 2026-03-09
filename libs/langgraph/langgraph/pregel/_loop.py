@@ -1119,13 +1119,17 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     def _get_latest_checkpoint_before_parent(
         self, parent_checkpoint_id: str
     ) -> CheckpointTuple | None:
-        """Find the latest subgraph checkpoint that was current before the parent's
-        checkpoint time, using the parent checkpoint_id as an upper bound.
+        """Find the latest subgraph checkpoint created before the given parent
+        checkpoint, so the subgraph restores to the correct historical state
+        during a parent replay. Uses UUIDv6 ordering as a temporal upper bound.
 
-        The parent passes the resolved before-bound checkpoint ID via
-        CONFIG_KEY_REPLAY_CHECKPOINT_ID (already accounting for forks).
+        Example: parent checkpoints P1, P2, P3 produce subgraph checkpoints
+        S1, S2, S3. Replaying from P2 loads S1 (latest before P2), so the
+        subgraph re-executes step 2 from the right prior state.
 
-        Returns None to start fresh if no such checkpoint exists."""
+        The parent passes the bound via `CONFIG_KEY_REPLAY_CHECKPOINT_ID`
+        (already accounting for forks). Returns `None` if no matching
+        checkpoint exists, causing the subgraph to start fresh."""
         for saved in cast(BaseCheckpointSaver, self.checkpointer).list(
             self.checkpoint_config,
             before={"configurable": {"checkpoint_id": parent_checkpoint_id}},
@@ -1139,14 +1143,10 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     def __enter__(self) -> Self:
         if not self.checkpointer:
             saved = None
-        elif (
-            self.is_nested
-            and (
-                parent_checkpoint_id := self.config[CONF].get(
-                    CONFIG_KEY_REPLAY_CHECKPOINT_ID
-                )
+        elif self.is_nested and (
+            parent_checkpoint_id := self.config[CONF].get(
+                CONFIG_KEY_REPLAY_CHECKPOINT_ID
             )
-            and not self.checkpoint_config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_ID)
         ):
             # Subgraph replay: the parent graph is replaying from an earlier
             # checkpoint, so we need to restore the subgraph checkpoint that
@@ -1352,14 +1352,10 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     async def __aenter__(self) -> Self:
         if not self.checkpointer:
             saved = None
-        elif (
-            self.is_nested
-            and (
-                parent_checkpoint_id := self.config[CONF].get(
-                    CONFIG_KEY_REPLAY_CHECKPOINT_ID
-                )
+        elif self.is_nested and (
+            parent_checkpoint_id := self.config[CONF].get(
+                CONFIG_KEY_REPLAY_CHECKPOINT_ID
             )
-            and not self.checkpoint_config.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_ID)
         ):
             # Subgraph replay: the parent graph is replaying from an earlier
             # checkpoint, so we need to restore the subgraph checkpoint that
