@@ -42,7 +42,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
-    CONFIG_KEY_REPLAY_CHECKPOINT_ID,
+    CONFIG_KEY_REPLAY_STATE,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SCRATCHPAD,
@@ -59,6 +59,7 @@ from langgraph._internal._constants import (
     RESUME,
     TASKS,
 )
+from langgraph._internal._replay import ReplayState
 from langgraph._internal._scratchpad import PregelScratchpad
 from langgraph._internal._typing import EMPTY_SEQ, MISSING
 from langgraph.channels.base import BaseChannel
@@ -748,7 +749,7 @@ class PregelLoop:
             # parent. For forks (source=update), use the fork's parent
             # checkpoint ID since the fork was created after the subgraph's
             # checkpoints from the original execution.
-            replay_checkpoint_id: str | None = None
+            replay_state: ReplayState | None = None
             if self.is_replaying:
                 replay_checkpoint_id = self.checkpoint["id"]
                 if (
@@ -758,11 +759,12 @@ class PregelLoop:
                     replay_checkpoint_id = self.prev_checkpoint_config[CONF].get(
                         CONFIG_KEY_CHECKPOINT_ID, replay_checkpoint_id
                     )
+                replay_state = ReplayState(replay_checkpoint_id)
             self.config = patch_configurable(
                 self.config,
                 {
                     CONFIG_KEY_RESUMING: is_resuming,
-                    CONFIG_KEY_REPLAY_CHECKPOINT_ID: replay_checkpoint_id,
+                    CONFIG_KEY_REPLAY_STATE: replay_state,
                 },
             )
         # set flag
@@ -1115,43 +1117,19 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             },
         )
 
-    def _get_latest_checkpoint_before_parent(
-        self, parent_checkpoint_id: str
-    ) -> CheckpointTuple | None:
-        """Find the latest subgraph checkpoint created before the given parent
-        checkpoint, so the subgraph restores to the correct historical state
-        during a parent replay. Uses UUIDv6 ordering as a temporal upper bound.
-
-        Example: parent checkpoints P1, P2, P3 produce subgraph checkpoints
-        S1, S2, S3. Replaying from P2 loads S1 (latest before P2), so the
-        subgraph re-executes step 2 from the right prior state.
-
-        The parent passes the bound via `CONFIG_KEY_REPLAY_CHECKPOINT_ID`
-        (already accounting for forks). Returns `None` if no matching
-        checkpoint exists, causing the subgraph to start fresh."""
-        for saved in cast(BaseCheckpointSaver, self.checkpointer).list(
-            self.checkpoint_config,
-            before={"configurable": {"checkpoint_id": parent_checkpoint_id}},
-            limit=1,
-        ):
-            return saved
-        return None
-
     # context manager
 
     def __enter__(self) -> Self:
         if not self.checkpointer:
             saved = None
         elif self.is_nested and (
-            parent_checkpoint_id := self.config[CONF].get(
-                CONFIG_KEY_REPLAY_CHECKPOINT_ID
-            )
+            replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
         ):
-            # Subgraph replay: the parent graph is replaying from an earlier
-            # checkpoint, so we need to restore the subgraph checkpoint that
-            # corresponds to that parent checkpoint — not the subgraph's
-            # latest. We find it by matching the parent checkpoint timeline.
-            saved = self._get_latest_checkpoint_before_parent(parent_checkpoint_id)
+            saved = replay_state.get_checkpoint(
+                self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
+                self.checkpointer,
+                self.checkpoint_config,
+            )
             # Clear RESUMING so _first re-applies input instead of resuming.
             # This recreates ephemeral routing channels so nodes trigger
             # naturally via version comparison.
@@ -1334,34 +1312,18 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             },
         )
 
-    async def _aget_latest_checkpoint_before_parent(
-        self, parent_checkpoint_id: str
-    ) -> CheckpointTuple | None:
-        """Async version of `_get_latest_checkpoint_before_parent`."""
-        async for saved in cast(BaseCheckpointSaver, self.checkpointer).alist(
-            self.checkpoint_config,
-            before={"configurable": {"checkpoint_id": parent_checkpoint_id}},
-            limit=1,
-        ):
-            return saved
-        return None
-
     # context manager
 
     async def __aenter__(self) -> Self:
         if not self.checkpointer:
             saved = None
         elif self.is_nested and (
-            parent_checkpoint_id := self.config[CONF].get(
-                CONFIG_KEY_REPLAY_CHECKPOINT_ID
-            )
+            replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
         ):
-            # Subgraph replay: the parent graph is replaying from an earlier
-            # checkpoint, so we need to restore the subgraph checkpoint that
-            # corresponds to that parent checkpoint — not the subgraph's
-            # latest. We find it by matching the parent checkpoint timeline.
-            saved = await self._aget_latest_checkpoint_before_parent(
-                parent_checkpoint_id
+            saved = await replay_state.aget_checkpoint(
+                self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
+                self.checkpointer,
+                self.checkpoint_config,
             )
             # Clear RESUMING so _first re-applies input instead of resuming.
             # This recreates ephemeral routing channels so nodes trigger
