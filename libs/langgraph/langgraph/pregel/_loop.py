@@ -622,24 +622,23 @@ class PregelLoop:
         # Resuming from a previous checkpoint requires two things:
         # 1. A prior checkpoint exists (channel_versions is non-empty)
         # 2. The input signals continuation (not a fresh run with new input)
-        configurable = self.config.get(CONF, {})
-        has_prior_checkpoint = bool(self.checkpoint["channel_versions"])
         # For subgraphs, the parent explicitly sets CONFIG_KEY_RESUMING.
         # For the outer graph, we infer from the input:
         #   - None input: resume after interrupt (invoke(None, config))
         #   - Command input: any Command operates on existing state
         #   - Same run_id: re-entry into an ongoing run (e.g. stream reconnect)
-        input_signals_resume = (
-            self.input is None
-            or isinstance(self.input, Command)
-            or (
-                not self.is_nested
-                and self.config.get("metadata", {}).get("run_id")
-                == self.checkpoint_metadata.get("run_id", MISSING)
+        configurable = self.config.get(CONF, {})
+        is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
+            configurable.get(
+                CONFIG_KEY_RESUMING,
+                self.input is None
+                or isinstance(self.input, Command)
+                or (
+                    not self.is_nested
+                    and self.config.get("metadata", {}).get("run_id")
+                    == self.checkpoint_metadata.get("run_id", MISSING)
+                ),
             )
-        )
-        is_resuming = has_prior_checkpoint and bool(
-            configurable.get(CONFIG_KEY_RESUMING, input_signals_resume)
         )
 
         # When replaying from a specific checkpoint, drop cached RESUME
