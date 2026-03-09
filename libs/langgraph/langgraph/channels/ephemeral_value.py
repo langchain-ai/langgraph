@@ -28,6 +28,11 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
     def __eq__(self, value: object) -> bool:
         return isinstance(value, EphemeralValue) and value.guard == self.guard
 
+    def __repr__(self) -> str:
+        if self.value is MISSING:
+            return f"EphemeralValue(typ={self.typ!r}, key={self.key!r}, guard={self.guard}, value=MISSING)"
+        return f"EphemeralValue(typ={self.typ!r}, key={self.key!r}, guard={self.guard}, value={self.value!r})"
+
     @property
     def ValueType(self) -> type[Value]:
         """The type of the value stored in the channel."""
