@@ -19,7 +19,6 @@ Key concepts:
 import operator
 from typing import Annotated
 
-import pytest
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from typing_extensions import TypedDict
@@ -30,6 +29,34 @@ from langgraph.types import Command, interrupt
 
 class State(TypedDict):
     value: Annotated[list[str], operator.add]
+
+
+def _checkpoint_summary(history: list) -> list[dict]:
+    """Summarize checkpoint history into a readable format for assertions.
+
+    Returns a list of dicts (newest-first, matching get_state_history order) with:
+      - id: short checkpoint id suffix (last 6 chars)
+      - parent_id: short parent checkpoint id suffix or None
+      - next: tuple of next node names
+      - values: channel values snapshot
+    """
+    summaries = []
+    for s in history:
+        cid = s.config["configurable"]["checkpoint_id"]
+        pid = (
+            s.parent_config["configurable"]["checkpoint_id"]
+            if s.parent_config
+            else None
+        )
+        summaries.append(
+            {
+                "id": cid[-6:],
+                "parent_id": pid[-6:] if pid else None,
+                "next": s.next,
+                "values": s.values,
+            }
+        )
+    return summaries
 
 
 # ---------------------------------------------------------------------------
@@ -1648,7 +1675,6 @@ def test_stateful_subgraph_retains_state_on_parent_replay(
     assert started[0] == ("step_a", {"value": ["a:a1", "b:b1"]})
 
 
-@pytest.mark.xfail(reason="Fork does not yet roll back subgraph state correctly")
 def test_stateful_subgraph_retains_state_on_parent_fork(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
@@ -1716,6 +1742,521 @@ def test_stateful_subgraph_retains_state_on_parent_fork(
     assert "__interrupt__" in fork_result
     # Fork sees 1st invocation's final state, NOT 2nd invocation's
     assert observed[0] == ("step_a", {"value": ["a:a1", "b:b1"]})
+
+
+def test_stateful_subgraph_loads_state_across_ticks(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """When replaying from a checkpoint before a non-subgraph node, a stateful
+    subgraph that runs in a later tick should still load its accumulated state
+    from the previous execution.
+
+    Sequence: node_a -> node_b -> sub_node -> node_a -> node_b -> sub_node
+    Replay from the 2nd node_a: sub_node in the later tick should see state
+    from the end of the 1st sub_node execution.
+    """
+    observed: list[tuple[str, dict]] = []
+
+    class SubState(TypedDict):
+        value: Annotated[list[str], operator.add]
+
+    class ParentState(TypedDict):
+        results: Annotated[list[str], operator.add]
+
+    def node_a(state: ParentState) -> ParentState:
+        return {"results": ["a"]}
+
+    def node_b(state: ParentState) -> ParentState:
+        return {"results": ["b"]}
+
+    def sub_step(state: SubState) -> SubState:
+        observed.append(("sub_step", dict(state)))
+        return {"value": ["s"]}
+
+    sub = (
+        StateGraph(SubState)
+        .add_node("sub_step", sub_step)
+        .add_edge(START, "sub_step")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(ParentState)
+        .add_node("node_a", node_a)
+        .add_node("node_b", node_b)
+        .add_node("sub_node", sub)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "node_b")
+        .add_edge("node_b", "sub_node")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # 1st invocation
+    graph.invoke({"results": []}, config)
+    assert observed[0] == ("sub_step", {"value": []})
+
+    # 2nd invocation
+    observed.clear()
+    graph.invoke({"results": []}, config)
+    assert observed[0] == ("sub_step", {"value": ["s"]})
+
+    # Replay from checkpoint before node_a in 2nd invocation
+    history = list(graph.get_state_history(config))
+    before_a_2nd = [s for s in history if s.next == ("node_a",)][0]
+
+    observed.clear()
+    graph.invoke(None, before_a_2nd.config)
+
+    # sub_node runs in a later tick (after node_a and node_b replay),
+    # and should see state from end of 1st sub_node execution
+    assert observed[0] == ("sub_step", {"value": ["s"]})
+
+
+# ---------------------------------------------------------------------------
+# Section 8: Append-only checkpoint history (branching / forking)
+# ---------------------------------------------------------------------------
+
+
+def test_replay_creates_branch_preserving_old_checkpoints(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replaying from a mid-run checkpoint creates a new branch of checkpoints
+    while the original checkpoint sequence is preserved (append-only).
+
+    Original run (newest first):
+      C4  next=()          values=[a, b1, c]     parent=C3
+      C3  next=(node_c,)   values=[a, b1]        parent=C2
+      C2  next=(node_b,)   values=[a]            parent=C1
+      C1  next=(node_a,)   values=[]             parent=C0
+      C0  next=(__start__,) values={}             parent=None
+
+    After replay from C2 (newest first):
+      C6  next=()          values=[a, b2, c]     parent=C5   <- new branch tip
+      C5  next=(node_c,)   values=[a, b2]        parent=C2   <- branches from C2
+      C4  next=()          values=[a, b1, c]     parent=C3   <- old branch preserved
+      C3  next=(node_c,)   values=[a, b1]        parent=C2
+      C2  next=(node_b,)   values=[a]            parent=C1
+      C1  next=(node_a,)   values=[]             parent=C0
+      C0  next=(__start__,) values={}             parent=None
+    """
+
+    call_count = 0
+
+    def node_a(state: State) -> State:
+        return {"value": ["a"]}
+
+    def node_b(state: State) -> State:
+        nonlocal call_count
+        call_count += 1
+        return {"value": [f"b{call_count}"]}
+
+    def node_c(state: State) -> State:
+        return {"value": ["c"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("node_b", node_b)
+        .add_node("node_c", node_c)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "node_b")
+        .add_edge("node_b", "node_c")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"value": []}, config)
+    assert result == {"value": ["a", "b1", "c"]}
+
+    # -- Original checkpoint history (newest first) --
+    original_history = list(graph.get_state_history(config))
+    original_summary = _checkpoint_summary(original_history)
+    assert len(original_summary) == 5
+    # Verify the shape: next tuples newest->oldest
+    assert [s["next"] for s in original_summary] == [
+        (),
+        ("node_c",),
+        ("node_b",),
+        ("node_a",),
+        ("__start__",),
+    ]
+    # Verify values at each checkpoint
+    assert [s["values"] for s in original_summary] == [
+        {"value": ["a", "b1", "c"]},
+        {"value": ["a", "b1"]},
+        {"value": ["a"]},
+        {"value": []},
+        {"value": []},
+    ]
+    original_ids = {s.config["configurable"]["checkpoint_id"] for s in original_history}
+
+    # Find checkpoint before node_b and replay from it
+    before_b = next(s for s in original_history if s.next == ("node_b",))
+    before_b_id = before_b.config["configurable"]["checkpoint_id"]
+    replay_result = graph.invoke(None, before_b.config)
+    assert replay_result == {"value": ["a", "b2", "c"]}
+
+    # -- Post-replay checkpoint history (newest first) --
+    post_replay_history = list(graph.get_state_history(config))
+    post_summary = _checkpoint_summary(post_replay_history)
+    assert len(post_summary) == 7  # 5 original + 2 new branch checkpoints
+
+    # Verify the full shape after replay
+    assert [s["next"] for s in post_summary] == [
+        (),  # new branch tip (C6)
+        ("node_c",),  # new branch (C5)
+        (),  # old branch tip (C4)
+        ("node_c",),  # old (C3)
+        ("node_b",),  # branch point (C2)
+        ("node_a",),  # old (C1)
+        ("__start__",),  # old (C0)
+    ]
+    assert [s["values"] for s in post_summary] == [
+        {"value": ["a", "b2", "c"]},  # new branch tip
+        {"value": ["a", "b2"]},  # new: node_b re-ran with call_count=2
+        {"value": ["a", "b1", "c"]},  # old branch tip preserved
+        {"value": ["a", "b1"]},  # old
+        {"value": ["a"]},  # branch point
+        {"value": []},  # old
+        {"value": []},  # old
+    ]
+
+    # All original checkpoint IDs still exist (append-only)
+    post_ids = {s.config["configurable"]["checkpoint_id"] for s in post_replay_history}
+    assert original_ids.issubset(post_ids)
+
+    # New branch's oldest checkpoint parent is the branch point
+    new_checkpoints = [
+        s
+        for s in post_replay_history
+        if s.config["configurable"]["checkpoint_id"] not in original_ids
+    ]
+    oldest_new = sorted(new_checkpoints, key=lambda s: s.created_at)[0]
+    assert oldest_new.parent_config is not None
+    assert oldest_new.parent_config["configurable"]["checkpoint_id"] == before_b_id
+
+    # get_state returns the new branch tip
+    latest = graph.get_state(config)
+    assert latest.values == {"value": ["a", "b2", "c"]}
+    assert latest.config["configurable"]["checkpoint_id"] not in original_ids
+
+
+def test_replay_creates_branch_in_subgraph(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replaying a graph with a subgraph from a mid-run checkpoint creates a
+    new branch while preserving the original checkpoint sequence.
+
+    The subgraph re-executes on the new branch and the old checkpoints
+    (including sub-checkpoints) remain in the history.
+    """
+
+    sub_call_count = 0
+
+    class SubState(TypedDict):
+        sub_value: Annotated[list[str], operator.add]
+
+    class ParentState(TypedDict):
+        value: Annotated[list[str], operator.add]
+        sub_value: Annotated[list[str], operator.add]
+
+    def parent_start(state: ParentState) -> ParentState:
+        return {"value": ["p_start"]}
+
+    def sub_step(state: SubState) -> SubState:
+        nonlocal sub_call_count
+        sub_call_count += 1
+        return {"sub_value": [f"sub{sub_call_count}"]}
+
+    def parent_end(state: ParentState) -> ParentState:
+        return {"value": ["p_end"]}
+
+    sub = (
+        StateGraph(SubState)
+        .add_node("sub_step", sub_step)
+        .add_edge(START, "sub_step")
+        .compile()
+    )
+
+    graph = (
+        StateGraph(ParentState)
+        .add_node("parent_start", parent_start)
+        .add_node("sub_graph", sub)
+        .add_node("parent_end", parent_end)
+        .add_edge(START, "parent_start")
+        .add_edge("parent_start", "sub_graph")
+        .add_edge("sub_graph", "parent_end")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"value": [], "sub_value": []}, config)
+    assert result == {"value": ["p_start", "p_end"], "sub_value": ["sub1"]}
+
+    # Capture original checkpoint IDs
+    original_history = list(graph.get_state_history(config))
+    original_ids = {s.config["configurable"]["checkpoint_id"] for s in original_history}
+
+    # Find checkpoint before sub_graph
+    before_sub = next(s for s in original_history if s.next == ("sub_graph",))
+    before_sub_id = before_sub.config["configurable"]["checkpoint_id"]
+
+    # Replay from before sub_graph
+    replay_result = graph.invoke(None, before_sub.config)
+    assert replay_result == {"value": ["p_start", "p_end"], "sub_value": ["sub2"]}
+
+    # Get full history after replay
+    post_replay_history = list(graph.get_state_history(config))
+    post_replay_ids = {
+        s.config["configurable"]["checkpoint_id"] for s in post_replay_history
+    }
+
+    # All original checkpoint IDs still exist (append-only)
+    assert original_ids.issubset(post_replay_ids)
+
+    # New checkpoints were added (the branch)
+    new_ids = post_replay_ids - original_ids
+    assert len(new_ids) >= 2  # sub_graph + parent_end at minimum
+
+    # The oldest new checkpoint's parent is the checkpoint we replayed from
+    new_checkpoints = [
+        s
+        for s in post_replay_history
+        if s.config["configurable"]["checkpoint_id"] in new_ids
+    ]
+    oldest_new = sorted(new_checkpoints, key=lambda s: s.created_at)[0]
+    assert oldest_new.parent_config is not None
+    assert oldest_new.parent_config["configurable"]["checkpoint_id"] == before_sub_id
+
+    # get_state returns the new branch tip
+    latest = graph.get_state(config)
+    assert latest.config["configurable"]["checkpoint_id"] in new_ids
+    assert latest.values == {"value": ["p_start", "p_end"], "sub_value": ["sub2"]}
+
+
+def test_fork_creates_branch_preserving_old_checkpoints(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Forking (update_state + invoke) from a mid-run checkpoint creates a new
+    branch of checkpoints while the original sequence is preserved.
+
+    Original run (newest first):
+      C4  next=()          values=[a, b1, c]     parent=C3
+      C3  next=(node_c,)   values=[a, b1]        parent=C2
+      C2  next=(node_b,)   values=[a]            parent=C1
+      C1  next=(node_a,)   values=[]             parent=C0
+      C0  next=(__start__,) values={}             parent=None
+
+    After fork from C2 with update {"value": ["x"]} (newest first):
+      C7  next=()          values=[a, x, b2, c]  parent=C6
+      C6  next=(node_c,)   values=[a, x, b2]     parent=C5
+      C5  next=(node_b,)   values=[a, x]         parent=C2   <- fork checkpoint
+      C4  next=()          values=[a, b1, c]     parent=C3   <- old branch preserved
+      C3  next=(node_c,)   values=[a, b1]        parent=C2
+      C2  next=(node_b,)   values=[a]            parent=C1   <- fork point
+      C1  next=(node_a,)   values=[]             parent=C0
+      C0  next=(__start__,) values={}             parent=None
+    """
+
+    call_count = 0
+
+    def node_a(state: State) -> State:
+        return {"value": ["a"]}
+
+    def node_b(state: State) -> State:
+        nonlocal call_count
+        call_count += 1
+        return {"value": [f"b{call_count}"]}
+
+    def node_c(state: State) -> State:
+        return {"value": ["c"]}
+
+    graph = (
+        StateGraph(State)
+        .add_node("node_a", node_a)
+        .add_node("node_b", node_b)
+        .add_node("node_c", node_c)
+        .add_edge(START, "node_a")
+        .add_edge("node_a", "node_b")
+        .add_edge("node_b", "node_c")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"value": []}, config)
+    assert result == {"value": ["a", "b1", "c"]}
+
+    # -- Original checkpoint history (newest first) --
+    original_history = list(graph.get_state_history(config))
+    original_summary = _checkpoint_summary(original_history)
+    assert len(original_summary) == 5
+    assert [s["next"] for s in original_summary] == [
+        (),
+        ("node_c",),
+        ("node_b",),
+        ("node_a",),
+        ("__start__",),
+    ]
+    assert [s["values"] for s in original_summary] == [
+        {"value": ["a", "b1", "c"]},
+        {"value": ["a", "b1"]},
+        {"value": ["a"]},
+        {"value": []},
+        {"value": []},
+    ]
+    original_ids = {s.config["configurable"]["checkpoint_id"] for s in original_history}
+
+    # Fork from before node_b with modified state
+    before_b = next(s for s in original_history if s.next == ("node_b",))
+    before_b_id = before_b.config["configurable"]["checkpoint_id"]
+    fork_config = graph.update_state(before_b.config, {"value": ["x"]})
+    fork_result = graph.invoke(None, fork_config)
+    assert fork_result == {"value": ["a", "x", "b2", "c"]}
+
+    # -- Post-fork checkpoint history (newest first) --
+    post_fork_history = list(graph.get_state_history(config))
+    post_summary = _checkpoint_summary(post_fork_history)
+    # 5 original + 1 fork checkpoint (update_state) + 2 new nodes (node_b, node_c)
+    assert len(post_summary) == 8
+
+    assert [s["next"] for s in post_summary] == [
+        (),  # new branch tip (C7)
+        ("node_c",),  # new branch (C6)
+        ("node_b",),  # fork checkpoint from update_state (C5)
+        (),  # old branch tip (C4)
+        ("node_c",),  # old (C3)
+        ("node_b",),  # fork point (C2)
+        ("node_a",),  # old (C1)
+        ("__start__",),  # old (C0)
+    ]
+    assert [s["values"] for s in post_summary] == [
+        {"value": ["a", "x", "b2", "c"]},  # new branch tip
+        {"value": ["a", "x", "b2"]},  # new: node_b re-ran
+        {"value": ["a", "x"]},  # fork: state updated with "x"
+        {"value": ["a", "b1", "c"]},  # old branch tip preserved
+        {"value": ["a", "b1"]},  # old
+        {"value": ["a"]},  # fork point
+        {"value": []},  # old
+        {"value": []},  # old
+    ]
+
+    # All original checkpoint IDs still exist (append-only)
+    post_ids = {s.config["configurable"]["checkpoint_id"] for s in post_fork_history}
+    assert original_ids.issubset(post_ids)
+
+    # Fork checkpoint's parent is the branch point
+    new_checkpoints = [
+        s
+        for s in post_fork_history
+        if s.config["configurable"]["checkpoint_id"] not in original_ids
+    ]
+    oldest_new = sorted(new_checkpoints, key=lambda s: s.created_at)[0]
+    assert oldest_new.parent_config is not None
+    assert oldest_new.parent_config["configurable"]["checkpoint_id"] == before_b_id
+
+    # get_state returns the new branch tip
+    latest = graph.get_state(config)
+    assert latest.values == {"value": ["a", "x", "b2", "c"]}
+    assert latest.config["configurable"]["checkpoint_id"] not in original_ids
+
+
+def test_fork_creates_branch_in_subgraph(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Forking a graph with a subgraph from a mid-run checkpoint creates a new
+    branch while preserving the original checkpoint sequence.
+
+    The subgraph re-executes on the new branch and the old checkpoints remain.
+    """
+
+    sub_call_count = 0
+
+    class SubState(TypedDict):
+        sub_value: Annotated[list[str], operator.add]
+
+    class ParentState(TypedDict):
+        value: Annotated[list[str], operator.add]
+        sub_value: Annotated[list[str], operator.add]
+
+    def parent_start(state: ParentState) -> ParentState:
+        return {"value": ["p_start"]}
+
+    def sub_step(state: SubState) -> SubState:
+        nonlocal sub_call_count
+        sub_call_count += 1
+        return {"sub_value": [f"sub{sub_call_count}"]}
+
+    def parent_end(state: ParentState) -> ParentState:
+        return {"value": ["p_end"]}
+
+    sub = (
+        StateGraph(SubState)
+        .add_node("sub_step", sub_step)
+        .add_edge(START, "sub_step")
+        .compile()
+    )
+
+    graph = (
+        StateGraph(ParentState)
+        .add_node("parent_start", parent_start)
+        .add_node("sub_graph", sub)
+        .add_node("parent_end", parent_end)
+        .add_edge(START, "parent_start")
+        .add_edge("parent_start", "sub_graph")
+        .add_edge("sub_graph", "parent_end")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+    result = graph.invoke({"value": [], "sub_value": []}, config)
+    assert result == {"value": ["p_start", "p_end"], "sub_value": ["sub1"]}
+
+    # Capture original checkpoint IDs
+    original_history = list(graph.get_state_history(config))
+    original_ids = {s.config["configurable"]["checkpoint_id"] for s in original_history}
+
+    # Find checkpoint before sub_graph and fork with modified state
+    before_sub = next(s for s in original_history if s.next == ("sub_graph",))
+    before_sub_id = before_sub.config["configurable"]["checkpoint_id"]
+    fork_config = graph.update_state(before_sub.config, {"value": ["extra"]})
+    fork_result = graph.invoke(None, fork_config)
+    assert fork_result == {
+        "value": ["p_start", "extra", "p_end"],
+        "sub_value": ["sub2"],
+    }
+
+    # Get full history after fork
+    post_fork_history = list(graph.get_state_history(config))
+    post_fork_ids = {
+        s.config["configurable"]["checkpoint_id"] for s in post_fork_history
+    }
+
+    # All original checkpoint IDs still exist (append-only)
+    assert original_ids.issubset(post_fork_ids)
+
+    # New checkpoints were added (the branch)
+    new_ids = post_fork_ids - original_ids
+    assert len(new_ids) >= 3  # fork checkpoint + sub_graph + parent_end
+
+    # The oldest new checkpoint's parent is the checkpoint we forked from
+    new_checkpoints = [
+        s
+        for s in post_fork_history
+        if s.config["configurable"]["checkpoint_id"] in new_ids
+    ]
+    oldest_new = sorted(new_checkpoints, key=lambda s: s.created_at)[0]
+    assert oldest_new.parent_config is not None
+    assert oldest_new.parent_config["configurable"]["checkpoint_id"] == before_sub_id
+
+    # get_state returns the new branch tip
+    latest = graph.get_state(config)
+    assert latest.config["configurable"]["checkpoint_id"] in new_ids
+    assert latest.values == {
+        "value": ["p_start", "extra", "p_end"],
+        "sub_value": ["sub2"],
+    }
 
 
 def test_stateless_subgraph_starts_fresh_on_parent_replay(
