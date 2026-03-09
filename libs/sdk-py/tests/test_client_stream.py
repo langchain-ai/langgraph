@@ -394,7 +394,12 @@ async def test_async_stream_v2_client_side_conversion() -> None:
     assert len(parts) == 3
     for part in parts:
         _assert_v2_shape(part)
-    assert parts[0] == {"type": "metadata", "ns": [], "data": {"run_id": "r1"}, "interrupts": []}
+    assert parts[0] == {
+        "type": "metadata",
+        "ns": [],
+        "data": {"run_id": "r1"},
+        "interrupts": [],
+    }
     assert parts[1] == {
         "type": "values",
         "ns": [],
@@ -421,8 +426,18 @@ def test_sync_stream_v2_client_side_conversion() -> None:
     assert len(parts) == 2
     for part in parts:
         _assert_v2_shape(part)
-    assert parts[0] == {"type": "metadata", "ns": [], "data": {"run_id": "r1"}, "interrupts": []}
-    assert parts[1] == {"type": "values", "ns": [], "data": {"state": "full"}, "interrupts": []}
+    assert parts[0] == {
+        "type": "metadata",
+        "ns": [],
+        "data": {"run_id": "r1"},
+        "interrupts": [],
+    }
+    assert parts[1] == {
+        "type": "values",
+        "ns": [],
+        "data": {"state": "full"},
+        "interrupts": [],
+    }
 
 
 # --- type narrowing compile-time checks ---

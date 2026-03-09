@@ -171,9 +171,7 @@ class TestV1BackwardsCompat:
 class TestV2Stream:
     def test_values(self) -> None:
         graph = _make_simple_graph().compile()
-        chunks = list(
-            graph.stream(_SIMPLE_INPUT, stream_mode="values", version="v2")
-        )
+        chunks = list(graph.stream(_SIMPLE_INPUT, stream_mode="values", version="v2"))
         assert len(chunks) >= 1
         for c in chunks:
             _assert_stream_part_shape(c)
@@ -183,9 +181,7 @@ class TestV2Stream:
 
     def test_updates(self) -> None:
         graph = _make_simple_graph().compile()
-        chunks = list(
-            graph.stream(_SIMPLE_INPUT, stream_mode="updates", version="v2")
-        )
+        chunks = list(graph.stream(_SIMPLE_INPUT, stream_mode="updates", version="v2"))
         assert len(chunks) == 2
         for c in chunks:
             _assert_stream_part_shape(c)
@@ -196,9 +192,7 @@ class TestV2Stream:
 
     def test_messages(self) -> None:
         graph = _make_messages_graph().compile()
-        chunks = list(
-            graph.stream(_MSG_INPUT, stream_mode="messages", version="v2")
-        )
+        chunks = list(graph.stream(_MSG_INPUT, stream_mode="messages", version="v2"))
         msg_chunks = [c for c in chunks if c["type"] == "messages"]
         assert len(msg_chunks) >= 1
         for c in msg_chunks:
@@ -213,9 +207,7 @@ class TestV2Stream:
 
     def test_custom(self) -> None:
         graph = _make_custom_graph()
-        chunks = list(
-            graph.stream({"key": "val"}, stream_mode="custom", version="v2")
-        )
+        chunks = list(graph.stream({"key": "val"}, stream_mode="custom", version="v2"))
         custom = [c for c in chunks if c["type"] == "custom"]
         assert len(custom) == 2
         for c in custom:
@@ -701,9 +693,7 @@ class TestV2InvokeAsync:
         graph = builder.compile(checkpointer=InMemorySaver())
 
         config: Any = {"configurable": {"thread_id": "test-ainvoke-v2-interrupts"}}
-        result = await graph.ainvoke(
-            {"value": "x", "items": []}, config, version="v2"
-        )
+        result = await graph.ainvoke({"value": "x", "items": []}, config, version="v2")
         assert isinstance(result, GraphOutput)
         assert len(result.interrupts) > 0
         for intr in result.interrupts:
@@ -761,9 +751,7 @@ class TestV2InvokeAsync:
     @pytest.mark.anyio
     async def test_updates_mode(self) -> None:
         graph = _make_simple_graph().compile()
-        result = await graph.ainvoke(
-            _SIMPLE_INPUT, stream_mode="updates", version="v2"
-        )
+        result = await graph.ainvoke(_SIMPLE_INPUT, stream_mode="updates", version="v2")
         assert isinstance(result, list) and len(result) == 2
         for chunk in result:
             _assert_stream_part_shape(chunk)
@@ -776,9 +764,7 @@ class TestV2InvokeAsync:
     async def test_multiple_modes(self) -> None:
         graph = _make_simple_graph().compile()
         modes: Any = ["values", "updates"]
-        result = await graph.ainvoke(
-            _SIMPLE_INPUT, stream_mode=modes, version="v2"
-        )
+        result = await graph.ainvoke(_SIMPLE_INPUT, stream_mode=modes, version="v2")
         assert isinstance(result, list)
         types_seen = {c["type"] for c in result}
         assert {"values", "updates"} <= types_seen
@@ -862,9 +848,7 @@ class TestV2TypeSafeStreaming:
     def test_values_typeddict_state(self) -> None:
         """v2 values + TypedDict state -> data stays plain dict (no coercion)."""
         graph = _make_simple_graph().compile()
-        chunks = list(
-            graph.stream(_SIMPLE_INPUT, stream_mode="values", version="v2")
-        )
+        chunks = list(graph.stream(_SIMPLE_INPUT, stream_mode="values", version="v2"))
         assert len(chunks) >= 1
         for c in chunks:
             _assert_stream_part_shape(c)
