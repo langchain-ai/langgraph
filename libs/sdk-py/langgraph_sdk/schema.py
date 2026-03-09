@@ -687,6 +687,7 @@ class ValuesStreamPart(TypedDict):
     type: Literal["values"]
     ns: list[str]
     data: dict[str, Any]
+    interrupts: list[dict[str, Any]]
 
 
 class UpdatesStreamPart(TypedDict):

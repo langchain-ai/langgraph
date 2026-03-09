@@ -301,6 +301,7 @@ def test_sse_to_v2_dict_basic() -> None:
         "type": "values",
         "ns": [],
         "data": {"messages": [{"role": "user"}]},
+        "interrupts": [],
     }
 
 
@@ -312,6 +313,7 @@ def test_sse_to_v2_dict_with_namespace() -> None:
         "type": "updates",
         "ns": ["sub:abc"],
         "data": {"key": "val"},
+        "interrupts": [],
     }
 
 
@@ -323,6 +325,7 @@ def test_sse_to_v2_dict_with_multiple_ns() -> None:
         "type": "custom",
         "ns": ["parent", "child:123"],
         "data": "hello",
+        "interrupts": [],
     }
 
 
@@ -338,6 +341,7 @@ def test_sse_to_v2_dict_metadata_event() -> None:
         "type": "metadata",
         "ns": [],
         "data": {"run_id": "abc-123"},
+        "interrupts": [],
     }
 
 
@@ -349,7 +353,26 @@ def test_sse_to_v2_dict_messages_partial() -> None:
         "type": "messages/partial",
         "ns": [],
         "data": [{"type": "ai", "content": "hi"}],
+        "interrupts": [],
     }
+
+
+def test_sse_to_v2_dict_values_with_interrupts() -> None:
+    data = {
+        "messages": [{"role": "user"}],
+        "__interrupt__": [{"value": "confirm?", "resumable": True}],
+    }
+    result = _sse_to_v2_dict("values", data)
+    assert result is not None
+    _assert_v2_shape(result)
+    assert result == {
+        "type": "values",
+        "ns": [],
+        "data": {"messages": [{"role": "user"}]},
+        "interrupts": [{"value": "confirm?", "resumable": True}],
+    }
+    # __interrupt__ should be popped from data
+    assert "__interrupt__" not in result["data"]
 
 
 # --- client-side v2 stream wrapping ---
@@ -371,16 +394,18 @@ async def test_async_stream_v2_client_side_conversion() -> None:
     assert len(parts) == 3
     for part in parts:
         _assert_v2_shape(part)
-    assert parts[0] == {"type": "metadata", "ns": [], "data": {"run_id": "r1"}}
+    assert parts[0] == {"type": "metadata", "ns": [], "data": {"run_id": "r1"}, "interrupts": []}
     assert parts[1] == {
         "type": "values",
         "ns": [],
         "data": {"messages": [{"role": "user", "content": "hi"}]},
+        "interrupts": [],
     }
     assert parts[2] == {
         "type": "updates",
         "ns": ["sub:abc"],
         "data": {"node": {"out": 1}},
+        "interrupts": [],
     }
 
 
@@ -396,8 +421,8 @@ def test_sync_stream_v2_client_side_conversion() -> None:
     assert len(parts) == 2
     for part in parts:
         _assert_v2_shape(part)
-    assert parts[0] == {"type": "metadata", "ns": [], "data": {"run_id": "r1"}}
-    assert parts[1] == {"type": "values", "ns": [], "data": {"state": "full"}}
+    assert parts[0] == {"type": "metadata", "ns": [], "data": {"run_id": "r1"}, "interrupts": []}
+    assert parts[1] == {"type": "values", "ns": [], "data": {"state": "full"}, "interrupts": []}
 
 
 # --- type narrowing compile-time checks ---

@@ -814,7 +814,13 @@ class RemoteGraph(PregelProtocol):
 
             # emit chunk
             if version == "v2":
-                yield {"type": mode, "ns": ns, "data": chunk.data}
+                ints: tuple[Interrupt, ...] = ()
+                if mode == "values" and isinstance(chunk.data, dict):
+                    ints = tuple(
+                        Interrupt(**i) if isinstance(i, dict) else i
+                        for i in chunk.data.pop(INTERRUPT, ())
+                    )
+                yield {"type": mode, "ns": ns, "data": chunk.data, "interrupts": ints}
             elif subgraphs:
                 if NS_SEP in chunk.event:
                     mode, ns_ = chunk.event.split(NS_SEP, 1)
@@ -959,7 +965,13 @@ class RemoteGraph(PregelProtocol):
 
             # emit chunk
             if version == "v2":
-                yield {"type": mode, "ns": ns, "data": chunk.data}
+                ints: tuple[Interrupt, ...] = ()
+                if mode == "values" and isinstance(chunk.data, dict):
+                    ints = tuple(
+                        Interrupt(**i) if isinstance(i, dict) else i
+                        for i in chunk.data.pop(INTERRUPT, ())
+                    )
+                yield {"type": mode, "ns": ns, "data": chunk.data, "interrupts": ints}
             elif subgraphs:
                 if NS_SEP in chunk.event:
                     mode, ns_ = chunk.event.split(NS_SEP, 1)
