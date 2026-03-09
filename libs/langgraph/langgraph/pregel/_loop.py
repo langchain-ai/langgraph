@@ -245,9 +245,7 @@ class PregelLoop:
         self.interrupt_before = interrupt_before
         self.manager = manager
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get(CONF, {})
-        self.is_replaying = CONFIG_KEY_CHECKPOINT_ID in config[CONF] or bool(
-            config[CONF].get(CONFIG_KEY_REPLAY_CHECKPOINT_ID)
-        )
+        self.is_replaying = CONFIG_KEY_CHECKPOINT_ID in config[CONF]
         self._migrate_checkpoint = migrate_checkpoint
         self.trigger_to_nodes = trigger_to_nodes
         self.retry_policy = retry_policy
@@ -649,14 +647,12 @@ class PregelLoop:
         # stale values. But if a resume value is being provided (e.g.
         # Command(resume=...) or CONFIG_KEY_RESUMING), keep them —
         # multi-interrupt scenarios need previously resolved values preserved.
-        if self.is_replaying:
-            is_resume_with_value = (
-                isinstance(self.input, Command) and self.input.resume is not None
-            ) or configurable.get(CONFIG_KEY_RESUMING, False)
-            if not is_resume_with_value:
-                self.checkpoint_pending_writes = [
-                    w for w in self.checkpoint_pending_writes if w[1] != RESUME
-                ]
+        if self.is_replaying and not (
+            isinstance(self.input, Command) and self.input.resume is not None
+        ):
+            self.checkpoint_pending_writes = [
+                w for w in self.checkpoint_pending_writes if w[1] != RESUME
+            ]
 
         # map command to writes
         if isinstance(self.input, Command):
