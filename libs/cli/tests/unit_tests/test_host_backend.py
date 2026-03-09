@@ -135,6 +135,22 @@ def test_list_deployments(client):
     assert result == {"ok": True}
 
 
+def test_list_deployments_without_filter_uses_base_path():
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert str(req.url) == "https://api.example.com/v2/deployments"
+        return httpx.Response(200, json={"ok": True})
+
+    c = HostBackendClient("https://api.example.com", "test-key")
+    c._client = httpx.Client(
+        base_url="https://api.example.com",
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
+        timeout=30,
+    )
+    result = c.list_deployments()
+    assert result == {"ok": True}
+
+
 def test_request_push_token(client):
     result = client.request_push_token("dep-123")
     assert result == {"ok": True}

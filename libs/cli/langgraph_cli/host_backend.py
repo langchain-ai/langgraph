@@ -65,8 +65,12 @@ class HostBackendClient:
     def create_deployment(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/v2/deployments", payload)
 
-    def list_deployments(self, name_contains: str) -> dict[str, Any]:
-        return self._request("GET", f"/v2/deployments?name_contains={name_contains}")
+    def list_deployments(self, name_contains: str | None = None) -> dict[str, Any]:
+        path = "/v2/deployments"
+        if name_contains:
+            query = httpx.QueryParams({"name_contains": name_contains})
+            path = f"{path}?{query}"
+        return self._request("GET", path)
 
     def get_deployment(self, deployment_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v2/deployments/{deployment_id}")

@@ -124,6 +124,60 @@ def _secrets_from_env(
     return secrets
 
 
+def _resolve_host_api_key(
+    api_key: str | None, env_vars: dict[str, str] | None = None
+) -> str | None:
+    """Resolve the host API key from explicit input or supported env vars."""
+    if api_key:
+        return api_key
+    env_vars = env_vars or {}
+    for key_name in _API_KEY_ENV_NAMES:
+        val = env_vars.get(key_name) or os.environ.get(key_name)
+        if val:
+            return val
+    return None
+
+
+def _extract_deployment_url(deployment: dict[str, object]) -> str:
+    """Return the deployment URL exposed by the API response."""
+    source_config = deployment.get("source_config")
+    if isinstance(source_config, dict):
+        for key in ("custom_url", "url"):
+            value = source_config.get(key)
+            if isinstance(value, str) and value:
+                return value
+
+    return "-"
+
+
+def _print_deployments(deployments: Sequence[dict[str, object]]) -> None:
+    """Render deployments in a simple aligned table."""
+    if not deployments:
+        click.secho("No deployments found.", fg="yellow")
+        return
+
+    rows = [
+        (
+            str(deployment.get("id", "-") or "-"),
+            str(deployment.get("name", "-") or "-"),
+            _extract_deployment_url(deployment),
+        )
+        for deployment in deployments
+    ]
+    headers = ("Deployment ID", "Deployment Name", "Deployment URL")
+    widths = [
+        max(len(headers[idx]), max(len(row[idx]) for row in rows))
+        for idx in range(len(headers))
+    ]
+
+    click.secho(
+        "  ".join(headers[idx].ljust(widths[idx]) for idx in range(len(headers))),
+        bold=True,
+    )
+    for row in rows:
+        click.echo("  ".join(row[idx].ljust(widths[idx]) for idx in range(len(row))))
+
+
 _TERMINAL_STATUSES = frozenset(
     [
         "DEPLOYED",
@@ -681,12 +735,7 @@ def deploy(
 
     env_vars = _parse_env_from_config(config_json, config)
 
-    if not api_key:
-        for key_name in _API_KEY_ENV_NAMES:
-            val = env_vars.get(key_name) or os.environ.get(key_name)
-            if val:
-                api_key = val
-                break
+    api_key = _resolve_host_api_key(api_key, env_vars)
     if not api_key:
         api_key = click.prompt("Host API key", hide_input=True)
 
@@ -1006,6 +1055,66 @@ def deploy(
                     "   Check status in the LangSmith Deployments dashboard.",
                     fg="yellow",
                 )
+
+
+@click.option(
+    "--api-key",
+    envvar="LANGGRAPH_HOST_API_KEY",
+    help=(
+        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
+        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable."
+    ),
+)
+@click.option(
+    "--host-url",
+    envvar="LANGGRAPH_HOST_URL",
+    default="https://api.host.langchain.com",
+    hidden=True,
+)
+@cli.command(
+    "list-deployments",
+    help=(
+        "[Beta] List LangSmith Deployments.\n\n"
+        "This command is in beta and under active development."
+    ),
+)
+@log_command
+def list_deployments(
+    api_key: str | None,
+    host_url: str,
+) -> None:
+    click.secho(
+        "Note: 'langgraph list-deployments' is in beta. Expect frequent updates and improvements.",
+        fg="yellow",
+    )
+    click.echo()
+
+    api_key = _resolve_host_api_key(api_key)
+    if not api_key:
+        api_key = click.prompt("Host API key", hide_input=True)
+
+    client = HostBackendClient(host_url, api_key)
+    try:
+        response = client.list_deployments()
+    except HostBackendError as err:
+        if err.status_code == 403 and "requires workspace specification" in err.message:
+            click.secho(
+                "Your API key is org-scoped and requires a workspace ID.",
+                fg="yellow",
+            )
+            click.secho(
+                "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                fg="yellow",
+            )
+            tenant_id = click.prompt("Workspace ID")
+            client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
+            response = client.list_deployments()
+        else:
+            raise
+
+    resources = response.get("resources", []) if isinstance(response, dict) else []
+    deployments = [dep for dep in resources if isinstance(dep, dict)]
+    _print_deployments(deployments)
 
 
 def _normalize_image_name(value: str | None) -> str:

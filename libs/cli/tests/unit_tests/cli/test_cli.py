@@ -7,6 +7,7 @@ import textwrap
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from langgraph_cli.cli import cli, prepare_args_and_stdin
@@ -285,6 +286,65 @@ def test_version_option() -> None:
     assert "LangGraph CLI, version" in result.output, (
         "Expected version information in output"
     )
+
+
+def test_list_deployments_command_formats_output(monkeypatch: pytest.MonkeyPatch):
+    class FakeHostBackendClient:
+        def __init__(self, base_url, api_key, tenant_id=None):
+            self.base_url = base_url
+            self.api_key = api_key
+            self.tenant_id = tenant_id
+
+        def list_deployments(self):
+            return {
+                "resources": [
+                    {
+                        "id": "dep_123",
+                        "name": "alpha",
+                        "source_config": {"custom_url": "https://alpha.example.com"},
+                    },
+                    {
+                        "id": "dep_456",
+                        "name": "beta",
+                        "source_config": {"custom_url": "https://beta.example.com"},
+                    },
+                ]
+            }
+
+    monkeypatch.setattr("langgraph_cli.cli.HostBackendClient", FakeHostBackendClient)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["list-deployments", "--api-key", "test-key"])
+
+    assert result.exit_code == 0, result.output
+    assert "Deployment ID" in result.output
+    assert "Deployment Name" in result.output
+    assert "Deployment URL" in result.output
+    assert "dep_123" in result.output
+    assert "alpha" in result.output
+    assert "https://alpha.example.com" in result.output
+    assert "dep_456" in result.output
+    assert "beta" in result.output
+    assert "https://beta.example.com" in result.output
+
+
+def test_list_deployments_command_empty_result(monkeypatch: pytest.MonkeyPatch):
+    class FakeHostBackendClient:
+        def __init__(self, base_url, api_key, tenant_id=None):
+            self.base_url = base_url
+            self.api_key = api_key
+            self.tenant_id = tenant_id
+
+        def list_deployments(self):
+            return {"resources": []}
+
+    monkeypatch.setattr("langgraph_cli.cli.HostBackendClient", FakeHostBackendClient)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["list-deployments", "--api-key", "test-key"])
+
+    assert result.exit_code == 0, result.output
+    assert "No deployments found." in result.output
 
 
 def test_dockerfile_command_basic() -> None:
