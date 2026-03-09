@@ -783,7 +783,10 @@ def deploy(
             try:
                 existing = client.list_deployments(name_contains=name)
             except HostBackendError as err:
-                if err.status_code == 403 and "requires workspace specification" in err.message:
+                if (
+                    err.status_code == 403
+                    and "requires workspace specification" in err.message
+                ):
                     click.secho(
                         "Your API key is org-scoped and requires a workspace ID.",
                         fg="yellow",
@@ -836,7 +839,8 @@ def deploy(
         except HostBackendError as err:
             if (
                 err.status_code == 400
-                and "only available for 'internal_docker' source deployments" in err.message
+                and "only available for 'internal_docker' source deployments"
+                in err.message
             ):
                 raise click.ClickException(
                     f"Deployment '{deployment_id}' was not created by 'langgraph deploy' "
