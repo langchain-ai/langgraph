@@ -71,6 +71,9 @@ class HostBackendClient:
     def get_deployment(self, deployment_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v2/deployments/{deployment_id}")
 
+    def delete_deployment(self, deployment_id: str) -> None:
+        self._request("DELETE", f"/v2/deployments/{deployment_id}")
+
     def request_push_token(self, deployment_id: str) -> dict[str, Any]:
         return self._request(
             "POST",

@@ -1008,6 +1008,80 @@ def deploy(
                 )
 
 
+@click.option(
+    "--api-key",
+    envvar="LANGGRAPH_HOST_API_KEY",
+    help=(
+        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
+        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
+    ),
+)
+@click.option(
+    "--host-url",
+    envvar="LANGGRAPH_HOST_URL",
+    default="https://api.host.langchain.com",
+    hidden=True,
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Delete the deployment without prompting for confirmation.",
+)
+@click.argument("deployment_id")
+@cli.command(
+    help=(
+        "[Beta] Delete a LangSmith Deployment.\n\n"
+        "This command is in beta and under active development."
+    )
+)
+@log_command
+def delete_deployment(
+    deployment_id: str,
+    host_url: str | None,
+    api_key: str | None,
+    force: bool,
+) -> None:
+    click.secho(
+        "Note: 'langgraph delete-deployment' is in beta. Expect frequent updates and improvements.",
+        fg="yellow",
+    )
+    click.echo()
+
+    if not api_key:
+        api_key = click.prompt("Host API key", hide_input=True)
+
+    if not force:
+        confirmation = click.prompt(
+            f"Are you sure you want to delete deployment ID {deployment_id} (Y/n)?",
+            default="N",
+            show_default=False,
+        )
+        if confirmation.strip() != "Y":
+            raise click.ClickException("Deployment not deleted.")
+
+    client = HostBackendClient(host_url, api_key)
+    try:
+        client.delete_deployment(deployment_id)
+    except HostBackendError as err:
+        if err.status_code == 403 and "requires workspace specification" in err.message:
+            click.secho(
+                "Your API key is org-scoped and requires a workspace ID.",
+                fg="yellow",
+            )
+            click.secho(
+                "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                fg="yellow",
+            )
+            tenant_id = click.prompt("Workspace ID")
+            client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
+            client.delete_deployment(deployment_id)
+        else:
+            raise
+
+    click.secho(f"Deleted deployment '{deployment_id}'.", fg="green")
+
+
 def _normalize_image_name(value: str | None) -> str:
     """Sanitize a deployment/directory name into a valid Docker repository name.
 

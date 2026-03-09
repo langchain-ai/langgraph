@@ -7,6 +7,7 @@ import textwrap
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from langgraph_cli.cli import cli, prepare_args_and_stdin
@@ -285,6 +286,97 @@ def test_version_option() -> None:
     assert "LangGraph CLI, version" in result.output, (
         "Expected version information in output"
     )
+
+
+def test_delete_deployment_command_calls_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str | None, str, str | None]] = []
+
+    class FakeHostBackendClient:
+        def __init__(
+            self, base_url: str | None, api_key: str, tenant_id: str | None = None
+        ) -> None:
+            calls.append((base_url, api_key, tenant_id))
+
+        def delete_deployment(self, deployment_id: str) -> None:
+            calls.append(("delete", deployment_id, None))
+
+    monkeypatch.setattr("langgraph_cli.cli.HostBackendClient", FakeHostBackendClient)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["delete-deployment", "--api-key", "test-key", "dep-123"],
+        input="Y\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls == [
+        ("https://api.host.langchain.com", "test-key", None),
+        ("delete", "dep-123", None),
+    ]
+    assert "Deleted deployment 'dep-123'." in result.output
+
+
+def test_delete_deployment_command_requires_y(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    class FakeHostBackendClient:
+        def __init__(
+            self, base_url: str | None, api_key: str, tenant_id: str | None = None
+        ) -> None:
+            nonlocal called
+            called = True
+
+        def delete_deployment(self, deployment_id: str) -> None:
+            nonlocal called
+            called = True
+
+    monkeypatch.setattr("langgraph_cli.cli.HostBackendClient", FakeHostBackendClient)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["delete-deployment", "--api-key", "test-key", "dep-123"],
+        input="N\n",
+    )
+
+    assert result.exit_code != 0
+    assert "Deployment not deleted." in result.output
+    assert called is False
+
+
+def test_delete_deployment_command_force_skips_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str | None, str, str | None]] = []
+
+    class FakeHostBackendClient:
+        def __init__(
+            self, base_url: str | None, api_key: str, tenant_id: str | None = None
+        ) -> None:
+            calls.append((base_url, api_key, tenant_id))
+
+        def delete_deployment(self, deployment_id: str) -> None:
+            calls.append(("delete", deployment_id, None))
+
+    monkeypatch.setattr("langgraph_cli.cli.HostBackendClient", FakeHostBackendClient)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["delete-deployment", "--api-key", "test-key", "--force", "dep-123"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Type Y to delete deployment" not in result.output
+    assert calls == [
+        ("https://api.host.langchain.com", "test-key", None),
+        ("delete", "dep-123", None),
+    ]
 
 
 def test_dockerfile_command_basic() -> None:

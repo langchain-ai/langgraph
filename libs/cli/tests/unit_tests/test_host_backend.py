@@ -130,6 +130,10 @@ def test_get_deployment(client):
     assert result == {"ok": True}
 
 
+def test_delete_deployment(client):
+    assert client.delete_deployment("dep-123") is None
+
+
 def test_list_deployments(client):
     result = client.list_deployments("my-app")
     assert result == {"ok": True}
