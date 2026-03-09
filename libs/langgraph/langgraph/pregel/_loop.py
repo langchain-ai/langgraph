@@ -637,6 +637,14 @@ class PregelLoop:
 
         # map command to writes
         if isinstance(self.input, Command):
+            if self.input.resume is not None and self.input.update:
+                raise ValueError(
+                    "Command(resume=..., update=...) is not allowed as graph input. "
+                    "Use Command(resume=...) to resume execution, or use "
+                    "graph.update_state(...) to update state before resuming. "
+                    "Note: Command(update=...) can still be used as a return "
+                    "value from a node to update graph state."
+                )
             if (resume := self.input.resume) is not None:
                 if not self.checkpointer:
                     raise RuntimeError(

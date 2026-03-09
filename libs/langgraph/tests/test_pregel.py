@@ -5850,6 +5850,30 @@ def test_task_before_interrupt_resume(
     assert result == {"answers": ["answer1", "answer2"]}
 
 
+def test_command_resume_with_update_raises(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Test that Command(resume=..., update=...) raises InvalidUpdateError
+    when used as graph input."""
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def workflow(inputs: str) -> str:
+        answer = interrupt("question")
+        return answer
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # First invocation triggers interrupt
+    result = workflow.invoke("start", config=config)
+    assert "__interrupt__" in result
+
+    # Resuming with both resume and update should raise
+    with pytest.raises(ValueError, match="Command\\(resume=.*update="):
+        workflow.invoke(
+            Command(resume="answer", update={"foo": "bar"}), config=config
+        )
+
+
 def test_multiple_tasks_before_interrupt_resume(
     sync_checkpointer: BaseCheckpointSaver,
 ) -> None:
