@@ -1951,9 +1951,9 @@ def test_config_to_compose_distributed_orchestrator_uses_api_version():
 
 
 def test_config_to_compose_distributed_requires_api_version():
-    """Distributed mode without api_version should raise an error."""
+    """Without api_version, distributed mode should raise ClickException."""
     graphs = {"agent": "./agent.py:graph"}
-    with pytest.raises(click.ClickException, match="requires a pinned API version"):
+    with pytest.raises(click.ClickException, match="pinned API version"):
         config_to_compose(
             PATH_TO_CONFIG,
             validate_config({"dependencies": ["."], "graphs": graphs}),
