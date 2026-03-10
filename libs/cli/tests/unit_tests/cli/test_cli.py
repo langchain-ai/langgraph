@@ -288,6 +288,32 @@ def test_version_option() -> None:
     )
 
 
+def test_top_level_help_shows_deploy_subcommands() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "deploy" in result.output
+    assert "deploy list" in result.output
+    assert "List LangSmith deployments." in result.output
+
+
+def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["--help"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    deploy_line = next(line for line in lines if "deploy       " in line)
+    deploy_list_line = next(line for line in lines if "deploy list  " in line)
+
+    assert "Deployments." not in lines[lines.index(deploy_line) + 1]
+    assert "..." in deploy_line
+    assert "List LangSmith deployments." in deploy_list_line
+
+
 def test_deploy_list_command(monkeypatch) -> None:
     runner = CliRunner()
     captured: dict[str, str] = {}

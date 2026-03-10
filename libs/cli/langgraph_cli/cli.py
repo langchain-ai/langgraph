@@ -311,7 +311,41 @@ OPT_ENGINE_RUNTIME_MODE = click.option(
 )
 
 
-@click.group()
+class NestedHelpGroup(click.Group):
+    """Click group that shows one level of nested subcommands in top-level help."""
+
+    def format_commands(
+        self, ctx: click.Context, formatter: click.HelpFormatter
+    ) -> None:
+        command_entries: list[tuple[str, click.Command]] = []
+        for command_name in self.list_commands(ctx):
+            command = self.get_command(ctx, command_name)
+            if command is None or command.hidden:
+                continue
+            command_entries.append((command_name, command))
+            if isinstance(command, click.Group):
+                sub_ctx = click.Context(command, info_name=command_name, parent=ctx)
+                for subcommand_name in command.list_commands(sub_ctx):
+                    subcommand = command.get_command(sub_ctx, subcommand_name)
+                    if subcommand is None or subcommand.hidden:
+                        continue
+                    command_entries.append(
+                        (f"{command_name} {subcommand_name}", subcommand)
+                    )
+
+        command_width = max((len(name) for name, _ in command_entries), default=0)
+        help_width = max(formatter.width - command_width - 6, 10)
+        rows = [
+            (name, command.get_short_help_str(help_width))
+            for name, command in command_entries
+        ]
+
+        if rows:
+            with formatter.section("Commands"):
+                formatter.write_dl(rows)
+
+
+@click.group(cls=NestedHelpGroup)
 @click.version_option(version=__version__, prog_name="LangGraph CLI")
 def cli():
     pass
@@ -1159,7 +1193,7 @@ def _format_deployments_table(deployments: Sequence[dict[str, object]]) -> str:
     default="",
     help="Only show deployments whose names contain this value.",
 )
-@deploy.command("list", help="List LangSmith deployments.")
+@deploy.command("list", help="[Beta] List LangSmith Deployments.")
 def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -> None:
     client = _create_host_backend_client(host_url, api_key)
     response = _call_host_backend_with_optional_tenant(
