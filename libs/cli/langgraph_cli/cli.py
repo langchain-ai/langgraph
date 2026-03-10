@@ -23,10 +23,16 @@ import langgraph_cli.config
 import langgraph_cli.docker
 from langgraph_cli.analytics import log_command
 from langgraph_cli.config import Config
-from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
+from langgraph_cli.constants import API_KEY_ENV_NAMES, DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
+from langgraph_cli.helpers import (
+    format_log_entry,
+    level_fg,
+    resolve_api_key,
+    resolve_deployment_id,
+)
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
 from langgraph_cli.util import warn_non_wolfi_distro
@@ -77,12 +83,6 @@ RESERVED_ENV_VARS = frozenset(
         "LSD_DD_ENDPOINT",
         "LSD_DEPLOYMENT_TYPE",
     ]
-)
-
-_API_KEY_ENV_NAMES = (
-    "LANGGRAPH_HOST_API_KEY",
-    "LANGSMITH_API_KEY",
-    "LANGCHAIN_API_KEY",
 )
 
 _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
@@ -699,7 +699,7 @@ def deploy(
     env_vars = _parse_env_from_config(config_json, config)
 
     if not api_key:
-        for key_name in _API_KEY_ENV_NAMES:
+        for key_name in API_KEY_ENV_NAMES:
             val = env_vars.get(key_name) or os.environ.get(key_name)
             if val:
                 api_key = val
@@ -1074,6 +1074,190 @@ def _normalize_image_tag(value: str) -> str:
             "Image tag may only contain characters A-Z, a-z, 0-9, '_', '-', '.'"
         )
     return value
+
+
+@click.option(
+    "--api-key",
+    envvar="LANGGRAPH_HOST_API_KEY",
+    help=(
+        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
+        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable."
+    ),
+)
+@click.option(
+    "--name",
+    help="Deployment name to look up.",
+)
+@click.option(
+    "--deployment-id",
+    help="Deployment ID. If omitted, --name is used to find the deployment.",
+)
+@click.option(
+    "--type",
+    "log_type",
+    type=click.Choice(["deploy", "build"]),
+    default="deploy",
+    show_default=True,
+    help="Type of logs to fetch.",
+)
+@click.option(
+    "--revision-id",
+    help="Specific revision ID. For build logs, defaults to latest revision.",
+)
+@click.option(
+    "--level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    help="Filter by log level.",
+)
+@click.option(
+    "--limit",
+    type=int,
+    default=100,
+    show_default=True,
+    help="Max log entries to fetch.",
+)
+@click.option(
+    "--query",
+    "-q",
+    help="Search string filter.",
+)
+@click.option(
+    "--start-time",
+    help="ISO8601 start time (e.g. 2026-03-08T00:00:00Z).",
+)
+@click.option(
+    "--end-time",
+    help="ISO8601 end time.",
+)
+@click.option(
+    "--follow",
+    "-f",
+    is_flag=True,
+    default=False,
+    help="Continuously poll for new logs.",
+)
+@click.option(
+    "--host-url",
+    envvar="LANGGRAPH_HOST_URL",
+    default="https://api.host.langchain.com",
+    hidden=True,
+)
+@click.option(
+    "--langsmith-url",
+    envvar="LANGSMITH_ENDPOINT",
+    default="https://api.smith.langchain.com",
+    hidden=True,
+)
+@cli.command(
+    help="Fetch build or deploy logs for a LangSmith deployment.",
+)
+@log_command
+def logs(
+    api_key: str | None,
+    name: str | None,
+    deployment_id: str | None,
+    log_type: str,
+    revision_id: str | None,
+    level: str | None,
+    limit: int,
+    query: str | None,
+    start_time: str | None,
+    end_time: str | None,
+    follow: bool,
+    host_url: str,
+    langsmith_url: str,
+):
+    resolved_key = resolve_api_key(api_key)
+    client = HostBackendClient(
+        host_url, resolved_key, langsmith_url=langsmith_url
+    )
+
+    dep_id = resolve_deployment_id(client, deployment_id, name)
+
+    if log_type == "build" and not revision_id:
+        revisions_resp = client.list_revisions(dep_id, limit=1)
+        resources = (
+            revisions_resp.get("resources", [])
+            if isinstance(revisions_resp, dict)
+            else []
+        )
+        if not resources:
+            raise click.ClickException(
+                "No revisions found for this deployment. Cannot fetch build logs."
+            )
+        revision_id = str(resources[0]["id"])
+        click.secho(f"Using latest revision: {revision_id}", fg="cyan")
+
+    payload: dict = {"limit": limit, "order": "desc"}
+    if level:
+        payload["level"] = level.upper()
+    if query:
+        payload["query"] = query
+    if start_time:
+        payload["start_time"] = start_time
+    if end_time:
+        payload["end_time"] = end_time
+
+    def _fetch(request_payload: dict) -> list[dict]:
+        if log_type == "build":
+            resp = client.get_build_logs(dep_id, revision_id, request_payload)
+        else:
+            resp = client.get_deploy_logs(dep_id, request_payload, revision_id)
+
+        if isinstance(resp, dict):
+            return resp.get("logs", resp.get("entries", []))
+        elif isinstance(resp, list):
+            return resp
+        return []
+
+    def _print_entries(entries: list[dict]) -> None:
+        for entry in entries:
+            line = format_log_entry(entry)
+            fg = level_fg(entry.get("level", ""))
+            click.secho(line, fg=fg)
+
+    def _fetch_and_print(request_payload: dict) -> list[dict]:
+        entries = _fetch(request_payload)
+        _print_entries(entries)
+        return entries
+
+    def _fetch_and_print_new(
+        request_payload: dict, seen_ids: set[str]
+    ) -> list[dict]:
+        entries = _fetch(request_payload)
+        new = [e for e in entries if e.get("id", "") not in seen_ids]
+        if new:
+            _print_entries(new)
+            seen_ids.update(e.get("id", "") for e in new)
+        return new
+
+    entries = _fetch_and_print(payload)
+
+    if not follow:
+        if not entries:
+            click.secho("No log entries found.", fg="yellow")
+        return
+
+    from datetime import datetime, timezone
+
+    payload["order"] = "asc"
+    seen_ids: set[str] = {e.get("id", "") for e in entries if e.get("id")}
+
+    try:
+        while True:
+            time.sleep(2)
+            if entries:
+                last_ts = entries[-1].get("timestamp")
+                if isinstance(last_ts, (int, float)):
+                    dt = datetime.fromtimestamp(last_ts / 1000, tz=timezone.utc)
+                    payload["start_time"] = dt.isoformat()
+                elif last_ts:
+                    payload["start_time"] = str(last_ts)
+            new_entries = _fetch_and_print_new(payload, seen_ids)
+            if new_entries:
+                entries = new_entries
+    except KeyboardInterrupt:
+        click.echo("\nStopped.")
 
 
 def _get_docker_ignore_content() -> str:
