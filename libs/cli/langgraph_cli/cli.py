@@ -295,6 +295,28 @@ OPT_ENGINE_RUNTIME_MODE = click.option(
 )
 
 
+class _DefaultGroup(click.Group):
+    """Click group that falls back to a default hidden subcommand."""
+
+    def __init__(self, *args, default_cmd_name="up", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.default_cmd_name = default_cmd_name
+
+    def parse_args(self, ctx, args):
+        if not args and not ctx.resilient_parsing:
+            args = [self.default_cmd_name]
+        elif args and args[0] not in self.commands and args[0] not in ("--help", "-h"):
+            args = [self.default_cmd_name] + list(args)
+        return super().parse_args(ctx, args)
+
+    def resolve_command(self, ctx, args):
+        try:
+            return super().resolve_command(ctx, args)
+        except click.UsageError:
+            args = [self.default_cmd_name] + list(args)
+            return super().resolve_command(ctx, args)
+
+
 @click.group()
 @click.version_option(version=__version__, prog_name="LangGraph CLI")
 def cli():
@@ -593,6 +615,22 @@ def build(
         )
 
 
+@cli.group(
+    cls=_DefaultGroup,
+    help=(
+        "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
+        "Running 'langgraph deploy' without a subcommand performs a deployment. "
+        "This command is in beta and under active development. "
+        "Expect frequent updates and improvements.\n\n"
+        "Run from the root of your LangGraph project (where langgraph.json "
+        "is located). This command also accepts build flags (--base-image, "
+        "--pull, etc.). See 'langgraph build --help' for details."
+    ),
+)
+def deploy():
+    pass
+
+
 @click.option(
     "--api-key",
     envvar="LANGGRAPH_HOST_API_KEY",
@@ -658,19 +696,14 @@ def build(
 @click.option("--build-command", hidden=True)
 @click.option("--api-version", type=str, hidden=True)
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
-@cli.command(
-    help=(
-        "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
-        "This command is in beta and under active development. "
-        "Expect frequent updates and improvements.\n\n"
-        "Run from the root of your LangGraph project (where langgraph.json "
-        "is located). This command also accepts build flags (--base-image, "
-        "--pull, etc.). See 'langgraph build --help' for details."
-    ),
+@deploy.command(
+    "up",
+    hidden=True,
+    help="Build and deploy a LangGraph image to LangSmith Deployments.",
     context_settings=dict(ignore_unknown_options=True),
 )
 @log_command
-def deploy(
+def deploy_up(
     config: pathlib.Path,
     pull: bool,
     verbose: bool,
@@ -1148,11 +1181,12 @@ def _normalize_image_tag(value: str) -> str:
     default="https://api.smith.langchain.com",
     hidden=True,
 )
-@cli.command(
+@deploy.command(
+    "logs",
     help="Fetch build or deploy logs for a LangSmith deployment.",
 )
 @log_command
-def logs(
+def deploy_logs(
     api_key: str | None,
     name: str | None,
     deployment_id: str | None,
