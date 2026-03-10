@@ -16,16 +16,25 @@ from typing import (
 )
 from warnings import warn
 
+from langchain_core.messages import AnyMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver, CheckpointMetadata
-from typing_extensions import Unpack, deprecated
+from typing_extensions import NotRequired, TypeAliasType, TypedDict, Unpack, deprecated
 from xxhash import xxh3_128_hexdigest
 
 from langgraph._internal._cache import default_cache_key
+from langgraph._internal._constants import INTERRUPT as _INTERRUPT_KEY
 from langgraph._internal._fields import get_cached_annotated_keys, get_update_as_tuples
 from langgraph._internal._retry import default_retry_on
 from langgraph._internal._typing import MISSING, DeprecatedKwargs
-from langgraph.warnings import LangGraphDeprecatedSinceV10
+from langgraph.warnings import LangGraphDeprecatedSinceV10, LangGraphDeprecatedSinceV11
+
+# Local TypeVars for generic stream TypedDicts.
+# We use separate TypeVars here (rather than importing from langgraph.typing)
+# because the typing module TypeVars have defaults that cause mypy issues
+# when used in standalone type aliases.
+StateT = TypeVar("StateT")
+OutputT = TypeVar("OutputT")
 
 if TYPE_CHECKING:
     from langgraph.pregel.protocol import PregelProtocol
@@ -44,6 +53,19 @@ __all__ = (
     "Checkpointer",
     "StreamMode",
     "StreamWriter",
+    "StreamPart",
+    "ValuesStreamPart",
+    "UpdatesStreamPart",
+    "MessagesStreamPart",
+    "CustomStreamPart",
+    "CheckpointStreamPart",
+    "TasksStreamPart",
+    "DebugStreamPart",
+    "TaskPayload",
+    "TaskResultPayload",
+    "CheckpointTask",
+    "CheckpointPayload",
+    "DebugPayload",
     "RetryPolicy",
     "CachePolicy",
     "Interrupt",
@@ -56,6 +78,7 @@ __all__ = (
     "Durability",
     "interrupt",
     "Overwrite",
+    "GraphOutput",
     "ensure_valid_checkpointer",
 )
 
@@ -112,6 +135,268 @@ StreamWriter = Callable[[Any], None]
 """`Callable` that accepts a single argument and writes it to the output stream.
 Always injected into nodes if requested as a keyword argument, but it's a no-op
 when not using `stream_mode="custom"`."""
+
+
+class TaskPayload(TypedDict):
+    """Payload for a task start event."""
+
+    id: str
+    """Unique identifier for this task."""
+    name: str
+    """Name of the node being executed."""
+    input: Any
+    """Input data passed to the task."""
+    triggers: list[str]
+    """List of triggers that caused this task to be executed (e.g. channel writes)."""
+
+
+class TaskResultPayload(TypedDict):
+    """Payload for a task result event."""
+
+    id: str
+    """Unique identifier for this task."""
+    name: str
+    """Name of the node that was executed."""
+    error: str | None
+    """Error message if the task failed, otherwise `None`."""
+    interrupts: list[dict]
+    """List of interrupts that occurred during task execution."""
+    result: dict[str, Any]
+    """Mapping of channel names to the values written by this task."""
+
+
+class CheckpointTask(TypedDict):
+    """A task entry within a `CheckpointPayload`.
+
+    The keys present depend on the task's state:
+
+    - **Error:** `id`, `name`, `error`, `state`
+    - **Has result:** `id`, `name`, `result`, `interrupts`, `state`
+    - **Pending:** `id`, `name`, `interrupts`, `state`
+    """
+
+    id: str
+    """Unique identifier for this task."""
+    name: str
+    """Name of the node being executed."""
+    error: NotRequired[str]
+    """Error message, present only if the task failed."""
+    result: NotRequired[Any]
+    """Result of the task, present only if the task completed successfully."""
+    interrupts: NotRequired[list[dict]]
+    """List of interrupts, present when the task has been interrupted or completed."""
+    state: StateSnapshot | RunnableConfig | None
+    """Snapshot of the subgraph state, or a `RunnableConfig` pointing to it. `None` if not a subgraph."""
+
+
+class CheckpointPayload(TypedDict, Generic[StateT]):
+    """Payload for a checkpoint event."""
+
+    config: RunnableConfig | None
+    """Configuration for this checkpoint, including the `thread_id` and `checkpoint_id`."""
+    metadata: CheckpointMetadata
+    """Metadata associated with this checkpoint (e.g. step number, source, writes)."""
+    values: StateT
+    """Current state values at the time of this checkpoint."""
+    next: list[str]
+    """Names of the nodes scheduled to execute next."""
+    parent_config: RunnableConfig | None
+    """Configuration of the parent checkpoint, or `None` if this is the first checkpoint."""
+    tasks: list[CheckpointTask]
+    """List of tasks associated with this checkpoint."""
+
+
+class _DebugCheckpointPayload(TypedDict, Generic[StateT]):
+    step: int
+    """The step number in the graph execution."""
+    timestamp: str
+    """ISO 8601 timestamp of when this event occurred."""
+    type: Literal["checkpoint"]
+    """Event type discriminator, always `"checkpoint"`."""
+    payload: CheckpointPayload[StateT]
+    """The checkpoint payload."""
+
+
+class _DebugTaskPayload(TypedDict):
+    step: int
+    """The step number in the graph execution."""
+    timestamp: str
+    """ISO 8601 timestamp of when this event occurred."""
+    type: Literal["task"]
+    """Event type discriminator, always `"task"`."""
+    payload: TaskPayload
+    """The task start payload."""
+
+
+class _DebugTaskResultPayload(TypedDict):
+    step: int
+    """The step number in the graph execution."""
+    timestamp: str
+    """ISO 8601 timestamp of when this event occurred."""
+    type: Literal["task_result"]
+    """Event type discriminator, always `"task_result"`."""
+    payload: TaskResultPayload
+    """The task result payload."""
+
+
+DebugPayload = TypeAliasType(
+    "DebugPayload",
+    _DebugCheckpointPayload[StateT] | _DebugTaskPayload | _DebugTaskResultPayload,
+    type_params=(StateT,),
+)
+"""Wrapper payload for debug events. Discriminate on `type`."""
+
+
+class ValuesStreamPart(TypedDict, Generic[OutputT]):
+    """Stream part emitted for `stream_mode="values"`.
+
+    `data` contains the full state after each step, as returned by `read_channels()`.
+    """
+
+    type: Literal["values"]
+    ns: tuple[str, ...]
+    data: OutputT
+    interrupts: tuple[Interrupt, ...]
+
+
+class UpdatesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="updates"`.
+
+    `data` maps node names to their outputs. May also contain
+    `__interrupt__` (tuple of `Interrupt` dicts) and `__metadata__` keys.
+    """
+
+    type: Literal["updates"]
+    ns: tuple[str, ...]
+    data: dict[str, Any]
+
+
+class MessagesStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="messages"`.
+
+    `data` is a 2-tuple of `(message, metadata)` where `message` is a
+    `BaseMessage` (e.g. `AIMessageChunk`) and `metadata` is a dict containing
+    keys like `langgraph_step`, `langgraph_node`, `langgraph_triggers`, etc.
+    """
+
+    type: Literal["messages"]
+    ns: tuple[str, ...]
+    data: tuple[AnyMessage, dict[str, Any]]
+
+
+class CustomStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="custom"`.
+
+    `data` is whatever value was passed to `StreamWriter` inside a node.
+    """
+
+    type: Literal["custom"]
+    ns: tuple[str, ...]
+    data: Any
+
+
+class CheckpointStreamPart(TypedDict, Generic[StateT]):
+    """Stream part emitted for `stream_mode="checkpoints"`."""
+
+    type: Literal["checkpoints"]
+    ns: tuple[str, ...]
+    data: CheckpointPayload[StateT]
+
+
+class TasksStreamPart(TypedDict):
+    """Stream part emitted for `stream_mode="tasks"`.
+
+    For task start events, `data` is a `TaskPayload` with `id`, `name`,
+    `input`, and `triggers` keys.
+
+    For task result events, `data` is a `TaskResultPayload` with `id`,
+    `name`, `error`, `interrupts`, and `result` keys.
+    """
+
+    type: Literal["tasks"]
+    ns: tuple[str, ...]
+    data: TaskPayload | TaskResultPayload
+
+
+class DebugStreamPart(TypedDict, Generic[StateT]):
+    """Stream part emitted for `stream_mode="debug"`."""
+
+    type: Literal["debug"]
+    ns: tuple[str, ...]
+    data: DebugPayload[StateT]
+
+
+StreamPart = TypeAliasType(
+    "StreamPart",
+    ValuesStreamPart[OutputT]
+    | UpdatesStreamPart
+    | MessagesStreamPart
+    | CustomStreamPart
+    | CheckpointStreamPart[StateT]
+    | TasksStreamPart
+    | DebugStreamPart[StateT],
+    type_params=(OutputT, StateT),
+)
+"""A discriminated union of all v2 stream part types.
+
+Use `part["type"]` to narrow the type:
+
+```python
+async for part in graph.astream(input, version="v2"):
+    if part["type"] == "values":
+        part["data"]  # OutputT — full state (pydantic/dataclass/dict)
+    elif part["type"] == "messages":
+        part["data"]  # tuple[BaseMessage, dict] — (message, metadata)
+    elif part["type"] == "custom":
+        part["data"]  # Any — user-defined
+```
+"""
+
+
+@dataclass(frozen=True)
+class GraphOutput(Generic[OutputT]):
+    """Typed container returned by `invoke()` / `ainvoke()` with `version="v2"`.
+
+    Attributes:
+        value: The final output of the graph (dict, Pydantic model, dataclass, etc.).
+        interrupts: Any interrupts that occurred during execution.
+    """
+
+    value: OutputT
+    interrupts: tuple[Interrupt, ...] = ()
+
+    def __getitem__(self, key: str) -> Any:
+        """Backward compat: `result['__interrupt__']` and dict-key access."""
+        warn(
+            "Accessing GraphOutput via `result[key]` is deprecated. "
+            "Use `result.value` to access the output value directly, "
+            "or `result.interrupts` for interrupts.",
+            LangGraphDeprecatedSinceV11,
+            stacklevel=2,
+        )
+        if key == _INTERRUPT_KEY:
+            return self.interrupts
+        if isinstance(self.value, dict):
+            return self.value[key]
+        try:
+            return getattr(self.value, key)
+        except AttributeError:
+            raise KeyError(key)
+
+    def __contains__(self, key: object) -> bool:
+        warn(
+            "Accessing GraphOutput via `key in result` is deprecated. "
+            "Use `result.value` to access the output value directly, "
+            "or `result.interrupts` for interrupts.",
+            LangGraphDeprecatedSinceV11,
+            stacklevel=2,
+        )
+        if key == _INTERRUPT_KEY:
+            return bool(self.interrupts)
+        if isinstance(self.value, dict):
+            return key in self.value
+        return isinstance(key, str) and hasattr(self.value, key)
+
 
 _DC_KWARGS = {"kw_only": True, "slots": True, "frozen": True}
 

