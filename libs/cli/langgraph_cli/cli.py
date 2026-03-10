@@ -318,12 +318,17 @@ class NestedHelpGroup(click.Group):
         self, ctx: click.Context, formatter: click.HelpFormatter
     ) -> None:
         command_entries: list[tuple[str, click.Command]] = []
+        # Collect the top-level commands first, then append one level of nested
+        # subcommands using names like "deploy list" so they show up in the
+        # top-level help output.
         for command_name in self.list_commands(ctx):
             command = self.get_command(ctx, command_name)
             if command is None or command.hidden:
                 continue
             command_entries.append((command_name, command))
             if isinstance(command, click.Group):
+                # Build a child context so Click resolves the subcommands the same
+                # way it would for the nested group itself.
                 sub_ctx = click.Context(command, info_name=command_name, parent=ctx)
                 for subcommand_name in command.list_commands(sub_ctx):
                     subcommand = command.get_command(sub_ctx, subcommand_name)
@@ -333,6 +338,9 @@ class NestedHelpGroup(click.Group):
                         (f"{command_name} {subcommand_name}", subcommand)
                     )
 
+        # Compute the available width for help text up front so we can truncate
+        # descriptions before handing them to Click. That keeps each command on
+        # a single line instead of allowing wrapped descriptions.
         command_width = max((len(name) for name, _ in command_entries), default=0)
         help_width = max(formatter.width - command_width - 6, 10)
         rows = [
@@ -341,6 +349,9 @@ class NestedHelpGroup(click.Group):
         ]
 
         if rows:
+            # Render the flattened command list using Click's standard
+            # definition-list formatter so alignment stays consistent with the
+            # rest of the CLI help output.
             with formatter.section("Commands"):
                 formatter.write_dl(rows)
 
@@ -660,8 +671,6 @@ def build(
 def deploy(ctx: click.Context):
     if ctx.invoked_subcommand is not None:
         return
-    if ctx.args and ctx.args[0] == "run":
-        raise click.UsageError("No such command 'run'.")
     return _deploy_run_command.main(
         args=list(ctx.args),
         prog_name=ctx.command_path,

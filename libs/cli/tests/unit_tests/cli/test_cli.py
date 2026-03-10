@@ -520,15 +520,6 @@ def test_deploy_delete_command_force(monkeypatch) -> None:
     assert result.output.strip() == "Deleted deployment dep-123."
 
 
-def test_deploy_run_command_is_not_supported() -> None:
-    runner = CliRunner()
-
-    result = runner.invoke(cli, ["deploy", "run"])
-
-    assert result.exit_code == 2
-    assert "No such command 'run'" in result.output
-
-
 def test_dockerfile_command_basic() -> None:
     """Test the 'dockerfile' command with basic configuration."""
     runner = CliRunner()
