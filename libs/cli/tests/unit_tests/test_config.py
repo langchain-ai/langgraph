@@ -1787,7 +1787,9 @@ def test_config_to_compose_distributed_mode():
     # Executor service is present with correct base image
     assert "langgraph-executor:" in actual_compose_stdin
     assert "FROM langchain/langgraph-executor:0.7.67-py3.11" in actual_compose_stdin
-    assert 'entrypoint: ["sh", "/storage/executor_entrypoint.sh"]' in actual_compose_stdin
+    assert (
+        'entrypoint: ["sh", "/storage/executor_entrypoint.sh"]' in actual_compose_stdin
+    )
 
     # Executor has required environment variables
     assert "EXECUTOR_GRPC_PORT:" in actual_compose_stdin
@@ -1874,6 +1876,7 @@ def test_config_to_compose_distributed_executor_gets_correct_paths():
         validate_config({"dependencies": ["."], "graphs": graphs}),
         "langchain/langgraph-api",
         engine_runtime_mode="distributed",
+        api_version="0.7.67",
     )
 
     # Both API and executor Dockerfiles should contain valid LANGSERVE_GRAPHS
@@ -1947,16 +1950,16 @@ def test_config_to_compose_distributed_orchestrator_uses_api_version():
     assert "langchain/langgraph-orchestrator-licensed:0.7.67" in actual
 
 
-def test_config_to_compose_distributed_orchestrator_defaults_to_latest():
-    """Without api_version, orchestrator image should use 'latest'."""
+def test_config_to_compose_distributed_requires_api_version():
+    """Without api_version, distributed mode should raise ClickException."""
     graphs = {"agent": "./agent.py:graph"}
-    actual = config_to_compose(
-        PATH_TO_CONFIG,
-        validate_config({"dependencies": ["."], "graphs": graphs}),
-        "langchain/langgraph-api",
-        engine_runtime_mode="distributed",
-    )
-    assert "langchain/langgraph-orchestrator-licensed:latest" in actual
+    with pytest.raises(click.ClickException, match="pinned API version"):
+        config_to_compose(
+            PATH_TO_CONFIG,
+            validate_config({"dependencies": ["."], "graphs": graphs}),
+            "langchain/langgraph-api",
+            engine_runtime_mode="distributed",
+        )
 
 
 def test_config_to_compose_distributed_all_images_same_version():

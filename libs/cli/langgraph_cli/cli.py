@@ -1518,7 +1518,9 @@ def prepare(
             fg="cyan",
         )
         api_version = langgraph_cli.config.fetch_latest_api_version()
-        click.secho(f"Using version {api_version} for all distributed images.", fg="cyan")
+        click.secho(
+            f"Using version {api_version} for all distributed images.", fg="cyan"
+        )
 
     # pull latest images
     if pull:

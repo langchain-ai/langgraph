@@ -943,6 +943,7 @@ def test_prepare_args_and_stdin_distributed_mode() -> None:
         port=port,
         watch=False,
         engine_runtime_mode="distributed",
+        api_version="0.7.67",
     )
 
     # API service should use langgraph-api base image
