@@ -1904,18 +1904,6 @@ def test_config_to_compose_distributed_orchestrator_uses_api_version():
     assert "langchain/langgraph-orchestrator-licensed:0.7.67" in actual
 
 
-def test_config_to_compose_distributed_requires_api_version():
-    """Without api_version, distributed mode should raise ClickException."""
-    graphs = {"agent": "./agent.py:graph"}
-    with pytest.raises(click.ClickException, match="pinned API version"):
-        config_to_compose(
-            PATH_TO_CONFIG,
-            validate_config({"dependencies": ["."], "graphs": graphs}),
-            "langchain/langgraph-api",
-            engine_runtime_mode="distributed",
-        )
-
-
 def test_config_to_compose_distributed_all_images_same_version():
     """All 3 images (api, executor, orchestrator) should use the same api_version."""
     graphs = {"agent": "./agent.py:graph"}

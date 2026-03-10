@@ -1269,17 +1269,17 @@ def docker_tag(
     version_distro_tag = f"{version}{distro_tag}"
 
     # Prepend API version if provided
+    # Strip an existing tag from base_image so we don't produce two colons
+    # (e.g. "langchain/langgraph-server:0.2" → "langchain/langgraph-server").
+    if ":" in base_image:
+        base_image = base_image.rsplit(":", 1)[0]
+
     if api_version:
         full_tag = f"{api_version}-{language}{version_distro_tag}"
     elif "/langgraph-server" in base_image and version_distro_tag not in base_image:
         return f"{base_image}-{language}{version_distro_tag}"
     else:
         full_tag = version_distro_tag
-
-    # Strip an existing tag from base_image so we don't produce two colons
-    # (e.g. "langchain/langgraph-server:0.2" → "langchain/langgraph-server").
-    if ":" in base_image:
-        base_image = base_image.rsplit(":", 1)[0]
 
     return f"{base_image}:{full_tag}"
 
@@ -1426,13 +1426,6 @@ def config_to_compose(
                 executor_additional_contexts_str = f"""
                 additional_contexts:
 {executor_additional_contexts_str}"""
-
-            if not api_version:
-                raise click.ClickException(
-                    "Distributed runtime requires a pinned API version for all images.\n"
-                    "Either pass --api-version explicitly or let the CLI resolve it "
-                    "from the Docker Hub version marker."
-                )
 
             postgres_uri = "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
             result += f"""    langgraph-orchestrator:
