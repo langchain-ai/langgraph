@@ -822,3 +822,139 @@ def test_prepare_args_and_stdin_with_api_version_and_image() -> None:
     # When image is provided, api_version should be ignored for the image
     # but the stdin should not contain a build section (since image is provided)
     assert "pull_policy: build" not in actual_stdin
+
+
+def test_dockerfile_command_distributed_mode() -> None:
+    """Test the 'dockerfile' command with --engine-runtime-mode distributed."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            [
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--engine-runtime-mode",
+                "distributed",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "✅ Created: Dockerfile" in result.output
+
+        assert save_path.exists()
+        with open(save_path) as f:
+            dockerfile = f.read()
+            assert "FROM langchain/langgraph-executor:3.11" in dockerfile
+
+
+def test_dockerfile_command_combined_mode() -> None:
+    """Test the 'dockerfile' command with --engine-runtime-mode combined_queue_worker."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            [
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--engine-runtime-mode",
+                "combined_queue_worker",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert save_path.exists()
+        with open(save_path) as f:
+            dockerfile = f.read()
+            assert "FROM langchain/langgraph-api:3.11" in dockerfile
+
+
+def test_dockerfile_command_distributed_with_explicit_base_image() -> None:
+    """Test distributed mode with explicit --base-image overrides executor default."""
+    runner = CliRunner()
+    config_content = {
+        "python_version": "3.11",
+        "graphs": {"agent": "agent.py:graph"},
+        "dependencies": ["."],
+    }
+
+    with temporary_config_folder(config_content) as temp_dir:
+        save_path = temp_dir / "Dockerfile"
+        agent_path = temp_dir / "agent.py"
+        agent_path.touch()
+
+        result = runner.invoke(
+            cli,
+            [
+                "dockerfile",
+                str(save_path),
+                "--config",
+                str(temp_dir / "config.json"),
+                "--engine-runtime-mode",
+                "distributed",
+                "--base-image",
+                "my-custom-executor:latest",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert save_path.exists()
+        with open(save_path) as f:
+            dockerfile = f.read()
+            assert "FROM my-custom-executor:latest" in dockerfile
+
+
+def test_prepare_args_and_stdin_distributed_mode() -> None:
+    """Test prepare_args_and_stdin with distributed mode includes all services."""
+    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config = validate_config(
+        Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
+    )
+    port = 8000
+
+    actual_args, actual_stdin = prepare_args_and_stdin(
+        capabilities=DEFAULT_DOCKER_CAPABILITIES,
+        config_path=config_path,
+        config=config,
+        docker_compose=None,
+        port=port,
+        watch=False,
+        engine_runtime_mode="distributed",
+    )
+
+    # API service should use langgraph-api base image
+    assert "FROM langchain/langgraph-api:" in actual_stdin
+
+    # Distributed mode sets N_JOBS_PER_WORKER=0 on the API service
+    assert 'N_JOBS_PER_WORKER: "0"' in actual_stdin
+
+    # Orchestrator service present
+    assert "langgraph-orchestrator:" in actual_stdin
+
+    # Executor service present with correct base image
+    assert "langgraph-executor:" in actual_stdin
+    assert "FROM langchain/langgraph-executor:" in actual_stdin
+    assert "executor_entrypoint.sh" in actual_stdin
