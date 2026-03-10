@@ -149,6 +149,7 @@ def compose_as_dict(
     base_image: str | None = None,
     # API version of the base image
     api_version: str | None = None,
+    engine_runtime_mode: str = "combined_queue_worker",
 ) -> dict:
     """Create a docker compose file as a dictionary in YML style."""
     if postgres_uri is None:
@@ -207,15 +208,19 @@ def compose_as_dict(
         )["langgraph-debugger"]
 
     # Add langgraph-api service
+    api_environment = {
+        "REDIS_URI": "redis://langgraph-redis:6379",
+        "POSTGRES_URI": postgres_uri,
+    }
+    if engine_runtime_mode == "distributed":
+        api_environment["N_JOBS_PER_WORKER"] = '"0"'
+
     services["langgraph-api"] = {
         "ports": [f'"{port}:8000"'],
         "depends_on": {
             "langgraph-redis": {"condition": "service_healthy"},
         },
-        "environment": {
-            "REDIS_URI": "redis://langgraph-redis:6379",
-            "POSTGRES_URI": postgres_uri,
-        },
+        "environment": api_environment,
     }
     if image:
         services["langgraph-api"]["image"] = image
@@ -255,6 +260,7 @@ def compose(
     image: str | None = None,
     base_image: str | None = None,
     api_version: str | None = None,
+    engine_runtime_mode: str = "combined_queue_worker",
 ) -> str:
     """Create a docker compose file as a string."""
     compose_content = compose_as_dict(
@@ -266,6 +272,7 @@ def compose(
         image=image,
         base_image=base_image,
         api_version=api_version,
+        engine_runtime_mode=engine_runtime_mode,
     )
     compose_str = dict_to_yaml(compose_content)
     return compose_str

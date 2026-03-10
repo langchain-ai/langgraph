@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import pathlib
@@ -1232,11 +1233,15 @@ def node_config_to_docker(
     return os.linesep.join(docker_file_contents), {}
 
 
-def default_base_image(config: Config) -> str:
+def default_base_image(
+    config: Config, engine_runtime_mode: str = "combined_queue_worker"
+) -> str:
     if config.get("base_image"):
         return config["base_image"]
     if config.get("node_version") and not config.get("python_version"):
         return "langchain/langgraphjs-api"
+    if engine_runtime_mode == "distributed":
+        return "langchain/langgraph-executor"
     return "langchain/langgraph-api"
 
 
@@ -1329,6 +1334,7 @@ def config_to_compose(
     api_version: str | None = None,
     image: str | None = None,
     watch: bool = False,
+    engine_runtime_mode: str = "combined_queue_worker",
 ) -> str:
     base_image = base_image or default_base_image(config)
 
@@ -1362,6 +1368,11 @@ def config_to_compose(
 """
 
     else:
+        # Save a pristine copy before config_to_docker mutates graph paths
+        config_snapshot = (
+            copy.deepcopy(config) if engine_runtime_mode == "distributed" else None
+        )
+
         dockerfile, additional_contexts = config_to_docker(
             config_path=config_path,
             config=config,
@@ -1379,7 +1390,7 @@ def config_to_compose(
             additional_contexts:
 {additional_contexts_str}"""
 
-        return f"""
+        result = f"""
 {textwrap.indent(env_vars_str, "            ")}
         {env_file_str}
         pull_policy: build
@@ -1389,3 +1400,60 @@ def config_to_compose(
 {textwrap.indent(dockerfile, "                ")}
         {watch_str}
 """
+
+        if engine_runtime_mode == "distributed":
+            executor_base_image = default_base_image(
+                config_snapshot, engine_runtime_mode="distributed"
+            )
+            executor_dockerfile, executor_additional_contexts = config_to_docker(
+                config_path=config_path,
+                config=config_snapshot,
+                base_image=executor_base_image,
+                api_version=api_version,
+                escape_variables=True,
+            )
+
+            executor_additional_contexts_str = "\n".join(
+                f"                    - {name}: {path}"
+                for name, path in executor_additional_contexts.items()
+            )
+            if executor_additional_contexts_str:
+                executor_additional_contexts_str = f"""
+                additional_contexts:
+{executor_additional_contexts_str}"""
+
+            postgres_uri = "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
+            result += f"""    langgraph-orchestrator:
+        image: langchain/langgraph-orchestrator-licensed:latest
+        depends_on:
+            langgraph-api:
+                condition: service_healthy
+            langgraph-postgres:
+                condition: service_healthy
+        environment:
+            DATABASE_URI: {postgres_uri}
+            EXECUTOR_TARGET: langgraph-executor:8188
+        {env_file_str}
+    langgraph-executor:
+        depends_on:
+            langgraph-postgres:
+                condition: service_healthy
+            langgraph-api:
+                condition: service_healthy
+        entrypoint: ["sh", "/storage/executor_entrypoint.sh"]
+        environment:
+            DATABASE_URI: {postgres_uri}
+            REDIS_URI: redis://langgraph-redis:6379
+            EXECUTOR_GRPC_PORT: "8188"
+            ENGINE_GRPC_ADDRESS: "langgraph-orchestrator:50054"
+            LSD_GRPC_SERVER_ADDRESS: "localhost:50050"
+            LANGGRAPH_HTTP: ""
+        {env_file_str}
+        pull_policy: build
+        build:
+            context: .{executor_additional_contexts_str}
+            dockerfile_inline: |
+{textwrap.indent(executor_dockerfile, "                ")}
+"""
+
+        return result
