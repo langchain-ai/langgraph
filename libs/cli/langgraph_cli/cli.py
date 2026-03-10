@@ -1238,7 +1238,7 @@ def deploy_delete(
             default="Y",
             show_default=False,
         )
-        if response.strip().lower() not in {"", "y", "yes"}:
+        if response.strip().lower() not in {"y", "yes"}:
             raise click.Abort()
     client = _create_host_backend_client(host_url, api_key)
     _call_host_backend_with_optional_tenant(
