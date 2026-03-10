@@ -163,7 +163,9 @@ def test_get_revision(client):
 
 
 def test_langsmith_client_created_lazily():
-    c = HostBackendClient("https://api.example.com", "key", langsmith_url="https://ls.example.com")
+    c = HostBackendClient(
+        "https://api.example.com", "key", langsmith_url="https://ls.example.com"
+    )
     assert c._langsmith_client is None
     ls = c._get_langsmith_client()
     assert ls is not None

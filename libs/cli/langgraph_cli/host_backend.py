@@ -37,7 +37,9 @@ class HostBackendClient:
             headers["X-Tenant-ID"] = tenant_id
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
-        self._langsmith_url = (langsmith_url or "https://api.smith.langchain.com").rstrip("/")
+        self._langsmith_url = (
+            langsmith_url or "https://api.smith.langchain.com"
+        ).rstrip("/")
         self._tenant_id = tenant_id
         self._client = httpx.Client(
             base_url=self._base_url,

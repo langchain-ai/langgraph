@@ -22,7 +22,11 @@ class TestFormatLogEntry:
         assert result == "[2026-03-10 05:14:04] [ERROR] boom"
 
     def test_full_entry_string(self):
-        entry = {"timestamp": "2026-03-08T12:00:00Z", "level": "ERROR", "message": "boom"}
+        entry = {
+            "timestamp": "2026-03-08T12:00:00Z",
+            "level": "ERROR",
+            "message": "boom",
+        }
         assert format_log_entry(entry) == "[2026-03-08T12:00:00Z] [ERROR] boom"
 
     def test_no_level(self):

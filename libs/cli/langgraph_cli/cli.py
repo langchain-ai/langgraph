@@ -26,13 +26,13 @@ from langgraph_cli.config import Config
 from langgraph_cli.constants import API_KEY_ENV_NAMES, DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
-from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.helpers import (
     format_log_entry,
     level_fg,
     resolve_api_key,
     resolve_deployment_id,
 )
+from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
 from langgraph_cli.util import warn_non_wolfi_distro
@@ -1168,9 +1168,7 @@ def logs(
     langsmith_url: str,
 ):
     resolved_key = resolve_api_key(api_key)
-    client = HostBackendClient(
-        host_url, resolved_key, langsmith_url=langsmith_url
-    )
+    client = HostBackendClient(host_url, resolved_key, langsmith_url=langsmith_url)
 
     dep_id = resolve_deployment_id(client, deployment_id, name)
 
@@ -1221,9 +1219,7 @@ def logs(
         _print_entries(entries)
         return entries
 
-    def _fetch_and_print_new(
-        request_payload: dict, seen_ids: set[str]
-    ) -> list[dict]:
+    def _fetch_and_print_new(request_payload: dict, seen_ids: set[str]) -> list[dict]:
         entries = _fetch(request_payload)
         new = [e for e in entries if e.get("id", "") not in seen_ids]
         if new:
