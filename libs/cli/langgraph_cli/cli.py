@@ -27,6 +27,7 @@ from langgraph_cli.api_version import resolve_langgraph_api_version
 from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
+from langgraph_cli.engine_runtime_mode import resolve_engine_runtime_mode
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
@@ -292,8 +293,8 @@ OPT_API_VERSION = click.option(
 OPT_ENGINE_RUNTIME_MODE = click.option(
     "--engine-runtime-mode",
     type=click.Choice(["combined_queue_worker", "distributed"]),
-    default="combined_queue_worker",
-    help="Runtime mode. 'distributed' uses separate executor and orchestrator containers.",
+    default=None,
+    help="Runtime mode. 'distributed' uses separate executor and orchestrator containers. Defaults to distributed.",
 )
 
 
@@ -349,11 +350,14 @@ def up(
     debugger_base_url: str | None,
     postgres_uri: str | None,
     api_version: str | None,
-    engine_runtime_mode: str,
+    engine_runtime_mode: str | None,
     image: str | None,
     base_image: str | None,
 ):
     api_version = resolve_langgraph_api_version(config, api_version)
+    engine_runtime_mode = resolve_engine_runtime_mode(
+        config, api_version, engine_runtime_mode
+    )
     click.secho("Starting LangGraph API server...", fg="green")
     click.secho(
         """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Deployment.
@@ -553,13 +557,16 @@ def build(
     docker_build_args: Sequence[str],
     base_image: str | None,
     api_version: str | None,
-    engine_runtime_mode: str,
+    engine_runtime_mode: str | None,
     pull: bool,
     tag: str,
     install_command: str | None,
     build_command: str | None,
 ):
     api_version = resolve_langgraph_api_version(config, api_version)
+    engine_runtime_mode = resolve_engine_runtime_mode(
+        config, api_version, engine_runtime_mode
+    )
     if install_command and langgraph_cli.config.has_disallowed_build_command_content(
         install_command
     ):
@@ -692,7 +699,8 @@ def deploy(
     no_wait: bool,
     docker_build_args: Sequence[str],
 ):
-    deploy_api_version = resolve_langgraph_api_version(config, api_version)
+    api_version = resolve_langgraph_api_version(config, api_version)
+    engine_runtime_mode = resolve_engine_runtime_mode(config, api_version, None)
     click.secho(
         "Note: 'langgraph deploy' is in beta. Expect frequent updates and improvements.",
         fg="yellow",
@@ -719,12 +727,6 @@ def deploy(
         name = click.prompt("Deployment name", default=default_name)
 
     secrets = _secrets_from_env(env_vars)
-
-    # Determine language and runtime mode from config for host backend
-    is_python = bool(config_json.get("python_version")) or not config_json.get(
-        "node_version"
-    )
-    deploy_engine_runtime_mode = "distributed" if is_python else "combined_queue_server"
 
     # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
     # (e.g. Apple Silicon). On amd64 hosts, plain docker build is sufficient.
@@ -875,10 +877,10 @@ def deploy(
                 "source_config": {"deployment_type": deployment_type},
                 "source_revision_config": {},
                 "secrets": secrets,
-                "engine_runtime_mode": deploy_engine_runtime_mode,
+                "engine_runtime_mode": engine_runtime_mode,
             }
-            if deploy_api_version:
-                payload["deployed_api_version"] = deploy_api_version
+            if api_version:
+                payload["deployed_api_version"] = api_version
             created = client.create_deployment(payload)
             created_id = created.get("id") if isinstance(created, dict) else None
             if not isinstance(created_id, str) or not created_id:
@@ -991,8 +993,8 @@ def deploy(
             deployment_id,
             remote_image,
             secrets=secrets,
-            engine_runtime_mode=deploy_engine_runtime_mode,
-            deployed_api_version=deploy_api_version,
+            engine_runtime_mode=engine_runtime_mode,
+            deployed_api_version=api_version,
         )
         tenant_id = updated.get("tenant_id") if isinstance(updated, dict) else None
         if tenant_id:
@@ -1181,9 +1183,12 @@ def dockerfile(
     add_docker_compose: bool,
     base_image: str | None = None,
     api_version: str | None = None,
-    engine_runtime_mode: str = "combined_queue_worker",
+    engine_runtime_mode: str | None = None,
 ) -> None:
     api_version = resolve_langgraph_api_version(config, api_version)
+    engine_runtime_mode = resolve_engine_runtime_mode(
+        config, api_version, engine_runtime_mode
+    )
     save_path = pathlib.Path(save_path).absolute()
     secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
     config_json = langgraph_cli.config.validate_config_file(config)

@@ -568,6 +568,8 @@ def test_build_generate_proper_build_context():
                     "test-image",
                     "--config",
                     str(temp_dir / "config.json"),
+                    "--engine-runtime-mode",
+                    "combined_queue_worker",
                 ],
                 catch_exceptions=True,
             )
@@ -603,6 +605,8 @@ def test_dockerfile_command_with_api_version() -> None:
                 str(temp_dir / "config.json"),
                 "--api-version",
                 "0.2.74",
+                "--engine-runtime-mode",
+                "combined_queue_worker",
             ],
         )
 
@@ -719,6 +723,8 @@ def test_build_command_with_api_version() -> None:
                     str(temp_dir / "config.json"),
                     "--api-version",
                     "0.2.74",
+                    "--engine-runtime-mode",
+                    "combined_queue_worker",
                     "--no-pull",  # Avoid pulling non-existent images
                 ],
                 catch_exceptions=True,
