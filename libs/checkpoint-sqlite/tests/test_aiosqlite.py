@@ -219,9 +219,28 @@ class TestAsyncSqliteSaver:
             assert latest.checkpoint["id"] == "a-newer"
 
             before_results = [
+                c
+                async for c in saver.alist(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-non-lex",
+                            "checkpoint_ns": "",
+                        }
+                    },
+                    before={"configurable": {"checkpoint_id": "a-newer"}},
+                )
+            ]
+            assert [result.checkpoint["id"] for result in before_results] == ["z-older"]
+
+            before_results = [
                 result
                 async for result in saver.alist(
-                    {"configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}},
+                    {
+                        "configurable": {
+                            "thread_id": "thread-non-lex",
+                            "checkpoint_ns": "",
+                        }
+                    },
                     before={
                         "configurable": {
                             "thread_id": "thread-non-lex",

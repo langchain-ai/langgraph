@@ -139,18 +139,28 @@ class InMemorySaver(
         return (checkpoint_data["ts"], checkpoint_id)
 
     def _before_sort_key(
-        self, config: RunnableConfig | None
+        self, config: RunnableConfig | None, before: RunnableConfig | None
     ) -> tuple[str, str] | None:
-        if config is None:
+        if before is None:
             return None
 
-        checkpoint_id = get_checkpoint_id(config)
+        checkpoint_id = get_checkpoint_id(before)
         if checkpoint_id is None:
             return None
 
-        thread_id = config["configurable"]["thread_id"]
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        saved = self.storage[thread_id][checkpoint_ns].get(checkpoint_id)
+        before_configurable = before["configurable"]
+        config_configurable = config["configurable"] if config is not None else {}
+        thread_id = before_configurable.get(
+            "thread_id", config_configurable.get("thread_id")
+        )
+        if thread_id is None:
+            return None
+        checkpoint_ns = before_configurable.get(
+            "checkpoint_ns", config_configurable.get("checkpoint_ns", "")
+        )
+        saved = (
+            self.storage.get(thread_id, {}).get(checkpoint_ns, {}).get(checkpoint_id)
+        )
         if saved is None:
             return None
 
@@ -204,15 +214,16 @@ class InMemorySaver(
                 )
         else:
             if checkpoints := self.storage[thread_id][checkpoint_ns]:
-                checkpoint_id, (
-                    checkpoint,
-                    metadata,
-                    parent_checkpoint_id,
+                (
+                    checkpoint_id,
+                    (
+                        checkpoint,
+                        metadata,
+                        parent_checkpoint_id,
+                    ),
                 ) = max(
                     checkpoints.items(),
-                    key=lambda item: self._checkpoint_sort_key(
-                        item[0], item[1][0]
-                    ),
+                    key=lambda item: self._checkpoint_sort_key(item[0], item[1][0]),
                 )
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 checkpoint_ = self.serde.loads_typed(checkpoint)
@@ -274,7 +285,7 @@ class InMemorySaver(
             config["configurable"].get("checkpoint_ns") if config else None
         )
         config_checkpoint_id = get_checkpoint_id(config) if config else None
-        before_sort_key = self._before_sort_key(before)
+        before_sort_key = self._before_sort_key(config, before)
         candidates: list[
             tuple[
                 tuple[str, str],

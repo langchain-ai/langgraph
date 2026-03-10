@@ -194,6 +194,44 @@ class TestMemorySaver:
         ]
         assert len(search_results_4) == 0
 
+    def test_before_checkpoint_only_cursor_uses_config_context(self) -> None:
+        first_checkpoint = empty_checkpoint()
+        first_checkpoint["id"] = "z-older"
+        first_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+        first_config: RunnableConfig = {
+            "configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}
+        }
+        stored_first = self.memory_saver.put(
+            first_config,
+            first_checkpoint,
+            {"step": 0},
+            first_checkpoint["channel_versions"],
+        )
+
+        second_checkpoint = empty_checkpoint()
+        second_checkpoint["id"] = "a-newer"
+        second_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+        second_config: RunnableConfig = {
+            "configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}
+        }
+        second_config["configurable"]["checkpoint_id"] = stored_first["configurable"][
+            "checkpoint_id"
+        ]
+        self.memory_saver.put(
+            second_config,
+            second_checkpoint,
+            {"step": 1},
+            second_checkpoint["channel_versions"],
+        )
+
+        before_results = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}},
+                before={"configurable": {"checkpoint_id": "a-newer"}},
+            )
+        )
+        assert [result.checkpoint["id"] for result in before_results] == ["z-older"]
+
 
 async def test_memory_saver() -> None:
     from langgraph.checkpoint.memory import InMemorySaver
@@ -265,13 +303,17 @@ def test_memory_saver_latest_uses_checkpoint_timestamp_not_id() -> None:
     first_checkpoint = empty_checkpoint()
     first_checkpoint["id"] = "z-older"
     first_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
-    first_config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+    first_config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id, "checkpoint_ns": ""}
+    }
     stored_first = memory_saver.put(first_config, first_checkpoint, {"step": 0}, {})
 
     second_checkpoint = empty_checkpoint()
     second_checkpoint["id"] = "a-newer"
     second_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
-    second_config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+    second_config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id, "checkpoint_ns": ""}
+    }
     second_config["configurable"]["checkpoint_id"] = stored_first["configurable"][
         "checkpoint_id"
     ]
@@ -291,13 +333,17 @@ def test_memory_saver_list_before_uses_checkpoint_timestamp_not_id() -> None:
     first_checkpoint = empty_checkpoint()
     first_checkpoint["id"] = "z-older"
     first_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
-    first_config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+    first_config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id, "checkpoint_ns": ""}
+    }
     stored_first = memory_saver.put(first_config, first_checkpoint, {"step": 0}, {})
 
     second_checkpoint = empty_checkpoint()
     second_checkpoint["id"] = "a-newer"
     second_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
-    second_config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+    second_config: RunnableConfig = {
+        "configurable": {"thread_id": thread_id, "checkpoint_ns": ""}
+    }
     second_config["configurable"]["checkpoint_id"] = stored_first["configurable"][
         "checkpoint_id"
     ]

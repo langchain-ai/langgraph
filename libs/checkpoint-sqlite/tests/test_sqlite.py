@@ -169,9 +169,9 @@ class TestSqliteSaver:
             second_config: RunnableConfig = {
                 "configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}
             }
-            second_config["configurable"]["checkpoint_id"] = stored_first["configurable"][
-                "checkpoint_id"
-            ]
+            second_config["configurable"]["checkpoint_id"] = stored_first[
+                "configurable"
+            ]["checkpoint_id"]
             saver.put(second_config, second_checkpoint, {"step": 1}, {})
 
             latest = saver.get_tuple(
@@ -182,7 +182,12 @@ class TestSqliteSaver:
 
             before_results = list(
                 saver.list(
-                    {"configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}},
+                    {
+                        "configurable": {
+                            "thread_id": "thread-non-lex",
+                            "checkpoint_ns": "",
+                        }
+                    },
                     before={
                         "configurable": {
                             "thread_id": "thread-non-lex",
@@ -193,6 +198,21 @@ class TestSqliteSaver:
                 )
             )
             assert [result.checkpoint["id"] for result in before_results] == ["z-older"]
+
+            checkpoint_only_before_results = list(
+                saver.list(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-non-lex",
+                            "checkpoint_ns": "",
+                        }
+                    },
+                    before={"configurable": {"checkpoint_id": "a-newer"}},
+                )
+            )
+            assert [
+                result.checkpoint["id"] for result in checkpoint_only_before_results
+            ] == ["z-older"]
 
     def test_metadata_predicate(self) -> None:
         # call method / assertions

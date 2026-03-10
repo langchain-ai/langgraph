@@ -110,8 +110,16 @@ def search_where(
 
     # construct predicate for `before`
     if before is not None and (before_checkpoint_id := get_checkpoint_id(before)):
-        before_thread_id = before["configurable"]["thread_id"]
-        before_checkpoint_ns = before["configurable"].get("checkpoint_ns", "")
+        before_configurable = before["configurable"]
+        config_configurable = config["configurable"] if config is not None else {}
+        before_thread_id = before_configurable.get(
+            "thread_id", config_configurable.get("thread_id")
+        )
+        if before_thread_id is None:
+            return ("WHERE " + " AND ".join(wheres) if wheres else "", param_values)
+        before_checkpoint_ns = before_configurable.get(
+            "checkpoint_ns", config_configurable.get("checkpoint_ns", "")
+        )
         wheres.append(
             """(
                 rowid < (
