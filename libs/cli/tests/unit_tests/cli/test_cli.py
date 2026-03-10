@@ -382,9 +382,10 @@ def test_dockerfile_command_with_base_image() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert re.match("FROM langchain/langgraph-server:0.2-py3.*", dockerfile), (
-                "\n".join(dockerfile.splitlines()[:3])
-            )
+            assert re.match(
+                r"FROM langchain/langgraph-server:\d+\.\d+\.\d+-py3\..*",
+                dockerfile,
+            ), "\n".join(dockerfile.splitlines()[:3])
 
 
 def test_dockerfile_command_with_docker_compose() -> None:
@@ -856,7 +857,10 @@ def test_dockerfile_command_distributed_mode() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert "FROM langchain/langgraph-executor:3.11" in dockerfile
+            assert re.search(
+                r"FROM langchain/langgraph-executor:\d+\.\d+\.\d+-py3\.11",
+                dockerfile,
+            ), dockerfile.splitlines()[0]
 
 
 def test_dockerfile_command_combined_mode() -> None:
@@ -889,7 +893,10 @@ def test_dockerfile_command_combined_mode() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert "FROM langchain/langgraph-api:3.11" in dockerfile
+            assert re.search(
+                r"FROM langchain/langgraph-api:\d+\.\d+\.\d+-py3\.11",
+                dockerfile,
+            ), dockerfile.splitlines()[0]
 
 
 def test_dockerfile_command_distributed_with_explicit_base_image() -> None:
@@ -924,7 +931,10 @@ def test_dockerfile_command_distributed_with_explicit_base_image() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert "FROM my-custom-executor:latest" in dockerfile
+            assert re.search(
+                r"FROM my-custom-executor:\d+\.\d+\.\d+-py3\.11",
+                dockerfile,
+            ), dockerfile.splitlines()[0]
 
 
 def test_prepare_args_and_stdin_distributed_mode() -> None:

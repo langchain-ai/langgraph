@@ -169,9 +169,7 @@ def test_update_deployment_with_engine_runtime_mode():
         headers={"X-Api-Key": "test-key", "Accept": "application/json"},
         timeout=30,
     )
-    result = c.update_deployment(
-        "dep-1", "img:v1", engine_runtime_mode="distributed"
-    )
+    result = c.update_deployment("dep-1", "img:v1", engine_runtime_mode="distributed")
     assert result == {"id": "dep-1"}
 
 

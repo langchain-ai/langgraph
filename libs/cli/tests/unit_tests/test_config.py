@@ -15,7 +15,6 @@ from langgraph_cli.config import (
     config_to_docker,
     default_base_image,
     docker_tag,
-    fetch_latest_api_version,
     has_disallowed_build_command_content,
     validate_config,
     validate_config_file,
@@ -1890,51 +1889,6 @@ def test_config_to_compose_distributed_executor_gets_correct_paths():
     assert len(from_lines) == 2, (
         f"Expected 2 LANGSERVE_GRAPHS lines (api + executor), got {len(from_lines)}"
     )
-
-
-def test_fetch_latest_api_version_parses_semver(monkeypatch):
-    """fetch_latest_api_version should return the first semver-like tag."""
-    import io
-    import urllib.request
-
-    fake_body = json.dumps(
-        {"results": [{"name": "latest"}, {"name": "abc1234"}, {"name": "0.7.67"}]}
-    ).encode()
-
-    def mock_urlopen(url, *, timeout=None):
-        return io.BytesIO(fake_body)
-
-    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
-    assert fetch_latest_api_version() == "0.7.67"
-
-
-def test_fetch_latest_api_version_no_semver_raises(monkeypatch):
-    """Should raise ClickException when no semver tag is found."""
-    import io
-    import urllib.request
-
-    fake_body = json.dumps(
-        {"results": [{"name": "latest"}, {"name": "abc1234"}]}
-    ).encode()
-
-    def mock_urlopen(url, *, timeout=None):
-        return io.BytesIO(fake_body)
-
-    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
-    with pytest.raises(click.ClickException, match="Could not find a semver tag"):
-        fetch_latest_api_version()
-
-
-def test_fetch_latest_api_version_network_error_raises(monkeypatch):
-    """Should raise ClickException on network failure."""
-    import urllib.request
-
-    def mock_urlopen(url, *, timeout=None):
-        raise urllib.error.URLError("connection refused")
-
-    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
-    with pytest.raises(click.ClickException, match="Failed to fetch"):
-        fetch_latest_api_version()
 
 
 def test_config_to_compose_distributed_orchestrator_uses_api_version():

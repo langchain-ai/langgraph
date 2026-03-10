@@ -23,6 +23,7 @@ from dotenv import dotenv_values
 import langgraph_cli.config
 import langgraph_cli.docker
 from langgraph_cli.analytics import log_command
+from langgraph_cli.api_version import resolve_langgraph_api_version
 from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
@@ -352,6 +353,7 @@ def up(
     image: str | None,
     base_image: str | None,
 ):
+    api_version = resolve_langgraph_api_version(config, api_version)
     click.secho("Starting LangGraph API server...", fg="green")
     click.secho(
         """For local dev, requires env var LANGSMITH_API_KEY with access to LangSmith Deployment.
@@ -557,6 +559,7 @@ def build(
     install_command: str | None,
     build_command: str | None,
 ):
+    api_version = resolve_langgraph_api_version(config, api_version)
     if install_command and langgraph_cli.config.has_disallowed_build_command_content(
         install_command
     ):
@@ -689,6 +692,7 @@ def deploy(
     no_wait: bool,
     docker_build_args: Sequence[str],
 ):
+    deploy_api_version = resolve_langgraph_api_version(config, api_version)
     click.secho(
         "Note: 'langgraph deploy' is in beta. Expect frequent updates and improvements.",
         fg="yellow",
@@ -721,7 +725,6 @@ def deploy(
         "node_version"
     )
     deploy_engine_runtime_mode = "distributed" if is_python else "combined_queue_server"
-    deploy_api_version = api_version or config_json.get("api_version")
 
     # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
     # (e.g. Apple Silicon). On amd64 hosts, plain docker build is sufficient.
@@ -1180,6 +1183,7 @@ def dockerfile(
     api_version: str | None = None,
     engine_runtime_mode: str = "combined_queue_worker",
 ) -> None:
+    api_version = resolve_langgraph_api_version(config, api_version)
     save_path = pathlib.Path(save_path).absolute()
     secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
     config_json = langgraph_cli.config.validate_config_file(config)
@@ -1528,16 +1532,6 @@ def prepare(
     """Prepare the arguments and stdin for running the LangGraph API server."""
     config_json = langgraph_cli.config.validate_config_file(config_path)
     warn_non_wolfi_distro(config_json)
-
-    if engine_runtime_mode == "distributed" and not api_version and not image:
-        click.secho(
-            "Resolving latest published version for distributed runtime...",
-            fg="cyan",
-        )
-        api_version = langgraph_cli.config.fetch_latest_api_version()
-        click.secho(
-            f"Using version {api_version} for all distributed images.", fg="cyan"
-        )
 
     # pull latest images
     if pull:
