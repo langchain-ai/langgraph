@@ -287,6 +287,22 @@ OPT_API_VERSION = click.option(
     help="API server version to use for the base image. If unspecified, the latest version will be used.",
 )
 
+OPT_HOST_API_KEY = click.option(
+    "--api-key",
+    envvar="LANGGRAPH_HOST_API_KEY",
+    help=(
+        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
+        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
+    ),
+)
+
+OPT_HOST_URL = click.option(
+    "--host-url",
+    envvar="LANGGRAPH_HOST_URL",
+    default="https://api.host.langchain.com",
+    hidden=True,
+)
+
 OPT_ENGINE_RUNTIME_MODE = click.option(
     "--engine-runtime-mode",
     type=click.Choice(["combined_queue_worker", "distributed"]),
@@ -295,29 +311,41 @@ OPT_ENGINE_RUNTIME_MODE = click.option(
 )
 
 
-class _DefaultGroup(click.Group):
-    """Click group that falls back to a default hidden subcommand."""
+class NestedHelpGroup(click.Group):
+    """Click group that shows one level of nested subcommands in top-level help."""
 
-    def __init__(self, *args, default_cmd_name="up", **kwargs):
-        super().__init__(*args, **kwargs)
-        self.default_cmd_name = default_cmd_name
+    def format_commands(
+        self, ctx: click.Context, formatter: click.HelpFormatter
+    ) -> None:
+        command_entries: list[tuple[str, click.Command]] = []
+        for command_name in self.list_commands(ctx):
+            command = self.get_command(ctx, command_name)
+            if command is None or command.hidden:
+                continue
+            command_entries.append((command_name, command))
+            if isinstance(command, click.Group):
+                sub_ctx = click.Context(command, info_name=command_name, parent=ctx)
+                for subcommand_name in command.list_commands(sub_ctx):
+                    subcommand = command.get_command(sub_ctx, subcommand_name)
+                    if subcommand is None or subcommand.hidden:
+                        continue
+                    command_entries.append(
+                        (f"{command_name} {subcommand_name}", subcommand)
+                    )
 
-    def parse_args(self, ctx, args):
-        if not args and not ctx.resilient_parsing:
-            args = [self.default_cmd_name]
-        elif args and args[0] not in self.commands and args[0] not in ("--help", "-h"):
-            args = [self.default_cmd_name] + list(args)
-        return super().parse_args(ctx, args)
+        command_width = max((len(name) for name, _ in command_entries), default=0)
+        help_width = max(formatter.width - command_width - 6, 10)
+        rows = [
+            (name, command.get_short_help_str(help_width))
+            for name, command in command_entries
+        ]
 
-    def resolve_command(self, ctx, args):
-        try:
-            return super().resolve_command(ctx, args)
-        except click.UsageError:
-            args = [self.default_cmd_name] + list(args)
-            return super().resolve_command(ctx, args)
+        if rows:
+            with formatter.section("Commands"):
+                formatter.write_dl(rows)
 
 
-@click.group()
+@click.group(cls=NestedHelpGroup)
 @click.version_option(version=__version__, prog_name="LangGraph CLI")
 def cli():
     pass
@@ -616,29 +644,30 @@ def build(
 
 
 @cli.group(
-    cls=_DefaultGroup,
     help=(
         "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
-        "Running 'langgraph deploy' without a subcommand performs a deployment. "
         "This command is in beta and under active development. "
         "Expect frequent updates and improvements.\n\n"
         "Run from the root of your LangGraph project (where langgraph.json "
         "is located). This command also accepts build flags (--base-image, "
         "--pull, etc.). See 'langgraph build --help' for details."
     ),
+    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
+    invoke_without_command=True,
 )
-def deploy():
-    pass
+@click.pass_context
+@log_command
+def deploy(ctx: click.Context):
+    if ctx.invoked_subcommand is not None:
+        return
+    return _deploy.main(
+        args=list(ctx.args),
+        prog_name=ctx.command_path,
+        standalone_mode=False,
+    )
 
 
-@click.option(
-    "--api-key",
-    envvar="LANGGRAPH_HOST_API_KEY",
-    help=(
-        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
-        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
-    ),
-)
+@OPT_HOST_API_KEY
 @click.option(
     "--name",
     envvar="LANGSMITH_DEPLOYMENT_NAME",
@@ -669,12 +698,7 @@ def deploy():
     help="Skip waiting for deployment status.",
 )
 @OPT_VERBOSE
-@click.option(
-    "--host-url",
-    envvar="LANGGRAPH_HOST_URL",
-    default="https://api.host.langchain.com",
-    hidden=True,
-)
+@OPT_HOST_URL
 @click.option("--image-name", hidden=True)
 @click.option("--image-tag", default="latest", hidden=True)
 @click.option(
@@ -696,14 +720,8 @@ def deploy():
 @click.option("--build-command", hidden=True)
 @click.option("--api-version", type=str, hidden=True)
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
-@deploy.command(
-    "up",
-    hidden=True,
-    help="Build and deploy a LangGraph image to LangSmith Deployments.",
-    context_settings=dict(ignore_unknown_options=True),
-)
-@log_command
-def deploy_up(
+@click.command(context_settings=dict(ignore_unknown_options=True))
+def _deploy(
     config: pathlib.Path,
     pull: bool,
     verbose: bool,
@@ -1109,14 +1127,7 @@ def _normalize_image_tag(value: str) -> str:
     return value
 
 
-@click.option(
-    "--api-key",
-    envvar="LANGGRAPH_HOST_API_KEY",
-    help=(
-        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
-        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable."
-    ),
-)
+@OPT_HOST_API_KEY
 @click.option(
     "--name",
     help="Deployment name to look up.",
@@ -1169,12 +1180,7 @@ def _normalize_image_tag(value: str) -> str:
     default=False,
     help="Continuously poll for new logs.",
 )
-@click.option(
-    "--host-url",
-    envvar="LANGGRAPH_HOST_URL",
-    default="https://api.host.langchain.com",
-    hidden=True,
-)
+@OPT_HOST_URL
 @click.option(
     "--langsmith-url",
     envvar="LANGSMITH_ENDPOINT",
@@ -1183,7 +1189,7 @@ def _normalize_image_tag(value: str) -> str:
 )
 @deploy.command(
     "logs",
-    help="Fetch build or deploy logs for a LangSmith deployment.",
+    help="[Beta] Fetch build or deploy logs for a LangSmith deployment.",
 )
 @log_command
 def deploy_logs(
