@@ -1128,8 +1128,8 @@ def _create_host_backend_client(
 
 def _call_host_backend_with_optional_tenant(
     client: HostBackendClient,
-    operation: Callable[[HostBackendClient], dict[str, object]],
-) -> dict[str, object]:
+    operation: Callable[[HostBackendClient], object],
+) -> object:
     try:
         return operation(client)
     except HostBackendError as err:
@@ -1208,6 +1208,21 @@ def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -
         click.echo("No deployments found.")
         return
     click.echo(_format_deployments_table(deployments))
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.argument("deployment_id")
+@deploy.command("delete", help="[Beta] Delete a LangSmith Deployment.")
+def deploy_delete(
+    api_key: str | None, host_url: str | None, deployment_id: str
+) -> None:
+    client = _create_host_backend_client(host_url, api_key)
+    _call_host_backend_with_optional_tenant(
+        client,
+        lambda current_client: current_client.delete_deployment(deployment_id),
+    )
+    click.echo(f"Deleted deployment {deployment_id}.")
 
 
 def _normalize_image_name(value: str | None) -> str:

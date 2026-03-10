@@ -152,6 +152,11 @@ def test_list_deployments_sends_query_params():
     assert result == {"ok": True}
 
 
+def test_delete_deployment(client):
+    result = client.delete_deployment("dep-123")
+    assert result == {"ok": True}
+
+
 def test_request_push_token(client):
     result = client.request_push_token("dep-123")
     assert result == {"ok": True}

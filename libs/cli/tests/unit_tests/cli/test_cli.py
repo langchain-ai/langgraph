@@ -296,7 +296,8 @@ def test_top_level_help_shows_deploy_subcommands() -> None:
     assert result.exit_code == 0, result.output
     assert "deploy" in result.output
     assert "deploy list" in result.output
-    assert "List LangSmith deployments." in result.output
+    assert "deploy delete" in result.output
+    assert "[Beta] List LangSmith Deployments." in result.output
 
 
 def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
@@ -306,12 +307,14 @@ def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
 
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()
-    deploy_line = next(line for line in lines if "deploy       " in line)
-    deploy_list_line = next(line for line in lines if "deploy list  " in line)
+    deploy_line = next(line for line in lines if line.strip().startswith("deploy"))
+    deploy_list_line = next(
+        line for line in lines if line.strip().startswith("deploy list")
+    )
 
-    assert "Deployments." not in lines[lines.index(deploy_line) + 1]
+    assert not lines[lines.index(deploy_line) + 1].startswith("               ")
     assert "..." in deploy_line
-    assert "List LangSmith deployments." in deploy_list_line
+    assert "[Beta] List LangSmith Deployments." in deploy_list_line
 
 
 def test_deploy_list_command(monkeypatch) -> None:
@@ -397,6 +400,45 @@ def test_deploy_list_command_no_results(monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     assert result.output.strip() == "No deployments found."
+
+
+def test_deploy_delete_command(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def delete_deployment(self, deployment_id: str):
+            captured["deployment_id"] = deployment_id
+            return None
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "delete",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+        "deployment_id": "dep-123",
+    }
+    assert result.output.strip() == "Deleted deployment dep-123."
 
 
 def test_deploy_run_command_is_not_supported() -> None:
