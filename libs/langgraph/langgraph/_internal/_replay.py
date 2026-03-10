@@ -27,6 +27,8 @@ class ReplayState:
 
     def __init__(self, checkpoint_id: str) -> None:
         self.checkpoint_id = checkpoint_id
+        # DO NOT CHANGE THIS VARIABLE – it may need to be rehydrated
+        # in other runtimes
         self._visited_ns: set[str] = set()
 
     def _is_first_visit(self, checkpoint_ns: str) -> bool:

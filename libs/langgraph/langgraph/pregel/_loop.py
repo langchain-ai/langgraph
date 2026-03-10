@@ -629,11 +629,12 @@ class PregelLoop:
         #   - Command input: any Command operates on existing state
         #   - Same run_id: re-entry into an ongoing run (e.g. stream reconnect)
         configurable = self.config.get(CONF, {})
+        input_is_command = isinstance(self.input, Command)
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
             configurable.get(
                 CONFIG_KEY_RESUMING,
                 self.input is None
-                or isinstance(self.input, Command)
+                or input_is_command
                 or (
                     not self.is_nested
                     and self.config.get("metadata", {}).get("run_id")
@@ -651,7 +652,7 @@ class PregelLoop:
         # - CONFIG_KEY_RESUMING: child subgraphs receive it via config from
         #   the parent (their input is a Send arg, not a Command)
         if self.is_replaying and not (
-            (isinstance(self.input, Command) and self.input.resume is not None)
+            (input_is_command and cast(Command, self.input).resume is not None)
             or configurable.get(CONFIG_KEY_RESUMING, False)
         ):
             self.checkpoint_pending_writes = [
@@ -659,8 +660,8 @@ class PregelLoop:
             ]
 
         # map command to writes
-        if isinstance(self.input, Command):
-            if (resume := self.input.resume) is not None:
+        if input_is_command:
+            if (resume := cast(Command, self.input).resume) is not None:
                 if not self.checkpointer:
                     raise RuntimeError(
                         "Cannot use Command(resume=...) without checkpointer"
@@ -680,7 +681,7 @@ class PregelLoop:
 
             writes: defaultdict[str, list[tuple[str, Any]]] = defaultdict(list)
             # group writes by task ID
-            for tid, c, v in map_command(cmd=self.input):
+            for tid, c, v in map_command(cmd=cast(Command, self.input)):
                 if not (c == RESUME and resume_is_map):
                     writes[tid].append((c, v))
             if not writes and not resume_is_map:
