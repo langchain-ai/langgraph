@@ -13,6 +13,36 @@ from langgraph_cli.schemas import Config, Distros
 MIN_NODE_VERSION = "20"
 DEFAULT_NODE_VERSION = "20"
 
+DISALLOWED_BUILD_COMMAND_CHARS = [
+    '"',
+    "`",
+    "\\",
+    "\n",
+    "\r",
+    "\0",
+    "\t",
+    "|",
+    ";",
+    "$",
+    ">",
+    "<",
+]
+
+# Regex pattern matching a single "&" that is NOT part of "&&".
+# This blocks background execution (cmd &) while allowing command
+# chaining (cmd1 && cmd2) which is common in build commands.
+_SINGLE_AMPERSAND_RE = re.compile(r"(?<!&)&(?:&&)*(?!&)")
+
+
+def has_disallowed_build_command_content(command: str) -> bool:
+    """Check if a command string contains disallowed characters or patterns."""
+    if any(char in command for char in DISALLOWED_BUILD_COMMAND_CHARS):
+        return True
+    if _SINGLE_AMPERSAND_RE.search(command):
+        return True
+    return False
+
+
 MIN_PYTHON_VERSION = "3.11"
 DEFAULT_PYTHON_VERSION = "3.11"
 

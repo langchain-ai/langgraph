@@ -1,14 +1,23 @@
 """CLI entrypoint for LangGraph API server."""
 
+import base64
+import copy
+import json as json_mod
 import os
 import pathlib
+import platform
+import re
 import shutil
 import sys
+import tempfile
+import time
 from collections.abc import Callable, Sequence
+from contextlib import contextmanager
 
 import click
 import click.exceptions
 from click import secho
+from dotenv import dotenv_values
 
 import langgraph_cli.config
 import langgraph_cli.docker
@@ -17,10 +26,130 @@ from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
+from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
 from langgraph_cli.util import warn_non_wolfi_distro
 from langgraph_cli.version import __version__
+
+RESERVED_ENV_VARS = frozenset(
+    [
+        # LANGCHAIN_RESERVED_ENV_VARS from host-backend
+        "LANGCHAIN_TRACING_V2",
+        "LANGSMITH_TRACING_V2",
+        "LANGCHAIN_ENDPOINT",
+        "LANGCHAIN_PROJECT",
+        "LANGSMITH_PROJECT",
+        "LANGSMITH_LANGGRAPH_GIT_REPO",
+        "LANGGRAPH_GIT_REPO_PATH",
+        "LANGCHAIN_API_KEY",
+        "LANGSMITH_CONTROL_PLANE_API_KEY",
+        "POSTGRES_URI",
+        "POSTGRES_PASSWORD",
+        "DATABASE_URI",
+        "LANGSMITH_LANGGRAPH_GIT_REF",
+        "LANGSMITH_LANGGRAPH_GIT_REF_SHA",
+        "LANGGRAPH_AUTH_TYPE",
+        "LANGSMITH_AUTH_ENDPOINT",
+        "LANGSMITH_TENANT_ID",
+        "LANGSMITH_AUTH_VERIFY_TENANT_ID",
+        "LANGSMITH_HOST_PROJECT_ID",
+        "LANGSMITH_HOST_PROJECT_NAME",
+        "LANGSMITH_HOST_REVISION_ID",
+        "LOG_JSON",
+        "LOG_DICT_TRACEBACKS",
+        "REDIS_URI",
+        "LANGCHAIN_CALLBACKS_BACKGROUND",
+        "DD_TRACE_PSYCOPG_ENABLED",
+        "DD_TRACE_REDIS_ENABLED",
+        "LANGSMITH_DEPLOYMENT_NAME",
+        "LANGGRAPH_CLOUD_LICENSE_KEY",
+        # ALLOWED_SELF_HOSTED_ENV_VARS (rejected for non-self-hosted)
+        "LANGSMITH_API_KEY",
+        "LANGSMITH_ENDPOINT",
+        "POSTGRES_URI_CUSTOM",
+        "REDIS_URI_CUSTOM",
+        "PATH",
+        "PORT",
+        "MOUNT_PREFIX",
+        "LSD_ENV",
+        "LSD_DD_API_KEY",
+        "LSD_DD_ENDPOINT",
+        "LSD_DEPLOYMENT_TYPE",
+    ]
+)
+
+_API_KEY_ENV_NAMES = (
+    "LANGGRAPH_HOST_API_KEY",
+    "LANGSMITH_API_KEY",
+    "LANGCHAIN_API_KEY",
+)
+
+_DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
+
+
+def _parse_env_from_config(
+    config_json: dict, config_path: pathlib.Path
+) -> dict[str, str]:
+    """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
+    env_field = config_json.get("env")
+    # validate_config_file will default env to {}
+    if isinstance(env_field, dict) and env_field:
+        return {str(k): str(v) for k, v in env_field.items()}
+    if isinstance(env_field, str):
+        env_path = (config_path.parent / env_field).resolve()
+        if not env_path.exists():
+            click.secho(
+                f"Warning: env file '{env_field}' specified in langgraph.json not found.",
+                fg="yellow",
+            )
+            return {}
+    else:
+        env_path = pathlib.Path.cwd() / ".env"
+    return {k: v for k, v in dotenv_values(env_path).items() if v is not None}
+
+
+def _secrets_from_env(
+    env_vars: dict[str, str],
+) -> list[dict[str, str]]:
+    """Convert env dict to secrets list, filtering reserved vars with warnings."""
+    secrets: list[dict[str, str]] = []
+    for name, value in env_vars.items():
+        if name in RESERVED_ENV_VARS:
+            click.secho(f"   Skipping reserved env var: {name}", fg="yellow")
+            continue
+        if not value:
+            continue
+        secrets.append({"name": name, "value": value})
+    return secrets
+
+
+_TERMINAL_STATUSES = frozenset(
+    [
+        "DEPLOYED",
+        "CREATE_FAILED",
+        "BUILD_FAILED",
+        "DEPLOY_FAILED",
+        "SKIPPED",
+    ]
+)
+
+
+@contextmanager
+def _docker_config_for_token(registry_host: str, token: str):
+    """Create a temporary Docker config with only the push token.
+
+    Yields the path to a temporary config directory that can be passed
+    to ``docker --config <path>`` so that system credential helpers
+    (e.g. gcloud) don't interfere with the push token.
+    """
+    auth_b64 = base64.b64encode(f"oauth2accesstoken:{token}".encode()).decode()
+    config_data = {"auths": {registry_host: {"auth": auth_b64}}}
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with open(os.path.join(tmpdir, "config.json"), "w") as f:
+            json_mod.dump(config_data, f)
+        yield tmpdir
+
 
 OPT_DOCKER_COMPOSE = click.option(
     "--docker-compose",
@@ -304,6 +433,9 @@ def _build(
     passthrough: Sequence[str] = (),
     install_command: str | None = None,
     build_command: str | None = None,
+    docker_command: Sequence[str] | None = None,
+    extra_flags: Sequence[str] = (),
+    verbose: bool = True,
 ):
     # pull latest images
     if pull:
@@ -312,7 +444,7 @@ def _build(
                 "docker",
                 "pull",
                 langgraph_cli.config.docker_tag(config_json, base_image, api_version),
-                verbose=True,
+                verbose=verbose,
             )
         )
     set("Building...")
@@ -334,7 +466,9 @@ def _build(
     else:
         build_context = str(config.parent)
 
-    # apply config
+    # Deep copy to avoid mutating the caller's config (config_to_docker
+    # rewrites graph paths to container-internal paths in place).
+    config_json = copy.deepcopy(config_json)
     stdin, additional_contexts = langgraph_cli.config.config_to_docker(
         config_path=config,
         config=config_json,
@@ -348,15 +482,16 @@ def _build(
     if additional_contexts:
         for k, v in additional_contexts.items():
             args.extend(["--build-context", f"{k}={v}"])
+    cmd = tuple(docker_command) if docker_command else ("docker", "build")
     runner.run(
         subp_exec(
-            "docker",
-            "build",
+            *cmd,
             *args,
+            *extra_flags,
             *passthrough,
             build_context,
             input=stdin,
-            verbose=True,
+            verbose=verbose,
         )
     )
 
@@ -409,6 +544,18 @@ def build(
     install_command: str | None,
     build_command: str | None,
 ):
+    if install_command and langgraph_cli.config.has_disallowed_build_command_content(
+        install_command
+    ):
+        raise click.UsageError(
+            "install_command contains disallowed characters or patterns."
+        )
+    if build_command and langgraph_cli.config.has_disallowed_build_command_content(
+        build_command
+    ):
+        raise click.UsageError(
+            "build_command contains disallowed characters or patterns."
+        )
     with Runner() as runner, Progress(message="Pulling...") as set:
         if shutil.which("docker") is None:
             raise click.UsageError("Docker not installed") from None
@@ -427,6 +574,489 @@ def build(
             install_command,
             build_command,
         )
+
+
+@click.option(
+    "--api-key",
+    envvar="LANGGRAPH_HOST_API_KEY",
+    help=(
+        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
+        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
+    ),
+)
+@click.option(
+    "--name",
+    envvar="LANGSMITH_DEPLOYMENT_NAME",
+    help=(
+        "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
+        "environment variable or .env file. Defaults to current directory name "
+        "if --deployment-id is not provided."
+    ),
+)
+@click.option(
+    "--deployment-id",
+    help=(
+        "ID of an existing deployment to update. If omitted, "
+        "--name is used to find or create the deployment."
+    ),
+)
+@click.option(
+    "--deployment-type",
+    type=click.Choice(["dev", "prod"]),
+    default="dev",
+    show_default=True,
+    help="Deployment type (used when creating a new deployment).",
+)
+@click.option(
+    "--no-wait",
+    is_flag=True,
+    default=False,
+    help="Skip waiting for deployment status.",
+)
+@OPT_VERBOSE
+@click.option(
+    "--host-url",
+    envvar="LANGGRAPH_HOST_URL",
+    default="https://api.host.langchain.com",
+    hidden=True,
+)
+@click.option("--image-name", hidden=True)
+@click.option("--image-tag", default="latest", hidden=True)
+@click.option(
+    "--config",
+    "-c",
+    default=DEFAULT_CONFIG,
+    hidden=True,
+    type=click.Path(
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        path_type=pathlib.Path,
+    ),
+)
+@click.option("--pull/--no-pull", default=True, hidden=True)
+@click.option("--base-image", hidden=True)
+@click.option("--install-command", hidden=True)
+@click.option("--build-command", hidden=True)
+@click.option("--api-version", type=str, hidden=True)
+@click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
+@cli.command(
+    help=(
+        "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
+        "This command is in beta and under active development. "
+        "Expect frequent updates and improvements.\n\n"
+        "Run from the root of your LangGraph project (where langgraph.json "
+        "is located). This command also accepts build flags (--base-image, "
+        "--pull, etc.). See 'langgraph build --help' for details."
+    ),
+    context_settings=dict(ignore_unknown_options=True),
+)
+@log_command
+def deploy(
+    config: pathlib.Path,
+    pull: bool,
+    verbose: bool,
+    api_version: str | None,
+    host_url: str | None,
+    api_key: str | None,
+    deployment_id: str | None,
+    deployment_type: str,
+    name: str | None,
+    image_name: str | None,
+    image_tag: str,
+    base_image: str | None,
+    install_command: str | None,
+    build_command: str | None,
+    no_wait: bool,
+    docker_build_args: Sequence[str],
+):
+    click.secho(
+        "Note: 'langgraph deploy' is in beta. Expect frequent updates and improvements.",
+        fg="yellow",
+    )
+    click.echo()
+    config_json = langgraph_cli.config.validate_config_file(config)
+    warn_non_wolfi_distro(config_json)
+
+    env_vars = _parse_env_from_config(config_json, config)
+
+    if not api_key:
+        for key_name in _API_KEY_ENV_NAMES:
+            val = env_vars.get(key_name) or os.environ.get(key_name)
+            if val:
+                api_key = val
+                break
+    if not api_key:
+        api_key = click.prompt("Host API key", hide_input=True)
+
+    if not deployment_id and not name:
+        name = env_vars.get(_DEPLOYMENT_NAME_ENV)
+    if not deployment_id and not name:
+        default_name = _normalize_image_name(pathlib.Path.cwd().name)
+        name = click.prompt("Deployment name", default=default_name)
+
+    secrets = _secrets_from_env(env_vars)
+
+    # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
+    # (e.g. Apple Silicon). On amd64 hosts, plain docker build is sufficient.
+    needs_buildx = platform.machine() != "x86_64"
+    local_tag = f"langgraph-deploy-tmp:{int(time.time())}"
+
+    with Runner() as runner:
+        if shutil.which("docker") is None:
+            raise click.UsageError(
+                "Docker is required but not installed.\n"
+                "Install Docker Desktop: https://docs.docker.com/get-docker/\n\n"
+                "Remote builds (no Docker required) are coming in a future update."
+            )
+        if needs_buildx:
+            try:
+                runner.run(subp_exec("docker", "buildx", "version", collect=True))
+            except click.exceptions.Exit:
+                raise click.UsageError(
+                    "Docker Buildx is required but not installed.\n"
+                    "Your machine architecture ("
+                    + platform.machine()
+                    + ") requires Buildx to cross-compile images for linux/amd64.\n"
+                    "Install Buildx: https://docs.docker.com/build/install-buildx/\n\n"
+                    "Remote builds (no Docker required) are coming in a future update."
+                ) from None
+
+        def log_step(message: str) -> None:
+            click.secho(message, fg="cyan")
+
+        client = HostBackendClient(host_url, api_key)
+        step = 1
+        needs_creation = False
+
+        if deployment_id:
+            log_step(f"{step}. Using deployment {deployment_id}")
+            try:
+                client.get_deployment(deployment_id)
+            except HostBackendError as err:
+                if (
+                    err.status_code == 403
+                    and "requires workspace specification" in err.message
+                ):
+                    click.secho(
+                        "Your API key is org-scoped and requires a workspace ID.",
+                        fg="yellow",
+                    )
+                    click.secho(
+                        "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                        fg="yellow",
+                    )
+                    tenant_id = click.prompt("Workspace ID")
+                    client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
+                    client.get_deployment(deployment_id)
+                else:
+                    raise
+            step += 1
+        else:
+            log_step(f"{step}. Looking up deployment '{name}'")
+            try:
+                existing = client.list_deployments(name_contains=name)
+            except HostBackendError as err:
+                if (
+                    err.status_code == 403
+                    and "requires workspace specification" in err.message
+                ):
+                    click.secho(
+                        "Your API key is org-scoped and requires a workspace ID.",
+                        fg="yellow",
+                    )
+                    click.secho(
+                        "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                        fg="yellow",
+                    )
+                    tenant_id = click.prompt("Workspace ID")
+                    client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
+                    existing = client.list_deployments(name_contains=name)
+                else:
+                    raise
+            found_id = None
+            if isinstance(existing, dict):
+                for dep in existing.get("resources", []):
+                    if isinstance(dep, dict) and dep.get("name") == name:
+                        found_id = dep.get("id")
+                        break
+            if found_id:
+                deployment_id = str(found_id)
+                click.secho(
+                    f"   Found existing deployment (ID: {deployment_id})",
+                    fg="green",
+                )
+            else:
+                needs_creation = True
+                click.secho(
+                    "   No deployment found. Will create after build.", fg="yellow"
+                )
+            step += 1
+
+        # -- Step: Build image --
+        log_step(f"{step}. Building image")
+        if needs_buildx:
+            build_flags: list[str] = [
+                "--platform",
+                "linux/amd64",
+                "--load",
+            ]
+            if not verbose:
+                build_flags.append("--progress=quiet")
+            with Progress(message="Building...", elapsed=not verbose):
+                _build(
+                    runner,
+                    lambda _msg: None,
+                    config,
+                    config_json,
+                    base_image,
+                    api_version,
+                    pull,
+                    local_tag,
+                    docker_build_args,
+                    install_command,
+                    build_command,
+                    docker_command=("docker", "buildx", "build"),
+                    extra_flags=build_flags,
+                    verbose=verbose,
+                )
+        else:
+            with Progress(message="Building...", elapsed=not verbose):
+                _build(
+                    runner,
+                    lambda _msg: None,
+                    config,
+                    config_json,
+                    base_image,
+                    api_version,
+                    pull,
+                    local_tag,
+                    docker_build_args,
+                    install_command,
+                    build_command,
+                    verbose=verbose,
+                )
+        step += 1
+
+        if needs_creation:
+            log_step(f"{step}. Creating deployment '{name}'")
+            payload = {
+                "name": name,
+                "source": "internal_docker",
+                "source_config": {"deployment_type": deployment_type},
+                "source_revision_config": {},
+                "secrets": secrets,
+            }
+            created = client.create_deployment(payload)
+            created_id = created.get("id") if isinstance(created, dict) else None
+            if not isinstance(created_id, str) or not created_id:
+                raise HostBackendError(
+                    "POST /v2/deployments succeeded but response missing a valid 'id'"
+                )
+            deployment_id = created_id
+            click.secho(f"   Deployment ID: {deployment_id}", fg="green")
+            step += 1
+
+        # -- Step: Get push token and authenticate --
+        log_step(f"{step}. Requesting push token")
+        try:
+            push_data = client.request_push_token(deployment_id)
+        except HostBackendError as err:
+            if (
+                err.status_code == 400
+                and "only available for 'internal_docker' source deployments"
+                in err.message
+            ):
+                raise click.ClickException(
+                    f"Deployment '{deployment_id}' was not created by 'langgraph deploy' "
+                    "and cannot be updated with this command.\n"
+                    "Please create a new deployment by running 'langgraph deploy' "
+                    "without --deployment-id, or use a different --name."
+                ) from None
+            raise
+        deployment_token = push_data.get("token")
+        registry_url = push_data.get("registry_url")
+        if not deployment_token or not registry_url:
+            raise click.ClickException(
+                "Push token response missing token or registry_url"
+            )
+        step += 1
+
+        normalized_registry = registry_url.rstrip("/")
+        if "://" in normalized_registry:
+            normalized_registry = normalized_registry.split("//", 1)[1]
+        repo_seed = image_name or name or config.parent.name
+        repo_name = _normalize_image_name(repo_seed)
+        tag_value = _normalize_image_tag(image_tag)
+        remote_image = f"{normalized_registry}/{repo_name}:{tag_value}"
+
+        registry_host = normalized_registry.split("/")[0]
+
+        # Use a clean Docker config with only the push token so that
+        # system credential helpers (e.g. gcloud) don't interfere.
+        with _docker_config_for_token(registry_host, deployment_token) as cfg:
+            log_step(f"{step}. Logging into {registry_host}")
+            token_input = (
+                deployment_token
+                if deployment_token.endswith("\n")
+                else f"{deployment_token}\n"
+            )
+            runner.run(
+                subp_exec(
+                    "docker",
+                    "--config",
+                    cfg,
+                    "login",
+                    "-u",
+                    "oauth2accesstoken",
+                    "--password-stdin",
+                    registry_host,
+                    input=token_input,
+                    verbose=verbose,
+                )
+            )
+            step += 1
+
+            # -- Step: Tag and push --
+            log_step(f"{step}. Pushing image {remote_image}")
+            runner.run(
+                subp_exec(
+                    "docker",
+                    "tag",
+                    local_tag,
+                    remote_image,
+                    verbose=verbose,
+                )
+            )
+            max_push_retries = 3
+            for attempt in range(max_push_retries):
+                try:
+                    with Progress(message="Pushing...", elapsed=not verbose):
+                        runner.run(
+                            subp_exec(
+                                "docker",
+                                "--config",
+                                cfg,
+                                "push",
+                                remote_image,
+                                verbose=verbose,
+                            )
+                        )
+                    break
+                except click.exceptions.Exit:
+                    if attempt < max_push_retries - 1:
+                        click.secho(
+                            f"   Push failed, retrying (attempt {attempt + 2} of {max_push_retries})...",
+                            fg="yellow",
+                        )
+                    else:
+                        raise
+        step += 1
+
+        # -- Step: Update deployment --
+        log_step(f"{step}. Updating deployment {deployment_id}")
+        updated = client.update_deployment(deployment_id, remote_image, secrets=secrets)
+        tenant_id = updated.get("tenant_id") if isinstance(updated, dict) else None
+        if tenant_id:
+            status_url = (
+                f"https://smith.langchain.com/o/{tenant_id}"
+                f"/host/deployments/{deployment_id}"
+            )
+            click.secho(f"   View status: {status_url}", fg="cyan")
+
+        if no_wait:
+            click.secho("   Deployment updated", fg="green")
+            return
+
+        # -- Poll revision status --
+        revisions_resp = client.list_revisions(deployment_id, limit=1)
+        resources = (
+            revisions_resp.get("resources", [])
+            if isinstance(revisions_resp, dict)
+            else []
+        )
+        if not resources:
+            click.secho("   Deployment updated", fg="green")
+            return
+
+        revision_id = str(resources[0]["id"])
+        last_status = ""
+
+        deadline = time.time() + 300
+        with Progress(message="Deploying...", elapsed=True) as set_progress:
+            while time.time() < deadline:
+                rev = client.get_revision(deployment_id, revision_id)
+                status = (
+                    rev.get("status", "UNKNOWN") if isinstance(rev, dict) else "UNKNOWN"
+                )
+                if status != last_status:
+                    last_status = status
+                    # pause spinner so we can avoid conflict when writing status
+                    set_progress("")
+                    click.secho(f"   Status: {status}", fg="cyan")
+                    if status in _TERMINAL_STATUSES:
+                        break
+                    set_progress(f"{status}...")
+                time.sleep(1)
+            else:
+                set_progress("")
+
+        dep_info = client.get_deployment(deployment_id)
+        custom_url = None
+        if isinstance(dep_info, dict):
+            sc = dep_info.get("source_config")
+            if isinstance(sc, dict):
+                custom_url = sc.get("custom_url")
+
+        if last_status == "DEPLOYED":
+            click.secho("   Deployment successful!", fg="green")
+            if custom_url:
+                click.secho(f"   URL: {custom_url}", fg="green")
+        elif last_status in ("BUILD_FAILED", "DEPLOY_FAILED", "CREATE_FAILED"):
+            click.secho(f"   Deployment failed: {last_status}", fg="red")
+            raise click.exceptions.Exit(1)
+        else:
+            click.secho(
+                f"   Timed out waiting for deployment (last status: {last_status}).",
+                fg="yellow",
+            )
+            if custom_url:
+                click.secho(
+                    f"   Check status at: {custom_url}",
+                    fg="yellow",
+                )
+            else:
+                click.secho(
+                    "   Check status in the LangSmith Deployments dashboard.",
+                    fg="yellow",
+                )
+
+
+def _normalize_image_name(value: str | None) -> str:
+    """Sanitize a deployment/directory name into a valid Docker repository name.
+
+    Docker repository names must be lowercase and may only contain
+    [a-z0-9._-].  Invalid characters are replaced with hyphens.
+    """
+    if not value:
+        return "app"
+    slug = re.sub(r"[^a-z0-9._-]+", "-", value.lower()).strip("-.")
+    return slug or "app"
+
+
+def _normalize_image_tag(value: str) -> str:
+    """Validate and return a Docker image tag.
+
+    Tags may only contain [A-Za-z0-9_.-].  Defaults to "latest" when empty.
+    """
+    if not value:
+        value = "latest"
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", value):
+        raise click.UsageError(
+            "Image tag may only contain characters A-Z, a-z, 0-9, '_', '-', '.'"
+        )
+    return value
 
 
 def _get_docker_ignore_content() -> str:
@@ -765,6 +1395,8 @@ def dev(
         allow_blocking=allow_blocking,
         tunnel=tunnel,
         server_level=server_log_level,
+        checkpointer=config_json.get("checkpointer"),
+        disable_persistence=config_json.get("disable_persistence", False),
     )
 
 
