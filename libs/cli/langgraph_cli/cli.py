@@ -726,7 +726,73 @@ def deploy(
         def log_step(message: str) -> None:
             click.secho(message, fg="cyan")
 
+        client = HostBackendClient(host_url, api_key)
         step = 1
+        needs_creation = False
+
+        if deployment_id:
+            log_step(f"{step}. Using deployment {deployment_id}")
+            try:
+                client.get_deployment(deployment_id)
+            except HostBackendError as err:
+                if (
+                    err.status_code == 403
+                    and "requires workspace specification" in err.message
+                ):
+                    click.secho(
+                        "Your API key is org-scoped and requires a workspace ID.",
+                        fg="yellow",
+                    )
+                    click.secho(
+                        "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                        fg="yellow",
+                    )
+                    tenant_id = click.prompt("Workspace ID")
+                    client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
+                    client.get_deployment(deployment_id)
+                else:
+                    raise
+            step += 1
+        else:
+            log_step(f"{step}. Looking up deployment '{name}'")
+            try:
+                existing = client.list_deployments(name_contains=name)
+            except HostBackendError as err:
+                if (
+                    err.status_code == 403
+                    and "requires workspace specification" in err.message
+                ):
+                    click.secho(
+                        "Your API key is org-scoped and requires a workspace ID.",
+                        fg="yellow",
+                    )
+                    click.secho(
+                        "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                        fg="yellow",
+                    )
+                    tenant_id = click.prompt("Workspace ID")
+                    client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
+                    existing = client.list_deployments(name_contains=name)
+                else:
+                    raise
+            found_id = None
+            if isinstance(existing, dict):
+                for dep in existing.get("resources", []):
+                    if isinstance(dep, dict) and dep.get("name") == name:
+                        found_id = dep.get("id")
+                        break
+            if found_id:
+                deployment_id = str(found_id)
+                click.secho(
+                    f"   Found existing deployment (ID: {deployment_id})",
+                    fg="green",
+                )
+            else:
+                needs_creation = True
+                click.secho(
+                    "   No deployment found. Will create after build.", fg="yellow"
+                )
+            step += 1
 
         # -- Step: Build image --
         log_step(f"{step}. Building image")
@@ -773,64 +839,23 @@ def deploy(
                 )
         step += 1
 
-        # -- Step: Find or create deployment --
-        client = HostBackendClient(host_url, api_key)
-
-        if deployment_id:
-            log_step(f"{step}. Using deployment {deployment_id}")
-            step += 1
-        else:
-            log_step(f"{step}. Looking up deployment '{name}'")
-            try:
-                existing = client.list_deployments(name_contains=name)
-            except HostBackendError as err:
-                if (
-                    err.status_code == 403
-                    and "requires workspace specification" in err.message
-                ):
-                    click.secho(
-                        "Your API key is org-scoped and requires a workspace ID.",
-                        fg="yellow",
-                    )
-                    click.secho(
-                        "Find your workspace ID in LangSmith under Settings > Workspaces.",
-                        fg="yellow",
-                    )
-                    tenant_id = click.prompt("Workspace ID")
-                    client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
-                    existing = client.list_deployments(name_contains=name)
-                else:
-                    raise
-            found_id = None
-            if isinstance(existing, dict):
-                for dep in existing.get("resources", []):
-                    if isinstance(dep, dict) and dep.get("name") == name:
-                        found_id = dep.get("id")
-                        break
-            if found_id:
-                deployment_id = str(found_id)
-                click.secho(
-                    f"   Found existing deployment (ID: {deployment_id})",
-                    fg="green",
+        if needs_creation:
+            log_step(f"{step}. Creating deployment '{name}'")
+            payload = {
+                "name": name,
+                "source": "internal_docker",
+                "source_config": {"deployment_type": deployment_type},
+                "source_revision_config": {},
+                "secrets": secrets,
+            }
+            created = client.create_deployment(payload)
+            created_id = created.get("id") if isinstance(created, dict) else None
+            if not isinstance(created_id, str) or not created_id:
+                raise HostBackendError(
+                    "POST /v2/deployments succeeded but response missing a valid 'id'"
                 )
-            else:
-                log_step(f"   Creating deployment '{name}'")
-                payload = {
-                    "name": name,
-                    "source": "internal_docker",
-                    "source_config": {"deployment_type": deployment_type},
-                    "source_revision_config": {},
-                    "secrets": secrets,
-                }
-                created = client.create_deployment(payload)
-                created_id = created.get("id") if isinstance(created, dict) else None
-                if not isinstance(created_id, str) or not created_id:
-                    raise HostBackendError(
-                        "POST /v2/deployments succeeded but response "
-                        "missing a valid 'id'"
-                    )
-                deployment_id = created_id
-                click.secho(f"   Deployment ID: {deployment_id}", fg="green")
+            deployment_id = created_id
+            click.secho(f"   Deployment ID: {deployment_id}", fg="green")
             step += 1
 
         # -- Step: Get push token and authenticate --
