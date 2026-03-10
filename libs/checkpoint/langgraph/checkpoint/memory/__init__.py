@@ -132,6 +132,31 @@ class InMemorySaver(
                     channel_values[k] = self.serde.loads_typed(vv)
         return channel_values
 
+    def _checkpoint_sort_key(
+        self, checkpoint_id: str, checkpoint: tuple[str, bytes]
+    ) -> tuple[str, str]:
+        checkpoint_data: Checkpoint = self.serde.loads_typed(checkpoint)
+        return (checkpoint_data["ts"], checkpoint_id)
+
+    def _before_sort_key(
+        self, config: RunnableConfig | None
+    ) -> tuple[str, str] | None:
+        if config is None:
+            return None
+
+        checkpoint_id = get_checkpoint_id(config)
+        if checkpoint_id is None:
+            return None
+
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        saved = self.storage[thread_id][checkpoint_ns].get(checkpoint_id)
+        if saved is None:
+            return None
+
+        checkpoint, _, _ = saved
+        return self._checkpoint_sort_key(checkpoint_id, checkpoint)
+
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the in-memory storage.
 
@@ -179,8 +204,16 @@ class InMemorySaver(
                 )
         else:
             if checkpoints := self.storage[thread_id][checkpoint_ns]:
-                checkpoint_id = max(checkpoints.keys())
-                checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
+                checkpoint_id, (
+                    checkpoint,
+                    metadata,
+                    parent_checkpoint_id,
+                ) = max(
+                    checkpoints.items(),
+                    key=lambda item: self._checkpoint_sort_key(
+                        item[0], item[1][0]
+                    ),
+                )
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 checkpoint_ = self.serde.loads_typed(checkpoint)
                 return CheckpointTuple(
@@ -241,6 +274,19 @@ class InMemorySaver(
             config["configurable"].get("checkpoint_ns") if config else None
         )
         config_checkpoint_id = get_checkpoint_id(config) if config else None
+        before_sort_key = self._before_sort_key(before)
+        candidates: list[
+            tuple[
+                tuple[str, str],
+                str,
+                str,
+                str,
+                Checkpoint,
+                CheckpointMetadata,
+                str | None,
+            ]
+        ] = []
+
         for thread_id in thread_ids:
             for checkpoint_ns in self.storage[thread_id].keys():
                 if (
@@ -253,21 +299,9 @@ class InMemorySaver(
                     checkpoint,
                     metadata_b,
                     parent_checkpoint_id,
-                ) in sorted(
-                    self.storage[thread_id][checkpoint_ns].items(),
-                    key=lambda x: x[0],
-                    reverse=True,
-                ):
+                ) in self.storage[thread_id][checkpoint_ns].items():
                     # filter by checkpoint ID from config
                     if config_checkpoint_id and checkpoint_id != config_checkpoint_id:
-                        continue
-
-                    # filter by checkpoint ID from `before` config
-                    if (
-                        before
-                        and (before_checkpoint_id := get_checkpoint_id(before))
-                        and checkpoint_id >= before_checkpoint_id
-                    ):
                         continue
 
                     # filter by metadata
@@ -278,50 +312,70 @@ class InMemorySaver(
                     ):
                         continue
 
-                    # limit search results
-                    if limit is not None and limit <= 0:
-                        break
-                    elif limit is not None:
-                        limit -= 1
-
-                    writes = self.writes[
-                        (thread_id, checkpoint_ns, checkpoint_id)
-                    ].values()
-
                     checkpoint_: Checkpoint = self.serde.loads_typed(checkpoint)
+                    sort_key = (checkpoint_["ts"], checkpoint_id)
+                    if before_sort_key and sort_key >= before_sort_key:
+                        continue
 
-                    yield CheckpointTuple(
-                        config={
-                            "configurable": {
-                                "thread_id": thread_id,
-                                "checkpoint_ns": checkpoint_ns,
-                                "checkpoint_id": checkpoint_id,
-                            }
-                        },
-                        checkpoint={
-                            **checkpoint_,
-                            "channel_values": self._load_blobs(
-                                thread_id,
-                                checkpoint_ns,
-                                checkpoint_["channel_versions"],
-                            ),
-                        },
-                        metadata=metadata,
-                        parent_config=(
-                            {
-                                "configurable": {
-                                    "thread_id": thread_id,
-                                    "checkpoint_ns": checkpoint_ns,
-                                    "checkpoint_id": parent_checkpoint_id,
-                                }
-                            }
-                            if parent_checkpoint_id
-                            else None
-                        ),
-                        pending_writes=[
-                            (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
-                        ],
+                    candidates.append(
+                        (
+                            sort_key,
+                            thread_id,
+                            checkpoint_ns,
+                            checkpoint_id,
+                            checkpoint_,
+                            metadata,
+                            parent_checkpoint_id,
+                        )
                     )
+
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        if limit is not None:
+            candidates = candidates[:limit]
+
+        for (
+            _sort_key,
+            thread_id,
+            checkpoint_ns,
+            checkpoint_id,
+            checkpoint_,
+            metadata,
+            parent_checkpoint_id,
+        ) in candidates:
+            writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
+
+            yield CheckpointTuple(
+                config={
+                    "configurable": {
+                        "thread_id": thread_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "checkpoint_id": checkpoint_id,
+                    }
+                },
+                checkpoint={
+                    **checkpoint_,
+                    "channel_values": self._load_blobs(
+                        thread_id,
+                        checkpoint_ns,
+                        checkpoint_["channel_versions"],
+                    ),
+                },
+                metadata=metadata,
+                parent_config=(
+                    {
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": parent_checkpoint_id,
+                        }
+                    }
+                    if parent_checkpoint_id
+                    else None
+                ),
+                pending_writes=[
+                    (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
+                ],
+            )
 
     def put(
         self,

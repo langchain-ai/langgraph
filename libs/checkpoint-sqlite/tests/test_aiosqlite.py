@@ -188,3 +188,47 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_latest_checkpoint_uses_timestamp_not_id(self) -> None:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+            first_checkpoint = empty_checkpoint()
+            first_checkpoint["id"] = "z-older"
+            first_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+            first_config: RunnableConfig = {
+                "configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}
+            }
+            stored_first = await saver.aput(
+                first_config, first_checkpoint, {"step": 0}, {}
+            )
+
+            second_checkpoint = empty_checkpoint()
+            second_checkpoint["id"] = "a-newer"
+            second_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+            second_config: RunnableConfig = {
+                "configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}
+            }
+            second_config["configurable"]["checkpoint_id"] = stored_first[
+                "configurable"
+            ]["checkpoint_id"]
+            await saver.aput(second_config, second_checkpoint, {"step": 1}, {})
+
+            latest = await saver.aget_tuple(
+                {"configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}}
+            )
+            assert latest is not None
+            assert latest.checkpoint["id"] == "a-newer"
+
+            before_results = [
+                result
+                async for result in saver.alist(
+                    {"configurable": {"thread_id": "thread-non-lex", "checkpoint_ns": ""}},
+                    before={
+                        "configurable": {
+                            "thread_id": "thread-non-lex",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": "a-newer",
+                        }
+                    },
+                )
+            ]
+            assert [result.checkpoint["id"] for result in before_results] == ["z-older"]

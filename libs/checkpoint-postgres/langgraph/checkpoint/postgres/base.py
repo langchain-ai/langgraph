@@ -305,9 +305,37 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
             param_values.append(Jsonb(filter))
 
         # construct predicate for `before`
-        if before is not None:
-            wheres.append("checkpoint_id < %s ")
-            param_values.append(get_checkpoint_id(before))
+        if before is not None and (before_checkpoint_id := get_checkpoint_id(before)):
+            before_thread_id = before["configurable"]["thread_id"]
+            before_checkpoint_ns = before["configurable"].get("checkpoint_ns", "")
+            wheres.append(
+                """(
+                    checkpoint->>'ts' < (
+                        SELECT checkpoint->>'ts'
+                        FROM checkpoints
+                        WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s
+                    )
+                    OR (
+                        checkpoint->>'ts' = (
+                            SELECT checkpoint->>'ts'
+                            FROM checkpoints
+                            WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s
+                        )
+                        AND checkpoint_id < %s
+                    )
+                )"""
+            )
+            param_values.extend(
+                [
+                    before_thread_id,
+                    before_checkpoint_ns,
+                    before_checkpoint_id,
+                    before_thread_id,
+                    before_checkpoint_ns,
+                    before_checkpoint_id,
+                    before_checkpoint_id,
+                ]
+            )
 
         return (
             "WHERE " + " AND ".join(wheres) if wheres else "",

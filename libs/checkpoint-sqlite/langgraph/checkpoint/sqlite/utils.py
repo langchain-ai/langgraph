@@ -109,8 +109,24 @@ def search_where(
         param_values.extend(metadata_values)
 
     # construct predicate for `before`
-    if before is not None:
-        wheres.append("checkpoint_id < ?")
-        param_values.append(get_checkpoint_id(before))
+    if before is not None and (before_checkpoint_id := get_checkpoint_id(before)):
+        before_thread_id = before["configurable"]["thread_id"]
+        before_checkpoint_ns = before["configurable"].get("checkpoint_ns", "")
+        wheres.append(
+            """(
+                rowid < (
+                    SELECT rowid
+                    FROM checkpoints
+                    WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?
+                )
+            )"""
+        )
+        param_values.extend(
+            [
+                before_thread_id,
+                before_checkpoint_ns,
+                before_checkpoint_id,
+            ]
+        )
 
     return ("WHERE " + " AND ".join(wheres) if wheres else "", param_values)
