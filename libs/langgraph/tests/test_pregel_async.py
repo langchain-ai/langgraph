@@ -214,6 +214,48 @@ async def test_checkpoint_errors() -> None:
             pass
 
 
+async def test_parallel_subgraph_does_not_rewrite_unchanged_parent_keys() -> None:
+    class State(TypedDict):
+        a: int
+        b: str
+        s1: int
+        s2: int
+
+    def node_a(state: State) -> dict[str, int]:
+        return {"a": 1}
+
+    def node_b(state: State) -> dict[str, str]:
+        return {"b": "updated-by-parent"}
+
+    def subnode_1(state: State) -> dict[str, int]:
+        return {"s1": 11}
+
+    def subnode_2(state: State) -> dict[str, int]:
+        return {"s2": 22}
+
+    subgraph_builder = StateGraph(State)
+    subgraph_builder.add_node("subnode_1", subnode_1)
+    subgraph_builder.add_node("subnode_2", subnode_2)
+    subgraph_builder.add_edge(START, "subnode_1")
+    subgraph_builder.add_edge(START, "subnode_2")
+    subgraph = subgraph_builder.compile()
+
+    parent_builder = StateGraph(State)
+    parent_builder.add_node("node_a", node_a)
+    parent_builder.add_node("subgraph", subgraph)
+    parent_builder.add_node("node_b", node_b)
+    parent_builder.add_edge(START, "node_a")
+    parent_builder.add_edge("node_a", "node_b")
+    parent_builder.add_edge("node_a", "subgraph")
+    parent_builder.add_edge("node_b", END)
+    parent_builder.add_edge("subgraph", END)
+    graph = parent_builder.compile()
+
+    result = await graph.ainvoke({"a": 0, "b": "", "s1": 0, "s2": 0})
+
+    assert result == {"a": 1, "b": "updated-by-parent", "s1": 11, "s2": 22}
+
+
 async def test_py_async_with_cancel_behavior() -> None:
     """This test confirms that in all versions of Python we support, __aexit__
     is not cancelled when the coroutine containing the async with block is cancelled."""
