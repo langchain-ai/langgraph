@@ -946,18 +946,19 @@ def test_prepare_args_and_stdin_distributed_mode() -> None:
         api_version="0.7.67",
     )
 
-    # API service should use langgraph-api base image
-    assert "FROM langchain/langgraph-api:" in actual_stdin
+    # API service should use langgraph-api base image with pinned version
+    assert "FROM langchain/langgraph-api:0.7.67-py3.11" in actual_stdin
 
     # Distributed mode sets N_JOBS_PER_WORKER=0 on the API service
     assert 'N_JOBS_PER_WORKER: "0"' in actual_stdin
 
-    # Orchestrator service present
+    # Orchestrator service present with pinned version
     assert "langgraph-orchestrator:" in actual_stdin
+    assert "langchain/langgraph-orchestrator-licensed:0.7.67" in actual_stdin
 
     # Executor service present with correct base image
     assert "langgraph-executor:" in actual_stdin
-    assert "FROM langchain/langgraph-executor:" in actual_stdin
+    assert "FROM langchain/langgraph-executor:0.7.67-py3.11" in actual_stdin
     assert "executor_entrypoint.sh" in actual_stdin
 
 

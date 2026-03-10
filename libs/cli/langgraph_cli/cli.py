@@ -13,6 +13,7 @@ import tempfile
 import time
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
+from typing import Any
 
 import click
 import click.exceptions
@@ -715,6 +716,13 @@ def deploy(
 
     secrets = _secrets_from_env(env_vars)
 
+    # Determine language and runtime mode from config for host backend
+    is_python = bool(config_json.get("python_version")) or not config_json.get(
+        "node_version"
+    )
+    deploy_engine_runtime_mode = "distributed" if is_python else "combined_queue_server"
+    deploy_api_version = api_version or config_json.get("api_version")
+
     # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
     # (e.g. Apple Silicon). On amd64 hosts, plain docker build is sufficient.
     needs_buildx = platform.machine() != "x86_64"
@@ -858,13 +866,16 @@ def deploy(
 
         if needs_creation:
             log_step(f"{step}. Creating deployment '{name}'")
-            payload = {
+            payload: dict[str, Any] = {
                 "name": name,
                 "source": "internal_docker",
                 "source_config": {"deployment_type": deployment_type},
                 "source_revision_config": {},
                 "secrets": secrets,
+                "engine_runtime_mode": deploy_engine_runtime_mode,
             }
+            if deploy_api_version:
+                payload["deployed_api_version"] = deploy_api_version
             created = client.create_deployment(payload)
             created_id = created.get("id") if isinstance(created, dict) else None
             if not isinstance(created_id, str) or not created_id:
@@ -973,7 +984,13 @@ def deploy(
 
         # -- Step: Update deployment --
         log_step(f"{step}. Updating deployment {deployment_id}")
-        updated = client.update_deployment(deployment_id, remote_image, secrets=secrets)
+        updated = client.update_deployment(
+            deployment_id,
+            remote_image,
+            secrets=secrets,
+            engine_runtime_mode=deploy_engine_runtime_mode,
+            deployed_api_version=deploy_api_version,
+        )
         tenant_id = updated.get("tenant_id") if isinstance(updated, dict) else None
         if tenant_id:
             status_url = (
