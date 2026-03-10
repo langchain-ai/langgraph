@@ -671,7 +671,7 @@ def build(
 def deploy(ctx: click.Context):
     if ctx.invoked_subcommand is not None:
         return
-    return _deploy_run_command.main(
+    return _deploy.main(
         args=list(ctx.args),
         prog_name=ctx.command_path,
         standalone_mode=False,
@@ -732,7 +732,7 @@ def deploy(ctx: click.Context):
 @click.option("--api-version", type=str, hidden=True)
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @click.command(context_settings=dict(ignore_unknown_options=True))
-def _deploy_run_command(
+def _deploy(
     config: pathlib.Path,
     pull: bool,
     verbose: bool,
