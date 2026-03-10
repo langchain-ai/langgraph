@@ -20,6 +20,7 @@ from langgraph_cli.schemas import (
     Config,
     ConfigurableHeaderConfig,
     CorsConfig,
+    GraphDef,
     HttpConfig,
     IndexConfig,
     SecurityConfig,
@@ -108,6 +109,7 @@ def add_descriptions_to_schema(schema, cls):
             # Find the class that corresponds to this definition
             for potential_cls in [
                 Config,
+                GraphDef,
                 StoreConfig,
                 IndexConfig,
                 AuthConfig,
