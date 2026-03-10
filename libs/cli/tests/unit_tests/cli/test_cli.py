@@ -339,7 +339,7 @@ def test_deploy_list_command(monkeypatch) -> None:
                     {
                         "id": "dep-456",
                         "name": "beta",
-                        "url": "https://beta.example.com",
+                        "source_config": {"custom_url": "https://beta.example.com"},
                     },
                 ]
             }

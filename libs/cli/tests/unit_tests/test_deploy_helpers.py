@@ -137,14 +137,7 @@ class TestParseEnvFromConfig:
 
 
 class TestDeploymentFormatting:
-    def test_extract_deployment_url_prefers_top_level_url(self):
-        deployment = {
-            "url": "https://example.com/top-level",
-            "source_config": {"custom_url": "https://example.com/custom"},
-        }
-        assert _extract_deployment_url(deployment) == "https://example.com/top-level"
-
-    def test_extract_deployment_url_uses_custom_url_fallback(self):
+    def test_extract_deployment_url_uses_custom_url(self):
         deployment = {"source_config": {"custom_url": "https://example.com/custom"}}
         assert _extract_deployment_url(deployment) == "https://example.com/custom"
 

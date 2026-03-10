@@ -1160,10 +1160,6 @@ def _call_host_backend_with_optional_tenant(
 
 
 def _extract_deployment_url(deployment: dict[str, object]) -> str:
-    for key in ("deployment_url", "url"):
-        value = deployment.get(key)
-        if isinstance(value, str) and value:
-            return value
     source_config = deployment.get("source_config")
     if isinstance(source_config, dict):
         custom_url = source_config.get("custom_url")
