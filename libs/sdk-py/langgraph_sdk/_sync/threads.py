@@ -255,6 +255,7 @@ class SyncThreadsClient:
         sort_by: ThreadSortBy | None = None,
         sort_order: SortOrder | None = None,
         select: list[ThreadSelectField] | None = None,
+        extract: dict[str, str] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> list[Thread]:
@@ -268,7 +269,17 @@ class SyncThreadsClient:
                 Must be one of 'idle', 'busy', 'interrupted' or 'error'.
             limit: Limit on number of threads to return.
             offset: Offset in threads table to start search from.
+            sort_by: Sort by field.
+            sort_order: Sort order.
+            select: List of fields to include in the response.
+            extract: Dictionary mapping aliases to JSONB paths to extract
+                from thread data. Paths use dot notation for nested keys and
+                bracket notation for array indices (e.g.,
+                `{"last_msg": "values.messages[-1]"}`). Extracted values are
+                returned in an `extracted` field on each thread. Maximum 10
+                paths per request.
             headers: Optional custom headers to include with the request.
+            params: Optional query parameters to include with the request.
 
         Returns:
             List of the threads matching the search parameters.
@@ -303,6 +314,8 @@ class SyncThreadsClient:
             payload["sort_order"] = sort_order
         if select:
             payload["select"] = select
+        if extract:
+            payload["extract"] = extract
         return self.http.post(
             "/threads/search", json=payload, headers=headers, params=params
         )
@@ -530,7 +543,7 @@ class SyncThreadsClient:
         elif checkpoint_id:
             get_params = {"subgraphs": subgraphs}
             if params:
-                get_params = {**get_params, **params}
+                get_params = {**get_params, **dict(params)}
             return self.http.get(
                 f"/threads/{thread_id}/state/{checkpoint_id}",
                 params=get_params,
@@ -539,7 +552,7 @@ class SyncThreadsClient:
         else:
             get_params = {"subgraphs": subgraphs}
             if params:
-                get_params = {**get_params, **params}
+                get_params = {**get_params, **dict(params)}
             return self.http.get(
                 f"/threads/{thread_id}/state",
                 params=get_params,
