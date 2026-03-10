@@ -464,7 +464,7 @@ class CronClient:
             ```
 
         """
-        payload = {
+        payload: dict[str, Any] = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,
             "enabled": enabled,
