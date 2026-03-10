@@ -429,9 +429,88 @@ def test_deploy_delete_command(monkeypatch) -> None:
             "https://api.example.com",
             "dep-123",
         ],
+        input="y\n",
     )
 
     assert result.exit_code == 0, result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+        "deployment_id": "dep-123",
+    }
+    assert (
+        "Are you sure you want to delete deployment ID dep-123? (Y/n):" in result.output
+    )
+    assert result.output.strip().endswith("Deleted deployment dep-123.")
+
+
+def test_deploy_delete_command_cancelled(monkeypatch) -> None:
+    runner = CliRunner()
+    deleted = False
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def delete_deployment(self, deployment_id: str):
+            nonlocal deleted
+            deleted = True
+            return None
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "delete",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+        input="n\n",
+    )
+
+    assert result.exit_code == 1, result.output
+    assert not deleted
+    assert "Aborted!" in result.output
+
+
+def test_deploy_delete_command_force(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def delete_deployment(self, deployment_id: str):
+            captured["deployment_id"] = deployment_id
+            return None
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "delete",
+            "--force",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Are you sure you want to delete deployment ID dep-123?" not in result.output
     assert captured == {
         "host_url": "https://api.example.com",
         "api_key": "test-key",

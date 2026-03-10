@@ -1212,11 +1212,25 @@ def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -
 
 @OPT_HOST_API_KEY
 @OPT_HOST_URL
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Delete without prompting for confirmation.",
+)
 @click.argument("deployment_id")
 @deploy.command("delete", help="[Beta] Delete a LangSmith Deployment.")
 def deploy_delete(
-    api_key: str | None, host_url: str | None, deployment_id: str
+    api_key: str | None, host_url: str | None, force: bool, deployment_id: str
 ) -> None:
+    if not force:
+        response = click.prompt(
+            f"Are you sure you want to delete deployment ID {deployment_id}? (Y/n)",
+            default="Y",
+            show_default=False,
+        )
+        if response.strip().lower() not in {"", "y", "yes"}:
+            raise click.Abort()
     client = _create_host_backend_client(host_url, api_key)
     _call_host_backend_with_optional_tenant(
         client,
