@@ -160,3 +160,49 @@ def test_list_revisions(client):
 def test_get_revision(client):
     result = client.get_revision("dep-123", "rev-456")
     assert result == {"ok": True}
+
+
+def test_langsmith_client_created_lazily():
+    c = HostBackendClient("https://api.example.com", "key", langsmith_url="https://ls.example.com")
+    assert c._langsmith_client is None
+    ls = c._get_langsmith_client()
+    assert ls is not None
+    assert c._get_langsmith_client() is ls  # same instance
+
+
+def test_get_build_logs(client):
+    result = client.get_build_logs("proj-1", "rev-1", {"limit": 10})
+    assert result == {"ok": True}
+
+
+def test_get_deploy_logs_all_revisions():
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert "/v1/projects/proj-1/deploy_logs" in str(req.url)
+        assert "/revisions/" not in str(req.url)
+        return httpx.Response(200, json={"logs": [{"message": "running"}]})
+
+    c = HostBackendClient("https://api.example.com", "key")
+    c._client = httpx.Client(
+        base_url="https://api.example.com",
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "key", "Accept": "application/json"},
+        timeout=30,
+    )
+    result = c.get_deploy_logs("proj-1", {"limit": 10})
+    assert result == {"logs": [{"message": "running"}]}
+
+
+def test_get_deploy_logs_specific_revision():
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert "/v1/projects/proj-1/revisions/rev-2/deploy_logs" in str(req.url)
+        return httpx.Response(200, json={"logs": []})
+
+    c = HostBackendClient("https://api.example.com", "key")
+    c._client = httpx.Client(
+        base_url="https://api.example.com",
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "key", "Accept": "application/json"},
+        timeout=30,
+    )
+    result = c.get_deploy_logs("proj-1", {"limit": 10}, revision_id="rev-2")
+    assert result == {"logs": []}
