@@ -15,6 +15,7 @@ from langgraph_cli.config import (
     config_to_docker,
     default_base_image,
     docker_tag,
+    fetch_latest_api_version,
     has_disallowed_build_command_content,
     validate_config,
     validate_config_file,
@@ -1772,18 +1773,20 @@ def test_config_to_compose_distributed_mode():
         validate_config({"dependencies": ["."], "graphs": graphs}),
         "langchain/langgraph-api",
         engine_runtime_mode="distributed",
+        api_version="0.7.67",
     )
 
     # API service uses langchain/langgraph-api base image
-    assert "FROM langchain/langgraph-api:3.11" in actual_compose_stdin
+    assert "FROM langchain/langgraph-api:0.7.67-py3.11" in actual_compose_stdin
 
-    # Orchestrator service is present
+    # Orchestrator service is present with pinned version
     assert "langgraph-orchestrator:" in actual_compose_stdin
+    assert "langchain/langgraph-orchestrator-licensed:0.7.67" in actual_compose_stdin
     assert "EXECUTOR_TARGET: langgraph-executor:8188" in actual_compose_stdin
 
     # Executor service is present with correct base image
     assert "langgraph-executor:" in actual_compose_stdin
-    assert "FROM langchain/langgraph-executor:3.11" in actual_compose_stdin
+    assert "FROM langchain/langgraph-executor:0.7.67-py3.11" in actual_compose_stdin
     assert 'entrypoint: ["sh", "/storage/executor_entrypoint.sh"]' in actual_compose_stdin
 
     # Executor has required environment variables
@@ -1802,6 +1805,7 @@ def test_config_to_compose_distributed_mode_with_env_file():
         validate_config({"dependencies": ["."], "graphs": graphs, "env": ".env"}),
         "langchain/langgraph-api",
         engine_runtime_mode="distributed",
+        api_version="0.7.67",
     )
 
     # env_file should appear multiple times: API, orchestrator, executor
@@ -1820,6 +1824,7 @@ def test_config_to_compose_distributed_mode_generates_two_dockerfiles():
         validate_config({"dependencies": ["."], "graphs": graphs}),
         "langchain/langgraph-api",
         engine_runtime_mode="distributed",
+        api_version="0.7.67",
     )
 
     # Should contain two different FROM lines
@@ -1829,8 +1834,8 @@ def test_config_to_compose_distributed_mode_generates_two_dockerfiles():
         if line.strip().startswith("FROM ")
     ]
     assert len(from_lines) == 2
-    assert "FROM langchain/langgraph-api:3.11" in from_lines[0]
-    assert "FROM langchain/langgraph-executor:3.11" in from_lines[1]
+    assert "FROM langchain/langgraph-api:0.7.67-py3.11" in from_lines[0]
+    assert "FROM langchain/langgraph-executor:0.7.67-py3.11" in from_lines[1]
 
 
 def test_config_to_compose_combined_mode_no_orchestrator():
@@ -1882,6 +1887,91 @@ def test_config_to_compose_distributed_executor_gets_correct_paths():
     assert len(from_lines) == 2, (
         f"Expected 2 LANGSERVE_GRAPHS lines (api + executor), got {len(from_lines)}"
     )
+
+
+def test_fetch_latest_api_version_parses_semver(monkeypatch):
+    """fetch_latest_api_version should return the first semver-like tag."""
+    import io
+    import urllib.request
+
+    fake_body = json.dumps(
+        {"results": [{"name": "latest"}, {"name": "abc1234"}, {"name": "0.7.67"}]}
+    ).encode()
+
+    def mock_urlopen(url, *, timeout=None):
+        return io.BytesIO(fake_body)
+
+    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+    assert fetch_latest_api_version() == "0.7.67"
+
+
+def test_fetch_latest_api_version_no_semver_raises(monkeypatch):
+    """Should raise ClickException when no semver tag is found."""
+    import io
+    import urllib.request
+
+    fake_body = json.dumps(
+        {"results": [{"name": "latest"}, {"name": "abc1234"}]}
+    ).encode()
+
+    def mock_urlopen(url, *, timeout=None):
+        return io.BytesIO(fake_body)
+
+    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+    with pytest.raises(click.ClickException, match="Could not find a semver tag"):
+        fetch_latest_api_version()
+
+
+def test_fetch_latest_api_version_network_error_raises(monkeypatch):
+    """Should raise ClickException on network failure."""
+    import urllib.request
+
+    def mock_urlopen(url, *, timeout=None):
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+    with pytest.raises(click.ClickException, match="Failed to fetch"):
+        fetch_latest_api_version()
+
+
+def test_config_to_compose_distributed_orchestrator_uses_api_version():
+    """Orchestrator image tag should use the api_version when provided."""
+    graphs = {"agent": "./agent.py:graph"}
+    actual = config_to_compose(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs}),
+        "langchain/langgraph-api",
+        engine_runtime_mode="distributed",
+        api_version="0.7.67",
+    )
+    assert "langchain/langgraph-orchestrator-licensed:0.7.67" in actual
+
+
+def test_config_to_compose_distributed_orchestrator_defaults_to_latest():
+    """Without api_version, orchestrator image should use 'latest'."""
+    graphs = {"agent": "./agent.py:graph"}
+    actual = config_to_compose(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs}),
+        "langchain/langgraph-api",
+        engine_runtime_mode="distributed",
+    )
+    assert "langchain/langgraph-orchestrator-licensed:latest" in actual
+
+
+def test_config_to_compose_distributed_all_images_same_version():
+    """All 3 images (api, executor, orchestrator) should use the same api_version."""
+    graphs = {"agent": "./agent.py:graph"}
+    actual = config_to_compose(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs}),
+        "langchain/langgraph-api",
+        engine_runtime_mode="distributed",
+        api_version="0.7.67",
+    )
+    assert "FROM langchain/langgraph-api:0.7.67-py3.11" in actual
+    assert "FROM langchain/langgraph-executor:0.7.67-py3.11" in actual
+    assert "langchain/langgraph-orchestrator-licensed:0.7.67" in actual
 
 
 class TestHasDisallowedBuildCommandContent:

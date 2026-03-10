@@ -958,3 +958,25 @@ def test_prepare_args_and_stdin_distributed_mode() -> None:
     assert "langgraph-executor:" in actual_stdin
     assert "FROM langchain/langgraph-executor:" in actual_stdin
     assert "executor_entrypoint.sh" in actual_stdin
+
+
+def test_prepare_args_and_stdin_distributed_with_api_version() -> None:
+    """All 3 images should use the same api_version in distributed mode."""
+    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config = validate_config(
+        Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
+    )
+    actual_args, actual_stdin = prepare_args_and_stdin(
+        capabilities=DEFAULT_DOCKER_CAPABILITIES,
+        config_path=config_path,
+        config=config,
+        docker_compose=None,
+        port=8000,
+        watch=False,
+        engine_runtime_mode="distributed",
+        api_version="0.7.67",
+    )
+
+    assert "FROM langchain/langgraph-api:0.7.67-py3.11" in actual_stdin
+    assert "FROM langchain/langgraph-executor:0.7.67-py3.11" in actual_stdin
+    assert "langchain/langgraph-orchestrator-licensed:0.7.67" in actual_stdin

@@ -1511,6 +1511,15 @@ def prepare(
     """Prepare the arguments and stdin for running the LangGraph API server."""
     config_json = langgraph_cli.config.validate_config_file(config_path)
     warn_non_wolfi_distro(config_json)
+
+    if engine_runtime_mode == "distributed" and not api_version and not image:
+        click.secho(
+            "Resolving latest published version for distributed runtime...",
+            fg="cyan",
+        )
+        api_version = langgraph_cli.config.fetch_latest_api_version()
+        click.secho(f"Using version {api_version} for all distributed images.", fg="cyan")
+
     # pull latest images
     if pull:
         runner.run(
@@ -1532,6 +1541,14 @@ def prepare(
                     langgraph_cli.config.docker_tag(
                         config_json, executor_base, api_version
                     ),
+                    verbose=verbose,
+                )
+            )
+            runner.run(
+                subp_exec(
+                    "docker",
+                    "pull",
+                    f"langchain/langgraph-orchestrator-licensed:{api_version}",
                     verbose=verbose,
                 )
             )

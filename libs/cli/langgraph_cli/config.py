@@ -4,6 +4,7 @@ import os
 import pathlib
 import re
 import textwrap
+import urllib.request
 from collections import Counter
 from typing import Literal, NamedTuple
 
@@ -1233,6 +1234,37 @@ def node_config_to_docker(
     return os.linesep.join(docker_file_contents), {}
 
 
+VERSION_MARKER_REPO = "langchain/langgraph-published-version-marker"
+_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+")
+
+
+def fetch_latest_api_version() -> str:
+    """Fetch the latest published API version from the Docker Hub version marker.
+
+    The marker repo is tagged with ``<semver>``, ``<sha>``, and ``latest``.
+    We pick the first tag that looks like a semver version.
+    """
+    url = f"https://hub.docker.com/v2/repositories/{VERSION_MARKER_REPO}/tags/?page_size=10"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read())
+    except Exception as exc:
+        raise click.ClickException(
+            f"Failed to fetch latest API version from {VERSION_MARKER_REPO}: {exc}\n"
+            "You can specify the version explicitly with --api-version."
+        ) from exc
+
+    for tag in data.get("results", []):
+        name = tag.get("name", "")
+        if _VERSION_RE.match(name):
+            return name
+
+    raise click.ClickException(
+        f"Could not find a semver tag in {VERSION_MARKER_REPO}.\n"
+        "You can specify the version explicitly with --api-version."
+    )
+
+
 def default_base_image(
     config: Config, engine_runtime_mode: str = "combined_queue_worker"
 ) -> str:
@@ -1422,9 +1454,16 @@ def config_to_compose(
                 additional_contexts:
 {executor_additional_contexts_str}"""
 
+            if not api_version:
+                raise click.ClickException(
+                    "Distributed runtime requires a pinned API version for all images.\n"
+                    "Either pass --api-version explicitly or let the CLI resolve it "
+                    "from the Docker Hub version marker."
+                )
+
             postgres_uri = "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
             result += f"""    langgraph-orchestrator:
-        image: langchain/langgraph-orchestrator-licensed:latest
+        image: langchain/langgraph-orchestrator-licensed:{api_version}
         depends_on:
             langgraph-api:
                 condition: service_healthy
