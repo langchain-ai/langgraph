@@ -287,6 +287,22 @@ OPT_API_VERSION = click.option(
     help="API server version to use for the base image. If unspecified, the latest version will be used.",
 )
 
+OPT_HOST_API_KEY = click.option(
+    "--api-key",
+    envvar="LANGGRAPH_HOST_API_KEY",
+    help=(
+        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
+        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
+    ),
+)
+
+OPT_HOST_URL = click.option(
+    "--host-url",
+    envvar="LANGGRAPH_HOST_URL",
+    default="https://api.host.langchain.com",
+    hidden=True,
+)
+
 OPT_ENGINE_RUNTIME_MODE = click.option(
     "--engine-runtime-mode",
     type=click.Choice(["combined_queue_worker", "distributed"]),
@@ -593,14 +609,33 @@ def build(
         )
 
 
-@click.option(
-    "--api-key",
-    envvar="LANGGRAPH_HOST_API_KEY",
+@cli.group(
     help=(
-        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
-        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
+        "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
+        "This command is in beta and under active development. "
+        "Expect frequent updates and improvements.\n\n"
+        "Run from the root of your LangGraph project (where langgraph.json "
+        "is located). This command also accepts build flags (--base-image, "
+        "--pull, etc.). See 'langgraph build --help' for details."
     ),
+    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
+    invoke_without_command=True,
 )
+@click.pass_context
+@log_command
+def deploy(ctx: click.Context):
+    if ctx.invoked_subcommand is not None:
+        return
+    if ctx.args and ctx.args[0] == "run":
+        raise click.UsageError("No such command 'run'.")
+    return _deploy_run_command.main(
+        args=list(ctx.args),
+        prog_name=ctx.command_path,
+        standalone_mode=False,
+    )
+
+
+@OPT_HOST_API_KEY
 @click.option(
     "--name",
     envvar="LANGSMITH_DEPLOYMENT_NAME",
@@ -631,12 +666,7 @@ def build(
     help="Skip waiting for deployment status.",
 )
 @OPT_VERBOSE
-@click.option(
-    "--host-url",
-    envvar="LANGGRAPH_HOST_URL",
-    default="https://api.host.langchain.com",
-    hidden=True,
-)
+@OPT_HOST_URL
 @click.option("--image-name", hidden=True)
 @click.option("--image-tag", default="latest", hidden=True)
 @click.option(
@@ -658,19 +688,8 @@ def build(
 @click.option("--build-command", hidden=True)
 @click.option("--api-version", type=str, hidden=True)
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
-@cli.command(
-    help=(
-        "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
-        "This command is in beta and under active development. "
-        "Expect frequent updates and improvements.\n\n"
-        "Run from the root of your LangGraph project (where langgraph.json "
-        "is located). This command also accepts build flags (--base-image, "
-        "--pull, etc.). See 'langgraph build --help' for details."
-    ),
-    context_settings=dict(ignore_unknown_options=True),
-)
-@log_command
-def deploy(
+@click.command(context_settings=dict(ignore_unknown_options=True))
+def _deploy_run_command(
     config: pathlib.Path,
     pull: bool,
     verbose: bool,
@@ -1048,6 +1067,113 @@ def deploy(
                     "   Check status in the LangSmith Deployments dashboard.",
                     fg="yellow",
                 )
+
+
+def _create_host_backend_client(
+    host_url: str | None,
+    api_key: str | None,
+    env_vars: dict[str, str] | None = None,
+) -> HostBackendClient:
+    if env_vars is None:
+        env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
+    resolved_api_key = api_key
+    if not resolved_api_key:
+        for key_name in _API_KEY_ENV_NAMES:
+            val = env_vars.get(key_name)
+            if val:
+                resolved_api_key = val
+                break
+            val = os.environ.get(key_name)
+            if val:
+                resolved_api_key = val
+                break
+    if not resolved_api_key:
+        resolved_api_key = click.prompt("Host API key", hide_input=True)
+    return HostBackendClient(host_url, resolved_api_key)
+
+
+def _call_host_backend_with_optional_tenant(
+    client: HostBackendClient,
+    operation: Callable[[HostBackendClient], dict[str, object]],
+) -> dict[str, object]:
+    try:
+        return operation(client)
+    except HostBackendError as err:
+        if err.status_code == 403 and "requires workspace specification" in err.message:
+            click.secho(
+                "Your API key is org-scoped and requires a workspace ID.",
+                fg="yellow",
+            )
+            click.secho(
+                "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                fg="yellow",
+            )
+            tenant_id = click.prompt("Workspace ID")
+            client = HostBackendClient(
+                client._base_url, client._api_key, tenant_id=tenant_id
+            )
+            return operation(client)
+        raise
+
+
+def _extract_deployment_url(deployment: dict[str, object]) -> str:
+    for key in ("deployment_url", "url"):
+        value = deployment.get(key)
+        if isinstance(value, str) and value:
+            return value
+    source_config = deployment.get("source_config")
+    if isinstance(source_config, dict):
+        custom_url = source_config.get("custom_url")
+        if isinstance(custom_url, str) and custom_url:
+            return custom_url
+    return "-"
+
+
+def _format_deployments_table(deployments: Sequence[dict[str, object]]) -> str:
+    headers = ("Deployment ID", "Deployment Name", "Deployment URL")
+    rows = [
+        (
+            str(deployment.get("id", "-") or "-"),
+            str(deployment.get("name", "-") or "-"),
+            _extract_deployment_url(deployment),
+        )
+        for deployment in deployments
+    ]
+    widths = [
+        max(len(headers[index]), *(len(row[index]) for row in rows))
+        for index in range(len(headers))
+    ]
+
+    def format_row(row: Sequence[str]) -> str:
+        return "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
+
+    lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
+    lines.extend(format_row(row) for row in rows)
+    return "\n".join(lines)
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--name-contains",
+    default="",
+    help="Only show deployments whose names contain this value.",
+)
+@deploy.command("list", help="List LangSmith deployments.")
+def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -> None:
+    client = _create_host_backend_client(host_url, api_key)
+    response = _call_host_backend_with_optional_tenant(
+        client,
+        lambda current_client: current_client.list_deployments(
+            name_contains=name_contains
+        ),
+    )
+    resources = response.get("resources", []) if isinstance(response, dict) else []
+    deployments = [item for item in resources if isinstance(item, dict)]
+    if not deployments:
+        click.echo("No deployments found.")
+        return
+    click.echo(_format_deployments_table(deployments))
 
 
 def _normalize_image_name(value: str | None) -> str:

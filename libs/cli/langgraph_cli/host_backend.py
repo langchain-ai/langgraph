@@ -39,10 +39,14 @@ class HostBackendClient:
         )
 
     def _request(
-        self, method: str, path: str, payload: dict[str, Any] | None = None
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> Any:
         try:
-            resp = self._client.request(method, path, json=payload)
+            resp = self._client.request(method, path, json=payload, params=params)
             resp.raise_for_status()
         except httpx.HTTPStatusError as err:
             detail = err.response.text or str(err.response.status_code)
@@ -65,8 +69,12 @@ class HostBackendClient:
     def create_deployment(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/v2/deployments", payload)
 
-    def list_deployments(self, name_contains: str) -> dict[str, Any]:
-        return self._request("GET", f"/v2/deployments?name_contains={name_contains}")
+    def list_deployments(self, name_contains: str = "") -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/v2/deployments",
+            params={"name_contains": name_contains},
+        )
 
     def get_deployment(self, deployment_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v2/deployments/{deployment_id}")
