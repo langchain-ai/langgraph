@@ -392,11 +392,9 @@ def _default_handle_tool_errors(e: Exception) -> str:
 def _handle_tool_error(
     e: Exception,
     *,
-    flag: bool
-    | str
-    | Callable[..., str]
-    | type[Exception]
-    | tuple[type[Exception], ...],
+    flag: (
+        bool | str | Callable[..., str] | type[Exception] | tuple[type[Exception], ...]
+    ),
 ) -> str:
     """Generate error message content based on exception handling configuration.
 
@@ -744,11 +742,13 @@ class ToolNode(RunnableCallable):
         *,
         name: str = "tools",
         tags: list[str] | None = None,
-        handle_tool_errors: bool
-        | str
-        | Callable[..., str]
-        | type[Exception]
-        | tuple[type[Exception], ...] = _default_handle_tool_errors,
+        handle_tool_errors: (
+            bool
+            | str
+            | Callable[..., str]
+            | type[Exception]
+            | tuple[type[Exception], ...]
+        ) = _default_handle_tool_errors,
         messages_key: str = "messages",
         wrap_tool_call: ToolCallWrapper | None = None,
         awrap_tool_call: AsyncToolCallWrapper | None = None,

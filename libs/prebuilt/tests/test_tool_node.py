@@ -1479,9 +1479,9 @@ def test_tool_node_inject_store() -> None:
         for result in (node_result, graph_result):
             result["messages"][-1]
             tool_message = result["messages"][-1]
-            assert tool_message.content == "Some val: 1, store val: bar", (
-                f"Failed for tool={tool_name}"
-            )
+            assert (
+                tool_message.content == "Some val: 1, store val: bar"
+            ), f"Failed for tool={tool_name}"
 
     tool_call = {
         "name": "tool3",
@@ -1498,9 +1498,9 @@ def test_tool_node_inject_store() -> None:
     for result in (node_result, graph_result):
         result["messages"][-1]
         tool_message = result["messages"][-1]
-        assert tool_message.content == "Some val: 1, store val: bar, state val: baz", (
-            f"Failed for tool={tool_name}"
-        )
+        assert (
+            tool_message.content == "Some val: 1, store val: bar, state val: baz"
+        ), f"Failed for tool={tool_name}"
 
     # test injected store without passing store to compiled graph
     failing_graph = builder.compile()
@@ -2223,3 +2223,132 @@ def test_tool_node_injected_state_overwrites_llm_value() -> None:
     )
     tool_message = result["messages"][-1]
     assert tool_message.content == "PUBLIC_DATA"
+
+def test_tool_node_inject_state_not_required_field() -> None:
+    """Test that InjectedState handles NotRequired fields gracefully.
+
+    Regression test for https://github.com/langchain-ai/langchain/issues/35585.
+    When a tool parameter is annotated with InjectedState pointing to a NotRequired
+    field, and that field is not present in the state, the tool should receive None
+    instead of raising a KeyError.
+    """
+    from typing_extensions import NotRequired
+
+    # Test with dict-based state
+    class StateWithNotRequired(TypedDict):
+        messages: list
+        city: NotRequired[str]  # Optional field
+
+    @dec_tool
+    def get_weather(city: Annotated[str | None, InjectedState("city")]) -> str:
+        """Get weather for a given city."""
+        if city is None:
+            return "No city provided"
+        return f"It's always sunny in {city}!"
+
+    node = ToolNode([get_weather])
+
+    # Test 1: NotRequired field is NOT present in state
+    tool_call = {
+        "name": "get_weather",
+        "args": {},
+        "id": "call_1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    state_without_city = StateWithNotRequired(messages=[msg])
+
+    # Should not raise KeyError, should return None for city
+    result = node.invoke(state_without_city, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "No city provided"
+    assert tool_message.tool_call_id == "call_1"
+
+    # Test 2: NotRequired field IS present in state
+    state_with_city = StateWithNotRequired(messages=[msg], city="San Francisco")
+    result = node.invoke(state_with_city, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "It's always sunny in San Francisco!"
+    assert tool_message.tool_call_id == "call_1"
+
+
+async def test_tool_node_inject_state_not_required_field_async() -> None:
+    """Async version of test_tool_node_inject_state_not_required_field."""
+    from typing_extensions import NotRequired
+
+    class StateWithNotRequired(TypedDict):
+        messages: list
+        city: NotRequired[str]
+
+    @dec_tool
+    async def get_weather_async(
+        city: Annotated[str | None, InjectedState("city")],
+    ) -> str:
+        """Get weather for a given city (async)."""
+        if city is None:
+            return "No city provided (async)"
+        return f"It's always sunny in {city}! (async)"
+
+    node = ToolNode([get_weather_async])
+
+    # Test without NotRequired field
+    tool_call = {
+        "name": "get_weather_async",
+        "args": {},
+        "id": "call_async_1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+    state_without_city = StateWithNotRequired(messages=[msg])
+
+    result = await node.ainvoke(
+        state_without_city, config=_create_config_with_runtime()
+    )
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "No city provided (async)"
+    assert tool_message.tool_call_id == "call_async_1"
+
+    # Test with NotRequired field
+    state_with_city = StateWithNotRequired(messages=[msg], city="Tokyo")
+    result = await node.ainvoke(state_with_city, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "It's always sunny in Tokyo! (async)"
+    assert tool_message.tool_call_id == "call_async_1"
+
+
+def test_tool_node_inject_state_not_required_dataclass() -> None:
+    """Test NotRequired fields with dataclass-based state."""
+
+    @dataclasses.dataclass
+    class DataclassStateWithNotRequired:
+        messages: list
+        city: str | None = None  # Optional field with default
+
+    @dec_tool
+    def get_weather_dc(city: Annotated[str | None, InjectedState("city")]) -> str:
+        """Get weather for a given city."""
+        if city is None:
+            return "No city provided (dataclass)"
+        return f"It's always sunny in {city}! (dataclass)"
+
+    node = ToolNode([get_weather_dc])
+
+    tool_call = {
+        "name": "get_weather_dc",
+        "args": {},
+        "id": "call_dc_1",
+        "type": "tool_call",
+    }
+    msg = AIMessage("", tool_calls=[tool_call])
+
+    # Test without city field
+    state_without_city = DataclassStateWithNotRequired(messages=[msg])
+    result = node.invoke(state_without_city, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "No city provided (dataclass)"
+
+    # Test with city field
+    state_with_city = DataclassStateWithNotRequired(messages=[msg], city="Berlin")
+    result = node.invoke(state_with_city, config=_create_config_with_runtime())
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "It's always sunny in Berlin! (dataclass)"
