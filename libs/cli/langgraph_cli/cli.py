@@ -670,7 +670,10 @@ def build(
 
 
 def _deploy_base_options(
-    func: Callable | None = None, *, include_docker_args: bool = True
+    func: Callable | None = None,
+    *,
+    include_docker_args: bool = True,
+    validate_config_path: bool = True,
 ):
     """Apply shared deploy flags.
 
@@ -720,7 +723,7 @@ def _deploy_base_options(
                 default=DEFAULT_CONFIG,
                 hidden=True,
                 type=click.Path(
-                    exists=True,
+                    exists=validate_config_path,
                     file_okay=True,
                     dir_okay=False,
                     resolve_path=True,
@@ -760,7 +763,7 @@ def _deploy_base_options(
     context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
     invoke_without_command=True,  # allow `deploy` click group to execute without command
 )
-@_deploy_base_options(include_docker_args=False)
+@_deploy_base_options(include_docker_args=False, validate_config_path=False)
 @click.pass_context
 @log_command
 def deploy(ctx: click.Context, **_: object):
