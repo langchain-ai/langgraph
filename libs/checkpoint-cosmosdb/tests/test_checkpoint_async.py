@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from langgraph.checkpoint.cosmosdb import AsyncCosmosDBSaver
+from langgraph.checkpoint.cosmosdb import CosmosDBSaver
 
 # Skip tests if CosmosDB credentials are not available
 pytestmark = pytest.mark.skipif(
@@ -16,14 +16,14 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture
-async def async_cosmosdb_saver() -> AsyncIterator[AsyncCosmosDBSaver]:
-    """Create an AsyncCosmosDBSaver instance for testing."""
+async def async_cosmosdb_saver() -> AsyncIterator[CosmosDBSaver]:
+    """Create a CosmosDBSaver instance for testing."""
     endpoint = os.getenv("COSMOSDB_ENDPOINT")
     key = os.getenv("COSMOSDB_KEY")
     database_name = os.getenv("COSMOSDB_TEST_DATABASE", "test_langgraph")
     container_name = os.getenv("COSMOSDB_TEST_CONTAINER", "test_checkpoints")
 
-    async with AsyncCosmosDBSaver.from_conn_info(
+    async with CosmosDBSaver.from_conn_info(
         endpoint=endpoint,
         key=key,
         database_name=database_name,
@@ -33,7 +33,7 @@ async def async_cosmosdb_saver() -> AsyncIterator[AsyncCosmosDBSaver]:
 
 
 @pytest.mark.asyncio
-async def test_async_put_and_get(async_cosmosdb_saver: AsyncCosmosDBSaver) -> None:
+async def test_async_put_and_get(async_cosmosdb_saver: CosmosDBSaver) -> None:
     """Test async put and get operations."""
     config = {
         "configurable": {
@@ -66,7 +66,7 @@ async def test_async_put_and_get(async_cosmosdb_saver: AsyncCosmosDBSaver) -> No
 
 
 @pytest.mark.asyncio
-async def test_async_list(async_cosmosdb_saver: AsyncCosmosDBSaver) -> None:
+async def test_async_list(async_cosmosdb_saver: CosmosDBSaver) -> None:
     """Test async list operation."""
     thread_id = "test_thread_async_list"
 

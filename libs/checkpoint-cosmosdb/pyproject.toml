@@ -15,6 +15,7 @@ dependencies = [
   "langgraph-checkpoint>=2.1.2,<5.0.0",
   "azure-cosmos>=4.0.0",
   "azure-identity>=1.12.0",
+  "azure-mgmt-cosmosdb>=9.0.0",
   "aiohttp>=3.8.0",
 ]
 

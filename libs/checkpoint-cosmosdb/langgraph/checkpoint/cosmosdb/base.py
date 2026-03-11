@@ -157,7 +157,7 @@ def _parse_checkpoint_data(
     )
 
 
-class CosmosDBSaver(BaseCheckpointSaver):
+class CosmosDBSaverSync(BaseCheckpointSaver):
     """CosmosDB synchronous implementation of BaseCheckpointSaver.
 
     Uses environment variables for connection configuration.
@@ -175,7 +175,7 @@ class CosmosDBSaver(BaseCheckpointSaver):
         >>> os.environ["COSMOSDB_ENDPOINT"] = "https://your-account.documents.azure.com:443/"
         >>> os.environ["COSMOSDB_KEY"] = "your_key"  # Optional
         >>>
-        >>> checkpointer = CosmosDBSaver(
+        >>> checkpointer = CosmosDBSaverSync(
         ...     database_name="langgraph_db",
         ...     container_name="checkpoints"
         ... )
@@ -202,8 +202,10 @@ class CosmosDBSaver(BaseCheckpointSaver):
             else:
                 credential = DefaultAzureCredential()
                 self.client = CosmosClient(endpoint, credential=credential)
-                self.database = self.client.get_database_client(database_name)
-                self.container = self.database.get_container_client(container_name)
+                self.database = self.client.create_database_if_not_exists(database_name)
+                self.container = self.database.create_container_if_not_exists(
+                    id=container_name, partition_key=PartitionKey(path="/partition_key")
+                )
         except CredentialUnavailableError as e:
             raise RuntimeError(
                 "Failed to obtain default credentials. Ensure the environment is "
@@ -225,8 +227,8 @@ class CosmosDBSaver(BaseCheckpointSaver):
         key: str,
         database_name: str,
         container_name: str,
-    ) -> Iterator[CosmosDBSaver]:
-        """Create a CosmosDBSaver from explicit connection info.
+    ) -> Iterator[CosmosDBSaverSync]:
+        """Create a CosmosDBSaverSync from explicit connection info.
 
         Args:
             endpoint: The CosmosDB endpoint URL.
@@ -235,7 +237,7 @@ class CosmosDBSaver(BaseCheckpointSaver):
             container_name: Name of the CosmosDB container.
 
         Yields:
-            CosmosDBSaver: A configured saver instance.
+            CosmosDBSaverSync: A configured saver instance.
         """
         old_endpoint = os.environ.get("COSMOSDB_ENDPOINT")
         old_key = os.environ.get("COSMOSDB_KEY")
@@ -515,4 +517,4 @@ class CosmosDBSaver(BaseCheckpointSaver):
         return latest_key["id"]
 
 
-__all__ = ["CosmosDBSaver"]
+__all__ = ["CosmosDBSaverSync"]

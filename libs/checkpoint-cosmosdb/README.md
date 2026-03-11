@@ -5,7 +5,7 @@ Implementation of LangGraph CheckpointSaver that uses Azure CosmosDB.
 ## Usage
 
 > [!IMPORTANT]
-> To use `CosmosDBSaver` or `AsyncCosmosDBSaver`, you need to provide Azure CosmosDB credentials. You can either:
+> To use `CosmosDBSaverSync` or `CosmosDBSaver`, you need to provide Azure CosmosDB credentials. You can either:
 > - Set `COSMOSDB_ENDPOINT` and `COSMOSDB_KEY` environment variables for key-based authentication
 > - Use default Azure credentials (e.g., `az login`, managed identity) if the database and container already exist
 
@@ -13,7 +13,7 @@ Implementation of LangGraph CheckpointSaver that uses Azure CosmosDB.
 
 ```python
 import os
-from langgraph.checkpoint.cosmosdb import CosmosDBSaver
+from langgraph.checkpoint.cosmosdb import CosmosDBSaverSync
 
 # Set environment variables
 os.environ["COSMOSDB_ENDPOINT"] = "your_cosmosdb_endpoint"
@@ -23,7 +23,7 @@ write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
 read_config = {"configurable": {"thread_id": "1"}}
 
 # Create saver (database and container will be created if they don't exist when using key-based auth)
-checkpointer = CosmosDBSaver(
+checkpointer = CosmosDBSaverSync(
     database_name="your_database",
     container_name="your_container"
 )
@@ -67,14 +67,14 @@ list(checkpointer.list(read_config))
 
 ```python
 import asyncio
-from langgraph.checkpoint.cosmosdb import AsyncCosmosDBSaver
+from langgraph.checkpoint.cosmosdb import CosmosDBSaver
 
 async def main():
     write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
     read_config = {"configurable": {"thread_id": "1"}}
 
     # Use the async context manager
-    async with AsyncCosmosDBSaver.from_conn_info(
+    async with CosmosDBSaver.from_conn_info(
         endpoint="your_cosmosdb_endpoint",
         key="your_cosmosdb_key",  # Optional if using RBAC
         database_name="your_database",
@@ -112,25 +112,25 @@ asyncio.run(main())
 ```
 
 > [!NOTE]
-> `AsyncCosmosDBSaver` uses the native async Azure Cosmos client (`azure.cosmos.aio`) for non-blocking I/O operations. For synchronous code, use `CosmosDBSaver` instead.
+> `CosmosDBSaver` uses the native async Azure Cosmos client (`azure.cosmos.aio`) for non-blocking I/O operations. For synchronous code, use `CosmosDBSaverSync` instead.
 
 ### Authentication Options
 
 **Synchronous with key-based authentication:**
 ```python
 import os
-from langgraph.checkpoint.cosmosdb import CosmosDBSaver
+from langgraph.checkpoint.cosmosdb import CosmosDBSaverSync
 
 os.environ["COSMOSDB_ENDPOINT"] = "https://your-account.documents.azure.com:443/"
 os.environ["COSMOSDB_KEY"] = "your_primary_key"
 
-checkpointer = CosmosDBSaver(database_name="db", container_name="container")
+checkpointer = CosmosDBSaverSync(database_name="db", container_name="container")
 ```
 
 **Synchronous with RBAC / Managed Identity:**
 ```python
 import os
-from langgraph.checkpoint.cosmosdb import CosmosDBSaver
+from langgraph.checkpoint.cosmosdb import CosmosDBSaverSync
 
 # Only endpoint needed; uses DefaultAzureCredential
 os.environ["COSMOSDB_ENDPOINT"] = "https://your-account.documents.azure.com:443/"
@@ -139,14 +139,14 @@ os.environ["COSMOSDB_ENDPOINT"] = "https://your-account.documents.azure.com:443/
 # os.environ["AZURE_CLIENT_ID"] = "your_client_id"
 
 # Database and container must already exist for RBAC
-checkpointer = CosmosDBSaver(database_name="existing_db", container_name="existing_container")
+checkpointer = CosmosDBSaverSync(database_name="existing_db", container_name="existing_container")
 ```
 
 **Async with explicit credentials:**
 ```python
-from langgraph.checkpoint.cosmosdb import AsyncCosmosDBSaver
+from langgraph.checkpoint.cosmosdb import CosmosDBSaver
 
-async with AsyncCosmosDBSaver.from_conn_info(
+async with CosmosDBSaver.from_conn_info(
     endpoint="https://your-account.documents.azure.com:443/",
     key="your_primary_key",  # Omit for RBAC/Managed Identity
     database_name="db",

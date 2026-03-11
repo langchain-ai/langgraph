@@ -6,7 +6,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from langgraph.checkpoint.cosmosdb import CosmosDBSaver
+from langgraph.checkpoint.cosmosdb import CosmosDBSaverSync
 
 # Skip tests if CosmosDB credentials are not available
 pytestmark = pytest.mark.skipif(
@@ -16,12 +16,12 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture
-def cosmosdb_saver() -> Iterator[CosmosDBSaver]:
-    """Create a CosmosDBSaver instance for testing."""
+def cosmosdb_saver() -> Iterator[CosmosDBSaverSync]:
+    """Create a CosmosDBSaverSync instance for testing."""
     database_name = os.getenv("COSMOSDB_TEST_DATABASE", "test_langgraph")
     container_name = os.getenv("COSMOSDB_TEST_CONTAINER", "test_checkpoints")
 
-    saver = CosmosDBSaver(
+    saver = CosmosDBSaverSync(
         database_name=database_name,
         container_name=container_name,
     )
@@ -29,13 +29,13 @@ def cosmosdb_saver() -> Iterator[CosmosDBSaver]:
     yield saver
 
 
-def test_cosmosdb_saver_init(cosmosdb_saver: CosmosDBSaver) -> None:
-    """Test that CosmosDBSaver initializes correctly."""
+def test_cosmosdb_saver_init(cosmosdb_saver: CosmosDBSaverSync) -> None:
+    """Test that CosmosDBSaverSync initializes correctly."""
     assert cosmosdb_saver is not None
     assert cosmosdb_saver.container is not None
 
 
-def test_put_and_get_checkpoint(cosmosdb_saver: CosmosDBSaver) -> None:
+def test_put_and_get_checkpoint(cosmosdb_saver: CosmosDBSaverSync) -> None:
     """Test basic put and get operations."""
     config = {
         "configurable": {
@@ -68,7 +68,7 @@ def test_put_and_get_checkpoint(cosmosdb_saver: CosmosDBSaver) -> None:
     assert retrieved.metadata["source"] == "test"
 
 
-def test_list_checkpoints(cosmosdb_saver: CosmosDBSaver) -> None:
+def test_list_checkpoints(cosmosdb_saver: CosmosDBSaverSync) -> None:
     """Test listing checkpoints."""
     thread_id = "test_thread_list"
 

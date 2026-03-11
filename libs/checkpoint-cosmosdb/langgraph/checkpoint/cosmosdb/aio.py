@@ -34,7 +34,7 @@ from langgraph.checkpoint.cosmosdb.base import (
 )
 
 
-class AsyncCosmosDBSaver(BaseCheckpointSaver):
+class CosmosDBSaver(BaseCheckpointSaver):
     """Asynchronous CosmosDB implementation of BaseCheckpointSaver.
 
     Uses the native `azure.cosmos.aio` async client for non-blocking I/O.
@@ -49,7 +49,7 @@ class AsyncCosmosDBSaver(BaseCheckpointSaver):
     Use `from_conn_info` to create an instance:
 
     Example:
-        >>> async with AsyncCosmosDBSaver.from_conn_info(
+        >>> async with CosmosDBSaver.from_conn_info(
         ...     endpoint="https://your-account.documents.azure.com:443/",
         ...     key="your_key",
         ...     database_name="langgraph_db",
@@ -81,8 +81,8 @@ class AsyncCosmosDBSaver(BaseCheckpointSaver):
         database_name: str,
         container_name: str,
         serde: SerializerProtocol | None = None,
-    ) -> AsyncIterator[AsyncCosmosDBSaver]:
-        """Create an AsyncCosmosDBSaver from explicit connection info.
+    ) -> AsyncIterator[CosmosDBSaver]:
+        """Create a CosmosDBSaver from explicit connection info.
 
         Args:
             endpoint: The CosmosDB endpoint URL.
@@ -92,7 +92,7 @@ class AsyncCosmosDBSaver(BaseCheckpointSaver):
             serde: Optional custom serializer.
 
         Yields:
-            AsyncCosmosDBSaver: A configured async saver instance.
+            CosmosDBSaver: A configured async saver instance.
         """
         credential = key if key else AsyncDefaultAzureCredential()
         async with AsyncCosmosClient(endpoint, credential) as client:
@@ -314,7 +314,7 @@ class AsyncCosmosDBSaver(BaseCheckpointSaver):
         try:
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncCosmosDBSaver are only allowed from a "
+                    "Synchronous calls to CosmosDBSaver are only allowed from a "
                     "different thread. From the main thread, use the async interface. "
                     "For example, use `await checkpointer.aget_tuple(...)` or "
                     "`await graph.ainvoke(...)`."
@@ -342,7 +342,7 @@ class AsyncCosmosDBSaver(BaseCheckpointSaver):
         try:
             if asyncio.get_running_loop() is self.loop:
                 raise asyncio.InvalidStateError(
-                    "Synchronous calls to AsyncCosmosDBSaver are only allowed from a "
+                    "Synchronous calls to CosmosDBSaver are only allowed from a "
                     "different thread. From the main thread, use the async interface. "
                     "For example, use `checkpointer.alist(...)` or "
                     "`await graph.ainvoke(...)`."
@@ -457,4 +457,4 @@ class AsyncCosmosDBSaver(BaseCheckpointSaver):
         return latest_key["id"]
 
 
-__all__ = ["AsyncCosmosDBSaver"]
+__all__ = ["CosmosDBSaver"]
