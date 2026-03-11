@@ -651,20 +651,11 @@ class PregelLoop:
         # - Command(resume=...): the outer graph receives resume via input
         # - CONFIG_KEY_RESUMING: child subgraphs receive it via config from
         #   the parent (their input is a Send arg, not a Command)
-        # Exception: when the checkpoint_map resolved a specific checkpoint
-        # for this subgraph (time-traveling to a subgraph checkpoint),
-        # always strip RESUME writes even though RESUMING is set — the
-        # subgraph is replaying from a known checkpoint, not actively
-        # resuming with new user input.
-        replaying_from_checkpoint_map = self.is_nested and configurable.get(
-            CONFIG_KEY_CHECKPOINT_NS, ""
-        ) in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {})
-        if self.is_replaying and (
-            replaying_from_checkpoint_map
-            or not (
-                (input_is_command and cast(Command, self.input).resume is not None)
-                or configurable.get(CONFIG_KEY_RESUMING, False)
-            )
+        # Note: for subgraphs replaying from checkpoint_map, RESUMING is
+        # already cleared in __enter__/__aenter__.
+        if self.is_replaying and not (
+            (input_is_command and cast(Command, self.input).resume is not None)
+            or configurable.get(CONFIG_KEY_RESUMING, False)
         ):
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
@@ -1138,33 +1129,24 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     def __enter__(self) -> Self:
         if not self.checkpointer:
             saved = None
-        elif self.is_nested and (
-            replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
+        elif (
+            not self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
+            and (
+                replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
+            )
         ):
-            # If the checkpoint_map already resolved a specific checkpoint_id
-            # for this subgraph, load it directly instead of using the
-            # ReplayState before-filter (which compares parent checkpoint IDs
-            # against subgraph checkpoint IDs and can incorrectly filter out
-            # all subgraph checkpoints since UUIDv6 ordering means the parent
-            # ID is always smaller than its subgraph IDs).
-            if self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
-                saved = self.checkpointer.get_tuple(self.checkpoint_config)
-            else:
-                saved = replay_state.get_checkpoint(
-                    self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
-                    self.checkpointer,
-                    self.checkpoint_config,
-                )
-                # Clear RESUMING so _first re-applies input instead of
-                # resuming. This recreates ephemeral routing channels so
-                # nodes trigger naturally via version comparison.
-                self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
+            saved = replay_state.get_checkpoint(
+                self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
+                self.checkpointer,
+                self.checkpoint_config,
+            )
         else:
-            # Normal case: fetch the most recent checkpoint for this
-            # graph/thread. If a specific checkpoint_id is in the config,
-            # fetch that exact checkpoint; otherwise fetch the latest one.
-            # Returns None on first invocation (no checkpoints exist yet).
             saved = self.checkpointer.get_tuple(self.checkpoint_config)
+        # Clear RESUMING for subgraphs during parent replay so _first
+        # re-applies input instead of resuming. This recreates ephemeral
+        # routing channels so nodes trigger naturally via version comparison.
+        if self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
+            self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
 
         if saved is None:
             saved = CheckpointTuple(
@@ -1342,25 +1324,24 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     async def __aenter__(self) -> Self:
         if not self.checkpointer:
             saved = None
-        elif self.is_nested and (
-            replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
+        elif (
+            not self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
+            and (
+                replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
+            )
         ):
-            # Same logic as sync __enter__ — see comments there.
-            if self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
-                saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
-            else:
-                saved = await replay_state.aget_checkpoint(
-                    self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
-                    self.checkpointer,
-                    self.checkpoint_config,
-                )
-                self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
+            saved = await replay_state.aget_checkpoint(
+                self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
+                self.checkpointer,
+                self.checkpoint_config,
+            )
         else:
-            # Normal case: fetch the most recent checkpoint for this
-            # graph/thread. If a specific checkpoint_id is in the config,
-            # fetch that exact checkpoint; otherwise fetch the latest one.
-            # Returns None on first invocation (no checkpoints exist yet).
             saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+        # Clear RESUMING for subgraphs during parent replay so _first
+        # re-applies input instead of resuming. This recreates ephemeral
+        # routing channels so nodes trigger naturally via version comparison.
+        if self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
+            self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
 
         if saved is None:
             saved = CheckpointTuple(

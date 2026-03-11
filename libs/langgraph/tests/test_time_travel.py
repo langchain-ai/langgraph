@@ -1205,6 +1205,105 @@ def test_subgraph_multiple_interrupts_time_travel(
     assert "ask_1" not in called
 
 
+def test_subgraph_3_levels_deep_replay_between_interrupts(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Replay from a 3-level deep subgraph checkpoint between interrupts.
+
+    Architecture:
+      Parent:  START --> outer (subgraph, checkpointer=True) --> END
+      Outer:   START --> middle (subgraph, checkpointer=True) --> END
+      Middle:  START --> step_a --> ask_1 (interrupt) --> ask_2 (interrupt) --> END
+
+    Flow: run through both interrupts resuming each, then time travel back to the
+    innermost subgraph checkpoint at the second interrupt. Expected: only ask_2
+    re-fires; step_a and ask_1 should NOT re-run.
+    """
+
+    called: list[str] = []
+
+    def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    inner = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    middle = (
+        StateGraph(State)
+        .add_node("inner", inner)
+        .add_edge(START, "inner")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("outer", middle)
+        .add_edge(START, "outer")
+        .compile(checkpointer=sync_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt (ask_1)
+    result = graph.invoke({"value": []}, config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    # Resume first interrupt
+    result = graph.invoke(Command(resume="answer_1"), config)
+    assert "__interrupt__" in result
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    # Capture innermost subgraph state at the second interrupt
+    parent_state = graph.get_state(config, subgraphs=True)
+    # Navigate: parent -> outer -> inner
+    mid_state = parent_state.tasks[0].state
+    inner_config = mid_state.tasks[0].state.config
+
+    # Resume second interrupt to complete the graph
+    result = graph.invoke(Command(resume="answer_2"), config)
+    assert "__interrupt__" not in result
+
+    # --- Scenario 1: Replay from innermost subgraph checkpoint at 2nd interrupt ---
+    called.clear()
+    replay_result = graph.invoke(None, inner_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 2?"
+    # step_a and ask_1 should NOT re-run — they were before this checkpoint
+    assert "step_a" not in called
+    assert "ask_1" not in called
+
+    # --- Scenario 2: Fork from innermost subgraph checkpoint at 2nd interrupt ---
+    called.clear()
+    fork_config = graph.update_state(inner_config, {"value": ["forked"]})
+    fork_result = graph.invoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "Question 2?"
+    # step_a and ask_1 should NOT re-run
+    assert "step_a" not in called
+    assert "ask_1" not in called
+
+
 # ---------------------------------------------------------------------------
 # Section 6: __copy__ / update_state(None)
 # ---------------------------------------------------------------------------
