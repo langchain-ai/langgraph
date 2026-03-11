@@ -9,6 +9,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
+import langgraph_cli.cli as cli_module
 from langgraph_cli.cli import cli, prepare_args_and_stdin
 from langgraph_cli.config import Config, _get_pip_cleanup_lines, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
@@ -285,6 +286,238 @@ def test_version_option() -> None:
     assert "LangGraph CLI, version" in result.output, (
         "Expected version information in output"
     )
+
+
+def test_top_level_help_shows_deploy_subcommands() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "deploy" in result.output
+    assert "deploy list" in result.output
+    assert "deploy delete" in result.output
+    assert "[Beta] List LangSmith Deployments." in result.output
+
+
+def test_top_level_help_truncates_command_descriptions_to_single_line() -> None:
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["--help"])
+
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    deploy_line = next(line for line in lines if line.strip().startswith("deploy"))
+    deploy_list_line = next(
+        line for line in lines if line.strip().startswith("deploy list")
+    )
+
+    assert not lines[lines.index(deploy_line) + 1].startswith("               ")
+    assert "..." in deploy_line
+    assert "[Beta] List LangSmith Deployments." in deploy_list_line
+
+
+def test_deploy_list_command(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def list_deployments(self, name_contains: str = ""):
+            captured["name_contains"] = name_contains
+            return {
+                "resources": [
+                    {
+                        "id": "dep-123",
+                        "name": "alpha",
+                        "source_config": {"custom_url": "https://alpha.example.com"},
+                    },
+                    {
+                        "id": "dep-456",
+                        "name": "beta",
+                        "source_config": {"custom_url": "https://beta.example.com"},
+                    },
+                ]
+            }
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "--name-contains",
+            "alp",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+        "name_contains": "alp",
+    }
+    assert "Deployment ID" in result.output
+    assert "Deployment Name" in result.output
+    assert "Deployment URL" in result.output
+    assert "dep-123" in result.output
+    assert "https://beta.example.com" in result.output
+
+
+def test_deploy_list_command_no_results(monkeypatch) -> None:
+    runner = CliRunner()
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def list_deployments(self, name_contains: str = ""):
+            return {"resources": []}
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "list",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == "No deployments found."
+
+
+def test_deploy_delete_command(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def delete_deployment(self, deployment_id: str):
+            captured["deployment_id"] = deployment_id
+            return None
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "delete",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+        input="y\n",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+        "deployment_id": "dep-123",
+    }
+    assert (
+        "Are you sure you want to delete deployment ID dep-123? (Y/n):" in result.output
+    )
+    assert result.output.strip().endswith("Deleted deployment dep-123.")
+
+
+def test_deploy_delete_command_cancelled(monkeypatch) -> None:
+    runner = CliRunner()
+    deleted = False
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            pass
+
+        def delete_deployment(self, deployment_id: str):
+            nonlocal deleted
+            deleted = True
+            return None
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "delete",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+        input="n\n",
+    )
+
+    assert result.exit_code == 1, result.output
+    assert not deleted
+    assert "Aborted!" in result.output
+
+
+def test_deploy_delete_command_force(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, str] = {}
+
+    class FakeClient:
+        def __init__(self, host_url: str, api_key: str, tenant_id: str | None = None):
+            captured["host_url"] = host_url
+            captured["api_key"] = api_key
+            captured["tenant_id"] = tenant_id or ""
+
+        def delete_deployment(self, deployment_id: str):
+            captured["deployment_id"] = deployment_id
+            return None
+
+    monkeypatch.setattr(cli_module, "HostBackendClient", FakeClient)
+
+    result = runner.invoke(
+        cli,
+        [
+            "deploy",
+            "delete",
+            "--force",
+            "--api-key",
+            "test-key",
+            "--host-url",
+            "https://api.example.com",
+            "dep-123",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Are you sure you want to delete deployment ID dep-123?" not in result.output
+    assert captured == {
+        "host_url": "https://api.example.com",
+        "api_key": "test-key",
+        "tenant_id": "",
+        "deployment_id": "dep-123",
+    }
+    assert result.output.strip() == "Deleted deployment dep-123."
 
 
 def test_dockerfile_command_basic() -> None:

@@ -385,6 +385,8 @@ class Cron(TypedDict):
     """The end date to stop running the cron."""
     schedule: str
     """The schedule to run, cron format."""
+    timezone: str | None
+    """IANA timezone for the cron schedule (e.g. 'America/New_York'). Defaults to null, which is treated as UTC."""
     created_at: datetime
     """The time the cron was created."""
     updated_at: datetime
@@ -406,6 +408,8 @@ class CronUpdate(TypedDict, total=False):
 
     schedule: str
     """The cron schedule to execute this job on."""
+    timezone: str
+    """IANA timezone for the cron schedule (e.g. 'America/New_York')."""
     end_time: datetime
     """The end date to stop running the cron."""
     input: Input
@@ -482,6 +486,7 @@ CronSelectField = Literal[
     "thread_id",
     "end_time",
     "schedule",
+    "timezone",
     "created_at",
     "updated_at",
     "user_id",
