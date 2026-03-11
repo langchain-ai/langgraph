@@ -296,6 +296,17 @@ OPT_HOST_API_KEY = click.option(
     ),
 )
 
+
+OPT_HOST_DEPLOYMENT_NAME = click.option(
+    "--name",
+    envvar=_DEPLOYMENT_NAME_ENV,
+    help=(
+        "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
+        "environment variable or .env file. Defaults to current directory name "
+        "if --deployment-id is not provided."
+    ),
+)
+
 OPT_HOST_URL = click.option(
     "--host-url",
     envvar="LANGGRAPH_HOST_URL",
@@ -679,15 +690,7 @@ def deploy(ctx: click.Context):
 
 
 @OPT_HOST_API_KEY
-@click.option(
-    "--name",
-    envvar="LANGSMITH_DEPLOYMENT_NAME",
-    help=(
-        "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
-        "environment variable or .env file. Defaults to current directory name "
-        "if --deployment-id is not provided."
-    ),
-)
+@OPT_HOST_DEPLOYMENT_NAME
 @click.option(
     "--deployment-id",
     help=(
@@ -1248,10 +1251,7 @@ def _normalize_image_tag(value: str) -> str:
 
 
 @OPT_HOST_API_KEY
-@click.option(
-    "--name",
-    help="Deployment name to look up.",
-)
+@OPT_HOST_DEPLOYMENT_NAME
 @click.option(
     "--deployment-id",
     help="Deployment ID. If omitted, --name is used to find the deployment.",
