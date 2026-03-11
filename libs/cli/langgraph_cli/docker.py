@@ -45,6 +45,23 @@ def _parse_version(version: str) -> Version:
     )
 
 
+def is_docker_available() -> bool:
+    """Check if Docker is installed and running without raising."""
+    if shutil.which("docker") is None:
+        return False
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["docker", "info"],
+            capture_output=True,
+            timeout=10,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
 def check_capabilities(
     runner, *, require_compose: bool = True, require_buildx: bool = False
 ) -> DockerCapabilities:

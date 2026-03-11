@@ -632,6 +632,14 @@ def build(
 @click.option("--install-command", hidden=True)
 @click.option("--build-command", hidden=True)
 @click.option("--api-version", type=str, hidden=True)
+@click.option(
+    "--remote/--no-remote",
+    default=None,
+    help=(
+        "Force or disable remote build. Default: auto-detect "
+        "(use remote build when Docker is unavailable)."
+    ),
+)
 @click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
 @cli.command(
     help=(
@@ -659,6 +667,7 @@ def deploy(
     install_command: str | None,
     build_command: str | None,
     no_wait: bool,
+    remote: bool | None,
     docker_build_args: Sequence[str],
 ):
     config_json = langgraph_cli.config.validate_config_file(config)
@@ -680,8 +689,76 @@ def deploy(
 
     secrets = _secrets_from_env(env_vars)
 
-    # Use buildx to cross-compile for amd64 when running on a non-x86_64 host
-    # (e.g. Apple Silicon). On amd64 hosts, plain docker build is sufficient.
+    # Determine whether to use remote build
+    use_remote = remote
+    if use_remote is None:
+        docker_available = langgraph_cli.docker.is_docker_available()
+        use_remote = not docker_available
+    elif use_remote is False:
+        pass  # --no-remote: fail if Docker is missing (existing behavior)
+
+    if use_remote:
+        _deploy_remote(
+            config=config,
+            config_json=config_json,
+            verbose=verbose,
+            api_version=api_version,
+            host_url=host_url,
+            api_key=api_key,
+            deployment_id=deployment_id,
+            deployment_type=deployment_type,
+            name=name,
+            base_image=base_image,
+            install_command=install_command,
+            build_command=build_command,
+            no_wait=no_wait,
+            secrets=secrets,
+        )
+    else:
+        _deploy_local(
+            config=config,
+            config_json=config_json,
+            verbose=verbose,
+            api_version=api_version,
+            host_url=host_url,
+            api_key=api_key,
+            deployment_id=deployment_id,
+            deployment_type=deployment_type,
+            name=name,
+            image_name=image_name,
+            image_tag=image_tag,
+            base_image=base_image,
+            install_command=install_command,
+            build_command=build_command,
+            no_wait=no_wait,
+            pull=pull,
+            docker_build_args=docker_build_args,
+            secrets=secrets,
+        )
+
+
+def _deploy_local(
+    *,
+    config: pathlib.Path,
+    config_json: dict,
+    verbose: bool,
+    api_version: str | None,
+    host_url: str | None,
+    api_key: str,
+    deployment_id: str | None,
+    deployment_type: str,
+    name: str | None,
+    image_name: str | None,
+    image_tag: str,
+    base_image: str | None,
+    install_command: str | None,
+    build_command: str | None,
+    no_wait: bool,
+    pull: bool,
+    docker_build_args: Sequence[str],
+    secrets: list[dict[str, str]],
+):
+    """Local Docker build + push deploy path."""
     needs_buildx = platform.machine() != "x86_64"
     local_tag = f"langgraph-deploy-tmp:{int(time.time())}"
 
@@ -697,7 +774,6 @@ def deploy(
 
         step = 1
 
-        # -- Step: Build image --
         log_step(f"{step}. Building image")
         if needs_buildx:
             build_flags: list[str] = [
@@ -742,48 +818,14 @@ def deploy(
                 )
         step += 1
 
-        # -- Step: Find or create deployment --
         client = HostBackendClient(host_url, api_key)
 
-        if deployment_id:
-            log_step(f"{step}. Using deployment {deployment_id}")
-            step += 1
-        else:
-            log_step(f"{step}. Looking up deployment '{name}'")
-            existing = client.list_deployments(name_contains=name)
-            found_id = None
-            if isinstance(existing, dict):
-                for dep in existing.get("resources", []):
-                    if isinstance(dep, dict) and dep.get("name") == name:
-                        found_id = dep.get("id")
-                        break
-            if found_id:
-                deployment_id = str(found_id)
-                click.secho(
-                    f"   Found existing deployment (ID: {deployment_id})",
-                    fg="green",
-                )
-            else:
-                log_step(f"   Creating deployment '{name}'")
-                payload = {
-                    "name": name,
-                    "source": "internal_docker",
-                    "source_config": {"deployment_type": deployment_type},
-                    "source_revision_config": {},
-                    "secrets": secrets,
-                }
-                created = client.create_deployment(payload)
-                created_id = created.get("id") if isinstance(created, dict) else None
-                if not isinstance(created_id, str) or not created_id:
-                    raise HostBackendError(
-                        "POST /v2/deployments succeeded but response "
-                        "missing a valid 'id'"
-                    )
-                deployment_id = created_id
-                click.secho(f"   Deployment ID: {deployment_id}", fg="green")
-            step += 1
+        deployment_id = _find_or_create_deployment(
+            client, deployment_id, name, deployment_type, secrets, "internal_docker",
+            step, log_step,
+        )
+        step += 1
 
-        # -- Step: Get push token and authenticate --
         log_step(f"{step}. Requesting push token")
         push_data = client.request_push_token(deployment_id)
         deployment_token = push_data.get("token")
@@ -804,8 +846,6 @@ def deploy(
 
         registry_host = normalized_registry.split("/")[0]
 
-        # Use a clean Docker config with only the push token so that
-        # system credential helpers (e.g. gcloud) don't interfere.
         with _docker_config_for_token(registry_host, deployment_token) as cfg:
             log_step(f"{step}. Logging into {registry_host}")
             token_input = (
@@ -829,7 +869,6 @@ def deploy(
             )
             step += 1
 
-            # -- Step: Tag and push --
             log_step(f"{step}. Pushing image {remote_image}")
             runner.run(
                 subp_exec(
@@ -853,7 +892,6 @@ def deploy(
                 )
         step += 1
 
-        # -- Step: Update deployment --
         log_step(f"{step}. Updating deployment {deployment_id}")
         client.update_deployment(deployment_id, remote_image, secrets=secrets)
 
@@ -861,67 +899,317 @@ def deploy(
             click.secho("   Deployment updated", fg="green")
             return
 
-        # -- Poll revision status --
-        revisions_resp = client.list_revisions(deployment_id, limit=1)
-        resources = (
-            revisions_resp.get("resources", [])
-            if isinstance(revisions_resp, dict)
-            else []
-        )
-        if not resources:
-            click.secho("   Deployment updated", fg="green")
-            return
+        _poll_revision_status(client, deployment_id, verbose=verbose)
 
-        revision_id = str(resources[0]["id"])
-        last_status = ""
 
-        deadline = time.time() + 300
-        with Progress(message="Deploying...", elapsed=True) as set_progress:
-            while time.time() < deadline:
-                rev = client.get_revision(deployment_id, revision_id)
-                status = (
-                    rev.get("status", "UNKNOWN") if isinstance(rev, dict) else "UNKNOWN"
+def _deploy_remote(
+    *,
+    config: pathlib.Path,
+    config_json: dict,
+    verbose: bool,
+    api_version: str | None,
+    host_url: str | None,
+    api_key: str,
+    deployment_id: str | None,
+    deployment_type: str,
+    name: str | None,
+    base_image: str | None,
+    install_command: str | None,
+    build_command: str | None,
+    no_wait: bool,
+    secrets: list[dict[str, str]],
+):
+    """Remote build deploy path (no local Docker required)."""
+    import urllib.request
+
+    from langgraph_cli.archive import create_archive
+
+    def log_step(message: str) -> None:
+        click.secho(message, fg="cyan")
+
+    step = 1
+    click.secho("Docker not available. Using remote build.", fg="yellow")
+
+    # -- Step: Create tarball --
+    log_step(f"{step}. Creating source archive")
+    try:
+        archive_path, file_size = create_archive(config)
+    except KeyboardInterrupt:
+        click.echo("\nCancelled.")
+        raise click.exceptions.Exit(1)
+    click.secho(
+        f"   Archive created ({file_size / 1_048_576:.1f} MB)", fg="green"
+    )
+    step += 1
+
+    client = HostBackendClient(host_url, api_key)
+
+    # -- Step: Find or create deployment --
+    deployment_id = _find_or_create_deployment(
+        client, deployment_id, name, deployment_type, secrets, "internal_source",
+        step, log_step,
+    )
+    step += 1
+
+    # -- Step: Request upload URL --
+    log_step(f"{step}. Requesting upload URL")
+    upload_data = client.request_upload_url(deployment_id)
+    signed_url = upload_data.get("upload_url")
+    object_path = upload_data.get("object_path")
+    if not signed_url or not object_path:
+        raise click.ClickException("Upload URL response missing required fields")
+    step += 1
+
+    # -- Step: Upload tarball --
+    log_step(f"{step}. Uploading source")
+    try:
+        _upload_to_gcs(signed_url, archive_path, file_size)
+    except KeyboardInterrupt:
+        click.echo("\nUpload cancelled.")
+        raise click.exceptions.Exit(1)
+    finally:
+        try:
+            os.unlink(archive_path)
+        except OSError:
+            pass
+    step += 1
+
+    # -- Step: Update deployment --
+    log_step(f"{step}. Triggering remote build")
+    client.update_deployment_internal_source(
+        deployment_id,
+        source_tarball_path=object_path,
+        secrets=secrets,
+        config_path=config.name,
+        install_command=install_command,
+        build_command=build_command,
+    )
+    step += 1
+
+    if no_wait:
+        click.secho("   Build triggered", fg="green")
+        return
+
+    # -- Poll revision status with optional log streaming --
+    _poll_revision_status(client, deployment_id, verbose=verbose, is_remote_build=True)
+
+
+def _upload_to_gcs(signed_url: str, file_path: str, file_size: int) -> None:
+    """Upload tarball to GCS via signed PUT URL with progress display."""
+    import urllib.request
+
+    uploaded = 0
+
+    with open(file_path, "rb") as f:
+        original_read = f.read
+
+        def tracked_read(size=-1):
+            nonlocal uploaded
+            data = original_read(size)
+            if data:
+                uploaded += len(data)
+                pct = int(uploaded * 100 / file_size) if file_size else 100
+                click.echo(
+                    f"\r   Uploading ({file_size / 1_048_576:.1f} MB)... {pct}%",
+                    nl=False,
                 )
-                if status != last_status:
-                    last_status = status
-                    set_progress("")
-                    click.secho(f"   Status: {status}", fg="cyan")
-                    if status in _TERMINAL_STATUSES:
-                        break
-                    set_progress(f"{status}...")
-                time.sleep(1)
-            else:
+            return data
+
+        f.read = tracked_read
+
+        req = urllib.request.Request(
+            signed_url,
+            data=f,
+            method="PUT",
+            headers={
+                "Content-Type": "application/gzip",
+                "Content-Length": str(file_size),
+                "X-Goog-Content-Length-Range": "0,209715200",
+            },
+        )
+        try:
+            urllib.request.urlopen(req)
+        except urllib.error.HTTPError as err:
+            detail = err.read().decode("utf-8", errors="ignore")
+            raise click.ClickException(
+                f"Upload failed with status {err.code}: {detail}"
+            ) from None
+    click.echo()
+
+
+def _find_or_create_deployment(
+    client: HostBackendClient,
+    deployment_id: str | None,
+    name: str | None,
+    deployment_type: str,
+    secrets: list[dict[str, str]],
+    source: str,
+    step: int,
+    log_step: Callable[[str], None],
+) -> str:
+    """Find an existing deployment or create a new one. Returns deployment_id."""
+    if deployment_id:
+        log_step(f"{step}. Using deployment {deployment_id}")
+        return deployment_id
+
+    log_step(f"{step}. Looking up deployment '{name}'")
+    existing = client.list_deployments(name_contains=name)
+    found_id = None
+    if isinstance(existing, dict):
+        for dep in existing.get("resources", []):
+            if isinstance(dep, dict) and dep.get("name") == name:
+                found_id = dep.get("id")
+                break
+    if found_id:
+        deployment_id = str(found_id)
+        click.secho(
+            f"   Found existing deployment (ID: {deployment_id})",
+            fg="green",
+        )
+        return deployment_id
+
+    log_step(f"   Creating deployment '{name}'")
+    payload = {
+        "name": name,
+        "source": source,
+        "source_config": {"deployment_type": deployment_type},
+        "source_revision_config": {},
+        "secrets": secrets,
+    }
+    created = client.create_deployment(payload)
+    created_id = created.get("id") if isinstance(created, dict) else None
+    if not isinstance(created_id, str) or not created_id:
+        raise HostBackendError(
+            "POST /v2/deployments succeeded but response missing a valid 'id'"
+        )
+    deployment_id = created_id
+    click.secho(f"   Deployment ID: {deployment_id}", fg="green")
+    return deployment_id
+
+
+def _poll_revision_status(
+    client: HostBackendClient,
+    deployment_id: str,
+    *,
+    verbose: bool = False,
+    is_remote_build: bool = False,
+) -> None:
+    """Poll revision status until terminal, optionally streaming build logs."""
+    revisions_resp = client.list_revisions(deployment_id, limit=1)
+    resources = (
+        revisions_resp.get("resources", [])
+        if isinstance(revisions_resp, dict)
+        else []
+    )
+    if not resources:
+        click.secho("   Deployment updated", fg="green")
+        return
+
+    revision_id = str(resources[0]["id"])
+    last_status = ""
+    log_offset: str | None = None
+
+    deadline = time.time() + 900 if is_remote_build else time.time() + 300
+    with Progress(message="Deploying...", elapsed=True) as set_progress:
+        while time.time() < deadline:
+            try:
+                rev = client.get_revision(deployment_id, revision_id)
+            except KeyboardInterrupt:
                 set_progress("")
+                click.secho(
+                    f"\n   Interrupted. Deployment ID: {deployment_id}, "
+                    f"Revision ID: {revision_id}",
+                    fg="yellow",
+                )
+                click.secho(
+                    "   The build will continue remotely.",
+                    fg="yellow",
+                )
+                raise click.exceptions.Exit(1)
 
-        dep_info = client.get_deployment(deployment_id)
-        custom_url = None
-        if isinstance(dep_info, dict):
-            sc = dep_info.get("source_config")
-            if isinstance(sc, dict):
-                custom_url = sc.get("custom_url")
+            status = (
+                rev.get("status", "UNKNOWN") if isinstance(rev, dict) else "UNKNOWN"
+            )
+            if status != last_status:
+                last_status = status
+                set_progress("")
+                click.secho(f"   Status: {status}", fg="cyan")
+                if status in _TERMINAL_STATUSES:
+                    break
+                set_progress(f"{status}...")
 
-        if last_status == "DEPLOYED":
-            click.secho("   Deployment successful!", fg="green")
-            if custom_url:
-                click.secho(f"   URL: {custom_url}", fg="green")
-        elif last_status in ("BUILD_FAILED", "DEPLOY_FAILED", "CREATE_FAILED"):
-            click.secho(f"   Deployment failed: {last_status}", fg="red")
-            raise click.exceptions.Exit(1)
+            # Stream build logs when verbose and building
+            if (
+                is_remote_build
+                and verbose
+                and status in ("AWAITING_BUILD", "BUILDING")
+            ):
+                try:
+                    logs_resp = client.list_build_logs(
+                        deployment_id, revision_id, offset=log_offset
+                    )
+                    if isinstance(logs_resp, dict):
+                        for entry in logs_resp.get("logs", []):
+                            msg = entry.get("message", "")
+                            if msg:
+                                click.echo(f"   | {msg}")
+                        log_offset = logs_resp.get("next_offset") or log_offset
+                except Exception:
+                    pass
+
+            time.sleep(3)
         else:
+            set_progress("")
+
+    # On BUILD_FAILED, tail the last few build log lines
+    if is_remote_build and last_status == "BUILD_FAILED" and not verbose:
+        click.secho("   Last build log lines:", fg="red")
+        try:
+            logs_resp = client.list_build_logs(
+                deployment_id, revision_id, order="desc", limit=30
+            )
+            if isinstance(logs_resp, dict):
+                entries = list(reversed(logs_resp.get("logs", [])))
+                for entry in entries:
+                    msg = entry.get("message", "")
+                    if msg:
+                        click.echo(f"   | {msg}")
+        except Exception:
+            click.secho("   (failed to fetch build logs)", fg="red")
+        click.secho(
+            "   Re-run with --verbose to see full build output.",
+            fg="yellow",
+        )
+
+    dep_info = client.get_deployment(deployment_id)
+    custom_url = None
+    if isinstance(dep_info, dict):
+        sc = dep_info.get("source_config")
+        if isinstance(sc, dict):
+            custom_url = sc.get("custom_url")
+
+    if last_status == "DEPLOYED":
+        click.secho("   Deployment successful!", fg="green")
+        if custom_url:
+            click.secho(f"   URL: {custom_url}", fg="green")
+    elif last_status in ("BUILD_FAILED", "DEPLOY_FAILED", "CREATE_FAILED"):
+        click.secho(f"   Deployment failed: {last_status}", fg="red")
+        raise click.exceptions.Exit(1)
+    else:
+        click.secho(
+            f"   Timed out waiting for deployment (last status: {last_status}).",
+            fg="yellow",
+        )
+        if custom_url:
             click.secho(
-                f"   Timed out waiting for deployment (last status: {last_status}).",
+                f"   Check status at: {custom_url}",
                 fg="yellow",
             )
-            if custom_url:
-                click.secho(
-                    f"   Check status at: {custom_url}",
-                    fg="yellow",
-                )
-            else:
-                click.secho(
-                    "   Check status in the LangSmith Deployments dashboard.",
-                    fg="yellow",
-                )
+        else:
+            click.secho(
+                "   Check status in the LangSmith Deployments dashboard.",
+                fg="yellow",
+            )
 
 
 def _normalize_image_name(value: str | None) -> str:

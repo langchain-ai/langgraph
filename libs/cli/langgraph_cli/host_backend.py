@@ -106,3 +106,58 @@ class HostBackendClient:
             "GET",
             f"/v2/deployments/{deployment_id}/revisions/{revision_id}",
         )
+
+    def request_upload_url(self, deployment_id: str) -> dict[str, Any]:
+        """Get a signed GCS URL for uploading the source tarball."""
+        return self._request(
+            "POST",
+            f"/v2/deployments/{deployment_id}/upload-url",
+        )
+
+    def update_deployment_internal_source(
+        self,
+        deployment_id: str,
+        source_tarball_path: str,
+        secrets: list[dict[str, str]] | None = None,
+        config_path: str | None = None,
+        install_command: str | None = None,
+        build_command: str | None = None,
+    ) -> dict[str, Any]:
+        """Trigger a remote build revision with the uploaded tarball."""
+        src_config: dict[str, Any] = {
+            "source_tarball_path": source_tarball_path,
+        }
+        if config_path is not None:
+            src_config["langgraph_config_path"] = config_path
+
+        payload: dict[str, Any] = {"source_revision_config": src_config}
+
+        source_config: dict[str, Any] = {}
+        if install_command is not None:
+            source_config["install_command"] = install_command
+        if build_command is not None:
+            source_config["build_command"] = build_command
+        if source_config:
+            payload["source_config"] = source_config
+
+        if secrets is not None:
+            payload["secrets"] = secrets
+        return self._request("PATCH", f"/v2/deployments/{deployment_id}", payload)
+
+    def list_build_logs(
+        self,
+        deployment_id: str,
+        revision_id: str,
+        order: str = "asc",
+        limit: int = 50,
+        offset: str | None = None,
+    ) -> dict[str, Any]:
+        """Fetch build logs for a revision."""
+        payload: dict[str, Any] = {"order": order, "limit": limit}
+        if offset:
+            payload["offset"] = offset
+        return self._request(
+            "POST",
+            f"/v1/projects/{deployment_id}/revisions/{revision_id}/build_logs",
+            payload,
+        )
