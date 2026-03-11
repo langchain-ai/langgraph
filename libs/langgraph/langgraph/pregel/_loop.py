@@ -1129,15 +1129,21 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     def __enter__(self) -> Self:
         if not self.checkpointer:
             saved = None
-        elif not self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID) and (
-            replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
-        ):
+        elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+            # Explicit checkpoint_id requested — fetch that exact checkpoint.
+            saved = self.checkpointer.get_tuple(self.checkpoint_config)
+        elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
+            # Subgraph replay: the parent is replaying and passed us a
+            # replay_state with its checkpoint_id. Look up our checkpoint
+            # from the parent's checkpoint_map instead of fetching latest.
             saved = replay_state.get_checkpoint(
                 self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
                 self.checkpointer,
                 self.checkpoint_config,
             )
         else:
+            # Normal case: fetch the most recent checkpoint for this
+            # graph/thread. Returns None on first invocation.
             saved = self.checkpointer.get_tuple(self.checkpoint_config)
         # Clear RESUMING for subgraphs during parent replay so _first
         # re-applies input instead of resuming. This recreates ephemeral
@@ -1321,15 +1327,21 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     async def __aenter__(self) -> Self:
         if not self.checkpointer:
             saved = None
-        elif not self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID) and (
-            replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
-        ):
+        elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+            # Explicit checkpoint_id requested — fetch that exact checkpoint.
+            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+        elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
+            # Subgraph replay: the parent is replaying and passed us a
+            # replay_state with its checkpoint_id. Look up our checkpoint
+            # from the parent's checkpoint_map instead of fetching latest.
             saved = await replay_state.aget_checkpoint(
                 self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
                 self.checkpointer,
                 self.checkpoint_config,
             )
         else:
+            # Normal case: fetch the most recent checkpoint for this
+            # graph/thread. Returns None on first invocation.
             saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
         # Clear RESUMING for subgraphs during parent replay so _first
         # re-applies input instead of resuming. This recreates ephemeral
