@@ -7,8 +7,6 @@ import pytest
 
 from langgraph_cli.cli import (
     _docker_config_for_token,
-    _extract_deployment_url,
-    _format_deployments_table,
     _normalize_image_name,
     _normalize_image_tag,
     _parse_env_from_config,
@@ -134,35 +132,3 @@ class TestParseEnvFromConfig:
         assert result["GOOD"] == "value"
         # EMPTY= gives empty string, not None, so it should be present
         assert result["EMPTY"] == ""
-
-
-class TestDeploymentFormatting:
-    def test_extract_deployment_url_uses_custom_url(self):
-        deployment = {"source_config": {"custom_url": "https://example.com/custom"}}
-        assert _extract_deployment_url(deployment) == "https://example.com/custom"
-
-    def test_extract_deployment_url_defaults_to_dash(self):
-        assert _extract_deployment_url({"id": "dep-123"}) == "-"
-
-    def test_format_deployments_table(self):
-        output = _format_deployments_table(
-            [
-                {
-                    "id": "dep-123",
-                    "name": "alpha",
-                    "source_config": {"custom_url": "https://alpha.example.com"},
-                },
-                {
-                    "id": "dep-456",
-                    "name": "beta",
-                    "url": "https://beta.example.com",
-                },
-            ]
-        )
-        assert "Deployment ID" in output
-        assert "Deployment Name" in output
-        assert "Deployment URL" in output
-        assert "dep-123" in output
-        assert "alpha" in output
-        assert "https://alpha.example.com" in output
-        assert "dep-456" in output

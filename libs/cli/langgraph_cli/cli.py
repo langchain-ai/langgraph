@@ -29,7 +29,7 @@ from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
-from langgraph_cli.util import warn_non_wolfi_distro
+from langgraph_cli.util import format_deployments_table, warn_non_wolfi_distro
 from langgraph_cli.version import __version__
 
 RESERVED_ENV_VARS = frozenset(
@@ -1159,38 +1159,6 @@ def _call_host_backend_with_optional_tenant(
         raise
 
 
-def _extract_deployment_url(deployment: dict[str, object]) -> str:
-    source_config = deployment.get("source_config")
-    if isinstance(source_config, dict):
-        custom_url = source_config.get("custom_url")
-        if isinstance(custom_url, str) and custom_url:
-            return custom_url
-    return "-"
-
-
-def _format_deployments_table(deployments: Sequence[dict[str, object]]) -> str:
-    headers = ("Deployment ID", "Deployment Name", "Deployment URL")
-    rows = [
-        (
-            str(deployment.get("id", "-") or "-"),
-            str(deployment.get("name", "-") or "-"),
-            _extract_deployment_url(deployment),
-        )
-        for deployment in deployments
-    ]
-    widths = [
-        max(len(headers[index]), *(len(row[index]) for row in rows))
-        for index in range(len(headers))
-    ]
-
-    def format_row(row: Sequence[str]) -> str:
-        return "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
-
-    lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
-    lines.extend(format_row(row) for row in rows)
-    return "\n".join(lines)
-
-
 @OPT_HOST_API_KEY
 @OPT_HOST_URL
 @click.option(
@@ -1212,7 +1180,7 @@ def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -
     if not deployments:
         click.echo("No deployments found.")
         return
-    click.echo(_format_deployments_table(deployments))
+    click.echo(format_deployments_table(deployments))
 
 
 @OPT_HOST_API_KEY
@@ -1224,7 +1192,13 @@ def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -
     help="Delete without prompting for confirmation.",
 )
 @click.argument("deployment_id")
-@deploy.command("delete", help="[Beta] Delete a LangSmith Deployment.")
+@deploy.command(
+    "delete",
+    help=(
+        "[Beta] Delete a LangSmith Deployment.\n\n"
+        "Use the `deploy list` command to list deployment IDs."
+    ),
+)
 def deploy_delete(
     api_key: str | None, host_url: str | None, force: bool, deployment_id: str
 ) -> None:
