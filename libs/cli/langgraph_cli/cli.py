@@ -356,6 +356,21 @@ class NestedHelpGroup(click.Group):
                 formatter.write_dl(rows)
 
 
+class DeployGroup(NestedHelpGroup):
+    """Group that treats leading '-' args as passthrough docker flags."""
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        result = super().parse_args(ctx, args)
+        if ctx._protected_args and ctx._protected_args[0].startswith("-"):
+            # Click stores the would-be subcommand in _protected_args; if it looks
+            # like an option (e.g. --build-arg) treat it as passthrough docker
+            # args instead of insisting on a nested command.
+            ctx.args = [*ctx._protected_args, *ctx.args]
+            ctx._protected_args = []
+            return ctx.args
+        return result
+
+
 @click.group(cls=NestedHelpGroup)
 @click.version_option(version=__version__, prog_name="LangGraph CLI")
 def cli():
@@ -654,7 +669,86 @@ def build(
         )
 
 
+def _deploy_base_options(
+    func: Callable | None = None, *, include_docker_args: bool = True
+):
+    """Apply shared deploy flags.
+
+    The group shares most options but should not consume subcommands, so the
+    docker build args are only attached when requested.
+    """
+
+    def _apply(target: Callable) -> Callable:
+        decorators = [
+            OPT_HOST_API_KEY,
+            click.option(
+                "--name",
+                envvar="LANGSMITH_DEPLOYMENT_NAME",
+                help=(
+                    "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
+                    "environment variable or .env file. Defaults to current directory name "
+                    "if --deployment-id is not provided."
+                ),
+            ),
+            click.option(
+                "--deployment-id",
+                help=(
+                    "ID of an existing deployment to update. If omitted, "
+                    "--name is used to find or create the deployment."
+                ),
+            ),
+            click.option(
+                "--deployment-type",
+                type=click.Choice(["dev", "prod"]),
+                default="dev",
+                show_default=True,
+                help="Deployment type (used when creating a new deployment).",
+            ),
+            click.option(
+                "--no-wait",
+                is_flag=True,
+                default=False,
+                help="Skip waiting for deployment status.",
+            ),
+            OPT_VERBOSE,
+            OPT_HOST_URL,
+            click.option("--image-name", hidden=True),
+            click.option("--image-tag", default="latest", hidden=True),
+            click.option(
+                "--config",
+                "-c",
+                default=DEFAULT_CONFIG,
+                hidden=True,
+                type=click.Path(
+                    exists=True,
+                    file_okay=True,
+                    dir_okay=False,
+                    resolve_path=True,
+                    path_type=pathlib.Path,
+                ),
+            ),
+            click.option("--pull/--no-pull", default=True, hidden=True),
+            click.option("--base-image", hidden=True),
+            click.option("--install-command", hidden=True),
+            click.option("--build-command", hidden=True),
+            click.option("--api-version", type=str, hidden=True),
+        ]
+        if include_docker_args:
+            # Only attach build args to the default command; on the group they
+            # would capture subcommand names like `list` before Click resolves
+            # them, making those subcommands unreachable.
+            decorators.append(
+                click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
+            )
+        for decorator in reversed(decorators):
+            target = decorator(target)
+        return target
+
+    return _apply(func) if func is not None else _apply
+
+
 @cli.group(
+    cls=DeployGroup,
     help=(
         "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
         "This command is in beta and under active development. "
@@ -664,73 +758,23 @@ def build(
         "--pull, etc.). See 'langgraph build --help' for details."
     ),
     context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
-    invoke_without_command=True,
+    invoke_without_command=True,  # allow `deploy` click group to execute without command
 )
+@_deploy_base_options(include_docker_args=False)
 @click.pass_context
 @log_command
-def deploy(ctx: click.Context):
+def deploy(ctx: click.Context, **_: object):
+    # We register deploy as both a group and a command here.
+    # if we detect no subcommand, we run _deploy (basically run langgraph deploy as a top level command)
+    # otherwise, we return None here and click will proceed to actually run the subcommand (list or delete)
     if ctx.invoked_subcommand is not None:
         return
-    return _deploy.main(
-        args=list(ctx.args),
-        prog_name=ctx.command_path,
-        standalone_mode=False,
-    )
+    docker_build_args = tuple(ctx.args)
+    ctx.args = []  # Prevent Click from re-processing passthrough args later.
+    return ctx.forward(_deploy, docker_build_args=docker_build_args)
 
 
-@OPT_HOST_API_KEY
-@click.option(
-    "--name",
-    envvar="LANGSMITH_DEPLOYMENT_NAME",
-    help=(
-        "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
-        "environment variable or .env file. Defaults to current directory name "
-        "if --deployment-id is not provided."
-    ),
-)
-@click.option(
-    "--deployment-id",
-    help=(
-        "ID of an existing deployment to update. If omitted, "
-        "--name is used to find or create the deployment."
-    ),
-)
-@click.option(
-    "--deployment-type",
-    type=click.Choice(["dev", "prod"]),
-    default="dev",
-    show_default=True,
-    help="Deployment type (used when creating a new deployment).",
-)
-@click.option(
-    "--no-wait",
-    is_flag=True,
-    default=False,
-    help="Skip waiting for deployment status.",
-)
-@OPT_VERBOSE
-@OPT_HOST_URL
-@click.option("--image-name", hidden=True)
-@click.option("--image-tag", default="latest", hidden=True)
-@click.option(
-    "--config",
-    "-c",
-    default=DEFAULT_CONFIG,
-    hidden=True,
-    type=click.Path(
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        resolve_path=True,
-        path_type=pathlib.Path,
-    ),
-)
-@click.option("--pull/--no-pull", default=True, hidden=True)
-@click.option("--base-image", hidden=True)
-@click.option("--install-command", hidden=True)
-@click.option("--build-command", hidden=True)
-@click.option("--api-version", type=str, hidden=True)
-@click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
+@_deploy_base_options()
 @click.command(context_settings=dict(ignore_unknown_options=True))
 def _deploy(
     config: pathlib.Path,
