@@ -647,22 +647,22 @@ class PregelLoop:
         # writes so that interrupt() calls re-fire instead of returning
         # stale values. But if we're actively resuming, keep them —
         # multi-interrupt scenarios need previously resolved values preserved.
-        # We check two conditions because resume signals arrive differently:
-        # - Command(resume=...): the outer graph receives resume via input
-        # - CONFIG_KEY_RESUMING: child subgraphs receive it via config from
-        #   the parent (their input is a Send arg, not a Command)
-        # Exception: when checkpoint_map resolved a specific checkpoint for
-        # this subgraph (time-traveling to a subgraph checkpoint), always
-        # strip RESUME writes even though RESUMING is set — the subgraph
-        # is replaying from a known checkpoint, not actively resuming with
-        # new user input.
-        replaying_from_checkpoint_map = self.is_nested and configurable.get(
-            CONFIG_KEY_CHECKPOINT_NS, ""
-        ) in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {})
         if self.is_replaying and (
-            replaying_from_checkpoint_map
+            # Time-travel to a subgraph checkpoint: the parent sets
+            # RESUMING=True (it can't distinguish time-travel from resume),
+            # so we check if this subgraph's own ns is in checkpoint_map.
+            # Normally the map only has ancestor entries (_algo.py); the
+            # subgraph's own entry only appears via get_state(subgraphs=True).
+            (
+                self.is_nested
+                and configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
+                in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {})
+            )
             or not (
+                # Outer graph: resume arrives as Command(resume=...)
                 (input_is_command and cast(Command, self.input).resume is not None)
+                # Subgraphs: resume arrives via config flag from parent
+                # (subgraph input is a Send arg, not a Command)
                 or configurable.get(CONFIG_KEY_RESUMING, False)
             )
         ):
