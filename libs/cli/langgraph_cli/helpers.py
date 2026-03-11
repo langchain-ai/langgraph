@@ -2,24 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 
 import click
 
-from langgraph_cli.constants import API_KEY_ENV_NAMES
 from langgraph_cli.host_backend import HostBackendClient
-
-
-def resolve_api_key(api_key: str | None) -> str:
-    """Resolve API key from argument, env vars, or prompt."""
-    if api_key:
-        return api_key
-    for key_name in API_KEY_ENV_NAMES:
-        val = os.environ.get(key_name)
-        if val:
-            return val
-    return click.prompt("API key", hide_input=True)
 
 
 def resolve_deployment_id(

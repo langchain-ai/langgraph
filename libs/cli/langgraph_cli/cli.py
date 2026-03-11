@@ -26,12 +26,7 @@ from langgraph_cli.config import Config
 from langgraph_cli.constants import API_KEY_ENV_NAMES, DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
-from langgraph_cli.helpers import (
-    format_log_entry,
-    level_fg,
-    resolve_api_key,
-    resolve_deployment_id,
-)
+from langgraph_cli.helpers import format_log_entry, level_fg, resolve_deployment_id
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
@@ -1367,9 +1362,7 @@ def deploy_logs(
     follow: bool,
     host_url: str,
 ):
-    resolved_key = resolve_api_key(api_key)
-    client = HostBackendClient(host_url, resolved_key)
-
+    client = _create_host_backend_client(host_url, api_key)
     dep_id = resolve_deployment_id(client, deployment_id, name)
 
     if log_type == "build" and not revision_id:
@@ -1408,15 +1401,16 @@ def deploy_logs(
             return resp
         return []
 
-    def _print_entries(entries: list[dict]) -> None:
-        for entry in entries:
+    def _print_entries(entries: list[dict], *, reverse: bool = False) -> None:
+        iterable = reversed(entries) if reverse else entries
+        for entry in iterable:
             line = format_log_entry(entry)
             fg = level_fg(entry.get("level", ""))
             click.secho(line, fg=fg)
 
-    def _fetch_and_print(request_payload: dict) -> list[dict]:
+    def _fetch_and_print(request_payload: dict, *, reverse: bool = False) -> list[dict]:
         entries = _fetch(request_payload)
-        _print_entries(entries)
+        _print_entries(entries, reverse=reverse)
         return entries
 
     def _fetch_and_print_new(request_payload: dict, seen_ids: set[str]) -> list[dict]:
@@ -1427,31 +1421,36 @@ def deploy_logs(
             seen_ids.update(e.get("id", "") for e in new)
         return new
 
-    entries = _fetch_and_print(payload)
+    entries = _fetch_and_print(payload, reverse=True)
 
     if not follow:
         if not entries:
             click.secho("No log entries found.", fg="yellow")
         return
 
-    from datetime import datetime, timezone
-
     payload["order"] = "asc"
     seen_ids: set[str] = {e.get("id", "") for e in entries if e.get("id")}
+    from datetime import datetime, timezone
+
+    def _update_start_time(ts) -> None:
+        if ts is None:
+            return
+        if isinstance(ts, (int, float)):
+            dt = datetime.fromtimestamp(ts / 1000, tz=timezone.utc)
+            payload["start_time"] = dt.isoformat()
+        else:
+            payload["start_time"] = str(ts)
+
+    if entries:
+        # entries are in descending order here, so index 0 is the newest log
+        _update_start_time(entries[0].get("timestamp"))
 
     try:
         while True:
             time.sleep(2)
-            if entries:
-                last_ts = entries[-1].get("timestamp")
-                if isinstance(last_ts, (int, float)):
-                    dt = datetime.fromtimestamp(last_ts / 1000, tz=timezone.utc)
-                    payload["start_time"] = dt.isoformat()
-                elif last_ts:
-                    payload["start_time"] = str(last_ts)
             new_entries = _fetch_and_print_new(payload, seen_ids)
             if new_entries:
-                entries = new_entries
+                _update_start_time(new_entries[-1].get("timestamp"))
     except KeyboardInterrupt:
         click.echo("\nStopped.")
 
