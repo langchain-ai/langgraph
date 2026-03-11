@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import builtins
 import warnings
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
-from typing import Any, overload
+from typing import Any, Literal, overload
 
 import httpx
 
 from langgraph_sdk._async.http import HttpClient
-from langgraph_sdk._shared.utilities import _get_run_metadata_from_response
+from langgraph_sdk._shared.utilities import (
+    _get_run_metadata_from_response,
+    _sse_to_v2_dict,
+)
 from langgraph_sdk.schema import (
     All,
     BulkCancelRunsStatus,
@@ -32,7 +36,19 @@ from langgraph_sdk.schema import (
     RunStatus,
     StreamMode,
     StreamPart,
+    StreamPartV2,
+    StreamVersion,
 )
+
+
+async def _wrap_stream_v2(
+    raw: AsyncIterator[StreamPart],
+) -> AsyncIterator[StreamPartV2]:
+    """Wrap a raw SSE stream, converting each event to a v2 dict."""
+    async for part in raw:
+        v2 = _sse_to_v2_dict(part.event, part.data)
+        if v2 is not None:
+            yield v2
 
 
 class RunsClient:
@@ -80,6 +96,66 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        version: Literal["v1"] = "v1",
+    ) -> AsyncIterator[StreamPart]: ...
+
+    @overload
+    def stream(
+        self,
+        thread_id: str,
+        assistant_id: str,
+        *,
+        input: Input | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
+        stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
+        metadata: Mapping[str, Any] | None = None,
+        config: Config | None = None,
+        context: Context | None = None,
+        checkpoint: Checkpoint | None = None,
+        checkpoint_id: str | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        feedback_keys: Sequence[str] | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        webhook: str | None = None,
+        multitask_strategy: MultitaskStrategy | None = None,
+        if_not_exists: IfNotExists | None = None,
+        after_seconds: int | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        version: Literal["v2"],
+    ) -> AsyncIterator[StreamPartV2]: ...
+
+    @overload
+    def stream(
+        self,
+        thread_id: None,
+        assistant_id: str,
+        *,
+        input: Input | None = None,
+        command: Command | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] = "values",
+        stream_subgraphs: bool = False,
+        stream_resumable: bool = False,
+        metadata: Mapping[str, Any] | None = None,
+        config: Config | None = None,
+        checkpoint_during: bool | None = None,
+        interrupt_before: All | Sequence[str] | None = None,
+        interrupt_after: All | Sequence[str] | None = None,
+        feedback_keys: Sequence[str] | None = None,
+        on_disconnect: DisconnectMode | None = None,
+        on_completion: OnCompletionBehavior | None = None,
+        if_not_exists: IfNotExists | None = None,
+        webhook: str | None = None,
+        after_seconds: int | None = None,
+        headers: Mapping[str, str] | None = None,
+        params: QueryParamTypes | None = None,
+        on_run_created: Callable[[RunCreateMetadata], None] | None = None,
+        version: Literal["v1"] = "v1",
     ) -> AsyncIterator[StreamPart]: ...
 
     @overload
@@ -107,7 +183,8 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> AsyncIterator[StreamPart]: ...
+        version: Literal["v2"],
+    ) -> AsyncIterator[StreamPartV2]: ...
 
     def stream(
         self,
@@ -138,7 +215,8 @@ class RunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-    ) -> AsyncIterator[StreamPart]:
+        version: StreamVersion = "v1",
+    ) -> AsyncIterator[StreamPart | StreamPartV2]:
         """Create a run and stream the results.
 
         Args:
@@ -179,6 +257,8 @@ class RunsClient:
                 "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
                 "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
                 "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
+            version: Stream format version. "v1" (default) returns raw SSE StreamPart
+                NamedTuples. "v2" returns typed dicts with `type`, `ns`, and `data` keys.
 
         Returns:
             Asynchronous iterator of stream results.
@@ -221,7 +301,7 @@ class RunsClient:
                 stacklevel=2,
             )
 
-        payload = {
+        payload: dict[str, Any] = {
             "input": input,
             "command": (
                 {k: v for k, v in command.items() if v is not None} if command else None
@@ -258,7 +338,7 @@ class RunsClient:
             if on_run_created and (metadata := _get_run_metadata_from_response(res)):
                 on_run_created(metadata)
 
-        return self.http.stream(
+        raw = self.http.stream(
             endpoint,
             "POST",
             json={k: v for k, v in payload.items() if v is not None},
@@ -266,6 +346,9 @@ class RunsClient:
             headers=headers,
             on_response=on_response if on_run_created else None,
         )
+        if version == "v2":
+            return _wrap_stream_v2(raw)
+        return raw
 
     @overload
     async def create(
@@ -507,11 +590,11 @@ class RunsClient:
 
     async def create_batch(
         self,
-        payloads: list[RunCreate],
+        payloads: builtins.list[RunCreate],
         *,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Run]:
+    ) -> builtins.list[Run]:
         """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
@@ -547,7 +630,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> list[dict] | dict[str, Any]: ...
+    ) -> builtins.list[dict] | dict[str, Any]: ...
 
     @overload
     async def wait(
@@ -572,7 +655,7 @@ class RunsClient:
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
-    ) -> list[dict] | dict[str, Any]: ...
+    ) -> builtins.list[dict] | dict[str, Any]: ...
 
     async def wait(
         self,
@@ -600,7 +683,7 @@ class RunsClient:
         params: QueryParamTypes | None = None,
         on_run_created: Callable[[RunCreateMetadata], None] | None = None,
         durability: Durability | None = None,
-    ) -> list[dict] | dict[str, Any]:
+    ) -> builtins.list[dict] | dict[str, Any]:
         """Create a run, wait until it finishes and return the final state.
 
         Args:
@@ -751,10 +834,10 @@ class RunsClient:
         limit: int = 10,
         offset: int = 0,
         status: RunStatus | None = None,
-        select: list[RunSelectField] | None = None,
+        select: builtins.list[RunSelectField] | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
-    ) -> list[Run]:
+    ) -> builtins.list[Run]:
         """List runs.
 
         Args:

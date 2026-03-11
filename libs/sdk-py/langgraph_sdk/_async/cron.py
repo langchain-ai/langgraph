@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from datetime import datetime
+import warnings
+from collections.abc import Mapping, Sequence
+from datetime import datetime, tzinfo
 from typing import Any
 
 from langgraph_sdk._async.http import HttpClient
+from langgraph_sdk._shared.utilities import _resolve_timezone
 from langgraph_sdk.schema import (
     All,
     Config,
@@ -14,11 +16,13 @@ from langgraph_sdk.schema import (
     Cron,
     CronSelectField,
     CronSortBy,
+    Durability,
     Input,
     OnCompletionBehavior,
     QueryParamTypes,
     Run,
     SortOrder,
+    StreamMode,
 )
 
 
@@ -60,13 +64,18 @@ class CronClient:
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
         enabled: bool | None = None,
+        timezone: str | tzinfo | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_subgraphs: bool | None = None,
+        stream_resumable: bool | None = None,
+        durability: Durability | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -77,13 +86,13 @@ class CronClient:
             assistant_id: The assistant ID or graph name to use for the cron job.
                 If using graph name, will default to first assistant created from that graph.
             schedule: The cron schedule to execute this job on.
-                Schedules are interpreted in UTC.
+                Schedules are interpreted in UTC unless a timezone is specified.
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
                 !!! version-added "Added in version 0.6.0"
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
 
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
@@ -93,6 +102,14 @@ class CronClient:
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             enabled: Whether the cron job is enabled or not.
+            timezone: IANA timezone for the cron schedule. Accepts a string (e.g. 'America/New_York') or a ``datetime.tzinfo`` instance (e.g. ``ZoneInfo("America/New_York")``).
+            stream_mode: The stream mode(s) to use.
+            stream_subgraphs: Whether to stream output from subgraphs.
+            stream_resumable: Whether to persist the stream chunks in order to resume the stream later.
+            durability: Durability level for the run. Must be one of 'sync', 'async', or 'exit'.
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -118,6 +135,13 @@ class CronClient:
             )
             ```
         """
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         payload = {
             "schedule": schedule,
             "input": input,
@@ -131,6 +155,11 @@ class CronClient:
             "webhook": webhook,
             "end_time": end_time.isoformat() if end_time else None,
             "enabled": enabled,
+            "timezone": _resolve_timezone(timezone),
+            "stream_mode": stream_mode,
+            "stream_subgraphs": stream_subgraphs,
+            "stream_resumable": stream_resumable,
+            "durability": durability,
         }
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
@@ -151,7 +180,7 @@ class CronClient:
         metadata: Mapping[str, Any] | None = None,
         config: Config | None = None,
         context: Context | None = None,
-        checkpoint_during: bool | None = None,
+        checkpoint_during: bool | None = None,  # deprecated
         interrupt_before: All | list[str] | None = None,
         interrupt_after: All | list[str] | None = None,
         webhook: str | None = None,
@@ -159,6 +188,11 @@ class CronClient:
         multitask_strategy: str | None = None,
         end_time: datetime | None = None,
         enabled: bool | None = None,
+        timezone: str | tzinfo | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_subgraphs: bool | None = None,
+        stream_resumable: bool | None = None,
+        durability: Durability | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Run:
@@ -168,13 +202,13 @@ class CronClient:
             assistant_id: The assistant ID or graph name to use for the cron job.
                 If using graph name, will default to first assistant created from that graph.
             schedule: The cron schedule to execute this job on.
-                Schedules are interpreted in UTC.
+                Schedules are interpreted in UTC unless a timezone is specified.
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
             context: Static context to add to the assistant.
                 !!! version-added "Added in version 0.6.0"
-            checkpoint_during: Whether to checkpoint during the run (or only at the end/interruption).
+            checkpoint_during: (deprecated) Whether to checkpoint during the run (or only at the end/interruption).
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
@@ -186,6 +220,14 @@ class CronClient:
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             end_time: The time to stop running the cron job. If not provided, the cron job will run indefinitely.
             enabled: Whether the cron job is enabled or not.
+            timezone: IANA timezone for the cron schedule. Accepts a string (e.g. 'America/New_York') or a ``datetime.tzinfo`` instance (e.g. ``ZoneInfo("America/New_York")``).
+            stream_mode: The stream mode(s) to use.
+            stream_subgraphs: Whether to stream output from subgraphs.
+            stream_resumable: Whether to persist the stream chunks in order to resume the stream later.
+            durability: Durability level for the run. Must be one of 'sync', 'async', or 'exit'.
+                "async" means checkpoints are persisted async while next graph step executes, replaces checkpoint_during=True
+                "sync" means checkpoints are persisted sync after graph step executes, replaces checkpoint_during=False
+                "exit" means checkpoints are only persisted when the run exits, does not save intermediate steps
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -211,6 +253,13 @@ class CronClient:
             ```
 
         """
+        if checkpoint_during is not None:
+            warnings.warn(
+                "`checkpoint_during` is deprecated and will be removed in a future version. Use `durability` instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         payload = {
             "schedule": schedule,
             "input": input,
@@ -225,6 +274,11 @@ class CronClient:
             "on_run_completed": on_run_completed,
             "end_time": end_time.isoformat() if end_time else None,
             "enabled": enabled,
+            "timezone": _resolve_timezone(timezone),
+            "stream_mode": stream_mode,
+            "stream_subgraphs": stream_subgraphs,
+            "stream_resumable": stream_resumable,
+            "durability": durability,
         }
         if multitask_strategy:
             payload["multitask_strategy"] = multitask_strategy
@@ -277,6 +331,11 @@ class CronClient:
         interrupt_after: All | list[str] | None = None,
         on_run_completed: OnCompletionBehavior | None = None,
         enabled: bool | None = None,
+        timezone: str | tzinfo | None = None,
+        stream_mode: StreamMode | Sequence[StreamMode] | None = None,
+        stream_subgraphs: bool | None = None,
+        stream_resumable: bool | None = None,
+        durability: Durability | None = None,
         headers: Mapping[str, str] | None = None,
         params: QueryParamTypes | None = None,
     ) -> Cron:
@@ -285,7 +344,7 @@ class CronClient:
         Args:
             cron_id: The cron ID to update.
             schedule: The cron schedule to execute this job on.
-                Schedules are interpreted in UTC.
+                Schedules are interpreted in UTC unless a timezone is specified.
             end_time: The end date to stop running the cron.
             input: The input to the graph.
             metadata: Metadata to assign to the cron job runs.
@@ -299,6 +358,11 @@ class CronClient:
                 after execution. 'keep' creates a new thread for each execution but does not
                 clean them up.
             enabled: Enable or disable the cron job.
+            timezone: IANA timezone for the cron schedule. Accepts a string (e.g. 'America/New_York') or a ``datetime.tzinfo`` instance (e.g. ``ZoneInfo("America/New_York")``).
+            stream_mode: The stream mode(s) to use.
+            stream_subgraphs: Whether to stream output from subgraphs.
+            stream_resumable: Whether to persist the stream chunks in order to resume the stream later.
+            durability: Durability level for the run. Must be one of 'sync', 'async', or 'exit'.
             headers: Optional custom headers to include with the request.
             params: Optional query parameters to include with the request.
 
@@ -329,6 +393,11 @@ class CronClient:
             "interrupt_after": interrupt_after,
             "on_run_completed": on_run_completed,
             "enabled": enabled,
+            "timezone": _resolve_timezone(timezone),
+            "stream_mode": stream_mode,
+            "stream_subgraphs": stream_subgraphs,
+            "stream_resumable": stream_resumable,
+            "durability": durability,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return await self.http.patch(
@@ -405,7 +474,7 @@ class CronClient:
             ```
 
         """
-        payload = {
+        payload: dict[str, Any] = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,
             "enabled": enabled,
