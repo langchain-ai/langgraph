@@ -1129,11 +1129,8 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     def __enter__(self) -> Self:
         if not self.checkpointer:
             saved = None
-        elif (
-            not self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
-            and (
-                replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
-            )
+        elif not self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID) and (
+            replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
         ):
             saved = replay_state.get_checkpoint(
                 self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
@@ -1324,11 +1321,8 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     async def __aenter__(self) -> Self:
         if not self.checkpointer:
             saved = None
-        elif (
-            not self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID)
-            and (
-                replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
-            )
+        elif not self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID) and (
+            replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
         ):
             saved = await replay_state.aget_checkpoint(
                 self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
