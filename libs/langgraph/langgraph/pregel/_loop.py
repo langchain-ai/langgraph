@@ -43,6 +43,7 @@ from langgraph._internal._constants import (
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_CHECKPOINT_WRITE_BUFFER_SIZE,
     CONFIG_KEY_REPLAY_STATE,
     CONFIG_KEY_RESUME_MAP,
     CONFIG_KEY_RESUMING,
@@ -1262,8 +1263,12 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
                 signature(checkpointer.aput_writes).parameters.get("task_path")
                 is not None
             )
+            buffer_size = config.get(CONF, {}).get(
+                CONFIG_KEY_CHECKPOINT_WRITE_BUFFER_SIZE,
+                CHECKPOINT_WRITE_BUFFER_SIZE,
+            )
             self._checkpoint_queue: asyncio.Queue[_CheckpointWriteItem | None] = (
-                asyncio.Queue(maxsize=CHECKPOINT_WRITE_BUFFER_SIZE)
+                asyncio.Queue(maxsize=buffer_size)
             )
             self._checkpoint_writer_task: asyncio.Task | None = None
             self._checkpoint_write_error: BaseException | None = None
