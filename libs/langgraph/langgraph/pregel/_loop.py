@@ -651,9 +651,20 @@ class PregelLoop:
         # - Command(resume=...): the outer graph receives resume via input
         # - CONFIG_KEY_RESUMING: child subgraphs receive it via config from
         #   the parent (their input is a Send arg, not a Command)
-        if self.is_replaying and not (
-            (input_is_command and cast(Command, self.input).resume is not None)
-            or configurable.get(CONFIG_KEY_RESUMING, False)
+        # Exception: when the checkpoint_map resolved a specific checkpoint
+        # for this subgraph (time-traveling to a subgraph checkpoint),
+        # always strip RESUME writes even though RESUMING is set — the
+        # subgraph is replaying from a known checkpoint, not actively
+        # resuming with new user input.
+        replaying_from_checkpoint_map = self.is_nested and configurable.get(
+            CONFIG_KEY_CHECKPOINT_NS, ""
+        ) in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {})
+        if self.is_replaying and (
+            replaying_from_checkpoint_map
+            or not (
+                (input_is_command and cast(Command, self.input).resume is not None)
+                or configurable.get(CONFIG_KEY_RESUMING, False)
+            )
         ):
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
@@ -1130,15 +1141,24 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         elif self.is_nested and (
             replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
         ):
-            saved = replay_state.get_checkpoint(
-                self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
-                self.checkpointer,
-                self.checkpoint_config,
-            )
-            # Clear RESUMING so _first re-applies input instead of resuming.
-            # This recreates ephemeral routing channels so nodes trigger
-            # naturally via version comparison.
-            self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
+            # If the checkpoint_map already resolved a specific checkpoint_id
+            # for this subgraph, load it directly instead of using the
+            # ReplayState before-filter (which compares parent checkpoint IDs
+            # against subgraph checkpoint IDs and can incorrectly filter out
+            # all subgraph checkpoints since UUIDv6 ordering means the parent
+            # ID is always smaller than its subgraph IDs).
+            if self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+                saved = self.checkpointer.get_tuple(self.checkpoint_config)
+            else:
+                saved = replay_state.get_checkpoint(
+                    self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
+                    self.checkpointer,
+                    self.checkpoint_config,
+                )
+                # Clear RESUMING so _first re-applies input instead of
+                # resuming. This recreates ephemeral routing channels so
+                # nodes trigger naturally via version comparison.
+                self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
         else:
             # Normal case: fetch the most recent checkpoint for this
             # graph/thread. If a specific checkpoint_id is in the config,
@@ -1325,15 +1345,16 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         elif self.is_nested and (
             replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
         ):
-            saved = await replay_state.aget_checkpoint(
-                self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
-                self.checkpointer,
-                self.checkpoint_config,
-            )
-            # Clear RESUMING so _first re-applies input instead of resuming.
-            # This recreates ephemeral routing channels so nodes trigger
-            # naturally via version comparison.
-            self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
+            # Same logic as sync __enter__ — see comments there.
+            if self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+                saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+            else:
+                saved = await replay_state.aget_checkpoint(
+                    self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
+                    self.checkpointer,
+                    self.checkpoint_config,
+                )
+                self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
         else:
             # Normal case: fetch the most recent checkpoint for this
             # graph/thread. If a specific checkpoint_id is in the config,
