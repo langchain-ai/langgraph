@@ -7,12 +7,15 @@ import os
 import re
 from collections.abc import Mapping
 from datetime import tzinfo
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
 import langgraph_sdk
 from langgraph_sdk.schema import RunCreateMetadata
+
+if TYPE_CHECKING:
+    from zoneinfo import ZoneInfo
 
 RESERVED_HEADERS = ("x-api-key",)
 
@@ -126,7 +129,7 @@ def _sse_to_v2_dict(event: str, data: Any) -> dict[str, Any] | None:
     return result
 
 
-def _resolve_timezone(tz: str | tzinfo | None) -> str | None:
+def _resolve_timezone(tz: str | tzinfo | ZoneInfo | None) -> str | None:
     """Convert a timezone argument to an IANA timezone string.
 
     Accepts:
