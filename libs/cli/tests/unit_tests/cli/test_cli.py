@@ -382,9 +382,10 @@ def test_dockerfile_command_with_base_image() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert re.match("FROM langchain/langgraph-server:0.2-py3.*", dockerfile), (
-                "\n".join(dockerfile.splitlines()[:3])
-            )
+            assert re.match(
+                r"FROM langchain/langgraph-server:\d+\.\d+\.\d+-py3\..*",
+                dockerfile,
+            ), "\n".join(dockerfile.splitlines()[:3])
 
 
 def test_dockerfile_command_with_docker_compose() -> None:
@@ -567,6 +568,8 @@ def test_build_generate_proper_build_context():
                     "test-image",
                     "--config",
                     str(temp_dir / "config.json"),
+                    "--engine-runtime-mode",
+                    "combined_queue_worker",
                 ],
                 catch_exceptions=True,
             )
@@ -602,6 +605,8 @@ def test_dockerfile_command_with_api_version() -> None:
                 str(temp_dir / "config.json"),
                 "--api-version",
                 "0.2.74",
+                "--engine-runtime-mode",
+                "combined_queue_worker",
             ],
         )
 
@@ -718,6 +723,8 @@ def test_build_command_with_api_version() -> None:
                     str(temp_dir / "config.json"),
                     "--api-version",
                     "0.2.74",
+                    "--engine-runtime-mode",
+                    "combined_queue_worker",
                     "--no-pull",  # Avoid pulling non-existent images
                 ],
                 catch_exceptions=True,
@@ -856,7 +863,10 @@ def test_dockerfile_command_distributed_mode() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert "FROM langchain/langgraph-executor:3.11" in dockerfile
+            assert re.search(
+                r"FROM langchain/langgraph-executor:\d+\.\d+\.\d+-py3\.11",
+                dockerfile,
+            ), dockerfile.splitlines()[0]
 
 
 def test_dockerfile_command_combined_mode() -> None:
@@ -889,7 +899,10 @@ def test_dockerfile_command_combined_mode() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert "FROM langchain/langgraph-api:3.11" in dockerfile
+            assert re.search(
+                r"FROM langchain/langgraph-api:\d+\.\d+\.\d+-py3\.11",
+                dockerfile,
+            ), dockerfile.splitlines()[0]
 
 
 def test_dockerfile_command_distributed_with_explicit_base_image() -> None:
@@ -924,7 +937,10 @@ def test_dockerfile_command_distributed_with_explicit_base_image() -> None:
         assert save_path.exists()
         with open(save_path) as f:
             dockerfile = f.read()
-            assert "FROM my-custom-executor:latest" in dockerfile
+            assert re.search(
+                r"FROM my-custom-executor:\d+\.\d+\.\d+-py3\.11",
+                dockerfile,
+            ), dockerfile.splitlines()[0]
 
 
 def test_prepare_args_and_stdin_distributed_mode() -> None:
@@ -943,18 +959,42 @@ def test_prepare_args_and_stdin_distributed_mode() -> None:
         port=port,
         watch=False,
         engine_runtime_mode="distributed",
+        api_version="0.7.67",
     )
 
-    # API service should use langgraph-api base image
-    assert "FROM langchain/langgraph-api:" in actual_stdin
+    # API service should use langgraph-api base image with pinned version
+    assert "FROM langchain/langgraph-api:0.7.67-py3.11" in actual_stdin
 
     # Distributed mode sets N_JOBS_PER_WORKER=0 on the API service
     assert 'N_JOBS_PER_WORKER: "0"' in actual_stdin
 
-    # Orchestrator service present
+    # Orchestrator service present with pinned version
     assert "langgraph-orchestrator:" in actual_stdin
+    assert "langchain/langgraph-orchestrator-licensed:0.7.67" in actual_stdin
 
     # Executor service present with correct base image
     assert "langgraph-executor:" in actual_stdin
-    assert "FROM langchain/langgraph-executor:" in actual_stdin
+    assert "FROM langchain/langgraph-executor:0.7.67-py3.11" in actual_stdin
     assert "executor_entrypoint.sh" in actual_stdin
+
+
+def test_prepare_args_and_stdin_distributed_with_api_version() -> None:
+    """All 3 images should use the same api_version in distributed mode."""
+    config_path = pathlib.Path(__file__).parent / "langgraph.json"
+    config = validate_config(
+        Config(dependencies=["."], graphs={"agent": "agent.py:graph"})
+    )
+    actual_args, actual_stdin = prepare_args_and_stdin(
+        capabilities=DEFAULT_DOCKER_CAPABILITIES,
+        config_path=config_path,
+        config=config,
+        docker_compose=None,
+        port=8000,
+        watch=False,
+        engine_runtime_mode="distributed",
+        api_version="0.7.67",
+    )
+
+    assert "FROM langchain/langgraph-api:0.7.67-py3.11" in actual_stdin
+    assert "FROM langchain/langgraph-executor:0.7.67-py3.11" in actual_stdin
+    assert "langchain/langgraph-orchestrator-licensed:0.7.67" in actual_stdin

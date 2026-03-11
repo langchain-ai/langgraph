@@ -82,12 +82,18 @@ class HostBackendClient:
         deployment_id: str,
         image_uri: str,
         secrets: list[dict[str, str]] | None = None,
+        engine_runtime_mode: str | None = None,
+        deployed_api_version: str | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "source_revision_config": {"image_uri": image_uri},
         }
         if secrets is not None:
             payload["secrets"] = secrets
+        if engine_runtime_mode is not None:
+            payload["engine_runtime_mode"] = engine_runtime_mode
+        if deployed_api_version is not None:
+            payload["deployed_api_version"] = deployed_api_version
         return self._request(
             "PATCH",
             f"/v2/deployments/{deployment_id}",

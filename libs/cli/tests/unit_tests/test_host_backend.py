@@ -152,6 +152,77 @@ def test_update_deployment_no_secrets(client):
     assert result == {"ok": True}
 
 
+def test_update_deployment_with_engine_runtime_mode():
+    """Verify engine_runtime_mode is included in the PATCH payload."""
+    import json
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        body = json.loads(req.content)
+        assert body["engine_runtime_mode"] == "distributed"
+        assert body["source_revision_config"]["image_uri"] == "img:v1"
+        return httpx.Response(200, json={"id": "dep-1"})
+
+    c = HostBackendClient("https://api.example.com", "test-key")
+    c._client = httpx.Client(
+        base_url="https://api.example.com",
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
+        timeout=30,
+    )
+    result = c.update_deployment("dep-1", "img:v1", engine_runtime_mode="distributed")
+    assert result == {"id": "dep-1"}
+
+
+def test_update_deployment_with_deployed_api_version():
+    """Verify deployed_api_version is included in the PATCH payload."""
+    import json
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        body = json.loads(req.content)
+        assert body["deployed_api_version"] == "0.3.5"
+        assert body["engine_runtime_mode"] == "distributed"
+        assert body["source_revision_config"]["image_uri"] == "img:v2"
+        assert body["secrets"] == [{"name": "K", "value": "V"}]
+        return httpx.Response(200, json={"id": "dep-2"})
+
+    c = HostBackendClient("https://api.example.com", "test-key")
+    c._client = httpx.Client(
+        base_url="https://api.example.com",
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
+        timeout=30,
+    )
+    result = c.update_deployment(
+        "dep-2",
+        "img:v2",
+        secrets=[{"name": "K", "value": "V"}],
+        engine_runtime_mode="distributed",
+        deployed_api_version="0.3.5",
+    )
+    assert result == {"id": "dep-2"}
+
+
+def test_update_deployment_omits_none_fields():
+    """Verify None values for optional fields are not sent in payload."""
+    import json
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        body = json.loads(req.content)
+        assert "engine_runtime_mode" not in body
+        assert "deployed_api_version" not in body
+        assert "secrets" not in body
+        return httpx.Response(200, json={"ok": True})
+
+    c = HostBackendClient("https://api.example.com", "test-key")
+    c._client = httpx.Client(
+        base_url="https://api.example.com",
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
+        timeout=30,
+    )
+    c.update_deployment("dep-3", "img:v1")
+
+
 def test_list_revisions(client):
     result = client.list_revisions("dep-123", limit=5)
     assert result == {"ok": True}

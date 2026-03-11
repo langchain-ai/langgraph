@@ -1269,6 +1269,11 @@ def docker_tag(
     version_distro_tag = f"{version}{distro_tag}"
 
     # Prepend API version if provided
+    # Strip an existing tag from base_image so we don't produce two colons
+    # (e.g. "langchain/langgraph-server:0.2" → "langchain/langgraph-server").
+    if ":" in base_image:
+        base_image = base_image.rsplit(":", 1)[0]
+
     if api_version:
         full_tag = f"{api_version}-{language}{version_distro_tag}"
     elif "/langgraph-server" in base_image and version_distro_tag not in base_image:
@@ -1424,7 +1429,7 @@ def config_to_compose(
 
             postgres_uri = "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
             result += f"""    langgraph-orchestrator:
-        image: langchain/langgraph-orchestrator-licensed:latest
+        image: langchain/langgraph-orchestrator-licensed:{api_version}
         depends_on:
             langgraph-api:
                 condition: service_healthy
