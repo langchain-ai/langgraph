@@ -24,7 +24,6 @@ class HostBackendClient:
         base_url: str,
         api_key: str,
         tenant_id: str | None = None,
-        langsmith_url: str | None = None,
     ):
         if not base_url:
             raise click.UsageError("Host backend URL is required")
@@ -36,35 +35,12 @@ class HostBackendClient:
         if tenant_id:
             headers["X-Tenant-ID"] = tenant_id
         self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
-        self._langsmith_url = (
-            langsmith_url or "https://api.smith.langchain.com"
-        ).rstrip("/")
-        self._tenant_id = tenant_id
         self._client = httpx.Client(
             base_url=self._base_url,
             headers=headers,
             transport=transport,
             timeout=30,
         )
-        self._langsmith_client: httpx.Client | None = None
-
-    def _get_langsmith_client(self) -> httpx.Client:
-        if self._langsmith_client is None:
-            transport = httpx.HTTPTransport(retries=3)
-            headers: dict[str, str] = {
-                "X-Api-Key": self._api_key,
-                "Accept": "application/json",
-            }
-            if self._tenant_id:
-                headers["X-Tenant-ID"] = self._tenant_id
-            self._langsmith_client = httpx.Client(
-                base_url=self._langsmith_url,
-                headers=headers,
-                transport=transport,
-                timeout=30,
-            )
-        return self._langsmith_client
 
     def _request(
         self,
@@ -72,11 +48,9 @@ class HostBackendClient:
         path: str,
         payload: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
-        use_langsmith: bool = False,
     ) -> Any:
-        client = self._get_langsmith_client() if use_langsmith else self._client
         try:
-            resp = client.request(method, path, json=payload, params=params)
+            resp = self._client.request(method, path, json=payload, params=params)
             resp.raise_for_status()
         except httpx.HTTPStatusError as err:
             detail = err.response.text or str(err.response.status_code)

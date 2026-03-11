@@ -184,16 +184,6 @@ def test_get_revision(client):
     assert result == {"ok": True}
 
 
-def test_langsmith_client_created_lazily():
-    c = HostBackendClient(
-        "https://api.example.com", "key", langsmith_url="https://ls.example.com"
-    )
-    assert c._langsmith_client is None
-    ls = c._get_langsmith_client()
-    assert ls is not None
-    assert c._get_langsmith_client() is ls  # same instance
-
-
 def test_get_build_logs(client):
     result = client.get_build_logs("proj-1", "rev-1", {"limit": 10})
     assert result == {"ok": True}

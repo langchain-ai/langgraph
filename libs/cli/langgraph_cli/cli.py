@@ -1301,12 +1301,6 @@ def _normalize_image_tag(value: str) -> str:
     help="Continuously poll for new logs.",
 )
 @OPT_HOST_URL
-@click.option(
-    "--langsmith-url",
-    envvar="LANGSMITH_ENDPOINT",
-    default="https://api.smith.langchain.com",
-    hidden=True,
-)
 @deploy.command(
     "logs",
     help="[Beta] Fetch build or deploy logs for a LangSmith deployment.",
@@ -1325,10 +1319,9 @@ def deploy_logs(
     end_time: str | None,
     follow: bool,
     host_url: str,
-    langsmith_url: str,
 ):
     resolved_key = resolve_api_key(api_key)
-    client = HostBackendClient(host_url, resolved_key, langsmith_url=langsmith_url)
+    client = HostBackendClient(host_url, resolved_key)
 
     dep_id = resolve_deployment_id(client, deployment_id, name)
 
