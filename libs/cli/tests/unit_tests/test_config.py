@@ -1784,7 +1784,9 @@ def test_config_to_compose_distributed_mode():
     # Executor service is present with correct base image
     assert "langgraph-executor:" in actual_compose_stdin
     assert "FROM langchain/langgraph-executor:3.11" in actual_compose_stdin
-    assert 'entrypoint: ["sh", "/storage/executor_entrypoint.sh"]' in actual_compose_stdin
+    assert (
+        'entrypoint: ["sh", "/storage/executor_entrypoint.sh"]' in actual_compose_stdin
+    )
 
     # Executor has required environment variables
     assert "EXECUTOR_GRPC_PORT:" in actual_compose_stdin
