@@ -647,13 +647,24 @@ class PregelLoop:
         # writes so that interrupt() calls re-fire instead of returning
         # stale values. But if we're actively resuming, keep them —
         # multi-interrupt scenarios need previously resolved values preserved.
-        # We check two conditions because resume signals arrive differently:
-        # - Command(resume=...): the outer graph receives resume via input
-        # - CONFIG_KEY_RESUMING: child subgraphs receive it via config from
-        #   the parent (their input is a Send arg, not a Command)
-        if self.is_replaying and not (
-            (input_is_command and cast(Command, self.input).resume is not None)
-            or configurable.get(CONFIG_KEY_RESUMING, False)
+        if self.is_replaying and (
+            # Time-travel to a subgraph checkpoint: the parent sets
+            # RESUMING=True (it can't distinguish time-travel from resume),
+            # so we check if this subgraph's own ns is in checkpoint_map.
+            # Normally the map only has ancestor entries (_algo.py); the
+            # subgraph's own entry only appears via get_state(subgraphs=True).
+            (
+                self.is_nested
+                and configurable.get(CONFIG_KEY_CHECKPOINT_NS, "")
+                in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {})
+            )
+            or not (
+                # Outer graph: resume arrives as Command(resume=...)
+                (input_is_command and cast(Command, self.input).resume is not None)
+                # Subgraphs: resume arrives via config flag from parent
+                # (subgraph input is a Send arg, not a Command)
+                or configurable.get(CONFIG_KEY_RESUMING, False)
+            )
         ):
             self.checkpoint_pending_writes = [
                 w for w in self.checkpoint_pending_writes if w[1] != RESUME
@@ -1127,9 +1138,15 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
     def __enter__(self) -> Self:
         if not self.checkpointer:
             saved = None
-        elif self.is_nested and (
-            replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
-        ):
+        elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+            # Explicit checkpoint_id requested — fetch that exact checkpoint.
+            # This covers both normal replay and subgraphs resolved via
+            # checkpoint_map during time-travel.
+            saved = self.checkpointer.get_tuple(self.checkpoint_config)
+        elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
+            # Subgraph replay: the parent is replaying and passed us a
+            # replay_state with its checkpoint_id. Look up our checkpoint
+            # from the parent's checkpoint_map instead of fetching latest.
             saved = replay_state.get_checkpoint(
                 self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
                 self.checkpointer,
@@ -1141,9 +1158,7 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
             self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
         else:
             # Normal case: fetch the most recent checkpoint for this
-            # graph/thread. If a specific checkpoint_id is in the config,
-            # fetch that exact checkpoint; otherwise fetch the latest one.
-            # Returns None on first invocation (no checkpoints exist yet).
+            # graph/thread. Returns None on first invocation.
             saved = self.checkpointer.get_tuple(self.checkpoint_config)
 
         if saved is None:
@@ -1322,9 +1337,15 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
     async def __aenter__(self) -> Self:
         if not self.checkpointer:
             saved = None
-        elif self.is_nested and (
-            replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE)
-        ):
+        elif self.checkpoint_config[CONF].get(CONFIG_KEY_CHECKPOINT_ID):
+            # Explicit checkpoint_id requested — fetch that exact checkpoint.
+            # This covers both normal replay and subgraphs resolved via
+            # checkpoint_map during time-travel.
+            saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
+        elif replay_state := self.config[CONF].get(CONFIG_KEY_REPLAY_STATE):
+            # Subgraph replay: the parent is replaying and passed us a
+            # replay_state with its checkpoint_id. Look up our checkpoint
+            # from the parent's checkpoint_map instead of fetching latest.
             saved = await replay_state.aget_checkpoint(
                 self.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, ""),
                 self.checkpointer,
@@ -1336,9 +1357,7 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
             self.config[CONF].pop(CONFIG_KEY_RESUMING, None)
         else:
             # Normal case: fetch the most recent checkpoint for this
-            # graph/thread. If a specific checkpoint_id is in the config,
-            # fetch that exact checkpoint; otherwise fetch the latest one.
-            # Returns None on first invocation (no checkpoints exist yet).
+            # graph/thread. Returns None on first invocation.
             saved = await self.checkpointer.aget_tuple(self.checkpoint_config)
 
         if saved is None:
