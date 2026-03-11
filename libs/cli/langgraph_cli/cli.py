@@ -1204,7 +1204,10 @@ def deploy_delete(
 ) -> None:
     if not force:
         response = click.prompt(
-            f"Are you sure you want to delete deployment ID {deployment_id}? (Y/n)",
+            click.style(
+                f"Are you sure you want to delete deployment ID {deployment_id}? (Y/n)",
+                fg="yellow",
+            ),
             default="Y",
             show_default=False,
         )
@@ -1215,7 +1218,7 @@ def deploy_delete(
         client,
         lambda current_client: current_client.delete_deployment(deployment_id),
     )
-    click.echo(f"Deleted deployment {deployment_id}.")
+    click.secho(f"Deleted deployment {deployment_id}.", fg="green")
 
 
 def _normalize_image_name(value: str | None) -> str:
