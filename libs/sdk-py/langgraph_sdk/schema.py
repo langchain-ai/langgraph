@@ -409,7 +409,7 @@ class CronUpdate(TypedDict, total=False):
     schedule: str
     """The cron schedule to execute this job on."""
     timezone: str
-    """IANA timezone for the cron schedule (e.g. 'America/New_York'). If not provided, UTC is used."""
+    """IANA timezone for the cron schedule (e.g. 'America/New_York')."""
     end_time: datetime
     """The end date to stop running the cron."""
     input: Input
