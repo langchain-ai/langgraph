@@ -35,7 +35,7 @@ from langgraph_cli.helpers import (
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
-from langgraph_cli.util import warn_non_wolfi_distro
+from langgraph_cli.util import format_deployments_table, warn_non_wolfi_distro
 from langgraph_cli.version import __version__
 
 RESERVED_ENV_VARS = frozenset(
@@ -318,12 +318,17 @@ class NestedHelpGroup(click.Group):
         self, ctx: click.Context, formatter: click.HelpFormatter
     ) -> None:
         command_entries: list[tuple[str, click.Command]] = []
+        # Collect the top-level commands first, then append one level of nested
+        # subcommands using names like "deploy list" so they show up in the
+        # top-level help output.
         for command_name in self.list_commands(ctx):
             command = self.get_command(ctx, command_name)
             if command is None or command.hidden:
                 continue
             command_entries.append((command_name, command))
             if isinstance(command, click.Group):
+                # Build a child context so Click resolves the subcommands the same
+                # way it would for the nested group itself.
                 sub_ctx = click.Context(command, info_name=command_name, parent=ctx)
                 for subcommand_name in command.list_commands(sub_ctx):
                     subcommand = command.get_command(sub_ctx, subcommand_name)
@@ -333,6 +338,9 @@ class NestedHelpGroup(click.Group):
                         (f"{command_name} {subcommand_name}", subcommand)
                     )
 
+        # Compute the available width for help text up front so we can truncate
+        # descriptions before handing them to Click. That keeps each command on
+        # a single line instead of allowing wrapped descriptions.
         command_width = max((len(name) for name, _ in command_entries), default=0)
         help_width = max(formatter.width - command_width - 6, 10)
         rows = [
@@ -341,6 +349,9 @@ class NestedHelpGroup(click.Group):
         ]
 
         if rows:
+            # Render the flattened command list using Click's standard
+            # definition-list formatter so alignment stays consistent with the
+            # rest of the CLI help output.
             with formatter.section("Commands"):
                 formatter.write_dl(rows)
 
@@ -1099,6 +1110,115 @@ def _deploy(
                     "   Check status in the LangSmith Deployments dashboard.",
                     fg="yellow",
                 )
+
+
+def _create_host_backend_client(
+    host_url: str | None,
+    api_key: str | None,
+    env_vars: dict[str, str] | None = None,
+) -> HostBackendClient:
+    if env_vars is None:
+        env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
+    resolved_api_key = api_key
+    if not resolved_api_key:
+        for key_name in API_KEY_ENV_NAMES:
+            val = env_vars.get(key_name)
+            if val:
+                resolved_api_key = val
+                break
+            val = os.environ.get(key_name)
+            if val:
+                resolved_api_key = val
+                break
+    if not resolved_api_key:
+        resolved_api_key = click.prompt("Host API key", hide_input=True)
+    return HostBackendClient(host_url, resolved_api_key)
+
+
+def _call_host_backend_with_optional_tenant(
+    client: HostBackendClient,
+    operation: Callable[[HostBackendClient], object],
+) -> object:
+    try:
+        return operation(client)
+    except HostBackendError as err:
+        if err.status_code == 403 and "requires workspace specification" in err.message:
+            click.secho(
+                "Your API key is org-scoped and requires a workspace ID.",
+                fg="yellow",
+            )
+            click.secho(
+                "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                fg="yellow",
+            )
+            tenant_id = click.prompt("Workspace ID")
+            client = HostBackendClient(
+                client._base_url, client._api_key, tenant_id=tenant_id
+            )
+            return operation(client)
+        raise
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--name-contains",
+    default="",
+    help="Only show deployments whose names contain this value.",
+)
+@deploy.command("list", help="[Beta] List LangSmith Deployments.")
+def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -> None:
+    client = _create_host_backend_client(host_url, api_key)
+    response = _call_host_backend_with_optional_tenant(
+        client,
+        lambda current_client: current_client.list_deployments(
+            name_contains=name_contains
+        ),
+    )
+    resources = response.get("resources", []) if isinstance(response, dict) else []
+    deployments = [item for item in resources if isinstance(item, dict)]
+    if not deployments:
+        click.echo("No deployments found.")
+        return
+    click.echo(format_deployments_table(deployments))
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Delete without prompting for confirmation.",
+)
+@click.argument("deployment_id")
+@deploy.command(
+    "delete",
+    help=(
+        "[Beta] Delete a LangSmith Deployment.\n\n"
+        "Use the `deploy list` command to list deployment IDs."
+    ),
+)
+def deploy_delete(
+    api_key: str | None, host_url: str | None, force: bool, deployment_id: str
+) -> None:
+    if not force:
+        response = click.prompt(
+            click.style(
+                f"Are you sure you want to delete deployment ID {deployment_id}? (Y/n)",
+                fg="yellow",
+            ),
+            default="Y",
+            show_default=False,
+        )
+        if response.strip().lower() not in {"y", "yes"}:
+            raise click.Abort()
+    client = _create_host_backend_client(host_url, api_key)
+    _call_host_backend_with_optional_tenant(
+        client,
+        lambda current_client: current_client.delete_deployment(deployment_id),
+    )
+    click.secho(f"Deleted deployment {deployment_id}.", fg="green")
 
 
 def _normalize_image_name(value: str | None) -> str:

@@ -71,11 +71,12 @@ class HostBackendClient:
         method: str,
         path: str,
         payload: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
         use_langsmith: bool = False,
     ) -> Any:
         client = self._get_langsmith_client() if use_langsmith else self._client
         try:
-            resp = client.request(method, path, json=payload)
+            resp = client.request(method, path, json=payload, params=params)
             resp.raise_for_status()
         except httpx.HTTPStatusError as err:
             detail = err.response.text or str(err.response.status_code)
@@ -98,11 +99,18 @@ class HostBackendClient:
     def create_deployment(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/v2/deployments", payload)
 
-    def list_deployments(self, name_contains: str) -> dict[str, Any]:
-        return self._request("GET", f"/v2/deployments?name_contains={name_contains}")
+    def list_deployments(self, name_contains: str = "") -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/v2/deployments",
+            params={"name_contains": name_contains},
+        )
 
     def get_deployment(self, deployment_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v2/deployments/{deployment_id}")
+
+    def delete_deployment(self, deployment_id: str) -> None:
+        return self._request("DELETE", f"/v2/deployments/{deployment_id}")
 
     def request_push_token(self, deployment_id: str) -> dict[str, Any]:
         return self._request(
