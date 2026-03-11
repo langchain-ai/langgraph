@@ -287,6 +287,13 @@ OPT_API_VERSION = click.option(
     help="API server version to use for the base image. If unspecified, the latest version will be used.",
 )
 
+OPT_ENGINE_RUNTIME_MODE = click.option(
+    "--engine-runtime-mode",
+    type=click.Choice(["combined_queue_worker", "distributed"]),
+    default="combined_queue_worker",
+    help="Runtime mode. 'distributed' uses separate executor and orchestrator containers.",
+)
+
 
 @click.group()
 @click.version_option(version=__version__, prog_name="LangGraph CLI")
@@ -305,6 +312,7 @@ def cli():
 @OPT_WATCH
 @OPT_POSTGRES_URI
 @OPT_API_VERSION
+@OPT_ENGINE_RUNTIME_MODE
 @click.option(
     "--image",
     type=str,
@@ -339,6 +347,7 @@ def up(
     debugger_base_url: str | None,
     postgres_uri: str | None,
     api_version: str | None,
+    engine_runtime_mode: str,
     image: str | None,
     base_image: str | None,
 ):
@@ -362,6 +371,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             debugger_base_url=debugger_base_url,
             postgres_uri=postgres_uri,
             api_version=api_version,
+            engine_runtime_mode=engine_runtime_mode,
             image=image,
             base_image=base_image,
         )
@@ -518,6 +528,7 @@ def _build(
     "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
 @OPT_API_VERSION
+@OPT_ENGINE_RUNTIME_MODE
 @click.option(
     "--install-command",
     help="Custom install command to run from the build context root. If not provided, auto-detects based on package manager files.",
@@ -539,6 +550,7 @@ def build(
     docker_build_args: Sequence[str],
     base_image: str | None,
     api_version: str | None,
+    engine_runtime_mode: str,
     pull: bool,
     tag: str,
     install_command: str | None,
@@ -561,12 +573,17 @@ def build(
             raise click.UsageError("Docker not installed") from None
         config_json = langgraph_cli.config.validate_config_file(config)
         warn_non_wolfi_distro(config_json)
+        effective_base_image = base_image
+        if engine_runtime_mode == "distributed" and not base_image:
+            effective_base_image = langgraph_cli.config.default_base_image(
+                config_json, engine_runtime_mode=engine_runtime_mode
+            )
         _build(
             runner,
             set,
             config,
             config_json,
-            base_image,
+            effective_base_image,
             api_version,
             pull,
             tag,
@@ -1136,6 +1153,7 @@ tests
     "\n    --base-image langchain/langgraph-server:0.2  # Pin to a minor version (Python)",
 )
 @OPT_API_VERSION
+@OPT_ENGINE_RUNTIME_MODE
 @log_command
 def dockerfile(
     save_path: str,
@@ -1143,6 +1161,7 @@ def dockerfile(
     add_docker_compose: bool,
     base_image: str | None = None,
     api_version: str | None = None,
+    engine_runtime_mode: str = "combined_queue_worker",
 ) -> None:
     save_path = pathlib.Path(save_path).absolute()
     secho(f"🔍 Validating configuration at path: {config}", fg="yellow")
@@ -1150,11 +1169,17 @@ def dockerfile(
     warn_non_wolfi_distro(config_json)
     secho("✅ Configuration validated!", fg="green")
 
+    effective_base_image = base_image
+    if engine_runtime_mode == "distributed" and not base_image:
+        effective_base_image = langgraph_cli.config.default_base_image(
+            config_json, engine_runtime_mode=engine_runtime_mode
+        )
+
     secho(f"📝 Generating Dockerfile at {save_path}", fg="yellow")
     dockerfile, additional_contexts = langgraph_cli.config.config_to_docker(
         config_path=config,
         config=config_json,
-        base_image=base_image,
+        base_image=effective_base_image,
         api_version=api_version,
     )
     with open(str(save_path), "w", encoding="utf-8") as f:
@@ -1425,6 +1450,7 @@ def prepare_args_and_stdin(
     debugger_base_url: str | None = None,
     postgres_uri: str | None = None,
     api_version: str | None = None,
+    engine_runtime_mode: str = "combined_queue_worker",
     # Like "my-tag" (if you already built it locally)
     image: str | None = None,
     # Like "langchain/langgraphjs-api" or "langchain/langgraph-api
@@ -1438,9 +1464,10 @@ def prepare_args_and_stdin(
         debugger_port=debugger_port,
         debugger_base_url=debugger_base_url,
         postgres_uri=postgres_uri,
-        image=image,  # Pass image to compose YAML generator
+        image=image,
         base_image=base_image,
         api_version=api_version,
+        engine_runtime_mode=engine_runtime_mode,
     )
     args = [
         "--project-directory",
@@ -1458,6 +1485,7 @@ def prepare_args_and_stdin(
         base_image=langgraph_cli.config.default_base_image(config),
         api_version=api_version,
         image=image,
+        engine_runtime_mode=engine_runtime_mode,
     )
     return args, stdin
 
@@ -1476,6 +1504,7 @@ def prepare(
     debugger_base_url: str | None = None,
     postgres_uri: str | None = None,
     api_version: str | None = None,
+    engine_runtime_mode: str = "combined_queue_worker",
     image: str | None = None,
     base_image: str | None = None,
 ) -> tuple[list[str], str]:
@@ -1492,6 +1521,20 @@ def prepare(
                 verbose=verbose,
             )
         )
+        if engine_runtime_mode == "distributed":
+            executor_base = langgraph_cli.config.default_base_image(
+                config_json, engine_runtime_mode="distributed"
+            )
+            runner.run(
+                subp_exec(
+                    "docker",
+                    "pull",
+                    langgraph_cli.config.docker_tag(
+                        config_json, executor_base, api_version
+                    ),
+                    verbose=verbose,
+                )
+            )
 
     args, stdin = prepare_args_and_stdin(
         capabilities=capabilities,
@@ -1504,6 +1547,7 @@ def prepare(
         debugger_base_url=debugger_base_url or f"http://127.0.0.1:{port}",
         postgres_uri=postgres_uri,
         api_version=api_version,
+        engine_runtime_mode=engine_runtime_mode,
         image=image,
         base_image=base_image,
     )
