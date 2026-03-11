@@ -29,7 +29,7 @@ from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
-from langgraph_cli.util import warn_non_wolfi_distro
+from langgraph_cli.util import format_deployments_table, warn_non_wolfi_distro
 from langgraph_cli.version import __version__
 
 RESERVED_ENV_VARS = frozenset(
@@ -287,6 +287,22 @@ OPT_API_VERSION = click.option(
     help="API server version to use for the base image. If unspecified, the latest version will be used.",
 )
 
+OPT_HOST_API_KEY = click.option(
+    "--api-key",
+    envvar="LANGGRAPH_HOST_API_KEY",
+    help=(
+        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
+        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
+    ),
+)
+
+OPT_HOST_URL = click.option(
+    "--host-url",
+    envvar="LANGGRAPH_HOST_URL",
+    default="https://api.host.langchain.com",
+    hidden=True,
+)
+
 OPT_ENGINE_RUNTIME_MODE = click.option(
     "--engine-runtime-mode",
     type=click.Choice(["combined_queue_worker", "distributed"]),
@@ -295,7 +311,67 @@ OPT_ENGINE_RUNTIME_MODE = click.option(
 )
 
 
-@click.group()
+class NestedHelpGroup(click.Group):
+    """Click group that shows one level of nested subcommands in top-level help."""
+
+    def format_commands(
+        self, ctx: click.Context, formatter: click.HelpFormatter
+    ) -> None:
+        command_entries: list[tuple[str, click.Command]] = []
+        # Collect the top-level commands first, then append one level of nested
+        # subcommands using names like "deploy list" so they show up in the
+        # top-level help output.
+        for command_name in self.list_commands(ctx):
+            command = self.get_command(ctx, command_name)
+            if command is None or command.hidden:
+                continue
+            command_entries.append((command_name, command))
+            if isinstance(command, click.Group):
+                # Build a child context so Click resolves the subcommands the same
+                # way it would for the nested group itself.
+                sub_ctx = click.Context(command, info_name=command_name, parent=ctx)
+                for subcommand_name in command.list_commands(sub_ctx):
+                    subcommand = command.get_command(sub_ctx, subcommand_name)
+                    if subcommand is None or subcommand.hidden:
+                        continue
+                    command_entries.append(
+                        (f"{command_name} {subcommand_name}", subcommand)
+                    )
+
+        # Compute the available width for help text up front so we can truncate
+        # descriptions before handing them to Click. That keeps each command on
+        # a single line instead of allowing wrapped descriptions.
+        command_width = max((len(name) for name, _ in command_entries), default=0)
+        help_width = max(formatter.width - command_width - 6, 10)
+        rows = [
+            (name, command.get_short_help_str(help_width))
+            for name, command in command_entries
+        ]
+
+        if rows:
+            # Render the flattened command list using Click's standard
+            # definition-list formatter so alignment stays consistent with the
+            # rest of the CLI help output.
+            with formatter.section("Commands"):
+                formatter.write_dl(rows)
+
+
+class DeployGroup(NestedHelpGroup):
+    """Group that treats leading '-' args as passthrough docker flags."""
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        result = super().parse_args(ctx, args)
+        if ctx._protected_args and ctx._protected_args[0].startswith("-"):
+            # Click stores the would-be subcommand in _protected_args; if it looks
+            # like an option (e.g. --build-arg) treat it as passthrough docker
+            # args instead of insisting on a nested command.
+            ctx.args = [*ctx._protected_args, *ctx.args]
+            ctx._protected_args = []
+            return ctx.args
+        return result
+
+
+@click.group(cls=NestedHelpGroup)
 @click.version_option(version=__version__, prog_name="LangGraph CLI")
 def cli():
     pass
@@ -593,72 +669,89 @@ def build(
         )
 
 
-@click.option(
-    "--api-key",
-    envvar="LANGGRAPH_HOST_API_KEY",
-    help=(
-        "API key. Can also be set via LANGGRAPH_HOST_API_KEY, "
-        "LANGSMITH_API_KEY, or LANGCHAIN_API_KEY environment variable or .env file."
-    ),
-)
-@click.option(
-    "--name",
-    envvar="LANGSMITH_DEPLOYMENT_NAME",
-    help=(
-        "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
-        "environment variable or .env file. Defaults to current directory name "
-        "if --deployment-id is not provided."
-    ),
-)
-@click.option(
-    "--deployment-id",
-    help=(
-        "ID of an existing deployment to update. If omitted, "
-        "--name is used to find or create the deployment."
-    ),
-)
-@click.option(
-    "--deployment-type",
-    type=click.Choice(["dev", "prod"]),
-    default="dev",
-    show_default=True,
-    help="Deployment type (used when creating a new deployment).",
-)
-@click.option(
-    "--no-wait",
-    is_flag=True,
-    default=False,
-    help="Skip waiting for deployment status.",
-)
-@OPT_VERBOSE
-@click.option(
-    "--host-url",
-    envvar="LANGGRAPH_HOST_URL",
-    default="https://api.host.langchain.com",
-    hidden=True,
-)
-@click.option("--image-name", hidden=True)
-@click.option("--image-tag", default="latest", hidden=True)
-@click.option(
-    "--config",
-    "-c",
-    default=DEFAULT_CONFIG,
-    hidden=True,
-    type=click.Path(
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        resolve_path=True,
-        path_type=pathlib.Path,
-    ),
-)
-@click.option("--pull/--no-pull", default=True, hidden=True)
-@click.option("--base-image", hidden=True)
-@click.option("--install-command", hidden=True)
-@click.option("--build-command", hidden=True)
-@click.option("--api-version", type=str, hidden=True)
-@click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
-@cli.command(
+def _deploy_base_options(
+    func: Callable | None = None,
+    *,
+    include_docker_args: bool = True,
+    validate_config_path: bool = True,
+):
+    """Apply shared deploy flags.
+
+    The group shares most options but should not consume subcommands, so the
+    docker build args are only attached when requested.
+    """
+
+    def _apply(target: Callable) -> Callable:
+        decorators = [
+            OPT_HOST_API_KEY,
+            click.option(
+                "--name",
+                envvar="LANGSMITH_DEPLOYMENT_NAME",
+                help=(
+                    "Deployment name. Can also be set via LANGSMITH_DEPLOYMENT_NAME "
+                    "environment variable or .env file. Defaults to current directory name "
+                    "if --deployment-id is not provided."
+                ),
+            ),
+            click.option(
+                "--deployment-id",
+                help=(
+                    "ID of an existing deployment to update. If omitted, "
+                    "--name is used to find or create the deployment."
+                ),
+            ),
+            click.option(
+                "--deployment-type",
+                type=click.Choice(["dev", "prod"]),
+                default="dev",
+                show_default=True,
+                help="Deployment type (used when creating a new deployment).",
+            ),
+            click.option(
+                "--no-wait",
+                is_flag=True,
+                default=False,
+                help="Skip waiting for deployment status.",
+            ),
+            OPT_VERBOSE,
+            OPT_HOST_URL,
+            click.option("--image-name", hidden=True),
+            click.option("--image-tag", default="latest", hidden=True),
+            click.option(
+                "--config",
+                "-c",
+                default=DEFAULT_CONFIG,
+                hidden=True,
+                type=click.Path(
+                    exists=validate_config_path,
+                    file_okay=True,
+                    dir_okay=False,
+                    resolve_path=True,
+                    path_type=pathlib.Path,
+                ),
+            ),
+            click.option("--pull/--no-pull", default=True, hidden=True),
+            click.option("--base-image", hidden=True),
+            click.option("--install-command", hidden=True),
+            click.option("--build-command", hidden=True),
+            click.option("--api-version", type=str, hidden=True),
+        ]
+        if include_docker_args:
+            # Only attach build args to the default command; on the group they
+            # would capture subcommand names like `list` before Click resolves
+            # them, making those subcommands unreachable.
+            decorators.append(
+                click.argument("docker_build_args", nargs=-1, type=click.UNPROCESSED)
+            )
+        for decorator in reversed(decorators):
+            target = decorator(target)
+        return target
+
+    return _apply(func) if func is not None else _apply
+
+
+@cli.group(
+    cls=DeployGroup,
     help=(
         "[Beta] Build and deploy a LangGraph image to LangSmith Deployments.\n\n"
         "This command is in beta and under active development. "
@@ -667,10 +760,26 @@ def build(
         "is located). This command also accepts build flags (--base-image, "
         "--pull, etc.). See 'langgraph build --help' for details."
     ),
-    context_settings=dict(ignore_unknown_options=True),
+    context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
+    invoke_without_command=True,  # allow `deploy` click group to execute without command
 )
+@_deploy_base_options(include_docker_args=False, validate_config_path=False)
+@click.pass_context
 @log_command
-def deploy(
+def deploy(ctx: click.Context, **_: object):
+    # We register deploy as both a group and a command here.
+    # if we detect no subcommand, we run _deploy (basically run langgraph deploy as a top level command)
+    # otherwise, we return None here and click will proceed to actually run the subcommand (list or delete)
+    if ctx.invoked_subcommand is not None:
+        return
+    docker_build_args = tuple(ctx.args)
+    ctx.args = []  # Prevent Click from re-processing passthrough args later.
+    return ctx.forward(_deploy, docker_build_args=docker_build_args)
+
+
+@_deploy_base_options()
+@click.command(context_settings=dict(ignore_unknown_options=True))
+def _deploy(
     config: pathlib.Path,
     pull: bool,
     verbose: bool,
@@ -1048,6 +1157,115 @@ def deploy(
                     "   Check status in the LangSmith Deployments dashboard.",
                     fg="yellow",
                 )
+
+
+def _create_host_backend_client(
+    host_url: str | None,
+    api_key: str | None,
+    env_vars: dict[str, str] | None = None,
+) -> HostBackendClient:
+    if env_vars is None:
+        env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
+    resolved_api_key = api_key
+    if not resolved_api_key:
+        for key_name in _API_KEY_ENV_NAMES:
+            val = env_vars.get(key_name)
+            if val:
+                resolved_api_key = val
+                break
+            val = os.environ.get(key_name)
+            if val:
+                resolved_api_key = val
+                break
+    if not resolved_api_key:
+        resolved_api_key = click.prompt("Host API key", hide_input=True)
+    return HostBackendClient(host_url, resolved_api_key)
+
+
+def _call_host_backend_with_optional_tenant(
+    client: HostBackendClient,
+    operation: Callable[[HostBackendClient], object],
+) -> object:
+    try:
+        return operation(client)
+    except HostBackendError as err:
+        if err.status_code == 403 and "requires workspace specification" in err.message:
+            click.secho(
+                "Your API key is org-scoped and requires a workspace ID.",
+                fg="yellow",
+            )
+            click.secho(
+                "Find your workspace ID in LangSmith under Settings > Workspaces.",
+                fg="yellow",
+            )
+            tenant_id = click.prompt("Workspace ID")
+            client = HostBackendClient(
+                client._base_url, client._api_key, tenant_id=tenant_id
+            )
+            return operation(client)
+        raise
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--name-contains",
+    default="",
+    help="Only show deployments whose names contain this value.",
+)
+@deploy.command("list", help="[Beta] List LangSmith Deployments.")
+def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -> None:
+    client = _create_host_backend_client(host_url, api_key)
+    response = _call_host_backend_with_optional_tenant(
+        client,
+        lambda current_client: current_client.list_deployments(
+            name_contains=name_contains
+        ),
+    )
+    resources = response.get("resources", []) if isinstance(response, dict) else []
+    deployments = [item for item in resources if isinstance(item, dict)]
+    if not deployments:
+        click.echo("No deployments found.")
+        return
+    click.echo(format_deployments_table(deployments))
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Delete without prompting for confirmation.",
+)
+@click.argument("deployment_id")
+@deploy.command(
+    "delete",
+    help=(
+        "[Beta] Delete a LangSmith Deployment.\n\n"
+        "Use the `deploy list` command to list deployment IDs."
+    ),
+)
+def deploy_delete(
+    api_key: str | None, host_url: str | None, force: bool, deployment_id: str
+) -> None:
+    if not force:
+        response = click.prompt(
+            click.style(
+                f"Are you sure you want to delete deployment ID {deployment_id}? (Y/n)",
+                fg="yellow",
+            ),
+            default="Y",
+            show_default=False,
+        )
+        if response.strip().lower() not in {"y", "yes"}:
+            raise click.Abort()
+    client = _create_host_backend_client(host_url, api_key)
+    _call_host_backend_with_optional_tenant(
+        client,
+        lambda current_client: current_client.delete_deployment(deployment_id),
+    )
+    click.secho(f"Deleted deployment {deployment_id}.", fg="green")
 
 
 def _normalize_image_name(value: str | None) -> str:
