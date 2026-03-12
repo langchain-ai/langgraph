@@ -56,11 +56,8 @@ def build_sub_agent() -> Any:
     sub_agent = StateGraph(SubAgentState)
 
     async def research_node(state: SubAgentState) -> dict[str, str]:
-        # Make timing deterministic for the prototype flow assertions.
-        if state["input"] == "research lunch options":
-            await asyncio.sleep(0.05)
-        else:
-            await asyncio.sleep(0.09)
+        # Intentionally slower than timer_condition(seconds=1) to validate timer path.
+        await asyncio.sleep(5)
         return {"output": f"research sub agent completed for: {state['input']}"}
 
     sub_agent.add_node("research_node", research_node)
@@ -81,7 +78,10 @@ def build_main_agent(planner: MockPlanner, sub_agent: Any) -> Any:
                 return Command(
                     goto=Send(
                         order_food_node,
-                        decision.complete or "order flow completed",
+                        {
+                            "state": state,
+                            "complete": decision.complete or "order flow completed",
+                        },
                     )
                 )
             if decision.type == "sub_agent" and decision.sub_agent:
@@ -99,7 +99,7 @@ def build_main_agent(planner: MockPlanner, sub_agent: Any) -> Any:
                 channel_condition("tool_completion_channel"),
                 channel_condition("subagent_completion_channel"),
                 channel_condition("user_input_channel"),
-                timer_condition(minutes=1),
+                timer_condition(seconds=1),
             )
         )
         if event["condition"] == "channel":
@@ -111,13 +111,15 @@ def build_main_agent(planner: MockPlanner, sub_agent: Any) -> Any:
                 state["output"].append(f"sub_agent: {payload}")
             elif channel == "user_input_channel":
                 state["output"].append(f"user_input: {payload}")
+            # State changed -> ask planner what to do next.
+            return Command(goto=Send("llm_node", state))
         else:
             state["output"].append("timer: no updates yet")
-        # Loop back to planner with updated output.
-        return Command(goto=Send("llm_node", state))
+            # No meaningful state change -> keep waiting without calling planner.
+            return Command(goto=Send("wait_node", state))
 
     async def tool_node(ctx: Context, tool_input: str) -> None:
-        await asyncio.sleep(0.03)
+        await asyncio.sleep(0.1)
         # Fire-and-forget style completion: publish result to inbox and exit.
         # (i.e., just complete without explicitly going to a next node)
         ctx.publish_to_channel(
@@ -136,8 +138,13 @@ def build_main_agent(planner: MockPlanner, sub_agent: Any) -> Any:
             sub_agent_output["output"],
         )
 
-    async def order_food_node(complete_message: str) -> dict[str, str]:
-        return {"done": complete_message}
+    async def order_food_node(payload: dict[str, Any]) -> dict[str, Any]:
+        state = payload["state"]
+        complete_message = payload["complete"]
+        return {
+            "done": complete_message,
+            "output": [*state["output"], f"order_food: {complete_message}"],
+        }
 
     advanced_flow = AdvancedStateGraph(MainAgentState)
     # Default behavior is an unbounded async channel like Rust channel
@@ -150,7 +157,7 @@ def build_main_agent(planner: MockPlanner, sub_agent: Any) -> Any:
     advanced_flow.add_node(tool_node)
     advanced_flow.add_node(sub_agent_node)
     advanced_flow.add_finish_node(order_food_node)
-    
+
     return advanced_flow.compile()
 
 
@@ -161,15 +168,17 @@ async def test_async_sub_graph() -> None:
 
     planner.responses = [
         [
-            # First planner pass triggers one sub-agent + one tool.
+            # First planner pass triggers one slow sub-agent.
             Decision(type="sub_agent", sub_agent="research lunch options"),
             Decision(type="tool", tool="slack_tool"),
         ],
-        # Second planner pass triggers another sub-agent.
+        # After user input.
+        [],
+        # After tool completion.
+        [],
+        # After first sub-agent completion, planner decides to run second research.
         [Decision(type="sub_agent", sub_agent="find vegetarian fallback")],
-        [],
-        [],
-        # Final pass decides to end.
+        # After second sub-agent completion, planner decides to end.
         [Decision(type="end", complete="order submitted")],
     ]
 
@@ -182,13 +191,27 @@ async def test_async_sub_graph() -> None:
     await handler.apublish_to_channel("user_input_channel", "No spicy food please")
     result = await handler.aresult()
 
-    assert result == {
-        "input": "help me get something for lunch",
-        "output": [
-            "user_input: No spicy food please",
-            "tool: tool completed for: slack_tool",
-            "sub_agent: research sub agent completed for: research lunch options",
-            "sub_agent: research sub agent completed for: find vegetarian fallback",
-        ],
-        "done": "order submitted",
-    }
+    assert result["input"] == "help me get something for lunch"
+    assert result["done"] == "order submitted"
+
+    output = result["output"]
+    assert output.count("timer: no updates yet") >= 3
+    assert "user_input: No spicy food please" in output
+    assert "tool: tool completed for: slack_tool" in output
+    assert (
+        "sub_agent: research sub agent completed for: research lunch options" in output
+    )
+    assert (
+        "sub_agent: research sub agent completed for: find vegetarian fallback" in output
+    )
+    assert output[-1] == "order_food: order submitted"
+
+    first_sub_idx = output.index(
+        "sub_agent: research sub agent completed for: research lunch options"
+    )
+    second_sub_idx = output.index(
+        "sub_agent: research sub agent completed for: find vegetarian fallback"
+    )
+    order_food_idx = output.index("order_food: order submitted")
+    assert first_sub_idx < second_sub_idx < order_food_idx
+    assert planner._idx == len(planner.responses)

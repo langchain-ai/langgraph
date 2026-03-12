@@ -67,13 +67,7 @@ class AdvancedStateGraph(Generic[StateT]):
         self._nodes[node_name] = node_fn
         return node_name
 
-    def add_node(self, node: Callable[..., Any]) -> str:
-        """Register a node using the function name as node id."""
-        return self.add_node(node)
-
-    def add_async_channel(
-        self, name: str, typ: Any   
-    ) -> None:
+    def add_async_channel(self, name: str, typ: Any) -> None:
         if name in self._async_channels:
             raise ValueError(f"Channel `{name}` already exists")
         self._async_channels[name] = _ChannelSpec(typ=typ)
