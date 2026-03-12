@@ -198,6 +198,7 @@ class PregelLoop:
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
+    _has_untracked_channels: bool
     # Futures from `checkpointer.put_writes` calls that produced delta-channel
     # writes. `_checkpointer_put_after_previous` drains this list (swap to a
     # local `futs` then reset to `[]` and wait/gather) before putting the
