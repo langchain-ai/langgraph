@@ -2648,9 +2648,7 @@ class Pregel(
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
-                execution_info=ExecutionInfo(
-                    thread_id=config[CONF].get(CONFIG_KEY_THREAD_ID),
-                ),
+                execution_info=ExecutionInfo(),
             )
             parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)
@@ -3017,9 +3015,7 @@ class Pregel(
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
-                execution_info=ExecutionInfo(
-                    thread_id=config[CONF].get(CONFIG_KEY_THREAD_ID),
-                ),
+                execution_info=ExecutionInfo(),
             )
             parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)

@@ -171,14 +171,12 @@ def test_graph_with_single_retry_policy():
     attempt_count = 0
     attempt_numbers: list[int] = []
     first_attempt_times: list[float | None] = []
-    thread_ids: list[str | None] = []
 
     def failing_node(state: State, runtime: Runtime):
         nonlocal attempt_count
         attempt_count += 1
         attempt_numbers.append(runtime.execution_info.node_attempt)
         first_attempt_times.append(runtime.execution_info.node_first_attempt_time)
-        thread_ids.append(runtime.execution_info.thread_id)
         if attempt_count < 3:  # Fail the first two attempts
             raise ValueError("Intentional failure")
         return {"foo": "success"}
@@ -206,10 +204,7 @@ def test_graph_with_single_retry_policy():
     )
 
     with patch("time.sleep") as mock_sleep:
-        result = graph.invoke(
-            {"foo": ""},
-            {"configurable": {"thread_id": "test-thread"}},
-        )
+        result = graph.invoke({"foo": ""})
 
     # Verify retry behavior
     assert attempt_count == 3  # The node should have been tried 3 times
@@ -218,7 +213,6 @@ def test_graph_with_single_retry_policy():
     assert first_attempt_times[0] is not None
     assert first_attempt_times[1] == first_attempt_times[0]
     assert first_attempt_times[2] == first_attempt_times[0]
-    assert thread_ids == ["test-thread", "test-thread", "test-thread"]
     assert result["foo"] == "other_node"  # Final result should be from other_node
 
     # Verify the sleep intervals
@@ -239,7 +233,6 @@ def test_runtime_execution_info_defaults_without_retry():
         captured["node_first_attempt_time"] = (
             runtime.execution_info.node_first_attempt_time
         )
-        captured["thread_id"] = runtime.execution_info.thread_id
         return {"foo": "ok"}
 
     graph = StateGraph(State).add_node("node", node).add_edge(START, "node").compile()
@@ -249,7 +242,6 @@ def test_runtime_execution_info_defaults_without_retry():
     assert result["foo"] == "ok"
     assert captured["node_attempt"] == 1
     assert isinstance(captured["node_first_attempt_time"], float)
-    assert captured["thread_id"] is None
 
 
 def test_graph_with_jitter_retry_policy():

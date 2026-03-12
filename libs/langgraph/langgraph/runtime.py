@@ -23,9 +23,6 @@ class ExecutionInfo(NamedTuple):
     node_first_attempt_time: float | None = None
     """Unix timestamp (seconds) for when the first attempt started."""
 
-    thread_id: str | None = None
-    """Current thread identifier, if provided in config."""
-
     def patch(self, **overrides: Any) -> ExecutionInfo:
         """Return a new execution info object with selected fields replaced."""
         return self._replace(**overrides)
