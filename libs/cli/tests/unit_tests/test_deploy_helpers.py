@@ -10,6 +10,8 @@ from langgraph_cli.cli import (
     _normalize_image_name,
     _normalize_image_tag,
     _parse_env_from_config,
+    _resolve_env_file_path,
+    _save_to_dotenv,
 )
 
 
@@ -132,3 +134,73 @@ class TestParseEnvFromConfig:
         assert result["GOOD"] == "value"
         # EMPTY= gives empty string, not None, so it should be present
         assert result["EMPTY"] == ""
+
+
+class TestResolveEnvFilePath:
+    def test_inline_dict_returns_none(self, tmp_path):
+        config_path = tmp_path / "langgraph.json"
+        config_path.touch()
+        assert _resolve_env_file_path({"env": {"FOO": "bar"}}, config_path) is None
+
+    def test_string_returns_resolved_path(self, tmp_path):
+        config_path = tmp_path / "langgraph.json"
+        config_path.touch()
+        result = _resolve_env_file_path({"env": "my.env"}, config_path)
+        assert result == (tmp_path / "my.env").resolve()
+
+    def test_no_env_field_returns_cwd_dotenv(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        config_path = tmp_path / "langgraph.json"
+        config_path.touch()
+        result = _resolve_env_file_path({}, config_path)
+        assert result == tmp_path / ".env"
+
+    def test_empty_dict_returns_cwd_dotenv(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        config_path = tmp_path / "langgraph.json"
+        config_path.touch()
+        result = _resolve_env_file_path({"env": {}}, config_path)
+        assert result == tmp_path / ".env"
+
+
+class TestSaveToDotenv:
+    def test_creates_new_file(self, tmp_path):
+        env_file = tmp_path / ".env"
+        _save_to_dotenv(env_file, "MY_KEY", "my_value")
+        assert env_file.read_text() == "MY_KEY=my_value\n"
+
+    def test_appends_to_existing_file(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("EXISTING=val\n")
+        _save_to_dotenv(env_file, "NEW_KEY", "new_val")
+        assert env_file.read_text() == "EXISTING=val\nNEW_KEY=new_val\n"
+
+    def test_appends_newline_if_missing(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("EXISTING=val")
+        _save_to_dotenv(env_file, "NEW_KEY", "new_val")
+        assert env_file.read_text() == "EXISTING=val\nNEW_KEY=new_val\n"
+
+    def test_updates_existing_key(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("KEY1=old\nKEY2=keep\n")
+        _save_to_dotenv(env_file, "KEY1", "new")
+        content = env_file.read_text()
+        assert "KEY1=new\n" in content
+        assert "KEY2=keep\n" in content
+        assert "KEY1=old" not in content
+
+    def test_updates_key_with_spaces(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("KEY1 = old\nKEY2=keep\n")
+        _save_to_dotenv(env_file, "KEY1", "new")
+        content = env_file.read_text()
+        assert "KEY1=new\n" in content
+        assert "KEY1 = old" not in content
+
+    def test_preserves_other_lines(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("# comment\nA=1\nB=2\n")
+        _save_to_dotenv(env_file, "C", "3")
+        content = env_file.read_text()
+        assert content == "# comment\nA=1\nB=2\nC=3\n"

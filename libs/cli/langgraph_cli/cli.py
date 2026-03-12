@@ -90,25 +90,60 @@ _API_KEY_ENV_NAMES = (
 _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
 
 
+def _resolve_env_file_path(
+    config_json: dict, config_path: pathlib.Path
+) -> pathlib.Path | None:
+    """Return the .env file path from config, or None if env is an inline dict."""
+    env_field = config_json.get("env")
+    if isinstance(env_field, dict) and env_field:
+        return None
+    if isinstance(env_field, str):
+        return (config_path.parent / env_field).resolve()
+    return pathlib.Path.cwd() / ".env"
+
+
 def _parse_env_from_config(
     config_json: dict, config_path: pathlib.Path
 ) -> dict[str, str]:
     """Resolve env vars from langgraph.json 'env' field or a .env fallback."""
-    env_field = config_json.get("env")
-    # validate_config_file will default env to {}
-    if isinstance(env_field, dict) and env_field:
-        return {str(k): str(v) for k, v in env_field.items()}
-    if isinstance(env_field, str):
-        env_path = (config_path.parent / env_field).resolve()
-        if not env_path.exists():
+    env_path = _resolve_env_file_path(config_json, config_path)
+    if env_path is None:
+        env_field = config_json.get("env")
+        if isinstance(env_field, dict) and env_field:
+            return {str(k): str(v) for k, v in env_field.items()}
+        return {}
+    if not env_path.exists():
+        env_field = config_json.get("env")
+        if isinstance(env_field, str):
             click.secho(
                 f"Warning: env file '{env_field}' specified in langgraph.json not found.",
                 fg="yellow",
             )
-            return {}
-    else:
-        env_path = pathlib.Path.cwd() / ".env"
+        return {}
     return {k: v for k, v in dotenv_values(env_path).items() if v is not None}
+
+
+def _save_to_dotenv(env_path: pathlib.Path, key: str, value: str) -> None:
+    """Append or update a key=value pair in a .env file."""
+    lines: list[str] = []
+    found = False
+    new_line = f"{key}={value}"
+    if env_path.exists():
+        text = env_path.read_text()
+        lines = text.splitlines(keepends=True)
+        for i, line in enumerate(lines):
+            stripped = line.lstrip()
+            if stripped.startswith(f"{key}=") or stripped.startswith(f"{key} ="):
+                lines[i] = new_line + "\n"
+                found = True
+                break
+    if found:
+        env_path.write_text("".join(lines))
+    else:
+        with open(env_path, "a") as f:
+            if lines and not lines[-1].endswith("\n"):
+                f.write("\n")
+            f.write(new_line + "\n")
 
 
 def _secrets_from_env(
@@ -817,6 +852,13 @@ def _deploy(
     if not deployment_id and not name:
         default_name = _normalize_image_name(pathlib.Path.cwd().name)
         name = click.prompt("Deployment name", default=default_name)
+        env_file = _resolve_env_file_path(config_json, config)
+        if env_file is not None and name:
+            _save_to_dotenv(env_file, _DEPLOYMENT_NAME_ENV, name)
+            click.secho(
+                f"   Saved {_DEPLOYMENT_NAME_ENV}={name} to {env_file}",
+                fg="green",
+            )
 
     secrets = _secrets_from_env(env_vars)
 
