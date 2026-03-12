@@ -316,33 +316,41 @@ class BasePostgresSaver(BaseCheckpointSaver[str]):
                     "WHERE " + " AND ".join(wheres) if wheres else "",
                     param_values,
                 )
-            before_checkpoint_ns = before_configurable.get(
-                "checkpoint_ns", config_configurable.get("checkpoint_ns", "")
+            before_timestamp_subquery = (
+                "SELECT checkpoint->>'ts' "
+                "FROM checkpoints "
+                "WHERE thread_id = %s AND checkpoint_id = %s "
+                "ORDER BY checkpoint->>'ts' DESC LIMIT 1"
             )
             wheres.append(
                 """(
-                    checkpoint->>'ts' < (
-                        SELECT checkpoint->>'ts'
+                    NOT EXISTS (
+                        SELECT 1
                         FROM checkpoints
-                        WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s
+                        WHERE thread_id = %s AND checkpoint_id = %s
+                    )
+                    OR
+                    checkpoint->>'ts' < (
+                        {before_timestamp_subquery}
                     )
                     OR (
                         checkpoint->>'ts' = (
-                            SELECT checkpoint->>'ts'
-                            FROM checkpoints
-                            WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s
+                            {before_timestamp_subquery}
                         )
                         AND checkpoint_id < %s
                     )
-                )"""
+                )""".replace(
+                    "{before_timestamp_subquery}",
+                    before_timestamp_subquery,
+                )
             )
             param_values.extend(
                 [
                     before_thread_id,
-                    before_checkpoint_ns,
                     before_checkpoint_id,
                     before_thread_id,
-                    before_checkpoint_ns,
+                    before_checkpoint_id,
+                    before_thread_id,
                     before_checkpoint_id,
                     before_checkpoint_id,
                 ]

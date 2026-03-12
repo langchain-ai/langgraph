@@ -117,22 +117,22 @@ def search_where(
         )
         if before_thread_id is None:
             return ("WHERE " + " AND ".join(wheres) if wheres else "", param_values)
-        before_checkpoint_ns = before_configurable.get(
-            "checkpoint_ns", config_configurable.get("checkpoint_ns", "")
+        before_rowid_query = (
+            "SELECT rowid FROM checkpoints "
+            "WHERE thread_id = ? AND checkpoint_id = ? "
+            "ORDER BY rowid DESC LIMIT 1"
         )
         wheres.append(
             """(
-                rowid < (
-                    SELECT rowid
-                    FROM checkpoints
-                    WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?
-                )
-            )"""
+                ({before_rowid_query}) IS NULL
+                OR rowid < ({before_rowid_query})
+            )""".replace("{before_rowid_query}", before_rowid_query)
         )
         param_values.extend(
             [
                 before_thread_id,
-                before_checkpoint_ns,
+                before_checkpoint_id,
+                before_thread_id,
                 before_checkpoint_id,
             ]
         )

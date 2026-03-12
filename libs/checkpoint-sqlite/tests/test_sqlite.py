@@ -136,15 +136,21 @@ class TestSqliteSaver:
             "AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? "
             "AND json_extract(CAST(metadata AS TEXT), '$.score') = ? "
             "AND ("
-            " rowid < ("
-            " SELECT rowid"
-            " FROM checkpoints"
-            " WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?"
-            " )"
+            " (SELECT rowid FROM checkpoints WHERE thread_id = ? AND checkpoint_id = ? ORDER BY rowid DESC LIMIT 1) IS NULL"
+            " OR rowid < (SELECT rowid FROM checkpoints WHERE thread_id = ? AND checkpoint_id = ? ORDER BY rowid DESC LIMIT 1)"
             " "
             ")"
         )
-        expected_param_values_1 = ["input", 2, "{}", 1, "thread-1", "", "1"]
+        expected_param_values_1 = [
+            "input",
+            2,
+            "{}",
+            1,
+            "thread-1",
+            "1",
+            "thread-1",
+            "1",
+        ]
         actual_predicate, actual_params = search_where(
             None, cast(dict[str, Any], self.metadata_1), self.config_1
         )
@@ -213,6 +219,68 @@ class TestSqliteSaver:
             assert [
                 result.checkpoint["id"] for result in checkpoint_only_before_results
             ] == ["z-older"]
+
+    def test_before_checkpoint_only_cursor_resolves_across_namespaces(self) -> None:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
+            older_checkpoint = empty_checkpoint()
+            older_checkpoint["id"] = "older-subgraph"
+            older_checkpoint["ts"] = "2026-01-01T00:00:00+00:00"
+            saver.put(
+                {
+                    "configurable": {
+                        "thread_id": "thread-cross-ns",
+                        "checkpoint_ns": "child",
+                    }
+                },
+                older_checkpoint,
+                {"step": 0},
+                {},
+            )
+
+            parent_checkpoint = empty_checkpoint()
+            parent_checkpoint["id"] = "parent-bound"
+            parent_checkpoint["ts"] = "2026-01-01T00:00:01+00:00"
+            saver.put(
+                {
+                    "configurable": {
+                        "thread_id": "thread-cross-ns",
+                        "checkpoint_ns": "",
+                    }
+                },
+                parent_checkpoint,
+                {"step": 0},
+                {},
+            )
+
+            newer_checkpoint = empty_checkpoint()
+            newer_checkpoint["id"] = "newer-subgraph"
+            newer_checkpoint["ts"] = "2026-01-01T00:00:02+00:00"
+            saver.put(
+                {
+                    "configurable": {
+                        "thread_id": "thread-cross-ns",
+                        "checkpoint_ns": "child",
+                    }
+                },
+                newer_checkpoint,
+                {"step": 1},
+                {},
+            )
+
+            before_results = list(
+                saver.list(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-cross-ns",
+                            "checkpoint_ns": "child",
+                        }
+                    },
+                    before={"configurable": {"checkpoint_id": "parent-bound"}},
+                )
+            )
+            assert [result.checkpoint["id"] for result in before_results] == [
+                "older-subgraph"
+            ]
 
     def test_metadata_predicate(self) -> None:
         # call method / assertions

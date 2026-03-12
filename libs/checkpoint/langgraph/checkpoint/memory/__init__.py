@@ -158,9 +158,13 @@ class InMemorySaver(
         checkpoint_ns = before_configurable.get(
             "checkpoint_ns", config_configurable.get("checkpoint_ns", "")
         )
-        saved = (
-            self.storage.get(thread_id, {}).get(checkpoint_ns, {}).get(checkpoint_id)
-        )
+        thread_storage = self.storage.get(thread_id, {})
+        saved = thread_storage.get(checkpoint_ns, {}).get(checkpoint_id)
+        if saved is None:
+            for namespace_storage in thread_storage.values():
+                saved = namespace_storage.get(checkpoint_id)
+                if saved is not None:
+                    break
         if saved is None:
             return None
 
