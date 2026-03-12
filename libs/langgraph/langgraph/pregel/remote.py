@@ -734,7 +734,7 @@ class RemoteGraph(PregelProtocol):
         """Create a run and stream the results.
 
         This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
-        is speciffed in the `configurable` field of the config or
+        is specified in the `configurable` field of the config or
         `POST /runs/stream` otherwise.
 
         Args:
@@ -885,7 +885,7 @@ class RemoteGraph(PregelProtocol):
         """Create a run and stream the results.
 
         This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
-        is speciffed in the `configurable` field of the config or
+        is specified in the `configurable` field of the config or
         `POST /runs/stream` otherwise.
 
         Args:
