@@ -8371,6 +8371,117 @@ def test_parent_command_goto_deeply_nested(
     }
 
 
+def test_parallel_parent_commands_merged() -> None:
+    """Test that multiple Command.PARENT from parallel tool calls are merged.
+
+    When multiple tools return Command.PARENT in parallel, all updates and gotos
+    should be merged into a single ParentCommand instead of only the first being
+    processed (see https://github.com/langchain-ai/langgraph/issues/7129).
+    """
+    from langgraph.graph.state import _control_branch
+
+    # Single parent command should still work as before
+    single = Command(graph=Command.PARENT, goto="node_a", update={"a": True})
+    with pytest.raises(ParentCommand) as exc_info:
+        _control_branch(single)
+    assert exc_info.value.args[0].goto == "node_a"
+    assert exc_info.value.args[0].update == {"a": True}
+
+    # Multiple parent commands in a list should be merged
+    cmds = [
+        Command(graph=Command.PARENT, goto="result", update={"a": True}),
+        Command(graph=Command.PARENT, goto="result", update={"b": True}),
+        Command(graph=Command.PARENT, goto="result", update={"c": True}),
+    ]
+    with pytest.raises(ParentCommand) as exc_info:
+        _control_branch(cmds)
+    merged = exc_info.value.args[0]
+    assert merged.graph == Command.PARENT
+    # All updates should be present
+    assert merged.update == {"a": True, "b": True, "c": True}
+    # Duplicate gotos should be deduplicated
+    assert merged.goto == "result"
+
+    # Multiple parent commands with different gotos
+    cmds_diff_goto = [
+        Command(graph=Command.PARENT, goto="node_x", update={"x": 1}),
+        Command(graph=Command.PARENT, goto="node_y", update={"y": 2}),
+    ]
+    with pytest.raises(ParentCommand) as exc_info:
+        _control_branch(cmds_diff_goto)
+    merged = exc_info.value.args[0]
+    assert merged.update == {"x": 1, "y": 2}
+    assert set(merged.goto) == {"node_x", "node_y"}
+
+    # Mixed: some parent commands, some local commands
+    mixed = [
+        Command(goto="local_node"),
+        Command(graph=Command.PARENT, goto="parent_node", update={"p": True}),
+    ]
+    with pytest.raises(ParentCommand) as exc_info:
+        result = _control_branch(mixed)
+    merged = exc_info.value.args[0]
+    assert merged.update == {"p": True}
+    assert merged.goto == "parent_node"
+
+
+@pytest.mark.parametrize("subgraph_persist", [True, False])
+def test_parent_command_parallel_tool_calls(
+    sync_checkpointer: BaseCheckpointSaver,
+    subgraph_persist: bool,
+) -> None:
+    """Integration test: parallel tool calls each returning Command.PARENT.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/7129.
+    When a tool node invokes multiple tools in parallel and each returns
+    Command(graph=Command.PARENT), all updates must be applied to the parent
+    state, not just the first one.
+    """
+
+    class ParentState(TypedDict):
+        a: bool
+        b: bool
+        c: bool
+
+    class ChildState(TypedDict):
+        values: Annotated[list[str], operator.add]
+
+    def child_tools(state: ChildState) -> list[Command]:
+        # Simulate parallel tool calls that all return Command.PARENT
+        return [
+            Command(graph=Command.PARENT, goto="result_node", update={"a": True}),
+            Command(graph=Command.PARENT, goto="result_node", update={"b": True}),
+            Command(graph=Command.PARENT, goto="result_node", update={"c": True}),
+        ]
+
+    child_builder = StateGraph(ChildState)
+    child_builder.add_node("tools", child_tools)
+    child_builder.add_edge(START, "tools")
+    child_graph = child_builder.compile(checkpointer=subgraph_persist)
+
+    def result_node(state: ParentState) -> ParentState:
+        return state
+
+    parent_builder = StateGraph(ParentState)
+    parent_builder.add_node(
+        "child", child_graph, destinations=("result_node",)
+    )
+    parent_builder.add_node("result_node", result_node)
+    parent_builder.add_edge(START, "child")
+
+    graph = parent_builder.compile(checkpointer=sync_checkpointer)
+
+    config = {"configurable": {"thread_id": "parallel_parent"}}
+    result = graph.invoke(
+        {"a": False, "b": False, "c": False}, config=config
+    )
+
+    # All three updates should have been applied
+    assert result["a"] is True
+    assert result["b"] is True
+    assert result["c"] is True
+
+
 @pytest.mark.parametrize("with_timeout", [True, False])
 def test_timeout_with_parent_command(
     sync_checkpointer: BaseCheckpointSaver, with_timeout: bool
