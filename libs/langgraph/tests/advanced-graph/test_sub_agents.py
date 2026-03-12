@@ -67,10 +67,6 @@ async def test_async_sub_graph() -> None:
     planner = MockPlanner()
     sub_agent = build_sub_agent()
 
-    advanced_flow = AdvancedStateGraph(MainAgentState)
-    # Default behavior is an unbounded async channel (maxsize=None).
-    advanced_flow.add_async_channel("inbox", dict)
-
     async def llm_node(state: MainAgentState) -> Command:
         # Planner decides whether to call a tool, spawn a sub-agent, or finish.
         decisions = await planner.ainvoke(state)
@@ -123,11 +119,9 @@ async def test_async_sub_graph() -> None:
     async def order_food_node(complete_message: str) -> dict[str, str]:
         return {"done": complete_message}
 
-    # NOTE: This is the simplified API shape:
-    # - add_entry_node(fn)
-    # - node(fn)
-    # - add_finish_node(fn)
-    # where node names are inferred from function names via reflection.
+    advanced_flow = AdvancedStateGraph(MainAgentState)
+    # Default behavior is an unbounded async channel (maxsize=None).
+    advanced_flow.add_async_channel("inbox", dict)
     advanced_flow.add_entry_node(llm_node)
     advanced_flow.node(wait_node)
     advanced_flow.node(tool_node)
