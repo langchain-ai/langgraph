@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable, Sequence
+from datetime import datetime, timezone
 from contextlib import contextmanager
 
 import click
@@ -1310,7 +1311,10 @@ def _normalize_image_tag(value: str) -> str:
     type=click.Choice(["deploy", "build"]),
     default="deploy",
     show_default=True,
-    help="Type of logs to fetch.",
+    help=(
+        "Log stream to fetch: 'deploy' shows agent server runtime logs; "
+        "'build' shows build logs (for deployments built remotely)."
+    ),
 )
 @click.option(
     "--revision-id",
@@ -1318,7 +1322,9 @@ def _normalize_image_tag(value: str) -> str:
 )
 @click.option(
     "--level",
-    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    type=click.Choice(
+        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
+    ),
     help="Filter by log level.",
 )
 @click.option(
@@ -1339,7 +1345,7 @@ def _normalize_image_tag(value: str) -> str:
 )
 @click.option(
     "--end-time",
-    help="ISO8601 end time.",
+    help="ISO8601 end time. (e.g. 2026-03-08T00:00:00Z)",
 )
 @click.option(
     "--follow",
@@ -1351,7 +1357,10 @@ def _normalize_image_tag(value: str) -> str:
 @OPT_HOST_URL
 @deploy.command(
     "logs",
-    help="[Beta] Fetch build or deploy logs for a LangSmith deployment.",
+    help=(
+        "[Beta] Fetch LangSmith Deployment logs. Use 'deploy' for agent runtime "
+        "logs, or 'build' for remote build logs."
+    ),
 )
 @log_command
 def deploy_logs(
@@ -1402,9 +1411,7 @@ def deploy_logs(
             resp = client.get_deploy_logs(dep_id, request_payload, revision_id)
 
         if isinstance(resp, dict):
-            return resp.get("logs", resp.get("entries", []))
-        elif isinstance(resp, list):
-            return resp
+            return resp.get("logs", [])
         return []
 
     def _print_entries(entries: list[dict], *, reverse: bool = False) -> None:
@@ -1427,6 +1434,7 @@ def deploy_logs(
             seen_ids.update(e.get("id", "") for e in new)
         return new
 
+    # initial log fetch will be newest -> oldest, so we need to reverse
     entries = _fetch_and_print(payload, reverse=True)
 
     if not follow:
@@ -1436,7 +1444,6 @@ def deploy_logs(
 
     payload["order"] = "asc"
     seen_ids: set[str] = {e.get("id", "") for e in entries if e.get("id")}
-    from datetime import datetime, timezone
 
     def _update_start_time(ts) -> None:
         if ts is None:

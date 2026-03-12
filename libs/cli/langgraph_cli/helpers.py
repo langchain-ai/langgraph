@@ -52,7 +52,7 @@ def format_log_entry(entry: dict) -> str:
 def level_fg(level: str) -> str | None:
     """Return click color for a log level."""
     level_upper = level.upper() if level else ""
-    if level_upper == "ERROR":
+    if level_upper in {"ERROR", "CRITICAL"}:
         return "red"
     if level_upper == "WARNING":
         return "yellow"
