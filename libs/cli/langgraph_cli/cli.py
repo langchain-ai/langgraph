@@ -335,25 +335,25 @@ class NestedHelpGroup(click.Group):
         self, ctx: click.Context, formatter: click.HelpFormatter
     ) -> None:
         command_entries: list[tuple[str, click.Command]] = []
-        # Collect the top-level commands first, then append one level of nested
-        # subcommands using names like "deploy list" so they show up in the
-        # top-level help output.
-        for command_name in self.list_commands(ctx):
-            command = self.get_command(ctx, command_name)
-            if command is None or command.hidden:
-                continue
-            command_entries.append((command_name, command))
-            if isinstance(command, click.Group):
-                # Build a child context so Click resolves the subcommands the same
-                # way it would for the nested group itself.
-                sub_ctx = click.Context(command, info_name=command_name, parent=ctx)
-                for subcommand_name in command.list_commands(sub_ctx):
-                    subcommand = command.get_command(sub_ctx, subcommand_name)
-                    if subcommand is None or subcommand.hidden:
-                        continue
-                    command_entries.append(
-                        (f"{command_name} {subcommand_name}", subcommand)
+
+        def collect_commands(
+            group: click.Group, parent_ctx: click.Context, prefix: str = ""
+        ) -> None:
+            for command_name in group.list_commands(parent_ctx):
+                command = group.get_command(parent_ctx, command_name)
+                if command is None or command.hidden:
+                    continue
+                qualified_name = f"{prefix} {command_name}" if prefix else command_name
+                command_entries.append((qualified_name, command))
+                if isinstance(command, click.Group):
+                    sub_ctx = click.Context(
+                        command,
+                        info_name=qualified_name,
+                        parent=parent_ctx,
                     )
+                    collect_commands(command, sub_ctx, qualified_name)
+
+        collect_commands(self, ctx)
 
         # Compute the available width for help text up front so we can truncate
         # descriptions before handing them to Click. That keeps each command on

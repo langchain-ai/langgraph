@@ -298,6 +298,7 @@ def test_top_level_help_shows_deploy_subcommands() -> None:
     assert "deploy list" in result.output
     assert "deploy delete" in result.output
     assert "deploy revisions" in result.output
+    assert "deploy revisions list" in result.output
     assert "[Beta] List LangSmith Deployments." in result.output
 
 
