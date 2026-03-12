@@ -23,7 +23,7 @@ import langgraph_cli.config
 import langgraph_cli.docker
 from langgraph_cli.analytics import log_command
 from langgraph_cli.config import Config
-from langgraph_cli.constants import API_KEY_ENV_NAMES, DEFAULT_CONFIG, DEFAULT_PORT
+from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.helpers import format_log_entry, level_fg, resolve_deployment_id
@@ -78,6 +78,12 @@ RESERVED_ENV_VARS = frozenset(
         "LSD_DD_ENDPOINT",
         "LSD_DEPLOYMENT_TYPE",
     ]
+)
+
+_API_KEY_ENV_NAMES = (
+    "LANGGRAPH_HOST_API_KEY",
+    "LANGSMITH_API_KEY",
+    "LANGCHAIN_API_KEY",
 )
 
 _DEPLOYMENT_NAME_ENV = "LANGSMITH_DEPLOYMENT_NAME"
@@ -806,7 +812,7 @@ def _deploy(
     env_vars = _parse_env_from_config(config_json, config)
 
     if not api_key:
-        for key_name in API_KEY_ENV_NAMES:
+        for key_name in _API_KEY_ENV_NAMES:
             val = env_vars.get(key_name) or os.environ.get(key_name)
             if val:
                 api_key = val
@@ -1166,7 +1172,7 @@ def _create_host_backend_client(
         env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
     resolved_api_key = api_key
     if not resolved_api_key:
-        for key_name in API_KEY_ENV_NAMES:
+        for key_name in _API_KEY_ENV_NAMES:
             val = env_vars.get(key_name)
             if val:
                 resolved_api_key = val
