@@ -31,7 +31,11 @@ from langgraph_cli.helpers import format_log_entry, level_fg, resolve_deployment
 from langgraph_cli.host_backend import HostBackendClient, HostBackendError
 from langgraph_cli.progress import Progress
 from langgraph_cli.templates import TEMPLATE_HELP_STRING, create_new
-from langgraph_cli.util import format_deployments_table, warn_non_wolfi_distro
+from langgraph_cli.util import (
+    format_deployments_table,
+    format_revisions_table,
+    warn_non_wolfi_distro,
+)
 from langgraph_cli.version import __version__
 
 RESERVED_ENV_VARS = frozenset(
@@ -374,12 +378,18 @@ class DeployGroup(NestedHelpGroup):
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
         result = super().parse_args(ctx, args)
-        if ctx._protected_args and ctx._protected_args[0].startswith("-"):
+        protected_args = ctx.__dict__.get("protected_args")
+        if protected_args is None:
+            protected_args = ctx.__dict__.get("_protected_args", [])
+        if protected_args and protected_args[0].startswith("-"):
             # Click stores the would-be subcommand in _protected_args; if it looks
             # like an option (e.g. --build-arg) treat it as passthrough docker
             # args instead of insisting on a nested command.
-            ctx.args = [*ctx._protected_args, *ctx.args]
-            ctx._protected_args = []
+            ctx.args = [*protected_args, *ctx.args]
+            if "protected_args" in ctx.__dict__:
+                ctx.protected_args = []
+            elif "_protected_args" in ctx.__dict__:
+                ctx._protected_args = []
             return ctx.args
         return result
 
@@ -780,6 +790,13 @@ def deploy(ctx: click.Context, **_: object):
     docker_build_args = tuple(ctx.args)
     ctx.args = []  # Prevent Click from re-processing passthrough args later.
     return ctx.forward(_deploy, docker_build_args=docker_build_args)
+
+
+@deploy.group(
+    "revisions", cls=NestedHelpGroup, help="[Beta] Manage deployment revisions."
+)
+def deploy_revisions() -> None:
+    pass
 
 
 @_deploy_base_options()
@@ -1197,6 +1214,39 @@ def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -
         click.echo("No deployments found.")
         return
     click.echo(format_deployments_table(deployments))
+
+
+@OPT_HOST_API_KEY
+@OPT_HOST_URL
+@click.option(
+    "--limit",
+    type=int,
+    default=10,
+    show_default=True,
+    help="Maximum number of revisions to return.",
+)
+@click.argument("deployment_id")
+@deploy_revisions.command(
+    "list",
+    help=(
+        "[Beta] List revisions for a LangSmith Deployment.\n\n"
+        "Use the `deploy list` command to list deployment IDs."
+    ),
+)
+def deploy_revisions_list(
+    api_key: str | None, host_url: str | None, limit: int, deployment_id: str
+) -> None:
+    client = _create_host_backend_client(host_url, api_key)
+    response = _call_host_backend_with_optional_tenant(
+        client,
+        lambda c: c.list_revisions(deployment_id, limit=limit),
+    )
+    resources = response.get("resources", []) if isinstance(response, dict) else []
+    revisions = [item for item in resources if isinstance(item, dict)]
+    if not revisions:
+        click.echo(f"No revisions found for deployment {deployment_id}.")
+        return
+    click.echo(format_revisions_table(revisions))
 
 
 @OPT_HOST_API_KEY

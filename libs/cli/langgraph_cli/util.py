@@ -57,3 +57,26 @@ def format_deployments_table(deployments: Sequence[dict[str, object]]) -> str:
     lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
     lines.extend(format_row(row) for row in rows)
     return "\n".join(lines)
+
+
+def format_revisions_table(revisions: Sequence[dict[str, object]]) -> str:
+    headers = ("Revision ID", "Status", "Created At")
+    rows = [
+        (
+            str(revision.get("id", "-") or "-"),
+            str(revision.get("status", "-") or "-"),
+            str(revision.get("created_at", "-") or "-"),
+        )
+        for revision in revisions
+    ]
+    widths = [
+        max(len(headers[index]), *(len(row[index]) for row in rows))
+        for index in range(len(headers))
+    ]
+
+    def format_row(row: Sequence[str]) -> str:
+        return "  ".join(value.ljust(widths[index]) for index, value in enumerate(row))
+
+    lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
+    lines.extend(format_row(row) for row in rows)
+    return "\n".join(lines)
