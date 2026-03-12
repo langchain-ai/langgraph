@@ -7,11 +7,10 @@ from typing_extensions import TypedDict
 
 from langgraph.advanced_graph import (
     AdvancedStateGraph,
+    Context,
     any_of,
     channel_condition,
-    publish_to_channel,
     timer_condition,
-    wait_for,
 )
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
@@ -96,9 +95,9 @@ async def test_async_sub_graph() -> None:
         sends.append(Send("wait_node", state))
         return Command(goto=sends)
 
-    async def wait_node(state: MainAgentState) -> Command:
+    async def wait_node(ctx: Context, state: MainAgentState) -> Command:
         # Lightweight interrupt: only this node blocks for the next relevant signal.
-        event = await wait_for(
+        event = await ctx.wait_for(
             any_of(
                 channel_condition("tool_completion_channel"),
                 channel_condition("subagent_completion_channel"),
@@ -120,22 +119,22 @@ async def test_async_sub_graph() -> None:
         # Loop back to planner with updated output.
         return Command(goto=Send("llm_node", state))
 
-    async def tool_node(tool_input: str) -> None:
+    async def tool_node(ctx: Context, tool_input: str) -> None:
         await asyncio.sleep(0.03)
         # Fire-and-forget style completion: publish result to inbox and exit.
         # (i.e., just complete without explicitly going to a next node)
-        publish_to_channel(
+        ctx.publish_to_channel(
             "tool_completion_channel",
             f"tool completed for: {tool_input}",
         )
 
-    async def sub_agent_node(sub_agent_input: str) -> None:
+    async def sub_agent_node(ctx: Context, sub_agent_input: str) -> None:
         # Sub-agent remains a regular StateGraph, compiled independently.
         sub_agent_output = await sub_agent.ainvoke(
             {"input": sub_agent_input, "output": ""}
         )
         # Same pattern as tool node: publish result and complete current node.
-        publish_to_channel(
+        ctx.publish_to_channel(
             "subagent_completion_channel",
             sub_agent_output["output"],
         )
@@ -169,16 +168,14 @@ async def test_async_sub_graph() -> None:
         [Decision(type="end", complete="order submitted")],
     ]
 
-    started = asyncio.create_task(
-        main_agent.ainvoke(
-            {"input": "help me get something for lunch", "output": [], "done": None}
-        )
+    handler = await main_agent.astart(
+        {"input": "help me get something for lunch", "output": [], "done": None}
     )
 
     # External input can be injected while graph execution is in progress.
     await asyncio.sleep(0.01)
-    await main_agent.apublish_to_channel("user_input_channel", "No spicy food please")
-    result = await started
+    await handler.apublish_to_channel("user_input_channel", "No spicy food please")
+    result = await handler.aresult()
 
     assert result == {
         "input": "help me get something for lunch",

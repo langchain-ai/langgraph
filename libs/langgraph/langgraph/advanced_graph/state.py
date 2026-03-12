@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextvars
 import inspect
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -12,15 +11,10 @@ from langgraph.types import Command, Send
 
 StateT = TypeVar("StateT")
 
-_CURRENT_RUN: contextvars.ContextVar[_GraphEngineRun | None] = contextvars.ContextVar(
-    "langgraph_advanced_graph_run", default=None
-)
-
 
 @dataclass(frozen=True)
 class _ChannelSpec:
     typ: Any
-    maxsize: int
 
 
 @dataclass(frozen=True)
@@ -48,7 +42,7 @@ class AdvancedStateGraph(Generic[StateT]):
     def __init__(self, state_schema: type[StateT]) -> None:
         self.state_schema = state_schema
         self._nodes: dict[str, Callable[..., Any]] = {}
-        self._channels: dict[str, _ChannelSpec] = {}
+        self._async_channels: dict[str, _ChannelSpec] = {}
         self._entry_point: str | None = None
         self._finish_point: str | None = None
 
@@ -78,11 +72,11 @@ class AdvancedStateGraph(Generic[StateT]):
         return self.add_node(node)
 
     def add_async_channel(
-        self, name: str, typ: Any, maxsize: int | None = None
+        self, name: str, typ: Any   
     ) -> None:
-        if name in self._channels:
+        if name in self._async_channels:
             raise ValueError(f"Channel `{name}` already exists")
-        self._channels[name] = _ChannelSpec(typ=typ, maxsize=maxsize or 0)
+        self._async_channels[name] = _ChannelSpec(typ=typ)
 
     def set_entry_point(self, name_or_node: str | Callable[..., Any]) -> None:
         self._entry_point = self._resolve_node_name(name_or_node)
@@ -119,7 +113,7 @@ class AdvancedStateGraph(Generic[StateT]):
             raise ValueError(f"Finish point node `{self._finish_point}` does not exist")
         return CompiledGraphEngine(
             nodes=dict(self._nodes),
-            channels=dict(self._channels),
+            async_channels=dict(self._async_channels),
             entry_point=self._entry_point,
             finish_point=self._finish_point,
         )
@@ -132,40 +126,63 @@ class CompiledGraphEngine(Generic[StateT]):
         self,
         *,
         nodes: dict[str, Callable[..., Any]],
-        channels: dict[str, _ChannelSpec],
+        async_channels: dict[str, _ChannelSpec],
         entry_point: str,
         finish_point: str,
     ) -> None:
         self._nodes = nodes
-        self._channels = channels
+        self._async_channels = async_channels
         self._entry_point = entry_point
         self._finish_point = finish_point
-        self._active_run: _GraphEngineRun | None = None
-        self._run_lock = asyncio.Lock()
 
     async def ainvoke(self, initial_state: StateT) -> StateT:
-        async with self._run_lock:
-            if self._active_run is not None:
-                raise RuntimeError("Graph engine already has an active run")
-            run = _GraphEngineRun(
-                nodes=self._nodes,
-                channel_specs=self._channels,
-                entry_point=self._entry_point,
-                finish_point=self._finish_point,
-            )
-            self._active_run = run
-        try:
-            return await run.run(initial_state)
-        finally:
-            async with self._run_lock:
-                if self._active_run is run:
-                    self._active_run = None
+        handler = await self.astart(initial_state)
+        return await handler
+
+    async def astart(self, initial_state: StateT) -> GraphRunHandler[StateT]:
+        run = _GraphEngineRun(
+            nodes=self._nodes,
+            async_channel_specs=self._async_channels,
+            entry_point=self._entry_point,
+            finish_point=self._finish_point,
+        )
+        task = asyncio.create_task(run.run(initial_state))
+        return GraphRunHandler(run=run, task=task)
+
+
+class Context:
+    """Per-run context injected into advanced graph nodes."""
+
+    def __init__(self, run: _GraphEngineRun) -> None:
+        self._run = run
+
+    async def wait_for(self, target: WaitCondition | AnyOfCondition) -> Any:
+        return await self._run.wait_for(target)
+
+    def publish_to_channel(self, channel: str, value: Any) -> None:
+        self._run.publish_nowait(channel, value)
 
     async def apublish_to_channel(self, channel: str, value: Any) -> None:
-        run = self._active_run
-        if run is None:
-            raise RuntimeError("No active graph run to publish to")
-        await run.publish(channel, value)
+        await self._run.publish(channel, value)
+
+
+class GraphRunHandler(Generic[StateT]):
+    """Handle for an active in-memory run."""
+
+    def __init__(self, *, run: _GraphEngineRun, task: asyncio.Task[StateT]) -> None:
+        self._run = run
+        self._task = task
+
+    async def apublish_to_channel(self, channel: str, value: Any) -> None:
+        if self._task.done():
+            raise RuntimeError("Run has already completed")
+        await self._run.publish(channel, value)
+
+    async def aresult(self) -> StateT:
+        return await self._task
+
+    def __await__(self) -> Any:
+        return self._task.__await__()
 
 
 class _GraphEngineRun:
@@ -173,20 +190,20 @@ class _GraphEngineRun:
         self,
         *,
         nodes: dict[str, Callable[..., Any]],
-        channel_specs: dict[str, _ChannelSpec],
+        async_channel_specs: dict[str, _ChannelSpec],
         entry_point: str,
         finish_point: str,
     ) -> None:
         self._nodes = nodes
         self._entry_point = entry_point
         self._finish_point = finish_point
-        self._channels: dict[str, asyncio.Queue[Any]] = {
-            name: asyncio.Queue(maxsize=spec.maxsize)
-            for name, spec in channel_specs.items()
+        self._async_channels: dict[str, asyncio.Queue[Any]] = {
+            name: asyncio.Queue() for name, _spec in async_channel_specs.items()
         }
         self._tasks: set[asyncio.Task[list[Send]]] = set()
         self._finished = False
         self._state: Any = None
+        self.context = Context(self)
 
     async def run(self, initial_state: StateT) -> StateT:
         self._state = initial_state
@@ -212,11 +229,11 @@ class _GraphEngineRun:
             await self._cancel_all_tasks()
 
     async def publish(self, channel: str, value: Any) -> None:
-        queue = self._get_channel(channel)
+        queue = self._get_async_channel(channel)
         await queue.put(value)
 
     def publish_nowait(self, channel: str, value: Any) -> None:
-        queue = self._get_channel(channel)
+        queue = self._get_async_channel(channel)
         queue.put_nowait(value)
 
     async def wait_for(self, target: WaitCondition | AnyOfCondition) -> Any:
@@ -237,7 +254,7 @@ class _GraphEngineRun:
     async def _wait_for_channel_values(self, channel: str, n: int) -> Any:
         if n < 1:
             raise ValueError("wait_for count `n` must be >= 1")
-        queue = self._get_channel(channel)
+        queue = self._get_async_channel(channel)
         if n == 1:
             return await queue.get()
         values: list[Any] = []
@@ -260,10 +277,10 @@ class _GraphEngineRun:
         first = done.pop()
         return first.result()
 
-    def _get_channel(self, channel: str) -> asyncio.Queue[Any]:
-        if channel not in self._channels:
+    def _get_async_channel(self, channel: str) -> asyncio.Queue[Any]:
+        if channel not in self._async_channels:
             raise ValueError(f"Unknown channel `{channel}`")
-        return self._channels[channel]
+        return self._async_channels[channel]
 
     def _schedule(self, send: Send) -> None:
         if self._finished:
@@ -286,13 +303,9 @@ class _GraphEngineRun:
             raise ValueError(f"Unknown node `{node_name}`")
         node = self._nodes[node_name]
 
-        token = _CURRENT_RUN.set(self)
-        try:
-            result = node(send.arg)
-            if inspect.isawaitable(result):
-                result = await result
-        finally:
-            _CURRENT_RUN.reset(token)
+        result = _invoke_node(node, self.context, send.arg)
+        if inspect.isawaitable(result):
+            result = await result
 
         if isinstance(result, Command):
             self._apply_update(result.update)
@@ -371,22 +384,6 @@ def _normalize_goto(goto: Any, *, default_arg: Any) -> list[Send]:
     return []
 
 
-async def wait_for(target: WaitCondition | AnyOfCondition) -> Any:
-    run = _CURRENT_RUN.get()
-    if run is None:
-        raise RuntimeError("wait_for() can only be used inside advanced_graph nodes")
-    return await run.wait_for(target)
-
-
-def publish_to_channel(channel: str, value: Any) -> None:
-    run = _CURRENT_RUN.get()
-    if run is None:
-        raise RuntimeError(
-            "publish_to_channel() can only be used inside advanced_graph nodes"
-        )
-    run.publish_nowait(channel, value)
-
-
 def channel_condition(channel: str, n: int = 1) -> ChannelCondition:
     if n < 1:
         raise ValueError("channel_condition `n` must be >= 1")
@@ -439,3 +436,16 @@ def _resolve_target_name(target: Any) -> str:
     if callable(target):
         return _infer_node_name(target)
     raise ValueError(f"Unsupported node target type: {type(target)!r}")
+
+
+def _invoke_node(node: Callable[..., Any], ctx: Context, state: Any) -> Any:
+    try:
+        params = list(inspect.signature(node).parameters.values())
+    except (TypeError, ValueError):
+        params = []
+
+    if len(params) >= 2:
+        return node(ctx, state)
+    if len(params) == 1:
+        return node(state)
+    return node()
