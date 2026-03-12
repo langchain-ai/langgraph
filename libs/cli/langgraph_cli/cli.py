@@ -762,8 +762,8 @@ def _deploy_base_options(
         "This command is in beta and under active development. "
         "Expect frequent updates and improvements.\n\n"
         "Run from the root of your LangGraph project (where langgraph.json "
-        "is located). This command also accepts build flags (--config, "
-        "--base-image, --pull, etc.). See 'langgraph build --help' for details."
+        "is located). This command also accepts build flags (--base-image, "
+        "--config, --pull, etc.). See 'langgraph build --help' for details."
     ),
     context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
     invoke_without_command=True,  # allow `deploy` click group to execute without command
