@@ -31,6 +31,7 @@ from langgraph_sdk.client import (
 )
 from langgraph_sdk.schema import (
     Checkpoint,
+    Context,
     QueryParamTypes,
     ThreadState,
 )
@@ -691,6 +692,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -707,6 +709,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -722,6 +725,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -734,7 +738,7 @@ class RemoteGraph(PregelProtocol):
         """Create a run and stream the results.
 
         This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
-        is speciffed in the `configurable` field of the config or
+        is specified in the `configurable` field of the config or
         `POST /runs/stream` otherwise.
 
         Args:
@@ -769,6 +773,7 @@ class RemoteGraph(PregelProtocol):
             input=input,
             command=command,
             config=sanitized_config,
+            context=context,
             stream_mode=stream_modes,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
@@ -842,6 +847,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -858,6 +864,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -873,6 +880,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -885,7 +893,7 @@ class RemoteGraph(PregelProtocol):
         """Create a run and stream the results.
 
         This method calls `POST /threads/{thread_id}/runs/stream` if a `thread_id`
-        is speciffed in the `configurable` field of the config or
+        is specified in the `configurable` field of the config or
         `POST /runs/stream` otherwise.
 
         Args:
@@ -920,6 +928,7 @@ class RemoteGraph(PregelProtocol):
             input=input,
             command=command,
             config=sanitized_config,
+            context=context,
             stream_mode=stream_modes,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
@@ -1009,6 +1018,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
@@ -1023,6 +1033,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
@@ -1036,6 +1047,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
@@ -1061,6 +1073,7 @@ class RemoteGraph(PregelProtocol):
         for chunk in self.stream(  # type: ignore[misc, call-overload]
             input,
             config=config,
+            context=context,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             headers=headers,
@@ -1087,6 +1100,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
@@ -1101,6 +1115,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
@@ -1114,6 +1129,7 @@ class RemoteGraph(PregelProtocol):
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         *,
+        context: Context | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
@@ -1139,6 +1155,7 @@ class RemoteGraph(PregelProtocol):
         async for chunk in self.astream(  # type: ignore[misc, call-overload]
             input,
             config=config,
+            context=context,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             headers=headers,
