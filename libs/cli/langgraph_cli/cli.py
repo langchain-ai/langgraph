@@ -12,8 +12,8 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable, Sequence
-from datetime import datetime, timezone
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 import click
 import click.exceptions
