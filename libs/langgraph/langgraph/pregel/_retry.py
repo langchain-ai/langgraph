@@ -13,8 +13,8 @@ from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
-    CONFIG_KEY_RUNTIME,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_RUNTIME,
     NS_SEP,
 )
 from langgraph.errors import GraphBubbleUp, ParentCommand
