@@ -801,7 +801,7 @@ def _deploy(
     deployment_type: str,
     name: str | None,
     image_name: str | None,
-    image_tag: str,
+    tag: str,
     base_image: str | None,
     install_command: str | None,
     build_command: str | None,
@@ -982,7 +982,7 @@ def _deploy(
             normalized_registry = normalized_registry.split("//", 1)[1]
         repo_seed = image_name or name or config.parent.name
         repo_name = _normalize_image_name(repo_seed)
-        tag_value = _normalize_image_tag(image_tag)
+        tag_value = _normalize_image_tag(tag)
         remote_image = f"{normalized_registry}/{repo_name}:{tag_value}"
 
         registry_host = normalized_registry.split("/")[0]
