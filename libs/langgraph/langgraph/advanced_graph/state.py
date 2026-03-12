@@ -67,7 +67,7 @@ class AdvancedStateGraph(Generic[StateT]):
         self._nodes[node_name] = node_fn
         return node_name
 
-    def node(self, node: Callable[..., Any]) -> str:
+    def add_node(self, node: Callable[..., Any]) -> str:
         """Register a node using the function name as node id."""
         return self.add_node(node)
 

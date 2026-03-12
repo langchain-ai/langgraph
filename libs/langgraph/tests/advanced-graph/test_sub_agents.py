@@ -69,10 +69,7 @@ def build_sub_agent() -> Any:
     return sub_agent.compile()
 
 
-async def test_async_sub_graph() -> None:
-    planner = MockPlanner()
-    sub_agent = build_sub_agent()
-
+def build_main_agent(planner: MockPlanner, sub_agent: Any) -> Any:
     async def llm_node(state: MainAgentState) -> Command:
         # Planner decides whether to call a tool, spawn a sub-agent, or finish.
         decisions = await planner.ainvoke(state)
@@ -147,12 +144,20 @@ async def test_async_sub_graph() -> None:
     advanced_flow.add_async_channel("tool_completion_channel", str)
     advanced_flow.add_async_channel("subagent_completion_channel", str)
     advanced_flow.add_async_channel("user_input_channel", str)
+    # nodes are the same as in the regular StateGraph API
     advanced_flow.add_entry_node(llm_node)
-    advanced_flow.node(wait_node)
-    advanced_flow.node(tool_node)
-    advanced_flow.node(sub_agent_node)
+    advanced_flow.add_node(wait_node)
+    advanced_flow.add_node(tool_node)
+    advanced_flow.add_node(sub_agent_node)
     advanced_flow.add_finish_node(order_food_node)
-    main_agent = advanced_flow.compile()
+    
+    return advanced_flow.compile()
+
+
+async def test_async_sub_graph() -> None:
+    planner = MockPlanner()
+    sub_agent = build_sub_agent()
+    main_agent = build_main_agent(planner, sub_agent)
 
     planner.responses = [
         [
