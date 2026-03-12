@@ -5,9 +5,9 @@ from typing import Any, Literal
 import pytest
 from typing_extensions import TypedDict
 
+from langgraph.advanced_graph import AdvancedStateGraph, publish_to_channel, wait_for
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
-from langgraph.graph_engine import AdvancedStateGraph, publish_to_channel, wait_for
 from langgraph.types import Command, Send
 
 pytestmark = pytest.mark.anyio

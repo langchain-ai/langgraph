@@ -1,4 +1,4 @@
-from langgraph.graph_engine.state import (
+from langgraph.advanced_graph.state import (
     AdvancedStateGraph,
     CompiledGraphEngine,
     publish_to_channel,

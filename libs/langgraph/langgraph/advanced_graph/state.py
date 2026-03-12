@@ -12,7 +12,7 @@ from langgraph.types import Command, Send
 StateT = TypeVar("StateT")
 
 _CURRENT_RUN: contextvars.ContextVar[_GraphEngineRun | None] = contextvars.ContextVar(
-    "langgraph_graph_engine_run", default=None
+    "langgraph_advanced_graph_run", default=None
 )
 
 
@@ -324,7 +324,7 @@ def _normalize_goto(goto: Any, *, default_arg: Any) -> list[Send]:
 async def wait_for(channel: str, n: int = 1) -> Any:
     run = _CURRENT_RUN.get()
     if run is None:
-        raise RuntimeError("wait_for() can only be used inside graph_engine nodes")
+        raise RuntimeError("wait_for() can only be used inside advanced_graph nodes")
     return await run.wait_for(channel, n=n)
 
 
@@ -332,7 +332,7 @@ def publish_to_channel(channel: str, value: Any) -> None:
     run = _CURRENT_RUN.get()
     if run is None:
         raise RuntimeError(
-            "publish_to_channel() can only be used inside graph_engine nodes"
+            "publish_to_channel() can only be used inside advanced_graph nodes"
         )
     run.publish_nowait(channel, value)
 
