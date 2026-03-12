@@ -532,6 +532,8 @@ class RunCreate(TypedDict):
     """List of node names to interrupt execution after."""
     webhook: str | None
     """URL to send webhook notifications about the run's progress."""
+    stream_protocol_version: StreamVersion | None
+    """Opt into an alternate stream wire protocol version."""
     multitask_strategy: MultitaskStrategy | None
     """Strategy for handling concurrent runs on the same thread."""
 
@@ -733,6 +735,26 @@ class ValuesStreamPart(TypedDict):
     """List of interrupts that occurred during this step."""
 
 
+class ValuesPatchPayload(TypedDict):
+    """Incremental patch payload for subgraph `values` updates."""
+
+    values: dict[str, Any]
+    """Only the changed fields since the previous `values` event for this namespace."""
+    deleted_keys: NotRequired[list[str]]
+    """Optional list of keys that were removed from the previous values snapshot."""
+
+
+class ValuesPatchStreamPart(TypedDict):
+    """Stream part emitted for incremental subgraph value patches (`values-patch`)."""
+
+    type: Literal["values-patch"]
+    """Stream part type discriminator."""
+    ns: list[str]
+    """Namespace path of the emitting node (empty for root graph)."""
+    data: ValuesPatchPayload
+    """Incremental state patch for the namespace."""
+
+
 class UpdatesStreamPart(TypedDict):
     """Stream part emitted for `stream_mode="updates"`."""
 
@@ -845,6 +867,7 @@ class MetadataStreamPart(TypedDict):
 
 StreamPartV2 = (
     ValuesStreamPart
+    | ValuesPatchStreamPart
     | UpdatesStreamPart
     | MessagesPartialStreamPart
     | MessagesCompleteStreamPart

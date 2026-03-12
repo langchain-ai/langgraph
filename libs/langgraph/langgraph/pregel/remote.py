@@ -71,6 +71,8 @@ logger = logging.getLogger(__name__)
 
 __all__ = ("RemoteGraph", "RemoteException")
 
+_STREAM_PROTOCOL_CONFIG_KEY = "__stream_protocol_version__"
+
 _CONF_DROPLIST = frozenset(
     (
         CONFIG_KEY_CHECKPOINT_MAP,
@@ -107,6 +109,45 @@ class RemoteException(Exception):
     """Exception raised when an error occurs in the remote graph."""
 
     pass
+
+
+def _restore_message_metadata(
+    data: Any, metadata_by_message_id: dict[str, dict[str, Any]]
+) -> Any:
+    """Restore deduplicated message metadata using the message id as cache key."""
+    if not (isinstance(data, list) and len(data) == 2):
+        return data
+    message, metadata = data
+    if not isinstance(message, dict):
+        return data
+    message_id = message.get("id")
+    if not isinstance(message_id, str):
+        return data
+    if isinstance(metadata, dict):
+        metadata_by_message_id[message_id] = metadata
+        return (message, metadata)
+    return (message, metadata_by_message_id.get(message_id))
+
+
+def _merge_values_patch(
+    ns: tuple[str, ...],
+    mode: str,
+    data: Any,
+    values_by_ns: dict[tuple[str, ...], dict[str, Any]],
+) -> tuple[str, Any]:
+    """Merge `values-patch` events back into full values snapshots."""
+    if mode != "values-patch" or not isinstance(data, dict):
+        return mode, data
+    values = data.get("values")
+    if not isinstance(values, dict):
+        return "values", values if values is not None else {}
+    merged = dict(values_by_ns.get(ns, {}))
+    merged.update(values)
+    for key in data.get("deleted_keys", ()):
+        if isinstance(key, str):
+            merged.pop(key, None)
+    values_by_ns[ns] = merged
+    return "values", merged
 
 
 class RemoteGraph(PregelProtocol):
@@ -760,12 +801,25 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
+        stream_protocol_version = cast(
+            Literal["v1", "v2"] | None,
+            kwargs.pop(
+                "stream_protocol_version",
+                sanitized_config.get("configurable", {}).get(
+                    _STREAM_PROTOCOL_CONFIG_KEY
+                ),
+            ),
+        )
+        if version == "v2" and stream_protocol_version is None:
+            stream_protocol_version = "v2"
         if isinstance(input, Command):
             command: CommandSDK | None = cast(CommandSDK, asdict(input))
             input = None
         else:
             command = None
         thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
+        message_metadata_by_id: dict[str, dict[str, Any]] = {}
+        values_by_ns: dict[tuple[str, ...], dict[str, Any]] = {}
 
         for chunk in sync_client.runs.stream(
             thread_id=thread_id,
@@ -783,6 +837,7 @@ class RemoteGraph(PregelProtocol):
                 _merge_tracing_headers(headers) if self.distributed_tracing else headers
             ),
             params=params,
+            stream_protocol_version=stream_protocol_version,
             **kwargs,
         ):
             # split mode and ns
@@ -798,6 +853,11 @@ class RemoteGraph(PregelProtocol):
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
                 caller_ns = tuple(caller_ns.split(NS_SEP))
                 ns = caller_ns + ns
+            mode, data = _merge_values_patch(ns, mode, chunk.data, values_by_ns)
+            if mode != chunk.event:
+                chunk = chunk._replace(data=data)
+            elif data is not chunk.data:
+                chunk = chunk._replace(data=data)
             # stream to parent stream
             if stream is not None and mode in stream.modes:
                 stream((ns, mode, chunk.data))
@@ -815,7 +875,9 @@ class RemoteGraph(PregelProtocol):
                 continue
 
             if chunk.event.startswith("messages"):
-                chunk = chunk._replace(data=tuple(chunk.data))
+                chunk = chunk._replace(
+                    data=_restore_message_metadata(chunk.data, message_metadata_by_id)
+                )
 
             # emit chunk
             if version == "v2":
@@ -827,11 +889,6 @@ class RemoteGraph(PregelProtocol):
                     )
                 yield {"type": mode, "ns": ns, "data": chunk.data, "interrupts": ints}
             elif subgraphs:
-                if NS_SEP in chunk.event:
-                    mode, ns_ = chunk.event.split(NS_SEP, 1)
-                    ns = tuple(ns_.split(NS_SEP))
-                else:
-                    mode, ns = chunk.event, ()
                 if req_single:
                     yield ns, chunk.data
                 else:
@@ -915,12 +972,25 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
+        stream_protocol_version = cast(
+            Literal["v1", "v2"] | None,
+            kwargs.pop(
+                "stream_protocol_version",
+                sanitized_config.get("configurable", {}).get(
+                    _STREAM_PROTOCOL_CONFIG_KEY
+                ),
+            ),
+        )
+        if version == "v2" and stream_protocol_version is None:
+            stream_protocol_version = "v2"
         if isinstance(input, Command):
             command: CommandSDK | None = cast(CommandSDK, asdict(input))
             input = None
         else:
             command = None
         thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
+        message_metadata_by_id: dict[str, dict[str, Any]] = {}
+        values_by_ns: dict[tuple[str, ...], dict[str, Any]] = {}
 
         async for chunk in client.runs.stream(
             thread_id=thread_id,
@@ -938,6 +1008,7 @@ class RemoteGraph(PregelProtocol):
                 _merge_tracing_headers(headers) if self.distributed_tracing else headers
             ),
             params=params,
+            stream_protocol_version=stream_protocol_version,
             **kwargs,
         ):
             # split mode and ns
@@ -953,6 +1024,11 @@ class RemoteGraph(PregelProtocol):
             if caller_ns := (config or {}).get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS):
                 caller_ns = tuple(caller_ns.split(NS_SEP))
                 ns = caller_ns + ns
+            mode, data = _merge_values_patch(ns, mode, chunk.data, values_by_ns)
+            if mode != chunk.event:
+                chunk = chunk._replace(data=data)
+            elif data is not chunk.data:
+                chunk = chunk._replace(data=data)
             # stream to parent stream
             if stream is not None and mode in stream.modes:
                 stream((ns, mode, chunk.data))
@@ -970,7 +1046,9 @@ class RemoteGraph(PregelProtocol):
                 continue
 
             if chunk.event.startswith("messages"):
-                chunk = chunk._replace(data=tuple(chunk.data))
+                chunk = chunk._replace(
+                    data=_restore_message_metadata(chunk.data, message_metadata_by_id)
+                )
 
             # emit chunk
             if version == "v2":
@@ -982,11 +1060,6 @@ class RemoteGraph(PregelProtocol):
                     )
                 yield {"type": mode, "ns": ns, "data": chunk.data, "interrupts": ints}
             elif subgraphs:
-                if NS_SEP in chunk.event:
-                    mode, ns_ = chunk.event.split(NS_SEP, 1)
-                    ns = tuple(ns_.split(NS_SEP))
-                else:
-                    mode, ns = chunk.event, ()
                 if req_single:
                     yield ns, chunk.data
                 else:

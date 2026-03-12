@@ -25,7 +25,7 @@ except ImportError:
     _StreamingCallbackHandler = object  # type: ignore
 
 T = TypeVar("T")
-Meta = tuple[tuple[str, ...], dict[str, Any]]
+Meta = tuple[tuple[str, ...], dict[str, Any] | None]
 
 
 def _state_values(obj: Any) -> Sequence[Any]:
@@ -56,6 +56,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         subgraphs: bool,
         *,
         parent_ns: tuple[str, ...] | None = None,
+        dedupe_metadata: bool = False,
     ) -> None:
         """Configure the handler to stream messages from LLMs and nodes.
 
@@ -84,8 +85,10 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         self.stream = stream
         self.subgraphs = subgraphs
         self.metadata: dict[UUID, Meta] = {}
+        self.emitted_metadata: set[UUID] = set()
         self.seen: set[int | str] = set()
         self.parent_ns = parent_ns
+        self.dedupe_metadata = dedupe_metadata
 
     def _emit(self, meta: Meta, message: BaseMessage, *, dedupe: bool = False) -> None:
         if dedupe and message.id in self.seen:
@@ -155,6 +158,10 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         if not isinstance(chunk, ChatGenerationChunk):
             return
         if meta := self.metadata.get(run_id):
+            if self.dedupe_metadata and run_id in self.emitted_metadata:
+                meta = (meta[0], None)
+            else:
+                self.emitted_metadata.add(run_id)
             self._emit(meta, chunk.message)
 
     def on_llm_end(
@@ -170,6 +177,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
                 gen = response.generations[0][0]
                 if isinstance(gen, ChatGeneration):
                     self._emit(meta, gen.message, dedupe=True)
+        self.emitted_metadata.discard(run_id)
         self.metadata.pop(run_id, None)
 
     def on_llm_error(
@@ -180,6 +188,7 @@ class StreamMessagesHandler(BaseCallbackHandler, _StreamingCallbackHandler):
         parent_run_id: UUID | None = None,
         **kwargs: Any,
     ) -> Any:
+        self.emitted_metadata.discard(run_id)
         self.metadata.pop(run_id, None)
 
     def on_chain_start(
