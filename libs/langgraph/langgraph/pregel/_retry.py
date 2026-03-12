@@ -14,7 +14,6 @@ from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
     CONFIG_KEY_RUNTIME,
-    CONFIG_KEY_THREAD_ID,
     CONFIG_KEY_RESUMING,
     NS_SEP,
 )
@@ -67,12 +66,19 @@ def run_with_retry(
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
+    runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+    if isinstance(runtime, Runtime):
+        config = patch_configurable(
+            config,
+            {
+                CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                    node_first_attempt_time=node_first_attempt_time,
+                )
+            },
+        )
     while True:
         runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
         if isinstance(runtime, Runtime):
-            thread_id = config.get(CONF, {}).get(
-                CONFIG_KEY_THREAD_ID, runtime.execution_info.thread_id
-            )
             config = patch_configurable(
                 config,
                 {
@@ -80,8 +86,6 @@ def run_with_retry(
                         # node_attempt is execution count (1-indexed): 1 on first run,
                         # then 2, 3, ... on subsequent retries.
                         node_attempt=attempts + 1,
-                        node_first_attempt_time=node_first_attempt_time,
-                        thread_id=thread_id,
                     )
                 },
             )
@@ -166,6 +170,16 @@ async def arun_with_retry(
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
+    runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+    if isinstance(runtime, Runtime):
+        config = patch_configurable(
+            config,
+            {
+                CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                    node_first_attempt_time=node_first_attempt_time,
+                )
+            },
+        )
     if match_cached_writes is not None and task.cache_key is not None:
         for t in await match_cached_writes():
             if t is task:
@@ -174,9 +188,6 @@ async def arun_with_retry(
     while True:
         runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
         if isinstance(runtime, Runtime):
-            thread_id = config.get(CONF, {}).get(
-                CONFIG_KEY_THREAD_ID, runtime.execution_info.thread_id
-            )
             config = patch_configurable(
                 config,
                 {
@@ -184,8 +195,6 @@ async def arun_with_retry(
                         # node_attempt is execution count (1-indexed): 1 on first run,
                         # then 2, 3, ... on subsequent retries.
                         node_attempt=attempts + 1,
-                        node_first_attempt_time=node_first_attempt_time,
-                        thread_id=thread_id,
                     )
                 },
             )
