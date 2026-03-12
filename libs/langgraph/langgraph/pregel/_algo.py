@@ -528,7 +528,7 @@ PUSH_TRIGGER = (PUSH,)
 
 
 class _TaskIDFn(Protocol):
-    def __call__(self, namespace: bytes, *parts: str | bytes) -> str:
+    def __call__(self, namespace: bytes, *parts: str) -> str:
         pass
 
 
@@ -1199,32 +1199,37 @@ def _proc_input(
     return val
 
 
-def _uuid5_str(namespace: bytes, *parts: str | bytes) -> str:
+def _uuid5_str(namespace: bytes, *parts: str) -> str:
     """Generate a UUID from the SHA-1 hash of a namespace and str parts."""
 
     sha = sha1(namespace, usedforsecurity=False)
-    sha.update(b"".join(p.encode() if isinstance(p, str) else p for p in parts))
+    sha.update(b"".join(p.encode() for p in parts))
     hex = sha.hexdigest()
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 
-def _xxhash_str(namespace: bytes, *parts: str | bytes) -> str:
+def _xxhash_str(namespace: bytes, *parts: str) -> str:
     """Generate a UUID from the XXH3 hash of a namespace and str parts."""
-    hex = xxh3_128_hexdigest(
-        namespace + b"".join(p.encode() if isinstance(p, str) else p for p in parts)
-    )
+    hex = xxh3_128_hexdigest(namespace + b"".join(p.encode() for p in parts))
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 
-def task_path_str(tup: str | int | tuple) -> str:
+def task_path_str(tup: str | int | tuple | list) -> str:
     """Generate a string representation of the task path."""
-    return (
-        f"~{', '.join(task_path_str(x) for x in tup)}"
-        if isinstance(tup, (tuple, list))
-        else f"{tup:010d}"
-        if isinstance(tup, int)
-        else str(tup)
-    )
+    if isinstance(tup, (tuple, list)):
+        parts: list[str] = []
+        for x in tup:
+            if isinstance(x, int):
+                parts.append(f"{x:010d}")
+            elif isinstance(x, (tuple, list)):
+                parts.append(task_path_str(x))
+            else:
+                parts.append(str(x))
+        return f"~{', '.join(parts)}"
+    elif isinstance(tup, int):
+        return f"{tup:010d}"
+    else:
+        return str(tup)
 
 
 LAZY_ATOMIC_COUNTER_LOCK = threading.Lock()
