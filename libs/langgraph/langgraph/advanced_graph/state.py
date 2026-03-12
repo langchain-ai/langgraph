@@ -39,7 +39,7 @@ class AnyOfCondition:
     conditions: tuple[WaitCondition, ...]
 
 
-WaitCondition = ChannelCondition | TimerCondition | AnyOfCondition
+WaitCondition = ChannelCondition | TimerCondition
 
 
 class AdvancedStateGraph(Generic[StateT]):
@@ -219,9 +219,7 @@ class _GraphEngineRun:
         queue = self._get_channel(channel)
         queue.put_nowait(value)
 
-    async def wait_for(self, target: str | WaitCondition, n: int = 1) -> Any:
-        if isinstance(target, str):
-            return await self._wait_for_channel_values(target, n=n)
+    async def wait_for(self, target: WaitCondition | AnyOfCondition) -> Any:
         if isinstance(target, ChannelCondition):
             value = await self._wait_for_channel_values(target.channel, n=target.n)
             return {
@@ -252,7 +250,7 @@ class _GraphEngineRun:
             raise ValueError("any_of() requires at least one condition")
 
         tasks = [
-            asyncio.create_task(self.wait_for(inner_condition, n=1))
+            asyncio.create_task(self.wait_for(inner_condition))
             for inner_condition in condition.conditions
         ]
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -373,11 +371,11 @@ def _normalize_goto(goto: Any, *, default_arg: Any) -> list[Send]:
     return []
 
 
-async def wait_for(target: str | WaitCondition, n: int = 1) -> Any:
+async def wait_for(target: WaitCondition | AnyOfCondition) -> Any:
     run = _CURRENT_RUN.get()
     if run is None:
         raise RuntimeError("wait_for() can only be used inside advanced_graph nodes")
-    return await run.wait_for(target, n=n)
+    return await run.wait_for(target)
 
 
 def publish_to_channel(channel: str, value: Any) -> None:
