@@ -762,8 +762,8 @@ def _deploy_base_options(
         "This command is in beta and under active development. "
         "Expect frequent updates and improvements.\n\n"
         "Run from the root of your LangGraph project (where langgraph.json "
-        "is located). This command also accepts build flags (--base-image, "
-        "--pull, etc.). See 'langgraph build --help' for details."
+        "is located). This command also accepts build flags (--config, "
+        "--base-image, --pull, etc.). See 'langgraph build --help' for details."
     ),
     context_settings=dict(ignore_unknown_options=True, allow_extra_args=True),
     invoke_without_command=True,  # allow `deploy` click group to execute without command
@@ -812,15 +812,6 @@ def _deploy(
 
     env_vars = _parse_env_from_config(config_json, config)
 
-    if not api_key:
-        for key_name in _API_KEY_ENV_NAMES:
-            val = env_vars.get(key_name) or os.environ.get(key_name)
-            if val:
-                api_key = val
-                break
-    if not api_key:
-        api_key = click.prompt("Host API key", hide_input=True)
-
     if not deployment_id and not name:
         name = env_vars.get(_DEPLOYMENT_NAME_ENV)
     if not deployment_id and not name:
@@ -857,55 +848,21 @@ def _deploy(
         def log_step(message: str) -> None:
             click.secho(message, fg="cyan")
 
-        client = HostBackendClient(host_url, api_key)
+        client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
         step = 1
         needs_creation = False
 
         if deployment_id:
             log_step(f"{step}. Using deployment {deployment_id}")
-            try:
-                client.get_deployment(deployment_id)
-            except HostBackendError as err:
-                if (
-                    err.status_code == 403
-                    and "requires workspace specification" in err.message
-                ):
-                    click.secho(
-                        "Your API key is org-scoped and requires a workspace ID.",
-                        fg="yellow",
-                    )
-                    click.secho(
-                        "Find your workspace ID in LangSmith under Settings > Workspaces.",
-                        fg="yellow",
-                    )
-                    tenant_id = click.prompt("Workspace ID")
-                    client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
-                    client.get_deployment(deployment_id)
-                else:
-                    raise
+            _call_host_backend_with_optional_tenant(
+                client, lambda c: c.get_deployment(deployment_id)
+            )
             step += 1
         else:
             log_step(f"{step}. Looking up deployment '{name}'")
-            try:
-                existing = client.list_deployments(name_contains=name)
-            except HostBackendError as err:
-                if (
-                    err.status_code == 403
-                    and "requires workspace specification" in err.message
-                ):
-                    click.secho(
-                        "Your API key is org-scoped and requires a workspace ID.",
-                        fg="yellow",
-                    )
-                    click.secho(
-                        "Find your workspace ID in LangSmith under Settings > Workspaces.",
-                        fg="yellow",
-                    )
-                    tenant_id = click.prompt("Workspace ID")
-                    client = HostBackendClient(host_url, api_key, tenant_id=tenant_id)
-                    existing = client.list_deployments(name_contains=name)
-                else:
-                    raise
+            existing = _call_host_backend_with_optional_tenant(
+                client, lambda c: c.list_deployments(name_contains=name)
+            )
             found_id = None
             if isinstance(existing, dict):
                 for dep in existing.get("resources", []):
@@ -1183,7 +1140,11 @@ def _create_host_backend_client(
                 resolved_api_key = val
                 break
     if not resolved_api_key:
-        resolved_api_key = click.prompt("Host API key", hide_input=True)
+        click.secho(
+            "No LangSmith API key found. Create one at Settings > API Keys in LangSmith.",
+            fg="yellow",
+        )
+        resolved_api_key = click.prompt("Enter LangSmith API key", hide_input=True)
     return HostBackendClient(host_url, resolved_api_key)
 
 
@@ -1191,6 +1152,13 @@ def _call_host_backend_with_optional_tenant(
     client: HostBackendClient,
     operation: Callable[[HostBackendClient], object],
 ) -> object:
+    """Run *operation*, prompting for a workspace ID on org-scoped 403s.
+
+    On success the original *client* is returned as-is.  If the user is
+    prompted for a workspace ID, the tenant header is set on *client*
+    in-place so all subsequent calls through the same instance are
+    tenant-aware.
+    """
     try:
         return operation(client)
     except HostBackendError as err:
@@ -1204,9 +1172,7 @@ def _call_host_backend_with_optional_tenant(
                 fg="yellow",
             )
             tenant_id = click.prompt("Workspace ID")
-            client = HostBackendClient(
-                client._base_url, client._api_key, tenant_id=tenant_id
-            )
+            client._client.headers["X-Tenant-ID"] = tenant_id
             return operation(client)
         raise
 
@@ -1223,9 +1189,7 @@ def deploy_list(api_key: str | None, host_url: str | None, name_contains: str) -
     client = _create_host_backend_client(host_url, api_key)
     response = _call_host_backend_with_optional_tenant(
         client,
-        lambda current_client: current_client.list_deployments(
-            name_contains=name_contains
-        ),
+        lambda c: c.list_deployments(name_contains=name_contains),
     )
     resources = response.get("resources", []) if isinstance(response, dict) else []
     deployments = [item for item in resources if isinstance(item, dict)]
@@ -1268,7 +1232,7 @@ def deploy_delete(
     client = _create_host_backend_client(host_url, api_key)
     _call_host_backend_with_optional_tenant(
         client,
-        lambda current_client: current_client.delete_deployment(deployment_id),
+        lambda c: c.delete_deployment(deployment_id),
     )
     click.secho(f"Deleted deployment {deployment_id}.", fg="green")
 
@@ -1377,8 +1341,13 @@ def deploy_logs(
     follow: bool,
     host_url: str,
 ):
-    client = _create_host_backend_client(host_url, api_key)
-    dep_id = resolve_deployment_id(client, deployment_id, name)
+    env_vars = _parse_env_from_config({}, pathlib.Path.cwd() / DEFAULT_CONFIG)
+    client = _create_host_backend_client(host_url, api_key, env_vars=env_vars)
+    if not deployment_id and not name:
+        name = env_vars.get(_DEPLOYMENT_NAME_ENV)
+    dep_id = _call_host_backend_with_optional_tenant(
+        client, lambda c: resolve_deployment_id(c, deployment_id, name)
+    )
 
     if log_type == "build" and not revision_id:
         revisions_resp = client.list_revisions(dep_id, limit=1)
