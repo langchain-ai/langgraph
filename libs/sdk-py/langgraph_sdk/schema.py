@@ -58,6 +58,7 @@ StreamMode = Literal[
     "debug",
     "custom",
     "messages-tuple",
+    "compact",
 ]
 """
 Defines the mode of streaming:
@@ -69,6 +70,7 @@ Defines the mode of streaming:
 - "tasks": Stream task start and finish events.
 - "debug": Stream detailed debug information.
 - "custom": Stream custom events.
+- "compact": Enable compact streaming payloads for other selected modes.
 """
 
 DisconnectMode = Literal["cancel", "continue"]
@@ -532,8 +534,6 @@ class RunCreate(TypedDict):
     """List of node names to interrupt execution after."""
     webhook: str | None
     """URL to send webhook notifications about the run's progress."""
-    stream_protocol_version: StreamVersion | None
-    """Opt into an alternate stream wire protocol version."""
     multitask_strategy: MultitaskStrategy | None
     """Strategy for handling concurrent runs on the same thread."""
 

@@ -190,6 +190,19 @@ class TestV1BackwardsCompat:
         assert len(metadata) >= 3
         assert all(isinstance(meta, dict) for meta in metadata)
 
+    def test_stream_v1_messages_compact_dedupes_metadata(self) -> None:
+        graph = _make_streaming_messages_graph().compile()
+        chunks = list(graph.stream(_MSG_INPUT, stream_mode=["messages", "compact"]))
+        metadata = [
+            meta
+            for mode, payload in chunks
+            if mode == "messages"
+            for _message, meta in [payload]
+        ]
+        assert len(metadata) >= 3
+        assert isinstance(metadata[0], dict)
+        assert all(meta is None for meta in metadata[1:])
+
 
 # --- v2 sync stream ---
 
@@ -228,12 +241,18 @@ class TestV2Stream:
             assert isinstance(data, tuple) and len(data) == 2
             message, metadata = data
             assert isinstance(message, BaseMessage)
-            assert metadata is None or isinstance(metadata, dict)
-        assert any(isinstance(c["data"][1], dict) for c in msg_chunks)
+            assert isinstance(metadata, dict)
+            assert "langgraph_node" in metadata
 
-    def test_messages_streaming_dedupes_metadata(self) -> None:
+    def test_messages_streaming_compact_dedupes_metadata(self) -> None:
         graph = _make_streaming_messages_graph().compile()
-        chunks = list(graph.stream(_MSG_INPUT, stream_mode="messages", version="v2"))
+        chunks = list(
+            graph.stream(
+                _MSG_INPUT,
+                stream_mode=["messages", "compact"],
+                version="v2",
+            )
+        )
         msg_chunks = [c for c in chunks if c["type"] == "messages"]
         assert len(msg_chunks) >= 3
         first_message, first_metadata = msg_chunks[0]["data"]
@@ -581,16 +600,18 @@ class TestV2StreamAsync:
             assert isinstance(data, tuple) and len(data) == 2
             message, metadata = data
             assert isinstance(message, BaseMessage)
-            assert metadata is None or isinstance(metadata, dict)
-        assert any(isinstance(c["data"][1], dict) for c in msg_chunks)
+            assert isinstance(metadata, dict)
+            assert "langgraph_node" in metadata
 
     @pytest.mark.anyio
-    async def test_messages_streaming_dedupes_metadata(self) -> None:
+    async def test_messages_streaming_compact_dedupes_metadata(self) -> None:
         graph = _make_streaming_messages_graph().compile()
         chunks = [
             c
             async for c in graph.astream(
-                _MSG_INPUT, stream_mode="messages", version="v2"
+                _MSG_INPUT,
+                stream_mode=["messages", "compact"],
+                version="v2",
             )
         ]
         msg_chunks = [c for c in chunks if c["type"] == "messages"]

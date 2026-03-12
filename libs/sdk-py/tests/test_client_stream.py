@@ -393,12 +393,12 @@ def test_sse_to_v2_dict_values_patch() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_runs_stream_includes_stream_protocol_version():
+async def test_async_runs_stream_includes_compact_mode():
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"
         assert request.url.path == "/runs/stream"
         body = json.loads(request.content)
-        assert body["stream_protocol_version"] == "v2"
+        assert body["stream_mode"] == ["values", "compact"]
         return httpx.Response(
             200,
             headers={"Content-Type": "text/event-stream"},
@@ -416,7 +416,7 @@ async def test_async_runs_stream_includes_stream_protocol_version():
                 thread_id=None,
                 assistant_id="agent",
                 input={"messages": []},
-                stream_protocol_version="v2",
+                stream_mode=["values", "compact"],
             )
         ]
 
@@ -425,12 +425,12 @@ async def test_async_runs_stream_includes_stream_protocol_version():
     assert parts[0].data is None
 
 
-def test_sync_runs_stream_includes_stream_protocol_version():
+def test_sync_runs_stream_includes_compact_mode():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"
         assert request.url.path == "/runs/stream"
         body = json.loads(request.content)
-        assert body["stream_protocol_version"] == "v2"
+        assert body["stream_mode"] == ["values", "compact"]
         return httpx.Response(
             200,
             headers={"Content-Type": "text/event-stream"},
@@ -445,7 +445,7 @@ def test_sync_runs_stream_includes_stream_protocol_version():
                 thread_id=None,
                 assistant_id="agent",
                 input={"messages": []},
-                stream_protocol_version="v2",
+                stream_mode=["values", "compact"],
             )
         )
 

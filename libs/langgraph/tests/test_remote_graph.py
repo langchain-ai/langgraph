@@ -917,7 +917,7 @@ def test_stream_restores_messages_and_merges_values_patch():
         remote_pregel.stream(
             {"input": "data"},
             config={"configurable": {"thread_id": "thread_1"}},
-            stream_mode=["messages", "values"],
+            stream_mode=["messages", "values", "compact"],
             subgraphs=True,
             version="v2",
         )
@@ -948,7 +948,12 @@ def test_stream_restores_messages_and_merges_values_patch():
         },
     ]
     _, kwargs = mock_sync_client.runs.stream.call_args
-    assert kwargs["stream_protocol_version"] == "v2"
+    assert set(kwargs["stream_mode"]) == {
+        "messages-tuple",
+        "values",
+        "compact",
+        "updates",
+    }
 
 
 @pytest.mark.anyio
@@ -1199,7 +1204,7 @@ async def test_astream_restores_messages_and_merges_values_patch():
     async for part in remote_pregel.astream(
         {"input": "data"},
         config={"configurable": {"thread_id": "thread_1"}},
-        stream_mode=["messages", "values"],
+        stream_mode=["messages", "values", "compact"],
         subgraphs=True,
         version="v2",
     ):
@@ -1230,7 +1235,12 @@ async def test_astream_restores_messages_and_merges_values_patch():
         },
     ]
     _, kwargs = mock_async_client.runs.stream.call_args
-    assert kwargs["stream_protocol_version"] == "v2"
+    assert set(kwargs["stream_mode"]) == {
+        "messages-tuple",
+        "values",
+        "compact",
+        "updates",
+    }
 
 
 @pytest.mark.skip(

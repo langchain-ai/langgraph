@@ -71,8 +71,6 @@ logger = logging.getLogger(__name__)
 
 __all__ = ("RemoteGraph", "RemoteException")
 
-_STREAM_PROTOCOL_CONFIG_KEY = "__stream_protocol_version__"
-
 _CONF_DROPLIST = frozenset(
     (
         CONFIG_KEY_CHECKPOINT_MAP,
@@ -801,17 +799,6 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
-        stream_protocol_version = cast(
-            Literal["v1", "v2"] | None,
-            kwargs.pop(
-                "stream_protocol_version",
-                sanitized_config.get("configurable", {}).get(
-                    _STREAM_PROTOCOL_CONFIG_KEY
-                ),
-            ),
-        )
-        if version == "v2" and stream_protocol_version is None:
-            stream_protocol_version = "v2"
         if isinstance(input, Command):
             command: CommandSDK | None = cast(CommandSDK, asdict(input))
             input = None
@@ -837,7 +824,6 @@ class RemoteGraph(PregelProtocol):
                 _merge_tracing_headers(headers) if self.distributed_tracing else headers
             ),
             params=params,
-            stream_protocol_version=stream_protocol_version,
             **kwargs,
         ):
             # split mode and ns
@@ -972,17 +958,6 @@ class RemoteGraph(PregelProtocol):
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
-        stream_protocol_version = cast(
-            Literal["v1", "v2"] | None,
-            kwargs.pop(
-                "stream_protocol_version",
-                sanitized_config.get("configurable", {}).get(
-                    _STREAM_PROTOCOL_CONFIG_KEY
-                ),
-            ),
-        )
-        if version == "v2" and stream_protocol_version is None:
-            stream_protocol_version = "v2"
         if isinstance(input, Command):
             command: CommandSDK | None = cast(CommandSDK, asdict(input))
             input = None
@@ -1008,7 +983,6 @@ class RemoteGraph(PregelProtocol):
                 _merge_tracing_headers(headers) if self.distributed_tracing else headers
             ),
             params=params,
-            stream_protocol_version=stream_protocol_version,
             **kwargs,
         ):
             # split mode and ns

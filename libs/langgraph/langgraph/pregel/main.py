@@ -2614,7 +2614,7 @@ class Pregel(
                         stream.put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
-                        dedupe_metadata=version == "v2",
+                        dedupe_metadata="compact" in stream_modes,
                     )
                 )
 
@@ -2966,7 +2966,7 @@ class Pregel(
                         stream_put,
                         subgraphs,
                         parent_ns=tuple(ns_.split(NS_SEP)) if ns_ else None,
-                        dedupe_metadata=version == "v2",
+                        dedupe_metadata="compact" in stream_modes,
                     )
                 )
 
