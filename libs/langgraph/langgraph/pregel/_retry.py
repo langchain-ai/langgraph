@@ -76,12 +76,12 @@ def run_with_retry(
             config = patch_configurable(
                 config,
                 {
-                    CONFIG_KEY_RUNTIME: runtime.override(
-                        execution_info=runtime.execution_info.override(
-                            node_attempt=attempts + 1,
-                            node_first_attempt_time=node_first_attempt_time,
-                            thread_id=thread_id,
-                        )
+                    CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                        # node_attempt is execution count (1-indexed): 1 on first run,
+                        # then 2, 3, ... on subsequent retries.
+                        node_attempt=attempts + 1,
+                        node_first_attempt_time=node_first_attempt_time,
+                        thread_id=thread_id,
                     )
                 },
             )
@@ -123,7 +123,7 @@ def run_with_retry(
             if not matching_policy:
                 raise
 
-            # increment attempts
+            # attempts tracks failed tries only; it increments after a failure.
             attempts += 1
             # check if we should give up
             if attempts >= matching_policy.max_attempts:
@@ -180,12 +180,12 @@ async def arun_with_retry(
             config = patch_configurable(
                 config,
                 {
-                    CONFIG_KEY_RUNTIME: runtime.override(
-                        execution_info=runtime.execution_info.override(
-                            node_attempt=attempts + 1,
-                            node_first_attempt_time=node_first_attempt_time,
-                            thread_id=thread_id,
-                        )
+                    CONFIG_KEY_RUNTIME: runtime.patch_execution_info(
+                        # node_attempt is execution count (1-indexed): 1 on first run,
+                        # then 2, 3, ... on subsequent retries.
+                        node_attempt=attempts + 1,
+                        node_first_attempt_time=node_first_attempt_time,
+                        thread_id=thread_id,
                     )
                 },
             )
@@ -233,7 +233,8 @@ async def arun_with_retry(
             if not matching_policy:
                 raise
 
-            # increment attempts
+            # attempts tracks failed tries only; it increments after a failure.
+            # The next execution's node_attempt is derived as attempts + 1.
             attempts += 1
             # check if we should give up
             if attempts >= matching_policy.max_attempts:

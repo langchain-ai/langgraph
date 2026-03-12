@@ -26,7 +26,7 @@ class ExecutionInfo(NamedTuple):
     thread_id: str | None = None
     """Current thread identifier, if provided in config."""
 
-    def override(self, **overrides: Any) -> ExecutionInfo:
+    def patch(self, **overrides: Any) -> ExecutionInfo:
         """Return a new execution info object with selected fields replaced."""
         return self._replace(**overrides)
 
@@ -156,6 +156,13 @@ class Runtime(Generic[ContextT]):
     ) -> Runtime[ContextT]:
         """Replace the runtime with a new runtime with the given overrides."""
         return replace(self, **overrides)
+
+    def patch_execution_info(self, **overrides: Any) -> Runtime[ContextT]:
+        """Return a new runtime with selected execution_info fields replaced."""
+        return replace(
+            self,
+            execution_info=self.execution_info.patch(**overrides),
+        )
 
 
 DEFAULT_RUNTIME = Runtime(
