@@ -28,11 +28,16 @@ By default `langgraph-checkpoint-postgres` installs `psycopg` (Psycopg 3) withou
 >     # TypeError: tuple indices must be integers or slices, not str
 > ```
 
+> [!IMPORTANT]
+> Prefer short, stable identifiers such as UUIDs for `thread_id` (and `checkpoint_ns` if you set it manually). Postgres stores these values in composite primary keys, so very long identifiers can exceed Postgres index row limits.
+
 ```python
 from langgraph.checkpoint.postgres import PostgresSaver
+from uuid import uuid4
 
-write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
-read_config = {"configurable": {"thread_id": "1"}}
+thread_id = str(uuid4())
+write_config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+read_config = {"configurable": {"thread_id": thread_id}}
 
 DB_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
 with PostgresSaver.from_conn_string(DB_URI) as checkpointer:

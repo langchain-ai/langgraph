@@ -15,11 +15,17 @@ Threads enable the checkpointing of multiple different runs, making them essenti
 - `thread_id` is simply the ID of a thread. This is always required.
 - `checkpoint_id` can optionally be passed. This identifier refers to a specific checkpoint within a thread. This can be used to kick off a run of a graph from some point halfway through a thread.
 
+For production applications, prefer short, stable identifiers such as UUIDs for `thread_id` (and for `checkpoint_ns` if you set it manually). This is especially important with Postgres-backed checkpointers because these values are stored in composite primary keys and very long values can exceed Postgres index row limits.
+
 You must pass these when invoking the graph as part of the configurable part of the config, e.g.
 
 ```python
-{"configurable": {"thread_id": "1"}}  # valid config
-{"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
+from uuid import uuid4
+
+thread_id = str(uuid4())
+
+{"configurable": {"thread_id": thread_id}}  # valid config
+{"configurable": {"thread_id": thread_id, "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
 ```
 
 ### Serde
@@ -47,9 +53,11 @@ If the checkpointer will be used with asynchronous graph execution (i.e. executi
 
 ```python
 from langgraph.checkpoint.memory import InMemorySaver
+from uuid import uuid4
 
-write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
-read_config = {"configurable": {"thread_id": "1"}}
+thread_id = str(uuid4())
+write_config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+read_config = {"configurable": {"thread_id": thread_id}}
 
 checkpointer = InMemorySaver()
 checkpoint = {
