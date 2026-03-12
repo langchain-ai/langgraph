@@ -721,7 +721,13 @@ def _deploy_base_options(
             OPT_VERBOSE,
             OPT_HOST_URL,
             click.option("--image-name", hidden=True),
-            click.option("--image-tag", default="latest", hidden=True),
+            click.option(
+                "--tag",
+                "-t",
+                default="latest",
+                show_default=True,
+                help="Tag to use for the pushed deployment image.",
+            ),
             click.option(
                 "--config",
                 "-c",
