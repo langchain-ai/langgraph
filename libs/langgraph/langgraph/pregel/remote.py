@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Iterator, Sequence
 from dataclasses import asdict
 from typing import (
     Any,
+    Generic,
     Literal,
     cast,
     overload,
@@ -31,7 +32,6 @@ from langgraph_sdk.client import (
 )
 from langgraph_sdk.schema import (
     Checkpoint,
-    Context,
     QueryParamTypes,
     ThreadState,
 )
@@ -66,6 +66,7 @@ from langgraph.types import (
     StreamMode,
     StreamPart,
 )
+from langgraph.typing import ContextT, InputT, OutputT, StateT
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,10 @@ class RemoteException(Exception):
     pass
 
 
-class RemoteGraph(PregelProtocol):
+class RemoteGraph(
+    PregelProtocol[StateT, ContextT, InputT, OutputT],
+    Generic[StateT, ContextT, InputT, OutputT],
+):
     """The `RemoteGraph` class is a client implementation for calling remote
     APIs that implement the LangGraph Server API specification.
 
@@ -689,10 +693,10 @@ class RemoteGraph(PregelProtocol):
     @overload
     def stream(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -701,15 +705,15 @@ class RemoteGraph(PregelProtocol):
         params: QueryParamTypes | None = None,
         version: Literal["v2"],
         **kwargs: Any,
-    ) -> Iterator[StreamPart]: ...
+    ) -> Iterator[StreamPart[OutputT, StateT]]: ...
 
     @overload
     def stream(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -722,10 +726,10 @@ class RemoteGraph(PregelProtocol):
 
     def stream(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -844,10 +848,10 @@ class RemoteGraph(PregelProtocol):
     @overload
     def astream(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -856,15 +860,15 @@ class RemoteGraph(PregelProtocol):
         params: QueryParamTypes | None = None,
         version: Literal["v2"],
         **kwargs: Any,
-    ) -> AsyncIterator[StreamPart]: ...
+    ) -> AsyncIterator[StreamPart[OutputT, StateT]]: ...
 
     @overload
     def astream(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -877,10 +881,10 @@ class RemoteGraph(PregelProtocol):
 
     async def astream(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         stream_mode: StreamMode | list[StreamMode] | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
@@ -1015,25 +1019,25 @@ class RemoteGraph(PregelProtocol):
     @overload
     def invoke(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
         version: Literal["v2"],
         **kwargs: Any,
-    ) -> GraphOutput[dict[str, Any]]: ...
+    ) -> GraphOutput[OutputT]: ...
 
     @overload
     def invoke(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
@@ -1044,10 +1048,10 @@ class RemoteGraph(PregelProtocol):
 
     def invoke(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
@@ -1097,25 +1101,25 @@ class RemoteGraph(PregelProtocol):
     @overload
     async def ainvoke(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
         params: QueryParamTypes | None = None,
         version: Literal["v2"],
         **kwargs: Any,
-    ) -> GraphOutput[dict[str, Any]]: ...
+    ) -> GraphOutput[OutputT]: ...
 
     @overload
     async def ainvoke(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,
@@ -1126,10 +1130,10 @@ class RemoteGraph(PregelProtocol):
 
     async def ainvoke(
         self,
-        input: dict[str, Any] | Any,
+        input: InputT | Command | None,
         config: RunnableConfig | None = None,
         *,
-        context: Context | None = None,
+        context: ContextT | None = None,
         interrupt_before: All | Sequence[str] | None = None,
         interrupt_after: All | Sequence[str] | None = None,
         headers: dict[str, str] | None = None,

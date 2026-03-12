@@ -8,7 +8,8 @@ from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from langgraph.graph import StateGraph
-from langgraph.types import Command
+from langgraph.pregel.remote import RemoteGraph
+from langgraph.types import Command, GraphOutput, StreamPart
 
 
 def test_typed_dict_state() -> None:
@@ -159,3 +160,75 @@ def test_add_node_with_explicit_input_schema() -> None:
     # because it violates the principles of contravariance
     workflow.add_node("a_narrow", a, input_schema=ANarrow)  # type: ignore[arg-type]
     workflow.add_node("b_narrow", b, input_schema=BNarrow)  # type: ignore[arg-type]
+
+
+@pytest.mark.skip("Purely for type checking")
+def test_remote_graph_generics_typed_dict() -> None:
+    """RemoteGraph parameterized with TypedDict should propagate types."""
+
+    class MyState(TypedDict):
+        messages: list[str]
+
+    rg: RemoteGraph[MyState, None, MyState, MyState] = RemoteGraph(
+        "test", url="http://localhost:8123"
+    )
+
+    # v2 invoke should return GraphOutput[MyState]
+    result: GraphOutput[MyState] = rg.invoke({"messages": ["hi"]}, version="v2")
+    _val: MyState = result.value
+
+    # v1 invoke should return dict[str, Any] | Any
+    _v1_result: dict[str, Any] | Any = rg.invoke({"messages": ["hi"]})
+
+    # v2 stream should yield StreamPart[MyState, MyState]
+    for part in rg.stream({"messages": ["hi"]}, version="v2"):
+        _part: StreamPart[MyState, MyState] = part
+
+    # input should accept the state type
+    rg.invoke({"messages": ["hi"]}, version="v2")
+
+    # input should also accept Command
+    rg.invoke(Command(), version="v2")
+
+    # input should also accept None
+    rg.invoke(None, version="v2")
+
+
+@pytest.mark.skip("Purely for type checking")
+def test_remote_graph_generics_pydantic() -> None:
+    """RemoteGraph parameterized with Pydantic model should propagate types."""
+
+    class PydanticState(BaseModel):
+        messages: list[str]
+
+    rg: RemoteGraph[PydanticState, None, PydanticState, PydanticState] = RemoteGraph(
+        "test", url="http://localhost:8123"
+    )
+
+    result: GraphOutput[PydanticState] = rg.invoke(
+        PydanticState(messages=["hi"]), version="v2"
+    )
+    _val: PydanticState = result.value
+
+
+@pytest.mark.skip("Purely for type checking")
+def test_remote_graph_separate_input_output() -> None:
+    """RemoteGraph with different input/output schemas."""
+
+    class InputState(TypedDict):
+        query: str
+
+    class OutputState(TypedDict):
+        answer: str
+
+    class FullState(InputState, OutputState): ...
+
+    rg: RemoteGraph[FullState, None, InputState, OutputState] = RemoteGraph(
+        "test", url="http://localhost:8123"
+    )
+
+    result: GraphOutput[OutputState] = rg.invoke({"query": "hi"}, version="v2")
+    _val: OutputState = result.value
+
+    # wrong input type should fail type checking
+    rg.invoke({"answer": "wrong"}, version="v2")  # type: ignore[call-overload]
