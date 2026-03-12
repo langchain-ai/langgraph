@@ -5,7 +5,14 @@ from typing import Any, Literal
 import pytest
 from typing_extensions import TypedDict
 
-from langgraph.advanced_graph import AdvancedStateGraph, publish_to_channel, wait_for
+from langgraph.advanced_graph import (
+    AdvancedStateGraph,
+    any_of,
+    channel_condition,
+    publish_to_channel,
+    timer_condition,
+    wait_for,
+)
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.types import Command, Send
@@ -90,9 +97,26 @@ async def test_async_sub_graph() -> None:
         return Command(goto=sends)
 
     async def wait_node(state: MainAgentState) -> Command:
-        # Lightweight interrupt: only this node blocks on inbox.
-        msg = await wait_for("inbox")
-        state["output"].append(f"{msg['type']}: {msg['payload']}")
+        # Lightweight interrupt: only this node blocks for the next relevant signal.
+        event = await wait_for(
+            any_of(
+                channel_condition("tool_completion_channel"),
+                channel_condition("subagent_completion_channel"),
+                channel_condition("user_input_channel"),
+                timer_condition(minutes=1),
+            )
+        )
+        if event["condition"] == "channel":
+            channel = event["channel"]
+            payload = event["value"]
+            if channel == "tool_completion_channel":
+                state["output"].append(f"tool: {payload}")
+            elif channel == "subagent_completion_channel":
+                state["output"].append(f"sub_agent: {payload}")
+            elif channel == "user_input_channel":
+                state["output"].append(f"user_input: {payload}")
+        else:
+            state["output"].append("timer: no updates yet")
         # Loop back to planner with updated output.
         return Command(goto=Send("llm_node", state))
 
@@ -101,8 +125,8 @@ async def test_async_sub_graph() -> None:
         # Fire-and-forget style completion: publish result to inbox and exit.
         # (i.e., just complete without explicitly going to a next node)
         publish_to_channel(
-            "inbox",
-            {"type": "tool", "payload": f"tool completed for: {tool_input}"},
+            "tool_completion_channel",
+            f"tool completed for: {tool_input}",
         )
 
     async def sub_agent_node(sub_agent_input: str) -> None:
@@ -112,8 +136,8 @@ async def test_async_sub_graph() -> None:
         )
         # Same pattern as tool node: publish result and complete current node.
         publish_to_channel(
-            "inbox",
-            {"type": "sub_agent", "payload": sub_agent_output["output"]},
+            "subagent_completion_channel",
+            sub_agent_output["output"],
         )
 
     async def order_food_node(complete_message: str) -> dict[str, str]:
@@ -121,7 +145,9 @@ async def test_async_sub_graph() -> None:
 
     advanced_flow = AdvancedStateGraph(MainAgentState)
     # Default behavior is an unbounded async channel (maxsize=None).
-    advanced_flow.add_async_channel("inbox", dict)
+    advanced_flow.add_async_channel("tool_completion_channel", str)
+    advanced_flow.add_async_channel("subagent_completion_channel", str)
+    advanced_flow.add_async_channel("user_input_channel", str)
     advanced_flow.add_entry_node(llm_node)
     advanced_flow.node(wait_node)
     advanced_flow.node(tool_node)
@@ -151,9 +177,7 @@ async def test_async_sub_graph() -> None:
 
     # External input can be injected while graph execution is in progress.
     await asyncio.sleep(0.01)
-    await main_agent.apublish_to_channel(
-        "inbox", {"type": "user_input", "payload": "No spicy food please"}
-    )
+    await main_agent.apublish_to_channel("user_input_channel", "No spicy food please")
     result = await started
 
     assert result == {

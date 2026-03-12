@@ -5,6 +5,7 @@ import contextvars
 import inspect
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any, Generic, TypeVar, cast
 
 from langgraph.types import Command, Send
@@ -20,6 +21,25 @@ _CURRENT_RUN: contextvars.ContextVar[_GraphEngineRun | None] = contextvars.Conte
 class _ChannelSpec:
     typ: Any
     maxsize: int
+
+
+@dataclass(frozen=True)
+class ChannelCondition:
+    channel: str
+    n: int = 1
+
+
+@dataclass(frozen=True)
+class TimerCondition:
+    seconds: float
+
+
+@dataclass(frozen=True)
+class AnyOfCondition:
+    conditions: tuple[WaitCondition, ...]
+
+
+WaitCondition = ChannelCondition | TimerCondition | AnyOfCondition
 
 
 class AdvancedStateGraph(Generic[StateT]):
@@ -199,7 +219,24 @@ class _GraphEngineRun:
         queue = self._get_channel(channel)
         queue.put_nowait(value)
 
-    async def wait_for(self, channel: str, n: int = 1) -> Any:
+    async def wait_for(self, target: str | WaitCondition, n: int = 1) -> Any:
+        if isinstance(target, str):
+            return await self._wait_for_channel_values(target, n=n)
+        if isinstance(target, ChannelCondition):
+            value = await self._wait_for_channel_values(target.channel, n=target.n)
+            return {
+                "condition": "channel",
+                "channel": target.channel,
+                "value": value,
+            }
+        if isinstance(target, TimerCondition):
+            await asyncio.sleep(target.seconds)
+            return {"condition": "timer", "seconds": target.seconds}
+        if isinstance(target, AnyOfCondition):
+            return await self._wait_for_any_of(target)
+        raise ValueError(f"Unsupported wait condition type: {type(target)!r}")
+
+    async def _wait_for_channel_values(self, channel: str, n: int) -> Any:
         if n < 1:
             raise ValueError("wait_for count `n` must be >= 1")
         queue = self._get_channel(channel)
@@ -209,6 +246,21 @@ class _GraphEngineRun:
         for _ in range(n):
             values.append(await queue.get())
         return values
+
+    async def _wait_for_any_of(self, condition: AnyOfCondition) -> Any:
+        if not condition.conditions:
+            raise ValueError("any_of() requires at least one condition")
+
+        tasks = [
+            asyncio.create_task(self.wait_for(inner_condition, n=1))
+            for inner_condition in condition.conditions
+        ]
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        first = done.pop()
+        return first.result()
 
     def _get_channel(self, channel: str) -> asyncio.Queue[Any]:
         if channel not in self._channels:
@@ -321,11 +373,11 @@ def _normalize_goto(goto: Any, *, default_arg: Any) -> list[Send]:
     return []
 
 
-async def wait_for(channel: str, n: int = 1) -> Any:
+async def wait_for(target: str | WaitCondition, n: int = 1) -> Any:
     run = _CURRENT_RUN.get()
     if run is None:
         raise RuntimeError("wait_for() can only be used inside advanced_graph nodes")
-    return await run.wait_for(channel, n=n)
+    return await run.wait_for(target, n=n)
 
 
 def publish_to_channel(channel: str, value: Any) -> None:
@@ -335,6 +387,45 @@ def publish_to_channel(channel: str, value: Any) -> None:
             "publish_to_channel() can only be used inside advanced_graph nodes"
         )
     run.publish_nowait(channel, value)
+
+
+def channel_condition(channel: str, n: int = 1) -> ChannelCondition:
+    if n < 1:
+        raise ValueError("channel_condition `n` must be >= 1")
+    return ChannelCondition(channel=channel, n=n)
+
+
+def timer_condition(
+    timeout: float | timedelta | None = None,
+    *,
+    seconds: float | None = None,
+    minutes: float | None = None,
+) -> TimerCondition:
+    if timeout is not None and (seconds is not None or minutes is not None):
+        raise ValueError(
+            "Provide either `timeout` or named `seconds`/`minutes`, not both"
+        )
+
+    if isinstance(timeout, timedelta):
+        resolved_seconds = timeout.total_seconds()
+    elif isinstance(timeout, (int, float)):
+        resolved_seconds = float(timeout)
+    else:
+        resolved_seconds = 0.0
+        if seconds is not None:
+            resolved_seconds += float(seconds)
+        if minutes is not None:
+            resolved_seconds += float(minutes) * 60.0
+
+    if resolved_seconds <= 0:
+        raise ValueError("timer_condition must be greater than 0 seconds")
+    return TimerCondition(seconds=resolved_seconds)
+
+
+def any_of(*conditions: WaitCondition) -> AnyOfCondition:
+    if not conditions:
+        raise ValueError("any_of() requires at least one condition")
+    return AnyOfCondition(conditions=tuple(conditions))
 
 
 def _infer_node_name(node: Callable[..., Any]) -> str:
