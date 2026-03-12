@@ -134,7 +134,7 @@ class StoreClient:
                 raise ValueError(
                     f"Invalid namespace label '{label}'. Namespace labels cannot contain periods ('.')."
                 )
-        get_params = {"namespace": ".".join(namespace), "key": key}
+        get_params: dict[str, Any] = {"namespace": ".".join(namespace), "key": key}
         if refresh_ttl is not None:
             get_params["refresh_ttl"] = refresh_ttl
         if params:

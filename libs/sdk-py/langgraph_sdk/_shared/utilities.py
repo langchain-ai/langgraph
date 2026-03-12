@@ -6,12 +6,16 @@ import functools
 import os
 import re
 from collections.abc import Mapping
-from typing import Any, cast
+from datetime import tzinfo
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
 import langgraph_sdk
 from langgraph_sdk.schema import RunCreateMetadata
+
+if TYPE_CHECKING:
+    from zoneinfo import ZoneInfo
 
 RESERVED_HEADERS = ("x-api-key",)
 
@@ -105,6 +109,53 @@ def _get_run_metadata_from_response(
         )
 
     return None
+
+
+def _sse_to_v2_dict(event: str, data: Any) -> dict[str, Any] | None:
+    """Convert an SSE event+data pair into a v2 stream part dict.
+
+    Returns None for ``end`` events (signals end of stream).
+    """
+    if event == "end":
+        return None
+    parts = event.split("|")
+    event_type = parts[0]
+    ns = parts[1:] if len(parts) > 1 else []
+    result: dict[str, Any] = {"type": event_type, "ns": ns, "data": data}
+    if event_type == "values" and isinstance(data, dict):
+        result["interrupts"] = data.pop("__interrupt__", [])
+    else:
+        result["interrupts"] = []
+    return result
+
+
+def _resolve_timezone(tz: str | tzinfo | ZoneInfo | None) -> str | None:
+    """Convert a timezone argument to an IANA timezone string.
+
+    Accepts:
+        - A string (returned as-is, assumed to be an IANA timezone name)
+        - A ``datetime.tzinfo`` instance (e.g. ``zoneinfo.ZoneInfo("America/New_York")``,
+          ``datetime.timezone.utc``). The ``key`` attribute is used if available,
+          otherwise ``tzname(None)`` is used.
+        - ``None`` (returned as ``None``)
+    """
+    if tz is None or isinstance(tz, str):
+        return tz
+    if isinstance(tz, tzinfo):
+        # ZoneInfo objects have a .key attribute with the IANA name
+        if hasattr(tz, "key"):
+            return tz.key  # type: ignore[union-attr]
+        # Fall back to tzname for fixed-offset timezones like datetime.timezone.utc
+        name = tz.tzname(None)
+        if name is not None:
+            return name
+        raise ValueError(
+            f"Cannot determine timezone name from {tz!r}. "
+            "Use a zoneinfo.ZoneInfo instance or pass a string like 'America/New_York'."
+        )
+    raise TypeError(
+        f"Expected str, datetime.tzinfo, or None for timezone, got {type(tz).__name__}"
+    )
 
 
 def _provided_vals(d: Mapping[str, Any]) -> dict[str, Any]:

@@ -127,9 +127,16 @@
             "graphs": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/GraphDef"
+                  }
+                ]
               },
-              "description": "Optional. Named definitions of graphs, each pointing to a Python object.\n\n\nGraphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context\nmanagers that accept a single configuration argument (of type RunnableConfig) and return a pregel object\n(instance of Stategraph, etc.).\n"
+              "description": "Optional. Named definitions of graphs, each pointing to a Python object.\n\n\nGraphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context\nmanagers that accept a single configuration argument (of type RunnableConfig) and return a pregel object\n(instance of Stategraph, etc.).\n\nor objects with a \"path\" key and optional \"description\" key."
             },
             "http": {
               "anyOf": [
@@ -341,9 +348,16 @@
             "graphs": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/GraphDef"
+                  }
+                ]
               },
-              "description": "Optional. Named definitions of graphs, each pointing to a Python object.\n\n\nGraphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context\nmanagers that accept a single configuration argument (of type RunnableConfig) and return a pregel object\n(instance of Stategraph, etc.).\n"
+              "description": "Optional. Named definitions of graphs, each pointing to a Python object.\n\n\nGraphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context\nmanagers that accept a single configuration argument (of type RunnableConfig) and return a pregel object\n(instance of Stategraph, etc.).\n\nor objects with a \"path\" key and optional \"description\" key."
             },
             "http": {
               "anyOf": [
@@ -542,6 +556,10 @@
       "description": "Configuration for the built-in checkpointer, which handles checkpointing of state.\n\nIf omitted, no checkpointer is set up (the object store will still be present, however).",
       "type": "object",
       "properties": {
+        "path": {
+          "type": "string",
+          "description": "Import path to an async context manager that yields a `BaseCheckpointSaver`\ninstance.\n\nThe referenced object should be an `@asynccontextmanager`-decorated function\nso that the server can properly manage the checkpointer's lifecycle (e.g.\nopening and closing connections).\n"
+        },
         "serde": {
           "anyOf": [
             {
@@ -590,7 +608,27 @@
               "type": "null"
             }
           ],
-          "description": "Optional. List of allowed python modules to de-serialize custom objects from.\n\nIf provided, only the specified modules will be allowed to be deserialized.\nIf omitted, no modules are allowed, and the object returned will simply be a json object OR\na deserialized langchain object.\n"
+          "description": "Optional. List of allowed python modules to de-serialize custom objects from JSON.\n\nIf provided, only the specified modules will be allowed to be deserialized.\nIf omitted, no modules are allowed, and the object returned will simply be a json object OR\na deserialized langchain object.\n"
+        },
+        "allowed_msgpack_modules": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. List of allowed python modules to de-serialize custom objects from msgpack.\n\nKnown safe types (langgraph.checkpoint.serde.jsonplus.SAFE_MSGPACK_TYPES) are always\nallowed regardless of this setting. Use this to allowlist your custom Pydantic models,\ndataclasses, and other user-defined types.\n\nIf True (default), unregistered types will log a warning but still be deserialized.\nIf None, only known safe types will be deserialized; unregistered types will be blocked.\n\n{...\n[\"my_agent.models\", \"MyState\"],\n]\n}\n}\n\n{...\n}\n}\n\n"
         },
         "pickle_fallback": {
           "type": "boolean",
@@ -654,6 +692,29 @@
       "properties": {
         "path": {
           "type": "string"
+        }
+      },
+      "required": []
+    },
+    "GraphDef": {
+      "title": "GraphDef",
+      "description": "Definition of a graph with additional metadata.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Optional. A description of the graph's purpose and functionality.\n\nThis description is surfaced in the API and can help users understand what the graph does.\n"
+        },
+        "path": {
+          "type": "string",
+          "description": "Required. Import path to the graph object.\n"
         }
       },
       "required": []
