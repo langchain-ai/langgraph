@@ -143,7 +143,7 @@ async def test_async_sub_graph() -> None:
         return {"done": complete_message}
 
     advanced_flow = AdvancedStateGraph(MainAgentState)
-    # Default behavior is an unbounded async channel (maxsize=None).
+    # Default behavior is an unbounded async channel like Rust channel
     advanced_flow.add_async_channel("tool_completion_channel", str)
     advanced_flow.add_async_channel("subagent_completion_channel", str)
     advanced_flow.add_async_channel("user_input_channel", str)
