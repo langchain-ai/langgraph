@@ -67,7 +67,7 @@ def format_revisions_table(revisions: Sequence[dict[str, object]]) -> str:
         status = str(revision.get("status", "-") or "-")
         if status == "DEPLOYED":
             if latest_deployed_seen:
-                status = "PREV DEPLOYED"
+                status = "REPLACED"
             else:
                 latest_deployed_seen = True
         rows.append(

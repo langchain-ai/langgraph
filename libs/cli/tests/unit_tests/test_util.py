@@ -255,4 +255,4 @@ def test_format_revisions_table():
     assert "2023-11-07T05:31:56Z" in output
     assert "rev-456" in output
     assert "rev-789" in output
-    assert "PREV DEPLOYED" in output
+    assert "REPLACED" in output
