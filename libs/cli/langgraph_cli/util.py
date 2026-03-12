@@ -61,14 +61,23 @@ def format_deployments_table(deployments: Sequence[dict[str, object]]) -> str:
 
 def format_revisions_table(revisions: Sequence[dict[str, object]]) -> str:
     headers = ("Revision ID", "Status", "Created At")
-    rows = [
-        (
-            str(revision.get("id", "-") or "-"),
-            str(revision.get("status", "-") or "-"),
-            str(revision.get("created_at", "-") or "-"),
+    latest_deployed_seen = False
+    rows = []
+    for revision in revisions:
+        status = str(revision.get("status", "-") or "-")
+        if status == "DEPLOYED":
+            if latest_deployed_seen:
+                status = "PREV DEPLOYED"
+            else:
+                latest_deployed_seen = True
+        rows.append(
+            (
+                str(revision.get("id", "-") or "-"),
+                status,
+                str(revision.get("created_at", "-") or "-"),
+            )
         )
-        for revision in revisions
-    ]
+
     widths = [
         max(len(headers[index]), *(len(row[index]) for row in rows))
         for index in range(len(headers))

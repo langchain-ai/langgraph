@@ -232,11 +232,16 @@ def test_format_revisions_table():
         [
             {
                 "id": "rev-123",
+                "status": "DEPLOYED",
+                "created_at": "2023-11-09T10:00:00Z",
+            },
+            {
+                "id": "rev-456",
                 "status": "CREATING",
                 "created_at": "2023-11-07T05:31:56Z",
             },
             {
-                "id": "rev-456",
+                "id": "rev-789",
                 "status": "DEPLOYED",
                 "created_at": "2023-11-08T10:00:00Z",
             },
@@ -249,3 +254,5 @@ def test_format_revisions_table():
     assert "CREATING" in output
     assert "2023-11-07T05:31:56Z" in output
     assert "rev-456" in output
+    assert "rev-789" in output
+    assert "PREV DEPLOYED" in output
