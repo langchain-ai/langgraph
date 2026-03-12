@@ -215,3 +215,4 @@ async def test_async_sub_graph() -> None:
     order_food_idx = output.index("order_food: order submitted")
     assert first_sub_idx < second_sub_idx < order_food_idx
     assert planner._idx == len(planner.responses)
+    print(output)
