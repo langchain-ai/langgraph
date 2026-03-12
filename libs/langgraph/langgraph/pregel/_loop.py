@@ -180,6 +180,7 @@ class PregelLoop:
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
+    _has_untracked_channels: bool
     managed: ManagedValueMapping
     checkpoint: Checkpoint
     checkpoint_id_saved: str
