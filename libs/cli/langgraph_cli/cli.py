@@ -717,7 +717,7 @@ def _deploy_base_options(
             OPT_HOST_URL,
             click.option("--image-name", hidden=True),
             click.option(
-                "--image-tag",
+                "--tag",
                 "-t",
                 default="latest",
                 show_default=True,
