@@ -13,10 +13,13 @@ from langgraph._internal._config import patch_configurable, recast_checkpoint_ns
 from langgraph._internal._constants import (
     CONF,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_RUNTIME,
+    CONFIG_KEY_THREAD_ID,
     CONFIG_KEY_RESUMING,
     NS_SEP,
 )
 from langgraph.errors import GraphBubbleUp, ParentCommand
+from langgraph.runtime import Runtime
 from langgraph.types import Command, PregelExecutableTask, RetryPolicy
 
 logger = logging.getLogger(__name__)
@@ -60,10 +63,28 @@ def run_with_retry(
     """Run a task with retries."""
     retry_policy = task.retry_policy or retry_policy
     attempts = 0
+    node_first_attempt_time = time.time()
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
     while True:
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+        if isinstance(runtime, Runtime):
+            thread_id = config.get(CONF, {}).get(
+                CONFIG_KEY_THREAD_ID, runtime.execution_info.thread_id
+            )
+            config = patch_configurable(
+                config,
+                {
+                    CONFIG_KEY_RUNTIME: runtime.override(
+                        execution_info=runtime.execution_info.override(
+                            node_attempt=attempts + 1,
+                            node_first_attempt_time=node_first_attempt_time,
+                            thread_id=thread_id,
+                        )
+                    )
+                },
+            )
         try:
             # clear any writes from previous attempts
             task.writes.clear()
@@ -141,6 +162,7 @@ async def arun_with_retry(
     """Run a task asynchronously with retries."""
     retry_policy = task.retry_policy or retry_policy
     attempts = 0
+    node_first_attempt_time = time.time()
     config = task.config
     if configurable is not None:
         config = patch_configurable(config, configurable)
@@ -150,6 +172,23 @@ async def arun_with_retry(
                 # if the task is already cached, return
                 return
     while True:
+        runtime = config.get(CONF, {}).get(CONFIG_KEY_RUNTIME)
+        if isinstance(runtime, Runtime):
+            thread_id = config.get(CONF, {}).get(
+                CONFIG_KEY_THREAD_ID, runtime.execution_info.thread_id
+            )
+            config = patch_configurable(
+                config,
+                {
+                    CONFIG_KEY_RUNTIME: runtime.override(
+                        execution_info=runtime.execution_info.override(
+                            node_attempt=attempts + 1,
+                            node_first_attempt_time=node_first_attempt_time,
+                            thread_id=thread_id,
+                        )
+                    )
+                },
+            )
         try:
             # clear any writes from previous attempts
             task.writes.clear()

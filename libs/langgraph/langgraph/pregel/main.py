@@ -136,7 +136,7 @@ from langgraph.pregel._validate import validate_graph, validate_keys
 from langgraph.pregel._write import ChannelWrite, ChannelWriteEntry
 from langgraph.pregel.debug import get_bolded_text, get_colored_text, tasks_w_writes
 from langgraph.pregel.protocol import PregelProtocol, StreamChunk, StreamProtocol
-from langgraph.runtime import DEFAULT_RUNTIME, Runtime
+from langgraph.runtime import DEFAULT_RUNTIME, ExecutionInfo, Runtime
 from langgraph.types import (
     All,
     CachePolicy,
@@ -2648,6 +2648,9 @@ class Pregel(
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
+                execution_info=ExecutionInfo(
+                    thread_id=config[CONF].get(CONFIG_KEY_THREAD_ID),
+                ),
             )
             parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)
@@ -3014,6 +3017,9 @@ class Pregel(
                 store=store,
                 stream_writer=stream_writer,
                 previous=None,
+                execution_info=ExecutionInfo(
+                    thread_id=config[CONF].get(CONFIG_KEY_THREAD_ID),
+                ),
             )
             parent_runtime = config[CONF].get(CONFIG_KEY_RUNTIME, DEFAULT_RUNTIME)
             runtime = parent_runtime.merge(runtime)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Any, Generic, cast
+from typing import Any, Generic, NamedTuple, cast
 
 from langgraph.store.base import BaseStore
 from typing_extensions import TypedDict, Unpack
@@ -11,7 +11,24 @@ from langgraph.config import get_config
 from langgraph.types import _DC_KWARGS, StreamWriter
 from langgraph.typing import ContextT
 
-__all__ = ("Runtime", "get_runtime")
+__all__ = ("ExecutionInfo", "Runtime", "get_runtime")
+
+
+class ExecutionInfo(NamedTuple):
+    """Read-only execution metadata for the current node run."""
+
+    node_attempt: int = 1
+    """Current node execution attempt number (1-indexed)."""
+
+    node_first_attempt_time: float | None = None
+    """Unix timestamp (seconds) for when the first attempt started."""
+
+    thread_id: str | None = None
+    """Current thread identifier, if provided in config."""
+
+    def override(self, **overrides: Any) -> ExecutionInfo:
+        """Return a new execution info object with selected fields replaced."""
+        return self._replace(**overrides)
 
 
 def _no_op_stream_writer(_: Any) -> None: ...
@@ -22,6 +39,7 @@ class _RuntimeOverrides(TypedDict, Generic[ContextT], total=False):
     store: BaseStore | None
     stream_writer: StreamWriter
     previous: Any
+    execution_info: ExecutionInfo
 
 
 @dataclass(**_DC_KWARGS)
@@ -29,7 +47,7 @@ class Runtime(Generic[ContextT]):
     """Convenience class that bundles run-scoped context and other runtime utilities.
 
     This class is injected into graph nodes and middleware. It provides access to
-    `context`, `store`, `stream_writer`, and `previous`.
+    `context`, `store`, `stream_writer`, `previous`, and `execution_info`.
 
     !!! note "Accessing `config`"
 
@@ -115,6 +133,9 @@ class Runtime(Generic[ContextT]):
     Only available with the functional API when a checkpointer is provided.
     """
 
+    execution_info: ExecutionInfo = field(default_factory=ExecutionInfo)
+    """Read-only execution information/metadata for the current node run."""
+
     def merge(self, other: Runtime[ContextT]) -> Runtime[ContextT]:
         """Merge two runtimes together.
 
@@ -127,6 +148,7 @@ class Runtime(Generic[ContextT]):
             if other.stream_writer is not _no_op_stream_writer
             else self.stream_writer,
             previous=self.previous if other.previous is None else other.previous,
+            execution_info=other.execution_info,
         )
 
     def override(
@@ -141,6 +163,7 @@ DEFAULT_RUNTIME = Runtime(
     store=None,
     stream_writer=_no_op_stream_writer,
     previous=None,
+    execution_info=ExecutionInfo(),
 )
 
 
