@@ -15,7 +15,7 @@ __all__ = ("ExecutionInfo", "Runtime", "get_runtime")
 
 
 class ExecutionInfo(NamedTuple):
-    """Read-only execution metadata for the current node run."""
+    """Read-only execution info/metadata for the execution of current thread/run/node."""
 
     node_attempt: int = 1
     """Current node execution attempt number (1-indexed)."""
