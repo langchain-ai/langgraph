@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -9,6 +10,7 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 
@@ -188,3 +190,74 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_sync_and_async_checkpoint_ordering_parity(
+        self, tmp_path: Path
+    ) -> None:
+        db_path = tmp_path / "ordering-parity.sqlite"
+        config_root: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-parity",
+                "checkpoint_ns": "",
+            }
+        }
+        config_inner: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-parity",
+                "checkpoint_ns": "inner",
+            }
+        }
+
+        checkpoint_old = empty_checkpoint()
+        checkpoint_old["id"] = "z-older"
+        checkpoint_old["ts"] = "2024-01-01T00:00:00.000000+00:00"
+
+        checkpoint_new = create_checkpoint(checkpoint_old, {}, 1)
+        checkpoint_new["id"] = "a-newer"
+        checkpoint_new["ts"] = "2024-01-01T00:00:02.000000+00:00"
+
+        checkpoint_inner = empty_checkpoint()
+        checkpoint_inner["id"] = "m-inner"
+        checkpoint_inner["ts"] = "2024-01-01T00:00:01.000000+00:00"
+
+        async with AsyncSqliteSaver.from_conn_string(str(db_path)) as async_saver:
+            await async_saver.aput(config_root, checkpoint_old, {}, {})
+            await async_saver.aput(config_root, checkpoint_new, {}, {})
+            await async_saver.aput(config_inner, checkpoint_inner, {}, {})
+
+            latest_async = await async_saver.aget_tuple(config_root)
+            list_async = [
+                cp
+                async for cp in async_saver.alist(
+                    {"configurable": {"thread_id": "thread-parity"}}
+                )
+            ]
+            before_async = [
+                cp
+                async for cp in async_saver.alist(
+                    {"configurable": {"thread_id": "thread-parity"}},
+                    before={"configurable": {"checkpoint_id": "a-newer"}},
+                )
+            ]
+
+        with SqliteSaver.from_conn_string(str(db_path)) as sync_saver:
+            latest_sync = sync_saver.get_tuple(config_root)
+            list_sync = list(
+                sync_saver.list({"configurable": {"thread_id": "thread-parity"}})
+            )
+            before_sync = list(
+                sync_saver.list(
+                    {"configurable": {"thread_id": "thread-parity"}},
+                    before={"configurable": {"checkpoint_id": "a-newer"}},
+                )
+            )
+
+        assert latest_async is not None
+        assert latest_sync is not None
+        assert latest_async.checkpoint["id"] == latest_sync.checkpoint["id"]
+        assert [cp.checkpoint["id"] for cp in list_async] == [
+            cp.checkpoint["id"] for cp in list_sync
+        ]
+        assert [cp.checkpoint["id"] for cp in before_async] == [
+            cp.checkpoint["id"] for cp in before_sync
+        ]
