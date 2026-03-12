@@ -1129,7 +1129,7 @@ _OutputT = TypeVar("_OutputT")
 _StateT = TypeVar("_StateT")
 
 
-def _check_type_narrowing(part: StreamPart[_OutputT, _StateT]) -> None:
+def _check_type_narrowing(part: StreamPart[_StateT, _OutputT]) -> None:
     """Compile-time type narrowing checks — never called at runtime."""
     if part["type"] == "values":
         assert_type(part, ValuesStreamPart[_OutputT])
