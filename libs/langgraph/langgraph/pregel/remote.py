@@ -705,7 +705,7 @@ class RemoteGraph(
         params: QueryParamTypes | None = None,
         version: Literal["v2"],
         **kwargs: Any,
-    ) -> Iterator[StreamPart[OutputT, StateT]]: ...
+    ) -> Iterator[StreamPart[StateT, OutputT]]: ...
 
     @overload
     def stream(
@@ -860,7 +860,7 @@ class RemoteGraph(
         params: QueryParamTypes | None = None,
         version: Literal["v2"],
         **kwargs: Any,
-    ) -> AsyncIterator[StreamPart[OutputT, StateT]]: ...
+    ) -> AsyncIterator[StreamPart[StateT, OutputT]]: ...
 
     @overload
     def astream(
