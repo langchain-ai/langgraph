@@ -175,6 +175,7 @@ def test_graph_with_single_retry_policy():
     def failing_node(state: State, runtime: Runtime):
         nonlocal attempt_count
         attempt_count += 1
+        assert runtime.execution_info.node_attempt == attempt_count
         attempt_numbers.append(runtime.execution_info.node_attempt)
         first_attempt_times.append(runtime.execution_info.node_first_attempt_time)
         if attempt_count < 3:  # Fail the first two attempts
