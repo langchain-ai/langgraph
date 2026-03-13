@@ -121,6 +121,7 @@ class _ToolCallRequestOverrides(TypedDict, total=False):
     """Possible overrides for ToolCallRequest.override() method."""
 
     tool_call: ToolCall
+    tool: BaseTool
     state: Any
 
 
@@ -921,7 +922,7 @@ class ToolNode(RunnableCallable):
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime)
+        injected_call = self._inject_tool_args(call, request.runtime, tool)
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
@@ -1074,7 +1075,7 @@ class ToolNode(RunnableCallable):
             raise TypeError(msg)
 
         # Inject state, store, and runtime right before invocation
-        injected_call = self._inject_tool_args(call, request.runtime)
+        injected_call = self._inject_tool_args(call, request.runtime, tool)
         call_args = {**injected_call, "type": "tool_call"}
 
         try:
@@ -1280,6 +1281,7 @@ class ToolNode(RunnableCallable):
         self,
         tool_call: ToolCall,
         tool_runtime: ToolRuntime,
+        tool: BaseTool | None = None,
     ) -> ToolCall:
         """Inject graph state, store, and runtime into tool call arguments.
 
@@ -1298,6 +1300,9 @@ class ToolNode(RunnableCallable):
                 Must contain 'name', 'args', 'id', and 'type' fields.
             tool_runtime: The ToolRuntime instance containing all runtime context
                 (state, config, store, context, stream_writer) to inject into tools.
+            tool: Optional tool instance. When provided, allows injection for
+                dynamically registered tools that are not in self.tools_by_name
+                (e.g., tools added via middleware's wrap_tool_call).
 
         Returns:
             A new ToolCall dictionary with the same structure as the input but with
@@ -1311,10 +1316,12 @@ class ToolNode(RunnableCallable):
             This method is called automatically during tool execution. It should not
             be called from outside the `ToolNode`.
         """
-        if tool_call["name"] not in self.tools_by_name:
-            return tool_call
-
         injected = self._injected_args.get(tool_call["name"])
+        if not injected and tool is not None:
+            # For dynamically registered tools (e.g., added via middleware's
+            # wrap_tool_call), compute injected args on-the-fly since they
+            # were not present during ToolNode initialization.
+            injected = _get_all_injected_args(tool)
         if not injected:
             return tool_call
 
@@ -1530,16 +1537,23 @@ def tools_condition(
 class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
     """Runtime context automatically injected into tools.
 
-    When a tool function has a parameter named `tool_runtime` with type hint
+    !!! note
+
+        This is distinct from `Runtime` (from `langgraph.runtime`), which is injected
+        into graph nodes and middleware. `ToolRuntime` includes additional tool-specific
+        attributes like `config`, `state`, and `tool_call_id` that `Runtime` does not
+        have.
+
+    When a tool function has a parameter named `runtime` with type hint
     `ToolRuntime`, the tool execution system will automatically inject an instance
     containing:
 
     - `state`: The current graph state
     - `tool_call_id`: The ID of the current tool call
     - `config`: `RunnableConfig` for the current execution
-    - `context`: Runtime context (from langgraph `Runtime`)
-    - `store`: `BaseStore` instance for persistent storage (from langgraph `Runtime`)
-    - `stream_writer`: `StreamWriter` for streaming output (from langgraph `Runtime`)
+    - `context`: Runtime context (shared with `Runtime`)
+    - `store`: `BaseStore` instance for persistent storage (shared with `Runtime`)
+    - `stream_writer`: `StreamWriter` for streaming output (shared with `Runtime`)
 
     No `Annotated` wrapper is needed - just use `runtime: ToolRuntime`
     as a parameter.

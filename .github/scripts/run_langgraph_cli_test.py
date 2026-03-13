@@ -63,7 +63,7 @@ def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
             try:
                 sys.stderr.write("\n== docker compose ps ==\n")
                 runner.run(
-                    subp_exec(*compose_cmd, *args, "ps", input=stdin, verbose=False)
+                    subp_exec(*compose_cmd, *args, "ps", input=stdin, verbose=True)
                 )
             except Exception:
                 pass
@@ -76,7 +76,7 @@ def test(config: pathlib.Path, port: int, tag: str, verbose: bool):
                         "logs",
                         "langgraph-api",
                         input=stdin,
-                        verbose=False,
+                        verbose=True,
                     )
                 )
             except Exception:

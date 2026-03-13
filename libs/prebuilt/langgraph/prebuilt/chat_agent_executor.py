@@ -308,7 +308,13 @@ def create_react_agent(
 ) -> CompiledStateGraph:
     """Creates an agent graph that calls tools in a loop until a stopping condition is met.
 
-    For more details on using `create_react_agent`, visit [Agents](https://langchain-ai.github.io/langgraph/agents/overview/) documentation.
+    !!! warning
+
+        This function is deprecated in favor of
+        [`create_agent`][langchain.agents.create_agent] from the `langchain`
+        package, which provides an equivalent agent factory with a flexible
+        middleware system. For migration guidance, see
+        [Migrating from LangGraph v0](https://docs.langchain.com/oss/python/migrate/langgraph-v1).
 
     Args:
         model: The language model for the agent. Supports static and dynamic
