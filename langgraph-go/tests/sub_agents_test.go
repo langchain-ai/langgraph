@@ -179,6 +179,7 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 			"output": []string{},
 			"done":   nil,
 		},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("start failed: %v", err)

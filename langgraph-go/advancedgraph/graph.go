@@ -49,6 +49,18 @@ func (g *AdvancedStateGraph) SetFinishNode(fn any) {
 	g.finishPoint = NodeName(fn)
 }
 
+func (g *AdvancedStateGraph) AddEntryNode(fn any) string {
+	name := g.AddNode(fn)
+	g.entryPoint = name
+	return name
+}
+
+func (g *AdvancedStateGraph) AddFinishNode(fn any) string {
+	name := g.AddNode(fn)
+	g.finishPoint = name
+	return name
+}
+
 func (g *AdvancedStateGraph) Compile() *CompiledGraph {
 	return &CompiledGraph{
 		nodes:         g.nodes,
@@ -96,7 +108,7 @@ func (h *Handler) WaitForResult() (map[string]any, error) {
 	return res.state, res.err
 }
 
-func (g *CompiledGraph) Start(initialState map[string]any) (*Handler, error) {
+func (g *CompiledGraph) Start(initialState map[string]any, initialInput any) (*Handler, error) {
 	engine := NewRustEngine()
 	for _, ch := range g.asyncChannels {
 		if err := engine.AddAsyncChannel(ch); err != nil {
@@ -114,6 +126,7 @@ func (g *CompiledGraph) Start(initialState map[string]any) (*Handler, error) {
 			g.entryPoint,
 			g.finishPoint,
 			initialState,
+			initialInput,
 			func(node string, nodeInput any, fallbackState map[string]any) (Command, error) {
 				fn, ok := g.nodes[node]
 				if !ok {

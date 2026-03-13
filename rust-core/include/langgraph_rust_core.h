@@ -24,6 +24,7 @@ char* rc_run_graph_json(
     const char* entry_point,
     const char* finish_point,
     const char* initial_state_json,
+    const char* initial_input_json,
     unsigned long user_data,
     rc_node_callback_t callback
 );

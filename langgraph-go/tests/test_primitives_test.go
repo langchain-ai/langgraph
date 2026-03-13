@@ -67,16 +67,14 @@ func TestInputAndStatePrimitivesCompatible(t *testing.T) {
 	workflow := &primitiveWorkflow{}
 	graph := ag.NewAdvancedStateGraph()
 
-	graph.AddNode(workflow.startNode)
+	graph.AddEntryNode(workflow.startNode)
 	graph.AddNode(workflow.middleNode)
-	graph.AddNode(workflow.finishNode)
-	graph.SetEntryNode(workflow.startNode)
-	graph.SetFinishNode(workflow.finishNode)
+	graph.AddFinishNode(workflow.finishNode)
 
 	handler, err := graph.Compile().Start(map[string]any{
 		"logs": []string{},
 		"done": nil,
-	})
+	}, 100)
 	if err != nil {
 		t.Fatalf("start failed: %v", err)
 	}
@@ -89,7 +87,7 @@ func TestInputAndStatePrimitivesCompatible(t *testing.T) {
 		t.Fatalf("unexpected done: %v", result["done"])
 	}
 	logs := logsSlice(result)
-	if len(logs) != 3 || logs[0] != "start:0" || logs[1] != "middle:from_start" || logs[2] != "finish:from_middle" {
+	if len(logs) != 3 || logs[0] != "start:100" || logs[1] != "middle:from_start" || logs[2] != "finish:from_middle" {
 		t.Fatalf("unexpected logs: %#v", logs)
 	}
 }

@@ -136,6 +136,7 @@ fn run_graph_scheduler_json(
     entry_point: String,
     finish_point: String,
     initial_state: Value,
+    initial_input: Value,
     user_data: CUserData,
     callback: CNodeCallback,
 ) -> Result<Value, String> {
@@ -145,7 +146,7 @@ fn run_graph_scheduler_json(
     let tx_for_spawn = tx.clone();
     let state_for_spawn = Arc::clone(&state);
     let state_for_merge = Arc::clone(&state);
-    let initial_arg = Value::Null;
+    let initial_arg = initial_input;
     run_scheduler_loop(
         entry_point,
         &finish_point,
@@ -297,6 +298,7 @@ pub unsafe extern "C" fn rc_run_graph_json(
     entry_point: *const c_char,
     finish_point: *const c_char,
     initial_state_json: *const c_char,
+    initial_input_json: *const c_char,
     user_data: libc::c_ulong,
     callback: Option<CNodeCallback>,
 ) -> *mut c_char {
@@ -326,6 +328,18 @@ pub unsafe extern "C" fn rc_run_graph_json(
             ))
         }
     };
+    let initial_input_json = match cstr_to_str(initial_input_json) {
+        Ok(v) => v,
+        Err(e) => return into_c_ptr(format!("{{\"ok\":false,\"error\":\"{e}\"}}")),
+    };
+    let initial_input: Value = match serde_json::from_str(initial_input_json) {
+        Ok(v) => v,
+        Err(e) => {
+            return into_c_ptr(format!(
+                "{{\"ok\":false,\"error\":\"invalid initial_input JSON: {e}\"}}"
+            ))
+        }
+    };
 
     let (tx, rx) = mpsc::channel::<Result<Value, String>>();
     let user_data = CUserData(user_data);
@@ -334,6 +348,7 @@ pub unsafe extern "C" fn rc_run_graph_json(
             entry_point,
             finish_point,
             initial_state,
+            initial_input,
             user_data,
             callback,
         );

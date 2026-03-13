@@ -139,18 +139,25 @@ func (e *RustEngine) RunGraph(
 	entryPoint string,
 	finishPoint string,
 	initialState map[string]any,
+	initialInput any,
 	exec func(node string, nodeInput any, state map[string]any) (Command, error),
 ) (map[string]any, error) {
 	initialJSON, err := json.Marshal(initialState)
 	if err != nil {
 		return nil, fmt.Errorf("marshal initial state: %w", err)
 	}
+	initialInputJSON, err := json.Marshal(initialInput)
+	if err != nil {
+		return nil, fmt.Errorf("marshal initial input: %w", err)
+	}
 	centry := C.CString(entryPoint)
 	cfinish := C.CString(finishPoint)
 	cinitial := C.CString(string(initialJSON))
+	cinitialInput := C.CString(string(initialInputJSON))
 	defer C.free(unsafe.Pointer(centry))
 	defer C.free(unsafe.Pointer(cfinish))
 	defer C.free(unsafe.Pointer(cinitial))
+	defer C.free(unsafe.Pointer(cinitialInput))
 
 	handle := cgo.NewHandle(&runGraphCallbackCtx{exec: exec})
 	defer handle.Delete()
@@ -160,6 +167,7 @@ func (e *RustEngine) RunGraph(
 		centry,
 		cfinish,
 		cinitial,
+		cinitialInput,
 		C.ulong(handle),
 		(C.rc_node_callback_t)(C.goNodeCallback),
 	)
