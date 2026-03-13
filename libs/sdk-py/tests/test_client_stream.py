@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
@@ -8,7 +9,9 @@ import httpx
 import pytest
 from typing_extensions import assert_type
 
+from langgraph_sdk._async.runs import RunsClient
 from langgraph_sdk._shared.utilities import _sse_to_v2_dict
+from langgraph_sdk._sync.runs import SyncRunsClient
 from langgraph_sdk.client import HttpClient, SyncHttpClient
 from langgraph_sdk.schema import (
     CheckpointPayload,
@@ -24,6 +27,7 @@ from langgraph_sdk.schema import (
     TaskResultPayload,
     TasksStreamPart,
     UpdatesStreamPart,
+    ValuesPatchStreamPart,
     ValuesStreamPart,
 )
 from langgraph_sdk.sse import BytesLike, BytesLineDecoder, SSEDecoder
@@ -375,6 +379,81 @@ def test_sse_to_v2_dict_values_with_interrupts() -> None:
     assert "__interrupt__" not in result["data"]
 
 
+def test_sse_to_v2_dict_values_patch() -> None:
+    payload = {"values": {"count": 2}, "deleted_keys": ["stale"]}
+    result = _sse_to_v2_dict("values-patch|tools:call_1", payload)
+    assert result is not None
+    _assert_v2_shape(result)
+    assert result == {
+        "type": "values-patch",
+        "ns": ["tools:call_1"],
+        "data": {"values": {"count": 2}, "deleted_keys": ["stale"]},
+        "interrupts": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_runs_stream_includes_compact_mode():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/runs/stream"
+        body = json.loads(request.content)
+        assert body["stream_mode"] == ["values", "compact"]
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            content=b"event: end\ndata: null\n\n",
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        transport=transport, base_url="https://example.com"
+    ) as client:
+        runs_client = RunsClient(HttpClient(client))
+        parts = [
+            part
+            async for part in runs_client.stream(
+                thread_id=None,
+                assistant_id="agent",
+                input={"messages": []},
+                stream_mode=["values", "compact"],
+            )
+        ]
+
+    assert len(parts) == 1
+    assert parts[0].event == "end"
+    assert parts[0].data is None
+
+
+def test_sync_runs_stream_includes_compact_mode():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/runs/stream"
+        body = json.loads(request.content)
+        assert body["stream_mode"] == ["values", "compact"]
+        return httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream"},
+            content=b"event: end\ndata: null\n\n",
+        )
+
+    transport = httpx.MockTransport(handler)
+    with httpx.Client(transport=transport, base_url="https://example.com") as client:
+        runs_client = SyncRunsClient(SyncHttpClient(client))
+        parts = list(
+            runs_client.stream(
+                thread_id=None,
+                assistant_id="agent",
+                input={"messages": []},
+                stream_mode=["values", "compact"],
+            )
+        )
+
+    assert len(parts) == 1
+    assert parts[0].event == "end"
+    assert parts[0].data is None
+
+
 # --- client-side v2 stream wrapping ---
 
 
@@ -448,6 +527,8 @@ def _check_v2_type_narrowing(part: StreamPartV2) -> None:
     if part["type"] == "values":
         assert_type(part, ValuesStreamPart)
         assert_type(part["data"], dict[str, Any])
+    elif part["type"] == "values-patch":
+        assert_type(part, ValuesPatchStreamPart)
     elif part["type"] == "updates":
         assert_type(part, UpdatesStreamPart)
         assert_type(part["data"], dict[str, Any])

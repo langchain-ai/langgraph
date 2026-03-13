@@ -116,7 +116,14 @@ def ensure_valid_checkpointer(checkpointer: Checkpointer) -> Checkpointer:
 
 
 StreamMode = Literal[
-    "values", "updates", "checkpoints", "tasks", "debug", "messages", "custom"
+    "values",
+    "updates",
+    "checkpoints",
+    "tasks",
+    "debug",
+    "messages",
+    "custom",
+    "compact",
 ]
 """How the stream method should emit outputs.
 
@@ -275,13 +282,14 @@ class MessagesStreamPart(TypedDict):
     """Stream part emitted for `stream_mode="messages"`.
 
     `data` is a 2-tuple of `(message, metadata)` where `message` is a
-    `BaseMessage` (e.g. `AIMessageChunk`) and `metadata` is a dict containing
-    keys like `langgraph_step`, `langgraph_node`, `langgraph_triggers`, etc.
+    `BaseMessage` (e.g. `AIMessageChunk`) and `metadata` is either a dict containing
+    keys like `langgraph_step`, `langgraph_node`, `langgraph_triggers`, etc. or
+    `None` for deduplicated follow-up chunks when `stream_mode` includes `"compact"`.
     """
 
     type: Literal["messages"]
     ns: tuple[str, ...]
-    data: tuple[AnyMessage, dict[str, Any]]
+    data: tuple[AnyMessage, dict[str, Any] | None]
 
 
 class CustomStreamPart(TypedDict):
@@ -346,7 +354,7 @@ async for part in graph.astream(input, version="v2"):
     if part["type"] == "values":
         part["data"]  # OutputT — full state (pydantic/dataclass/dict)
     elif part["type"] == "messages":
-        part["data"]  # tuple[BaseMessage, dict] — (message, metadata)
+        part["data"]  # tuple[BaseMessage, dict | None] — (message, metadata)
     elif part["type"] == "custom":
         part["data"]  # Any — user-defined
 ```

@@ -882,6 +882,80 @@ def test_stream_sanitizes_thread_id():
     assert not passed_config["configurable"]
 
 
+def test_stream_restores_messages_and_merges_values_patch():
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = [
+        StreamPart(
+            event="messages|tools:call_1",
+            data=[
+                {"id": "msg-1", "type": "AIMessageChunk", "content": "hel"},
+                {
+                    "langgraph_checkpoint_ns": "tools:call_1",
+                    "langgraph_node": "agent",
+                },
+            ],
+        ),
+        StreamPart(
+            event="messages|tools:call_1",
+            data=[
+                {"id": "msg-1", "type": "AIMessageChunk", "content": "lo"},
+                None,
+            ],
+        ),
+        StreamPart(
+            event="values|tools:call_1",
+            data={"messages": [{"type": "human", "content": "hi"}], "count": 1},
+        ),
+        StreamPart(
+            event="values-patch|tools:call_1",
+            data={"values": {"count": 2}, "deleted_keys": ["messages"]},
+        ),
+    ]
+    remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+
+    parts = list(
+        remote_pregel.stream(
+            {"input": "data"},
+            config={"configurable": {"thread_id": "thread_1"}},
+            stream_mode=["messages", "values", "compact"],
+            subgraphs=True,
+            version="v2",
+        )
+    )
+
+    message_parts = [part for part in parts if part["type"] == "messages"]
+    assert message_parts[0]["data"][1] == {
+        "langgraph_checkpoint_ns": "tools:call_1",
+        "langgraph_node": "agent",
+    }
+    assert message_parts[1]["data"][1] == {
+        "langgraph_checkpoint_ns": "tools:call_1",
+        "langgraph_node": "agent",
+    }
+    value_parts = [part for part in parts if part["type"] == "values"]
+    assert value_parts == [
+        {
+            "type": "values",
+            "ns": ("tools:call_1",),
+            "data": {"messages": [{"type": "human", "content": "hi"}], "count": 1},
+            "interrupts": (),
+        },
+        {
+            "type": "values",
+            "ns": ("tools:call_1",),
+            "data": {"count": 2},
+            "interrupts": (),
+        },
+    ]
+    _, kwargs = mock_sync_client.runs.stream.call_args
+    assert set(kwargs["stream_mode"]) == {
+        "messages-tuple",
+        "values",
+        "compact",
+        "updates",
+    }
+
+
 @pytest.mark.anyio
 async def test_ainvoke():
     # set up test
@@ -1090,6 +1164,83 @@ def test_stream_context_base_model():
 
     _, kwargs = mock_sync_client.runs.stream.call_args
     assert kwargs["context"] == ctx
+
+
+@pytest.mark.anyio
+async def test_astream_restores_messages_and_merges_values_patch():
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = [
+        StreamPart(
+            event="messages|tools:call_1",
+            data=[
+                {"id": "msg-1", "type": "AIMessageChunk", "content": "hel"},
+                {
+                    "langgraph_checkpoint_ns": "tools:call_1",
+                    "langgraph_node": "agent",
+                },
+            ],
+        ),
+        StreamPart(
+            event="messages|tools:call_1",
+            data=[
+                {"id": "msg-1", "type": "AIMessageChunk", "content": "lo"},
+                None,
+            ],
+        ),
+        StreamPart(
+            event="values|tools:call_1",
+            data={"messages": [{"type": "human", "content": "hi"}], "count": 1},
+        ),
+        StreamPart(
+            event="values-patch|tools:call_1",
+            data={"values": {"count": 2}, "deleted_keys": ["messages"]},
+        ),
+    ]
+    mock_async_client.runs.stream.return_value = async_iter
+    remote_pregel = RemoteGraph("test_graph_id", client=mock_async_client)
+
+    parts = []
+    async for part in remote_pregel.astream(
+        {"input": "data"},
+        config={"configurable": {"thread_id": "thread_1"}},
+        stream_mode=["messages", "values", "compact"],
+        subgraphs=True,
+        version="v2",
+    ):
+        parts.append(part)
+
+    message_parts = [part for part in parts if part["type"] == "messages"]
+    assert message_parts[0]["data"][1] == {
+        "langgraph_checkpoint_ns": "tools:call_1",
+        "langgraph_node": "agent",
+    }
+    assert message_parts[1]["data"][1] == {
+        "langgraph_checkpoint_ns": "tools:call_1",
+        "langgraph_node": "agent",
+    }
+    value_parts = [part for part in parts if part["type"] == "values"]
+    assert value_parts == [
+        {
+            "type": "values",
+            "ns": ("tools:call_1",),
+            "data": {"messages": [{"type": "human", "content": "hi"}], "count": 1},
+            "interrupts": (),
+        },
+        {
+            "type": "values",
+            "ns": ("tools:call_1",),
+            "data": {"count": 2},
+            "interrupts": (),
+        },
+    ]
+    _, kwargs = mock_async_client.runs.stream.call_args
+    assert set(kwargs["stream_mode"]) == {
+        "messages-tuple",
+        "values",
+        "compact",
+        "updates",
+    }
 
 
 @pytest.mark.skip(
