@@ -2456,7 +2456,7 @@ class Pregel(
         debug: bool | None = None,
         version: Literal["v2"],
         **kwargs: Unpack[DeprecatedKwargs],
-    ) -> Iterator[StreamPart[OutputT, StateT]]: ...
+    ) -> Iterator[StreamPart[StateT, OutputT]]: ...
 
     @overload
     def stream(
@@ -2787,7 +2787,7 @@ class Pregel(
         debug: bool | None = None,
         version: Literal["v2"],
         **kwargs: Unpack[DeprecatedKwargs],
-    ) -> AsyncIterator[StreamPart[OutputT, StateT]]: ...
+    ) -> AsyncIterator[StreamPart[StateT, OutputT]]: ...
 
     @overload
     def astream(
@@ -3199,7 +3199,7 @@ class Pregel(
         durability: Durability | None = None,
         version: Literal["v2"],
         **kwargs: Any,
-    ) -> list[StreamPart[OutputT, StateT]]: ...
+    ) -> list[StreamPart[StateT, OutputT]]: ...
 
     @overload
     def invoke(
@@ -3369,7 +3369,7 @@ class Pregel(
         durability: Durability | None = None,
         version: Literal["v2"],
         **kwargs: Any,
-    ) -> list[StreamPart[OutputT, StateT]]: ...
+    ) -> list[StreamPart[StateT, OutputT]]: ...
 
     @overload
     async def ainvoke(
