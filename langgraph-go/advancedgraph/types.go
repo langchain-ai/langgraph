@@ -54,7 +54,7 @@ type WaitEvent struct {
 }
 
 type Send struct {
-	Node      string
+	Node      NodeFunc
 	NodeInput any
 }
 

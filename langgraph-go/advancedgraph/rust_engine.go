@@ -57,7 +57,7 @@ func goNodeCallback(userData C.ulong, node *C.char, argJSON *C.char, stateJSON *
 	sends := make([]map[string]any, 0, len(cmd.Goto))
 	for _, send := range cmd.Goto {
 		sends = append(sends, map[string]any{
-			"node": send.Node,
+			"node": NodeName(send.Node),
 			"arg":  send.NodeInput,
 		})
 	}

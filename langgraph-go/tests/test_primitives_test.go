@@ -7,7 +7,6 @@ import (
 )
 
 type primitiveWorkflow struct {
-	names map[string]string
 }
 
 func logsSlice(state map[string]any) []string {
@@ -38,7 +37,7 @@ func (w *primitiveWorkflow) startNode(ctx *ag.Context, _ any, state map[string]a
 	return ag.Command{
 		Update: state,
 		Goto: []ag.Send{
-			{Node: w.names["middle"], NodeInput: "from_start"},
+			{Node: w.middleNode, NodeInput: "from_start"},
 		},
 	}, nil
 }
@@ -50,7 +49,7 @@ func (w *primitiveWorkflow) middleNode(ctx *ag.Context, input any, state map[str
 	return ag.Command{
 		Update: state,
 		Goto: []ag.Send{
-			{Node: w.names["finish"], NodeInput: "from_middle"},
+			{Node: w.finishNode, NodeInput: "from_middle"},
 		},
 	}, nil
 }
@@ -64,12 +63,12 @@ func (w *primitiveWorkflow) finishNode(ctx *ag.Context, input any, state map[str
 }
 
 func TestInputAndStatePrimitivesCompatible(t *testing.T) {
-	workflow := &primitiveWorkflow{names: make(map[string]string)}
+	workflow := &primitiveWorkflow{}
 	graph := ag.NewAdvancedStateGraph()
 
-	workflow.names["start"] = graph.AddNode(workflow.startNode)
-	workflow.names["middle"] = graph.AddNode(workflow.middleNode)
-	workflow.names["finish"] = graph.AddNode(workflow.finishNode)
+	graph.AddNode(workflow.startNode)
+	graph.AddNode(workflow.middleNode)
+	graph.AddNode(workflow.finishNode)
 	graph.SetEntryNode(workflow.startNode)
 	graph.SetFinishNode(workflow.finishNode)
 

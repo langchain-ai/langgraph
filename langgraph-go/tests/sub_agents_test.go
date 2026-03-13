@@ -31,7 +31,7 @@ func (m *mockLLM) invoke() []decision {
 
 type lunchWorkflow struct {
 	planner *mockLLM
-	names   map[string]string
+	names   map[string]ag.NodeFunc
 }
 
 func outputSlice(state map[string]any) []string {
@@ -151,7 +151,7 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 	}
 	workflow := &lunchWorkflow{
 		planner: planner,
-		names:   make(map[string]string),
+		names:   make(map[string]ag.NodeFunc),
 	}
 
 	graph := ag.NewAdvancedStateGraph()
@@ -159,11 +159,16 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 	graph.AddAsyncChannel("subagent_completion_channel")
 	graph.AddAsyncChannel("user_input_channel")
 
-	workflow.names["llm"] = graph.AddNode(workflow.llmNode)
-	workflow.names["wait"] = graph.AddNode(workflow.waitNode)
-	workflow.names["tool"] = graph.AddNode(workflow.toolNode)
-	workflow.names["sub"] = graph.AddNode(workflow.subAgentNode)
-	workflow.names["order"] = graph.AddNode(workflow.orderFoodNode)
+	graph.AddNode(workflow.llmNode)
+	graph.AddNode(workflow.waitNode)
+	graph.AddNode(workflow.toolNode)
+	graph.AddNode(workflow.subAgentNode)
+	graph.AddNode(workflow.orderFoodNode)
+	workflow.names["llm"] = workflow.llmNode
+	workflow.names["wait"] = workflow.waitNode
+	workflow.names["tool"] = workflow.toolNode
+	workflow.names["sub"] = workflow.subAgentNode
+	workflow.names["order"] = workflow.orderFoodNode
 
 	graph.SetEntryNode(workflow.llmNode)
 	graph.SetFinishNode(workflow.orderFoodNode)
