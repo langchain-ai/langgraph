@@ -182,6 +182,7 @@ class PregelLoop:
     _migrate_checkpoint: Callable[[Checkpoint], None] | None
     submit: Submit
     channels: Mapping[str, BaseChannel]
+    _has_untracked_channels: bool
     managed: ManagedValueMapping
     checkpoint: Checkpoint
     checkpoint_id_saved: str
@@ -328,9 +329,7 @@ class PregelLoop:
             writes_to_save = writes
 
         # check if any writes are to an UntrackedValue channel
-        if any(
-            isinstance(channel, UntrackedValue) for channel in self.channels.values()
-        ):
+        if self._has_untracked_channels:
             # we do not persist untracked values in checkpoints
             writes_to_save = [
                 # sanitize UntrackedValues that are nested within Send packets
@@ -810,9 +809,7 @@ class PregelLoop:
             updated_channels=self.updated_channels,
         )
         # sanitize TASK channel in the checkpoint before saving (durability=="exit")
-        if TASKS in self.checkpoint["channel_values"] and any(
-            isinstance(channel, UntrackedValue) for channel in self.channels.values()
-        ):
+        if TASKS in self.checkpoint["channel_values"] and self._has_untracked_channels:
             sanitized_tasks = [
                 sanitize_untracked_values_in_send(value, self.channels)
                 if isinstance(value, Send)
@@ -1189,6 +1186,9 @@ class SyncPregelLoop(PregelLoop, AbstractContextManager):
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
         )
+        self._has_untracked_channels = any(
+            isinstance(ch, UntrackedValue) for ch in self.channels.values()
+        )
         self.stack.push(self._suppress_interrupt)
         self.status = "input"
         self.step = self.checkpoint_metadata["step"] + 1
@@ -1389,6 +1389,9 @@ class AsyncPregelLoop(PregelLoop, AbstractAsyncContextManager):
         )
         self.channels, self.managed = channels_from_checkpoint(
             self.specs, self.checkpoint
+        )
+        self._has_untracked_channels = any(
+            isinstance(ch, UntrackedValue) for ch in self.channels.values()
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "input"
