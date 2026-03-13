@@ -20,7 +20,7 @@ type mockPlanner struct {
 	i         int
 }
 
-func (m *mockPlanner) ainvoke() []decision {
+func (m *mockPlanner) invoke() []decision {
 	if m.i >= len(m.responses) {
 		return []decision{}
 	}
@@ -50,7 +50,7 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 
 	graph.AddNode("llm_node", func(ctx *ag.Context, arg any) (ag.Command, error) {
 		state := arg.(map[string]any)
-		decisions := planner.ainvoke()
+		decisions := planner.invoke()
 		sends := make([]ag.Send, 0, 4)
 		for _, d := range decisions {
 			if d.Type == "end" {
@@ -142,7 +142,7 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 	graph.SetEntryPoint("llm_node")
 	graph.SetFinishPoint("order_food_node")
 
-	handler, err := graph.Compile().AStart(
+	handler, err := graph.Compile().Start(
 		map[string]any{
 			"input":  "help me get something for lunch",
 			"output": []string{},
@@ -154,11 +154,11 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 	}
 
 	time.Sleep(10 * time.Millisecond)
-	if err := handler.APublishToChannel("user_input_channel", "No spicy food please"); err != nil {
+	if err := handler.PublishToChannel("user_input_channel", "No spicy food please"); err != nil {
 		t.Fatalf("publish failed: %v", err)
 	}
 
-	result, err := handler.AResult()
+	result, err := handler.WaitForResult()
 	if err != nil {
 		t.Fatalf("result failed: %v", err)
 	}
@@ -192,4 +192,3 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 		t.Fatalf("unexpected last output: %#v", output[len(output)-1])
 	}
 }
-

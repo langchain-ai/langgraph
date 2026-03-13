@@ -73,16 +73,16 @@ type resultOrErr struct {
 	err   error
 }
 
-func (h *Handler) APublishToChannel(channel string, value any) error {
+func (h *Handler) PublishToChannel(channel string, value any) error {
 	return h.engine.Publish(channel, value)
 }
 
-func (h *Handler) AResult() (map[string]any, error) {
+func (h *Handler) WaitForResult() (map[string]any, error) {
 	res := <-h.done
 	return res.state, res.err
 }
 
-func (g *CompiledGraph) AStart(initialState map[string]any) (*Handler, error) {
+func (g *CompiledGraph) Start(initialState map[string]any) (*Handler, error) {
 	engine := NewRustEngine()
 	for _, ch := range g.asyncChannels {
 		if err := engine.AddAsyncChannel(ch); err != nil {
