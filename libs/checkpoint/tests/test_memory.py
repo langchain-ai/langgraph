@@ -139,7 +139,357 @@ class TestMemorySaver:
             search_results_5[1].config["configurable"]["checkpoint_ns"],
         } == {"", "inner"}
 
-        # TODO: test before and limit params
+    def test_list_before(self) -> None:
+        """Test that `before` parameter filters checkpoints created before a given config."""
+        self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        self.memory_saver.put(
+            self.config_2,
+            self.chkpnt_2,
+            self.metadata_2,
+            self.chkpnt_2["channel_versions"],
+        )
+
+        # checkpoint_2 has a later ID, so `before=config_2_result` should
+        # return only checkpoint_1 (for thread-2) — but they are on different
+        # threads, so let's put two checkpoints on the same thread instead.
+        chkpnt_2b = create_checkpoint(self.chkpnt_2, {}, 1)
+        config_same_thread: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-1",
+                "checkpoint_ns": "",
+                "checkpoint_id": self.chkpnt_1["id"],
+            }
+        }
+        config_2b_result = self.memory_saver.put(
+            config_same_thread,
+            chkpnt_2b,
+            {"source": "loop", "step": 2, "writes": {}},
+            chkpnt_2b["channel_versions"],
+        )
+
+        # Without `before`, both checkpoints for thread-1 should appear
+        all_results = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-1", "checkpoint_ns": ""}}
+            )
+        )
+        assert len(all_results) == 2
+
+        # With `before=config_2b_result`, only chkpnt_1 should be returned
+        before_results = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-1", "checkpoint_ns": ""}},
+                before=config_2b_result,
+            )
+        )
+        assert len(before_results) == 1
+        assert before_results[0].checkpoint["id"] == self.chkpnt_1["id"]
+
+    def test_list_limit(self) -> None:
+        """Test that `limit` parameter caps the number of returned checkpoints."""
+        # Create 3 checkpoints on the same thread
+        config_a: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-limit",
+                "checkpoint_ns": "",
+            }
+        }
+        chkpnt_a = empty_checkpoint()
+        self.memory_saver.put(
+            config_a,
+            chkpnt_a,
+            {"source": "input", "step": 0, "writes": {}},
+            chkpnt_a["channel_versions"],
+        )
+
+        config_b: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-limit",
+                "checkpoint_ns": "",
+                "checkpoint_id": chkpnt_a["id"],
+            }
+        }
+        chkpnt_b = create_checkpoint(chkpnt_a, {}, 1)
+        self.memory_saver.put(
+            config_b,
+            chkpnt_b,
+            {"source": "loop", "step": 1, "writes": {}},
+            chkpnt_b["channel_versions"],
+        )
+
+        config_c: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-limit",
+                "checkpoint_ns": "",
+                "checkpoint_id": chkpnt_b["id"],
+            }
+        }
+        chkpnt_c = create_checkpoint(chkpnt_b, {}, 1)
+        self.memory_saver.put(
+            config_c,
+            chkpnt_c,
+            {"source": "loop", "step": 2, "writes": {}},
+            chkpnt_c["channel_versions"],
+        )
+
+        # All checkpoints
+        all_results = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-limit", "checkpoint_ns": ""}}
+            )
+        )
+        assert len(all_results) == 3
+
+        # Limit to 2
+        limited_results = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-limit", "checkpoint_ns": ""}},
+                limit=2,
+            )
+        )
+        assert len(limited_results) == 2
+
+        # Limit to 1
+        limited_results_1 = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-limit", "checkpoint_ns": ""}},
+                limit=1,
+            )
+        )
+        assert len(limited_results_1) == 1
+
+        # Limit to 0 returns nothing
+        limited_results_0 = list(
+            self.memory_saver.list(
+                {"configurable": {"thread_id": "thread-limit", "checkpoint_ns": ""}},
+                limit=0,
+            )
+        )
+        assert len(limited_results_0) == 0
+
+    def test_get_tuple_returns_none_for_missing_thread(self) -> None:
+        """Test that get_tuple returns None when no checkpoint exists for a thread."""
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "nonexistent-thread",
+                "checkpoint_ns": "",
+            }
+        }
+        result = self.memory_saver.get_tuple(config)
+        assert result is None
+
+    def test_get_tuple_returns_none_for_missing_checkpoint_id(self) -> None:
+        """Test that get_tuple returns None when checkpoint_id doesn't match."""
+        self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-1",
+                "checkpoint_ns": "",
+                "checkpoint_id": "nonexistent-checkpoint-id",
+            }
+        }
+        result = self.memory_saver.get_tuple(config)
+        assert result is None
+
+    def test_get_tuple_returns_latest_without_checkpoint_id(self) -> None:
+        """Test that get_tuple returns the latest checkpoint when no checkpoint_id is specified."""
+        config_no_id: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-latest",
+                "checkpoint_ns": "",
+            }
+        }
+        chkpnt_a = empty_checkpoint()
+        self.memory_saver.put(
+            config_no_id,
+            chkpnt_a,
+            {"source": "input", "step": 0, "writes": {}},
+            chkpnt_a["channel_versions"],
+        )
+
+        chkpnt_b = create_checkpoint(chkpnt_a, {}, 1)
+        config_with_parent: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-latest",
+                "checkpoint_ns": "",
+                "checkpoint_id": chkpnt_a["id"],
+            }
+        }
+        self.memory_saver.put(
+            config_with_parent,
+            chkpnt_b,
+            {"source": "loop", "step": 1, "writes": {}},
+            chkpnt_b["channel_versions"],
+        )
+
+        # Retrieve without checkpoint_id — should get the latest
+        result = self.memory_saver.get_tuple(config_no_id)
+        assert result is not None
+        assert result.checkpoint["id"] == chkpnt_b["id"]
+        assert result.parent_config is not None
+        assert result.parent_config["configurable"]["checkpoint_id"] == chkpnt_a["id"]
+
+    def test_delete_thread(self) -> None:
+        """Test that delete_thread removes all checkpoints and writes for a thread."""
+        saved_config_1 = self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        saved_config_2 = self.memory_saver.put(
+            self.config_2,
+            self.chkpnt_2,
+            self.metadata_2,
+            self.chkpnt_2["channel_versions"],
+        )
+
+        # Verify thread-1 checkpoint exists
+        assert self.memory_saver.get_tuple(saved_config_1) is not None
+
+        # Delete thread-1
+        self.memory_saver.delete_thread("thread-1")
+
+        # thread-1 should be gone
+        assert self.memory_saver.get_tuple(saved_config_1) is None
+
+        # thread-2 should still exist
+        assert self.memory_saver.get_tuple(saved_config_2) is not None
+
+    def test_delete_nonexistent_thread(self) -> None:
+        """Test that deleting a thread that doesn't exist does not raise."""
+        # Should not raise any exception
+        self.memory_saver.delete_thread("ghost-thread")
+
+    def test_put_writes_and_pending_writes(self) -> None:
+        """Test that put_writes stores writes and they appear in pending_writes."""
+        result_config = self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+
+        # Store some writes
+        self.memory_saver.put_writes(
+            result_config,
+            [("channel_a", "value_1"), ("channel_b", "value_2")],
+            task_id="task-1",
+        )
+
+        # Retrieve and check pending writes
+        checkpoint_tuple = self.memory_saver.get_tuple(result_config)
+        assert checkpoint_tuple is not None
+        assert checkpoint_tuple.pending_writes is not None
+        assert len(checkpoint_tuple.pending_writes) == 2
+
+        channels = [pw[1] for pw in checkpoint_tuple.pending_writes]
+        assert "channel_a" in channels
+        assert "channel_b" in channels
+
+    def test_put_writes_deduplication(self) -> None:
+        """Test that duplicate writes with the same task_id and idx are not stored twice."""
+        result_config = self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+
+        # Write twice with same task_id
+        self.memory_saver.put_writes(
+            result_config,
+            [("channel_a", "value_1")],
+            task_id="task-dup",
+        )
+        self.memory_saver.put_writes(
+            result_config,
+            [("channel_a", "value_1_updated")],
+            task_id="task-dup",
+        )
+
+        checkpoint_tuple = self.memory_saver.get_tuple(result_config)
+        assert checkpoint_tuple is not None
+        assert checkpoint_tuple.pending_writes is not None
+        # Should still be 1 write due to deduplication
+        assert len(checkpoint_tuple.pending_writes) == 1
+
+    def test_get_next_version(self) -> None:
+        """Test that get_next_version produces monotonically increasing version strings."""
+        v1 = self.memory_saver.get_next_version(None, None)
+        # Format is "{counter:032}.{random:016}", counter starts at 1
+        assert v1.split(".")[0].lstrip("0") == "1"
+
+        v2 = self.memory_saver.get_next_version(v1, None)
+        assert v2.split(".")[0].lstrip("0") == "2"
+
+        # Ensure v2 > v1 lexicographically (they are zero-padded)
+        assert v2 > v1
+
+    def test_get_next_version_from_int(self) -> None:
+        """Test get_next_version when current is an int (legacy format)."""
+        v = self.memory_saver.get_next_version(5, None)  # type: ignore[arg-type]
+        assert v.split(".")[0].lstrip("0") == "6"
+
+    async def test_async_put_and_get(self) -> None:
+        """Test async versions of put and get_tuple."""
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "async-thread",
+                "checkpoint_ns": "",
+            }
+        }
+        chkpnt = empty_checkpoint()
+        result_config = await self.memory_saver.aput(
+            config,
+            chkpnt,
+            {"source": "input", "step": 0, "writes": {}},
+            chkpnt["channel_versions"],
+        )
+        result = await self.memory_saver.aget_tuple(result_config)
+        assert result is not None
+        assert result.checkpoint["id"] == chkpnt["id"]
+
+    async def test_async_delete_thread(self) -> None:
+        """Test async version of delete_thread."""
+        saved_config = self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        assert self.memory_saver.get_tuple(saved_config) is not None
+
+        await self.memory_saver.adelete_thread("thread-1")
+        assert self.memory_saver.get_tuple(saved_config) is None
+
+    async def test_async_put_writes(self) -> None:
+        """Test async version of put_writes."""
+        result_config = self.memory_saver.put(
+            self.config_1,
+            self.chkpnt_1,
+            self.metadata_1,
+            self.chkpnt_1["channel_versions"],
+        )
+        await self.memory_saver.aput_writes(
+            result_config,
+            [("chan", "val")],
+            task_id="async-task",
+        )
+        checkpoint_tuple = self.memory_saver.get_tuple(result_config)
+        assert checkpoint_tuple is not None
+        assert checkpoint_tuple.pending_writes is not None
+        assert len(checkpoint_tuple.pending_writes) == 1
 
     async def test_asearch(self) -> None:
         # set up test
