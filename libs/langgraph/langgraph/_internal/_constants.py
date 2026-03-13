@@ -62,6 +62,10 @@ CONFIG_KEY_RUNNER_SUBMIT = sys.intern("__pregel_runner_submit")
 # holds a function that receives tasks from runner, executes them and returns results
 CONFIG_KEY_DURABILITY = sys.intern("__pregel_durability")
 # holds the durability mode, one of "sync", "async", or "exit"
+CONFIG_KEY_CHECKPOINT_WRITE_BUFFER_SIZE = sys.intern(
+    "__pregel_checkpoint_write_buffer_size"
+)
+# holds the max size of the bounded checkpoint write queue (default 4)
 CONFIG_KEY_RUNTIME = sys.intern("__pregel_runtime")
 # holds a `Runtime` instance with context, store, stream writer, etc.
 CONFIG_KEY_RESUME_MAP = sys.intern("__pregel_resume_map")
