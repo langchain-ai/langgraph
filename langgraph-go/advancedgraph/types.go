@@ -59,7 +59,7 @@ type Send struct {
 }
 
 type Command struct {
-	Update map[string]any
+	Update any
 	Goto   []Send
 }
 

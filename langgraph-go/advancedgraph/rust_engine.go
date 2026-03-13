@@ -138,7 +138,7 @@ func (e *RustEngine) WaitAnyOf(cond AnyOfCondition) (WaitEvent, error) {
 func (e *RustEngine) RunGraph(
 	entryPoint string,
 	finishPoint string,
-	initialState map[string]any,
+	initialState any,
 	initialInput any,
 	exec func(node string, nodeInput any, state map[string]any) (Command, error),
 ) (map[string]any, error) {

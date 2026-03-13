@@ -34,28 +34,13 @@ type lunchWorkflow struct {
 	names   map[string]any
 }
 
-func outputSlice(state map[string]any) []string {
-	raw, ok := state["output"]
-	if !ok || raw == nil {
-		return []string{}
-	}
-	switch v := raw.(type) {
-	case []string:
-		return v
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			if s, ok := item.(string); ok {
-				out = append(out, s)
-			}
-		}
-		return out
-	default:
-		return []string{}
-	}
+type lunchState struct {
+	Input  string   `json:"input"`
+	Output []string `json:"output"`
+	Done   string   `json:"done"`
 }
 
-func (w *lunchWorkflow) llmNode(ctx *ag.Context, _ any, state map[string]any) (ag.Command, error) {
+func (w *lunchWorkflow) llmNode(ctx *ag.Context, _ any, _ lunchState) (ag.Command, error) {
 	decisions := w.planner.invoke()
 	sends := make([]ag.Send, 0, 4)
 	for _, d := range decisions {
@@ -77,7 +62,7 @@ func (w *lunchWorkflow) llmNode(ctx *ag.Context, _ any, state map[string]any) (a
 	return ag.Command{Goto: sends}, nil
 }
 
-func (w *lunchWorkflow) waitNode(ctx *ag.Context, _ any, state map[string]any) (ag.Command, error) {
+func (w *lunchWorkflow) waitNode(ctx *ag.Context, _ any, state lunchState) (ag.Command, error) {
 	event, err := ctx.WaitFor(
 		ag.AnyOf(
 			ag.ChannelCondition{Channel: "tool_completion_channel", N: 1},
@@ -90,7 +75,7 @@ func (w *lunchWorkflow) waitNode(ctx *ag.Context, _ any, state map[string]any) (
 		return ag.Command{}, err
 	}
 
-	output := outputSlice(state)
+	output := append([]string(nil), state.Output...)
 	if event.Condition == "channel" {
 		payload := ag.DecodeString(event.Value)
 		switch event.Channel {
@@ -101,23 +86,23 @@ func (w *lunchWorkflow) waitNode(ctx *ag.Context, _ any, state map[string]any) (
 		case "user_input_channel":
 			output = append(output, "user_input: "+payload)
 		}
-		state["output"] = output
+		state.Output = output
 		return ag.Command{Goto: []ag.Send{{Node: w.names["llm"]}}, Update: state}, nil
 	}
 
 	output = append(output, "timer: no updates yet")
-	state["output"] = output
+	state.Output = output
 	return ag.Command{Goto: []ag.Send{{Node: w.names["wait"]}}, Update: state}, nil
 }
 
-func (w *lunchWorkflow) toolNode(ctx *ag.Context, input any, _ map[string]any) (ag.Command, error) {
+func (w *lunchWorkflow) toolNode(ctx *ag.Context, input any, _ lunchState) (ag.Command, error) {
 	toolInput, _ := input.(string)
 	time.Sleep(100 * time.Millisecond)
 	err := ctx.PublishToChannel("tool_completion_channel", "tool completed for: "+toolInput)
 	return ag.Command{}, err
 }
 
-func (w *lunchWorkflow) subAgentNode(ctx *ag.Context, input any, _ map[string]any) (ag.Command, error) {
+func (w *lunchWorkflow) subAgentNode(ctx *ag.Context, input any, _ lunchState) (ag.Command, error) {
 	subInput, _ := input.(string)
 	time.Sleep(5 * time.Second)
 	err := ctx.PublishToChannel(
@@ -127,12 +112,12 @@ func (w *lunchWorkflow) subAgentNode(ctx *ag.Context, input any, _ map[string]an
 	return ag.Command{}, err
 }
 
-func (w *lunchWorkflow) orderFoodNode(ctx *ag.Context, input any, state map[string]any) (ag.Command, error) {
+func (w *lunchWorkflow) orderFoodNode(ctx *ag.Context, input any, state lunchState) (ag.Command, error) {
 	complete, _ := input.(string)
-	output := outputSlice(state)
+	output := append([]string(nil), state.Output...)
 	output = append(output, "order_food: "+complete)
-	state["output"] = output
-	state["done"] = complete
+	state.Output = output
+	state.Done = complete
 	return ag.Command{Update: state}, nil
 }
 
@@ -154,31 +139,28 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 		names:   make(map[string]any),
 	}
 
-	graph := ag.NewAdvancedStateGraph()
+	graph := ag.NewAdvancedStateGraph[lunchState]()
 	graph.AddAsyncChannel("tool_completion_channel")
 	graph.AddAsyncChannel("subagent_completion_channel")
 	graph.AddAsyncChannel("user_input_channel")
 
-	graph.AddNode(workflow.llmNode)
+	graph.AddEntryNode(workflow.llmNode)
 	graph.AddNode(workflow.waitNode)
 	graph.AddNode(workflow.toolNode)
 	graph.AddNode(workflow.subAgentNode)
-	graph.AddNode(workflow.orderFoodNode)
+	graph.AddFinishNode(workflow.orderFoodNode)
 	workflow.names["llm"] = workflow.llmNode
 	workflow.names["wait"] = workflow.waitNode
 	workflow.names["tool"] = workflow.toolNode
 	workflow.names["sub"] = workflow.subAgentNode
 	workflow.names["order"] = workflow.orderFoodNode
 
-	graph.SetEntryNode(workflow.llmNode)
-	graph.SetFinishNode(workflow.orderFoodNode)
-
 	handler, err := graph.Compile().Start(
 		nil,
-		map[string]any{
-			"input":  "help me get something for lunch",
-			"output": []string{},
-			"done":   nil,
+		lunchState{
+			Input:  "help me get something for lunch",
+			Output: []string{},
+			Done:   "",
 		},
 	)
 	if err != nil {
@@ -195,12 +177,12 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 		t.Fatalf("result failed: %v", err)
 	}
 
-	output := outputSlice(result)
+	output := result.Output
 	if len(output) == 0 {
 		t.Fatalf("output is empty, full result=%#v", result)
 	}
-	if result["done"] != "order submitted" {
-		t.Fatalf("unexpected done: %v", result["done"])
+	if result.Done != "order submitted" {
+		t.Fatalf("unexpected done: %v", result.Done)
 	}
 	if !slices.Contains(output, "user_input: No spicy food please") {
 		t.Fatalf("missing user input output: %#v", output)

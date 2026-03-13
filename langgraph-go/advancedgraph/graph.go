@@ -1,35 +1,38 @@
 package advancedgraph
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
 )
 
-type NodeFunc[IN any] func(ctx *Context, input IN, state map[string]any) (Command, error)
+type NodeFunc[IN any, StateT any] func(ctx *Context, input IN, state StateT) (Command, error)
 
 type nodeExecutor func(ctx *Context, input any, state map[string]any) (Command, error)
 
-type AdvancedStateGraph struct {
+type AdvancedStateGraph[StateT any] struct {
 	nodes         map[string]nodeExecutor
 	asyncChannels []string
 	entryPoint    string
 	finishPoint   string
+	stateType     reflect.Type
 }
 
-func NewAdvancedStateGraph() *AdvancedStateGraph {
-	return &AdvancedStateGraph{
-		nodes: make(map[string]nodeExecutor),
+func NewAdvancedStateGraph[StateT any]() *AdvancedStateGraph[StateT] {
+	return &AdvancedStateGraph[StateT]{
+		nodes:     make(map[string]nodeExecutor),
+		stateType: mustTypeOf[StateT](),
 	}
 }
 
-func (g *AdvancedStateGraph) AddNode(fn any) string {
+func (g *AdvancedStateGraph[StateT]) AddNode(fn any) string {
 	name := NodeName(fn)
 	if _, exists := g.nodes[name]; exists {
 		panic(fmt.Sprintf("node `%s` already exists", name))
 	}
-	exec, err := compileNodeExecutor(fn)
+	exec, err := compileNodeExecutor(fn, g.stateType)
 	if err != nil {
 		panic(err)
 	}
@@ -37,44 +40,38 @@ func (g *AdvancedStateGraph) AddNode(fn any) string {
 	return name
 }
 
-func (g *AdvancedStateGraph) AddAsyncChannel(name string) {
+func (g *AdvancedStateGraph[StateT]) AddAsyncChannel(name string) {
 	g.asyncChannels = append(g.asyncChannels, name)
 }
 
-func (g *AdvancedStateGraph) SetEntryNode(fn any) {
-	g.entryPoint = NodeName(fn)
-}
-
-func (g *AdvancedStateGraph) SetFinishNode(fn any) {
-	g.finishPoint = NodeName(fn)
-}
-
-func (g *AdvancedStateGraph) AddEntryNode(fn any) string {
+func (g *AdvancedStateGraph[StateT]) AddEntryNode(fn any) string {
 	name := g.AddNode(fn)
 	g.entryPoint = name
 	return name
 }
 
-func (g *AdvancedStateGraph) AddFinishNode(fn any) string {
+func (g *AdvancedStateGraph[StateT]) AddFinishNode(fn any) string {
 	name := g.AddNode(fn)
 	g.finishPoint = name
 	return name
 }
 
-func (g *AdvancedStateGraph) Compile() *CompiledGraph {
-	return &CompiledGraph{
+func (g *AdvancedStateGraph[StateT]) Compile() *CompiledGraph[StateT] {
+	return &CompiledGraph[StateT]{
 		nodes:         g.nodes,
 		asyncChannels: g.asyncChannels,
 		entryPoint:    g.entryPoint,
 		finishPoint:   g.finishPoint,
+		stateType:     g.stateType,
 	}
 }
 
-type CompiledGraph struct {
+type CompiledGraph[StateT any] struct {
 	nodes         map[string]nodeExecutor
 	asyncChannels []string
 	entryPoint    string
 	finishPoint   string
+	stateType     reflect.Type
 }
 
 type Context struct {
@@ -89,26 +86,26 @@ func (c *Context) PublishToChannel(channel string, value any) error {
 	return c.engine.Publish(channel, value)
 }
 
-type Handler struct {
+type Handler[StateT any] struct {
 	engine *RustEngine
-	done   chan resultOrErr
+	done   chan resultOrErr[StateT]
 }
 
-type resultOrErr struct {
-	state map[string]any
+type resultOrErr[StateT any] struct {
+	state StateT
 	err   error
 }
 
-func (h *Handler) PublishToChannel(channel string, value any) error {
+func (h *Handler[StateT]) PublishToChannel(channel string, value any) error {
 	return h.engine.Publish(channel, value)
 }
 
-func (h *Handler) WaitForResult() (map[string]any, error) {
+func (h *Handler[StateT]) WaitForResult() (StateT, error) {
 	res := <-h.done
 	return res.state, res.err
 }
 
-func (g *CompiledGraph) Start(initialInput any, initialState map[string]any) (*Handler, error) {
+func (g *CompiledGraph[StateT]) Start(initialInput any, initialState StateT) (*Handler[StateT], error) {
 	engine := NewRustEngine()
 	for _, ch := range g.asyncChannels {
 		if err := engine.AddAsyncChannel(ch); err != nil {
@@ -116,13 +113,13 @@ func (g *CompiledGraph) Start(initialInput any, initialState map[string]any) (*H
 		}
 	}
 
-	handler := &Handler{
+	handler := &Handler[StateT]{
 		engine: engine,
-		done:   make(chan resultOrErr, 1),
+		done:   make(chan resultOrErr[StateT], 1),
 	}
 	go func() {
 		defer engine.Close()
-		state, err := engine.RunGraph(
+		rawState, err := engine.RunGraph(
 			g.entryPoint,
 			g.finishPoint,
 			initialState,
@@ -138,7 +135,13 @@ func (g *CompiledGraph) Start(initialInput any, initialState map[string]any) (*H
 				return fn(&Context{engine: engine}, nodeInput, fallbackState)
 			},
 		)
-		handler.done <- resultOrErr{state: state, err: err}
+		if err != nil {
+			handler.done <- resultOrErr[StateT]{err: err}
+			close(handler.done)
+			return
+		}
+		state, err := mapToState[StateT](rawState)
+		handler.done <- resultOrErr[StateT]{state: state, err: err}
 		close(handler.done)
 	}()
 	return handler, nil
@@ -172,22 +175,18 @@ func NodeName(fn any) string {
 	return short
 }
 
-func compileNodeExecutor(fn any) (nodeExecutor, error) {
+func compileNodeExecutor(fn any, expectedStateType reflect.Type) (nodeExecutor, error) {
 	rv := reflect.ValueOf(fn)
 	if !rv.IsValid() || rv.Kind() != reflect.Func {
 		return nil, fmt.Errorf("node must be a function")
 	}
 	rt := rv.Type()
 	if rt.NumIn() != 3 {
-		return nil, fmt.Errorf("node `%s` must accept exactly 3 args: (*Context, input, map[string]any)", NodeName(fn))
+		return nil, fmt.Errorf("node `%s` must accept exactly 3 args: (*Context, input, state)", NodeName(fn))
 	}
 	ctxType := reflect.TypeOf((*Context)(nil))
 	if rt.In(0) != ctxType {
 		return nil, fmt.Errorf("node `%s` first arg must be *Context", NodeName(fn))
-	}
-	stateType := reflect.TypeOf(map[string]any{})
-	if rt.In(2) != stateType {
-		return nil, fmt.Errorf("node `%s` third arg must be map[string]any", NodeName(fn))
 	}
 	if rt.NumOut() != 2 {
 		return nil, fmt.Errorf("node `%s` must return (Command, error)", NodeName(fn))
@@ -202,11 +201,24 @@ func compileNodeExecutor(fn any) (nodeExecutor, error) {
 	}
 
 	inputType := rt.In(1)
+	stateType := rt.In(2)
+	if stateType != expectedStateType {
+		return nil, fmt.Errorf(
+			"node `%s` state type mismatch: got %s, graph expects %s",
+			NodeName(fn),
+			stateType.String(),
+			expectedStateType.String(),
+		)
+	}
 	return func(ctx *Context, input any, state map[string]any) (Command, error) {
+		stateArg, err := convertStateArg(state, stateType)
+		if err != nil {
+			return Command{}, fmt.Errorf("node `%s` state decode failed: %w", NodeName(fn), err)
+		}
 		args := []reflect.Value{
 			reflect.ValueOf(ctx),
 			reflect.Zero(inputType),
-			reflect.ValueOf(state),
+			stateArg,
 		}
 		if input != nil {
 			inVal := reflect.ValueOf(input)
@@ -230,4 +242,51 @@ func compileNodeExecutor(fn any) (nodeExecutor, error) {
 		}
 		return cmd, out[1].Interface().(error)
 	}, nil
+}
+
+func convertStateArg(state map[string]any, stateType reflect.Type) (reflect.Value, error) {
+	if stateType == reflect.TypeOf(map[string]any{}) {
+		return reflect.ValueOf(state), nil
+	}
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return reflect.Value{}, fmt.Errorf("marshal state: %w", err)
+	}
+	if stateType.Kind() == reflect.Ptr {
+		target := reflect.New(stateType.Elem())
+		if err := json.Unmarshal(raw, target.Interface()); err != nil {
+			return reflect.Value{}, fmt.Errorf("unmarshal state into %s: %w", stateType.String(), err)
+		}
+		return target, nil
+	}
+	target := reflect.New(stateType)
+	if err := json.Unmarshal(raw, target.Interface()); err != nil {
+		return reflect.Value{}, fmt.Errorf("unmarshal state into %s: %w", stateType.String(), err)
+	}
+	return target.Elem(), nil
+}
+
+func mapToState[StateT any](raw map[string]any) (StateT, error) {
+	var out StateT
+	if anyVal, ok := any(raw).(StateT); ok {
+		return anyVal, nil
+	}
+	payload, err := json.Marshal(raw)
+	if err != nil {
+		return out, fmt.Errorf("marshal state: %w", err)
+	}
+	if err := json.Unmarshal(payload, &out); err != nil {
+		return out, fmt.Errorf("unmarshal state: %w", err)
+	}
+	return out, nil
+}
+
+func mustTypeOf[T any]() reflect.Type {
+	var zero T
+	t := reflect.TypeOf(zero)
+	if t != nil {
+		return t
+	}
+	// Handles nil-able types where zero value has no dynamic type.
+	return reflect.TypeOf((*T)(nil)).Elem()
 }
