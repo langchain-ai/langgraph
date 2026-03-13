@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 
 	ag "github.com/langchain-ai/langgraph/langgraph-go/advancedgraph"
@@ -30,9 +31,9 @@ func logsSlice(state map[string]any) []string {
 	}
 }
 
-func (w *primitiveWorkflow) startNode(ctx *ag.Context, _ any, state map[string]any) (ag.Command, error) {
+func (w *primitiveWorkflow) startNode(ctx *ag.Context, input int, state map[string]any) (ag.Command, error) {
 	logs := logsSlice(state)
-	logs = append(logs, "start")
+	logs = append(logs, fmt.Sprintf("start:%d", input))
 	state["logs"] = logs
 	return ag.Command{
 		Update: state,
@@ -42,9 +43,9 @@ func (w *primitiveWorkflow) startNode(ctx *ag.Context, _ any, state map[string]a
 	}, nil
 }
 
-func (w *primitiveWorkflow) middleNode(ctx *ag.Context, input any, state map[string]any) (ag.Command, error) {
+func (w *primitiveWorkflow) middleNode(ctx *ag.Context, input string, state map[string]any) (ag.Command, error) {
 	logs := logsSlice(state)
-	logs = append(logs, "middle:"+input.(string))
+	logs = append(logs, "middle:"+input)
 	state["logs"] = logs
 	return ag.Command{
 		Update: state,
@@ -54,11 +55,11 @@ func (w *primitiveWorkflow) middleNode(ctx *ag.Context, input any, state map[str
 	}, nil
 }
 
-func (w *primitiveWorkflow) finishNode(ctx *ag.Context, input any, state map[string]any) (ag.Command, error) {
+func (w *primitiveWorkflow) finishNode(ctx *ag.Context, input string, state map[string]any) (ag.Command, error) {
 	logs := logsSlice(state)
-	logs = append(logs, "finish:"+input.(string))
+	logs = append(logs, "finish:"+input)
 	state["logs"] = logs
-	state["done"] = input.(string)
+	state["done"] = input
 	return ag.Command{Update: state}, nil
 }
 
@@ -88,7 +89,7 @@ func TestInputAndStatePrimitivesCompatible(t *testing.T) {
 		t.Fatalf("unexpected done: %v", result["done"])
 	}
 	logs := logsSlice(result)
-	if len(logs) != 3 || logs[0] != "start" || logs[1] != "middle:from_start" || logs[2] != "finish:from_middle" {
+	if len(logs) != 3 || logs[0] != "start:0" || logs[1] != "middle:from_start" || logs[2] != "finish:from_middle" {
 		t.Fatalf("unexpected logs: %#v", logs)
 	}
 }

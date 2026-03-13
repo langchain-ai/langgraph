@@ -145,7 +145,7 @@ fn run_graph_scheduler_json(
     let tx_for_spawn = tx.clone();
     let state_for_spawn = Arc::clone(&state);
     let state_for_merge = Arc::clone(&state);
-    let initial_arg = state.lock().expect("state mutex poisoned").clone();
+    let initial_arg = Value::Null;
     run_scheduler_loop(
         entry_point,
         &finish_point,

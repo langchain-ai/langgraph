@@ -31,7 +31,7 @@ func (m *mockLLM) invoke() []decision {
 
 type lunchWorkflow struct {
 	planner *mockLLM
-	names   map[string]ag.NodeFunc
+	names   map[string]any
 }
 
 func outputSlice(state map[string]any) []string {
@@ -151,7 +151,7 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 	}
 	workflow := &lunchWorkflow{
 		planner: planner,
-		names:   make(map[string]ag.NodeFunc),
+		names:   make(map[string]any),
 	}
 
 	graph := ag.NewAdvancedStateGraph()

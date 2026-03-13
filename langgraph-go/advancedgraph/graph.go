@@ -7,10 +7,12 @@ import (
 	"strings"
 )
 
-type NodeFunc func(ctx *Context, input any, state map[string]any) (Command, error)
+type NodeFunc[IN any] func(ctx *Context, input IN, state map[string]any) (Command, error)
+
+type nodeExecutor func(ctx *Context, input any, state map[string]any) (Command, error)
 
 type AdvancedStateGraph struct {
-	nodes         map[string]NodeFunc
+	nodes         map[string]nodeExecutor
 	asyncChannels []string
 	entryPoint    string
 	finishPoint   string
@@ -18,16 +20,20 @@ type AdvancedStateGraph struct {
 
 func NewAdvancedStateGraph() *AdvancedStateGraph {
 	return &AdvancedStateGraph{
-		nodes: make(map[string]NodeFunc),
+		nodes: make(map[string]nodeExecutor),
 	}
 }
 
-func (g *AdvancedStateGraph) AddNode(fn NodeFunc) string {
+func (g *AdvancedStateGraph) AddNode(fn any) string {
 	name := NodeName(fn)
 	if _, exists := g.nodes[name]; exists {
 		panic(fmt.Sprintf("node `%s` already exists", name))
 	}
-	g.nodes[name] = fn
+	exec, err := compileNodeExecutor(fn)
+	if err != nil {
+		panic(err)
+	}
+	g.nodes[name] = exec
 	return name
 }
 
@@ -35,11 +41,11 @@ func (g *AdvancedStateGraph) AddAsyncChannel(name string) {
 	g.asyncChannels = append(g.asyncChannels, name)
 }
 
-func (g *AdvancedStateGraph) SetEntryNode(fn NodeFunc) {
+func (g *AdvancedStateGraph) SetEntryNode(fn any) {
 	g.entryPoint = NodeName(fn)
 }
 
-func (g *AdvancedStateGraph) SetFinishNode(fn NodeFunc) {
+func (g *AdvancedStateGraph) SetFinishNode(fn any) {
 	g.finishPoint = NodeName(fn)
 }
 
@@ -53,7 +59,7 @@ func (g *AdvancedStateGraph) Compile() *CompiledGraph {
 }
 
 type CompiledGraph struct {
-	nodes         map[string]NodeFunc
+	nodes         map[string]nodeExecutor
 	asyncChannels []string
 	entryPoint    string
 	finishPoint   string
@@ -125,8 +131,12 @@ func (g *CompiledGraph) Start(initialState map[string]any) (*Handler, error) {
 	return handler, nil
 }
 
-func NodeName(fn NodeFunc) string {
-	pc := reflect.ValueOf(fn).Pointer()
+func NodeName(fn any) string {
+	rv := reflect.ValueOf(fn)
+	if !rv.IsValid() || rv.Kind() != reflect.Func {
+		panic("cannot infer node name from non-function value")
+	}
+	pc := rv.Pointer()
 	f := runtime.FuncForPC(pc)
 	if f == nil {
 		panic("cannot infer node name from nil function")
@@ -147,4 +157,64 @@ func NodeName(fn NodeFunc) string {
 		panic(fmt.Sprintf("cannot infer stable node name from `%s`", full))
 	}
 	return short
+}
+
+func compileNodeExecutor(fn any) (nodeExecutor, error) {
+	rv := reflect.ValueOf(fn)
+	if !rv.IsValid() || rv.Kind() != reflect.Func {
+		return nil, fmt.Errorf("node must be a function")
+	}
+	rt := rv.Type()
+	if rt.NumIn() != 3 {
+		return nil, fmt.Errorf("node `%s` must accept exactly 3 args: (*Context, input, map[string]any)", NodeName(fn))
+	}
+	ctxType := reflect.TypeOf((*Context)(nil))
+	if rt.In(0) != ctxType {
+		return nil, fmt.Errorf("node `%s` first arg must be *Context", NodeName(fn))
+	}
+	stateType := reflect.TypeOf(map[string]any{})
+	if rt.In(2) != stateType {
+		return nil, fmt.Errorf("node `%s` third arg must be map[string]any", NodeName(fn))
+	}
+	if rt.NumOut() != 2 {
+		return nil, fmt.Errorf("node `%s` must return (Command, error)", NodeName(fn))
+	}
+	cmdType := reflect.TypeOf(Command{})
+	if rt.Out(0) != cmdType {
+		return nil, fmt.Errorf("node `%s` first return must be Command", NodeName(fn))
+	}
+	errType := reflect.TypeOf((*error)(nil)).Elem()
+	if !rt.Out(1).Implements(errType) {
+		return nil, fmt.Errorf("node `%s` second return must be error", NodeName(fn))
+	}
+
+	inputType := rt.In(1)
+	return func(ctx *Context, input any, state map[string]any) (Command, error) {
+		args := []reflect.Value{
+			reflect.ValueOf(ctx),
+			reflect.Zero(inputType),
+			reflect.ValueOf(state),
+		}
+		if input != nil {
+			inVal := reflect.ValueOf(input)
+			if inVal.Type().AssignableTo(inputType) {
+				args[1] = inVal
+			} else if inVal.Type().ConvertibleTo(inputType) {
+				args[1] = inVal.Convert(inputType)
+			} else {
+				return Command{}, fmt.Errorf(
+					"node `%s` input type mismatch: got %T, want %s",
+					NodeName(fn),
+					input,
+					inputType.String(),
+				)
+			}
+		}
+		out := rv.Call(args)
+		cmd := out[0].Interface().(Command)
+		if out[1].IsNil() {
+			return cmd, nil
+		}
+		return cmd, out[1].Interface().(error)
+	}, nil
 }
