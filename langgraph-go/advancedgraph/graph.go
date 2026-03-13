@@ -217,7 +217,10 @@ func compileNodeExecutor(fn any, expectedStateType reflect.Type) (nodeExecutor, 
 		if err != nil {
 			return Command{}, fmt.Errorf("node `%s` state decode failed: %w", NodeName(fn), err)
 		}
-		beforeState := stateArg.Interface()
+		beforeStateMap, ok := structValueToMap(stateArg)
+		if !ok {
+			return Command{}, fmt.Errorf("node `%s` failed to snapshot state fields", NodeName(fn))
+		}
 		args := []reflect.Value{
 			reflect.ValueOf(ctx),
 			reflect.Zero(inputType),
@@ -251,7 +254,7 @@ func compileNodeExecutor(fn any, expectedStateType reflect.Type) (nodeExecutor, 
 				)
 			}
 		}
-		cmd.Update = reduceStructUpdateToChangedFields(beforeState, cmd.Update, stateType)
+		cmd.Update = reduceStructUpdateToChangedFields(beforeStateMap, cmd.Update, stateType)
 		if out[1].IsNil() {
 			return cmd, nil
 		}
@@ -306,38 +309,45 @@ func mustTypeOf[T any]() reflect.Type {
 	return reflect.TypeOf((*T)(nil)).Elem()
 }
 
-func reduceStructUpdateToChangedFields(before any, update any, stateType reflect.Type) any {
+func reduceStructUpdateToChangedFields(
+	before map[string]any,
+	update any,
+	stateType reflect.Type,
+) any {
 	if update == nil {
 		return nil
 	}
-	beforeV := reflect.ValueOf(before)
 	updateV := reflect.ValueOf(update)
-	if !beforeV.IsValid() || !updateV.IsValid() {
-		return update
+	if !updateV.IsValid() {
+		panic("internal invariant violated: update is non-nil but reflect value is invalid")
 	}
-	if beforeV.Type() != stateType || updateV.Type() != stateType {
-		return update
+	if updateV.Type() != stateType {
+		panic(fmt.Sprintf(
+			"internal invariant violated: update type mismatch in reducer: got %s, expected %s",
+			updateV.Type().String(),
+			stateType.String(),
+		))
 	}
 	if stateType.Kind() != reflect.Struct {
-		return update
+		panic(fmt.Sprintf(
+			"internal invariant violated: stateType must be struct in reducer, got %s",
+			stateType.Kind().String(),
+		))
 	}
-
+	updateMap, ok := structValueToMap(updateV)
+	if !ok {
+		panic(fmt.Sprintf(
+			"internal invariant violated: failed to convert struct update to map for type %s",
+			stateType.String(),
+		))
+	}
 	changed := make(map[string]any)
-	for i := 0; i < stateType.NumField(); i++ {
-		field := stateType.Field(i)
-		if field.PkgPath != "" {
+	for key, updateValue := range updateMap {
+		prevValue, ok := before[key]
+		if ok && reflect.DeepEqual(prevValue, updateValue) {
 			continue
 		}
-		beforeField := beforeV.Field(i)
-		updateField := updateV.Field(i)
-		if reflect.DeepEqual(beforeField.Interface(), updateField.Interface()) {
-			continue
-		}
-		key := jsonFieldName(field)
-		if key == "-" {
-			continue
-		}
-		changed[key] = updateField.Interface()
+		changed[key] = updateValue
 	}
 	if len(changed) == 0 {
 		return nil
@@ -345,14 +355,49 @@ func reduceStructUpdateToChangedFields(before any, update any, stateType reflect
 	return changed
 }
 
-func jsonFieldName(field reflect.StructField) string {
+func structValueToMap(value reflect.Value) (map[string]any, bool) {
+	if !value.IsValid() || value.Kind() != reflect.Struct {
+		return nil, false
+	}
+	out := make(map[string]any, value.NumField())
+	typ := value.Type()
+	for i := 0; i < value.NumField(); i++ {
+		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
+		name, omitEmpty, skip := parseJSONFieldTag(field)
+		if skip {
+			continue
+		}
+		fv := value.Field(i)
+		if omitEmpty && fv.IsZero() {
+			continue
+		}
+		out[name] = fv.Interface()
+	}
+	return out, true
+}
+
+func parseJSONFieldTag(field reflect.StructField) (name string, omitEmpty bool, skip bool) {
 	tag := field.Tag.Get("json")
+	if tag == "-" {
+		return "", false, true
+	}
 	if tag == "" {
-		return field.Name
+		return field.Name, false, false
 	}
 	parts := strings.Split(tag, ",")
-	if len(parts) == 0 || parts[0] == "" {
-		return field.Name
+	fieldName := parts[0]
+	if fieldName == "" {
+		fieldName = field.Name
 	}
-	return parts[0]
+	omit := false
+	for _, opt := range parts[1:] {
+		if opt == "omitempty" {
+			omit = true
+			break
+		}
+	}
+	return fieldName, omit, false
 }
