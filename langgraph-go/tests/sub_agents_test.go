@@ -15,12 +15,12 @@ type decision struct {
 	Complete string
 }
 
-type mockPlanner struct {
+type mockLLM struct {
 	responses [][]decision
 	i         int
 }
 
-func (m *mockPlanner) invoke() []decision {
+func (m *mockLLM) invoke() []decision {
 	if m.i >= len(m.responses) {
 		return []decision{}
 	}
@@ -30,7 +30,7 @@ func (m *mockPlanner) invoke() []decision {
 }
 
 type lunchWorkflow struct {
-	planner *mockPlanner
+	planner *mockLLM
 	names   map[string]string
 }
 
@@ -152,7 +152,7 @@ func (w *lunchWorkflow) orderFoodNode(ctx *ag.Context, state map[string]any) (ag
 }
 
 func TestSubAgentsEquivalentFlow(t *testing.T) {
-	planner := &mockPlanner{
+	planner := &mockLLM{
 		responses: [][]decision{
 			{
 				{Type: "sub_agent", SubAgent: "research lunch options"},

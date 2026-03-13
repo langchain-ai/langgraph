@@ -38,7 +38,7 @@ class Decision:
     complete: str | None = None
 
 
-class MockPlanner:
+class MockLLM:
     def __init__(self) -> None:
         self.responses: list[list[Decision]] = []
         self._idx = 0
@@ -66,7 +66,7 @@ def build_sub_agent() -> Any:
     return sub_agent.compile()
 
 
-def build_main_agent(planner: MockPlanner, sub_agent: Any) -> Any:
+def build_main_agent(planner: MockLLM, sub_agent: Any) -> Any:
     async def llm_node(state: MainAgentState) -> Command:
         # Planner decides whether to call a tool, spawn a sub-agent, or finish.
         decisions = await planner.ainvoke(state)
@@ -162,11 +162,11 @@ def build_main_agent(planner: MockPlanner, sub_agent: Any) -> Any:
 
 
 async def test_async_sub_graph() -> None:
-    planner = MockPlanner()
+    llm = MockLLM()
     sub_agent = build_sub_agent()
-    main_agent = build_main_agent(planner, sub_agent)
+    main_agent = build_main_agent(llm, sub_agent)
 
-    planner.responses = [
+    llm.responses = [
         [
             # First planner pass triggers one slow sub-agent.
             Decision(type="sub_agent", sub_agent="research lunch options"),
@@ -215,7 +215,7 @@ async def test_async_sub_graph() -> None:
     )
     order_food_idx = output.index("order_food: order submitted")
     assert first_sub_idx < second_sub_idx < order_food_idx
-    assert planner._idx == len(planner.responses)
+    assert llm._idx == len(llm.responses)
     import json
 
     print(json.dumps(result, ensure_ascii=False, indent=2))
