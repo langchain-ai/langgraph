@@ -1545,9 +1545,11 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
             if isinstance(cmd, Command):
                 commands.append(cmd)
     rtn: list[tuple[str, Any]] = []
+    parent_commands: list[Command] = []
     for command in commands:
         if command.graph == Command.PARENT:
-            raise ParentCommand(command)
+            parent_commands.append(command)
+            continue
 
         goto_targets = (
             [command.goto] if isinstance(command.goto, (Send, str)) else command.goto
@@ -1560,6 +1562,45 @@ def _control_branch(value: Any) -> Sequence[tuple[str, Any]]:
                 # END is a special case, it's not actually a node in a practical sense
                 # but rather a special terminal node that we don't need to branch to
                 rtn.append((_CHANNEL_BRANCH_TO.format(go), None))
+    if parent_commands:
+        if len(parent_commands) == 1:
+            raise ParentCommand(parent_commands[0])
+        # Merge multiple parent commands (e.g. from parallel tool calls)
+        # into a single Command so all updates and gotos are preserved.
+        merged_update: dict[str, Any] = {}
+        merged_goto: list[Send | str] = []
+        merged_resume: dict[str, Any] = {}
+        for cmd in parent_commands:
+            if cmd.update is not None:
+                if isinstance(cmd.update, dict):
+                    merged_update.update(cmd.update)
+                else:
+                    merged_update.update(dict(cmd._update_as_tuples()))
+            goto = cmd.goto
+            if isinstance(goto, (Send, str)):
+                if goto not in merged_goto:
+                    merged_goto.append(goto)
+            elif goto:
+                for g in goto:
+                    if g not in merged_goto:
+                        merged_goto.append(g)
+            if isinstance(cmd.resume, dict):
+                merged_resume.update(cmd.resume)
+        final_goto: Send | list[Send | str] | str | tuple[()]
+        if len(merged_goto) == 1:
+            final_goto = merged_goto[0]
+        elif merged_goto:
+            final_goto = merged_goto
+        else:
+            final_goto = ()
+        raise ParentCommand(
+            Command(
+                graph=Command.PARENT,
+                update=merged_update or None,
+                goto=final_goto,
+                resume=merged_resume or None,
+            )
+        )
     return rtn
 
 
