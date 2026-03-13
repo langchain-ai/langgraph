@@ -269,9 +269,6 @@ class _GraphEngineRun:
             update = result
             sends = _normalize_result_to_sends(result, default_input=node_input)
 
-        if update is None and isinstance(state, dict):
-            # Preserve in-place state mutations for prototype nodes like wait_node.
-            update = state
         if isinstance(update, dict):
             update = _reduce_update_to_changed_fields(before_state_snapshot, update)
 

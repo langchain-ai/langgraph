@@ -109,11 +109,11 @@ def build_main_agent(planner: MockLLM, sub_agent: Any) -> Any:
             elif channel == "user_input_channel":
                 state["output"].append(f"user_input: {payload}")
             # State changed -> ask planner what to do next.
-            return Command(goto=Send("llm_node", None))
+            return Command(update=state, goto=Send("llm_node", None))
         else:
             state["output"].append("timer: no updates yet")
             # No meaningful state change -> keep waiting without calling planner.
-            return Command(goto=Send("wait_node", None))
+            return Command(update=state, goto=Send("wait_node", None))
 
     async def tool_node(ctx: Context, tool_input: str) -> None:
         await asyncio.sleep(0.1)
