@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-type NodeFunc func(ctx *Context, state map[string]any) (Command, error)
+type NodeFunc func(ctx *Context, input any, state map[string]any) (Command, error)
 
 type AdvancedStateGraph struct {
 	nodes         map[string]NodeFunc
@@ -108,19 +108,15 @@ func (g *CompiledGraph) Start(initialState map[string]any) (*Handler, error) {
 			g.entryPoint,
 			g.finishPoint,
 			initialState,
-			func(node string, arg any, fallbackState map[string]any) (Command, error) {
+			func(node string, nodeInput any, fallbackState map[string]any) (Command, error) {
 				fn, ok := g.nodes[node]
 				if !ok {
 					return Command{}, fmt.Errorf("unknown node `%s`", node)
 				}
-				stateArg, ok := arg.(map[string]any)
-				if !ok {
-					stateArg = fallbackState
-				}
-				if stateArg == nil {
+				if fallbackState == nil {
 					return Command{}, fmt.Errorf("node `%s` expected map state argument", node)
 				}
-				return fn(&Context{engine: engine}, stateArg)
+				return fn(&Context{engine: engine}, nodeInput, fallbackState)
 			},
 		)
 		handler.done <- resultOrErr{state: state, err: err}

@@ -5,7 +5,7 @@ use crate::engine::{
 use serde::Deserialize;
 use serde_json::Value;
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_void};
+use std::os::raw::c_char;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 
@@ -33,16 +33,14 @@ struct CallbackEnvelopeIn {
 }
 
 type CNodeCallback = unsafe extern "C" fn(
-    user_data: *mut c_void,
+    user_data: libc::c_ulong,
     node: *mut c_char,
     arg_json: *mut c_char,
     state_json: *mut c_char,
 ) -> *mut c_char;
 
 #[derive(Clone, Copy)]
-struct CUserData(*mut c_void);
-unsafe impl Send for CUserData {}
-unsafe impl Sync for CUserData {}
+struct CUserData(libc::c_ulong);
 
 fn cstr_to_str<'a>(ptr: *const c_char) -> Result<&'a str, String> {
     if ptr.is_null() {
@@ -95,7 +93,7 @@ fn spawn_json_node_task(
     arg: Value,
     state_snapshot: Value,
     tx: mpsc::Sender<Result<(String, NodeExecResult<Value, Value>), String>>,
-    user_data_bits: usize,
+    user_data_bits: libc::c_ulong,
     callback: CNodeCallback,
 ) -> Result<(), String> {
     node_pool_execute(move || {
@@ -112,7 +110,7 @@ fn spawn_json_node_task(
                 CString::new(state_json).map_err(|e| format!("invalid state JSON bytes: {e}"))?;
             let out_ptr = unsafe {
                 callback(
-                    user_data_bits as *mut c_void,
+                    user_data_bits,
                     node_c.as_ptr() as *mut c_char,
                     arg_c.as_ptr() as *mut c_char,
                     state_c.as_ptr() as *mut c_char,
@@ -143,7 +141,7 @@ fn run_graph_scheduler_json(
 ) -> Result<Value, String> {
     let (tx, rx) = mpsc::channel::<Result<(String, NodeExecResult<Value, Value>), String>>();
     let state = Arc::new(Mutex::new(initial_state));
-    let user_data_bits = user_data.0 as usize;
+    let user_data_bits = user_data.0;
     let tx_for_spawn = tx.clone();
     let state_for_spawn = Arc::clone(&state);
     let state_for_merge = Arc::clone(&state);
@@ -299,7 +297,7 @@ pub unsafe extern "C" fn rc_run_graph_json(
     entry_point: *const c_char,
     finish_point: *const c_char,
     initial_state_json: *const c_char,
-    user_data: *mut c_void,
+    user_data: libc::c_ulong,
     callback: Option<CNodeCallback>,
 ) -> *mut c_char {
     if ptr.is_null() {

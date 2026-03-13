@@ -249,25 +249,27 @@ class _GraphEngineRun:
     def _publish_sync(self, channel: str, value: Any) -> None:
         self._rust_engine.publish_obj(channel, value)
 
-    def _execute_node_for_rust(self, node_name: str, arg: Any, state: Any) -> dict[str, Any]:
+    def _execute_node_for_rust(
+        self, node_name: str, node_input: Any, state: Any
+    ) -> dict[str, Any]:
 
         if node_name not in self._nodes:
             raise ValueError(f"Unknown node `{node_name}`")
         node = self._nodes[node_name]
-        result = _invoke_node(node, self.context, arg)
+        result = _invoke_node(node, self.context, node_input, state)
         if inspect.isawaitable(result):
             result = asyncio.run(cast(Coroutine[Any, Any, Any], result))
 
         if isinstance(result, Command):
             update = result.update
-            sends = _normalize_goto(result.goto, default_arg=state)
+            sends = _normalize_goto(result.goto, default_input=node_input)
         else:
             update = result
-            sends = _normalize_result_to_sends(result, default_arg=state)
+            sends = _normalize_result_to_sends(result, default_input=node_input)
 
-        if update is None and isinstance(arg, dict):
+        if update is None and isinstance(state, dict):
             # Preserve in-place state mutations for prototype nodes like wait_node.
-            update = arg
+            update = state
 
         return {
             "update": update,
@@ -277,46 +279,46 @@ class _GraphEngineRun:
             ],
         }
 
-def _normalize_result_to_sends(result: Any, *, default_arg: Any) -> list[Send]:
+def _normalize_result_to_sends(result: Any, *, default_input: Any) -> list[Send]:
     if result is None:
         return []
     if isinstance(result, Send):
         return [result]
     if callable(result):
-        return [Send(_infer_node_name(result), default_arg)]
+        return [Send(_infer_node_name(result), default_input)]
     if isinstance(result, str):
-        return [Send(result, default_arg)]
+        return [Send(result, default_input)]
     if isinstance(result, Sequence) and not isinstance(result, (str, bytes)):
         sends: list[Send] = []
         for item in result:
             if isinstance(item, Send):
                 sends.append(item)
             elif callable(item):
-                sends.append(Send(_infer_node_name(item), default_arg))
+                sends.append(Send(_infer_node_name(item), default_input))
             elif isinstance(item, str):
-                sends.append(Send(item, default_arg))
+                sends.append(Send(item, default_input))
         return sends
     return []
 
 
-def _normalize_goto(goto: Any, *, default_arg: Any) -> list[Send]:
+def _normalize_goto(goto: Any, *, default_input: Any) -> list[Send]:
     if not goto:
         return []
     if isinstance(goto, Send):
         return [goto]
     if callable(goto):
-        return [Send(_infer_node_name(goto), default_arg)]
+        return [Send(_infer_node_name(goto), default_input)]
     if isinstance(goto, str):
-        return [Send(goto, default_arg)]
+        return [Send(goto, default_input)]
     if isinstance(goto, Sequence):
         sends: list[Send] = []
         for item in goto:
             if isinstance(item, Send):
                 sends.append(item)
             elif callable(item):
-                sends.append(Send(_infer_node_name(item), default_arg))
+                sends.append(Send(_infer_node_name(item), default_input))
             elif isinstance(item, str):
-                sends.append(Send(item, default_arg))
+                sends.append(Send(item, default_input))
         return sends
     return []
 
@@ -383,14 +385,57 @@ def _resolve_target_name(target: Any) -> str:
     raise ValueError(f"Unsupported node target type: {type(target)!r}")
 
 
-def _invoke_node(node: Callable[..., Any], ctx: Context, state: Any) -> Any:
+def _invoke_node(node: Callable[..., Any], ctx: Context, node_input: Any, state: Any) -> Any:
     try:
         params = list(inspect.signature(node).parameters.values())
     except (TypeError, ValueError):
         params = []
 
-    if len(params) >= 2:
-        return node(ctx, state)
+    if not params:
+        return node()
+
+    names = [param.name.lower() for param in params]
+    has_ctx = [("ctx" in name or "context" in name) for name in names]
+    has_state = [("state" in name) for name in names]
+    has_input = [("input" in name) for name in names]
+
+    kwargs: dict[str, Any] = {}
+    unresolved = False
+    for idx, param in enumerate(params):
+        if has_ctx[idx]:
+            kwargs[param.name] = ctx
+        elif has_state[idx]:
+            kwargs[param.name] = state
+        elif has_input[idx]:
+            kwargs[param.name] = node_input
+        else:
+            unresolved = True
+
+    if kwargs and not unresolved:
+        return node(**kwargs)
+
     if len(params) == 1:
-        return node(state)
-    return node()
+        if has_ctx[0]:
+            return node(ctx)
+        if has_state[0]:
+            return node(state)
+        return node(node_input)
+
+    if len(params) == 2:
+        if has_ctx[0] and has_state[1]:
+            return node(ctx, state)
+        if has_ctx[0] and has_input[1]:
+            return node(ctx, node_input)
+        if has_input[0] and has_state[1]:
+            return node(node_input, state)
+        if has_state[0] and has_input[1]:
+            return node(state, node_input)
+        if has_state[0]:
+            return node(state, node_input)
+        if has_state[1]:
+            return node(node_input, state)
+        if has_ctx[0]:
+            return node(ctx, node_input)
+        return node(node_input, state)
+
+    return node(ctx, node_input, state)

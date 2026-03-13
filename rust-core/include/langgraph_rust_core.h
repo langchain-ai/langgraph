@@ -7,7 +7,7 @@ extern "C" {
 
 typedef struct Engine Engine;
 typedef char* (*rc_node_callback_t)(
-    void* user_data,
+    unsigned long user_data,
     char* node,
     char* arg_json,
     char* state_json
@@ -24,7 +24,7 @@ char* rc_run_graph_json(
     const char* entry_point,
     const char* finish_point,
     const char* initial_state_json,
-    void* user_data,
+    unsigned long user_data,
     rc_node_callback_t callback
 );
 

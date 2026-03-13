@@ -5,7 +5,7 @@ package advancedgraph
 #cgo LDFLAGS: -L${SRCDIR}/../../rust-core/target/debug -llanggraph_rust_core
 #include "langgraph_rust_core.h"
 #include <stdlib.h>
-extern char* goNodeCallback(void* user_data, char* node, char* arg_json, char* state_json);
+extern char* goNodeCallback(unsigned long user_data, char* node, char* arg_json, char* state_json);
 */
 import "C"
 
@@ -21,11 +21,11 @@ type RustEngine struct {
 }
 
 type runGraphCallbackCtx struct {
-	exec func(node string, arg any, state map[string]any) (Command, error)
+	exec func(node string, nodeInput any, state map[string]any) (Command, error)
 }
 
 //export goNodeCallback
-func goNodeCallback(userData unsafe.Pointer, node *C.char, argJSON *C.char, stateJSON *C.char) *C.char {
+func goNodeCallback(userData C.ulong, node *C.char, argJSON *C.char, stateJSON *C.char) *C.char {
 	handle := cgo.Handle(uintptr(userData))
 	ctx, ok := handle.Value().(*runGraphCallbackCtx)
 	if !ok {
@@ -34,22 +34,22 @@ func goNodeCallback(userData unsafe.Pointer, node *C.char, argJSON *C.char, stat
 
 	nodeName := C.GoString(node)
 
-	var arg any
-	if err := json.Unmarshal([]byte(C.GoString(argJSON)), &arg); err != nil {
+	var nodeInput any
+	if err := json.Unmarshal([]byte(C.GoString(argJSON)), &nodeInput); err != nil {
 		return cCallbackEnvelopeError(fmt.Sprintf("decode arg failed for `%s`: %v", nodeName, err))
 	}
 	var state map[string]any
 	if err := json.Unmarshal([]byte(C.GoString(stateJSON)), &state); err != nil {
 		return cCallbackEnvelopeError(fmt.Sprintf("decode state failed for `%s`: %v", nodeName, err))
 	}
-	arg = coerceJSONValue(arg)
+	nodeInput = coerceJSONValue(nodeInput)
 	stateAny := coerceJSONValue(state)
 	state, ok = stateAny.(map[string]any)
 	if !ok {
 		return cCallbackEnvelopeError(fmt.Sprintf("decoded state has unexpected type for `%s`", nodeName))
 	}
 
-	cmd, err := ctx.exec(nodeName, arg, state)
+	cmd, err := ctx.exec(nodeName, nodeInput, state)
 	if err != nil {
 		return cCallbackEnvelopeError(err.Error())
 	}
@@ -58,7 +58,7 @@ func goNodeCallback(userData unsafe.Pointer, node *C.char, argJSON *C.char, stat
 	for _, send := range cmd.Goto {
 		sends = append(sends, map[string]any{
 			"node": send.Node,
-			"arg":  send.Arg,
+			"arg":  send.NodeInput,
 		})
 	}
 	payload := map[string]any{
@@ -139,7 +139,7 @@ func (e *RustEngine) RunGraph(
 	entryPoint string,
 	finishPoint string,
 	initialState map[string]any,
-	exec func(node string, arg any, state map[string]any) (Command, error),
+	exec func(node string, nodeInput any, state map[string]any) (Command, error),
 ) (map[string]any, error) {
 	initialJSON, err := json.Marshal(initialState)
 	if err != nil {
@@ -160,7 +160,7 @@ func (e *RustEngine) RunGraph(
 		centry,
 		cfinish,
 		cinitial,
-		unsafe.Pointer(uintptr(handle)),
+		C.ulong(handle),
 		(C.rc_node_callback_t)(C.goNodeCallback),
 	)
 	defer C.rc_string_free(resp)

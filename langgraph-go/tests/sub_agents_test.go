@@ -34,15 +34,6 @@ type lunchWorkflow struct {
 	names   map[string]string
 }
 
-func cloneState(state map[string]any) map[string]any {
-	out := make(map[string]any, len(state)+2)
-	for k, v := range state {
-		out[k] = v
-	}
-	out["output"] = append([]string(nil), outputSlice(state)...)
-	return out
-}
-
 func outputSlice(state map[string]any) []string {
 	raw, ok := state["output"]
 	if !ok || raw == nil {
@@ -64,35 +55,29 @@ func outputSlice(state map[string]any) []string {
 	}
 }
 
-func (w *lunchWorkflow) llmNode(ctx *ag.Context, state map[string]any) (ag.Command, error) {
+func (w *lunchWorkflow) llmNode(ctx *ag.Context, _ any, state map[string]any) (ag.Command, error) {
 	decisions := w.planner.invoke()
 	sends := make([]ag.Send, 0, 4)
 	for _, d := range decisions {
 		if d.Type == "end" {
-			next := cloneState(state)
-			next["complete"] = d.Complete
 			return ag.Command{
 				Goto: []ag.Send{
-					{Node: w.names["order"], Arg: next},
+					{Node: w.names["order"], NodeInput: d.Complete},
 				},
 			}, nil
 		}
 		if d.Type == "sub_agent" {
-			next := cloneState(state)
-			next["sub_agent_input"] = d.SubAgent
-			sends = append(sends, ag.Send{Node: w.names["sub"], Arg: next})
+			sends = append(sends, ag.Send{Node: w.names["sub"], NodeInput: d.SubAgent})
 		}
 		if d.Type == "tool" {
-			next := cloneState(state)
-			next["tool_input"] = d.Tool
-			sends = append(sends, ag.Send{Node: w.names["tool"], Arg: next})
+			sends = append(sends, ag.Send{Node: w.names["tool"], NodeInput: d.Tool})
 		}
 	}
-	sends = append(sends, ag.Send{Node: w.names["wait"], Arg: cloneState(state)})
+	sends = append(sends, ag.Send{Node: w.names["wait"]})
 	return ag.Command{Goto: sends}, nil
 }
 
-func (w *lunchWorkflow) waitNode(ctx *ag.Context, state map[string]any) (ag.Command, error) {
+func (w *lunchWorkflow) waitNode(ctx *ag.Context, _ any, state map[string]any) (ag.Command, error) {
 	event, err := ctx.WaitFor(
 		ag.AnyOf(
 			ag.ChannelCondition{Channel: "tool_completion_channel", N: 1},
@@ -117,23 +102,23 @@ func (w *lunchWorkflow) waitNode(ctx *ag.Context, state map[string]any) (ag.Comm
 			output = append(output, "user_input: "+payload)
 		}
 		state["output"] = output
-		return ag.Command{Goto: []ag.Send{{Node: w.names["llm"], Arg: cloneState(state)}}}, nil
+		return ag.Command{Goto: []ag.Send{{Node: w.names["llm"]}}, Update: state}, nil
 	}
 
 	output = append(output, "timer: no updates yet")
 	state["output"] = output
-	return ag.Command{Goto: []ag.Send{{Node: w.names["wait"], Arg: cloneState(state)}}}, nil
+	return ag.Command{Goto: []ag.Send{{Node: w.names["wait"]}}, Update: state}, nil
 }
 
-func (w *lunchWorkflow) toolNode(ctx *ag.Context, state map[string]any) (ag.Command, error) {
-	toolInput, _ := state["tool_input"].(string)
+func (w *lunchWorkflow) toolNode(ctx *ag.Context, input any, _ map[string]any) (ag.Command, error) {
+	toolInput, _ := input.(string)
 	time.Sleep(100 * time.Millisecond)
 	err := ctx.PublishToChannel("tool_completion_channel", "tool completed for: "+toolInput)
 	return ag.Command{}, err
 }
 
-func (w *lunchWorkflow) subAgentNode(ctx *ag.Context, state map[string]any) (ag.Command, error) {
-	subInput, _ := state["sub_agent_input"].(string)
+func (w *lunchWorkflow) subAgentNode(ctx *ag.Context, input any, _ map[string]any) (ag.Command, error) {
+	subInput, _ := input.(string)
 	time.Sleep(5 * time.Second)
 	err := ctx.PublishToChannel(
 		"subagent_completion_channel",
@@ -142,8 +127,8 @@ func (w *lunchWorkflow) subAgentNode(ctx *ag.Context, state map[string]any) (ag.
 	return ag.Command{}, err
 }
 
-func (w *lunchWorkflow) orderFoodNode(ctx *ag.Context, state map[string]any) (ag.Command, error) {
-	complete, _ := state["complete"].(string)
+func (w *lunchWorkflow) orderFoodNode(ctx *ag.Context, input any, state map[string]any) (ag.Command, error) {
+	complete, _ := input.(string)
 	output := outputSlice(state)
 	output = append(output, "order_food: "+complete)
 	state["output"] = output

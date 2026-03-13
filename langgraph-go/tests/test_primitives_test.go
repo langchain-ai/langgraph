@@ -1,0 +1,95 @@
+package tests
+
+import (
+	"testing"
+
+	ag "github.com/langchain-ai/langgraph/langgraph-go/advancedgraph"
+)
+
+type primitiveWorkflow struct {
+	names map[string]string
+}
+
+func logsSlice(state map[string]any) []string {
+	raw, ok := state["logs"]
+	if !ok || raw == nil {
+		return []string{}
+	}
+	switch v := raw.(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return []string{}
+	}
+}
+
+func (w *primitiveWorkflow) startNode(ctx *ag.Context, _ any, state map[string]any) (ag.Command, error) {
+	logs := logsSlice(state)
+	logs = append(logs, "start")
+	state["logs"] = logs
+	return ag.Command{
+		Update: state,
+		Goto: []ag.Send{
+			{Node: w.names["middle"], NodeInput: "from_start"},
+		},
+	}, nil
+}
+
+func (w *primitiveWorkflow) middleNode(ctx *ag.Context, input any, state map[string]any) (ag.Command, error) {
+	logs := logsSlice(state)
+	logs = append(logs, "middle:"+input.(string))
+	state["logs"] = logs
+	return ag.Command{
+		Update: state,
+		Goto: []ag.Send{
+			{Node: w.names["finish"], NodeInput: "from_middle"},
+		},
+	}, nil
+}
+
+func (w *primitiveWorkflow) finishNode(ctx *ag.Context, input any, state map[string]any) (ag.Command, error) {
+	logs := logsSlice(state)
+	logs = append(logs, "finish:"+input.(string))
+	state["logs"] = logs
+	state["done"] = input.(string)
+	return ag.Command{Update: state}, nil
+}
+
+func TestInputAndStatePrimitivesCompatible(t *testing.T) {
+	workflow := &primitiveWorkflow{names: make(map[string]string)}
+	graph := ag.NewAdvancedStateGraph()
+
+	workflow.names["start"] = graph.AddNode(workflow.startNode)
+	workflow.names["middle"] = graph.AddNode(workflow.middleNode)
+	workflow.names["finish"] = graph.AddNode(workflow.finishNode)
+	graph.SetEntryNode(workflow.startNode)
+	graph.SetFinishNode(workflow.finishNode)
+
+	handler, err := graph.Compile().Start(map[string]any{
+		"logs": []string{},
+		"done": nil,
+	})
+	if err != nil {
+		t.Fatalf("start failed: %v", err)
+	}
+
+	result, err := handler.WaitForResult()
+	if err != nil {
+		t.Fatalf("result failed: %v", err)
+	}
+	if result["done"] != "from_middle" {
+		t.Fatalf("unexpected done: %v", result["done"])
+	}
+	logs := logsSlice(result)
+	if len(logs) != 3 || logs[0] != "start" || logs[1] != "middle:from_start" || logs[2] != "finish:from_middle" {
+		t.Fatalf("unexpected logs: %#v", logs)
+	}
+}
