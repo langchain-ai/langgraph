@@ -959,9 +959,10 @@ class Pregel(
             An iterator of the `(namespace, subgraph)` pairs.
         """
         for name, node in self.nodes.items():
-            # filter by prefix
+            # filter by exact match on the first namespace segment
             if namespace is not None:
-                if not namespace.startswith(name):
+                ns_parts = namespace.split(NS_SEP, 1)
+                if ns_parts[0] != name:
                     continue
 
             # find the subgraph, if any
@@ -975,12 +976,14 @@ class Pregel(
                 if namespace is None:
                     yield name, graph
                 if recurse and isinstance(graph, Pregel):
+                    remaining_ns: str | None = None
                     if namespace is not None:
-                        namespace = namespace[len(name) + 1 :]
+                        ns_parts = namespace.split(NS_SEP, 1)
+                        remaining_ns = ns_parts[1] if len(ns_parts) > 1 else None
                     yield from (
                         (f"{name}{NS_SEP}{n}", s)
                         for n, s in graph.get_subgraphs(
-                            namespace=namespace, recurse=recurse
+                            namespace=remaining_ns, recurse=recurse
                         )
                     )
 
