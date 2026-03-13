@@ -2,9 +2,12 @@ package advancedgraph
 
 import (
 	"fmt"
+	"reflect"
+	"runtime"
+	"strings"
 )
 
-type NodeFunc func(ctx *Context, arg any) (Command, error)
+type NodeFunc func(ctx *Context, state map[string]any) (Command, error)
 
 type AdvancedStateGraph struct {
 	nodes         map[string]NodeFunc
@@ -19,20 +22,25 @@ func NewAdvancedStateGraph() *AdvancedStateGraph {
 	}
 }
 
-func (g *AdvancedStateGraph) AddNode(name string, fn NodeFunc) {
+func (g *AdvancedStateGraph) AddNode(fn NodeFunc) string {
+	name := NodeName(fn)
+	if _, exists := g.nodes[name]; exists {
+		panic(fmt.Sprintf("node `%s` already exists", name))
+	}
 	g.nodes[name] = fn
+	return name
 }
 
 func (g *AdvancedStateGraph) AddAsyncChannel(name string) {
 	g.asyncChannels = append(g.asyncChannels, name)
 }
 
-func (g *AdvancedStateGraph) SetEntryPoint(name string) {
-	g.entryPoint = name
+func (g *AdvancedStateGraph) SetEntryNode(fn NodeFunc) {
+	g.entryPoint = NodeName(fn)
 }
 
-func (g *AdvancedStateGraph) SetFinishPoint(name string) {
-	g.finishPoint = name
+func (g *AdvancedStateGraph) SetFinishNode(fn NodeFunc) {
+	g.finishPoint = NodeName(fn)
 }
 
 func (g *AdvancedStateGraph) Compile() *CompiledGraph {
@@ -100,16 +108,47 @@ func (g *CompiledGraph) Start(initialState map[string]any) (*Handler, error) {
 			g.entryPoint,
 			g.finishPoint,
 			initialState,
-			func(node string, arg any, _ map[string]any) (Command, error) {
+			func(node string, arg any, fallbackState map[string]any) (Command, error) {
 				fn, ok := g.nodes[node]
 				if !ok {
 					return Command{}, fmt.Errorf("unknown node `%s`", node)
 				}
-				return fn(&Context{engine: engine}, arg)
+				stateArg, ok := arg.(map[string]any)
+				if !ok {
+					stateArg = fallbackState
+				}
+				if stateArg == nil {
+					return Command{}, fmt.Errorf("node `%s` expected map state argument", node)
+				}
+				return fn(&Context{engine: engine}, stateArg)
 			},
 		)
 		handler.done <- resultOrErr{state: state, err: err}
 		close(handler.done)
 	}()
 	return handler, nil
+}
+
+func NodeName(fn NodeFunc) string {
+	pc := reflect.ValueOf(fn).Pointer()
+	f := runtime.FuncForPC(pc)
+	if f == nil {
+		panic("cannot infer node name from nil function")
+	}
+	full := f.Name()
+	if strings.Contains(full, ".func") {
+		panic("anonymous functions are not allowed as nodes")
+	}
+	short := full
+	if i := strings.LastIndex(short, "/"); i >= 0 {
+		short = short[i+1:]
+	}
+	if i := strings.LastIndex(short, "."); i >= 0 {
+		short = short[i+1:]
+	}
+	short = strings.TrimSuffix(short, "-fm")
+	if short == "" || strings.Contains(short, "func") {
+		panic(fmt.Sprintf("cannot infer stable node name from `%s`", full))
+	}
+	return short
 }
