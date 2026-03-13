@@ -9,7 +9,7 @@ import click
 
 TEMPLATES: dict[str, dict[str, str]] = {
     "Deep Agent": {
-        "description": "An opinionated deployment template for a Deep Agent built with createDeepAgent.",
+        "description": "An opinionated deployment template for a Deep Agent.",
         "python": "https://github.com/langchain-ai/deep-agent-template/archive/refs/heads/main.zip",
         "js": "https://github.com/langchain-ai/deep-agent-template-js/archive/refs/heads/main.zip",
     },
