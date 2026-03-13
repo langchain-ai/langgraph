@@ -78,10 +78,7 @@ def build_main_agent(planner: MockLLM, sub_agent: Any) -> Any:
                 return Command(
                     goto=Send(
                         order_food_node,
-                        {
-                            "state": state,
-                            "complete": decision.complete or "order flow completed",
-                        },
+                        decision.complete or "order flow completed",
                     )
                 )
             if decision.type == "sub_agent" and decision.sub_agent:
@@ -89,7 +86,7 @@ def build_main_agent(planner: MockLLM, sub_agent: Any) -> Any:
             if decision.type == "tool" and decision.tool:
                 sends.append(Send("tool_node", decision.tool))
         # Keep the main loop responsive: wait for one inbound message and continue.
-        sends.append(Send("wait_node", state))
+        sends.append(Send("wait_node", None))
         return Command(goto=sends)
 
     async def wait_node(ctx: Context, state: MainAgentState) -> Command:
@@ -112,11 +109,11 @@ def build_main_agent(planner: MockLLM, sub_agent: Any) -> Any:
             elif channel == "user_input_channel":
                 state["output"].append(f"user_input: {payload}")
             # State changed -> ask planner what to do next.
-            return Command(goto=Send("llm_node", state))
+            return Command(goto=Send("llm_node", None))
         else:
             state["output"].append("timer: no updates yet")
             # No meaningful state change -> keep waiting without calling planner.
-            return Command(goto=Send("wait_node", state))
+            return Command(goto=Send("wait_node", None))
 
     async def tool_node(ctx: Context, tool_input: str) -> None:
         await asyncio.sleep(0.1)
@@ -138,9 +135,8 @@ def build_main_agent(planner: MockLLM, sub_agent: Any) -> Any:
             sub_agent_output["output"],
         )
 
-    async def order_food_node(payload: dict[str, Any]) -> dict[str, Any]:
-        state = payload["state"]
-        complete_message = payload["complete"]
+    async def order_food_node(input: str, state: MainAgentState) -> dict[str, Any]:
+        complete_message = input
         return {
             "done": complete_message,
             "output": [*state["output"], f"order_food: {complete_message}"],
