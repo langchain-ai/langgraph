@@ -68,7 +68,7 @@ def _choose_template() -> str:
         return _choose_template()
 
     template_info = TEMPLATES[selected_template]
-    available_langs = [l for l in ("python", "js") if l in template_info]
+    available_langs = [lang for lang in ("python", "js") if lang in template_info]
 
     click.secho(
         f"\nYou selected: {selected_template} - {template_info['description']}",
@@ -137,7 +137,7 @@ def _get_template_url(template_name: str) -> str | None:
     """
     if template_name in TEMPLATES:
         template_info = TEMPLATES[template_name]
-        available_langs = [l for l in ("python", "js") if l in template_info]
+        available_langs = [lang for lang in ("python", "js") if lang in template_info]
 
         click.secho(f"Template selected: {template_name}", fg="green")
 
