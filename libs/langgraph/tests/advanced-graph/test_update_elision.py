@@ -11,7 +11,7 @@ from langgraph.types import Command, Send
 pytestmark = pytest.mark.anyio
 
 
-@dataclass(frozen=True)
+@dataclass
 class DataClassPayload:
     value: int
 
@@ -25,7 +25,8 @@ class InnerTypedDict(TypedDict):
     n: int
 
 
-class UpdateElisionState(TypedDict):
+@dataclass
+class UpdateElisionState:
     x: int
     dc: DataClassPayload
     model: PydanticPayload
@@ -35,14 +36,14 @@ class UpdateElisionState(TypedDict):
 
 
 def _initial_state() -> UpdateElisionState:
-    return {
-        "x": 0,
-        "dc": DataClassPayload(0),
-        "model": PydanticPayload(value=0),
-        "td": {"flag": False, "n": 0},
-        "obj": {"n": 0},
-        "items": [0],
-    }
+    return UpdateElisionState(
+        x=0,
+        dc=DataClassPayload(0),
+        model=PydanticPayload(value=0),
+        td={"flag": False, "n": 0},
+        obj={"n": 0},
+        items=[0],
+    )
 
 
 
@@ -74,12 +75,12 @@ async def test_noop_slow_update_does_not_override_fast_update() -> None:
     compiled: CompiledGraphEngine[UpdateElisionState] = graph.compile()
     initial_state: UpdateElisionState = _initial_state()
     result: UpdateElisionState = await compiled.ainvoke(initial_state)
-    assert result["x"] == 1
-    assert result["dc"] == DataClassPayload(1)
-    assert result["model"].value == 1
-    assert result["td"] == {"flag": True, "n": 1}
-    assert result["obj"] == {"n": 1}
-    assert result["items"] == [1]
+    assert result.x == 1
+    assert result.dc == DataClassPayload(1)
+    assert result.model.value == 1
+    assert result.td == {"flag": True, "n": 1}
+    assert result.obj == {"n": 1}
+    assert result.items == [0, 1]
 
 
 async def test_changed_slow_update_overrides_fast_update() -> None:
@@ -117,9 +118,9 @@ async def test_changed_slow_update_overrides_fast_update() -> None:
     compiled: CompiledGraphEngine[UpdateElisionState] = graph.compile()
     initial_state: UpdateElisionState = _initial_state()
     result: UpdateElisionState = await compiled.ainvoke(initial_state)
-    assert result["x"] == 2
-    assert result["dc"] == DataClassPayload(2)
-    assert result["model"].value == 2
-    assert result["td"] == {"flag": False, "n": 2}
-    assert result["obj"] == {"n": 2}
-    assert result["items"] == [2]
+    assert result.x == 2
+    assert result.dc == DataClassPayload(2)
+    assert result.model.value == 2
+    assert result.td == {"flag": False, "n": 2}
+    assert result.obj == {"n": 2}
+    assert result.items == [0, 1, 2]
