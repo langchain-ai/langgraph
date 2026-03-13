@@ -252,6 +252,7 @@ class _GraphEngineRun:
     def _execute_node_for_rust(
         self, node_name: str, node_input: Any, state: Any
     ) -> dict[str, Any]:
+        before_state_markers = _state_shallow_markers(state)
 
         if node_name not in self._nodes:
             raise ValueError(f"Unknown node `{node_name}`")
@@ -269,7 +270,11 @@ class _GraphEngineRun:
 
         if update is None and isinstance(state, dict):
             # Preserve in-place state mutations for prototype nodes like wait_node.
-            update = state
+            if _has_shallow_state_change(before_state_markers, state):
+                update = state
+        elif isinstance(update, dict):
+            if not _has_shallow_update_change(before_state_markers, update):
+                update = None
 
         return {
             "update": update,
@@ -383,6 +388,46 @@ def _resolve_target_name(target: Any) -> str:
     if callable(target):
         return _infer_node_name(target)
     raise ValueError(f"Unsupported node target type: {type(target)!r}")
+
+
+def _state_shallow_markers(state: Any) -> dict[str, Any] | None:
+    if not isinstance(state, dict):
+        return None
+    return {k: _value_shallow_marker(v) for k, v in state.items()}
+
+
+def _value_shallow_marker(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, float, str, bytes)):
+        return ("primitive", value)
+    if isinstance(value, (list, tuple, set, dict)):
+        return ("container", type(value).__name__, id(value), len(value))
+    return ("object", type(value).__name__, id(value))
+
+
+def _has_shallow_state_change(before: dict[str, Any] | None, state: Any) -> bool:
+    if before is None or not isinstance(state, dict):
+        return True
+    if len(before) != len(state):
+        return True
+    for key, old_marker in before.items():
+        if key not in state:
+            return True
+        if old_marker != _value_shallow_marker(state[key]):
+            return True
+    return False
+
+
+def _has_shallow_update_change(
+    before: dict[str, Any] | None, update: dict[str, Any]
+) -> bool:
+    if before is None:
+        return True
+    for key, new_value in update.items():
+        if key not in before:
+            return True
+        if _value_shallow_marker(new_value) != before[key]:
+            return True
+    return False
 
 
 def _invoke_node(node: Callable[..., Any], ctx: Context, node_input: Any, state: Any) -> Any:

@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-type NodeFunc[IN any, StateT any] func(ctx *Context, input IN, state StateT) (Command, error)
-
 type nodeExecutor func(ctx *Context, input any, state map[string]any) (Command, error)
 
 type AdvancedStateGraph[StateT any] struct {
@@ -21,9 +19,13 @@ type AdvancedStateGraph[StateT any] struct {
 }
 
 func NewAdvancedStateGraph[StateT any]() *AdvancedStateGraph[StateT] {
+	stateType := mustTypeOf[StateT]()
+	if stateType.Kind() != reflect.Struct {
+		panic(fmt.Sprintf("StateT must be a struct, got %s", stateType.String()))
+	}
 	return &AdvancedStateGraph[StateT]{
 		nodes:     make(map[string]nodeExecutor),
-		stateType: mustTypeOf[StateT](),
+		stateType: stateType,
 	}
 }
 
@@ -215,6 +217,7 @@ func compileNodeExecutor(fn any, expectedStateType reflect.Type) (nodeExecutor, 
 		if err != nil {
 			return Command{}, fmt.Errorf("node `%s` state decode failed: %w", NodeName(fn), err)
 		}
+		beforeState := stateArg.Interface()
 		args := []reflect.Value{
 			reflect.ValueOf(ctx),
 			reflect.Zero(inputType),
@@ -237,6 +240,18 @@ func compileNodeExecutor(fn any, expectedStateType reflect.Type) (nodeExecutor, 
 		}
 		out := rv.Call(args)
 		cmd := out[0].Interface().(Command)
+		if cmd.Update != nil {
+			updateType := reflect.TypeOf(cmd.Update)
+			if updateType != stateType {
+				return Command{}, fmt.Errorf(
+					"node `%s` update type mismatch: got %s, graph expects %s",
+					NodeName(fn),
+					updateType.String(),
+					stateType.String(),
+				)
+			}
+		}
+		cmd.Update = reduceStructUpdateToChangedFields(beforeState, cmd.Update, stateType)
 		if out[1].IsNil() {
 			return cmd, nil
 		}
@@ -289,4 +304,55 @@ func mustTypeOf[T any]() reflect.Type {
 	}
 	// Handles nil-able types where zero value has no dynamic type.
 	return reflect.TypeOf((*T)(nil)).Elem()
+}
+
+func reduceStructUpdateToChangedFields(before any, update any, stateType reflect.Type) any {
+	if update == nil {
+		return nil
+	}
+	beforeV := reflect.ValueOf(before)
+	updateV := reflect.ValueOf(update)
+	if !beforeV.IsValid() || !updateV.IsValid() {
+		return update
+	}
+	if beforeV.Type() != stateType || updateV.Type() != stateType {
+		return update
+	}
+	if stateType.Kind() != reflect.Struct {
+		return update
+	}
+
+	changed := make(map[string]any)
+	for i := 0; i < stateType.NumField(); i++ {
+		field := stateType.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
+		beforeField := beforeV.Field(i)
+		updateField := updateV.Field(i)
+		if reflect.DeepEqual(beforeField.Interface(), updateField.Interface()) {
+			continue
+		}
+		key := jsonFieldName(field)
+		if key == "-" {
+			continue
+		}
+		changed[key] = updateField.Interface()
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+	return changed
+}
+
+func jsonFieldName(field reflect.StructField) string {
+	tag := field.Tag.Get("json")
+	if tag == "" {
+		return field.Name
+	}
+	parts := strings.Split(tag, ",")
+	if len(parts) == 0 || parts[0] == "" {
+		return field.Name
+	}
+	return parts[0]
 }
