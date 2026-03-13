@@ -81,6 +81,7 @@ from langgraph._internal._constants import (
     NS_END,
     NS_SEP,
     NULL_TASK_ID,
+    PULL,
     PUSH,
     TASKS,
 )
@@ -145,6 +146,7 @@ from langgraph.types import (
     Durability,
     GraphOutput,
     Interrupt,
+    PregelTask,
     Send,
     StateSnapshot,
     StateUpdate,
@@ -1014,6 +1016,111 @@ class Pregel(
                 checkpoint["channel_versions"].values()
             )
 
+    def _completed_subgraph_tasks(
+        self,
+        saved: CheckpointTuple,
+        recurse: BaseCheckpointSaver,
+        next_tasks: dict,
+        subgraphs: dict,
+    ) -> tuple[PregelTask, ...]:
+        """Return PregelTask entries for immediate subgraphs that have completed
+        (i.e. are not present in the current pending next_tasks).
+
+        When get_state() is called after the graph finishes executing,
+        next_tasks is empty so completed subgraph states are invisible.
+        This method finds them by scanning checkpoints whose namespace
+        starts with ``{subgraph_name}:`` and hydrates their StateSnapshot.
+        """
+        parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        thread_id = saved.config[CONF]["thread_id"]
+        active_names = {task.name for task in next_tasks.values() if task.name in subgraphs}
+        completed: list[PregelTask] = []
+
+        for name, pregel in subgraphs.items():
+            if name in active_names:
+                continue
+            ns_prefix = (
+                f"{parent_ns}{NS_SEP}{name}{NS_END}" if parent_ns else f"{name}{NS_END}"
+            )
+            list_config = {CONF: {"thread_id": thread_id}}
+            found_ns = None
+            for tup in recurse.list(list_config):
+                tup_ns = tup.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+                if tup_ns.startswith(ns_prefix):
+                    found_ns = tup_ns
+                    break  # list() returns newest-first; take the first match
+            if found_ns is None:
+                continue
+            sub_config = {
+                CONF: {
+                    CONFIG_KEY_CHECKPOINTER: recurse,
+                    "thread_id": thread_id,
+                    CONFIG_KEY_CHECKPOINT_NS: found_ns,
+                }
+            }
+            snapshot = pregel.get_state(sub_config, subgraphs=True)
+            if not snapshot.values:
+                continue
+            task_id = str(uuid5(UUID(int=0), f"{thread_id}:{name}"))
+            completed.append(
+                PregelTask(
+                    id=task_id,
+                    name=name,
+                    path=(PULL, name),
+                    state=snapshot,
+                )
+            )
+        return tuple(completed)
+
+    async def _acompleted_subgraph_tasks(
+        self,
+        saved: CheckpointTuple,
+        recurse: BaseCheckpointSaver,
+        next_tasks: dict,
+        subgraphs: dict,
+    ) -> tuple[PregelTask, ...]:
+        """Async counterpart of _completed_subgraph_tasks."""
+        parent_ns = saved.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+        thread_id = saved.config[CONF]["thread_id"]
+        active_names = {task.name for task in next_tasks.values() if task.name in subgraphs}
+        completed: list[PregelTask] = []
+
+        for name, pregel in subgraphs.items():
+            if name in active_names:
+                continue
+            ns_prefix = (
+                f"{parent_ns}{NS_SEP}{name}{NS_END}" if parent_ns else f"{name}{NS_END}"
+            )
+            list_config = {CONF: {"thread_id": thread_id}}
+            found_ns = None
+            async for tup in recurse.alist(list_config):
+                tup_ns = tup.config[CONF].get(CONFIG_KEY_CHECKPOINT_NS, "")
+                if tup_ns.startswith(ns_prefix):
+                    found_ns = tup_ns
+                    break
+            if found_ns is None:
+                continue
+            sub_config = {
+                CONF: {
+                    CONFIG_KEY_CHECKPOINTER: recurse,
+                    "thread_id": thread_id,
+                    CONFIG_KEY_CHECKPOINT_NS: found_ns,
+                }
+            }
+            snapshot = await pregel.aget_state(sub_config, subgraphs=True)
+            if not snapshot.values:
+                continue
+            task_id = str(uuid5(UUID(int=0), f"{thread_id}:{name}"))
+            completed.append(
+                PregelTask(
+                    id=task_id,
+                    name=name,
+                    path=(PULL, name),
+                    state=snapshot,
+                )
+            )
+        return tuple(completed)
+
     def _prepare_state_snapshot(
         self,
         config: RunnableConfig,
@@ -1121,6 +1228,11 @@ class Pregel(
             task_states,
             self.stream_channels_asis,
         )
+        # append completed subgraph tasks when subgraphs=True
+        if recurse:
+            tasks_with_writes += self._completed_subgraph_tasks(
+                saved, recurse, next_tasks, subgraphs
+            )
         # assemble the state snapshot
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
@@ -1241,6 +1353,11 @@ class Pregel(
             task_states,
             self.stream_channels_asis,
         )
+        # append completed subgraph tasks when subgraphs=True
+        if recurse:
+            tasks_with_writes += await self._acompleted_subgraph_tasks(
+                saved, recurse, next_tasks, subgraphs
+            )
         # assemble the state snapshot
         return StateSnapshot(
             read_channels(channels, self.stream_channels_asis),
