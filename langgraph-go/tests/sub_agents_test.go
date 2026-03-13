@@ -31,7 +31,6 @@ func (m *mockLLM) invoke() []decision {
 
 type lunchWorkflow struct {
 	planner *mockLLM
-	names   map[string]any
 }
 
 type lunchState struct {
@@ -47,18 +46,18 @@ func (w *lunchWorkflow) llmNode(ctx *ag.Context, _ any, _ lunchState) (ag.Comman
 		if d.Type == "end" {
 			return ag.Command{
 				Goto: []ag.Send{
-					{Node: w.names["order"], NodeInput: d.Complete},
+					{Node: w.orderFoodNode, NodeInput: d.Complete},
 				},
 			}, nil
 		}
 		if d.Type == "sub_agent" {
-			sends = append(sends, ag.Send{Node: w.names["sub"], NodeInput: d.SubAgent})
+			sends = append(sends, ag.Send{Node: w.subAgentNode, NodeInput: d.SubAgent})
 		}
 		if d.Type == "tool" {
-			sends = append(sends, ag.Send{Node: w.names["tool"], NodeInput: d.Tool})
+			sends = append(sends, ag.Send{Node: w.toolNode, NodeInput: d.Tool})
 		}
 	}
-	sends = append(sends, ag.Send{Node: w.names["wait"]})
+	sends = append(sends, ag.Send{Node: w.waitNode})
 	return ag.Command{Goto: sends}, nil
 }
 
@@ -87,12 +86,12 @@ func (w *lunchWorkflow) waitNode(ctx *ag.Context, _ any, state lunchState) (ag.C
 			output = append(output, "user_input: "+payload)
 		}
 		state.Output = output
-		return ag.Command{Goto: []ag.Send{{Node: w.names["llm"]}}, Update: state}, nil
+		return ag.Command{Goto: []ag.Send{{Node: w.llmNode}}, Update: state}, nil
 	}
 
 	output = append(output, "timer: no updates yet")
 	state.Output = output
-	return ag.Command{Goto: []ag.Send{{Node: w.names["wait"]}}, Update: state}, nil
+	return ag.Command{Goto: []ag.Send{{Node: w.waitNode}}, Update: state}, nil
 }
 
 func (w *lunchWorkflow) toolNode(ctx *ag.Context, input any, _ lunchState) (ag.Command, error) {
@@ -136,7 +135,6 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 	}
 	workflow := &lunchWorkflow{
 		planner: planner,
-		names:   make(map[string]any),
 	}
 
 	graph := ag.NewAdvancedStateGraph[lunchState]()
@@ -149,11 +147,6 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 	graph.AddNode(workflow.toolNode)
 	graph.AddNode(workflow.subAgentNode)
 	graph.AddFinishNode(workflow.orderFoodNode)
-	workflow.names["llm"] = workflow.llmNode
-	workflow.names["wait"] = workflow.waitNode
-	workflow.names["tool"] = workflow.toolNode
-	workflow.names["sub"] = workflow.subAgentNode
-	workflow.names["order"] = workflow.orderFoodNode
 
 	handler, err := graph.Compile().Start(
 		nil,
