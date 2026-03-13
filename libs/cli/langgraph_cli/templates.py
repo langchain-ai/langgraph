@@ -15,7 +15,7 @@ TEMPLATES: dict[str, dict[str, str]] = {
     },
     "Agent": {
         "description": "A simple agent that can be flexibly extended to many tools.",
-        "python": "https://github.com/langchain-ai/simple-agent-template",
+        "python": "https://github.com/langchain-ai/simple-agent-template/archive/refs/heads/main.zip",
     },
     "New LangGraph Project": {
         "description": "A simple, minimal chatbot with memory.",
@@ -123,44 +123,6 @@ def _download_repo_with_requests(repo_url: str, path: str) -> None:
             err=True,
         )
         sys.exit(1)
-
-
-def _get_template_url(template_name: str) -> str | None:
-    """
-    Retrieves the template URL based on the provided template name.
-
-    Args:
-        template_name: The name of the template.
-
-    Returns:
-        Optional[str]: The URL of the template if found, else None.
-    """
-    if template_name in TEMPLATES:
-        template_info = TEMPLATES[template_name]
-        available_langs = [lang for lang in ("python", "js") if lang in template_info]
-
-        click.secho(f"Template selected: {template_name}", fg="green")
-
-        if len(available_langs) == 1:
-            return template_info[available_langs[0]]
-
-        version_choice: int = click.prompt(
-            "Choose version (1 for Python 🐍, 2 for JS/TS 🌐)", type=int
-        )
-
-        if version_choice == 1:
-            return template_info["python"]
-        elif version_choice == 2:
-            return template_info["js"]
-        else:
-            click.secho("❌ Invalid choice. Please try again.", fg="red")
-            return None
-    else:
-        click.secho(
-            f"Template '{template_name}' not found. Please select from the available options.",
-            fg="red",
-        )
-        return None
 
 
 def create_new(path: str | None, template: str | None) -> None:
