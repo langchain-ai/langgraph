@@ -174,12 +174,12 @@ func TestSubAgentsEquivalentFlow(t *testing.T) {
 	graph.SetFinishNode(workflow.orderFoodNode)
 
 	handler, err := graph.Compile().Start(
+		nil,
 		map[string]any{
 			"input":  "help me get something for lunch",
 			"output": []string{},
 			"done":   nil,
 		},
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("start failed: %v", err)

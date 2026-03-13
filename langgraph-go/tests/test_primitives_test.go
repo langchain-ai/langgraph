@@ -71,10 +71,10 @@ func TestInputAndStatePrimitivesCompatible(t *testing.T) {
 	graph.AddNode(workflow.middleNode)
 	graph.AddFinishNode(workflow.finishNode)
 
-	handler, err := graph.Compile().Start(map[string]any{
+	handler, err := graph.Compile().Start(100, map[string]any{
 		"logs": []string{},
 		"done": nil,
-	}, 100)
+	})
 	if err != nil {
 		t.Fatalf("start failed: %v", err)
 	}

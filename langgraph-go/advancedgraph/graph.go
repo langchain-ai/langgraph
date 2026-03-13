@@ -108,7 +108,7 @@ func (h *Handler) WaitForResult() (map[string]any, error) {
 	return res.state, res.err
 }
 
-func (g *CompiledGraph) Start(initialState map[string]any, initialInput any) (*Handler, error) {
+func (g *CompiledGraph) Start(initialInput any, initialState map[string]any) (*Handler, error) {
 	engine := NewRustEngine()
 	for _, ch := range g.asyncChannels {
 		if err := engine.AddAsyncChannel(ch); err != nil {
