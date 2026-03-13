@@ -33,6 +33,11 @@ TEMPLATES: dict[str, dict[str, str]] = {
         "python": "https://github.com/langchain-ai/data-enrichment/archive/refs/heads/main.zip",
         "js": "https://github.com/langchain-ai/data-enrichment-js/archive/refs/heads/main.zip",
     },
+    "Basic Deep Agent": {
+        "description": "An opinionated deployment template for a Deep Agent built with createDeepAgent.",
+        "python": "https://github.com/langchain-ai/deep-agent-template/archive/refs/heads/main.zip",
+        "js": "https://github.com/langchain-ai/deep-agent-template-js/archive/refs/heads/main.zip",
+    },
 }
 
 # Generate TEMPLATE_IDS programmatically
