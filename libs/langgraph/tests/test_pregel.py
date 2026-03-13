@@ -1287,6 +1287,102 @@ def test_imp_task(
     assert mapper_calls == 2
 
 
+def test_interrupt_callable_lazy(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    calls = 0
+
+    def lazy_value() -> str:
+        nonlocal calls
+        calls += 1
+        return "question"
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def graph(input: str) -> str:
+        answer = interrupt(deferred=lazy_value)
+        return input + answer
+
+    thread = {"configurable": {"thread_id": "1"}}
+    events = [*graph.stream("hi", thread, durability=durability)]
+    assert events[-1] == {"__interrupt__": (Interrupt(value="question", id=AnyStr()),)}
+    assert calls == 1
+
+    assert (
+        graph.invoke(Command(resume="answer"), thread, durability=durability)
+        == "hianswer"
+    )
+    assert calls == 1
+
+
+def test_interrupt_rejects_async_callable(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    async def lazy_async() -> str:
+        return "question"
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def graph(input: str) -> str:
+        interrupt(deferred=lazy_async)
+        return input
+
+    thread = {"configurable": {"thread_id": "lazy-async-1"}}
+    with pytest.raises(TypeError, match="use ainterrupt"):
+        graph.invoke("hi", thread, durability=durability)
+
+
+def test_lazy_interrupt_callable_raises(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    def lazy_value() -> str:
+        raise ValueError("boom")
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def graph(input: str) -> str:
+        interrupt(deferred=lazy_value)
+        return input
+
+    thread = {"configurable": {"thread_id": "lazy-raise-1"}}
+    with pytest.raises(ValueError, match="boom"):
+        graph.invoke("hi", thread, durability=durability)
+
+
+def test_multiple_lazy_interrupts_in_node(
+    sync_checkpointer: BaseCheckpointSaver, durability: Durability
+) -> None:
+    calls: list[str] = []
+
+    def lazy_first() -> str:
+        calls.append("first")
+        return "question-one"
+
+    def lazy_second() -> str:
+        calls.append("second")
+        return "question-two"
+
+    @entrypoint(checkpointer=sync_checkpointer)
+    def graph(input: str) -> str:
+        first = interrupt(deferred=lazy_first)
+        second = interrupt(deferred=lazy_second)
+        return f"{input}:{first}:{second}"
+
+    thread = {"configurable": {"thread_id": "lazy-multi-1"}}
+    assert [*graph.stream("hi", thread, durability=durability)] == [
+        {"__interrupt__": (Interrupt(value="question-one", id=AnyStr()),)}
+    ]
+    assert calls == ["first"]
+
+    assert [
+        *graph.stream(Command(resume="answer-one"), thread, durability=durability)
+    ] == [{"__interrupt__": (Interrupt(value="question-two", id=AnyStr()),)}]
+    assert calls == ["first", "second"]
+
+    assert (
+        graph.invoke(Command(resume="answer-two"), thread, durability=durability)
+        == "hi:answer-one:answer-two"
+    )
+    assert calls == ["first", "second"]
+
+
 def test_imp_nested(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ) -> None:
