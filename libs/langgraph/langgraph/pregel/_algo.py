@@ -220,6 +220,7 @@ def apply_writes(
     tasks: Iterable[WritesProtocol],
     get_next_version: GetNextVersion | None,
     trigger_to_nodes: Mapping[str, Sequence[str]],
+    available_channels: set[str] | None = None,
 ) -> set[str]:
     """Apply writes from a set of tasks (usually the tasks from a Pregel step)
     to the checkpoint and channels, and return managed values writes to be applied
@@ -266,6 +267,18 @@ def apply_writes(
             None,
         )
 
+    # Sync available_channels with channel's actual availability state.
+    # Returns True if the channel is available (for callers that also need
+    # to update updated_channels).
+    def _track(chan: str) -> bool:
+        avail = channels[chan].is_available()
+        if available_channels is not None:
+            if avail:
+                available_channels.add(chan)
+            else:
+                available_channels.discard(chan)
+        return avail
+
     # Consume all channels that were read
     for chan in {
         chan
@@ -275,6 +288,7 @@ def apply_writes(
     }:
         if channels[chan].consume() and next_version is not None:
             checkpoint["channel_versions"][chan] = next_version
+        _track(chan)
 
     # Group writes by channel
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
@@ -296,18 +310,28 @@ def apply_writes(
             if channels[chan].update(vals) and next_version is not None:
                 checkpoint["channel_versions"][chan] = next_version
                 # unavailable channels can't trigger tasks, so don't add them
-                if channels[chan].is_available():
+                if _track(chan):
                     updated_channels.add(chan)
+            else:
+                _track(chan)
 
     # Channels that weren't updated in this step are notified of a new step
     if bump_step:
-        for chan in channels:
-            if channels[chan].is_available() and chan not in updated_channels:
-                if channels[chan].update(EMPTY_SEQ) and next_version is not None:
-                    checkpoint["channel_versions"][chan] = next_version
-                    # unavailable channels can't trigger tasks, so don't add them
-                    if channels[chan].is_available():
-                        updated_channels.add(chan)
+        candidates = (
+            available_channels - updated_channels
+            if available_channels is not None
+            else (
+                chan
+                for chan in channels
+                if channels[chan].is_available() and chan not in updated_channels
+            )
+        )
+        for chan in candidates:
+            if channels[chan].update(EMPTY_SEQ) and next_version is not None:
+                checkpoint["channel_versions"][chan] = next_version
+                # unavailable channels can't trigger tasks, so don't add them
+                if _track(chan):
+                    updated_channels.add(chan)
 
     # If this is (tentatively) the last superstep, notify all channels of finish
     if bump_step and updated_channels.isdisjoint(trigger_to_nodes):
@@ -315,8 +339,10 @@ def apply_writes(
             if channels[chan].finish() and next_version is not None:
                 checkpoint["channel_versions"][chan] = next_version
                 # unavailable channels can't trigger tasks, so don't add them
-                if channels[chan].is_available():
+                if _track(chan):
                     updated_channels.add(chan)
+            else:
+                _track(chan)
 
     # Return managed values writes to be applied externally
     return updated_channels
@@ -494,7 +520,7 @@ PUSH_TRIGGER = (PUSH,)
 
 
 class _TaskIDFn(Protocol):
-    def __call__(self, namespace: bytes, *parts: str | bytes) -> str:
+    def __call__(self, namespace: bytes, *parts: str) -> str:
         pass
 
 
@@ -1165,32 +1191,37 @@ def _proc_input(
     return val
 
 
-def _uuid5_str(namespace: bytes, *parts: str | bytes) -> str:
+def _uuid5_str(namespace: bytes, *parts: str) -> str:
     """Generate a UUID from the SHA-1 hash of a namespace and str parts."""
 
     sha = sha1(namespace, usedforsecurity=False)
-    sha.update(b"".join(p.encode() if isinstance(p, str) else p for p in parts))
+    sha.update(b"".join(p.encode() for p in parts))
     hex = sha.hexdigest()
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 
-def _xxhash_str(namespace: bytes, *parts: str | bytes) -> str:
+def _xxhash_str(namespace: bytes, *parts: str) -> str:
     """Generate a UUID from the XXH3 hash of a namespace and str parts."""
-    hex = xxh3_128_hexdigest(
-        namespace + b"".join(p.encode() if isinstance(p, str) else p for p in parts)
-    )
+    hex = xxh3_128_hexdigest(namespace + b"".join(p.encode() for p in parts))
     return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
 
 
-def task_path_str(tup: str | int | tuple) -> str:
+def task_path_str(tup: str | int | tuple | list) -> str:
     """Generate a string representation of the task path."""
-    return (
-        f"~{', '.join(task_path_str(x) for x in tup)}"
-        if isinstance(tup, (tuple, list))
-        else f"{tup:010d}"
-        if isinstance(tup, int)
-        else str(tup)
-    )
+    if isinstance(tup, (tuple, list)):
+        parts: list[str] = []
+        for x in tup:
+            if isinstance(x, int):
+                parts.append(f"{x:010d}")
+            elif isinstance(x, (tuple, list)):
+                parts.append(task_path_str(x))
+            else:
+                parts.append(str(x))
+        return f"~{', '.join(parts)}"
+    elif isinstance(tup, int):
+        return f"{tup:010d}"
+    else:
+        return str(tup)
 
 
 LAZY_ATOMIC_COUNTER_LOCK = threading.Lock()
