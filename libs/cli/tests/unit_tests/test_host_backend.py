@@ -135,6 +135,28 @@ def test_list_deployments(client):
     assert result == {"ok": True}
 
 
+def test_list_deployments_sends_query_params():
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.url.path == "/v2/deployments"
+        assert req.url.params["name_contains"] == "my app"
+        return httpx.Response(200, json={"ok": True})
+
+    c = HostBackendClient("https://api.example.com", "test-key")
+    c._client = httpx.Client(
+        base_url="https://api.example.com",
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "test-key", "Accept": "application/json"},
+        timeout=30,
+    )
+    result = c.list_deployments("my app")
+    assert result == {"ok": True}
+
+
+def test_delete_deployment(client):
+    result = client.delete_deployment("dep-123")
+    assert result == {"ok": True}
+
+
 def test_request_push_token(client):
     result = client.request_push_token("dep-123")
     assert result == {"ok": True}
@@ -160,3 +182,41 @@ def test_list_revisions(client):
 def test_get_revision(client):
     result = client.get_revision("dep-123", "rev-456")
     assert result == {"ok": True}
+
+
+def test_get_build_logs(client):
+    result = client.get_build_logs("proj-1", "rev-1", {"limit": 10})
+    assert result == {"ok": True}
+
+
+def test_get_deploy_logs_all_revisions():
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert "/v1/projects/proj-1/deploy_logs" in str(req.url)
+        assert "/revisions/" not in str(req.url)
+        return httpx.Response(200, json={"logs": [{"message": "running"}]})
+
+    c = HostBackendClient("https://api.example.com", "key")
+    c._client = httpx.Client(
+        base_url="https://api.example.com",
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "key", "Accept": "application/json"},
+        timeout=30,
+    )
+    result = c.get_deploy_logs("proj-1", {"limit": 10})
+    assert result == {"logs": [{"message": "running"}]}
+
+
+def test_get_deploy_logs_specific_revision():
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert "/v1/projects/proj-1/revisions/rev-2/deploy_logs" in str(req.url)
+        return httpx.Response(200, json={"logs": []})
+
+    c = HostBackendClient("https://api.example.com", "key")
+    c._client = httpx.Client(
+        base_url="https://api.example.com",
+        transport=httpx.MockTransport(handler),
+        headers={"X-Api-Key": "key", "Accept": "application/json"},
+        timeout=30,
+    )
+    result = c.get_deploy_logs("proj-1", {"limit": 10}, revision_id="rev-2")
+    assert result == {"logs": []}

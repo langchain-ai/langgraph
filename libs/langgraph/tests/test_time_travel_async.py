@@ -1051,6 +1051,552 @@ async def test_subgraph_interrupt_full_flow_no_sub_checkpointer(
     assert "post" in final_result["value"]
 
 
+@NEEDS_CONTEXTVARS
+async def test_subgraph_time_travel_to_first_interrupt_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Time travel to a subgraph checkpoint at the FIRST interrupt (async)."""
+
+    called: list[str] = []
+
+    async def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    async def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    async def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt (ask_1)
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    # Capture subgraph state at the first interrupt
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config_at_first = parent_state.tasks[0].state.config
+
+    # Resume through both interrupts to complete
+    await graph.ainvoke(Command(resume="answer_1"), config)
+    await graph.ainvoke(Command(resume="answer_2"), config)
+
+    # --- Scenario 1: Replay from subgraph checkpoint at 1st interrupt ---
+    called.clear()
+    replay_result = await graph.ainvoke(None, sub_config_at_first)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 1?"
+    assert "step_a" not in called
+    assert "ask_1" in called
+
+    # --- Scenario 2: Fork from subgraph checkpoint at 1st interrupt ---
+    called.clear()
+    fork_config = await graph.aupdate_state(sub_config_at_first, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "Question 1?"
+    assert "step_a" not in called
+    assert "ask_1" in called
+
+
+@NEEDS_CONTEXTVARS
+async def test_subgraph_time_travel_to_second_interrupt_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Time travel to a subgraph checkpoint at the SECOND interrupt (async)."""
+
+    called: list[str] = []
+
+    async def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    async def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    async def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt
+    await graph.ainvoke({"value": []}, config)
+
+    # Resume first interrupt
+    result = await graph.ainvoke(Command(resume="answer_1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    # Capture subgraph state at the second interrupt
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    sub_config = parent_state.tasks[0].state.config
+
+    # Resume second interrupt to complete
+    await graph.ainvoke(Command(resume="answer_2"), config)
+
+    # --- Scenario 1: Replay from subgraph checkpoint at 2nd interrupt ---
+    called.clear()
+    replay_result = await graph.ainvoke(None, sub_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 2?"
+    assert "step_a" not in called
+    assert "ask_1" not in called
+
+    # --- Scenario 2: Fork from subgraph checkpoint at 2nd interrupt ---
+    called.clear()
+    fork_config = await graph.aupdate_state(sub_config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "Question 2?"
+    assert "step_a" not in called
+    assert "ask_1" not in called
+
+
+@NEEDS_CONTEXTVARS
+async def test_subgraph_time_travel_after_completion_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Time travel to a subgraph checkpoint AFTER both interrupts resolved (async)."""
+
+    called: list[str] = []
+
+    async def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    async def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    async def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    executor = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("executor", executor)
+        .add_edge(START, "executor")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    await graph.ainvoke({"value": []}, config)
+    await graph.ainvoke(Command(resume="answer_1"), config)
+    await graph.ainvoke(Command(resume="answer_2"), config)
+
+    final_state = await graph.aget_state(config)
+    assert len(final_state.tasks) == 0
+
+    # Replay from the final parent checkpoint — should be a no-op
+    called.clear()
+    replay_result = await graph.ainvoke(None, final_state.config)
+    assert "__interrupt__" not in replay_result
+    assert "step_a" not in called
+    assert "ask_1" not in called
+    assert "ask_2" not in called
+    assert "step_a_done" in replay_result["value"]
+    assert "ask_1:answer_1" in replay_result["value"]
+    assert "ask_2:answer_2" in replay_result["value"]
+
+
+@NEEDS_CONTEXTVARS
+async def test_3_levels_deep_time_travel_to_first_interrupt_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Time travel to innermost subgraph checkpoint at FIRST interrupt (async, 3 levels)."""
+
+    called: list[str] = []
+
+    async def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    async def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    async def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    inner = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    middle = (
+        StateGraph(State)
+        .add_node("inner", inner)
+        .add_edge(START, "inner")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("outer", middle)
+        .add_edge(START, "outer")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    mid_state = parent_state.tasks[0].state
+    inner_config = mid_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="answer_1"), config)
+    await graph.ainvoke(Command(resume="answer_2"), config)
+
+    # --- Scenario 1: Replay from innermost checkpoint at 1st interrupt ---
+    called.clear()
+    replay_result = await graph.ainvoke(None, inner_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 1?"
+    assert "step_a" not in called
+    assert "ask_1" in called
+
+    # --- Scenario 2: Fork from innermost checkpoint at 1st interrupt ---
+    called.clear()
+    fork_config = await graph.aupdate_state(inner_config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "Question 1?"
+    assert "step_a" not in called
+    assert "ask_1" in called
+
+
+@NEEDS_CONTEXTVARS
+async def test_3_levels_deep_time_travel_to_second_interrupt_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Time travel to innermost subgraph checkpoint at SECOND interrupt (async, 3 levels)."""
+
+    called: list[str] = []
+
+    async def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    async def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    async def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    inner = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    middle = (
+        StateGraph(State)
+        .add_node("inner", inner)
+        .add_edge(START, "inner")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("outer", middle)
+        .add_edge(START, "outer")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    await graph.ainvoke({"value": []}, config)
+
+    result = await graph.ainvoke(Command(resume="answer_1"), config)
+    assert result["__interrupt__"][0].value == "Question 2?"
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    mid_state = parent_state.tasks[0].state
+    inner_config = mid_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="answer_2"), config)
+
+    # --- Scenario 1: Replay ---
+    called.clear()
+    replay_result = await graph.ainvoke(None, inner_config)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 2?"
+    assert "step_a" not in called
+    assert "ask_1" not in called
+
+    # --- Scenario 2: Fork ---
+    called.clear()
+    fork_config = await graph.aupdate_state(inner_config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "Question 2?"
+    assert "step_a" not in called
+    assert "ask_1" not in called
+
+
+@NEEDS_CONTEXTVARS
+async def test_3_levels_deep_time_travel_to_middle_subgraph_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Time travel to the MIDDLE-level subgraph checkpoint (async, 3 levels)."""
+
+    called: list[str] = []
+
+    async def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    async def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    async def ask_2(state: State) -> State:
+        called.append("ask_2")
+        answer = interrupt("Question 2?")
+        return {"value": [f"ask_2:{answer}"]}
+
+    inner = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_node("ask_2", ask_2)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "ask_2")
+        .add_edge("ask_2", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    middle = (
+        StateGraph(State)
+        .add_node("inner", inner)
+        .add_edge(START, "inner")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("outer", middle)
+        .add_edge(START, "outer")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    await graph.ainvoke({"value": []}, config)
+    await graph.ainvoke(Command(resume="answer_1"), config)
+
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    mid_config = parent_state.tasks[0].state.config
+
+    await graph.ainvoke(Command(resume="answer_2"), config)
+
+    # --- Scenario 1: Replay from middle-level subgraph checkpoint ---
+    # The middle subgraph's checkpoint knows about the inner subgraph's state
+    # via checkpoint_map, so the inner replays from the correct point.
+    called.clear()
+    replay_result = await graph.ainvoke(None, mid_config)
+    assert "__interrupt__" in replay_result
+
+    # --- Scenario 2: Fork from middle-level subgraph checkpoint ---
+    called.clear()
+    fork_config = await graph.aupdate_state(mid_config, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+
+
+@NEEDS_CONTEXTVARS
+async def test_3_levels_deep_middle_has_interrupts_async(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """Time travel when the MIDDLE subgraph itself has interrupts (async)."""
+
+    called: list[str] = []
+
+    async def pre(state: State) -> State:
+        called.append("pre")
+        answer = interrupt("Pre-question?")
+        return {"value": [f"pre:{answer}"]}
+
+    async def step_a(state: State) -> State:
+        called.append("step_a")
+        return {"value": ["step_a_done"]}
+
+    async def ask_1(state: State) -> State:
+        called.append("ask_1")
+        answer = interrupt("Question 1?")
+        return {"value": [f"ask_1:{answer}"]}
+
+    inner = (
+        StateGraph(State)
+        .add_node("step_a", step_a)
+        .add_node("ask_1", ask_1)
+        .add_edge(START, "step_a")
+        .add_edge("step_a", "ask_1")
+        .add_edge("ask_1", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    middle = (
+        StateGraph(State)
+        .add_node("pre", pre)
+        .add_node("inner", inner)
+        .add_edge(START, "pre")
+        .add_edge("pre", "inner")
+        .add_edge("inner", "__end__")
+        .compile(checkpointer=True)
+    )
+
+    graph = (
+        StateGraph(State)
+        .add_node("outer", middle)
+        .add_edge(START, "outer")
+        .compile(checkpointer=async_checkpointer)
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # Run until first interrupt (pre in middle subgraph)
+    result = await graph.ainvoke({"value": []}, config)
+    assert result["__interrupt__"][0].value == "Pre-question?"
+
+    # Capture middle subgraph config at the pre interrupt
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    mid_config_at_pre = parent_state.tasks[0].state.config
+
+    # Resume pre, hits ask_1 in inner subgraph
+    result = await graph.ainvoke(Command(resume="pre_answer"), config)
+    assert result["__interrupt__"][0].value == "Question 1?"
+
+    # Capture middle subgraph config at the ask_1 interrupt
+    parent_state = await graph.aget_state(config, subgraphs=True)
+    mid_config_at_ask1 = parent_state.tasks[0].state.config
+
+    # Resume ask_1 to complete
+    result = await graph.ainvoke(Command(resume="answer_1"), config)
+    assert "__interrupt__" not in result
+
+    # --- Time travel to middle checkpoint at pre interrupt ---
+    called.clear()
+    replay_result = await graph.ainvoke(None, mid_config_at_pre)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Pre-question?"
+    assert "pre" in called
+    assert "step_a" not in called
+    assert "ask_1" not in called
+
+    # Fork from middle checkpoint at pre interrupt
+    called.clear()
+    fork_config = await graph.aupdate_state(mid_config_at_pre, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "Pre-question?"
+    assert "pre" in called
+    assert "step_a" not in called
+
+    # --- Time travel to middle checkpoint at ask_1 interrupt ---
+    called.clear()
+    replay_result = await graph.ainvoke(None, mid_config_at_ask1)
+    assert "__interrupt__" in replay_result
+    assert replay_result["__interrupt__"][0].value == "Question 1?"
+    assert "pre" not in called
+    assert "ask_1" in called
+
+    # Fork from middle checkpoint at ask_1 interrupt
+    called.clear()
+    fork_config = await graph.aupdate_state(mid_config_at_ask1, {"value": ["forked"]})
+    fork_result = await graph.ainvoke(None, fork_config)
+    assert "__interrupt__" in fork_result
+    assert fork_result["__interrupt__"][0].value == "Question 1?"
+    assert "pre" not in called
+    assert "ask_1" in called
+
+
 # ---------------------------------------------------------------------------
 # Section 6: __copy__ / update_state(None)
 # ---------------------------------------------------------------------------
