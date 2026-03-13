@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any, Generic, TypeVar, cast
+
+from langgraph_rust_core import PyRustEngine  # type: ignore[import-untyped]
 
 from langgraph.types import Command, Send
 
@@ -191,44 +193,30 @@ class _GraphEngineRun:
         self._nodes = nodes
         self._entry_point = entry_point
         self._finish_point = finish_point
-        self._async_channels: dict[str, asyncio.Queue[Any]] = {
-            name: asyncio.Queue() for name, _spec in async_channel_specs.items()
-        }
+        self._rust_engine = PyRustEngine()
+        for name in async_channel_specs:
+            self._rust_engine.add_async_channel(name)
         self._tasks: set[asyncio.Task[list[Send]]] = set()
         self._finished = False
         self._state: Any = None
         self.context = Context(self)
 
     async def run(self, initial_state: StateT) -> StateT:
-        self._state = initial_state
-        self._schedule(Send(self._entry_point, initial_state))
-        try:
-            while self._tasks and not self._finished:
-                done, _ = await asyncio.wait(
-                    self._tasks, return_when=asyncio.FIRST_COMPLETED
-                )
-                for task in done:
-                    self._tasks.remove(task)
-                    exc = task.exception()
-                    if exc is not None:
-                        await self._cancel_all_tasks()
-                        raise exc
-                    sends = task.result()
-                    for send in sends:
-                        self._schedule(send)
-            if self._finished:
-                await self._cancel_all_tasks()
-            return cast(StateT, self._state)
-        finally:
-            await self._cancel_all_tasks()
+        result_obj = await asyncio.to_thread(
+            self._rust_engine.run_graph_py,
+            self._entry_point,
+            self._finish_point,
+            initial_state,
+            self._execute_node_for_rust,
+        )
+        self._state = result_obj
+        return cast(StateT, self._state)
 
     async def publish(self, channel: str, value: Any) -> None:
-        queue = self._get_async_channel(channel)
-        await queue.put(value)
+        await asyncio.to_thread(self._publish_sync, channel, value)
 
     def publish_nowait(self, channel: str, value: Any) -> None:
-        queue = self._get_async_channel(channel)
-        queue.put_nowait(value)
+        self._publish_sync(channel, value)
 
     async def wait_for(self, target: WaitCondition | AnyOfCondition) -> Any:
         if isinstance(target, ChannelCondition):
@@ -239,8 +227,7 @@ class _GraphEngineRun:
                 "value": value,
             }
         if isinstance(target, TimerCondition):
-            await asyncio.sleep(target.seconds)
-            return {"condition": "timer", "seconds": target.seconds}
+            return await asyncio.to_thread(self._rust_engine.wait_timer, target.seconds)
         if isinstance(target, AnyOfCondition):
             return await self._wait_for_any_of(target)
         raise ValueError(f"Unsupported wait condition type: {type(target)!r}")
@@ -248,91 +235,47 @@ class _GraphEngineRun:
     async def _wait_for_channel_values(self, channel: str, n: int) -> Any:
         if n < 1:
             raise ValueError("wait_for count `n` must be >= 1")
-        queue = self._get_async_channel(channel)
-        if n == 1:
-            return await queue.get()
-        values: list[Any] = []
-        for _ in range(n):
-            values.append(await queue.get())
-        return values
+        event = await asyncio.to_thread(self._rust_engine.wait_channel, channel, n)
+        return event["value"]
 
     async def _wait_for_any_of(self, condition: AnyOfCondition) -> Any:
         if not condition.conditions:
             raise ValueError("any_of() requires at least one condition")
+        payload = {
+            "conditions": [_condition_to_rust(cond) for cond in condition.conditions]
+        }
+        return await asyncio.to_thread(self._rust_engine.wait_any_of_obj, payload)
 
-        tasks = [
-            asyncio.create_task(self.wait_for(inner_condition))
-            for inner_condition in condition.conditions
-        ]
-        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-        for task in pending:
-            task.cancel()
-        await asyncio.gather(*pending, return_exceptions=True)
-        first = done.pop()
-        return first.result()
+    def _publish_sync(self, channel: str, value: Any) -> None:
+        self._rust_engine.publish_obj(channel, value)
 
-    def _get_async_channel(self, channel: str) -> asyncio.Queue[Any]:
-        if channel not in self._async_channels:
-            raise ValueError(f"Unknown channel `{channel}`")
-        return self._async_channels[channel]
+    def _execute_node_for_rust(self, node_name: str, arg: Any, state: Any) -> dict[str, Any]:
 
-    def _schedule(self, send: Send) -> None:
-        if self._finished:
-            return
-        task: asyncio.Task[list[Send]] = asyncio.create_task(self._execute_send(send))
-        self._tasks.add(task)
-
-    async def _cancel_all_tasks(self) -> None:
-        if not self._tasks:
-            return
-        to_cancel = list(self._tasks)
-        for task in to_cancel:
-            task.cancel()
-        await asyncio.gather(*to_cancel, return_exceptions=True)
-        self._tasks.clear()
-
-    async def _execute_send(self, send: Send) -> list[Send]:
-        node_name = _resolve_target_name(send.node)
         if node_name not in self._nodes:
             raise ValueError(f"Unknown node `{node_name}`")
         node = self._nodes[node_name]
-
-        result = _invoke_node(node, self.context, send.arg)
+        result = _invoke_node(node, self.context, arg)
         if inspect.isawaitable(result):
-            result = await result
+            result = asyncio.run(cast(Coroutine[Any, Any, Any], result))
 
         if isinstance(result, Command):
-            self._apply_update(result.update)
-            next_sends = _normalize_goto(result.goto, default_arg=self._state)
+            update = result.update
+            sends = _normalize_goto(result.goto, default_arg=state)
         else:
-            self._apply_update(result)
-            next_sends = _normalize_result_to_sends(result, default_arg=self._state)
+            update = result
+            sends = _normalize_result_to_sends(result, default_arg=state)
 
-        if node_name == self._finish_point:
-            self._finished = True
-            return []
-        return next_sends
+        if update is None and isinstance(arg, dict):
+            # Preserve in-place state mutations for prototype nodes like wait_node.
+            update = arg
 
-    def _apply_update(self, update: Any) -> None:
-        if update is None:
-            return
-        if isinstance(update, Mapping):
-            if isinstance(self._state, Mapping):
-                # Keep semantics simple: in-place update for mapping-like state.
-                cast(dict[str, Any], self._state).update(update)
-            return
-        if isinstance(update, Sequence) and not isinstance(update, (str, bytes)):
-            pairs = list(update)
-            if all(
-                isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str)
-                for item in pairs
-            ):
-                if isinstance(self._state, Mapping):
-                    cast(dict[str, Any], self._state).update(
-                        cast(dict[str, Any], pairs)
-                    )
-                return
-
+        return {
+            "update": update,
+            "sends": [
+                {"node": _resolve_target_name(send.node), "arg": send.arg}
+                for send in sends
+            ],
+        }
 
 def _normalize_result_to_sends(result: Any, *, default_arg: Any) -> list[Send]:
     if result is None:
@@ -415,6 +358,14 @@ def any_of(*conditions: WaitCondition) -> AnyOfCondition:
     if not conditions:
         raise ValueError("any_of() requires at least one condition")
     return AnyOfCondition(conditions=tuple(conditions))
+
+
+def _condition_to_rust(condition: WaitCondition) -> dict[str, Any]:
+    if isinstance(condition, ChannelCondition):
+        return {"kind": "channel", "channel": condition.channel, "n": condition.n}
+    if isinstance(condition, TimerCondition):
+        return {"kind": "timer", "seconds": condition.seconds}
+    raise TypeError(f"Unsupported condition type: {type(condition)!r}")
 
 
 def _infer_node_name(node: Callable[..., Any]) -> str:

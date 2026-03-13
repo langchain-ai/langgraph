@@ -1,0 +1,241 @@
+package advancedgraph
+
+/*
+#cgo CFLAGS: -I${SRCDIR}/../../rust-core/include
+#cgo LDFLAGS: -L${SRCDIR}/../../rust-core/target/debug -llanggraph_rust_core
+#include "langgraph_rust_core.h"
+#include <stdlib.h>
+extern char* goNodeCallback(void* user_data, char* node, char* arg_json, char* state_json);
+*/
+import "C"
+
+import (
+	"encoding/json"
+	"fmt"
+	"runtime/cgo"
+	"unsafe"
+)
+
+type RustEngine struct {
+	ptr *C.Engine
+}
+
+type runGraphCallbackCtx struct {
+	exec func(node string, arg any, state map[string]any) (Command, error)
+}
+
+//export goNodeCallback
+func goNodeCallback(userData unsafe.Pointer, node *C.char, argJSON *C.char, stateJSON *C.char) *C.char {
+	handle := cgo.Handle(uintptr(userData))
+	ctx, ok := handle.Value().(*runGraphCallbackCtx)
+	if !ok {
+		return cCallbackEnvelopeError("invalid callback context")
+	}
+
+	nodeName := C.GoString(node)
+
+	var arg any
+	if err := json.Unmarshal([]byte(C.GoString(argJSON)), &arg); err != nil {
+		return cCallbackEnvelopeError(fmt.Sprintf("decode arg failed for `%s`: %v", nodeName, err))
+	}
+	var state map[string]any
+	if err := json.Unmarshal([]byte(C.GoString(stateJSON)), &state); err != nil {
+		return cCallbackEnvelopeError(fmt.Sprintf("decode state failed for `%s`: %v", nodeName, err))
+	}
+	arg = coerceJSONValue(arg)
+	stateAny := coerceJSONValue(state)
+	state, ok = stateAny.(map[string]any)
+	if !ok {
+		return cCallbackEnvelopeError(fmt.Sprintf("decoded state has unexpected type for `%s`", nodeName))
+	}
+
+	cmd, err := ctx.exec(nodeName, arg, state)
+	if err != nil {
+		return cCallbackEnvelopeError(err.Error())
+	}
+
+	sends := make([]map[string]any, 0, len(cmd.Goto))
+	for _, send := range cmd.Goto {
+		sends = append(sends, map[string]any{
+			"node": send.Node,
+			"arg":  send.Arg,
+		})
+	}
+	payload := map[string]any{
+		"update": cmd.Update,
+		"sends":  sends,
+	}
+	raw, err := json.Marshal(map[string]any{
+		"ok":      true,
+		"payload": payload,
+	})
+	if err != nil {
+		return cCallbackEnvelopeError(fmt.Sprintf("encode callback payload failed: %v", err))
+	}
+	return C.CString(string(raw))
+}
+
+func NewRustEngine() *RustEngine {
+	return &RustEngine{ptr: C.rc_engine_new()}
+}
+
+func (e *RustEngine) Close() {
+	if e.ptr != nil {
+		C.rc_engine_free(e.ptr)
+		e.ptr = nil
+	}
+}
+
+func (e *RustEngine) AddAsyncChannel(channel string) error {
+	cch := C.CString(channel)
+	defer C.free(unsafe.Pointer(cch))
+	resp := C.rc_add_async_channel(e.ptr, cch)
+	return parseRustStatus(resp)
+}
+
+func (e *RustEngine) Publish(channel string, value any) error {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("marshal publish value: %w", err)
+	}
+	cch := C.CString(channel)
+	cval := C.CString(string(payload))
+	defer C.free(unsafe.Pointer(cch))
+	defer C.free(unsafe.Pointer(cval))
+	resp := C.rc_publish_json(e.ptr, cch, cval)
+	return parseRustStatus(resp)
+}
+
+func (e *RustEngine) WaitAnyOf(cond AnyOfCondition) (WaitEvent, error) {
+	payload, err := json.Marshal(cond)
+	if err != nil {
+		return WaitEvent{}, fmt.Errorf("marshal any_of: %w", err)
+	}
+	cpayload := C.CString(string(payload))
+	defer C.free(unsafe.Pointer(cpayload))
+	resp := C.rc_wait_any_of_json(e.ptr, cpayload)
+	defer C.rc_string_free(resp)
+
+	raw := C.GoString(resp)
+	var status struct {
+		OK    bool            `json:"ok"`
+		Error string          `json:"error"`
+		Event json.RawMessage `json:"event"`
+	}
+	if err := json.Unmarshal([]byte(raw), &status); err != nil {
+		return WaitEvent{}, fmt.Errorf("decode rust wait response: %w", err)
+	}
+	if !status.OK {
+		return WaitEvent{}, fmt.Errorf("rust wait failed: %s", status.Error)
+	}
+	var event WaitEvent
+	if err := json.Unmarshal(status.Event, &event); err != nil {
+		return WaitEvent{}, fmt.Errorf("decode wait event: %w", err)
+	}
+	return event, nil
+}
+
+func (e *RustEngine) RunGraph(
+	entryPoint string,
+	finishPoint string,
+	initialState map[string]any,
+	exec func(node string, arg any, state map[string]any) (Command, error),
+) (map[string]any, error) {
+	initialJSON, err := json.Marshal(initialState)
+	if err != nil {
+		return nil, fmt.Errorf("marshal initial state: %w", err)
+	}
+	centry := C.CString(entryPoint)
+	cfinish := C.CString(finishPoint)
+	cinitial := C.CString(string(initialJSON))
+	defer C.free(unsafe.Pointer(centry))
+	defer C.free(unsafe.Pointer(cfinish))
+	defer C.free(unsafe.Pointer(cinitial))
+
+	handle := cgo.NewHandle(&runGraphCallbackCtx{exec: exec})
+	defer handle.Delete()
+
+	resp := C.rc_run_graph_json(
+		e.ptr,
+		centry,
+		cfinish,
+		cinitial,
+		unsafe.Pointer(uintptr(handle)),
+		(C.rc_node_callback_t)(C.goNodeCallback),
+	)
+	defer C.rc_string_free(resp)
+
+	raw := C.GoString(resp)
+	var status struct {
+		OK    bool           `json:"ok"`
+		Error string         `json:"error"`
+		State map[string]any `json:"state"`
+	}
+	if err := json.Unmarshal([]byte(raw), &status); err != nil {
+		return nil, fmt.Errorf("decode rust run response: %w", err)
+	}
+	if !status.OK {
+		return nil, fmt.Errorf("rust run failed: %s", status.Error)
+	}
+	coerced := coerceJSONValue(status.State)
+	typed, ok := coerced.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("unexpected state type from rust run")
+	}
+	return typed, nil
+}
+
+func cCallbackEnvelopeError(message string) *C.char {
+	raw, _ := json.Marshal(map[string]any{
+		"ok":    false,
+		"error": message,
+	})
+	return C.CString(string(raw))
+}
+
+func coerceJSONValue(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[k] = coerceJSONValue(val)
+		}
+		return out
+	case []any:
+		coerced := make([]any, len(t))
+		allStrings := true
+		for i, val := range t {
+			cv := coerceJSONValue(val)
+			coerced[i] = cv
+			if _, ok := cv.(string); !ok {
+				allStrings = false
+			}
+		}
+		if allStrings {
+			out := make([]string, len(coerced))
+			for i, item := range coerced {
+				out[i] = item.(string)
+			}
+			return out
+		}
+		return coerced
+	default:
+		return v
+	}
+}
+
+func parseRustStatus(resp *C.char) error {
+	defer C.rc_string_free(resp)
+	raw := C.GoString(resp)
+	var status struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(raw), &status); err != nil {
+		return fmt.Errorf("decode rust response: %w", err)
+	}
+	if !status.OK {
+		return fmt.Errorf("rust error: %s", status.Error)
+	}
+	return nil
+}

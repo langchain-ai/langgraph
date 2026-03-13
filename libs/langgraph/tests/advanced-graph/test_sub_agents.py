@@ -202,7 +202,8 @@ async def test_async_sub_graph() -> None:
         "sub_agent: research sub agent completed for: research lunch options" in output
     )
     assert (
-        "sub_agent: research sub agent completed for: find vegetarian fallback" in output
+        "sub_agent: research sub agent completed for: find vegetarian fallback"
+        in output
     )
     assert output[-1] == "order_food: order submitted"
 
@@ -216,4 +217,5 @@ async def test_async_sub_graph() -> None:
     assert first_sub_idx < second_sub_idx < order_food_idx
     assert planner._idx == len(planner.responses)
     import json
+
     print(json.dumps(result, ensure_ascii=False, indent=2))
