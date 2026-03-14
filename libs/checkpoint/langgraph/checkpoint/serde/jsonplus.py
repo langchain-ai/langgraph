@@ -440,7 +440,7 @@ def _msgpack_default(obj: Any) -> str | ormsgpack.Ext:
         return ormsgpack.Ext(
             EXT_CONSTRUCTOR_SINGLE_ARG,
             _msgpack_enc(
-                (obj.__class__.__module__, obj.__class__.__name__, obj.value),
+                (obj.__class__.__module__, obj.__class__.__qualname__, obj.value),
             ),
         )
     elif isinstance(obj, SendProtocol):
@@ -580,6 +580,13 @@ def _create_msgpack_ext_hook(
         )
         return False
 
+    def _resolve_type(module: str, name: str) -> Any:
+        """Resolve a type from module and name, supporting dotted qualnames for nested classes."""
+        obj = importlib.import_module(module)
+        for part in name.split("."):
+            obj = getattr(obj, part)
+        return obj
+
     def ext_hook(code: int, data: bytes) -> Any:
         if code == EXT_CONSTRUCTOR_SINGLE_ARG:
             try:
@@ -592,7 +599,7 @@ def _create_msgpack_ext_hook(
                     # it would be validated upon construction.
                     return tup[2]
                 # module, name, arg
-                return getattr(importlib.import_module(tup[0]), tup[1])(tup[2])
+                return _resolve_type(tup[0], tup[1])(tup[2])
             except Exception:
                 return None
         elif code == EXT_CONSTRUCTOR_POS_ARGS:
@@ -603,7 +610,7 @@ def _create_msgpack_ext_hook(
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
                 # module, name, args
-                return getattr(importlib.import_module(tup[0]), tup[1])(*tup[2])
+                return _resolve_type(tup[0], tup[1])(*tup[2])
             except Exception:
                 return None
         elif code == EXT_CONSTRUCTOR_KW_ARGS:
@@ -614,7 +621,7 @@ def _create_msgpack_ext_hook(
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
                 # module, name, kwargs
-                return getattr(importlib.import_module(tup[0]), tup[1])(**tup[2])
+                return _resolve_type(tup[0], tup[1])(**tup[2])
             except Exception:
                 return None
         elif code == EXT_METHOD_SINGLE_ARG:
@@ -625,9 +632,7 @@ def _create_msgpack_ext_hook(
                 if not _check_allowed_method(tup[0], tup[1], tup[3]):
                     return tup[2]
                 # module, name, arg, method
-                return getattr(
-                    getattr(importlib.import_module(tup[0]), tup[1]), tup[3]
-                )(tup[2])
+                return getattr(_resolve_type(tup[0], tup[1]), tup[3])(tup[2])
             except Exception:
                 return None
         elif code == EXT_PYDANTIC_V1:
@@ -638,7 +643,7 @@ def _create_msgpack_ext_hook(
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
                 # module, name, kwargs
-                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                cls = _resolve_type(tup[0], tup[1])
                 try:
                     return cls(**tup[2])
                 except Exception:
@@ -658,7 +663,7 @@ def _create_msgpack_ext_hook(
                 if not _check_allowed(tup[0], tup[1]):
                     return tup[2]
                 # module, name, kwargs, method
-                cls = getattr(importlib.import_module(tup[0]), tup[1])
+                cls = _resolve_type(tup[0], tup[1])
                 try:
                     return cls(**tup[2])
                 except Exception:
