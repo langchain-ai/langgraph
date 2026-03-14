@@ -1767,6 +1767,13 @@ def dev(
 
     graphs = config_json.get("graphs", {})
 
+    # Suppress noisy watchfiles "N changes detected" log messages caused by
+    # .langgraph_api/ runtime pickle files being written every ~10s.
+    # See: https://github.com/langchain-ai/langgraph/issues/7170
+    import logging as _logging
+
+    _logging.getLogger("watchfiles.main").setLevel(_logging.WARNING)
+
     run_server(
         host,
         port,
@@ -1789,6 +1796,7 @@ def dev(
         server_level=server_log_level,
         checkpointer=config_json.get("checkpointer"),
         disable_persistence=config_json.get("disable_persistence", False),
+        reload_excludes=[".langgraph_api"],
     )
 
 

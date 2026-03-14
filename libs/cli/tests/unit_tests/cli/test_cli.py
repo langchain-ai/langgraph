@@ -1160,6 +1160,38 @@ def test_dockerfile_command_distributed_with_explicit_base_image() -> None:
             assert "FROM my-custom-executor:latest" in dockerfile
 
 
+def test_dev_excludes_langgraph_api_from_reload(monkeypatch, tmp_path) -> None:
+    """Verify dev command passes reload_excludes and suppresses watchfiles logs."""
+    import logging
+    import sys
+    import types
+
+    captured: dict = {}
+
+    def fake_run_server(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+
+    # Mock the langgraph_api.cli module
+    fake_mod = types.ModuleType("langgraph_api.cli")
+    fake_mod.run_server = fake_run_server
+    monkeypatch.setitem(sys.modules, "langgraph_api", types.ModuleType("langgraph_api"))
+    monkeypatch.setitem(sys.modules, "langgraph_api.cli", fake_mod)
+
+    # Create minimal config
+    config = tmp_path / "langgraph.json"
+    config.write_text(
+        json.dumps({"dependencies": ["."], "graphs": {"agent": "agent.py:graph"}})
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["dev", "--no-browser", "--config", str(config)])
+
+    assert result.exit_code == 0, result.output
+    assert ".langgraph_api" in captured["kwargs"].get("reload_excludes", [])
+    assert logging.getLogger("watchfiles.main").level >= logging.WARNING
+
+
 def test_prepare_args_and_stdin_distributed_mode() -> None:
     """Test prepare_args_and_stdin with distributed mode includes all services."""
     config_path = pathlib.Path(__file__).parent / "langgraph.json"
