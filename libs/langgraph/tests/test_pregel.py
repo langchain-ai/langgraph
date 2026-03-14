@@ -5316,6 +5316,30 @@ def test_multiple_interrupt_state_persistence(
     assert state.values["steps"] == ["step1", "step2"]
 
 
+def test_get_state_next_after_double_interrupt(
+    sync_checkpointer: BaseCheckpointSaver,
+) -> None:
+    """get_state().next must include the node name after a second interrupt."""
+
+    def node(state):
+        interrupt("first question")
+        interrupt("second question")
+
+    app = (
+        StateGraph(dict)
+        .add_node("node", node)
+        .add_edge(START, "node")
+        .add_edge("node", END)
+        .compile(checkpointer=sync_checkpointer)
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    app.invoke({}, config)
+    app.invoke(Command(resume="ans1"), config)
+
+    assert app.get_state(config).next == ("node",)
+
+
 def test_concurrent_execution_thread_safety():
     """Test thread safety during concurrent execution."""
 
