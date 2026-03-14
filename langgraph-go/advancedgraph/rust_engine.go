@@ -12,6 +12,7 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"runtime/cgo"
 	"unsafe"
 )
@@ -59,8 +60,12 @@ func goNodeCallback(userData C.ulong, node *C.char, argJSON *C.char, stateJSON *
 
 	sends := make([]map[string]any, 0, len(cmd.Goto))
 	for _, send := range cmd.Goto {
+		targetNode, err := resolveSendTarget(send.Node)
+		if err != nil {
+			return cCallbackEnvelopeError(err.Error())
+		}
 		sends = append(sends, map[string]any{
-			"node": NodeName(send.Node),
+			"node": targetNode,
 			"arg":  send.NodeInput,
 		})
 	}
@@ -213,6 +218,20 @@ func cCallbackEnvelopeSuspend(cond AnyOfCondition) *C.char {
 		},
 	})
 	return C.CString(string(raw))
+}
+
+func resolveSendTarget(target any) (string, error) {
+	if name, ok := target.(string); ok {
+		if name == "" {
+			return "", fmt.Errorf("send target cannot be empty string")
+		}
+		return name, nil
+	}
+	rv := reflect.ValueOf(target)
+	if rv.IsValid() && rv.Kind() == reflect.Func {
+		return NodeName(target), nil
+	}
+	return "", fmt.Errorf("unsupported send target type %T", target)
 }
 
 func coerceJSONValue(v any) any {

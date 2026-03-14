@@ -31,6 +31,10 @@ func NewAdvancedStateGraph[StateT any]() *AdvancedStateGraph[StateT] {
 
 func (g *AdvancedStateGraph[StateT]) AddNode(fn any) string {
 	name := NodeName(fn)
+	return g.AddNodeAs(name, fn)
+}
+
+func (g *AdvancedStateGraph[StateT]) AddNodeAs(name string, fn any) string {
 	if _, exists := g.nodes[name]; exists {
 		panic(fmt.Sprintf("node `%s` already exists", name))
 	}
@@ -47,13 +51,23 @@ func (g *AdvancedStateGraph[StateT]) AddAsyncChannel(name string) {
 }
 
 func (g *AdvancedStateGraph[StateT]) AddEntryNode(fn any) string {
-	name := g.AddNode(fn)
+	name := NodeName(fn)
+	return g.AddEntryNodeAs(name, fn)
+}
+
+func (g *AdvancedStateGraph[StateT]) AddEntryNodeAs(name string, fn any) string {
+	name = g.AddNodeAs(name, fn)
 	g.entryPoint = name
 	return name
 }
 
 func (g *AdvancedStateGraph[StateT]) AddFinishNode(fn any) string {
-	name := g.AddNode(fn)
+	name := NodeName(fn)
+	return g.AddFinishNodeAs(name, fn)
+}
+
+func (g *AdvancedStateGraph[StateT]) AddFinishNodeAs(name string, fn any) string {
+	name = g.AddNodeAs(name, fn)
 	g.finishPoint = name
 	return name
 }
@@ -331,4 +345,3 @@ func unwrapResumeInput(input any) (any, *WaitEvent) {
 	}
 	return rawArg, &event
 }
-
