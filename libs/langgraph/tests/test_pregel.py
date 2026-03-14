@@ -9192,6 +9192,27 @@ def test_send_with_untracked_value_overlapping_keys(
     assert state.values.get("dictionary") == {"session_resource": "legal_value"}
 
 
+def test_overwrite_on_fresh_channel() -> None:
+    """Test that Overwrite correctly unwraps its value when the channel starts MISSING (i.e. the channel type has no default constructor)."""
+
+    class Uninstantiable:
+        def __init__(self) -> None:
+            raise TypeError("no default constructor")
+
+    class State(TypedDict):
+        items: Annotated[Uninstantiable, operator.add]
+
+    def node(state: State):
+        return {"items": Overwrite(["reset"])}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+
+    graph = builder.compile()
+    assert graph.invoke({}) == {"items": ["reset"]}
+
+
 @pytest.mark.parametrize("as_json", [False, True])
 def test_overwrite_sequential(
     sync_checkpointer: BaseCheckpointSaver, as_json: bool
