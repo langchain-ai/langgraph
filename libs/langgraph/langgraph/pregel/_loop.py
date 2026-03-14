@@ -671,8 +671,9 @@ class PregelLoop:
             ]
 
         # map command to writes
-        if input_is_command:
-            if (resume := cast(Command, self.input).resume) is not None:
+        if isinstance(self.input, Command):
+            resume_is_map = False
+            if (resume := self.input.resume) is not None:
                 if not self.checkpointer:
                     raise RuntimeError(
                         "Cannot use Command(resume=...) without checkpointer"
