@@ -1,6 +1,9 @@
 package advancedgraph
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"errors"
+)
 
 type WaitCondition interface {
 	toAny() map[string]any
@@ -61,6 +64,22 @@ type Send struct {
 type Command struct {
 	Update any
 	Goto   []Send
+}
+
+type ErrWaitRequested struct {
+	Condition AnyOfCondition
+}
+
+func (e ErrWaitRequested) Error() string {
+	return "wait requested"
+}
+
+func AsErrWaitRequested(err error) (ErrWaitRequested, bool) {
+	var target ErrWaitRequested
+	if !errors.As(err, &target) {
+		return target, false
+	}
+	return target, true
 }
 
 func DecodeString(raw json.RawMessage) string {

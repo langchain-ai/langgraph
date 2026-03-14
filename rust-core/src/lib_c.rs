@@ -1,6 +1,6 @@
 use crate::engine::{
-    merge_json_update, node_pool_execute, run_loop_pool_execute, run_scheduler_loop,
-    AnyOfCondition, Engine, NodeExecResult, SendPayload,
+    merge_json_update, node_pool_execute, run_loop_block_on, run_loop_spawn, AnyOfCondition,
+    Engine, NodeExecResult, NodeOutcome, SendPayload, WaitEvent, WaitRequest,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -8,6 +8,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc as tokio_mpsc;
 
 #[derive(Debug, Deserialize)]
 struct SendPayloadJson {
@@ -28,6 +29,8 @@ struct CallbackEnvelopeIn {
     ok: bool,
     #[serde(default)]
     payload: Option<NodeExecResultJsonWire>,
+    #[serde(default)]
+    suspend: Option<WaitRequest>,
     #[serde(default)]
     error: Option<String>,
 }
@@ -63,13 +66,16 @@ fn into_c_ptr(s: String) -> *mut c_char {
 fn parse_c_callback_result(
     raw: String,
     node_name: &str,
-) -> Result<NodeExecResult<Value, Value>, String> {
+) -> Result<NodeOutcome<Value, Value>, String> {
     let parsed: CallbackEnvelopeIn = serde_json::from_str(&raw)
         .map_err(|e| format!("decode callback envelope for `{node_name}` failed: {e}"))?;
     if !parsed.ok {
         return Err(parsed
             .error
             .unwrap_or_else(|| format!("callback reported error for `{node_name}`")));
+    }
+    if let Some(wait) = parsed.suspend {
+        return Ok(NodeOutcome::Suspended { wait });
     }
     let payload = parsed
         .payload
@@ -82,22 +88,40 @@ fn parse_c_callback_result(
             arg: s.arg,
         })
         .collect();
-    Ok(NodeExecResult {
+    Ok(NodeOutcome::Completed(NodeExecResult {
         update: payload.update,
         sends,
-    })
+    }))
+}
+
+enum SchedulerEventJson {
+    Node(Result<NodeExecutionJson, String>),
+    Resume {
+        node: String,
+        arg: Value,
+        event: WaitEvent,
+    },
+    WaitError(String),
+}
+
+struct NodeExecutionJson {
+    node: String,
+    arg: Value,
+    outcome: NodeOutcome<Value, Value>,
 }
 
 fn spawn_json_node_task(
     node: String,
     arg: Value,
     state_snapshot: Value,
-    tx: mpsc::Sender<Result<(String, NodeExecResult<Value, Value>), String>>,
+    tx: tokio_mpsc::UnboundedSender<SchedulerEventJson>,
     user_data_bits: libc::c_ulong,
     callback: CNodeCallback,
 ) -> Result<(), String> {
     node_pool_execute(move || {
-        let result = (|| -> Result<(String, NodeExecResult<Value, Value>), String> {
+        let node_for_result = node.clone();
+        let arg_for_result = arg.clone();
+        let result = (|| -> Result<NodeExecutionJson, String> {
             let node_c =
                 CString::new(node.clone()).map_err(|e| format!("invalid node name: {e}"))?;
             let arg_json = serde_json::to_string(&arg)
@@ -126,54 +150,124 @@ fn spawn_json_node_task(
                 libc::free(out_ptr.cast());
             }
             let payload = parse_c_callback_result(out_raw, &node)?;
-            Ok((node, payload))
+            Ok(NodeExecutionJson {
+                node: node_for_result,
+                arg: arg_for_result,
+                outcome: payload,
+            })
         })();
-        let _ = tx.send(result);
+        let _ = tx.send(SchedulerEventJson::Node(result));
     })
 }
 
-fn run_graph_scheduler_json(
+async fn run_graph_scheduler_json(
     entry_point: String,
     finish_point: String,
     initial_state: Value,
     initial_input: Value,
+    engine: Engine,
     user_data: CUserData,
     callback: CNodeCallback,
 ) -> Result<Value, String> {
-    let (tx, rx) = mpsc::channel::<Result<(String, NodeExecResult<Value, Value>), String>>();
+    let (tx, mut rx) = tokio_mpsc::unbounded_channel::<SchedulerEventJson>();
     let state = Arc::new(Mutex::new(initial_state));
     let user_data_bits = user_data.0;
     let tx_for_spawn = tx.clone();
     let state_for_spawn = Arc::clone(&state);
     let state_for_merge = Arc::clone(&state);
-    let initial_arg = initial_input;
-    run_scheduler_loop(
+    let mut active: usize = 1;
+    let mut waiting: usize = 0;
+    spawn_json_node_task(
         entry_point,
-        &finish_point,
-        initial_arg,
-        move |node, arg| {
-            let snapshot = state_for_spawn
-                .lock()
-                .expect("state mutex poisoned")
-                .clone();
-            spawn_json_node_task(
-                node,
-                arg,
-                snapshot,
-                tx_for_spawn.clone(),
-                user_data_bits,
-                callback,
-            )
-        },
-        move |_node_name, update| {
-            let mut guard = state_for_merge.lock().expect("state mutex poisoned");
-            merge_json_update(&mut guard, update);
-            Ok(())
-        },
-        rx,
+        initial_input,
+        state_for_spawn
+            .lock()
+            .expect("state mutex poisoned")
+            .clone(),
+        tx_for_spawn.clone(),
+        user_data_bits,
+        callback,
     )?;
+    while active > 0 || waiting > 0 {
+        let evt = rx
+            .recv()
+            .await
+            .ok_or_else(|| "scheduler event channel closed".to_string())?;
+        match evt {
+            SchedulerEventJson::Node(result) => {
+                active = active.saturating_sub(1);
+                let exec = result?;
+                match exec.outcome {
+                    NodeOutcome::Completed(node_result) => {
+                        let mut guard = state_for_merge.lock().expect("state mutex poisoned");
+                        merge_json_update(&mut guard, node_result.update);
+                        drop(guard);
+                        if exec.node == finish_point {
+                            break;
+                        }
+                        for send in node_result.sends {
+                            active += 1;
+                            let snapshot = state_for_spawn
+                                .lock()
+                                .expect("state mutex poisoned")
+                                .clone();
+                            spawn_json_node_task(
+                                send.node,
+                                send.arg,
+                                snapshot,
+                                tx_for_spawn.clone(),
+                                user_data_bits,
+                                callback,
+                            )?;
+                        }
+                    }
+                    NodeOutcome::Suspended { wait } => {
+                        waiting += 1;
+                        let tx_wait = tx_for_spawn.clone();
+                        let node = exec.node;
+                        let arg = exec.arg;
+                        let engine_for_wait = engine.clone();
+                        tokio::spawn(async move {
+                            match engine_for_wait.wait_request_async(&wait).await {
+                                Ok(event) => {
+                                    let _ = tx_wait.send(SchedulerEventJson::Resume { node, arg, event });
+                                }
+                                Err(e) => {
+                                    let _ = tx_wait.send(SchedulerEventJson::WaitError(e));
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+            SchedulerEventJson::Resume { node, arg, event } => {
+                waiting = waiting.saturating_sub(1);
+                active += 1;
+                let snapshot = state_for_spawn
+                    .lock()
+                    .expect("state mutex poisoned")
+                    .clone();
+                spawn_json_node_task(
+                    node,
+                    wrap_resume_arg(arg, event),
+                    snapshot,
+                    tx_for_spawn.clone(),
+                    user_data_bits,
+                    callback,
+                )?;
+            }
+            SchedulerEventJson::WaitError(e) => return Err(e),
+        }
+    }
     let final_state = state.lock().expect("state mutex poisoned").clone();
     Ok(final_state)
+}
+
+fn wrap_resume_arg(arg: Value, event: WaitEvent) -> Value {
+    serde_json::json!({
+        "__lg_resume_arg__": arg,
+        "__lg_resume_event__": event,
+    })
 }
 
 #[no_mangle]
@@ -278,7 +372,7 @@ pub unsafe extern "C" fn rc_wait_any_of_json(
             ))
         }
     };
-    let result = (*ptr).wait_for_any_of(&any_of);
+    let result = run_loop_block_on((*ptr).wait_for_any_of_async(&any_of));
     match result {
         Ok(event) => match serde_json::to_string(&event) {
             Ok(s) => into_c_ptr(format!("{{\"ok\":true,\"event\":{s}}}")),
@@ -343,15 +437,18 @@ pub unsafe extern "C" fn rc_run_graph_json(
 
     let (tx, rx) = mpsc::channel::<Result<Value, String>>();
     let user_data = CUserData(user_data);
-    let submit = run_loop_pool_execute(move || {
+    let run_engine = (*ptr).clone();
+    let submit = run_loop_spawn(async move {
         let out = run_graph_scheduler_json(
             entry_point,
             finish_point,
             initial_state,
             initial_input,
+            run_engine,
             user_data,
             callback,
-        );
+        )
+        .await;
         let _ = tx.send(out);
     });
     if let Err(e) = submit {

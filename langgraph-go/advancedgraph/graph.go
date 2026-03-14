@@ -77,11 +77,17 @@ type CompiledGraph[StateT any] struct {
 }
 
 type Context struct {
-	engine *RustEngine
+	engine      *RustEngine
+	resumeEvent *WaitEvent
 }
 
 func (c *Context) WaitFor(cond AnyOfCondition) (WaitEvent, error) {
-	return c.engine.WaitAnyOf(cond)
+	if c.resumeEvent != nil {
+		event := *c.resumeEvent
+		c.resumeEvent = nil
+		return event, nil
+	}
+	return WaitEvent{}, ErrWaitRequested{Condition: cond}
 }
 
 func (c *Context) PublishToChannel(channel string, value any) error {
@@ -134,7 +140,8 @@ func (g *CompiledGraph[StateT]) Start(initialInput any, initialState StateT) (*H
 				if fallbackState == nil {
 					return Command{}, fmt.Errorf("node `%s` expected map state argument", node)
 				}
-				return fn(&Context{engine: engine}, nodeInput, fallbackState)
+				resolvedInput, resumeEvent := unwrapResumeInput(nodeInput)
+				return fn(&Context{engine: engine, resumeEvent: resumeEvent}, resolvedInput, fallbackState)
 			},
 		)
 		if err != nil {
@@ -302,5 +309,26 @@ func mustTypeOf[T any]() reflect.Type {
 	}
 	// Handles nil-able types where zero value has no dynamic type.
 	return reflect.TypeOf((*T)(nil)).Elem()
+}
+
+func unwrapResumeInput(input any) (any, *WaitEvent) {
+	wrapper, ok := input.(map[string]any)
+	if !ok {
+		return input, nil
+	}
+	rawArg, hasArg := wrapper["__lg_resume_arg__"]
+	rawEvent, hasEvent := wrapper["__lg_resume_event__"]
+	if !hasArg || !hasEvent {
+		return input, nil
+	}
+	eventPayload, err := json.Marshal(rawEvent)
+	if err != nil {
+		return rawArg, nil
+	}
+	var event WaitEvent
+	if err := json.Unmarshal(eventPayload, &event); err != nil {
+		return rawArg, nil
+	}
+	return rawArg, &event
 }
 

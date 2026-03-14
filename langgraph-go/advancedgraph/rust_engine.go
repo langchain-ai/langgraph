@@ -51,6 +51,9 @@ func goNodeCallback(userData C.ulong, node *C.char, argJSON *C.char, stateJSON *
 
 	cmd, err := ctx.exec(nodeName, nodeInput, state)
 	if err != nil {
+		if waitReq, ok := AsErrWaitRequested(err); ok {
+			return cCallbackEnvelopeSuspend(waitReq.Condition)
+		}
 		return cCallbackEnvelopeError(err.Error())
 	}
 
@@ -197,6 +200,17 @@ func cCallbackEnvelopeError(message string) *C.char {
 	raw, _ := json.Marshal(map[string]any{
 		"ok":    false,
 		"error": message,
+	})
+	return C.CString(string(raw))
+}
+
+func cCallbackEnvelopeSuspend(cond AnyOfCondition) *C.char {
+	raw, _ := json.Marshal(map[string]any{
+		"ok": true,
+		"suspend": map[string]any{
+			"kind":   "any_of",
+			"any_of": cond,
+		},
 	})
 	return C.CString(string(raw))
 }

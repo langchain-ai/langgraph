@@ -1,14 +1,16 @@
-use parking_lot::{Condvar, Mutex};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 use std::env;
+use std::future::Future;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, Instant};
+use tokio::runtime::Runtime;
+use tokio::sync::Notify;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind")]
@@ -36,6 +38,15 @@ pub enum WaitEvent {
     Timer { seconds: f64 },
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum WaitRequest {
+    #[serde(rename = "condition")]
+    Condition { condition: WaitCondition },
+    #[serde(rename = "any_of")]
+    AnyOf { any_of: AnyOfCondition },
+}
+
 pub struct SendPayload<A> {
     pub node: String,
     pub arg: A,
@@ -44,6 +55,11 @@ pub struct SendPayload<A> {
 pub struct NodeExecResult<U, A> {
     pub update: Option<U>,
     pub sends: Vec<SendPayload<A>>,
+}
+
+pub enum NodeOutcome<U, A> {
+    Completed(NodeExecResult<U, A>),
+    Suspended { wait: WaitRequest },
 }
 
 type Task = Box<dyn FnOnce() + Send + 'static>;
@@ -68,6 +84,13 @@ fn debug_log(message: &str) {
         let thread_name = current.name().unwrap_or("unnamed");
         println!("[advanced-graph][{thread_name}] {message}");
     }
+}
+
+fn pool_size_from_env(var_name: &str, default: usize, min: usize) -> usize {
+    let parsed = env::var(var_name)
+        .ok()
+        .and_then(|raw| raw.trim().parse::<usize>().ok());
+    parsed.unwrap_or(default).max(min)
 }
 
 struct ThreadPool {
@@ -122,9 +145,10 @@ where
     debug_log("node_pool_execute() called");
     static NODE_POOL: OnceLock<ThreadPool> = OnceLock::new();
     let pool = NODE_POOL.get_or_init(|| {
-        let size = thread::available_parallelism()
+        let default_size = thread::available_parallelism()
             .map(|n| n.get().max(2))
             .unwrap_or(4);
+        let size = pool_size_from_env("LANGGRAPH_NODE_POOL_SIZE", default_size, 1);
         ThreadPool::new(size, "langgraph-node")
     });
     pool.execute(task)
@@ -135,9 +159,39 @@ where
     F: FnOnce() + Send + 'static,
 {
     debug_log("run_loop_pool_execute() called");
-    static RUN_LOOP_POOL: OnceLock<ThreadPool> = OnceLock::new();
-    let pool = RUN_LOOP_POOL.get_or_init(|| ThreadPool::new(2, "langgraph-runloop"));
-    pool.execute(task)
+    run_runtime().spawn_blocking(task);
+    Ok(())
+}
+
+pub fn run_loop_spawn<F>(future: F) -> Result<(), String>
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    run_runtime().spawn(future);
+    Ok(())
+}
+
+pub fn run_loop_block_on<F>(future: F) -> F::Output
+where
+    F: Future,
+{
+    run_runtime().block_on(future)
+}
+
+fn run_runtime() -> &'static Runtime {
+    static RUNTIME: OnceLock<Runtime> = OnceLock::new();
+    RUNTIME.get_or_init(|| {
+        let default_size = thread::available_parallelism()
+            .map(|n| n.get().max(2))
+            .unwrap_or(2);
+        let worker_threads = pool_size_from_env("LANGGRAPH_RUN_POOL_SIZE", default_size, 1);
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(worker_threads)
+            .thread_name("langgraph-runloop")
+            .enable_all()
+            .build()
+            .expect("failed to build tokio runtime")
+    })
 }
 
 pub fn run_scheduler_loop<U: Send + 'static, A: Send + 'static, FSpawn, FMerge>(
@@ -227,8 +281,8 @@ pub fn merge_json_update(state: &mut Value, update: Option<Value>) {
 
 #[derive(Clone, Default)]
 pub struct Engine {
-    channels: Arc<Mutex<HashMap<String, VecDeque<serde_json::Value>>>>,
-    channel_notify: Arc<Condvar>,
+    channels: Arc<StdMutex<HashMap<String, VecDeque<serde_json::Value>>>>,
+    channel_notify: Arc<Notify>,
 }
 
 impl Engine {
@@ -239,78 +293,55 @@ impl Engine {
 
     pub fn add_async_channel(&self, name: &str) {
         debug_log(&format!("Engine::add_async_channel(name={name})"));
-        let mut channels = self.channels.lock();
+        let mut channels = self.channels.lock().expect("channels mutex poisoned");
         channels.entry(name.to_owned()).or_default();
     }
 
     pub fn publish_json(&self, channel: &str, value: serde_json::Value) -> Result<(), String> {
         debug_log(&format!("Engine::publish_json(channel={channel})"));
-        let mut channels = self.channels.lock();
+        let mut channels = self.channels.lock().expect("channels mutex poisoned");
         let queue = channels
             .get_mut(channel)
             .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
         queue.push_back(value);
-        // Wake up waiters blocked on channel conditions/any_of.
-        self.channel_notify.notify_all();
+        self.channel_notify.notify_waiters();
         Ok(())
     }
 
-    pub fn wait_for(&self, cond: &WaitCondition) -> Result<WaitEvent, String> {
-        debug_log(&format!("Engine::wait_for(cond={cond:?})"));
+    pub async fn wait_request_async(&self, wait: &WaitRequest) -> Result<WaitEvent, String> {
+        match wait {
+            WaitRequest::Condition { condition } => self.wait_for_async(condition).await,
+            WaitRequest::AnyOf { any_of } => self.wait_for_any_of_async(any_of).await,
+        }
+    }
+
+    pub async fn wait_for_async(&self, cond: &WaitCondition) -> Result<WaitEvent, String> {
+        debug_log(&format!("Engine::wait_for_async(cond={cond:?})"));
         match cond {
             WaitCondition::Channel { channel, n } => {
                 if *n < 1 {
                     return Err("channel condition n must be >= 1".to_string());
                 }
-                let mut channels = self.channels.lock();
                 loop {
-                    let queue = channels
-                        .get_mut(channel)
-                        .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
-                    if queue.len() >= *n {
-                        debug_log(&format!(
-                            "Engine::wait_for channel ready (channel={channel}, n={n})"
-                        ));
-                        if *n == 1 {
-                            if let Some(value) = queue.pop_front() {
-                                return Ok(WaitEvent::Channel {
-                                    channel: channel.clone(),
-                                    value,
-                                });
-                            }
-                        } else {
-                            let mut values = Vec::with_capacity(*n);
-                            for _ in 0..*n {
-                                if let Some(v) = queue.pop_front() {
-                                    values.push(v);
-                                }
-                            }
-                            return Ok(WaitEvent::Channel {
-                                channel: channel.clone(),
-                                value: serde_json::Value::Array(values),
-                            });
-                        }
+                    if let Some(event) = self.try_take_channel_event(channel, *n)? {
+                        return Ok(event);
                     }
-                    debug_log(&format!(
-                        "Engine::wait_for waiting on channel condvar (channel={channel}, n={n})"
-                    ));
-                    self.channel_notify.wait(&mut channels);
+                    self.channel_notify.notified().await;
                 }
             }
             WaitCondition::Timer { seconds } => {
                 if *seconds <= 0.0 {
                     return Err("timer condition must be > 0".to_string());
                 }
-                std::thread::sleep(Duration::from_secs_f64(*seconds));
-                debug_log(&format!("Engine::wait_for timer fired (seconds={seconds})"));
+                tokio::time::sleep(Duration::from_secs_f64(*seconds)).await;
                 Ok(WaitEvent::Timer { seconds: *seconds })
             }
         }
     }
 
-    pub fn wait_for_any_of(&self, any_of: &AnyOfCondition) -> Result<WaitEvent, String> {
+    pub async fn wait_for_any_of_async(&self, any_of: &AnyOfCondition) -> Result<WaitEvent, String> {
         debug_log(&format!(
-            "Engine::wait_for_any_of(conditions={})",
+            "Engine::wait_for_any_of_async(conditions={})",
             any_of.conditions.len()
         ));
         if any_of.conditions.is_empty() {
@@ -328,39 +359,14 @@ impl Engine {
             }
         }
 
-        let mut channels = self.channels.lock();
         loop {
             for cond in &any_of.conditions {
                 if let WaitCondition::Channel { channel, n } = cond {
                     if *n < 1 {
                         return Err("channel condition n must be >= 1".to_string());
                     }
-                    let queue = channels
-                        .get_mut(channel)
-                        .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
-                    if queue.len() >= *n {
-                        debug_log(&format!(
-                            "Engine::wait_for_any_of channel hit (channel={channel}, n={n})"
-                        ));
-                        if *n == 1 {
-                            if let Some(value) = queue.pop_front() {
-                                return Ok(WaitEvent::Channel {
-                                    channel: channel.clone(),
-                                    value,
-                                });
-                            }
-                        } else {
-                            let mut values = Vec::with_capacity(*n);
-                            for _ in 0..*n {
-                                if let Some(v) = queue.pop_front() {
-                                    values.push(v);
-                                }
-                            }
-                            return Ok(WaitEvent::Channel {
-                                channel: channel.clone(),
-                                value: serde_json::Value::Array(values),
-                            });
-                        }
+                    if let Some(event) = self.try_take_channel_event(channel, *n)? {
+                        return Ok(event);
                     }
                 }
             }
@@ -369,21 +375,59 @@ impl Engine {
                 let timeout = Duration::from_secs_f64(seconds);
                 let elapsed = started.elapsed();
                 if elapsed >= timeout {
-                    debug_log(&format!(
-                        "Engine::wait_for_any_of timer hit (seconds={seconds})"
-                    ));
                     return Ok(WaitEvent::Timer { seconds });
                 }
                 let remaining = timeout.saturating_sub(elapsed);
-                debug_log(&format!(
-                    "Engine::wait_for_any_of waiting on condvar with timeout {:?}",
-                    remaining
-                ));
-                self.channel_notify.wait_for(&mut channels, remaining);
+                tokio::select! {
+                    _ = self.channel_notify.notified() => {}
+                    _ = tokio::time::sleep(remaining) => {
+                        return Ok(WaitEvent::Timer { seconds });
+                    }
+                }
             } else {
-                debug_log("Engine::wait_for_any_of waiting on condvar without timeout");
-                self.channel_notify.wait(&mut channels);
+                self.channel_notify.notified().await;
             }
         }
+    }
+
+    pub fn wait_for(&self, cond: &WaitCondition) -> Result<WaitEvent, String> {
+        run_loop_block_on(self.wait_for_async(cond))
+    }
+
+    pub fn wait_for_any_of(&self, any_of: &AnyOfCondition) -> Result<WaitEvent, String> {
+        run_loop_block_on(self.wait_for_any_of_async(any_of))
+    }
+
+    fn try_take_channel_event(
+        &self,
+        channel: &str,
+        n: usize,
+    ) -> Result<Option<WaitEvent>, String> {
+        let mut channels = self.channels.lock().expect("channels mutex poisoned");
+        let queue = channels
+            .get_mut(channel)
+            .ok_or_else(|| format!("Unknown channel `{channel}`"))?;
+        if queue.len() < n {
+            return Ok(None);
+        }
+        if n == 1 {
+            if let Some(value) = queue.pop_front() {
+                return Ok(Some(WaitEvent::Channel {
+                    channel: channel.to_string(),
+                    value,
+                }));
+            }
+            return Ok(None);
+        }
+        let mut values = Vec::with_capacity(n);
+        for _ in 0..n {
+            if let Some(v) = queue.pop_front() {
+                values.push(v);
+            }
+        }
+        Ok(Some(WaitEvent::Channel {
+            channel: channel.to_string(),
+            value: serde_json::Value::Array(values),
+        }))
     }
 }

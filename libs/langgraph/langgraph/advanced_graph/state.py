@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import threading
 from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
@@ -36,6 +37,12 @@ class AnyOfCondition:
 
 
 WaitCondition = ChannelCondition | TimerCondition
+
+
+class WaitRequested(Exception):
+    def __init__(self, payload: dict[str, Any]) -> None:
+        super().__init__("wait requested")
+        self.payload = payload
 
 
 class AdvancedStateGraph(Generic[StateT]):
@@ -74,20 +81,14 @@ class AdvancedStateGraph(Generic[StateT]):
             raise ValueError(f"Channel `{name}` already exists")
         self._async_channels[name] = _ChannelSpec(typ=typ)
 
-    def set_entry_point(self, name_or_node: str | Callable[..., Any]) -> None:
-        self._entry_point = self._resolve_node_name(name_or_node)
-
-    def set_finish_point(self, name_or_node: str | Callable[..., Any]) -> None:
-        self._finish_point = self._resolve_node_name(name_or_node)
-
     def add_entry_node(self, node: Callable[..., Any]) -> str:
         node_name = self.add_node(node)
-        self.set_entry_point(node_name)
+        self._entry_point = self._resolve_node_name(node_name)
         return node_name
 
     def add_finish_node(self, node: Callable[..., Any]) -> str:
         node_name = self.add_node(node)
-        self.set_finish_point(node_name)
+        self._finish_point = self._resolve_node_name(node_name)
         return node_name
 
     def _resolve_node_name(self, name_or_node: str | Callable[..., Any]) -> str:
@@ -153,7 +154,10 @@ class Context:
         self._run = run
 
     async def wait_for(self, target: WaitCondition | AnyOfCondition) -> Any:
-        return await self._run.wait_for(target)
+        resumed = self._run._consume_resume_event(target)
+        if resumed is not None:
+            return resumed
+        raise WaitRequested(_target_to_suspend_payload(target))
 
     def publish_to_channel(self, channel: str, value: Any) -> None:
         self._run.publish_nowait(channel, value)
@@ -199,6 +203,7 @@ class _GraphEngineRun:
         self._tasks: set[asyncio.Task[list[Send]]] = set()
         self._finished = False
         self._state: Any = None
+        self._local = threading.local()
         self.context = Context(self)
 
     async def run(self, initial_state: StateT) -> StateT:
@@ -252,12 +257,19 @@ class _GraphEngineRun:
     def _execute_node_for_rust(
         self, node_name: str, node_input: Any, state: Any
     ) -> dict[str, Any]:
+        node_input, resume_event = _unwrap_resume_input(node_input)
+        self._set_resume_event(resume_event)
         if node_name not in self._nodes:
             raise ValueError(f"Unknown node `{node_name}`")
         node = self._nodes[node_name]
-        result = _invoke_node(node, self.context, node_input, state)
-        if inspect.isawaitable(result):
-            result = asyncio.run(cast(Coroutine[Any, Any, Any], result))
+        try:
+            result = _invoke_node(node, self.context, node_input, state)
+            if inspect.isawaitable(result):
+                result = asyncio.run(cast(Coroutine[Any, Any, Any], result))
+        except WaitRequested as suspend:
+            return {"suspend": suspend.payload}
+        finally:
+            self._set_resume_event(None)
 
         if isinstance(result, Command):
             update = result.update
@@ -273,6 +285,16 @@ class _GraphEngineRun:
                 for send in sends
             ],
         }
+
+    def _set_resume_event(self, event: dict[str, Any] | None) -> None:
+        self._local.resume_event = event
+
+    def _consume_resume_event(self, target: WaitCondition | AnyOfCondition) -> Any | None:
+        event = cast(dict[str, Any] | None, getattr(self._local, "resume_event", None))
+        if event is None:
+            return None
+        self._local.resume_event = None
+        return event
 
 def _normalize_result_to_sends(result: Any, *, default_input: Any) -> list[Send]:
     if result is None:
@@ -363,6 +385,29 @@ def _condition_to_rust(condition: WaitCondition) -> dict[str, Any]:
     if isinstance(condition, TimerCondition):
         return {"kind": "timer", "seconds": condition.seconds}
     raise TypeError(f"Unsupported condition type: {type(condition)!r}")
+
+
+def _target_to_suspend_payload(target: WaitCondition | AnyOfCondition) -> dict[str, Any]:
+    if isinstance(target, AnyOfCondition):
+        return {
+            "kind": "any_of",
+            "any_of": {
+                "conditions": [_condition_to_rust(cond) for cond in target.conditions]
+            },
+        }
+    return {"kind": "condition", "condition": _condition_to_rust(target)}
+
+
+def _unwrap_resume_input(node_input: Any) -> tuple[Any, dict[str, Any] | None]:
+    if not isinstance(node_input, dict):
+        return node_input, None
+    if "__lg_resume_arg__" not in node_input or "__lg_resume_event__" not in node_input:
+        return node_input, None
+    resume_arg = node_input["__lg_resume_arg__"]
+    resume_event = node_input["__lg_resume_event__"]
+    if isinstance(resume_event, dict):
+        return resume_arg, resume_event
+    return resume_arg, None
 
 
 def _infer_node_name(node: Callable[..., Any]) -> str:
