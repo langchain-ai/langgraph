@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import atexit
 import asyncio
+import os
 import inspect
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
@@ -37,6 +40,31 @@ class AnyOfCondition:
 
 
 WaitCondition = ChannelCondition | TimerCondition
+
+_EXECUTOR_LOCK = threading.Lock()
+_EXECUTOR: ThreadPoolExecutor | None = None
+
+
+def _advanced_graph_executor() -> ThreadPoolExecutor:
+    global _EXECUTOR
+    with _EXECUTOR_LOCK:
+        if _EXECUTOR is None:
+            worker_count = int(os.getenv("LANGGRAPH_ADVANCED_GRAPH_PY_THREADS", "256"))
+            worker_count = max(worker_count, 1)
+            _EXECUTOR = ThreadPoolExecutor(
+                max_workers=worker_count,
+                thread_name_prefix="langgraph-advanced-py",
+            )
+            atexit.register(_shutdown_advanced_graph_executor)
+        return _EXECUTOR
+
+
+def _shutdown_advanced_graph_executor() -> None:
+    global _EXECUTOR
+    with _EXECUTOR_LOCK:
+        if _EXECUTOR is not None:
+            _EXECUTOR.shutdown(wait=False, cancel_futures=False)
+            _EXECUTOR = None
 
 
 class WaitRequested(Exception):
@@ -207,7 +235,9 @@ class _GraphEngineRun:
         self.context = Context(self)
 
     async def run(self, initial_state: StateT) -> StateT:
-        result_obj = await asyncio.to_thread(
+        loop = asyncio.get_running_loop()
+        result_obj = await loop.run_in_executor(
+            _advanced_graph_executor(),
             self._rust_engine.run_graph_py,
             self._entry_point,
             self._finish_point,
@@ -218,7 +248,13 @@ class _GraphEngineRun:
         return cast(StateT, self._state)
 
     async def publish(self, channel: str, value: Any) -> None:
-        await asyncio.to_thread(self._publish_sync, channel, value)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            _advanced_graph_executor(),
+            self._publish_sync,
+            channel,
+            value,
+        )
 
     def publish_nowait(self, channel: str, value: Any) -> None:
         self._publish_sync(channel, value)
@@ -232,7 +268,12 @@ class _GraphEngineRun:
                 "value": value,
             }
         if isinstance(target, TimerCondition):
-            return await asyncio.to_thread(self._rust_engine.wait_timer, target.seconds)
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                _advanced_graph_executor(),
+                self._rust_engine.wait_timer,
+                target.seconds,
+            )
         if isinstance(target, AnyOfCondition):
             return await self._wait_for_any_of(target)
         raise ValueError(f"Unsupported wait condition type: {type(target)!r}")
@@ -240,7 +281,13 @@ class _GraphEngineRun:
     async def _wait_for_channel_values(self, channel: str, n: int) -> Any:
         if n < 1:
             raise ValueError("wait_for count `n` must be >= 1")
-        event = await asyncio.to_thread(self._rust_engine.wait_channel, channel, n)
+        loop = asyncio.get_running_loop()
+        event = await loop.run_in_executor(
+            _advanced_graph_executor(),
+            self._rust_engine.wait_channel,
+            channel,
+            n,
+        )
         return event["value"]
 
     async def _wait_for_any_of(self, condition: AnyOfCondition) -> Any:
@@ -249,7 +296,12 @@ class _GraphEngineRun:
         payload = {
             "conditions": [_condition_to_rust(cond) for cond in condition.conditions]
         }
-        return await asyncio.to_thread(self._rust_engine.wait_any_of_obj, payload)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            _advanced_graph_executor(),
+            self._rust_engine.wait_any_of_obj,
+            payload,
+        )
 
     def _publish_sync(self, channel: str, value: Any) -> None:
         self._rust_engine.publish_obj(channel, value)
@@ -265,7 +317,9 @@ class _GraphEngineRun:
         try:
             result = _invoke_node(node, self.context, node_input, state)
             if inspect.isawaitable(result):
-                result = asyncio.run(cast(Coroutine[Any, Any, Any], result))
+                result = self._run_awaitable_in_worker(
+                    cast(Coroutine[Any, Any, Any], result)
+                )
         except WaitRequested as suspend:
             return {"suspend": suspend.payload}
         finally:
@@ -295,6 +349,16 @@ class _GraphEngineRun:
             return None
         self._local.resume_event = None
         return event
+
+    def _run_awaitable_in_worker(self, awaitable: Coroutine[Any, Any, Any]) -> Any:
+        loop = cast(
+            asyncio.AbstractEventLoop | None,
+            getattr(self._local, "worker_loop", None),
+        )
+        if loop is None or loop.is_closed():
+            loop = asyncio.new_event_loop()
+            self._local.worker_loop = loop
+        return loop.run_until_complete(awaitable)
 
 def _normalize_result_to_sends(result: Any, *, default_input: Any) -> list[Send]:
     if result is None:
