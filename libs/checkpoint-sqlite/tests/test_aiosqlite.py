@@ -236,7 +236,7 @@ class TestAsyncSqliteSaver:
                 cp
                 async for cp in async_saver.alist(
                     {"configurable": {"thread_id": "thread-parity"}},
-                    before={"configurable": {"checkpoint_id": "a-newer"}},
+                    before={"configurable": {"checkpoint_id": "z-older"}},
                 )
             ]
 
@@ -248,7 +248,7 @@ class TestAsyncSqliteSaver:
             before_sync = list(
                 sync_saver.list(
                     {"configurable": {"thread_id": "thread-parity"}},
-                    before={"configurable": {"checkpoint_id": "a-newer"}},
+                    before={"configurable": {"checkpoint_id": "z-older"}},
                 )
             )
 
@@ -258,6 +258,7 @@ class TestAsyncSqliteSaver:
         assert [cp.checkpoint["id"] for cp in list_async] == [
             cp.checkpoint["id"] for cp in list_sync
         ]
+        assert before_async
         assert [cp.checkpoint["id"] for cp in before_async] == [
             cp.checkpoint["id"] for cp in before_sync
         ]
