@@ -2,8 +2,10 @@ import json
 import pathlib
 import re
 import shutil
+import sys
 import tempfile
 import textwrap
+import types
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -286,6 +288,40 @@ def test_version_option() -> None:
     assert "LangGraph CLI, version" in result.output, (
         "Expected version information in output"
     )
+
+
+def test_dev_excludes_langgraph_api_from_reload(monkeypatch) -> None:
+    runner = CliRunner()
+    captured: dict[str, object] = {}
+
+    def fake_run_server(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+
+    fake_langgraph_api = types.ModuleType("langgraph_api")
+    fake_langgraph_api_cli = types.ModuleType("langgraph_api.cli")
+    fake_langgraph_api_cli.run_server = fake_run_server
+    fake_langgraph_api.cli = fake_langgraph_api_cli
+
+    monkeypatch.setitem(sys.modules, "langgraph_api", fake_langgraph_api)
+    monkeypatch.setitem(sys.modules, "langgraph_api.cli", fake_langgraph_api_cli)
+    monkeypatch.setattr(
+        cli_module.langgraph_cli.config,
+        "validate_config_file",
+        lambda path: {"graphs": {"agent": "agent.py:graph"}},
+    )
+
+    with runner.isolated_filesystem():
+        Path("langgraph.json").write_text(
+            json.dumps({"graphs": {"agent": "agent.py:graph"}}), encoding="utf-8"
+        )
+        result = runner.invoke(cli, ["dev", "--no-browser"], catch_exceptions=False)
+
+    assert result.exit_code == 0, result.output
+    assert captured["kwargs"]["reload_excludes"] == [
+        "**/.langgraph_api/*",
+        "**/.langgraph_api/**/*",
+    ]
 
 
 def test_top_level_help_shows_deploy_subcommands() -> None:
