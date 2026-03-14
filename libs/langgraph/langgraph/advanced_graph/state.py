@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import inspect
 from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass
@@ -253,8 +252,6 @@ class _GraphEngineRun:
     def _execute_node_for_rust(
         self, node_name: str, node_input: Any, state: Any
     ) -> dict[str, Any]:
-        before_state_snapshot = copy.deepcopy(state) if isinstance(state, dict) else None
-
         if node_name not in self._nodes:
             raise ValueError(f"Unknown node `{node_name}`")
         node = self._nodes[node_name]
@@ -268,9 +265,6 @@ class _GraphEngineRun:
         else:
             update = result
             sends = _normalize_result_to_sends(result, default_input=node_input)
-
-        if isinstance(update, dict):
-            update = _reduce_update_to_changed_fields(before_state_snapshot, update)
 
         return {
             "update": update,
@@ -384,18 +378,6 @@ def _resolve_target_name(target: Any) -> str:
     if callable(target):
         return _infer_node_name(target)
     raise ValueError(f"Unsupported node target type: {type(target)!r}")
-
-
-def _reduce_update_to_changed_fields(
-    before: dict[str, Any] | None, update: dict[str, Any]
-) -> dict[str, Any] | None:
-    if before is None:
-        return update
-    changed: dict[str, Any] = {}
-    for key, new_value in update.items():
-        if key not in before or before[key] != new_value:
-            changed[key] = new_value
-    return changed or None
 
 
 def _invoke_node(node: Callable[..., Any], ctx: Context, node_input: Any, state: Any) -> Any:

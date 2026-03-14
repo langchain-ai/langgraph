@@ -217,10 +217,6 @@ func compileNodeExecutor(fn any, expectedStateType reflect.Type) (nodeExecutor, 
 		if err != nil {
 			return Command{}, fmt.Errorf("node `%s` state decode failed: %w", NodeName(fn), err)
 		}
-		beforeStateMap, ok := structValueToMap(stateArg)
-		if !ok {
-			return Command{}, fmt.Errorf("node `%s` failed to snapshot state fields", NodeName(fn))
-		}
 		args := []reflect.Value{
 			reflect.ValueOf(ctx),
 			reflect.Zero(inputType),
@@ -254,7 +250,6 @@ func compileNodeExecutor(fn any, expectedStateType reflect.Type) (nodeExecutor, 
 				)
 			}
 		}
-		cmd.Update = reduceStructUpdateToChangedFields(beforeStateMap, cmd.Update, stateType)
 		if out[1].IsNil() {
 			return cmd, nil
 		}
@@ -309,95 +304,3 @@ func mustTypeOf[T any]() reflect.Type {
 	return reflect.TypeOf((*T)(nil)).Elem()
 }
 
-func reduceStructUpdateToChangedFields(
-	before map[string]any,
-	update any,
-	stateType reflect.Type,
-) any {
-	if update == nil {
-		return nil
-	}
-	updateV := reflect.ValueOf(update)
-	if !updateV.IsValid() {
-		panic("internal invariant violated: update is non-nil but reflect value is invalid")
-	}
-	if updateV.Type() != stateType {
-		panic(fmt.Sprintf(
-			"internal invariant violated: update type mismatch in reducer: got %s, expected %s",
-			updateV.Type().String(),
-			stateType.String(),
-		))
-	}
-	if stateType.Kind() != reflect.Struct {
-		panic(fmt.Sprintf(
-			"internal invariant violated: stateType must be struct in reducer, got %s",
-			stateType.Kind().String(),
-		))
-	}
-	updateMap, ok := structValueToMap(updateV)
-	if !ok {
-		panic(fmt.Sprintf(
-			"internal invariant violated: failed to convert struct update to map for type %s",
-			stateType.String(),
-		))
-	}
-	changed := make(map[string]any)
-	for key, updateValue := range updateMap {
-		prevValue, ok := before[key]
-		if ok && reflect.DeepEqual(prevValue, updateValue) {
-			continue
-		}
-		changed[key] = updateValue
-	}
-	if len(changed) == 0 {
-		return nil
-	}
-	return changed
-}
-
-func structValueToMap(value reflect.Value) (map[string]any, bool) {
-	if !value.IsValid() || value.Kind() != reflect.Struct {
-		return nil, false
-	}
-	out := make(map[string]any, value.NumField())
-	typ := value.Type()
-	for i := 0; i < value.NumField(); i++ {
-		field := typ.Field(i)
-		if field.PkgPath != "" {
-			continue
-		}
-		name, omitEmpty, skip := parseJSONFieldTag(field)
-		if skip {
-			continue
-		}
-		fv := value.Field(i)
-		if omitEmpty && fv.IsZero() {
-			continue
-		}
-		out[name] = fv.Interface()
-	}
-	return out, true
-}
-
-func parseJSONFieldTag(field reflect.StructField) (name string, omitEmpty bool, skip bool) {
-	tag := field.Tag.Get("json")
-	if tag == "-" {
-		return "", false, true
-	}
-	if tag == "" {
-		return field.Name, false, false
-	}
-	parts := strings.Split(tag, ",")
-	fieldName := parts[0]
-	if fieldName == "" {
-		fieldName = field.Name
-	}
-	omit := false
-	for _, opt := range parts[1:] {
-		if opt == "omitempty" {
-			omit = true
-			break
-		}
-	}
-	return fieldName, omit, false
-}

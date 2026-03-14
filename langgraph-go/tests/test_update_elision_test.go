@@ -63,7 +63,7 @@ func (w *updateElisionWorkflow) fastNode(ctx *ag.Context, _ any, state updateEli
 
 func (w *updateElisionWorkflow) slowNoopNode(ctx *ag.Context, _ any, state updateElisionState) (ag.Command, error) {
 	time.Sleep(100 * time.Millisecond)
-	// Returns same state as initial snapshot; SDK should elide this update.
+	// Returns same state as initial snapshot; without runtime elision this can overwrite newer updates.
 	return ag.Command{Update: state}, nil
 }
 
@@ -98,7 +98,7 @@ func assertStateEquals(t *testing.T, got updateElisionState, expected updateElis
 	}
 }
 
-func TestNoopSlowUpdateDoesNotOverrideFastUpdate(t *testing.T) {
+func TestNoopSlowUpdateCanOverrideFastUpdate(t *testing.T) {
 	workflow := &updateElisionWorkflow{}
 	graph := ag.NewAdvancedStateGraph[updateElisionState]()
 	graph.AddEntryNode(workflow.startNoopNode)
@@ -113,7 +113,7 @@ func TestNoopSlowUpdateDoesNotOverrideFastUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("result failed: %v", err)
 	}
-	assertStateEquals(t, result, makeState(1))
+	assertStateEquals(t, result, makeState(0))
 }
 
 func TestChangedSlowUpdateOverridesFastUpdate(t *testing.T) {
