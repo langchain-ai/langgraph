@@ -29,6 +29,7 @@ from typing import (
 )
 from uuid import UUID, uuid5
 
+from langchain_core.callbacks.manager import dispatch_custom_event
 from langchain_core.globals import get_debug
 from langchain_core.runnables import (
     RunnableSequence,
@@ -163,6 +164,15 @@ except ImportError:
 __all__ = ("NodeBuilder", "Pregel")
 
 _WriteValue = Callable[[Input], Output] | Any
+
+
+def _should_dispatch_custom_events(handlers: Sequence[Any]) -> bool:
+    """Whether custom stream chunks should surface as `on_custom_event`."""
+    return any(
+        type(handler).__name__ == "_AstreamEventsCallbackHandler"
+        and type(handler).__module__ == "langchain_core.tracers.event_stream"
+        for handler in handlers
+    )
 
 
 class NodeBuilder:
@@ -2578,6 +2588,7 @@ class Pregel(
             name=config.get("run_name", self.get_name()),
             run_id=config.get("run_id"),
         )
+        dispatch_custom_events = _should_dispatch_custom_events(run_manager.handlers)
         try:
             # assign defaults
             (
@@ -2619,19 +2630,24 @@ class Pregel(
 
             # set up custom stream mode
             if "custom" in stream_modes:
+                if dispatch_custom_events:
 
-                def stream_writer(c: Any) -> None:
-                    stream.put(
-                        (
-                            tuple(
-                                get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(
-                                    NS_SEP
-                                )[:-1]
-                            ),
-                            "custom",
-                            c,
+                    def stream_writer(c: Any) -> None:
+                        dispatch_custom_event("custom", c, config=get_config())
+                else:
+
+                    def stream_writer(c: Any) -> None:
+                        stream.put(
+                            (
+                                tuple(
+                                    get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(
+                                        NS_SEP
+                                    )[:-1]
+                                ),
+                                "custom",
+                                c,
+                            )
                         )
-                    )
             elif CONFIG_KEY_STREAM in config[CONF]:
                 stream_writer = config[CONF][CONFIG_KEY_RUNTIME].stream_writer
             else:
@@ -2928,6 +2944,7 @@ class Pregel(
             if _StreamingCallbackHandler is not None
             else False
         )
+        dispatch_custom_events = _should_dispatch_custom_events(run_manager.handlers)
         try:
             # assign defaults
             (
@@ -2969,35 +2986,26 @@ class Pregel(
                 )
 
             # set up custom stream mode
-            def stream_writer(c: Any) -> None:
-                aioloop.call_soon_threadsafe(
-                    stream.put_nowait,
-                    (
-                        tuple(
-                            get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(NS_SEP)[
-                                :-1
-                            ]
-                        ),
-                        "custom",
-                        c,
-                    ),
-                )
-
             if "custom" in stream_modes:
+                if dispatch_custom_events:
 
-                def stream_writer(c: Any) -> None:
-                    aioloop.call_soon_threadsafe(
-                        stream.put_nowait,
-                        (
-                            tuple(
-                                get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(
-                                    NS_SEP
-                                )[:-1]
+                    def stream_writer(c: Any) -> None:
+                        dispatch_custom_event("custom", c, config=get_config())
+                else:
+
+                    def stream_writer(c: Any) -> None:
+                        aioloop.call_soon_threadsafe(
+                            stream.put_nowait,
+                            (
+                                tuple(
+                                    get_config()[CONF][CONFIG_KEY_CHECKPOINT_NS].split(
+                                        NS_SEP
+                                    )[:-1]
+                                ),
+                                "custom",
+                                c,
                             ),
-                            "custom",
-                            c,
-                        ),
-                    )
+                        )
             elif CONFIG_KEY_STREAM in config[CONF]:
                 stream_writer = config[CONF][CONFIG_KEY_RUNTIME].stream_writer
             else:
