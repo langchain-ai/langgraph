@@ -1796,7 +1796,6 @@ def dev(
         server_level=server_log_level,
         checkpointer=config_json.get("checkpointer"),
         disable_persistence=config_json.get("disable_persistence", False),
-        reload_excludes=[".langgraph_api"],
     )
 
 

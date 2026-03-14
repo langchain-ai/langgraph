@@ -1160,17 +1160,14 @@ def test_dockerfile_command_distributed_with_explicit_base_image() -> None:
             assert "FROM my-custom-executor:latest" in dockerfile
 
 
-def test_dev_excludes_langgraph_api_from_reload(monkeypatch, tmp_path) -> None:
-    """Verify dev command passes reload_excludes and suppresses watchfiles logs."""
+def test_dev_suppresses_watchfiles_log_noise(monkeypatch, tmp_path) -> None:
+    """Verify dev command suppresses watchfiles.main INFO log messages."""
     import logging
     import sys
     import types
 
-    captured: dict = {}
-
     def fake_run_server(*args, **kwargs):
-        captured["args"] = args
-        captured["kwargs"] = kwargs
+        pass
 
     # Mock the langgraph_api.cli module
     fake_mod = types.ModuleType("langgraph_api.cli")
@@ -1188,7 +1185,6 @@ def test_dev_excludes_langgraph_api_from_reload(monkeypatch, tmp_path) -> None:
     result = runner.invoke(cli, ["dev", "--no-browser", "--config", str(config)])
 
     assert result.exit_code == 0, result.output
-    assert ".langgraph_api" in captured["kwargs"].get("reload_excludes", [])
     assert logging.getLogger("watchfiles.main").level >= logging.WARNING
 
 
