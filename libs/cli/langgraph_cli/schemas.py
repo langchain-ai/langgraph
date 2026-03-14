@@ -128,7 +128,7 @@ class SerdeConfig(TypedDict, total=False):
     If omitted, no serde is set up (the object store will still be present, however)."""
 
     allowed_json_modules: list[list[str]] | bool | None
-    """Optional. List of allowed python modules to de-serialize custom objects from.
+    """Optional. List of allowed python modules to de-serialize custom objects from JSON.
     
     If provided, only the specified modules will be allowed to be deserialized.
     If omitted, no modules are allowed, and the object returned will simply be a json object OR
@@ -148,7 +148,34 @@ class SerdeConfig(TypedDict, total=False):
     Example:
     {...
         "serde": {
-            "allowed_json_modules": true
+            "allowed_json_modules": True
+        }
+    }
+
+    """
+    allowed_msgpack_modules: list[list[str]] | bool | None
+    """Optional. List of allowed python modules to de-serialize custom objects from msgpack.
+
+    Known safe types (langgraph.checkpoint.serde.jsonplus.SAFE_MSGPACK_TYPES) are always
+    allowed regardless of this setting. Use this to allowlist your custom Pydantic models,
+    dataclasses, and other user-defined types.
+
+    If True (default), unregistered types will log a warning but still be deserialized.
+    If None, only known safe types will be deserialized; unregistered types will be blocked.
+
+    Example - allowlist specific types (no warnings for these):
+    {...
+        "serde": {
+            "allowed_msgpack_modules": [
+                ["my_agent.models", "MyState"],
+            ]
+        }
+    }
+
+    Example - strict mode (only safe types allowed):
+    {...
+        "serde": {
+            "allowed_msgpack_modules": null
         }
     }
     
@@ -328,8 +355,7 @@ class EncryptionConfig(TypedDict, total=False):
     """Configuration for custom at-rest encryption logic.
 
     Allows you to implement custom encryption for sensitive data stored in the database,
-    including metadata fields and checkpoint blobs.
-    """
+    including metadata fields and checkpoint blobs."""
 
     path: str
     """Required. Path to an instance of the Encryption() class that implements custom encryption handlers.
@@ -529,6 +555,21 @@ class WebhookUrlPolicy(TypedDict, total=False):
     """Disallow relative URLs (internal loopback calls) when true."""
 
 
+class GraphDef(TypedDict, total=False):
+    """Definition of a graph with additional metadata."""
+
+    path: str
+    """Required. Import path to the graph object.
+
+    Format: "path/to/file.py:object_name"
+    """
+    description: str | None
+    """Optional. A description of the graph's purpose and functionality.
+
+    This description is surfaced in the API and can help users understand what the graph does.
+    """
+
+
 class WebhooksConfig(TypedDict, total=False):
     env_prefix: str
     """Required prefix for environment variables referenced in header templates.
@@ -619,19 +660,23 @@ class Config(TypedDict, total=False):
     Defaults to an empty list, meaning no additional packages installed beyond your base environment.
     """
 
-    graphs: dict[str, str]
+    graphs: dict[str, str | GraphDef]
     """Optional. Named definitions of graphs, each pointing to a Python object.
 
-    
+
     Graphs can be StateGraph, @entrypoint, or any other Pregel object OR they can point to (async) context
     managers that accept a single configuration argument (of type RunnableConfig) and return a pregel object
     (instance of Stategraph, etc.).
-    
-    Keys are graph names, values are "path/to/file.py:object_name".
+
+    Keys are graph names, values are either "path/to/file.py:object_name" strings
+    or objects with a "path" key and optional "description" key.
     Example:
         {
             "mygraph": "graphs/my_graph.py:graph_definition",
-            "anothergraph": "graphs/another.py:get_graph"
+            "anothergraph": {
+                "path": "graphs/another.py:get_graph",
+                "description": "A graph that does X"
+            }
         }
     """
 
@@ -696,6 +741,7 @@ class Config(TypedDict, total=False):
 
 __all__ = [
     "Config",
+    "GraphDef",
     "StoreConfig",
     "CheckpointerConfig",
     "AuthConfig",

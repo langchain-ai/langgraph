@@ -37,4 +37,4 @@ type:
 
 format format_diff:
 	uv run ruff format $(PYTHON_FILES)
-	uv run ruff check --select I --fix $(PYTHON_FILES)
+	uv run ruff check --fix $(PYTHON_FILES)

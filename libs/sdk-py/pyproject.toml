@@ -30,10 +30,10 @@ test = [
     "pytest-watch",
 ]
 lint = [
-    "ruff==0.15.1",
+    "ruff==0.15.5",
     "codespell",
     "mypy==1.19.1",
-    "ty==0.0.17",
+    "ty==0.0.21",
     "starlette",
 ]
 dev = [
