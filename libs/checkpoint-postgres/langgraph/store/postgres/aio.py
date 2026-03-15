@@ -405,6 +405,7 @@ class AsyncPostgresStore(AsyncBatchedBaseStore, BasePostgresStore[_ainternal.Con
             self._ttl_stop_event.set()
             # We don't wait for the task to complete here to avoid blocking
             # The task will clean up itself gracefully
+        await self.aclose()
 
     async def _execute_batch(
         self,
