@@ -45,13 +45,17 @@ from typing_extensions import Self
 from langgraph._internal._config import merge_configs
 from langgraph._internal._constants import (
     CONF,
+    CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_CHECKPOINT_ID,
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINT_NS,
+    CONFIG_KEY_RESUMING,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
+    NULL_TASK_ID,
     NS_SEP,
+    RESUME,
 )
 from langgraph.errors import GraphInterrupt, ParentCommand
 from langgraph.pregel.protocol import PregelProtocol, StreamProtocol
@@ -397,6 +401,45 @@ class RemoteGraph(PregelProtocol):
                     sanitized["configurable"][k] = sanitized_value
 
         return sanitized
+
+    def _get_resume_command(
+        self, input: dict[str, Any] | Any, config: RunnableConfig
+    ) -> CommandSDK | None:
+        """Translate nested resume state into a remote command."""
+        if isinstance(input, Command):
+            return cast(CommandSDK, asdict(input))
+
+        configurable = config.get(CONF, {})
+        if not configurable.get(CONFIG_KEY_RESUMING):
+            return None
+
+        checkpointer = configurable.get(CONFIG_KEY_CHECKPOINTER)
+        thread_id = configurable.get("thread_id")
+        if checkpointer is None or thread_id is None:
+            return None
+
+        checkpoint_config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+        if checkpoint_id := configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}).get(
+            "", configurable.get(CONFIG_KEY_CHECKPOINT_ID)
+        ):
+            checkpoint_config["configurable"][CONFIG_KEY_CHECKPOINT_ID] = checkpoint_id
+
+        saved = checkpointer.get_tuple(checkpoint_config)
+        if saved is None or saved.pending_writes is None:
+            return None
+
+        resume = next(
+            (
+                value
+                for task_id, channel, value in reversed(saved.pending_writes)
+                if task_id == NULL_TASK_ID and channel == RESUME
+            ),
+            None,
+        )
+        if resume is None:
+            return None
+
+        return cast(CommandSDK, asdict(Command(resume=resume)))
 
     def get_state(
         self,
@@ -752,15 +795,13 @@ class RemoteGraph(PregelProtocol):
         """
         sync_client = self._validate_sync_client()
         merged_config = merge_configs(self.config, config)
+        command = self._get_resume_command(input, merged_config)
+        if command is not None:
+            input = None
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
-        if isinstance(input, Command):
-            command: CommandSDK | None = cast(CommandSDK, asdict(input))
-            input = None
-        else:
-            command = None
         thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
         for chunk in sync_client.runs.stream(
@@ -903,15 +944,13 @@ class RemoteGraph(PregelProtocol):
         """
         client = self._validate_client()
         merged_config = merge_configs(self.config, config)
+        command = self._get_resume_command(input, merged_config)
+        if command is not None:
+            input = None
         sanitized_config = self._sanitize_config(merged_config)
         stream_modes, requested, req_single, stream = self._get_stream_modes(
             stream_mode, config
         )
-        if isinstance(input, Command):
-            command: CommandSDK | None = cast(CommandSDK, asdict(input))
-            input = None
-        else:
-            command = None
         thread_id = sanitized_config.get("configurable", {}).pop("thread_id", None)
 
         async for chunk in client.runs.stream(

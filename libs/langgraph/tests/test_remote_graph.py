@@ -1,5 +1,6 @@
 import re
 import sys
+from types import SimpleNamespace
 from typing import Annotated
 from unittest.mock import AsyncMock, MagicMock
 
@@ -12,6 +13,12 @@ from langchain_core.runnables.graph import Node as DrawableNode
 from langgraph_sdk.schema import StreamPart
 from typing_extensions import TypedDict
 
+from langgraph._internal._constants import (
+    CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_RESUMING,
+    NULL_TASK_ID,
+    RESUME,
+)
 from langgraph.errors import GraphInterrupt
 from langgraph.graph import StateGraph, add_messages
 from langgraph.pregel import Pregel
@@ -604,6 +611,34 @@ def test_stream():
     ]
 
 
+def test_stream_forwards_nested_resume_as_command():
+    mock_sync_client = MagicMock()
+    mock_sync_client.runs.stream.return_value = []
+    checkpointer = MagicMock()
+    checkpointer.get_tuple.return_value = SimpleNamespace(
+        pending_writes=[(NULL_TASK_ID, RESUME, "Alice")]
+    )
+
+    remote_pregel = RemoteGraph("test_graph_id", sync_client=mock_sync_client)
+
+    list(
+        remote_pregel.stream(
+            {"messages": [{"type": "human", "content": "hello"}]},
+            config={
+                "configurable": {
+                    "thread_id": "thread_1",
+                    CONFIG_KEY_RESUMING: True,
+                    CONFIG_KEY_CHECKPOINTER: checkpointer,
+                }
+            },
+        )
+    )
+
+    _, kwargs = mock_sync_client.runs.stream.call_args
+    assert kwargs["input"] is None
+    assert kwargs["command"]["resume"] == "Alice"
+
+
 @pytest.mark.anyio
 async def test_astream():
     # set up test
@@ -813,6 +848,36 @@ async def test_astream():
         (("hello", "subgraph"), {"chunk": "data4"}),
         (("bye", "subgraph"), {"__interrupt__": ()}),
     ]
+
+
+@pytest.mark.anyio
+async def test_astream_forwards_nested_resume_as_command():
+    mock_async_client = MagicMock()
+    async_iter = MagicMock()
+    async_iter.__aiter__.return_value = []
+    mock_async_client.runs.stream.return_value = async_iter
+    checkpointer = MagicMock()
+    checkpointer.get_tuple.return_value = SimpleNamespace(
+        pending_writes=[(NULL_TASK_ID, RESUME, "Alice")]
+    )
+
+    remote_pregel = RemoteGraph("test_graph_id", client=mock_async_client)
+
+    async for _ in remote_pregel.astream(
+        {"messages": [{"type": "human", "content": "hello"}]},
+        config={
+            "configurable": {
+                "thread_id": "thread_1",
+                CONFIG_KEY_RESUMING: True,
+                CONFIG_KEY_CHECKPOINTER: checkpointer,
+            }
+        },
+    ):
+        pass
+
+    _, kwargs = mock_async_client.runs.stream.call_args
+    assert kwargs["input"] is None
+    assert kwargs["command"]["resume"] == "Alice"
 
 
 def test_invoke():
