@@ -66,6 +66,7 @@ from langgraph.types import (
     StateSnapshot,
     StateUpdate,
     StreamWriter,
+    ainterrupt,
     interrupt,
 )
 from tests.any_str import AnyStr, AnyVersion, FloatBetween, UnsortedSequence
@@ -713,6 +714,173 @@ async def test_dynamic_interrupt(async_checkpointer: BaseCheckpointSaver) -> Non
         ),
         interrupts=(),
     )
+
+
+@NEEDS_CONTEXTVARS
+async def test_async_interrupt_callable_lazy(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    calls = 0
+
+    async def lazy_value() -> str:
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0)
+        return "question"
+
+    class State(TypedDict):
+        value: str
+
+    async def node(state: State) -> State:
+        answer = await ainterrupt(deferred=lazy_value)
+        return {"value": state["value"] + answer}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=async_checkpointer)
+
+    thread = {"configurable": {"thread_id": "lazy-1"}}
+    assert [c async for c in graph.astream({"value": "hi"}, thread)] == [
+        {"__interrupt__": (Interrupt(value="question", id=AnyStr()),)}
+    ]
+    assert calls == 1
+
+    assert [c async for c in graph.astream(Command(resume="answer"), thread)] == [
+        {"node": {"value": "hianswer"}}
+    ]
+    assert calls == 1
+
+
+@NEEDS_CONTEXTVARS
+async def test_async_interrupt_with_sync_callable(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    calls = 0
+
+    def lazy_value() -> str:
+        nonlocal calls
+        calls += 1
+        return "question"
+
+    class State(TypedDict):
+        value: str
+
+    async def node(state: State) -> State:
+        answer = await ainterrupt(deferred=lazy_value)
+        return {"value": state["value"] + answer}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=async_checkpointer)
+
+    thread = {"configurable": {"thread_id": "lazy-sync-1"}}
+    assert [c async for c in graph.astream({"value": "hi"}, thread)] == [
+        {"__interrupt__": (Interrupt(value="question", id=AnyStr()),)}
+    ]
+    assert calls == 1
+
+    assert [c async for c in graph.astream(Command(resume="answer"), thread)] == [
+        {"node": {"value": "hianswer"}}
+    ]
+    assert calls == 1
+
+
+@NEEDS_CONTEXTVARS
+async def test_async_interrupt_with_plain_value(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        value: str
+
+    async def node(state: State) -> State:
+        answer = await ainterrupt("question")
+        return {"value": state["value"] + answer}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=async_checkpointer)
+
+    thread = {"configurable": {"thread_id": "plain-1"}}
+    assert [c async for c in graph.astream({"value": "hi"}, thread)] == [
+        {"__interrupt__": (Interrupt(value="question", id=AnyStr()),)}
+    ]
+    assert [c async for c in graph.astream(Command(resume="answer"), thread)] == [
+        {"node": {"value": "hianswer"}}
+    ]
+
+
+@NEEDS_CONTEXTVARS
+async def test_async_interrupt_callable_raises(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    async def lazy_value() -> str:
+        raise ValueError("boom")
+
+    class State(TypedDict):
+        value: str
+
+    async def node(state: State) -> State:
+        answer = await ainterrupt(deferred=lazy_value)
+        return {"value": state["value"] + answer}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=async_checkpointer)
+
+    thread = {"configurable": {"thread_id": "lazy-raise-async-1"}}
+    with pytest.raises(ValueError, match="boom"):
+        async for _ in graph.astream({"value": "hi"}, thread):
+            pass
+
+
+@NEEDS_CONTEXTVARS
+async def test_async_multiple_lazy_interrupts_in_node(
+    async_checkpointer: BaseCheckpointSaver,
+) -> None:
+    calls: list[str] = []
+
+    async def lazy_first() -> str:
+        calls.append("first")
+        await asyncio.sleep(0)
+        return "question-one"
+
+    async def lazy_second() -> str:
+        calls.append("second")
+        await asyncio.sleep(0)
+        return "question-two"
+
+    class State(TypedDict):
+        value: str
+
+    async def node(state: State) -> State:
+        first = await ainterrupt(deferred=lazy_first)
+        second = await ainterrupt(deferred=lazy_second)
+        return {"value": f"{state['value']}:{first}:{second}"}
+
+    builder = StateGraph(State)
+    builder.add_node("node", node)
+    builder.add_edge(START, "node")
+    graph = builder.compile(checkpointer=async_checkpointer)
+
+    thread = {"configurable": {"thread_id": "lazy-multi-async-1"}}
+    assert [c async for c in graph.astream({"value": "hi"}, thread)] == [
+        {"__interrupt__": (Interrupt(value="question-one", id=AnyStr()),)}
+    ]
+    assert calls == ["first"]
+
+    assert [c async for c in graph.astream(Command(resume="answer-one"), thread)] == [
+        {"__interrupt__": (Interrupt(value="question-two", id=AnyStr()),)}
+    ]
+    assert calls == ["first", "second"]
+
+    assert [c async for c in graph.astream(Command(resume="answer-two"), thread)] == [
+        {"node": {"value": "hi:answer-one:answer-two"}}
+    ]
+    assert calls == ["first", "second"]
 
 
 @NEEDS_CONTEXTVARS
