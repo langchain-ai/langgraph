@@ -4391,6 +4391,41 @@ def test_debug_retry(sync_checkpointer: BaseCheckpointSaver):
         assert stream_parent_conf == history_parent_conf
 
 
+def test_debug_stream_error_task_result():
+    """Test that task_result events with errors are yielded in debug stream mode.
+
+    Regression test for https://github.com/langchain-ai/langgraph/issues/5764
+    """
+
+    class State(TypedDict):
+        value: str
+
+    def failing_node(state: State):
+        raise ValueError("This node always fails")
+
+    builder = StateGraph(State)
+    builder.add_node("failer", failing_node)
+    builder.set_entry_point("failer")
+    builder.add_edge("failer", END)
+    graph = builder.compile()
+
+    # Single debug mode should yield task_result with error before raising
+    events: list[dict] = []
+    with pytest.raises(ValueError, match="This node always fails"):
+        for event in graph.stream({"value": "test"}, stream_mode="debug"):
+            events.append(event)
+
+    # Should have both task and task_result events
+    event_types = [e["type"] for e in events]
+    assert "task" in event_types
+    assert "task_result" in event_types
+
+    # task_result should contain the error
+    task_result = next(e for e in events if e["type"] == "task_result")
+    assert task_result["payload"]["error"] is not None
+    assert isinstance(task_result["payload"]["error"], ValueError)
+
+
 def test_debug_subgraphs(
     sync_checkpointer: BaseCheckpointSaver, durability: Durability
 ):
