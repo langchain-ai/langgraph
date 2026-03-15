@@ -132,7 +132,7 @@ func (h *Handler[StateT]) WaitForResult() (StateT, error) {
 	return h.inner.WaitForResult()
 }
 
-func (h *Handler[StateT]) Interrupt(name string, value any) error {
+func (h *Handler[StateT]) Resume(name string, value any) error {
 	if name == "" {
 		return fmt.Errorf("interrupt name cannot be empty")
 	}

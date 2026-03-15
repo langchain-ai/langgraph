@@ -187,7 +187,7 @@ func TestBasicStateGraphWithInterrupt(t *testing.T) {
 		// expected: paused
 	}
 
-	if err := handler.Interrupt("resume_channel", "go"); err != nil {
+	if err := handler.Resume("resume_channel", "go"); err != nil {
 		t.Fatalf("resume interrupt failed: %v", err)
 	}
 
