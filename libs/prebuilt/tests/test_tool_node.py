@@ -25,7 +25,7 @@ from langchain_core.tools import BaseTool, ToolException
 from langchain_core.tools import tool as dec_tool
 from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
-from langgraph.graph import START, MessagesState, StateGraph
+from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
 from langgraph.store.base import BaseStore
 from langgraph.store.memory import InMemoryStore
@@ -807,28 +807,28 @@ async def test_tool_node_command(input_type: str) -> None:
     )
     assert result == [
         Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content="Transferred to Bob",
-                        tool_call_id="1",
-                        name="transfer_to_bob",
-                    )
-                ]
-            },
-            goto="bob",
-            graph=Command.PARENT,
-        ),
-        Command(
-            update={
-                "messages": [
-                    ToolMessage(
-                        content="Transferred to Bob",
-                        tool_call_id="2",
-                        name="custom_transfer_to_bob",
-                    )
-                ]
-            },
+            update=[
+                (
+                    "messages",
+                    [
+                        ToolMessage(
+                            content="Transferred to Bob",
+                            tool_call_id="1",
+                            name="transfer_to_bob",
+                        )
+                    ],
+                ),
+                (
+                    "messages",
+                    [
+                        ToolMessage(
+                            content="Transferred to Bob",
+                            tool_call_id="2",
+                            name="custom_transfer_to_bob",
+                        )
+                    ],
+                ),
+            ],
             goto="bob",
             graph=Command.PARENT,
         ),
@@ -1088,22 +1088,26 @@ async def test_tool_node_command_list_input() -> None:
     assert result == [
         Command(
             update=[
-                ToolMessage(
-                    content="Transferred to Bob",
-                    tool_call_id="1",
-                    name="transfer_to_bob",
-                )
-            ],
-            goto="bob",
-            graph=Command.PARENT,
-        ),
-        Command(
-            update=[
-                ToolMessage(
-                    content="Transferred to Bob",
-                    tool_call_id="2",
-                    name="custom_transfer_to_bob",
-                )
+                (
+                    "__root__",
+                    [
+                        ToolMessage(
+                            content="Transferred to Bob",
+                            tool_call_id="1",
+                            name="transfer_to_bob",
+                        )
+                    ],
+                ),
+                (
+                    "__root__",
+                    [
+                        ToolMessage(
+                            content="Transferred to Bob",
+                            tool_call_id="2",
+                            name="custom_transfer_to_bob",
+                        )
+                    ],
+                ),
             ],
             goto="bob",
             graph=Command.PARENT,
@@ -1273,6 +1277,69 @@ def test_tool_node_parent_command_with_send() -> None:
             graph=Command.PARENT,
         )
     ]
+
+
+def test_tool_node_parallel_parent_commands_reach_parent_graph() -> None:
+    @dec_tool
+    def fetch_a() -> Command:
+        """Set a."""
+        return Command(graph=Command.PARENT, goto="result_node", update={"a": True})
+
+    @dec_tool
+    def fetch_b() -> Command:
+        """Set b."""
+        return Command(graph=Command.PARENT, goto="result_node", update={"b": True})
+
+    @dec_tool
+    def fetch_c() -> Command:
+        """Set c."""
+        return Command(graph=Command.PARENT, goto="result_node", update={"c": True})
+
+    class ParentState(TypedDict, total=False):
+        messages: Annotated[list[AnyMessage], add_messages]
+        a: bool
+        b: bool
+        c: bool
+
+    def call_model(state: ParentState) -> dict[str, Any]:
+        return {
+            "messages": [
+                AIMessage(
+                    "",
+                    tool_calls=[
+                        {"args": {}, "id": "1", "name": "fetch_a"},
+                        {"args": {}, "id": "2", "name": "fetch_b"},
+                        {"args": {}, "id": "3", "name": "fetch_c"},
+                    ],
+                )
+            ]
+        }
+
+    def result_node(state: ParentState) -> ParentState:
+        return state
+
+    agent_builder = StateGraph(ParentState)
+    agent_builder.add_node("call_model", call_model)
+    agent_builder.add_node("tools", ToolNode([fetch_a, fetch_b, fetch_c]))
+    agent_builder.add_edge(START, "call_model")
+    agent_builder.add_conditional_edges(
+        "call_model",
+        tools_condition,
+        {"tools": "tools", "__end__": END},
+    )
+    agent = agent_builder.compile(name="agent")
+
+    parent = StateGraph(ParentState)
+    parent.add_node("agent", agent, destinations=("result_node",))
+    parent.add_node("result_node", result_node)
+    parent.set_entry_point("agent")
+    parent.add_edge("result_node", END)
+
+    result = parent.compile().invoke({"messages": [("user", "run all tools")]})
+
+    assert result["a"] is True
+    assert result["b"] is True
+    assert result["c"] is True
 
 
 async def test_tool_node_command_remove_all_messages() -> None:
