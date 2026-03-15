@@ -194,12 +194,14 @@ def local_read(
             if c in select:
                 updated[c].append(v)
     if fresh:
-        # apply writes
+        # apply writes — only copy channels that will actually be read
         local_channels: dict[str, BaseChannel] = {}
-        for k in channels:
-            cc = channels[k].copy()
-            cc.update(updated[k])
-            local_channels[k] = cc
+        selected_keys = [select] if isinstance(select, str) else select
+        for k in selected_keys:
+            if k in channels:
+                cc = channels[k].copy()
+                cc.update(updated[k])
+                local_channels[k] = cc
         # read fresh values
         values = read_channels(local_channels, select)
     else:
