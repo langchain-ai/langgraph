@@ -194,6 +194,34 @@ class TestMemorySaver:
         ]
         assert len(search_results_4) == 0
 
+    def test_equal_timestamp_order_uses_checkpoint_id_tiebreak(self) -> None:
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-tie",
+                "checkpoint_ns": "",
+            }
+        }
+        checkpoint_a = empty_checkpoint()
+        checkpoint_a["id"] = "checkpoint-a"
+        checkpoint_a["ts"] = "2024-01-01T00:00:00.000000+00:00"
+
+        checkpoint_b = create_checkpoint(checkpoint_a, {}, 1)
+        checkpoint_b["id"] = "checkpoint-b"
+        checkpoint_b["ts"] = checkpoint_a["ts"]
+
+        stored_a = self.memory_saver.put(config, checkpoint_a, {}, {})
+        self.memory_saver.put(stored_a, checkpoint_b, {}, {})
+
+        latest = self.memory_saver.get_tuple(config)
+        listed = list(self.memory_saver.list(config))
+
+        assert latest is not None
+        assert latest.checkpoint["id"] == "checkpoint-b"
+        assert [item.checkpoint["id"] for item in listed] == [
+            "checkpoint-b",
+            "checkpoint-a",
+        ]
+
 
 async def test_memory_saver() -> None:
     from langgraph.checkpoint.memory import InMemorySaver

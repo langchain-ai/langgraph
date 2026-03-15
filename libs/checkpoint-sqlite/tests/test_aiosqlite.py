@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -188,3 +189,35 @@ class TestAsyncSqliteSaver:
             # (would have been dropped if injection succeeded)
             results = [c async for c in saver.alist(None, limit=None)]
             assert len(results) == 5
+
+    async def test_equal_timestamp_order_uses_checkpoint_id_tiebreak(
+        self, tmp_path: Path
+    ) -> None:
+        db_path = tmp_path / "equal-timestamp-order.sqlite"
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-tie",
+                "checkpoint_ns": "",
+            }
+        }
+        checkpoint_a = empty_checkpoint()
+        checkpoint_a["id"] = "checkpoint-a"
+        checkpoint_a["ts"] = "2024-01-01T00:00:00.000000+00:00"
+
+        checkpoint_b = create_checkpoint(checkpoint_a, {}, 1)
+        checkpoint_b["id"] = "checkpoint-b"
+        checkpoint_b["ts"] = checkpoint_a["ts"]
+
+        async with AsyncSqliteSaver.from_conn_string(str(db_path)) as saver:
+            stored_a = await saver.aput(config, checkpoint_a, {}, {})
+            await saver.aput(stored_a, checkpoint_b, {}, {})
+
+            latest = await saver.aget_tuple(config)
+            listed = [item async for item in saver.alist(config)]
+
+        assert latest is not None
+        assert latest.checkpoint["id"] == "checkpoint-b"
+        assert [item.checkpoint["id"] for item in listed] == [
+            "checkpoint-b",
+            "checkpoint-a",
+        ]

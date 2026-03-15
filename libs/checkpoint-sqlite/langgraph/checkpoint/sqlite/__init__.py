@@ -181,6 +181,12 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                     self.conn.commit()
                 cur.close()
 
+    def _checkpoint_order_key(
+        self, checkpoint_id: str, type_: str, checkpoint: bytes
+    ) -> tuple[str, str]:
+        loaded = self.serde.loads_typed((type_, checkpoint))
+        return (loaded["ts"], checkpoint_id)
+
     def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
         """Get a checkpoint tuple from the database.
 
@@ -230,11 +236,23 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 )
             else:
                 cur.execute(
-                    "SELECT thread_id, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND checkpoint_ns = ? ORDER BY checkpoint_id DESC LIMIT 1",
+                    "SELECT thread_id, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND checkpoint_ns = ?",
                     (str(config["configurable"]["thread_id"]), checkpoint_ns),
                 )
+                rows = cur.fetchall()
+                if rows:
+                    value = max(
+                        rows,
+                        key=lambda row: self._checkpoint_order_key(
+                            row[1], row[3], row[4]
+                        ),
+                    )
+                else:
+                    value = None
             # if a checkpoint is found, return it
-            if value := cur.fetchone():
+            if checkpoint_id := get_checkpoint_id(config):
+                value = cur.fetchone()
+            if value:
                 (
                     thread_id,
                     checkpoint_id,
@@ -327,13 +345,16 @@ class SqliteSaver(BaseCheckpointSaver[str]):
         where, param_values = search_where(config, filter, before)
         query = f"""SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata
         FROM checkpoints
-        {where}
-        ORDER BY checkpoint_id DESC"""
-        if limit is not None:
-            query += " LIMIT ?"
-            param_values = (*param_values, limit)
+        {where}"""
         with self.cursor(transaction=False) as cur, closing(self.conn.cursor()) as wcur:
             cur.execute(query, param_values)
+            rows = sorted(
+                cur.fetchall(),
+                key=lambda row: self._checkpoint_order_key(row[2], row[4], row[5]),
+                reverse=True,
+            )
+            if limit is not None:
+                rows = rows[:limit]
             for (
                 thread_id,
                 checkpoint_ns,
@@ -342,7 +363,7 @@ class SqliteSaver(BaseCheckpointSaver[str]):
                 type,
                 checkpoint,
                 metadata,
-            ) in cur:
+            ) in rows:
                 wcur.execute(
                     "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
                     (thread_id, checkpoint_ns, checkpoint_id),

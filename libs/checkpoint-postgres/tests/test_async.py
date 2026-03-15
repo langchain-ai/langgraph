@@ -267,6 +267,39 @@ async def test_asearch(saver_name: str, test_data) -> None:
         search_results_4 = [c async for c in saver.alist(None, filter=query_4)]
         assert len(search_results_4) == 0
 
+
+@pytest.mark.parametrize("saver_name", ["base", "pool", "pipe", "shallow"])
+async def test_equal_timestamp_order_uses_checkpoint_id_tiebreak(
+    saver_name: str,
+) -> None:
+    async with _saver(saver_name) as saver:
+        config: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-tie",
+                "checkpoint_ns": "",
+            }
+        }
+        checkpoint_a = empty_checkpoint()
+        checkpoint_a["id"] = "checkpoint-a"
+        checkpoint_a["ts"] = "2024-01-01T00:00:00.000000+00:00"
+
+        checkpoint_b = create_checkpoint(checkpoint_a, {}, 1)
+        checkpoint_b["id"] = "checkpoint-b"
+        checkpoint_b["ts"] = checkpoint_a["ts"]
+
+        stored_a = await saver.aput(config, checkpoint_a, {}, {})
+        await saver.aput(stored_a, checkpoint_b, {}, {})
+
+        latest = await saver.aget_tuple(config)
+        listed = [item async for item in saver.alist(config)]
+
+        assert latest is not None
+        assert latest.checkpoint["id"] == "checkpoint-b"
+        assert [item.checkpoint["id"] for item in listed] == [
+            "checkpoint-b",
+            "checkpoint-a",
+        ]
+
         # search by config (defaults to checkpoints across all namespaces)
         search_results_5 = [
             c async for c in saver.alist({"configurable": {"thread_id": "thread-2"}})

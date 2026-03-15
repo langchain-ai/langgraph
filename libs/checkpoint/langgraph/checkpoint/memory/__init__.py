@@ -179,8 +179,17 @@ class InMemorySaver(
                 )
         else:
             if checkpoints := self.storage[thread_id][checkpoint_ns]:
-                checkpoint_id = max(checkpoints.keys())
-                checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
+                (
+                    checkpoint_id,
+                    (
+                        checkpoint,
+                        metadata,
+                        parent_checkpoint_id,
+                    ),
+                ) = max(
+                    checkpoints.items(),
+                    key=lambda item: self._checkpoint_order_key(item[0], item[1][0]),
+                )
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 checkpoint_ = self.serde.loads_typed(checkpoint)
                 return CheckpointTuple(
@@ -249,13 +258,22 @@ class InMemorySaver(
                 ):
                     continue
 
+                before_key = None
+                if before and (before_checkpoint_id := get_checkpoint_id(before)):
+                    if saved_before := self.storage[thread_id][checkpoint_ns].get(
+                        before_checkpoint_id
+                    ):
+                        before_key = self._checkpoint_order_key(
+                            before_checkpoint_id, saved_before[0]
+                        )
+
                 for checkpoint_id, (
                     checkpoint,
                     metadata_b,
                     parent_checkpoint_id,
                 ) in sorted(
                     self.storage[thread_id][checkpoint_ns].items(),
-                    key=lambda x: x[0],
+                    key=lambda item: self._checkpoint_order_key(item[0], item[1][0]),
                     reverse=True,
                 ):
                     # filter by checkpoint ID from config
@@ -266,7 +284,19 @@ class InMemorySaver(
                     if (
                         before
                         and (before_checkpoint_id := get_checkpoint_id(before))
-                        and checkpoint_id >= before_checkpoint_id
+                        and (
+                            (
+                                before_key is not None
+                                and self._checkpoint_order_key(
+                                    checkpoint_id, checkpoint
+                                )
+                                >= before_key
+                            )
+                            or (
+                                before_key is None
+                                and checkpoint_id >= before_checkpoint_id
+                            )
+                        )
                     ):
                         continue
 
@@ -322,6 +352,12 @@ class InMemorySaver(
                             (id, c, self.serde.loads_typed(v)) for id, c, v, _ in writes
                         ],
                     )
+
+    def _checkpoint_order_key(
+        self, checkpoint_id: str, checkpoint_payload: tuple[str, bytes]
+    ) -> tuple[str, str]:
+        checkpoint = self.serde.loads_typed(checkpoint_payload)
+        return (checkpoint["ts"], checkpoint_id)
 
     def put(
         self,
