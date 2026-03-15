@@ -19,7 +19,12 @@ class HostBackendError(click.ClickException):
 class HostBackendClient:
     """Minimal JSON HTTP client for the host backend deployment service."""
 
-    def __init__(self, base_url: str, api_key: str, tenant_id: str | None = None):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        tenant_id: str | None = None,
+    ):
         if not base_url:
             raise click.UsageError("Host backend URL is required")
         transport = httpx.HTTPTransport(retries=3)
@@ -30,7 +35,6 @@ class HostBackendClient:
         if tenant_id:
             headers["X-Tenant-ID"] = tenant_id
         self._base_url = base_url.rstrip("/")
-        self._api_key = api_key
         self._client = httpx.Client(
             base_url=self._base_url,
             headers=headers,
@@ -39,10 +43,14 @@ class HostBackendClient:
         )
 
     def _request(
-        self, method: str, path: str, payload: dict[str, Any] | None = None
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> Any:
         try:
-            resp = self._client.request(method, path, json=payload)
+            resp = self._client.request(method, path, json=payload, params=params)
             resp.raise_for_status()
         except httpx.HTTPStatusError as err:
             detail = err.response.text or str(err.response.status_code)
@@ -65,11 +73,18 @@ class HostBackendClient:
     def create_deployment(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/v2/deployments", payload)
 
-    def list_deployments(self, name_contains: str) -> dict[str, Any]:
-        return self._request("GET", f"/v2/deployments?name_contains={name_contains}")
+    def list_deployments(self, name_contains: str = "") -> dict[str, Any]:
+        return self._request(
+            "GET",
+            "/v2/deployments",
+            params={"name_contains": name_contains},
+        )
 
     def get_deployment(self, deployment_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v2/deployments/{deployment_id}")
+
+    def delete_deployment(self, deployment_id: str) -> None:
+        return self._request("DELETE", f"/v2/deployments/{deployment_id}")
 
     def request_push_token(self, deployment_id: str) -> dict[str, Any]:
         return self._request(
@@ -105,3 +120,24 @@ class HostBackendClient:
             "GET",
             f"/v2/deployments/{deployment_id}/revisions/{revision_id}",
         )
+
+    def get_build_logs(
+        self, project_id: str, revision_id: str, payload: dict[str, Any]
+    ) -> Any:
+        return self._request(
+            "POST",
+            f"/v1/projects/{project_id}/revisions/{revision_id}/build_logs",
+            payload,
+        )
+
+    def get_deploy_logs(
+        self,
+        project_id: str,
+        payload: dict[str, Any],
+        revision_id: str | None = None,
+    ) -> Any:
+        if revision_id:
+            path = f"/v1/projects/{project_id}/revisions/{revision_id}/deploy_logs"
+        else:
+            path = f"/v1/projects/{project_id}/deploy_logs"
+        return self._request("POST", path, payload)
