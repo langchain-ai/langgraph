@@ -13,7 +13,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"runtime/cgo"
+	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -25,12 +26,38 @@ type runGraphCallbackCtx struct {
 	exec func(node string, nodeInput any, state map[string]any) (Command, error)
 }
 
+var (
+	callbackRegistryMu sync.RWMutex
+	callbackRegistry   = map[uint64]*runGraphCallbackCtx{}
+	callbackNextID     uint64
+)
+
+func registerRunGraphCallbackCtx(ctx *runGraphCallbackCtx) uint64 {
+	id := atomic.AddUint64(&callbackNextID, 1)
+	callbackRegistryMu.Lock()
+	callbackRegistry[id] = ctx
+	callbackRegistryMu.Unlock()
+	return id
+}
+
+func unregisterRunGraphCallbackCtx(id uint64) {
+	callbackRegistryMu.Lock()
+	delete(callbackRegistry, id)
+	callbackRegistryMu.Unlock()
+}
+
+func getRunGraphCallbackCtx(id uint64) (*runGraphCallbackCtx, bool) {
+	callbackRegistryMu.RLock()
+	ctx, ok := callbackRegistry[id]
+	callbackRegistryMu.RUnlock()
+	return ctx, ok
+}
+
 //export goNodeCallback
 func goNodeCallback(userData C.ulong, node *C.char, argJSON *C.char, stateJSON *C.char) *C.char {
-	handle := cgo.Handle(uintptr(userData))
-	ctx, ok := handle.Value().(*runGraphCallbackCtx)
+	ctx, ok := getRunGraphCallbackCtx(uint64(userData))
 	if !ok {
-		return cCallbackEnvelopeError("invalid callback context")
+		return cCallbackEnvelopeError("invalid callback context (possibly stale callback)")
 	}
 
 	nodeName := C.GoString(node)
@@ -167,8 +194,8 @@ func (e *RustEngine) RunGraph(
 	defer C.free(unsafe.Pointer(cinitial))
 	defer C.free(unsafe.Pointer(cinitialInput))
 
-	handle := cgo.NewHandle(&runGraphCallbackCtx{exec: exec})
-	defer handle.Delete()
+	callbackID := registerRunGraphCallbackCtx(&runGraphCallbackCtx{exec: exec})
+	defer unregisterRunGraphCallbackCtx(callbackID)
 
 	resp := C.rc_run_graph_json(
 		e.ptr,
@@ -176,7 +203,7 @@ func (e *RustEngine) RunGraph(
 		cfinish,
 		cinitial,
 		cinitialInput,
-		C.ulong(handle),
+		C.ulong(callbackID),
 		(C.rc_node_callback_t)(C.goNodeCallback),
 	)
 	defer C.rc_string_free(resp)
