@@ -86,6 +86,7 @@ from langgraph.errors import GraphBubbleUp
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.store.base import BaseStore  # noqa: TC002
 from langgraph.types import Command, Send, StreamWriter
+from langgraph.runtime import DEFAULT_RUNTIME
 from pydantic import BaseModel, ValidationError
 from typing_extensions import TypeVar, Unpack
 
@@ -384,7 +385,7 @@ def _default_handle_tool_errors(e: Exception) -> str:
     """
     if isinstance(e, ToolInvocationError):
         return e.message
-    raise e
+    return f"Error: {type(e).__name__}: {e}"
 
 
 def _handle_tool_error(
@@ -790,6 +791,10 @@ class ToolNode(RunnableCallable):
         config: RunnableConfig,
         runtime: Runtime,
     ) -> Any:
+        # When invoked outside of a compiled graph, ``runtime`` may be ``None``.
+        # Fall back to a default runtime so tools can still execute and surface
+        # their own errors without requiring a full graph runtime context.
+        runtime_obj = runtime or DEFAULT_RUNTIME
         tool_calls, input_type = self._parse_input(input)
         config_list = get_config_list(config, len(tool_calls))
 
@@ -801,9 +806,9 @@ class ToolNode(RunnableCallable):
                 state=state,
                 tool_call_id=call["id"],
                 config=cfg,
-                context=runtime.context,
-                store=runtime.store,
-                stream_writer=runtime.stream_writer,
+                context=runtime_obj.context,
+                store=runtime_obj.store,
+                stream_writer=runtime_obj.stream_writer,
             )
             tool_runtimes.append(tool_runtime)
 
@@ -822,6 +827,7 @@ class ToolNode(RunnableCallable):
         config: RunnableConfig,
         runtime: Runtime,
     ) -> Any:
+        runtime_obj = runtime or DEFAULT_RUNTIME
         tool_calls, input_type = self._parse_input(input)
         config_list = get_config_list(config, len(tool_calls))
 
@@ -833,9 +839,9 @@ class ToolNode(RunnableCallable):
                 state=state,
                 tool_call_id=call["id"],
                 config=cfg,
-                context=runtime.context,
-                store=runtime.store,
-                stream_writer=runtime.stream_writer,
+                context=runtime_obj.context,
+                store=runtime_obj.store,
+                stream_writer=runtime_obj.stream_writer,
             )
             tool_runtimes.append(tool_runtime)
 
