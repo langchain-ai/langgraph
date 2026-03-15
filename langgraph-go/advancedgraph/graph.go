@@ -29,6 +29,9 @@ func NewAdvancedStateGraph[StateT any]() *AdvancedStateGraph[StateT] {
 	}
 }
 
+// AddNode keeps `fn` as `any` because advanced graph nodes can have different
+// input argument types per node, while only `StateT` is globally constrained.
+// We validate and adapt node signatures at runtime in compileNodeExecutor.
 func (g *AdvancedStateGraph[StateT]) AddNode(fn any) string {
 	name := NodeName(fn)
 	return g.AddNodeAs(name, fn)
