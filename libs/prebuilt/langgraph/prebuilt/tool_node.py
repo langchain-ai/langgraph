@@ -1101,6 +1101,20 @@ class ToolNode(RunnableCallable):
         # (2 and 3 can happen in a "supervisor w/ tools" multi-agent architecture)
         except GraphBubbleUp:
             raise
+        except asyncio.CancelledError:
+            # Handle CancelledError separately since it inherits from BaseException, not Exception
+            if self._handle_tool_errors:
+                content = _handle_tool_error(
+                    Exception("Tool execution was cancelled"),
+                    flag=self._handle_tool_errors,
+                )
+                return ToolMessage(
+                    content=content,
+                    name=call["name"],
+                    tool_call_id=call["id"],
+                    status="error",
+                )
+            raise
         except Exception as e:
             # Determine which exception types are handled
             handled_types: tuple[type[Exception], ...]
