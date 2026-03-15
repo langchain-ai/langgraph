@@ -1181,8 +1181,11 @@ def _call_host_backend_with_optional_tenant(
             client._client.headers["X-Tenant-ID"] = tenant_id
             return operation(client)
         if err.status_code == 403 and "not enabled" in err.message.lower():
+            from urllib.parse import urlparse
+
             smith_host = "smith.langchain.com"
-            if "eu." in client._base_url:
+            parsed = urlparse(client._base_url)
+            if (parsed.hostname or "").startswith("eu."):
                 smith_host = "eu.smith.langchain.com"
             raise HostBackendError(
                 "LangSmith Deployment is not enabled for this organization. "
