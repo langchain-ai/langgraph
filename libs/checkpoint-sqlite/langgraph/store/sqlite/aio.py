@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
 from collections import defaultdict
 from collections.abc import AsyncIterator, Callable, Iterable, Sequence
@@ -236,18 +237,30 @@ class AsyncSqliteStore(AsyncBatchedBaseStore, BaseSqliteStore):
                     if transaction:
                         await self.conn.execute("COMMIT")
 
-    async def sweep_ttl(self) -> int:
+    async def sweep_ttl(self, *, now: datetime.datetime | None = None) -> int:
         """Delete expired store items based on TTL.
+
+        Args:
+            now: Optional UTC timestamp used as the deterministic sweep cutoff.
+                If omitted, uses the current UTC time.
 
         Returns:
             int: The number of deleted items.
         """
+        cutoff = now or datetime.datetime.now(datetime.timezone.utc)
+        cutoff_text = (
+            cutoff.astimezone(datetime.timezone.utc)
+            .replace(tzinfo=None)
+            .isoformat(sep=" ", timespec="microseconds")
+        )
         async with self._cursor() as cur:
             await cur.execute(
                 """
                 DELETE FROM store
-                WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP
-                """
+                WHERE expires_at IS NOT NULL
+                  AND julianday(expires_at) < julianday(?)
+                """,
+                (cutoff_text,),
             )
             deleted_count = cur.rowcount
             return deleted_count
